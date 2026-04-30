@@ -10,9 +10,10 @@ import {
   colors, OBJ_LABEL, OBJ_SVG, objBubble, objIconSvg, TL_LABELS,
   getCameraIcon, getCameraColor,
 } from './core/icons.js';
-// Stage-3a — pure dashboard helpers extracted from this file. The
-// rendering and live-update functions still live below for now;
-// stage-3b moves those out too. Each name retains its leading
+// Stages 3a + 3b — dashboard helpers + renderers extracted from this
+// file. Only the cross-tab orchestration loop (startLiveUpdate, which
+// calls into the Erkennung + Alerting status-strip updaters that still
+// live in this file) stays behind. Each name retains its leading
 // underscore so the migration stays string-comparable diff-wise.
 import {
   _failedSnapshotIds, _resetFailedSnapshotIds, _isSnapshotIdDead,
@@ -22,6 +23,13 @@ import {
   _surveilEyeSvg,
   _makeOfflinePlaceholder, _makeConnectingPlaceholder,
   _restorePlaceholder,
+  // Stage 3b additions:
+  _hdCards,
+  startPreviewRefresh,
+  toggleCardHd, _refreshLivePillForCard,
+  renderDashboard,
+  showCameraReloadAnimation, reloadCamera,
+  _cvCardClick,
 } from './dashboard.js';
 
 // _hmTip stays here — fixed-position heatmap tooltip used only by the
@@ -133,81 +141,16 @@ function _closeEditPanel(){
 }
 
 // ── Live update ───────────────────────────────────────────────────────────────
+// startLiveUpdate stays here because it bridges dashboard polling
+// (renderDashboard / showCameraReloadAnimation / _refreshLivePillForCard
+// from dashboard.js) with the Erkennung-tab and Alerting-tab status
+// strip updaters that still live in this legacy file. Once those move
+// to their own modules a later stage can extract this loop too.
 let _liveUpdateInterval=null;
-let _previewRefreshInterval=null;
 const _prevCamStatuses=new Map();
 
-// ── 5fps dashboard preview refresh ────────────────────────────────────────────
-// Refreshes all visible camera thumbnails at ~5fps while the tab is active.
-// Uses the existing snapshot.jpg endpoint (served from sub-stream frame buffer).
-const _hdCards=new Set();
-function startPreviewRefresh(){
-  if(_previewRefreshInterval) clearInterval(_previewRefreshInterval);
-  _previewRefreshInterval=setInterval(()=>{
-    if(document.hidden) return; // don't burn requests when tab is backgrounded
-    const grid=byId('cameraCards');
-    if(!grid) return;
-    grid.querySelectorAll('.cv-img.loaded').forEach(img=>{
-      if(img.dataset.hdMode==='1') return; // HD MJPEG stream refreshes itself
-      // Skip stale post-rename camera ids (see _failedSnapshotIds).
-      // Without this, the 5 fps loop keeps refreshing dead URLs and
-      // produces a 404 storm in the console until the dashboard
-      // re-renders with the fresh id.
-      const camId = _camIdFromImg(img);
-      if (_isSnapshotIdDead(camId)) return;
-      const base=img.src.split('?')[0];
-      img.src=base+'?t='+Date.now();
-    });
-  },200); // 5fps
-}
-function toggleCardHd(camId,btn){
-  const card=btn.closest('.cv-card');
-  const img=card?.querySelector('.cv-img');
-  if(!img) return;
-  if(_hdCards.has(camId)){
-    _hdCards.delete(camId);
-    btn.classList.remove('active');
-    img.dataset.hdMode='0';
-    img.src=`/api/camera/${encodeURIComponent(camId)}/snapshot.jpg?t=${Date.now()}`;
-  } else {
-    _hdCards.add(camId);
-    btn.classList.add('active');
-    img.dataset.hdMode='1';
-    img.src=`/api/camera/${encodeURIComponent(camId)}/stream_hd.mjpg`;
-  }
-  _refreshLivePillForCard(camId);
-}
-
-// Re-paint the expanded LivePill row values for one card based on current HD state.
-// Used by both toggleCardHd() and the 3s polling loop so the pill never shows
-// sub-stream values while HD-Stream is active.
-function _refreshLivePillForCard(camId){
-  const card=byId('cameraCards')?.querySelector(`[data-camid="${CSS.escape(camId)}"]`);
-  if(!card) return;
-  const livePill=card.querySelector('.cv-pill-live-wrap');
-  if(!livePill) return;
-  const c=(state.cameras||[]).find(x=>x.id===camId)||{};
-  const hdOn=_hdCards.has(camId);
-  const modeEl=livePill.querySelector('.cv-stream-mode');
-  if(modeEl){
-    if(hdOn){
-      modeEl.textContent='● HD-Stream';
-      modeEl.className='cv-stream-mode cv-mode-hd';
-    } else {
-      const mode=c.stream_mode||'baseline';
-      modeEl.textContent=mode==='live'?'● Live':'○ Vorschau';
-      modeEl.className='cv-stream-mode '+(mode==='live'?'cv-mode-live':'cv-mode-base');
-    }
-  }
-  const fpsEl=livePill.querySelector('.cv-lp-fps-val');
-  if(fpsEl) fpsEl.textContent=hdOn?'—':((c.preview_fps||0)>0?(c.preview_fps+' fps'):'—');
-  const fpsSubEl=livePill.querySelector('.cv-lp-fps-sub');
-  if(fpsSubEl) fpsSubEl.textContent=hdOn?'Main-Stream aktiv':'Gemessen (Sub-Stream)';
-  const resEl=livePill.querySelector('.cv-lp-res-val');
-  if(resEl) resEl.textContent=hdOn?'Main-Stream':(c.preview_resolution||c.resolution||'—');
-}
-window._refreshLivePillForCard=_refreshLivePillForCard;
-window.toggleCardHd=toggleCardHd;
+// _hdCards / startPreviewRefresh / toggleCardHd / _refreshLivePillForCard
+// now live in dashboard.js (Stage 3b).
 
 function startLiveUpdate(){
   if(_liveUpdateInterval) clearInterval(_liveUpdateInterval);
@@ -480,111 +423,7 @@ function renderShell(){
 // _camGridCols / SURVEIL_ACC / SURVEIL_LABEL / _isInScheduleWindow /
 // _surveilMode / _surveilEyeSvg now live in dashboard.js (Stage 3a).
 
-function renderDashboard(){
-  const cams=state.cameras;
-  const gridCls=_camGridCols(cams.length);
-  byId('cameraCards').className=`camera-grid ${gridCls}`;
-  byId('cameraCards').innerHTML=cams.map(c=>{
-    const hdOn=_hdCards.has(c.id);
-    const snapUrl=hdOn
-      ? `/api/camera/${esc(c.id)}/stream_hd.mjpg`
-      : `/api/camera/${esc(c.id)}/snapshot.jpg?t=${Date.now()}`;
-    const isActive=c.status==='active';
-    const tlOn=!!(c.timelapse&&c.timelapse.enabled);
-    const fps=c.frame_interval_ms?Math.round(1000/c.frame_interval_ms):null;
-    const previewFps=(c.preview_fps||0)>0?c.preview_fps:null;
-    const streamMode=c.stream_mode||'baseline';
-    const mode=_surveilMode(c);
-    const acc=SURVEIL_ACC[mode];
-    const label=SURVEIL_LABEL[mode];
-    const sch=c.schedule||{};
-    return `<article class="cv-card${c.armed?'':' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name||c.id)}" onclick="_cvCardClick(event,'${esc(c.id)}')">
-  <div class="cv-frame">
-    <div class="cv-img-wrap">
-      <div class="cv-loading-placeholder">${isActive?_makeConnectingPlaceholder():_makeOfflinePlaceholder()}</div>
-      <img class="cv-img cam-snap" src="${snapUrl}" alt="${esc(c.name)}" data-hd-mode="${hdOn?'1':'0'}"
-        onload="this.classList.add('loaded');this.previousElementSibling.style.display='none'"
-        onerror="_camImgRetry(this)" />
-    </div>
-    <div class="cv-grad-top"></div>
-    <div class="cv-grad-bot"></div>
-
-    <!-- top-left: thematic icon + name. Surveillance mode lives in the
-         bottom-left .cv-surveil block; no duplicate indicator here. -->
-    <div class="cv-title-wrap">
-      <div class="cv-name-row">
-        <span class="cv-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
-        <div class="cv-name">${esc(c.name)}</div>
-      </div>
-      ${c.location?`<div class="cv-loc">${esc(c.location)}</div>`:''}
-    </div>
-${isActive?`
-    <!-- top-right: [Live + HD] row + optional Timelapse pill. The old
-         alarm/notification pill moved into .cv-surveil below. -->
-    <div class="cv-tr">
-      <div class="cv-tr-row">
-        <div class="cv-pill-live-wrap cv-live-active">
-          <div class="cv-live-collapsed">
-            <div class="cv-pdot"></div>
-            <span>Live</span>
-            ${previewFps?`<span style="color:rgba(134,239,172,.55);font-size:10px;font-weight:400;margin-left:3px">${previewFps} fps</span>`:''}
-            <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="rgba(200,245,224,.55)" stroke-width="1.8" stroke-linecap="round" style="margin-left:auto;margin-right:2px;flex-shrink:0"><path d="M3 4.5l3 3 3-3"/></svg>
-          </div>
-          <div class="cv-live-expanded">
-            <div class="cv-live-exp-header">
-              <div class="cv-pdot"></div>
-              <span>Livestream aktiv</span>
-            </div>
-            <div class="cv-lp-row"><span>Stream-Modus</span><strong class="cv-stream-mode ${hdOn?'cv-mode-hd':(streamMode==='live'?'cv-mode-live':'cv-mode-base')}">${hdOn?'● HD-Stream':(streamMode==='live'?'● Live':'○ Vorschau')}</strong></div>
-            <div class="cv-lp-row"><span>Preview-FPS<br><small class="cv-lp-fps-sub">${hdOn?'Analyse läuft im Sub-Stream weiter':'Gemessen (Sub-Stream)'}</small></span><strong class="cv-lp-fps-val">${hdOn?(previewFps!=null?previewFps+' fps':'—'):(previewFps!=null?previewFps+' fps':'—')}</strong></div>
-            <div class="cv-lp-row"><span>Auflösung</span><strong class="cv-lp-res-val">${hdOn?esc(c.main_resolution||c.preview_resolution||c.resolution||'—'):esc(c.preview_resolution||c.resolution||'—')}</strong></div>
-            <div class="cv-lp-row"><span>Analyse-Framerate<br><small>Wie oft TAM-spy analysiert</small></span><strong>${fps!=null?fps+' fps':'—'}</strong></div>
-          </div>
-        </div>
-      </div>
-      ${tlOn?`<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse',14)}Timelapse</div>`:''}
-    </div>
-    ${c.rtsp_url?`<button class="cv-hd-badge${hdOn?' active':''}" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau">HD</button>`:''}
-`:''}
-    <!-- bottom-left: surveillance stack — mode pill + targets row +
-         optional schedule window time. Always rendered (mode='off'
-         shows for disarmed cams too); targets+time hidden when off. -->
-    <div class="cv-surveil" data-mode="${mode}" style="--surveil-acc:${acc}">
-      <div class="cv-surveil-head">
-        <span class="cv-surveil-eye">${_surveilEyeSvg(mode)}</span>
-        <span class="cv-surveil-label">${esc(label)}</span>
-      </div>
-      ${mode==='off'?'':`
-        <div class="cv-surveil-targets">
-          ${(c.object_filter||[]).map(cls=>`<div class="cv-surveil-tgt" data-cls="${esc(cls)}" title="${esc(OBJ_LABEL[cls]||cls)}">${objIconSvg(cls,16)}</div>`).join('')}
-        </div>
-        ${sch.enabled?`<div class="cv-surveil-time">${esc(sch.from||'')} – ${esc(sch.to||'')}</div>`:''}
-      `}
-    </div>
-    <!-- bottom-right: settings cog. Flat dark surface matches the
-         mobile-dock chrome; tap → camera-edit form. -->
-    <button class="cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>
-    </button>
-  </div>
-</article>`;
-  }).join('');
-  byId('cameraCards').querySelectorAll('.cv-pill-live-wrap').forEach(el=>{
-    const collapsed=el.querySelector('.cv-live-collapsed');
-    requestAnimationFrame(()=>{
-      const w=Math.ceil(collapsed.getBoundingClientRect().width);
-      if(w>0) el.style.setProperty('--lp-collapsed-w', w+'px');
-    });
-    let _t=null;
-    el.addEventListener('mouseenter',()=>{clearTimeout(_t);el.classList.add('cv-lp-open');});
-    el.addEventListener('mouseleave',()=>{_t=setTimeout(()=>el.classList.remove('cv-lp-open'),120);});
-    el.addEventListener('touchstart',e=>{e.stopPropagation();clearTimeout(_t);const open=el.classList.toggle('cv-lp-open');if(!open)clearTimeout(_t);},{passive:true});
-    document.addEventListener('touchstart',e=>{if(!el.contains(e.target)){clearTimeout(_t);el.classList.remove('cv-lp-open');}},{passive:true});
-  });
-}
+// renderDashboard now lives in dashboard.js (Stage 3b).
 
 // Live-detection 3 s flash on the .cv-surveil-tgt of a class. CSS already
 // supports the .is-detecting class (animation gated by prefers-reduced-
@@ -2676,11 +2515,9 @@ async function renderAudit(){ const actions=await j('/api/telegram/actions'); by
 
 async function toggleArm(camId,armed){ await fetch(`/api/camera/${camId}/arm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({armed})}); await loadAll(); }
 window.toggleArm=toggleArm;
-window._cvCardClick=function(e,camId){
-  const cam=(state.cameras||[]).find(c=>c.id===camId);
-  if(!cam) return;
-  openLiveView(camId, cam.name||camId);
-};
+// _cvCardClick now lives in dashboard.js (Stage 3b). Its window
+// bridge migrates with the function so the inline onclick handler
+// rendered into each cv-card keeps resolving.
 async function loadTimelapse(camId){
   const res=await fetch(`/api/camera/${encodeURIComponent(camId)}/timelapse`);
   const r=await res.json();
@@ -4579,42 +4416,10 @@ byId('coralModelsReload')?.addEventListener('click',_loadCoralModels);
 // _placeholderShell / _CAM_OFF_SVG / _CAM_SM_SVG /
 // _makeOfflinePlaceholder / _makeConnectingPlaceholder /
 // _restorePlaceholder all now live in dashboard.js (Stage 3a).
-function showCameraReloadAnimation(camId){
-  const cameraCards=byId('cameraCards');
-  const cards=camId
-    ?[cameraCards?.querySelector(`[data-camid="${CSS.escape(camId)}"]`)]
-    :[...(cameraCards?.querySelectorAll('[data-camid]')||[])];
-  cards.filter(Boolean).forEach(card=>{
-    const placeholder=card.querySelector('.cv-loading-placeholder');
-    const img=card.querySelector('.cv-img');
-    if(placeholder && !placeholder.querySelector('.cv-ph--blue'))
-      placeholder.innerHTML=_makeConnectingPlaceholder();
-    if(img){img.classList.remove('loaded');img.style.opacity='0';}
-    const targetCamId=card.dataset.camid;
-    let attempts=0;
-    const poll=setInterval(async()=>{
-      attempts++;
-      if(attempts>15){clearInterval(poll);_restorePlaceholder(card);return;}
-      try{
-        const r=await j('/api/cameras');
-        const cam=(r.cameras||[]).find(c=>c.id===targetCamId);
-        if(cam?.status==='active'){
-          clearInterval(poll);
-          // Full re-render so the cv-tr / cv-br overlay nodes appear in the
-          // DOM — they weren't rendered while the camera was offline and
-          // simply toggling their parent's class wouldn't add them back.
-          state.cameras=r.cameras||state.cameras;
-          renderDashboard();
-        }
-      }catch{}
-    },2000);
-  });
-}
-async function reloadCamera(camId){
-  showCameraReloadAnimation(camId);
-  await fetch(`/api/camera/${encodeURIComponent(camId)}/reload`,{method:'POST'}).catch(()=>{});
-}
-window.reloadCamera=reloadCamera;
+// showCameraReloadAnimation + reloadCamera now live in dashboard.js
+// (Stage 3b). The window.reloadCamera bridge moves with the function
+// so existing callers (the camera-row Verbinden button, the cam-edit
+// recovery flow) keep resolving.
 
 byId('exportJsonBtn').onclick=()=>download('/api/settings/export?format=json');
 byId('exportYamlBtn').onclick=()=>download('/api/settings/export?format=yaml');

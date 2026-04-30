@@ -527,10 +527,16 @@ select option{background:#1e1e1e;color:#c8c8c8}
     position:fixed;
     left:var(--m-dock-gap);
     right:var(--m-dock-gap);
-    /* Sit closer to the home-indicator: at most --m-dock-gap from the
-       bottom, but if the safe-area inset is bigger than 20 px (Pro
-       models) trim it back so the dock isn't floating high. */
-    bottom:max(var(--m-dock-gap),calc(env(safe-area-inset-bottom,0px) - 8px));
+    /* Equal floating gap on all three exposed sides. The previous
+       formula  max(--m-dock-gap, env(safe-area-inset-bottom) - 8px)
+       was effectively additive on home-indicator phones (safe-area
+       ~34 px → bottom ~26 px while the sides stayed at 12 px), so
+       the bar visually drifted upward. max(--m-dock-gap, env())
+       lets the device-imposed safe-area kick in only when it's
+       larger than the design margin — notch-less iPhones and iPads
+       (env() == 0) get true 12/12/12 margins; phones with a home
+       indicator clear it cleanly without trimming. */
+    bottom:max(var(--m-dock-gap),env(safe-area-inset-bottom,0px));
     padding:10px 8px;
     border-radius:var(--m-dock-radius);
     background:rgba(38,40,48,.78);

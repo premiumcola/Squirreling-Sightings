@@ -1,0 +1,116 @@
+/* ── Mobile bottom dock ─────────────────────────────────────────
+   Geometry tuned for iPhone 15 Pro Max:
+     display corner radius ≈ 55 px
+     gap-edge               = 8 px (left/right/bottom equal)
+     dock corner radius     = 55 − 8 = 47 px (concentric to bezel)
+   The safe-area-inset-bottom adds the home-indicator clearance
+   ON TOP of the 8 px gap. Other iPhones look fine too — only
+   on 15 Pro Max it nests visually flush with the bezel curve. */
+.m-dock{display:none}
+@media (max-width:768px){
+  .m-dock{
+    --m-dock-gap:12px;
+    --m-dock-radius:47px;
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:2px;
+    position:fixed;
+    left:var(--m-dock-gap);
+    right:var(--m-dock-gap);
+    /* Equal floating gap on all three exposed sides. The previous
+       formula  max(--m-dock-gap, env(safe-area-inset-bottom) - 8px)
+       was effectively additive on home-indicator phones (safe-area
+       ~34 px → bottom ~26 px while the sides stayed at 12 px), so
+       the bar visually drifted upward. max(--m-dock-gap, env())
+       lets the device-imposed safe-area kick in only when it's
+       larger than the design margin — notch-less iPhones and iPads
+       (env() == 0) get true 12/12/12 margins; phones with a home
+       indicator clear it cleanly without trimming. */
+    bottom:max(var(--m-dock-gap),env(safe-area-inset-bottom,0px));
+    padding:10px 8px;
+    border-radius:var(--m-dock-radius);
+    background:rgba(38,40,48,.78);
+    backdrop-filter:blur(22px) saturate(1.4);
+    -webkit-backdrop-filter:blur(22px) saturate(1.4);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:
+      0 12px 32px rgba(0,0,0,.55),
+      0 4px 10px rgba(0,0,0,.32);
+    z-index:90;
+    outline:0;
+  }
+  .m-dock-btn{
+    border:0;outline:0;
+    background:transparent;
+    -webkit-tap-highlight-color:transparent;
+    border-radius:18px;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    gap:3px;
+    padding:8px 4px 6px;
+    min-height:54px;
+    color:rgba(155,168,196,.7);
+    cursor:pointer;
+    transition:background .18s,color .18s,transform .12s;
+    position:relative;
+    font-family:inherit;
+  }
+  .m-dock-btn svg{
+    width:22px;height:22px;
+    stroke:currentColor;stroke-width:1.9;fill:none;
+    stroke-linecap:round;stroke-linejoin:round;
+  }
+  .m-dock-lbl{
+    font-size:9.5px;font-weight:600;
+    letter-spacing:.01em;line-height:1;
+  }
+  .m-dock-btn:active{transform:scale(.94)}
+  .m-dock-btn.is-active{
+    color:rgb(var(--m-acc));
+    background:rgba(var(--m-acc),.13);
+  }
+  /* Pulsing green dot on the Live tab while at least one camera is
+     enabled+armed. JS toggles [hidden]. */
+  .m-dock-livedot{
+    position:absolute;
+    top:8px;right:14px;
+    width:6px;height:6px;
+    border-radius:50%;
+    background:#22c55e;
+    animation:m-dock-livePulse 2s ease-out infinite;
+  }
+  .m-dock-livedot[hidden]{display:none}
+  @keyframes m-dock-livePulse{
+    0%   {box-shadow:0 0 0 0 rgba(34,197,94,.55)}
+    70%  {box-shadow:0 0 0 6px rgba(34,197,94,0)}
+    100% {box-shadow:0 0 0 0 rgba(34,197,94,0)}
+  }
+  /* Reserve scroll-space at the bottom so content isn't permanently
+     hidden behind the floating dock. 78 ≈ dock height + gap + safe. */
+  body{
+    padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))!important;
+  }
+  /* Narrow iPhones: nudge label down a hair so "Sichtungen" doesn't
+     wrap. Only triggers under 380 px. */
+  @media (max-width:380px){
+    .m-dock-lbl{font-size:9px}
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .m-dock-livedot{animation:none}
+  .m-dock-btn{transition:none}
+}
+
+textarea{width:100%;padding:12px 13px;border-radius:14px;background:var(--surface);color:var(--text);border:none;outline:none;resize:vertical}textarea:focus{box-shadow:0 0 0 2px var(--accent)}
+.item-head,.compact-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.compact-head{margin-bottom:12px}.two-thirds{grid-template-columns:1.1fr .9fr}.inset{padding:14px;margin-top:14px;border-radius:18px}/* Wrap height follows the snapshot's natural aspect ratio: image is in
+   normal flow with width:100% + height:auto, the wrap shrinks to fit.
+   The canvas overlay then inset:0 covers exactly the same area. Without
+   max-height/object-fit there is no letterbox; canvas and image bounds
+   stay 1:1 so clicks always land where they appear to land. */
+.canvas-wrap{position:relative;border-radius:18px;overflow:hidden;background:#222222;min-height:240px}
+.canvas-wrap img{display:block;width:100%;height:auto}
+/* Canvas sits ABOVE the snapshot image and any sibling overlays so clicks
+   reliably reach it. pointer-events:auto is the default for canvas, but
+   stating it explicitly guards against any inherited none from the
+   collapsing/animated parent panel. */
+.canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;pointer-events:auto;z-index:10}.shape-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}

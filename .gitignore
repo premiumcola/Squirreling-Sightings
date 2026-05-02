@@ -73,5 +73,9 @@ Thumbs.db
 node_modules/
 package-lock.json
 
+# CSS build artifact — source of truth is app/web/static/css/*.css
+# Regenerated at server boot by app/app/css_builder.py
+app/web/static/app.css
+
 # Claude internal
 .claude/

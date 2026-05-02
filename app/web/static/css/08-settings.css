@@ -1,0 +1,141 @@
+/* ── Sidebar: Settings accordion ────────────────────────────────────────────── */
+.nav-group{display:contents}
+/* Einstellungen row: link (scroll-only, fills the row) + small chevron
+   button (toggles sub-list, no scroll). Hover never reveals the sub-list. */
+.nav-settings-row{display:flex;align-items:center;gap:2px}
+.nav-settings-link{flex:1;min-width:0}
+.nav-settings-chev{flex-shrink:0;width:36px;height:36px;border:none;background:transparent;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;padding:0;transition:background .15s,color .15s}
+.nav-settings-chev:hover{background:rgba(255,255,255,.05);color:#e2e8f0}
+.nav-settings-chev .nav-chev{transition:transform .25s cubic-bezier(0.4,0,0.2,1)}
+.nav-settings-chev[aria-expanded="true"] .nav-chev{transform:rotate(90deg)}
+/* Sub-list: inline in document flow, never absolute, max-width 100% so it
+   can never push past the sidebar. Indent rendered as padding-left + a
+   thin left border to read as a vertical group line under Einstellungen. */
+.nav-sub{display:grid;gap:1px;max-height:0;overflow:hidden;box-sizing:border-box;max-width:100%;margin:0;padding:0;border-left:1px solid transparent;transition:max-height .3s cubic-bezier(0.4,0,0.2,1),margin .25s ease,padding .25s ease,border-color .25s ease}
+.nav-sub.open{margin:2px 0 6px 14px;padding-left:16px;border-left-color:rgba(100,116,139,.22)}
+.nav-sub a{padding:8px 10px;border-radius:10px;display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:13px;min-height:36px;background:transparent;white-space:nowrap}
+.nav-sub a:hover{background:rgba(255,255,255,.04);color:#e2e8f0}
+.nav-sub-bullet{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.45;flex-shrink:0}
+.sidebar.collapsed .nav-sub,.sidebar.collapsed .nav-settings-chev{display:none}
+/* ── Task 2: Media storage bar ──────────────────────────────────────────────── */
+.media-storage-bar{margin-bottom:10px}
+.storage-bar-inner{display:flex;flex-wrap:wrap;gap:8px}
+.storage-cam-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:10px;background:var(--surface);font-size:12px}
+.storage-cam-name{font-weight:600}
+.storage-cam-size{color:var(--accent);font-weight:700}
+
+/* ── Task 3: Password field with eye toggle ─────────────────────────────────── */
+/* Unified password / URL eye toggle. .pw-eye and .url-eye share geometry +
+   colours via the comma selector below; only their click handlers differ.
+   Inner glyph is an SVG (set by JS or inline in HTML) — never an emoji,
+   so size and centring are pixel-stable across fonts/platforms. */
+/* .pw-input-row is the absolute-positioning anchor: it wraps ONLY the
+   input + eye so top:50% on the eye lands at the input's vertical
+   centre, not the field-wrap column's (which also includes the
+   field-label below). */
+.pw-input-row{position:relative;width:100%}
+.pw-wrap,.url-wrap{position:relative}
+.pw-wrap input,.url-wrap input{padding-right:54px!important}
+/* Icon-only at rest — no ghost box. Hover gets a very faint surface
+   tint + colour brighten so the affordance is still visible. 44 × 44
+   hit area to clear the iOS tap-target floor; SVG itself is 20 × 20
+   so the icon reads clearly on both URL rows + the password row. */
+.pw-eye,.url-eye{
+  position:absolute;right:5px;top:50%;transform:translateY(-50%);
+  width:44px;height:44px;
+  border:none;border-radius:8px;
+  background:transparent;
+  color:rgba(255,255,255,.55);
+  cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:0;
+  transition:background .15s,color .15s;
+  -webkit-tap-highlight-color:transparent;
+  z-index:2;
+}
+.pw-eye:hover,.url-eye:hover{background:rgba(255,255,255,.06);color:#fff}
+.pw-eye.revealed,.url-eye.revealed{color:#fff}
+.pw-eye svg,.url-eye svg{display:block;width:20px;height:20px;flex-shrink:0}
+/* URL-field eye toggle — masks the password portion of an rtsp://… or
+   http://user:pass@… URL while keeping the real value stored in
+   data-real. Clicking reveals; clicking again re-masks. */
+
+/* ── Settings accordion ────────────────────────────────────────────────── */
+/* Closed = neutral gray, no border. Open = tinted border + background +
+   header in the section's accent colour. --sa is an RGB triplet like
+   "96,165,250" set by JS from each section's data-accent attribute. */
+.settings-form{display:grid;gap:6px}
+.set-section{--sa:143,158,181;--acc:var(--sa);border-radius:14px;background:var(--surface);border:1.5px solid transparent;overflow:hidden;transition:border-color .2s,background .2s}
+/* Subtitles / sublabels / descriptors inside any set-section pick up the
+   section's own accent at low alpha, so the panel reads as a single themed
+   surface. Titles stay white — explicitly NOT covered by these rules. */
+.set-section .toggle-row-sublabel,
+.set-section .field-help,
+.set-section .field-label,
+.set-section .cpt-node-sub,
+.set-section .cpt-node-list{color:rgb(var(--acc) / 0.65)}
+/* App + Media-config panels use a true neutral warm-grey for subtitles
+   instead of their cool grey-blue accent (matches the previously approved
+   #9ba1a8 used for the app-info-row labels). */
+#set-app .toggle-row-sublabel,
+#set-app .field-help,
+#set-app .field-label,
+#set-app .cpt-node-sub,
+#set-app .cpt-node-list,
+#set-media-config .toggle-row-sublabel,
+#set-media-config .field-help,
+#set-media-config .field-label{color:#9ba1a8}
+/* Accent-driven save buttons — every settings panel gets its own coloured
+   save button without per-panel CSS. Soft tinted fill, accent text/icon. */
+.set-section .btn-save{background:rgba(var(--acc),.14);color:rgb(var(--acc))}
+.set-section .btn-save:hover{background:rgba(var(--acc),.22);color:rgb(var(--acc))}
+/* Telegram "Testnachricht" sits next to the save button — same accent pair. */
+#set-telegram #telegramTestBtn{background:rgba(var(--acc),.14);color:rgb(var(--acc));border:none}
+#set-telegram #telegramTestBtn:hover{background:rgba(var(--acc),.22);color:rgb(var(--acc))}
+/* Toggle switches inside any settings panel adopt the section accent on the
+   "on" state, falling back to green globally elsewhere in the app. */
+.set-section .switch input:checked + .slider{background:rgb(var(--acc));border-color:rgb(var(--acc))}
+.set-section.open{border-color:rgba(var(--sa),0.2);background:rgba(var(--sa),0.04)}
+.set-hd-row{display:flex;align-items:center;border-radius:inherit;overflow:hidden}
+.set-hd{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;background:none;border:none;color:var(--text);font-size:14px;font-weight:600;cursor:pointer;text-align:left}
+.set-hd:hover{background:rgba(255,255,255,.04)}
+.set-section.open .set-hd{background:rgba(var(--sa),0.06)}
+.set-icon{flex-shrink:0;width:22px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.set-icon svg{display:block;width:18px;height:18px}
+.set-section.open .set-chevron{transform:rotate(90deg);color:rgba(var(--sa),0.7)}
+.set-chevron-lg{width:16px;height:16px}
+.set-bd{display:grid;grid-template-rows:0fr;transition:grid-template-rows .38s cubic-bezier(.4,0,.2,1);overflow:hidden;scrollbar-width:none}
+.set-bd::-webkit-scrollbar{display:none}
+.set-section.open .set-bd{grid-template-rows:1fr}
+.set-inner{overflow:hidden;min-height:0;padding:0 16px;scrollbar-width:none}
+.set-section.open .set-inner{padding:14px 16px 16px}
+.set-inner::-webkit-scrollbar,
+.set-inner ::-webkit-scrollbar,
+.set-inner ::-webkit-scrollbar-button{display:none;width:0;height:0}
+
+/* Inner cards (sub-groups inside a section) — always NEUTRAL gray. Accent
+   colour lives on the outer section border only; inner content never
+   competes with it. */
+.set-inner .subcard{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px 14px}
+.set-inner .subcard+.subcard{margin-top:10px}
+.subcard-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.subcard-title{font-size:11px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em}
+.subcard-body{display:grid;gap:8px}
+
+/* Nested sub-accordions inside a section (e.g. Telegram panes). Progressive
+   brightness: closed subsection ≈ .02, open ≈ .04 — each level one step
+   lighter than the parent, matching the section→subcard→subsection rhythm. */
+.group-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.04)}
+.group-row:last-child{border-bottom:none}
+.group-row-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.group-inline{padding:12px 0}
+.group-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;background:var(--bg);border-radius:14px;margin-top:2px}
+#settings .set-section+.set-section{margin-top:8px}
+.set-inner .set-section{border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04)}
+.set-inner .set-section.open{background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.08)}
+.set-inner .set-section .set-hd{padding:10px 12px;font-size:13px;font-weight:600}
+.set-inner .set-section .set-chevron{font-size:10px}
+.set-inner .set-bd{display:grid;grid-template-rows:0fr;transition:grid-template-rows .38s cubic-bezier(.4,0,.2,1)}
+.set-inner .set-section.open .set-bd{grid-template-rows:1fr}
+.set-inner .set-section+.set-section{margin-top:6px}
+

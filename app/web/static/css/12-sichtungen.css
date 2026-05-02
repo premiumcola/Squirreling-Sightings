@@ -1,0 +1,100 @@
+/* ── Achievements / Sichtungen ─────────────────────────────────────────── */
+/* Warm bronze tint matching the "Bronze 1–4×" achievement badge. The accent
+   (--acc) is fed by data-accent="200,120,64" on the section root and seeded
+   by the panel-section accent loop in app.js. No border-top — the tint
+   alone separates this from the surrounding dark UI. */
+#achievements{
+  --acc:200,120,64;
+  background:linear-gradient(160deg, rgba(var(--acc),0.08) 0%, rgba(var(--acc),0.03) 100%);
+  padding:12px 16px;
+}
+#achievements .section-head h3,
+#achievements .section-head .section-subtitle{color:rgba(var(--acc),0.85)}
+.ach-progress-bar{margin-bottom:10px;padding:10px 14px;border-radius:12px;background:rgba(0,0,0,0.15);display:flex;align-items:center;gap:12px}
+.ach-progress-text{font-weight:700;font-size:14px;white-space:nowrap;color:rgba(var(--acc),0.9)}
+.ach-progress-track{flex:1;height:8px;border-radius:999px;background:rgba(255,255,255,0.06);overflow:hidden}
+.ach-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,rgba(var(--acc),0.85),rgba(var(--acc),0.55));transition:width .5s cubic-bezier(.4,0,.2,1)}
+.ach-progress-pct{font-size:12px;font-weight:700;color:rgba(var(--acc),0.9);white-space:nowrap}
+.ach-grid{margin-top:2px}
+.ach-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;margin-bottom:2px;margin-left:4px;font-size:12px;color:var(--muted);align-items:center}
+.ach-leg-dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:4px;vertical-align:middle;flex-shrink:0}
+/* Compact grid: smaller tile, tighter gaps, 5-6 cols on desktop at
+   typical viewport widths. */
+.ach-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px}
+.ach-card{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;cursor:default;padding:8px 4px 6px;border-radius:10px;transition:background .15s;position:relative}
+.ach-card:not(.locked):hover{background:rgba(255,255,255,.04)}
+.ach-card:not(.locked):hover .medal-wrap svg{transform:scale(1.04);filter:drop-shadow(0 5px 12px rgba(0,0,0,.5))}
+.medal-wrap{position:relative;width:88px;height:88px;display:flex;align-items:center;justify-content:center;margin-top:10px}
+.medal-wrap svg{display:block;transition:transform .2s,filter .2s;filter:drop-shadow(0 3px 7px rgba(0,0,0,.4))}
+.medal-emoji{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:30px;line-height:1;pointer-events:none}
+.medal-emoji-locked{filter:grayscale(1) brightness(0.4)}
+.medal-count-badge{position:absolute;top:-4px;right:-4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap;pointer-events:none}
+.medal-count-badge.bronze{background:#7a3e10;color:#f0a050;border:1px solid #e08040}
+.medal-count-badge.silver{background:#304050;color:#b0d0e8;border:1px solid #90b8d0}
+.medal-count-badge.gold{background:#4a3a08;color:#f0d040;border:1px solid #e0b820}
+/* Lock badge: above the medal, overlapping ~25% of the top edge.
+   Small and unobtrusive, matching the overall "muted" locked aesthetic. */
+.medal-lock-overlay{position:absolute;top:-10px;left:50%;transform:translateX(-50%);width:28px;height:28px;background:rgba(0,0,0,0.4);border-radius:50%;border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;z-index:4;pointer-events:none}
+.medal-lock-overlay svg{stroke:rgba(255,255,255,0.2)!important;width:16px!important;height:16px!important}
+.medal-name{font-size:11px;font-weight:600;color:var(--text);line-height:1.2}
+.ach-card.locked .medal-name{color:rgba(255,255,255,0.4)}
+.medal-count{font-size:10px;font-weight:700}
+/* Rarity is now plain text, coloured inline by the renderer. */
+.medal-rarity{font-size:10px;font-weight:500;letter-spacing:.02em;line-height:1.3;white-space:nowrap;margin-top:1px}
+.medal-footline{display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;min-height:14px}
+/* Squirrel XL tiles — flagship animal of the project, pinned to front */
+.ach-card--xl{grid-column:span 2}
+.ach-card--xl .medal-wrap{width:132px;height:132px}
+.ach-card--xl .medal-name-base{font-size:13px;font-weight:700}
+.ach-card--xl .medal-variant{font-size:11px;font-style:italic;color:rgba(255,255,255,.45);margin-top:2px;line-height:1.2}
+.ach-card.locked.ach-card--xl .medal-name-base{color:rgba(255,255,255,.4)}
+.ach-card.locked.ach-card--xl .medal-variant{color:rgba(255,255,255,.25)}
+
+/* Active card — the medal that "opened" the drilldown. Subtle outline
+   so the eye can trace which species the grid below belongs to. */
+.ach-card--active{outline:2px solid rgba(255,255,255,.18);outline-offset:2px;background:rgba(255,255,255,.06)}
+
+/* ── Sichtungen drilldown — pool-of-light accordion ─────────────────── */
+.ach-drilldown-wrap{grid-column:1/-1;overflow:hidden;max-height:0;transition:max-height .42s cubic-bezier(.4,0,.2,1)}
+.ach-drilldown-wrap--open{max-height:1400px}
+.ach-drilldown{margin:10px 6px 4px 6px;border-radius:6px;overflow:hidden;background:linear-gradient(to bottom,rgba(180,210,255,0.09) 0%,rgba(140,180,240,0.055) 40%,rgba(100,150,220,0.03) 100%);border:1px solid rgba(160,200,255,0.13);box-shadow:0 -2px 18px rgba(120,170,255,0.07) inset,0 2px 24px rgba(0,0,0,.25)}
+.ach-drill-header{display:flex;align-items:center;gap:10px;padding:12px 16px 10px 16px;border-bottom:1px solid rgba(160,200,255,0.09);background:rgba(120,170,255,0.05)}
+.ach-drill-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;color:var(--text)}
+.ach-drill-count{font-size:11px;color:var(--muted);background:rgba(255,255,255,.07);padding:2px 8px;border-radius:999px}
+.ach-drill-close{margin-left:auto;background:rgba(255,255,255,.07);border:none;color:var(--muted);width:28px;height:28px;border-radius:8px;font-size:16px;cursor:pointer;transition:background .15s;display:inline-flex;align-items:center;justify-content:center}
+.ach-drill-close:hover{background:rgba(255,255,255,.13);color:var(--text)}
+.ach-drill-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;padding:12px 14px 14px 14px}
+.ach-drill-more{display:flex;justify-content:center;padding:0 14px 14px}
+
+/* Mobile-dense Sichtungen grid: 6 base tracks, regular tiles span 2
+   (3 per row), XL squirrel medals span 3 (2 per row). Fixed columns
+   instead of auto-fill so we don't get half-empty rows. Desktop's
+   auto-fill layout above stays as-is. */
+@media (max-width:768px){
+  .ach-cards-grid{grid-template-columns:repeat(6,1fr);gap:6px}
+  .ach-card{grid-column:span 2;padding:6px 2px 4px}
+  .ach-card--xl{grid-column:span 3}
+  .medal-wrap{width:64px;height:64px;margin-top:6px}
+  .ach-card--xl .medal-wrap{width:88px;height:88px}
+  .medal-name{
+    font-size:11px;
+    width:100%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  /* XL medal base label was 13 px desktop — at 88 px medal width that
+     reads heavy. Drop to match the variant line. */
+  .ach-card--xl .medal-name-base{font-size:11px}
+  .ach-card--xl .medal-variant{font-size:10px}
+}
+
+/* Discovery add-camera form */
+.disc-add-form{background:#1a1a1a;border-radius:12px;padding:12px;margin-top:8px}
+.sq-hop-anim{animation:sq-hop-logo 1.8s ease-in-out infinite}
+.cam-wobble-anim{animation:cam-wobble-logo 1.8s ease-in-out infinite}
+.leg-l-anim{animation:leg-l-logo .9s ease-in-out infinite alternate;transform-origin:16px 43px}
+.leg-r-anim{animation:leg-r-logo .9s ease-in-out infinite alternate;transform-origin:28px 43px}
+@keyframes sq-hop-logo{0%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}60%{transform:translateY(-3px)}}
+@keyframes cam-wobble-logo{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+@keyframes leg-l-logo{from{transform:rotate(-12deg)}to{transform:rotate(12deg)}}
+@keyframes leg-r-logo{from{transform:rotate(12deg)}to{transform:rotate(-12deg)}}
+

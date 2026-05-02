@@ -1,0 +1,49 @@
+:root{--bg:#111111;--panel:#1a1a1a;--surface:#222222;--line:transparent;--text:#edf4fb;--muted:#8b9ab5;--accent:#3b82f6;--good:#22c55e;--warn:#f59e0b;--danger:#ef4444}
+*{box-sizing:border-box}html{scroll-behavior:smooth}html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer}a{color:inherit;text-decoration:none}
+html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@media (max-width:768px){html{scroll-padding-top:8px}}
+.shell{display:flex;gap:12px;max-width:1900px;margin:0 auto;padding:8px 14px 18px 14px}
+.panel{background:var(--panel);border-radius:24px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
+.sidebar{padding:12px 6px;position:sticky;top:8px;height:max-content;flex-shrink:0;width:260px;transition:width .35s cubic-bezier(0.4,0,0.2,1),padding .35s cubic-bezier(0.4,0,0.2,1);overflow:hidden}
+.sidebar.collapsed{width:52px;padding:10px 6px}
+.sidebar.collapsed .brand{height:0;margin-bottom:0;overflow:hidden;opacity:0}
+.sidebar.collapsed .nav a{padding:10px 0;justify-content:center;gap:0}
+.sidebar.collapsed .nav-label,.sidebar.collapsed .nav-chev{opacity:0;width:0;overflow:hidden;pointer-events:none}
+.brand{display:flex;gap:10px;align-items:center;margin-bottom:0;transition:height .35s cubic-bezier(0.4,0,0.2,1),margin .35s cubic-bezier(0.4,0,0.2,1),opacity .35s cubic-bezier(0.4,0,0.2,1);overflow:hidden}.brand-text{flex:1;min-width:0;transition:opacity .35s cubic-bezier(0.4,0,0.2,1),width .35s cubic-bezier(0.4,0,0.2,1)}
+.logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:#14314c;flex-shrink:0}
+.nav{display:grid;gap:2px}
+.nav a{padding:8px 10px;border-radius:12px;background:transparent;display:flex;align-items:center;justify-content:flex-start;gap:10px;white-space:nowrap;min-height:44px;color:#cbd5e1;transition:background .15s ease,color .15s ease;-webkit-tap-highlight-color:transparent;border:none;width:100%;font:inherit;text-align:left;cursor:pointer}
+.nav a:hover{background:rgba(255,255,255,.05)}
+.nav a.nav-active{background:rgba(255,255,255,.10);color:#fff}
+.nav-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
+.nav-icon svg{width:20px;height:20px;display:block;transition:stroke .15s ease}
+.nav-label{transition:opacity .35s cubic-bezier(0.4,0,0.2,1),width .35s cubic-bezier(0.4,0,0.2,1);overflow:hidden}
+.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);opacity:.55;font-weight:700;padding:14px 10px 4px;user-select:none;pointer-events:none}
+.nav-section-label:first-child{padding-top:4px}
+.sidebar.collapsed .nav-section-label{opacity:0;height:0;padding:0;overflow:hidden}
+/* Symmetric horizontal margin so the line stays inset from both edges in
+   any sidebar width — collapsed and expanded read the same. */
+.nav-divider{height:1px;background:rgba(255,255,255,.06);margin:5px 8px;border:none}
+.nav-tag{font-style:italic;font-weight:400;font-size:10px;color:var(--muted);opacity:.55;margin-left:4px;letter-spacing:.02em}
+/* Sichtungen: amber-tinted hover and active state, icon + label go full amber. */
+.nav a.nav-achievements-item:hover{background:rgba(251,191,36,.09);color:#fbbf24}
+.nav a.nav-achievements-item:hover .nav-icon svg{stroke:#fbbf24}
+.nav a.nav-achievements-item.nav-active{background:rgba(251,191,36,.13);color:#fbbf24}
+.nav a.nav-achievements-item.nav-active .nav-icon svg{stroke:#fbbf24}
+/* Wetter: storm-blue tinted hover and active state, mirrors the
+   Sichtungen amber rule above. */
+.nav a.nav-weather-item:hover{background:rgba(127,174,201,.09);color:#7faec9}
+.nav a.nav-weather-item:hover .nav-icon svg{stroke:#7faec9}
+.nav a.nav-weather-item.nav-active{background:rgba(127,174,201,.13);color:#7faec9}
+.nav a.nav-weather-item.nav-active .nav-icon svg{stroke:#7faec9}
+/* ~/logs item: monospace green text, NO permanent box. The full terminal
+   surface lives on the #logs panel — the nav item only previews the look
+   on hover so the sidebar stays visually quiet by default. */
+.nav a.nav-logs-item{background:transparent;color:#4ade80;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;border:none;border-radius:12px;letter-spacing:.05em}
+.nav a.nav-logs-item:hover{background:rgba(0,255,65,.06);color:#4ade80}
+.nav a.nav-logs-item.nav-active{background:rgba(0,255,65,.10);color:#4ade80}
+.nav a.nav-logs-item .nav-icon svg,
+.nav a.nav-logs-item.nav-active .nav-icon svg,
+.nav a.nav-logs-item:hover .nav-icon svg{stroke:#4ade80}
+.sidebar.collapsed .nav a.nav-logs-item{margin-top:0}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199}.sidebar-overlay.visible{display:block}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}h1,h2,h3,p{margin:0}.muted{color:var(--muted)}.main{display:grid;gap:14px;flex:1;min-width:0;padding-bottom:60vh}

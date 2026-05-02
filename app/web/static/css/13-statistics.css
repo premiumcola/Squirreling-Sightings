@@ -1,0 +1,62 @@
+/* ── Statistics dashboard ───────────────────────────────────────────────── */
+.stat-period-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat-period-pill{background:var(--surface);border-radius:18px;padding:18px 22px;flex:1;min-width:120px;min-height:80px;display:flex;flex-direction:column;gap:5px}
+.stat-period-num{font-size:34px;font-weight:800;line-height:1;color:var(--text)}
+.stat-period-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.stat-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:768px){.stat-split{grid-template-columns:1fr}}
+.stat-card{background:var(--surface);border-radius:18px;padding:16px 18px;margin-bottom:12px}
+.stat-card:last-child{margin-bottom:0}
+.stat-split .stat-card{margin-bottom:0}
+.stat-card-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:14px}
+.stat-card-title svg{flex-shrink:0;opacity:.85}
+.stat-donut-wrap{display:flex;align-items:center;gap:18px;min-height:170px}
+.stat-donut-chart{position:relative;width:160px;height:160px;flex-shrink:0}
+.stat-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:none}
+.stat-donut-total{font-size:30px;font-weight:800;color:var(--text);line-height:1}
+.stat-donut-sub{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--muted)}
+.stat-donut-legend{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.stat-donut-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;min-height:36px;font-size:13px;transition:background .15s}
+.stat-donut-row.stat-drillable{cursor:pointer}
+.stat-donut-row.stat-drillable:hover{background:rgba(255,255,255,.04)}
+.stat-donut-sw{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.stat-donut-icon{display:inline-flex;font-size:16px;line-height:1;flex-shrink:0}
+.stat-donut-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--text)}
+.stat-donut-cnt{font-weight:700;color:var(--text);min-width:28px;text-align:right}
+.stat-donut-pct{color:var(--muted);font-weight:600;min-width:36px;text-align:right}
+@media(max-width:768px){.stat-donut-wrap{flex-direction:column;align-items:stretch;gap:12px}.stat-donut-chart{align-self:center}.stat-donut-legend{width:100%}}
+.stat-tile-row{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:12px;min-height:52px;margin-bottom:6px;transition:background .15s}
+.stat-tile-row:last-child{margin-bottom:0}
+.stat-tile-row.stat-drillable{cursor:pointer}
+.stat-tile-row.stat-drillable:hover{background:rgba(255,255,255,.04)}
+.stat-tile-chip{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stat-tile-icon{display:inline-flex;line-height:0}
+.stat-tile-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.stat-tile-name{font-size:14px;font-weight:700;color:var(--text);text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat-tile-cnt{font-size:11px;color:var(--muted);font-weight:600}
+.stat-tile-pct{font-size:18px;font-weight:700;flex-shrink:0;text-align:right;min-width:54px}
+.stat-heatmap-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* Layout: CSS grid with the first column sized at runtime by JS so the
+   widest camera name fits without being clipped. The 24 hour cells fill
+   the rest equally (1fr each). --hm-label-w is set inline by JS. */
+.stat-hm-grid{min-width:360px;--hm-label-w:130px}
+.stat-hm-header,.stat-hm-row{display:grid;align-items:center;grid-template-columns:var(--hm-label-w) repeat(24,1fr);column-gap:2px}
+.stat-hm-header{margin-bottom:4px}
+.stat-hm-cam-col,.stat-hm-cam{padding-right:10px}
+.stat-hm-cam{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:32px;display:flex;align-items:center}
+.stat-hm-hours{display:contents}
+.stat-hm-cells{display:contents}
+.stat-hm-hlabel{flex:1;font-size:9px;color:var(--muted);font-weight:600;text-align:center;min-width:0;padding:0 1px}
+.stat-hm-cell{flex:1;min-height:28px;border-radius:4px;position:relative;cursor:default;transition:filter .15s}
+.stat-hm-cell:hover{filter:brightness(1.25)}
+.stat-hm-row{margin-bottom:4px}
+.stat-hm-row:last-child{margin-bottom:0}
+/* tooltip handled by JS _hmTip (position:fixed) to avoid overflow-x:auto clipping */
+.stat-tl-block{margin-top:12px}
+.stat-tl-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);padding:4px 0 10px}
+.stat-tl-card{margin-top:12px}
+.stat-tl-card-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:0;flex-wrap:wrap}
+.stat-tl-card-hdr .stat-card-title{margin-bottom:0}
+.stat-drillable{cursor:pointer;border-radius:8px;transition:background .12s,opacity .12s}
+.stat-drillable:hover{background:rgba(255,255,255,.04)}
+.stat-drillable:active{opacity:.7}

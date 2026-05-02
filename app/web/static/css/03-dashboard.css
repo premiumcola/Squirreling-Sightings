@@ -1,0 +1,314 @@
+/* ── Camera video-grid ──────────────────────────────────────────────────────── */
+.camera-grid{display:grid;gap:12px}
+/* minmax(0, 1fr) — without it Safari treats grid-child min-width as
+   auto (= content intrinsic size), and a freshly-loaded camera <img>
+   pushes the column past viewport width. That was the root cause of
+   the "page jumps to desktop layout once streams load" regression. */
+.cam-grid-1{grid-template-columns:minmax(0,1fr)}
+.cam-grid-2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.cam-grid-4{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.cam-grid-n{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:900px){.cam-grid-2,.cam-grid-4,.cam-grid-n{grid-template-columns:minmax(0,1fr)}}
+
+/* Card = just the video frame */
+.cv-card{border-radius:18px;overflow:hidden;cursor:pointer;background:#0a0a0a;transition:transform .18s,box-shadow .18s;position:relative;min-width:0;contain:paint}
+.cv-card:hover{transform:scale(1.012);box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:1}
+.cv-frame{position:relative;aspect-ratio:16/9;overflow:hidden;contain:paint;transform:translateZ(0);--cv-overlay-inset:14px}
+.cv-img-wrap{position:relative;width:100%;height:100%}.cv-img{width:100%;height:100%;object-fit:cover;display:block;background:#0a0a0a;opacity:0;transition:opacity .4s;position:absolute;inset:0}.cv-img.loaded{opacity:1}.cv-loading-placeholder{position:absolute;inset:0;height:100%;background:#0a0a0a}@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Monitoring-style camera placeholders (offline / connecting) ────────── */
+.cv-ph{position:absolute;inset:0;overflow:hidden;background:#0a0a0a;color:rgba(255,255,255,.8);font-family:ui-monospace,Menlo,Consolas,monospace}
+.cv-ph-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);background-size:40px 40px;opacity:.05;animation:fadeGrid 8s ease-in-out infinite;pointer-events:none}
+.cv-ph-brackets{position:absolute;inset:22px;width:calc(100% - 44px);height:calc(100% - 44px);overflow:visible;pointer-events:none}
+.cv-ph-brackets polyline{stroke:rgba(255,255,255,0.15);stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+/* Every 6 s one diagonal pair jitters a single pixel (signal-interference feel) */
+.cv-ph-brackets .cv-ph-br--tl,.cv-ph-brackets .cv-ph-br--br{animation:bracketJitter 6s ease-in-out infinite}
+.cv-ph-brackets .cv-ph-br--tr,.cv-ph-brackets .cv-ph-br--bl{animation:bracketJitter 6s ease-in-out infinite;animation-delay:3s}
+.cv-ph-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:1}
+/* Fixed square stage centers rings, crosshair and icon on one point so the
+   geometry is independent of card aspect ratio and flex-label height. */
+.cv-ph-stage{position:relative;width:180px;height:180px;display:flex;align-items:center;justify-content:center}
+.cv-ph-icon{position:relative;z-index:3;line-height:0;margin:0 auto;animation:iconPulse 3s ease-in-out infinite}
+.cv-ph-icon--red{filter:drop-shadow(0 0 15px rgba(239,68,68,0.2))}
+.cv-ph-icon--glitch{animation:iconPulse 3s ease-in-out infinite, glitch 10s linear infinite}
+.cv-ph-label{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:800}
+.cv-ph-label--flicker{animation:textFlicker 6s linear infinite}
+.cv-ph-label--red{text-shadow:0 0 20px rgba(239,68,68,0.15)}
+.cv-ph-label--blue{color:rgba(59,130,246,0.55)}
+
+/* Offline (red): expanding rings + crosshair */
+.cv-ph-ring{position:absolute;top:50%;left:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border:1.5px solid rgba(239,68,68,0.45);border-radius:50%;animation:ring1 4s ease-out infinite;pointer-events:none}
+.cv-ph-crosshair{position:absolute;top:50%;left:50%;width:55%;height:55%;transform:translate(-50%,-50%);pointer-events:none;background:
+  linear-gradient(to right, transparent 0%, rgba(239,68,68,0.35) 50%, transparent 100%) center/100% 1px no-repeat,
+  linear-gradient(to bottom, transparent 0%, rgba(239,68,68,0.35) 50%, transparent 100%) center/1px 100% no-repeat}
+
+/* Connecting (blue): radar sweep + guide rings + orbiting dots */
+.cv-ph-guides,.cv-ph-radar{position:absolute;top:50%;left:50%;width:200px;height:200px;transform:translate(-50%,-50%);pointer-events:none}
+.cv-ph-radar{animation:radarSpin 3s linear infinite;transform-origin:100px 100px;transform:translate(-50%,-50%)}
+.cv-ph-orbit{position:absolute;top:50%;left:50%;border-radius:50%;pointer-events:none;transform-origin:0 0}
+.cv-ph-orbit--1{width:4px;height:4px;margin:-2px 0 0 -2px;background:rgba(59,130,246,0.8);box-shadow:0 0 6px rgba(59,130,246,0.8);animation:orbitDot 4s linear infinite}
+.cv-ph-orbit--2{width:5px;height:5px;margin:-2.5px 0 0 -2.5px;background:rgba(59,130,246,0.7);box-shadow:0 0 8px rgba(59,130,246,0.7);animation:orbitDot2 6s linear infinite}
+.cv-ph-orbit--3{width:3px;height:3px;margin:-1.5px 0 0 -1.5px;background:rgba(59,130,246,0.6);box-shadow:0 0 5px rgba(59,130,246,0.6);animation:orbitDot3 3s linear infinite}
+
+@keyframes fadeGrid{0%,100%{opacity:.04}50%{opacity:.07}}
+@keyframes bracketPulseRed{0%,100%{stroke:rgba(255,255,255,0.15)}50%{stroke:rgba(239,68,68,0.6)}}
+@keyframes bracketPulseBlue{0%,100%{stroke:rgba(255,255,255,0.15)}50%{stroke:rgba(59,130,246,0.6)}}
+/* 200 ms wobble at the 6-second mark — one pair of corners shifts 1 px */
+@keyframes bracketJitter{0%,95%,100%{transform:translate(0,0)}96%{transform:translate(1px,0)}97%{transform:translate(0,1px)}98%{transform:translate(-1px,0)}99%{transform:translate(0,0)}}
+@keyframes ring1{0%{transform:scale(0.3);opacity:.6}100%{transform:scale(2.8);opacity:0}}
+@keyframes radarSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes orbitDot{from{transform:rotate(0deg) translateX(40px)}to{transform:rotate(360deg) translateX(40px)}}
+@keyframes orbitDot2{from{transform:rotate(0deg) translateX(52px)}to{transform:rotate(-360deg) translateX(52px)}}
+@keyframes orbitDot3{from{transform:rotate(0deg) translateX(28px)}to{transform:rotate(360deg) translateX(28px)}}
+@keyframes iconPulse{0%,100%{opacity:.25;transform:scale(1)}50%{opacity:.4;transform:scale(1.04)}}
+@keyframes glitch{0%,88%,100%{transform:translate(0,0)}89%{transform:translate(-2px,1px)}90%{transform:translate(3px,-1px)}91%{transform:translate(-1px,2px)}92%{transform:translate(1px,-2px)}}
+@keyframes textFlicker{0%,84%,100%{opacity:1}85%{opacity:.25}86%{opacity:1}87%{opacity:.5}88%{opacity:1}89%{opacity:.3}90%{opacity:1}91%{opacity:.6}92%{opacity:1}}
+
+/* Gradient overlays */
+.cv-grad-top{position:absolute;top:0;left:0;right:0;height:40%;background:linear-gradient(to bottom,rgba(0,0,0,.65) 0%,transparent 100%);pointer-events:none}
+.cv-grad-bot{position:absolute;bottom:0;left:0;right:0;height:35%;background:linear-gradient(to top,rgba(0,0,0,.7) 0%,transparent 100%);pointer-events:none;opacity:0;transition:opacity .2s}
+.cv-card:hover .cv-grad-bot{opacity:1}.cv-live-dot{position:absolute;bottom:10px;left:10px;width:10px;height:10px;border-radius:50%;z-index:3}.cv-live-green{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}.cv-live-amber{background:#f59e0b;animation:cv-pulse-amber 2s ease-in-out infinite}.cv-live-red{background:#ef4444}@keyframes cv-pulse-green{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}50%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}@keyframes cv-pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
+
+/* Title — top left */
+.cv-title-wrap{position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:3px;max-width:60%}
+.cv-name{color:#fff;font-weight:700;font-size:15px;text-shadow:0 1px 6px rgba(0,0,0,.8);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cv-title-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;line-height:1;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))}
+.cv-loc{color:rgba(255,255,255,.7);font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.cv-group-pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.55);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;width:fit-content}
+.cv-name-row{display:flex;align-items:center;gap:8px;min-width:0}
+.cv-tr-row{display:flex;gap:6px;align-items:center}
+.cv-tr-row .cv-pill-live-wrap{margin-left:0}
+
+/* ── Top-right pill container ─────────────────────────────────────────────── */
+/* Top-right pill column. The +6px offset places the Live pill just
+   below the camera's burnt-in date/time row (~14px tall on Reolink
+   firmware). The previous +22px was sized for an older overlay and
+   left an obvious empty band between the date line and the pill. */
+.cv-tr{position:absolute;top:calc(var(--cv-overlay-inset) + 6px);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
+
+/* Base pill */
+.cv-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.02em;position:relative;cursor:default;backdrop-filter:blur(8px);min-height:0;line-height:1.2;box-sizing:border-box}
+
+/* Live dot */
+.cv-pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+/* Expanding live capsule */
+.cv-pill-live-wrap{--lp-collapsed-w:104px;--lp-expanded-w:210px;position:relative;border-radius:999px;border:1.5px solid rgba(34,197,94,.55);background:rgba(34,197,94,.18);color:#c8f5e0;font-size:10.5px;font-weight:700;cursor:default;overflow:hidden;backdrop-filter:blur(8px);min-width:var(--lp-collapsed-w);max-width:var(--lp-collapsed-w);max-height:22px;transition:max-width .28s ease,max-height .28s ease,border-radius .28s ease;margin-left:auto}
+.cv-pill-live-wrap.cv-lp-open{border-radius:14px;max-width:var(--lp-expanded-w);max-height:200px}
+.cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
+/* Slimmer collapsed row — 3 px vertical padding, 10.5 px font, 1.2 line-
+   height. The 22 px max-height on the wrap clips any overflow but the
+   inner padding has been tightened so nothing visually clips. */
+.cv-live-collapsed{display:flex;align-items:center;gap:6px;padding:3px 8px;white-space:nowrap;font-size:10.5px;line-height:1.2;min-height:0;box-sizing:border-box;opacity:1;transform:translateY(0);transition:opacity .18s ease,transform .28s ease}
+.cv-pill-live-wrap.cv-lp-open .cv-live-collapsed{opacity:0;transform:translateY(-4px);pointer-events:none;max-height:0;padding:0;overflow:hidden}
+.cv-live-expanded{padding:0 12px;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease,padding .3s ease;width:100%;min-width:0}
+.cv-pill-live-wrap.cv-lp-open .cv-live-expanded{max-height:160px;opacity:1;padding:8px 12px 10px}
+/* Tighter popover header — was 10 px top + 8 px bottom + 6 px margin =
+   24 px before the dot. Now 8 px above the title and 8 px below the
+   border, eliminating the empty band the user saw at the top of the
+   expanded popover. */
+.cv-live-exp-header{display:flex;align-items:center;gap:10px;font-size:11.5px;font-weight:700;color:#c8f5e0;padding:0 0 6px 0;border-bottom:1px solid rgba(34,197,94,.2);margin:0 0 8px}
+/* Belt-and-braces — strip any inherited top margin from the popover's
+   first child so a future content tweak can't reintroduce the empty
+   band above the dot. */
+.cv-pill-live-wrap.cv-lp-open .cv-live-expanded > *:first-child{margin-top:0}
+.cv-pill-live-wrap.cv-live-active .cv-pdot{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}
+.cv-pill-live-wrap.cv-live-off .cv-pdot{background:rgba(255,255,255,.3);animation:none}
+.cv-lp-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:5px;font-size:10px;padding:0 10px}
+.cv-lp-row span{color:rgba(220,252,231,.75);line-height:1.4}
+.cv-lp-row small{font-size:9px;color:rgba(220,252,231,.5);display:block}
+.cv-lp-row strong{color:#fff;font-weight:700;white-space:nowrap}
+/* HD badge — primary control next to the Live pill. */
+/* HD toggle — flat dark surface that matches .cv-cog so they read as
+   one button family. Bottom-right of the tile, just left of the cog,
+   stable position regardless of the live-pill expansion state. */
+.cv-hd-badge{
+  position:absolute;
+  right:50px;bottom:8px;
+  height:34px;min-width:38px;
+  padding:0 10px;
+  border-radius:11px;
+  background:#1c1c20;
+  color:rgba(255,255,255,.7);
+  font-size:11px;font-weight:700;letter-spacing:.05em;
+  border:0;outline:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  z-index:6;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .15s,color .15s,transform .12s;
+}
+.cv-hd-badge:hover{background:#26262a;color:#fff}
+.cv-hd-badge.active{background:rgba(59,130,246,.22);color:#bfdbfe}
+.cv-hd-badge:active{transform:scale(.94)}
+
+/* ── Bottom-left surveillance stack ────────────────────────────────────────
+   Replaces the old Motion + Objekte pills (cv-br) and the alarm pill
+   in cv-tr. Single source of truth for "what's this cam currently doing":
+   mode label + active class targets + optional schedule window time.
+   Flat design — depth via background tint and opacity, no border lines. */
+.cv-surveil{
+  position:absolute;left:10px;bottom:8px;
+  display:flex;flex-direction:column;gap:5px;
+  align-items:flex-start;
+  z-index:3;
+  /* leave room for HD-badge (50 + ~38) + cog (34) + gap on the right */
+  max-width:calc(100% - 100px);
+  pointer-events:none;
+}
+.cv-surveil > *{pointer-events:auto}
+.cv-surveil-head{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px 4px 6px;
+  border-radius:999px;
+  font-size:10.5px;font-weight:700;letter-spacing:.01em;
+  background:rgba(var(--surveil-acc),.22);
+  color:rgb(var(--surveil-acc));
+}
+.cv-surveil-eye{
+  width:18px;height:18px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.cv-surveil[data-mode="notify"] .cv-surveil-eye{
+  animation:cvEyeBlink 2.4s ease-in-out infinite;
+}
+.cv-surveil[data-mode="alarm"] .cv-surveil-head{
+  animation:cvAlarmPulse 1.8s ease-out infinite;
+}
+.cv-surveil[data-mode="alarm"] .cv-surveil-eye{
+  background:rgba(252,165,165,.22);
+  animation:cvEyeBlink 1.4s ease-in-out infinite;
+}
+@keyframes cvEyeBlink{
+  0%,90%,100%{transform:scaleY(1);opacity:1}
+  93%{transform:scaleY(.1);opacity:.85}
+}
+@keyframes cvAlarmPulse{
+  0%   {box-shadow:0 0 0 0 rgba(220,38,38,.55)}
+  70%  {box-shadow:0 0 0 8px rgba(220,38,38,0)}
+  100% {box-shadow:0 0 0 0 rgba(220,38,38,0)}
+}
+@media (prefers-reduced-motion: reduce){
+  .cv-surveil-eye,.cv-surveil-head{animation:none!important}
+}
+.cv-surveil-targets{
+  display:flex;gap:3px;
+  background:rgba(0,0,0,.45);
+  padding:4px 5px;
+  border-radius:10px;
+}
+.cv-surveil-tgt{
+  width:24px;height:24px;
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;
+  transition:background .25s ease;
+}
+/* Live-detection 3-second flash hook. The .is-detecting class is added
+   by _flashDetection(camId, cls) — JS hookup pending the backend pipe. */
+.cv-surveil-tgt.is-detecting{
+  background:rgba(var(--surveil-acc),.42);
+  animation:cvDetectFlash 3s ease-out;
+}
+@keyframes cvDetectFlash{
+  0%   {background:rgba(var(--surveil-acc),.65)}
+  100% {background:transparent}
+}
+@media (prefers-reduced-motion: reduce){
+  .cv-surveil-tgt.is-detecting{
+    animation:none;
+    background:rgba(var(--surveil-acc),.35);
+  }
+}
+.cv-surveil-time{
+  font-size:9.5px;
+  color:rgba(255,255,255,.6);
+  background:rgba(0,0,0,.45);
+  padding:2px 7px;border-radius:5px;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  font-weight:600;letter-spacing:.03em;
+  white-space:nowrap;
+}
+/* "Stumm" card — muted across the board: card dim, small bell-off icon next
+   to the name. Recording continues, only Telegram is suppressed. */
+.cv-card--muted{opacity:.85}
+.cv-card--muted:hover{opacity:1}
+/* Timelapse pill */
+.cv-pill-tl{background:rgba(168,85,247,.32);border:1.5px solid rgba(168,85,247,.78);color:#ede0ff}
+.cv-tl-icon{position:relative;width:18px;height:13px;overflow:hidden;display:flex;gap:2px;align-items:center;flex-shrink:0}
+.cv-tl-bar{width:3.5px;height:11px;border-radius:1px}
+.cv-tl-bar.hi{height:14px;margin-top:-1px}
+.cv-tl-scan{position:absolute;top:0;left:0;width:2px;height:100%;background:rgba(216,180,254,.9);border-radius:1px;animation:cv-tl-scan 1.2s ease-in-out infinite}
+@keyframes cv-tl-scan{0%{left:0;opacity:1}80%{left:16px;opacity:1}100%{left:16px;opacity:0}}
+/* Split badge */
+.cv-split-badge{display:inline-flex;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,.28);font-size:11px;font-weight:700;backdrop-filter:blur(6px)}
+.cv-sb-half{padding:5px 11px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.cv-sb-obj{background:rgba(245,158,11,.45);color:#fff;border-right:1px solid rgba(255,255,255,.18)}
+.cv-sb-obj-off{background:rgba(0,0,0,.32);color:rgba(255,255,255,.55);border-right:1px solid rgba(255,255,255,.18)}
+.cv-sb-mot{background:rgba(34,197,94,.4);color:#fff}
+.cv-sb-mot-off{background:rgba(0,0,0,.32);color:rgba(255,255,255,.55)}
+.cv-sb-label{font-size:11px;font-weight:700;white-space:nowrap}
+/* Detection-box + runner animations */
+.cv-obj-unfold{animation:cv-obj-unfold 2.6s ease-in-out infinite;transform-origin:center}
+@keyframes cv-obj-unfold{0%,100%{opacity:.85;transform:scale(1)}50%{opacity:1;transform:scale(1.13)}}
+.cv-runner-stride{animation:cv-runner-stride 1.1s ease-in-out infinite;transform-origin:50% 60%}
+@keyframes cv-runner-stride{0%,100%{transform:translateY(0) translateX(0)}30%{transform:translateY(-1.5px) translateX(1.5px)}70%{transform:translateY(0) translateX(-.5px)}}
+
+/* ── Settings cog (bottom-right of each tile) ────────────────────────────
+   Replaces the old hover-revealed .cv-actions panel. Flat dark surface
+   in the same #1c1c20 tone as the mobile bottom-dock so the dashboard
+   chrome reads as one family. */
+.cv-card:hover .cv-grad-bot{opacity:1}
+.cv-cog{
+  position:absolute;bottom:8px;right:8px;
+  width:34px;height:34px;border-radius:11px;
+  background:#1c1c20;
+  color:rgba(255,255,255,.7);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  border:0;outline:0;
+  -webkit-tap-highlight-color:transparent;
+  z-index:6;
+  transition:background .15s,color .15s,transform .12s;
+}
+.cv-cog:hover{background:#26262a;color:#fff}
+.cv-cog:active{transform:scale(.94)}
+.cv-cog svg{width:18px;height:18px}
+
+/* Legacy badge (used in camera settings list, not in grid) */
+.badge{padding:7px 10px;border-radius:999px;background:var(--surface);font-size:12px}
+.badge.good{color:var(--good)}.badge.warn{color:var(--warn)}.badge.danger{color:var(--danger)}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.legend-item{display:flex;gap:8px;align-items:center;padding:7px 10px;border-radius:999px;background:var(--surface);font-size:12px}
+.dot{width:10px;height:10px;border-radius:50%}.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(192px,1fr));gap:10px}@media(max-width:768px){.media-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}}.media-card{border-radius:14px;overflow:hidden;background:var(--panel);position:relative;cursor:pointer}.mmc-img-wrap{position:relative;aspect-ratio:16/10;overflow:hidden}.mmc-img-wrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}.media-card:hover .mmc-img-wrap img{transform:scale(1.03)}.mmc-overlay{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;pointer-events:none}.mmc-cam-pill{font-size:10px;padding:2px 7px;border-radius:999px;backdrop-filter:blur(4px)}.media-label-bubbles{position:absolute;top:6px;left:6px;display:flex;flex-direction:row;gap:4px;align-items:center;pointer-events:none}.media-label-bubble{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;backdrop-filter:blur(4px)}.mmc-actions{position:absolute;top:6px;right:6px;display:flex;gap:5px;opacity:.7;transition:opacity .15s;z-index:3}.media-card:hover .mmc-actions,.mmc-actions:hover,.mmc-actions:active{opacity:1}.mmc-btn{width:30px;height:30px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:transform .2s cubic-bezier(.4,0,.2,1),background .15s;-webkit-tap-highlight-color:transparent}.mmc-btn:hover{transform:scale(1.08)}.mmc-confirm{background:rgba(34,197,94,.8);color:#fff}.mmc-confirm.mmc-confirm--anim{transform:scale(1.3)}.mmc-delete{background:rgba(239,68,68,.8);color:#fff}.mmc-confirmed{box-shadow:inset 0 0 0 2px var(--good)}.mmc-confirmed .mmc-actions{display:none!important}.media-confirmed-badge{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:rgba(22,163,74,.9);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;pointer-events:none}.media-meta{padding:10px 12px;display:grid;gap:7px}.media-overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:14px}
+.moc-card{border-radius:16px;background:#2a2a2c;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:background .15s,box-shadow .15s}
+.moc-card:hover{background:#34343a;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.moc-card.moc-active{background:#34343a;box-shadow:0 4px 20px rgba(0,0,0,.4),inset 0 0 0 1.5px rgba(96,165,250,.55)}
+.moc-card.moc-active:hover{background:#3a3a40}
+.moc-thumb{width:100%;aspect-ratio:16/9;overflow:hidden;flex-shrink:0;background:#0a0a0a;position:relative}
+.moc-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.moc-all-thumb{width:100%;aspect-ratio:16/9;min-height:88px;overflow:hidden;flex-shrink:0;background:#2a2e36;display:flex;align-items:center;justify-content:center;position:relative}
+.moc-all-thumb svg{opacity:.95}
+/* Archived cameras section */
+.moc-archive-section{margin-top:20px;padding-top:4px}
+.moc-archive-hdr{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}
+.moc-archive-count{background:var(--surface);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;letter-spacing:0}
+.moc-archive-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+@media(max-width:768px){.moc-archive-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}}
+.moc-archived{opacity:.52;border:1px solid rgba(255,255,255,.04);font-size:12px;background:#161616;filter:saturate(.55)}
+.moc-archived .moc-body{padding:8px 10px}
+.moc-archived .moc-cam-name{font-size:12px}
+.moc-archived:hover{opacity:.82;filter:saturate(.9);border-color:transparent}
+.moc-arch-thumb{background:#0d0d0d;height:80px}
+/* Per-type label counts on overview cards */
+.moc-label-counts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.moc-label-count-item{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700}
+/* Rescan button scan animation */
+#rescanMediaBtn.scanning svg{animation:spin 1s linear infinite;transform-origin:center}
+/* ── Unified category filter button ─────────────────────────────── */
+/* Flat filled filter pill — no border, bg tint of object colour, text/icon
+   also in object colour. Hover/active deepen the fill; icon keeps its own
+   colour so the badge reads as a tinted object chip. */
+.cat-filter-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;min-height:44px;border-radius:10px;border:none;outline:none;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:background .15s,box-shadow .15s;background:color-mix(in srgb,var(--cb,#8888aa) 15%,transparent);color:var(--cb,#94a3b8)}
+.cat-filter-btn:hover{background:color-mix(in srgb,var(--cb,#8888aa) 24%,transparent)}
+.cat-filter-btn:active{opacity:.85}

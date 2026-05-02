@@ -1,0 +1,584 @@
+/* ── iOS / mobile foundation ─────────────────────────────────────────────
+   Globals first (benign on desktop), then mobile-specific overrides under
+   a single @media block. Desktop layout at ≥ 769 px is unaffected.        */
+html{-webkit-text-size-adjust:100%}
+body{overscroll-behavior-y:none}
+button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Body-scroll lock when the off-canvas sidebar is open. The class is
+   toggled from JS in tandem with .sidebar.mobile-open. */
+body.sidebar-locked{overflow:hidden;touch-action:none}
+
+/* Hover-only desktop affordances — cards scale on hover, action rows
+   reveal. Re-gate these behind hover-capable pointers so touch devices
+   don't get sticky hover state after a tap. */
+@media (hover:hover) and (pointer:fine){
+  .media-card:hover .mmc-img-wrap img{transform:scale(1.03)}
+  .media-card:hover .mmc-actions{opacity:1}
+  .mmc-btn:hover{transform:scale(1.08)}
+}
+@media (hover:none) and (pointer:coarse){
+  /* Touch: keep media-card thumbnails calm (no zoom-on-press) and let
+     the action row sit at full opacity by default — the user has no
+     hover to reveal it. */
+  .media-card .mmc-img-wrap img{transform:none}
+  .mmc-actions{opacity:1}
+}
+
+@media (max-width:768px){
+  /* Bump form-input font-size to 16px to suppress Safari's auto-zoom on
+     focus. Keep desktop sizes. */
+  input,select,textarea,
+  .toolbar input,.toolbar select,
+  .form input,.form select{font-size:16px}
+
+  /* Sidebar (when forced open via desktop toggle in landscape iPad
+     edge cases) lives at the viewport edge — pad into the iPhone
+     safe-area so the notch doesn't overlap the brand row. */
+  .sidebar{padding-top:calc(12px + env(safe-area-inset-top))}
+
+  /* Lightbox button placement on mobile —
+       Close             top-right (notch-safe)
+       Confirm + Delete  bottom row, above prev/next
+       Prev + Next       bottom row, home-indicator-safe       */
+  #lightboxClose{top:calc(12px + env(safe-area-inset-top))}
+  #lightboxConfirm{top:auto;right:18px;bottom:calc(86px + env(safe-area-inset-bottom));left:auto}
+  #lightboxDelete{top:auto;right:auto;left:18px;bottom:calc(86px + env(safe-area-inset-bottom))}
+  #lightboxPrev,#lightboxNext{bottom:calc(20px + env(safe-area-inset-bottom));top:auto;transform:none}
+
+  /* Pinch-zoom on the lightbox image. The surrounding wrap consumes
+     horizontal swipes for prev/next; pinch is a two-finger gesture and
+     coexists. The image still respects max-height: 100dvh. */
+  #lightboxImg{touch-action:pinch-zoom}
+  #lightboxVideo{touch-action:manipulation}
+
+  /* Mediathek filter pill bar — single horizontal-scroll row with
+     scroll-snap on mobile. Avoids the 3-line stack on a busy day. */
+  .media-filter-bar{
+    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;scroll-snap-type:x proximity;
+    padding:4px 12px;margin:0 -12px;
+  }
+  .media-filter-bar::-webkit-scrollbar{display:none}
+  .media-pill{scroll-snap-align:start;flex-shrink:0}
+
+  /* Pagination pills bumped from 32×32 to 40×40 with more gap so
+     they're tappable in a horizontal row. */
+  .media-pagination{gap:8px}
+  .page-pill{width:40px;height:40px;font-size:14px}
+
+  /* Drilldown header on mobile — back-button + counter on row 1, the
+     filter bar (which already scrolls horizontally) on row 2. */
+  .media-drill-head{flex-direction:column;align-items:stretch;gap:8px}
+  .media-drill-head .media-filter-bar{flex:initial;width:100%}
+}
+@media (max-width:400px){
+  /* Tighter grid on iPhone SE-class widths so two columns still feel
+     like cards, not letterboxed thumbnails. */
+  .media-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+}
+
+/* ── Dashboard / live-card mobile sizing ──────────────────────────────── */
+@media (max-width:768px){
+  /* Multi-cam layouts (.cam-grid-2/-4/-n) collapse to one column at 900 px,
+     so on phones two stacked 16/9 tiles eat ~470 px of vertical space just
+     for the live feed. Compressing them to 21/9 keeps both cameras visible
+     within roughly one viewport while object-fit:cover on .cv-img keeps the
+     surveillance-relevant region centred. Single-cam (.cam-grid-1) stays
+     16/9 — solo users have plenty of room. */
+  .cam-grid-2 .cv-frame,
+  .cam-grid-4 .cv-frame,
+  .cam-grid-n .cv-frame{aspect-ratio:21/9}
+
+  /* Placeholder geometry rescales for the ~165 px-tall frame. The 180 px
+     fixed stage and 72/48 px icons would otherwise clip; everything below
+     scales by ≈2/3 to match the new frame height. */
+  .cv-ph-stage{width:120px;height:120px}
+  .cv-ph-icon--red svg{width:52px;height:52px}
+  .cv-ph-icon:not(.cv-ph-icon--red) svg{width:36px;height:36px}
+  .cv-ph-label{font-size:12px}
+  .cv-ph-ring{width:40px;height:40px;margin:-20px 0 0 -20px}
+  .cv-ph-guides,.cv-ph-radar{width:130px;height:130px}
+  .cv-ph-radar{transform-origin:65px 65px}
+  /* Orbit dots — desktop keyframes hardcode translateX(40/52/28). Switch
+     to mobile-only keyframes with a smaller radius proportional to the
+     shrunken stage. */
+  .cv-ph-orbit--1{animation-name:orbitDotMobile1}
+  .cv-ph-orbit--2{animation-name:orbitDotMobile2}
+  .cv-ph-orbit--3{animation-name:orbitDotMobile3}
+}
+@keyframes orbitDotMobile1{from{transform:rotate(0deg) translateX(27px)}to{transform:rotate(360deg) translateX(27px)}}
+@keyframes orbitDotMobile2{from{transform:rotate(0deg) translateX(34px)}to{transform:rotate(-360deg) translateX(34px)}}
+@keyframes orbitDotMobile3{from{transform:rotate(0deg) translateX(19px)}to{transform:rotate(360deg) translateX(19px)}}
+
+@media (max-width:480px){
+  .cv-name{font-size:13px}
+  /* Live pill — collapsed shrinks; expanded width caps to viewport so the
+     pill never overflows a 375 px card. */
+  .cv-pill-live-wrap{--lp-collapsed-w:84px;--lp-expanded-w:min(210px,calc(100vw - 32px));font-size:10px;max-height:20px}
+  .cv-live-collapsed{padding:2px 7px;font-size:10px}
+  .cv-pill-tl{font-size:10px;padding:2px 7px}
+}
+
+/* ── Statistik · timeline tap-tooltip ─────────────────────────────────── */
+.tl-bar-tooltip{
+  position:fixed;z-index:1200;
+  width:220px;padding:8px 12px;border-radius:10px;
+  background:rgba(15,24,37,.96);color:#e2e8f0;
+  font-size:12px;line-height:1.35;font-weight:600;
+  box-shadow:0 10px 30px rgba(0,0,0,.45);
+  pointer-events:none;opacity:0;transition:opacity .15s ease;
+}
+.tl-bar-tooltip.visible{opacity:1}
+.tl-bar--tip-shown{outline:2px solid rgba(255,255,255,.35);outline-offset:1px}
+
+@media (max-width:768px){
+  /* Compress the timeline metrics so cam-name + label + lanes fit a 375 px
+     viewport without horizontal scrolling. The existing 628 px-line block
+     already shrinks these; this widens the rule to also cover desktop-
+     mobile transition cases (short tablets). Values mirror the spec. */
+  .tl-container{--tl-sidebox-w:92px;--tl-label-w:88px}
+  .tl-cam-name{font-size:13px}
+  .tl-lane-label-text{font-size:12px}
+
+  /* Sichtungen progress bar — slim on mobile so the achievements grid
+     gets the visual weight, not the meta strip on top. */
+  .ach-progress-track{height:6px}
+}
+
+/* ── Wetter mobile ────────────────────────────────────────────────────── */
+@media (max-width:768px){
+  /* Filter pills bar — same horizontal scroll-snap pattern as media. */
+  .ws-filter-bar{
+    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;scroll-snap-type:x proximity;
+    padding:4px 12px;margin:0 -12px;
+  }
+  .ws-filter-bar::-webkit-scrollbar{display:none}
+  .ws-filter-bar > *{scroll-snap-align:start;flex-shrink:0}
+
+  /* Recap strip — let cards bleed to the screen edges so the next card
+     visibly hints at the scroll affordance. Card width 140 px on mobile. */
+  .ws-recaps-strip{padding:2px 12px 6px;margin:0 -12px}
+  .ws-recap-card{flex-basis:140px;min-width:140px}
+
+  /* Time-range pills above the chart — 44 px tap-targets per iOS HIG, and
+     allow horizontal scroll-snap so the 5-pill row (1h/6h/24h/7d/30d)
+     never wraps awkwardly on a 375 px viewport. */
+  #weatherStatsPills{
+    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;scroll-snap-type:x proximity;max-width:100%;
+  }
+  #weatherStatsPills::-webkit-scrollbar{display:none}
+  #weatherStatsPills > *{scroll-snap-align:start;flex-shrink:0}
+  #weatherStatsPills .ws-pill,
+  #weatherStatsPills button{min-height:44px;padding:10px 14px}
+
+  /* Tighten the gap above the filter pills row — the head's 12 px
+     margin-bottom was wasting top-left space on iPhone widths. */
+  .weather-sightings-head{margin-bottom:6px}
+  /* The empty-state box and the Wetterdaten-block underneath it
+     used to read as merged. Add a small clean gap so they're
+     visually separated without floating apart. */
+  .ws-stats-block{margin-top:14px}
+
+  /* Stat chips on mobile: tighten padding + drop label/value font
+     to 10.5 px so full German labels (Niederschlag, Blitz-Energie,
+     Sonnenhöhe, Bewölkung) fit in a 3-column grid on iPhone widths
+     without ellipsis truncation. */
+  .ws-stats-chip{padding:6px 6px;gap:5px}
+  .ws-stats-chip-meta{gap:5px}
+  .ws-stats-chip-label{font-size:10.5px}
+  .ws-stats-chip-value{font-size:10.5px}
+}
+@media (max-width:380px){
+  /* Two-column legend on iPhone SE so the labels don't truncate
+     unreadably tightly inside 3 cramped chips. */
+  .ws-stats-legend{grid-template-columns:repeat(2,1fr)}
+}
+
+/* ── Geräte / cam-edit mobile ─────────────────────────────────────────── */
+@media (max-width:768px){
+  /* Object-filter pill bar inside cam-edit — same horizontal-scroll
+     pattern as the global media filter. */
+  .cam-objfilter-bar{
+    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;scroll-snap-type:x proximity;
+    padding:4px 0;margin:0;
+  }
+  .cam-objfilter-bar::-webkit-scrollbar{display:none}
+  .cam-objfilter-bar > *{scroll-snap-align:start;flex-shrink:0}
+
+  /* Field rows inside the form: bump min-height so values aren't cramped
+     when the floating label sits inside the input. */
+  .field-wrap{min-height:56px}
+
+  /* Mask canvas: allow pinch-zoom on top of single-finger draw — the
+     desktop rule (touch-action: manipulation) suppressed pinch in
+     Safari, which we want back on mobile so the user can zoom into the
+     drawing area. */
+  #maskCanvas{touch-action:pinch-zoom}
+
+  /* Native range inputs are tiny on iOS — give them a bigger thumb. */
+  input[type="range"]{
+    height:6px;-webkit-appearance:none;appearance:none;
+    background:rgba(255,255,255,.08);border-radius:3px;outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:26px;height:26px;border-radius:50%;
+    background:var(--accent);border:2px solid #0a0a0a;cursor:pointer;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:26px;height:26px;border-radius:50%;
+    background:var(--accent);border:2px solid #0a0a0a;cursor:pointer;
+  }
+
+  /* Save & Reload — sticky to the bottom of the cam-edit panel so the
+     user doesn't have to scroll to the end of a long form to save.
+     z-index sits below modals (1100) but above all form chrome. */
+  .cam-save-btn{
+    position:sticky;
+    bottom:calc(env(safe-area-inset-bottom));
+    z-index:5;box-shadow:0 -8px 16px rgba(0,0,0,.45);
+  }
+
+  /* Settings accordion chevron — keep it in view at narrow widths. */
+  .set-chevron{margin-left:auto;flex-shrink:0}
+
+  /* Coral / settings inner tabs — already overflow-x:auto upstream;
+     add scroll-snap for a tighter UX on touch devices. */
+  .set-tabs,.coral-tabs{scroll-snap-type:x proximity;scrollbar-width:none}
+  .set-tabs::-webkit-scrollbar,.coral-tabs::-webkit-scrollbar{display:none}
+  .set-tab,.coral-tab{scroll-snap-align:start;flex-shrink:0;min-height:44px}
+
+  /* Toggle row hit area — switch is 24 px tall, padding 10 px ⇒ 44 px
+     row total. Lock that floor explicitly so future padding tweaks
+     can't shrink the tap target below the iOS HIG. */
+  .toggle-row{min-height:44px}
+
+  /* Logs panel — wrap long lines instead of horizontal scrolling so the
+     terminal feel survives a 375 px viewport. Drop the fixed columns;
+     timestamp + level stack at the start of each row, body wraps. */
+  .log-output{font-size:12px;padding:10px}
+  .log-row{
+    grid-template-columns:auto auto auto 1fr;
+    overflow-wrap:anywhere;word-break:break-word;
+  }
+}
+@media (max-width:480px){
+  /* Stack the logs filter row vertically; the .section-head's inner
+     flex collapses on phone to give each select full width. */
+  #logs .section-head{flex-direction:column;align-items:stretch;gap:8px}
+  #logs .section-head > div{flex-wrap:wrap}
+  #logs .log-level-select{flex:1;min-width:0}
+}
+
+/* ── Cam-card stream containment ──────────────────────────────────────────
+   Defensive cap so any <img> or <video> rendered inside a cam-card
+   (snapshot, HD preview, eventual native MJPEG/HLS stream) can't push
+   the parent column past its grid track. Safe on desktop — these are
+   already column-constrained there; max-width:100% just re-asserts
+   that bound. */
+.cv-card,.cv-card *{min-width:0}
+.cv-card img,.cv-card video,
+.cam-card img,.cam-card video,
+#cameraCards img,#cameraCards video{
+  max-width:100%;
+  height:auto;
+  display:block;
+}
+/* The .cv-img path keeps its position:absolute/inset:0 contract — the
+   above auto height shouldn't override that. Re-pin explicitly so an
+   image with intrinsic 1080p dimensions still fills its frame instead
+   of laying itself out at native size when the absolute positioning
+   loses the cascade race. */
+.cv-card .cv-img,#cameraCards .cv-img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+}
+
+/* ── QA pass · long-tap context-menu suppression on UI thumbnails ─────── */
+/* Keep the lightbox image AS-IS — long-tap "Save Image…" is a feature
+   there. Suppress only on the cards/thumbnails that are part of the app
+   chrome, where the context menu would just get in the way. */
+.media-card img,
+.mmc-img-wrap img,
+.ws-card img,
+.brand img,
+.cv-card img{
+  -webkit-touch-callout:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+/* ── iOS mobile width-cap safety net ─────────────────────────────────────
+   Belt-and-braces against the "intrinsic image width pushes a flex/grid
+   ancestor past viewport" bug on iPhone when a live-tile snapshot
+   finishes loading. The .cv-card itself was already protected
+   (min-width:0, contain:paint, .cv-img absolute-positioned); the leak
+   was higher up the ancestor chain — .panel.section had no min-width:0
+   override, so a grid item with intrinsic-width content could push past
+   its track and drag the whole page along. */
+.main > .panel,
+.main > .section,
+.main > .panel.section,
+#dashboard,
+#dashboard .section-head,
+#cameraCards{min-width:0}
+#dashboard,
+#cameraCards{max-width:100%}
+
+/* Strengthen the .cv-img cap with !important on max-width so a future
+   stylesheet, an inline width attr from some refactor, or a Safari
+   cascade quirk cannot bypass it. The absolute positioning from the
+   earlier rule stays untouched — only the cap gains priority. */
+#cameraCards img,
+#cameraCards video,
+.cv-card .cv-img{max-width:100%!important;max-height:100%}
+
+/* Final viewport-level guard. Even if a new element ships without proper
+   sizing, mobile layout cannot scale out. The img/video catch-all here
+   is overridden by the more specific .cv-img rule above for live tiles,
+   so absolute positioning there is untouched. */
+@media (max-width:768px){
+  html,body{overflow-x:hidden;max-width:100vw}
+  .main,.panel,.section{max-width:100%;min-width:0}
+  img,video{max-width:100%;height:auto}
+}
+
+/* Mobile perf — drop backdrop-filter on the high-density overlay pills.
+   Each blur layer costs a compositor pass; on a card-heavy dashboard this
+   adds up to dropped frames on iPhone SE. The pills stay readable as
+   solid-coloured chips on touch widths. */
+@media (max-width:768px){
+  .cv-pill,
+  .cv-hd-badge,
+  .cv-split-badge,
+  .mmc-cam-pill,
+  .media-label-bubble,
+  .ct-pill,
+  .cb-ms{
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+  }
+}
+
+/* Weather location map — Leaflet container.
+   Storm-blue ring instead of a thin border (depth via color contrast). */
+.ws-map{
+  position:relative;
+  height:280px;
+  width:100%;
+  border-radius:14px;
+  overflow:hidden;
+  box-shadow:0 0 0 1px rgba(127,174,201,.25);
+  background:rgba(127,174,201,.04);
+}
+@media (max-width:768px){
+  .ws-map{height:220px}
+}
+.ws-map .leaflet-container{background:#1a1a1a}
+.ws-map .leaflet-control-attribution{
+  background:rgba(20,20,20,.72);
+  color:#aaa;
+  font-size:10px;
+  padding:1px 6px;
+}
+.ws-map .leaflet-control-attribution a{color:#7faec9}
+/* Custom flat-design pin: 32×42 visual centred on a 44×44 hit-area. */
+.ws-map-pin-wrap{background:transparent;border:none}
+.ws-map-pin-hit{
+  width:44px;height:44px;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+.ws-map-pin-hit svg{
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));
+}
+
+/* Weather "zuletzt gespeichert" footer hint — quiet auto-save signal.
+   No top border line: depth comes from the muted color contrast. */
+.ws-saved-hint{
+  margin-top:14px;
+  padding-top:10px;
+  font-size:12px;
+  font-style:italic;
+  color:var(--muted, #8a8a8a);
+  text-align:right;
+}
+/* Green save-confirmation pulse: same green as .btn-save (#4ade80).
+   Holds the colour for ~1 s, then fades back to the muted resting tone
+   over the remaining 1.4 s — long enough for the user to register
+   "saved" without lingering. */
+@keyframes ws-saved-pulse{
+  0%   {color:#4ade80;opacity:1}
+  40%  {color:#4ade80;opacity:1}
+  100% {color:var(--muted,#8a8a8a);opacity:1}
+}
+.ws-saved-hint.is-pulsing{animation:ws-saved-pulse 2.4s ease-out}
+@media (prefers-reduced-motion: reduce){
+  .ws-saved-hint.is-pulsing{animation:none}
+}
+
+/* Camera-edit › Verbindung › Erweitert disclosure for the RTSP-Pfad
+   picker. Most users never need it — auto-defaults from manufacturer.
+   Depth via background contrast (no thin border lines per project rules). */
+.cam-rtsp-erw{margin-top:10px}
+.cam-rtsp-erw-btn{
+  display:flex;align-items:center;gap:8px;
+  width:100%;min-height:44px;padding:10px 14px;
+  border:none;border-radius:10px;
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  font:inherit;font-size:13px;font-weight:600;
+  text-align:left;cursor:pointer;
+  transition:background .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.cam-rtsp-erw-btn:hover{background:rgba(255,255,255,.07)}
+.cam-rtsp-erw-chev{flex-shrink:0;transition:transform .2s}
+.cam-rtsp-erw-btn[aria-expanded="true"] .cam-rtsp-erw-chev{transform:rotate(90deg)}
+/* "manuell" hint — used to be a coloured pill that visually competed
+   with the form's own value pills. Toned down to small italic muted
+   text per CLAUDE.md (no per-item pill chrome that doesn't carry
+   meaningful semantics). */
+.cam-rtsp-erw-pill{
+  margin-left:auto;padding:0;background:transparent;
+  font-size:10px;font-style:italic;font-weight:400;
+  color:rgba(127,174,201,.65);
+  white-space:nowrap;letter-spacing:.02em;
+}
+.cam-rtsp-erw-pill[hidden]{display:none}
+.cam-rtsp-erw-body{
+  margin-top:8px;padding:10px;
+  border-radius:10px;
+  background:rgba(255,255,255,.025);
+  display:grid;gap:8px;
+}
+/* Class display:grid otherwise wins over the user-agent
+   [hidden]{display:none} (same specificity, class is later in the
+   cascade), so without this explicit rule the disclosure body would
+   stay visually open even when the toggle button reports collapsed. */
+.cam-rtsp-erw-body[hidden]{display:none}
+
+/* Readonly display fields (Kamera-IP, RTSP-URL) — rendered as <input>
+   so form.elements[name] still works, but styled as inline text:
+   transparent bg, transparent border (preserves height geometry to
+   match editable inputs), muted colour, no focus ring. White text =
+   you can edit; muted text = readonly info. */
+.field-wrap input.cam-readonly-input,
+.field-wrap input.cam-readonly-input:focus{
+  background:transparent;
+  border:1.5px solid transparent;
+  color:var(--muted);
+  cursor:default;
+  box-shadow:none;
+}
+.cam-readonly-hint{
+  font-size:11px;font-style:italic;color:var(--muted);
+  margin-top:2px;padding-left:14px;line-height:1.3;
+  opacity:.75;
+}
+
+/* Bestätigungs-Filter — pro Klasse eine Zeile mit N+seconds Inputs.
+   Flat design, kein border, depth via background-tint. */
+.cam-section-head{margin:8px 0 10px}
+.cam-confirm-grid{display:grid;gap:6px}
+.cam-confirm-row{
+  display:grid;
+  grid-template-columns:1fr 64px auto 64px auto;
+  align-items:center;gap:8px;
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(255,255,255,.035);
+  min-height:44px;
+}
+.cam-confirm-cls{
+  font-size:13px;font-weight:600;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.cam-confirm-sep,.cam-confirm-unit{
+  font-size:12px;color:var(--muted);font-style:italic;white-space:nowrap;
+}
+.cam-confirm-n,.cam-confirm-s{
+  width:100%;
+  padding:8px 10px;
+  border-radius:8px;
+  background:#1e1e1e;
+  border:1.5px solid rgba(255,255,255,.07);
+  color:var(--text);
+  font-size:14px;
+  text-align:center;
+  -webkit-appearance:none;appearance:none;
+  outline:none;
+  transition:border-color .15s,box-shadow .15s;
+}
+.cam-confirm-n:focus,.cam-confirm-s:focus{
+  border-color:#555;box-shadow:0 0 0 3px rgba(255,255,255,.06);
+}
+@media (max-width:640px){
+  .cam-confirm-row{
+    grid-template-columns:1fr;
+    gap:4px;padding:10px 12px;
+  }
+  .cam-confirm-cls{font-size:12px}
+  .cam-confirm-row > input{width:100%}
+  .cam-confirm-sep,.cam-confirm-unit{display:none}
+  .cam-confirm-row::before{
+    content:"Treffer / Sekunden";
+    font-size:11px;color:var(--muted);font-style:italic;
+  }
+}
+
+/* Weather chart hover tooltip — flat surface, no border, depth via
+   bg + shadow + blur. Tooltip lives inside .ws-stats-chart-wrap and
+   gets absolute-positioned by the JS handler, clamped to the wrap. */
+.ws-chart-tooltip{
+  position:absolute;
+  background:rgba(15,15,18,.94);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:11px;
+  color:#edf4fb;
+  pointer-events:none;
+  white-space:nowrap;
+  z-index:10;
+  box-shadow:0 6px 20px rgba(0,0,0,.5);
+  min-width:140px;
+  max-width:240px;
+}
+@media (prefers-reduced-motion: reduce){
+  /* Spec: tooltip appears/disappears instantly. The class has no
+     transition by default, but explicitly disable any future addition
+     so a visual rev doesn't accidentally animate for these users. */
+  .ws-chart-tooltip{transition:none !important}
+}
+.ws-chart-tooltip[hidden]{display:none}
+.ws-tt-time{
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  color:rgba(255,255,255,.8);
+  margin-bottom:6px;
+  text-rendering:geometricPrecision;
+}
+.ws-tt-row{
+  display:grid;
+  grid-template-columns:8px 1fr auto;
+  align-items:center;gap:6px;
+  font-size:11px;line-height:1.35;
+}
+.ws-tt-row + .ws-tt-row{margin-top:2px}
+.ws-tt-dot{
+  width:8px;height:8px;border-radius:50%;
+}
+.ws-tt-lbl{
+  color:rgba(255,255,255,.85);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ws-tt-val{
+  font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  font-variant-numeric:tabular-nums;
+  color:#fff;font-weight:600;
+  text-rendering:geometricPrecision;
+}

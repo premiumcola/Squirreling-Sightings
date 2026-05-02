@@ -5,42 +5,54 @@ This directory is the **source of truth** for the app's stylesheet. The file
 boot by `app/app/css_builder.py` (or manually via `python scripts/build_css.py`)
 and gitignored.
 
-## Load order
+## Why numbered prefixes?
 
-The build script concatenates partials in this exact order (defined in
-`app/app/css_builder.py::LOAD_ORDER`). The order matters where later rules
-override earlier ones — design tokens must come first; mobile media queries
-must come last so their @media rules win against any default-state rule the
-domain partials introduce.
+Partials are concatenated in the exact order shown by the file names'
+numeric prefix (`01-…` → `25-…`). That order **matches the original
+source-position** of every rule in the pre-split monolith. Preserving source
+order is what guarantees the cascade — same selector + same specificity →
+last write wins. Reordering rules across partials would silently change
+which rule survives, especially inside `@media` blocks.
 
-1. `tokens.css` — `:root` variables (color/spacing/radius), font setup
-2. `base.css` — element resets, body, scrollbar, focus, the `.panel` /
-   `.section` frame
-3. `utilities.css` — `.btn-*`, badges, chips, the `.row` / `.row3` / `.split`
-   helpers, anything genuinely utility-class shaped
-4. `chrome.css` — sidebar accordion, mobile bottom dock, section-head icons,
-   toast, tooltips, password-toggle
-5. `hero.css` — hero panel + build-info column
-6. `dashboard.css` — camera grid, `.cv-card`, surveillance overlay,
-   offline/connecting placeholders, live pill, HD badge, settings cog
-7. `mediathek.css` — `.media-*` + `.moc-*` + `.ws-card-*` + lightbox + bbox
-   overlay + multi-select + pagination + pills + filters
-8. `timeline.css` — `.tl-*` timeline lanes, range slider
-9. `cam-edit.css` — every `.cam-*` + `.erk-*` + `.alert-*` + `.field-*` +
-   zone/mask editor + RTSP builder + recovery
-10. `timelapse.css` — Timelapse mode grid + period selectors + speed-up
-    labels + active tags
-11. `weather.css` — Wetter-Sichtungen + `.ws-*` + map markers + day/night
-    override row + length-preview + sun-event sliders
-12. `statistics.css` — Statistik dashboard + heatmap + chart
-13. `sichtungen.css` — Achievements + Sichtungen accordion +
-    animal-silhouette tiles
-14. `coral.css` — Coral pipeline tree + 3-tab layout + per-model breakdown +
-    grouped model browser
-15. `telegram.css` — Telegram page + push settings + chat-thread
-16. `mobile.css` — every `@media (max-width: 768px)` block from across the
-    app, gathered into one place. Easier to review the mobile story end to
-    end. **MUST stay last.**
+This is why mobile rules are NOT all gathered into `25-mobile.css`. Most
+`@media (max-width:768px)` blocks live with their owning domain (so they
+appear at the same source position as in the original file). Only the large
+"iOS / mobile foundation" tail block (formerly the bottom ~600 lines of
+`app.css`) lives in `25-mobile.css`. A future "gather mobile" pass can
+revisit this once we have a dedicated visual-regression harness — for this
+round, byte-identity wins.
+
+## Load order (= file-name order)
+
+| # | File | Lines | What's primarily inside |
+|---|---|---:|---|
+| 01 | `01-base.css` | 49 | `:root` tokens, element resets, `.shell`, `.panel`, sidebar/nav |
+| 02 | `02-hero.css` | 95 | Hero panel + build-info column |
+| 03 | `03-dashboard.css` | 314 | Camera grid, `.cv-card`, monitoring placeholders, pills, surveillance overlay, settings cog, unified category filter button |
+| 04 | `04-coral-1.css` | 56 | Coral pipeline tree (compact) |
+| 05 | `05-chrome-dock.css` | 116 | Mobile bottom dock |
+| 06 | `06-cam-edit-1.css` | 949 | Zone/mask editor + Erkennung 5-step + Alerting + per-cam pill bar + Erkennung+Aufnahme block |
+| 07 | `07-timelapse-1.css` | 54 | Timelapse Settings section |
+| 08 | `08-settings.css` | 141 | Sidebar settings accordion + storage bar + password-toggle |
+| 09 | `09-telegram-1.css` | 77 | Telegram page |
+| 10 | `10-timeline.css` | 13 | Timeline tooltip / hover popup |
+| 11 | `11-chrome-overlays.css` | 21 | Toast + section-head icon |
+| 12 | `12-sichtungen.css` | 100 | Achievements + Sichtungen drilldown accordion |
+| 13 | `13-statistics.css` | 62 | Statistics dashboard |
+| 14 | `14-mediathek-1.css` | 14 | Mediathek multi-select mode |
+| 15 | `15-coral-2.css` | 165 | Coral 3-tab layout + accent overrides + per-model breakdown + grouped model browser |
+| 16 | `16-cam-edit-2.css` | 18 | Reconnect button |
+| 17 | `17-timelapse-2.css` | 20 | Timelapse mode grid |
+| 18 | `18-telegram-2.css` | 107 | Group/Telegram panels content inset + fullscreen + push-settings |
+| 19 | `19-weather-1.css` | 60 | Wetter-Ereignisse |
+| 20 | `20-mediathek-2.css` | 34 | Lightbox |
+| 21 | `21-weather-2.css` | 152 | Wetter settings + recaps strip + per-cam sun-timelapse + event-timelapse |
+| 22 | `22-cam-edit-3.css` | 82 | Camera connection-recovery indicator + modal |
+| 23 | `23-weather-3.css` | 136 | Wetterdaten & Prognose chart block |
+| 24 | `24-cam-edit-4.css` | 67 | Camera-edit live id preview |
+| 25 | `25-mobile.css` | 584 | iOS / mobile foundation through end of file |
+
+Total: 3486 lines (matches the pre-split `app.css` exactly).
 
 ## Editing partials
 
@@ -52,18 +64,21 @@ domain partials introduce.
 - The build is a pure concatenation. No transforms, no minification, no
   preprocessor. What you write in a partial is what ships.
 
-## Cross-domain rules
+## Why some domains span multiple files
 
-Some classes are consumed across domains (e.g. `.media-pill` styles used both
-inside the Mediathek and inside the Wetter-Card view). Rule of thumb: the
-class lives with its **primary domain** and other consumers just inherit. If
-two domains genuinely co-own a class, leave it where its strongest visual
-identity sits and add a one-line comment in the consuming partial pointing to
-the owner.
+`cam-edit-1.css`, `cam-edit-2.css`, `cam-edit-3.css`, `cam-edit-4.css` —
+camera-edit rules appear in four non-adjacent slabs of the original file.
+Same for `coral-1` / `coral-2`, `weather-1` / `-2` / `-3`, `telegram-1` /
+`-2`, `mediathek-1` / `-2`, `timelapse-1` / `-2`. The numbered suffix tells
+you which slab; together they're the full domain. A "decompose by domain"
+follow-up pass can merge these once a visual-regression harness is in
+place. For now: contiguous slabs only, source order preserved.
 
 ## Adding a partial
 
-1. Create the file under `css/`.
-2. Add it to `LOAD_ORDER` in `app/app/css_builder.py` at the right position.
-3. Update this README's load-order list.
+1. Create the file under `css/`. Use the next free numeric prefix for the
+   slot you want it loaded in.
+2. Add it to `LOAD_ORDER` in `app/app/css_builder.py` at the right
+   position.
+3. Update this README's load-order table.
 4. Restart server / re-run build.

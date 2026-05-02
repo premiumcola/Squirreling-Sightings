@@ -1,259 +1,76 @@
-// ─── Stage-2 core/* imports ─────────────────────────────────────────────────
-// Helpers extracted from this file's top into per-domain modules under
-// js/core/. Listed individually so a future tree-shake can drop unused
-// names — and so each helper's home is easy to find by name.
-import { state, shapeState, STAT_MEDIA_DRILLDOWN } from './core/state.js';
-import { byId, esc } from './core/dom.js';
-import { j } from './core/api.js';
-import { showToast, showConfirm, _resolveConfirm, bindConfirmModal } from './core/toast.js';
-import {
-  colors, OBJ_LABEL, OBJ_SVG, objBubble, objIconSvg, TL_LABELS,
-  getCameraIcon, getCameraColor,
-} from './core/icons.js';
-// Stages 3a + 3b — dashboard helpers + renderers extracted from this
-// file. Only the cross-tab orchestration loop (startLiveUpdate, which
-// calls into the Erkennung + Alerting status-strip updaters that still
-// live in this file) stays behind. Each name retains its leading
-// underscore so the migration stays string-comparable diff-wise.
-import {
-  _failedSnapshotIds, _resetFailedSnapshotIds, _isSnapshotIdDead,
-  _camIdFromImg, _camImgRetry,
-  _camGridCols,
-  SURVEIL_ACC, SURVEIL_LABEL, _isInScheduleWindow, _surveilMode,
-  _surveilEyeSvg,
-  _makeOfflinePlaceholder, _makeConnectingPlaceholder,
-  _restorePlaceholder,
-  // Stage 3b additions:
-  _hdCards,
-  startPreviewRefresh,
-  toggleCardHd, _refreshLivePillForCard,
-  renderDashboard,
-  showCameraReloadAnimation, reloadCamera,
-  _cvCardClick,
-} from './dashboard.js';
-// Stage 4 — lightbox pure DOM helpers. The state singletons
-// (lbState.item, lbState.index, lbState.deletePending) and the orchestration
-// (openLightbox / closeLightbox / keydown) stay in this file for now
-// because they reach into mediathek + timelapse + live-view modules
-// that haven't extracted yet; once those follow, the orchestration
-// migrates to lightbox.js too.
-// Stage 23 — lightbox orchestration (constants + helpers + openers +
-// keydown handler + button wiring + grid resize listener) all live in
-// lightbox.js now. Named imports of openLightbox/closeLightbox/
-// openTLPlayer give legacy.js something to bridge on window for
-// router.js + inline onclicks; the lightbox module's DOM wiring runs
-// at import time as a side effect.
-import { openLightbox, closeLightbox, openTLPlayer } from './lightbox.js';
-// Stage 6 — timeline render lives in its own module. CAT_COLORS is
-// also re-imported because chips/badges in mediathek + sichtungen
-// still resolve their bar colour from that table; those callsites
-// migrate to direct timeline.js imports as those domains extract.
-import { renderTimeline, CAT_COLORS } from './timeline.js';
-// Stage 6 — the 3 s status poll + the cross-domain loadAll boot
-// orchestration. loadAll uses window.X for renderers that still live
-// in this file; once those domains extract, those window lookups
-// switch to direct named imports.
-import { startLiveUpdate, loadAll } from './live-update.js';
-// Stage 6 — Zusammenführen modal. bindMergeModal() is called below
-// from the post-imports init block to wire its DOM listeners once.
-import { bindMergeModal } from './camera-merge.js';
-// Stage 7 — camedit subdomain. panelState replaces the file-local
-// _currentEditCamId; every read/write site here goes through
-// panelState.camId. RTSP/whitelist/camera_id/recovery helpers are
-// imported as named exports — the editCamera() function in this file
-// is their main consumer (still resident, queued for stage 8).
+// ─── camedit/index.js ──────────────────────────────────────────────────────
+// Stage 25 D of the legacy.js → ES modules refactor — camera-settings
+// root: hero/sidebar shell renderer, camera list, edit-panel hydrator
+// (the big editCamera function), profiles + audit + arm toggles, the
+// Settings tab hydrator, system info panel, cam-edit tab bar, MQTT
+// section save, config import/export. Pure code move from legacy.js,
+// no behaviour changes.
+//
+// Most cam-edit functionality already lives in dedicated modules
+// (camedit/rtsp.js, whitelist.js, detection.js, recovery.js,
+// camera_id.js, panel.js, coral-test.js, timelapse-settings.js,
+// wizard.js, discovery.js); this file is the orchestration layer that
+// wires them together when a camera is opened for editing.
+//
+// Public surface bridged on window for inline onclicks + loadAll() in
+// live-update.js: editCamera, toggleArm, toggleCameraEnabled,
+// _reconnectCam, _quickDeleteCamera, _flashDetection, saveMqttSettings,
+// renderShell, renderCameraSettings, renderProfiles, renderAudit,
+// hydrateSettings.
+import { state, shapeState } from '../core/state.js';
+import { byId, esc } from '../core/dom.js';
+import { j } from '../core/api.js';
+import { showToast, showConfirm } from '../core/toast.js';
+import { getCameraIcon } from '../core/icons.js';
+import { loadAll } from '../live-update.js';
+import { reloadCamera } from '../dashboard.js';
 import {
   panelState, _restoreEditWrapper, _closeEditPanel,
-} from './camedit/panel.js';
+} from './panel.js';
 import {
-  RTSP_PATH_OPTS, _rtspEnc, _maskUrlPassword, _applyUrlMask,
-  _revealUrl, _unmaskUrlsForSubmit, _defaultRtspPathForManufacturer,
+  RTSP_PATH_OPTS, _applyUrlMask, _defaultRtspPathForManufacturer,
   _updateRtspErweitertVisuals, initRtspBuilder, parseRtspUrl,
-} from './camedit/rtsp.js';
+} from './rtsp.js';
 import {
-  getWhitelistState, setWhitelistState,
-  _renderWhitelistChips, _updateWhitelistHidden,
-} from './camedit/whitelist.js';
+  setWhitelistState, _updateWhitelistHidden,
+} from './whitelist.js';
 import {
-  buildCameraId, _refreshCamIdPreview, _bindCamIdPreviewListeners,
-} from './camedit/camera_id.js';
+  _refreshCamIdPreview, _bindCamIdPreviewListeners,
+} from './camera_id.js';
 import {
   _loadCamDiagnostics, _refreshConnectionWarn,
-} from './camedit/recovery.js';
-// Stage 8 — camedit detection-tab UI. Form listeners + Erk sliders +
-// per-class drilldowns + simulate panel + cam-object pills + Erkennung
-// status strip + the legacy hidden #camConfirmGrid. _camObjectFilter
-// State is hidden inside the module; getter/setter give legacy access.
+} from './recovery.js';
 import {
   _initCameraFormListeners, _initErkSliders,
   _renderErkPerClassConfidence, _bindErkPerClassToggle,
-  _collectLabelThresholds,
   _renderErkPerClassConfirm, _bindErkConfirmPerClassToggle,
-  _collectConfirmationWindow,
   _bindErkSimulate,
   _renderCamObjectPills, getCamObjectFilterState, setCamObjectFilterState,
   _renderGlobalStatusRows, _renderCamConfirmGrid,
-  _fmtRelativeAgeS,
-} from './camedit/detection.js';
-// Stage 9 — polygon zone/mask editor. Importing the module also fires
-// its IIFE that wires the canvas + toolbar buttons (idempotent against
-// a missing canvas, so calling on every page is safe).
+} from './detection.js';
 import {
-  drawShapes, loadMaskSnapshot, saveShapesIntoForm, getCanvasCtx,
+  drawShapes, loadMaskSnapshot,
   _renderShapeList, _updateShapeDrawingBar, _updateShapeModeButtons,
-} from './shape-editor.js';
-// Stage 10 — chrome / UI subsystem. Each module either exports
-// helpers we still call here or runs a self-init IIFE on import
-// (sidebar collapse, mobile-dock scrollspy, logs panel boot).
-import './chrome/settings-collapse.js';
-import './chrome/sidebar.js';
-import { _setEyeState } from './chrome/password-toggle.js';
-import { loadMediaStorageStats, refreshTimelineAndStats } from './chrome/storage-stats.js';
-import './chrome/mobile-dock.js';
-import { loadLogs } from './chrome/logs.js';
-// Stage 23 — Mediathek orchestration extracted into its own module.
-// Imported here so legacy.js can keep maintaining the window.* bridges
-// other modules and inline onclicks resolve through.
+} from '../shape-editor.js';
+import { _bindCamProbeDeviceInfo } from './discovery.js';
 import {
-  calcItemsPerPage, MEDIA_FILTER_LABELS, _aggregateMediaCounts,
-  _seedTopMediaLabel, _pruneEmptyMediaFilters, renderMediaFilterPills,
-  syncMediaPills, loadMedia, CAM_COLORS, camColor, hexToRgba,
-  getMediaAccentColor, fmtMediaDate, fmtMediaTimeOnly, mediaCardHTML,
-  _MOC_ALL_SVG, _MOC_OBJECT_TYPES, _mocChip, _buildMocChips,
-  renderMediaOverview, _setActiveMocCard, openCategoryDrilldown,
-  openAllMediaDrilldown, openMediaDrilldown, closeMediaDrilldown,
-  _goToPage, renderMediaPagination, _ensureProcessingPoll, renderMediaGrid,
-  _MEDIA_TITLE_SVG, updateMediaSectionTitle,
-  deleteMediaCard, deleteTLCard, confirmMediaCard,
-} from './mediathek/orchestration.js';
-// Stage 11 — live-view modal + generic fullscreen wiring. live-view's
-// inline onclicks live in index.html. closeLiveView and _initFsBtn
-// are now consumed directly by lightbox.js (stage 23 B); the side-
-// effect import keeps live-view.js's DOM listeners wired at boot.
-import './chrome/live-view.js';
-import './chrome/fullscreen.js';
-// Stage 12 — Telegram + Push. push.js inlines the wetter-events
-// extension that used to monkey-patch hydratePushUI; renderWeather
-// Sightings / loadWeatherSightings monkey-patches at line ~6700 stay
-// in legacy.js until stage 16 ships weather/sightings.js.
-import { hydrateTelegram, initTelegramTabs } from './telegram.js';
-import { hydratePushUI } from './push.js';
-// Stage 13 — easy mediathek pieces. Lightbox / bbox / iOS-video /
-// drilldown stay in this file for now; their lbState.item state is shared
-// across 90+ callsites and needs a coordinated extraction.
-import './mediathek/rescan.js';
-import './mediathek/bulk-delete.js';
-import './mediathek/grid.js';
-// Stage 14 — animal silhouettes (pure data tables) + Sichtungen panel.
-// loadAchievements is bridged on window so the boot block at the end
-// of this file (`loadAll().then(...,loadAchievements())`) keeps working
-// without per-callsite import changes — the boot kickoff also moves
-// in stage 18.
-import { loadAchievements, renderAchievements } from './sichtungen.js';
-// Stage 15 — Statistik dashboard. Self-bound: IntersectionObserver
-// triggers loadStatistik on scroll, refresh button is wired on
-// import. _statOpenMedia is bridged on window for inline onclicks.
-import './statistics.js';
-// Stage 16 (partial) — Wetter-Ereignis types (label + colour + icon).
-// Sightings + settings still live in this file pending stage 24 B / C.
-import { WEATHER_TYPES } from './core/weather-types.js';
-// Stage 24 A — Wetterstatistik chart + explainer + legend + pill bar.
-// initWeatherStats is bridged on window because loadAll (live-update.js)
-// resolves it that way; once loadAll switches to a direct named import
-// the bridge below evaporates.
-import {
-  loadWeatherStats, renderWeatherStats, renderWeatherStatsChart,
-  renderWeatherStatsLegend, renderWeatherStatsExplainer, initWeatherStats,
-} from './weather/stats.js';
-// Stage 24 B — Sichtungen grid + lightbox + recaps + hash-anchor router.
-// loadWeatherSightings is bridged on window because router.js calls it
-// that way. The hashchange + DOMContentLoaded listeners run at
-// module-import time.
-import {
-  loadWeatherSightings, renderWeatherSightings, openWeatherLightbox,
-  closeWeatherLightbox, loadWeatherRecaps, openWeatherRecapLightbox,
-} from './weather/sightings.js';
-// Stage 24 C — Wetter-Einstellungen tab (cam panels, event blocks,
-// location map, status). initWeatherTabs + hydrateWeatherSettings are
-// bridged on window because loadAll() resolves them that way.
-import { initWeatherTabs, hydrateWeatherSettings } from './weather/settings.js';
-// Stage 25 A — Coral TPU test panel. Side-effect import: the module
-// binds the "Reload" button on load and assigns its own window.*
-// handlers for the inline onclicks on the test page.
-import './camedit/coral-test.js';
-// Stage 25 B — Timelapse subdomain. Public surface bridged on window
-// because loadAll resolves loadTlStatus + _updateTlActiveTags by name.
-// The module additionally assigns window.loadTimelapse / toggleTimelapse
-// / loadTlSettings / saveTlCameraProfiles / etc. for inline onclicks.
-import {
-  loadTimelapse, toggleTimelapse, loadTlStatus, _updateTlActiveTags,
-} from './camedit/timelapse-settings.js';
-// Stage 25 C — first-run wizard (4 steps + finish handler). Side-
-// effect import: the module owns its own DOM wiring + window bridge.
-import './camedit/wizard.js';
-// Stage 25 C — Camera-Discovery modal (subnet scan, results grid, add
-// form, apply-RTSP-to-edit-panel). Side-effect import: the module's
-// own bottom binds the discovery-modal listeners + openWizardBtn.
-// _bindCamProbeDeviceInfo is called from inside editCamera (still
-// here), so it is a named import.
-import { _bindCamProbeDeviceInfo } from './camedit/discovery.js';
-// Stage 17 — Alerting tab: per-class severity matrix + cooldown grid +
-// conflict banner + test-push button + status strip. _renderAlert
-// StatusStrip is bridged on window for live-update.js's 3 s poll.
-import {
-  _renderSeverityMatrix, _collectClassSeverity, _checkAlertingConflicts,
-  _renderAlertCooldownGrid, _bindAlertCooldownToggle, _collectAlertCooldown,
+  _renderSeverityMatrix, _checkAlertingConflicts,
+  _renderAlertCooldownGrid, _bindAlertCooldownToggle,
   _bindAlertTestButton, _bindAlertingConflictWatch,
   _renderAlertStatusStrip,
-} from './alerting.js';
-// Stage 18 — Telegram deep-link router. Resolves Telegram-bubble URLs
-// (#/event/<id>, #/sighting/<id>, #/recap/<id>) to the right section
-// + lightbox. Runs hashchange + 1.5 s post-load self-bind.
-import './router.js';
-// Stages 20–22 (lbState + bbox-overlay + iOS-video handoff) are now
-// consumed directly by lightbox.js (stage 23 B). lightbox.js imports
-// them too, so the modules + their IIFEs load transitively without
-// needing duplicate imports here.
+} from '../alerting.js';
 
-// _hmTip moved with statistics.js (Stage 15) — its only consumer was
-// the heatmap tooltip in _renderStatistik.
-// OBJ_SVG / objBubble / objIconSvg / TL_LABELS now live in core/icons.js
-// _renderLbLabels moved to lightbox.js (Stage 23 B).
-// getCameraIcon / getCameraColor now live in core/icons.js.
-// shapeState now lives in core/state.js. byId / esc now live in
-// core/dom.js. The fetch helper `j` now lives in core/api.js.
-
-// SQUIRREL_CHARS retired — its renderer was removed in the hero-panel
-// refactor (the hyphen of "TAM-spy" got an inline SVG ornament instead),
-// and `(()=>{const el=byId('heroSquirrel');if(el)el.innerHTML='';})()`
-// at the bottom of this file is the only surviving reference (a no-op
-// safety guard against a stale template).
+// Coral pipeline tree + device info + test cam list are bridged on
+// window inside camedit/coral-test.js — reach them that way until that
+// module exposes named exports.
+const _updateCoralDeviceInfo   = (...a) => window._updateCoralDeviceInfo?.(...a);
+const _renderCoralPipelineTree = (...a) => window._renderCoralPipelineTree?.(...a);
+const _populateCoralTestCameras = (...a) => window._populateCoralTestCameras?.(...a);
 
 // Tiny helper used by the export-config buttons in the App-Section.
 const download = (url) => window.open(url, '_blank');
 
-// _failedSnapshotIds + dead-id helpers + _camImgRetry now live in
-// dashboard.js (Stage 3a). The window._camImgRetry bridge moves with
-// the function so inline onclick="_camImgRetry(this)" keeps resolving.
-
-// ── Camera edit slide panel ───────────────────────────────────────────────────
-// Now lives in camedit/panel.js (Stage 7). _currentEditCamId is gone —
-// replaced by the imported `panelState.camId`. Mutating the field on
-// the shared object propagates to every importer because ES module
-// imports are live bindings to the same object reference.
-
-// ── Live update ───────────────────────────────────────────────────────────────
-// startLiveUpdate + loadAll now live in live-update.js (Stage 6).
-// loadAll is also bridged on window so the many in-file callers (save
-// flows, toggleArm, quick-delete, …) continue to resolve via the same
-// `loadAll(...)` they always did — no per-callsite import edit
-// needed because the import at the top brings the name into module
-// scope here too.
-
-// Mediathek orchestration (drilldown openers, filter pills, loadMedia,
-// grid + pagination + processing-poll, overview cards, section title)
-// extracted to mediathek/orchestration.js in stage 23. The window.* bridges
-// further down keep inline onclicks + still-resident callers resolving.
+const download = (url) => window.open(url, '_blank');
 
 function renderShell(){
   // Hero title is now a static "TAM-spy" lockup with the squirrel-on-
@@ -302,13 +119,6 @@ window._flashDetection = function(camId, cls){
   setTimeout(() => tgt.classList.remove('is-detecting'), 3000);
 };
 
-// ── Timeline ─────────────────────────────────────────────────────────────────
-// Now lives in timeline.js (Stage 6). renderTimeline + helpers +
-// CAT_COLORS / TL_LANES / GAP_MS constants moved together.
-
-// ── RTSP / URL masking / Connection builder ─────────────────────────────────
-// Now lives in camedit/rtsp.js (Stage 7). RTSP_PATH_OPTS, _rtspEnc,
-// _maskUrlPassword, _applyUrlMask, _revealUrl, _unmaskUrlsForSubmit,
 // _defaultRtspPathForManufacturer, _updateRtspErweitertVisuals,
 // initRtspBuilder, parseRtspUrl all moved together. Inline-onclick
 // handlers (_toggleUrlMask, _toggleCamRtspErw) keep their window
@@ -384,27 +194,6 @@ window._quickDeleteCamera=async function(camId,camName){
   try{
     const r=await j(`/api/settings/cameras/${encodeURIComponent(camId)}`,{method:'DELETE'});
     if(r.event_count>0) showToast(`${r.event_count} gespeicherte Ereignisse bleiben im Archiv erhalten.`,'warn');
-    if(panelState.camId===camId) _restoreEditWrapper();
-    await loadAll();
-  }catch(e){showToast('Fehler beim Löschen: '+esc(e.message||e),'error');}
-};
-
-// ── Whitelist chips ───────────────────────────────────────────────────────────
-// Now lives in camedit/whitelist.js (Stage 7). Internal _whitelistState
-// is hidden inside the module; this file reads/writes via the
-// imported getWhitelistState() / setWhitelistState() pair. The save
-// flow at line ~3300 and editCamera at line ~1600 are the two callers
-// inside this file.
-
-// ── camera_id JS port — keep in lockstep with app/app/camera_id.py ──────────
-// Now lives in camedit/camera_id.js (Stage 7). buildCameraId,
-// _camIdSanitise, _camIdLastIpSegment, _CAM_ID_TRANSLIT all moved
-// together. _CW_DEFAULTS / _renderCamConfirmGrid below stay until
-// stage 8 ships the camedit/detection.js extraction.
-
-
-// _refreshCamIdPreview + _bindCamIdPreviewListeners now live in
-// camedit/camera_id.js (Stage 7); editCamera below imports them.
 
 function editCamera(camId){
   // Defensive: if the cam-edit form isn't in the DOM yet (rare but
@@ -669,30 +458,6 @@ function editCamera(camId){
   }
 }
 
-// ── Connection-recovery modal + indicator + diagnostics ─────────────────────
-// Now lives in camedit/recovery.js (Stage 7). _refreshConnectionWarn,
-// _loadCamDiagnostics, the Sicherung/Auto-Erkennung modal helpers and
-// the _toggleCamDiag inline handler all moved together. editCamera()
-// in this file calls _refreshConnectionWarn + _loadCamDiagnostics via
-// direct named imports; the modal opens through its window bridges.
-window.editCamera=editCamera;
-
-byId('deleteCameraBtn').onclick=async()=>{
-  const camId=byId('deleteCameraBtn').dataset.camId;
-  if(!camId) return;
-  if(!await showConfirm(`Kamera "${camId}" wirklich löschen?\n\nDieser Vorgang entfernt die Kamera aus der Konfiguration. Ereignisse und Medien bleiben im Speicher erhalten.`)) return;
-  const r=await j(`/api/settings/cameras/${encodeURIComponent(camId)}`,{method:'DELETE'});
-  if(r.event_count>0) showToast(`Hinweis: Für diese Kamera existieren noch ${r.event_count} gespeicherte Ereignisse im Storage. Sie wurden NICHT gelöscht.`,'warn');
-  // Clear form so deleted camera's data doesn't linger
-  byId('cameraForm').reset();
-  byId('deleteCameraBtn').dataset.camId='';
-  byId('maskSnapshot').src='';
-  shapeState.camera=null; shapeState.zones=[]; shapeState.masks=[]; shapeState.points=[];
-  const ctx=getCanvasCtx(); ctx.clearRect(0,0,byId('maskCanvas').width,byId('maskCanvas').height);
-  _restoreEditWrapper();
-  await loadAll();
-};
-
 async function renderProfiles(){
   const cats=await j('/api/cats'); const persons=await j('/api/persons');
   const catEl=byId('catList'); const perEl=byId('personList');
@@ -704,8 +469,6 @@ async function renderAudit(){ const actions=await j('/api/telegram/actions'); by
 async function toggleArm(camId,armed){ await fetch(`/api/camera/${camId}/arm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({armed})}); await loadAll(); }
 window.toggleArm=toggleArm;
 // _cvCardClick now lives in dashboard.js (Stage 3b). Its window
-// bridge migrates with the function so the inline onclick handler
-// rendered into each cv-card keeps resolving.
 
 function hydrateSettings(){
   const mqtt=state.config.mqtt||{};
@@ -788,16 +551,6 @@ function hydrateSettings(){
   _updateCoralDeviceInfo();
   _renderCoralPipelineTree();
   _populateCoralTestCameras();
-  // Models list is now behind the Modelle sub-tab; load it lazily on
-  // first open via toggleCoralTab, so hydrate doesn't spin up a request
-  // users aren't looking at.
-  // Hydrate media settings form
-  const storageSec=state.config.storage||{};
-  const rdVal=storageSec.retention_days||14;
-  const rdEl=byId('ms_retention_days'); if(rdEl) rdEl.value=rdVal;
-  const rdLbl=byId('ms_retention_days_val'); if(rdLbl) rdLbl.textContent=rdVal+' Tage';
-  const acEl=byId('ms_auto_cleanup'); if(acEl) acEl.checked=!!storageSec.auto_cleanup_enabled;
-}
 
 async function updateSystemPanel(){
   const panel=byId('systemInfoPanel'); if(!panel) return;
@@ -875,45 +628,9 @@ function initCameraEditTabs(){
 }
 
 
-
 byId('reloadConfigBtn').onclick=()=>loadAll();
 
-// Slider feedback is decoupled from the network: input events update
-// state.tlHours, the label, and re-render the timeline against whatever
-// data is already cached in state.timeline (instant). The actual fetch
-// is debounced and cancellable so a fast drag spawns at most one
-// in-flight request, and stale responses can never overwrite a newer
-// selection (token check at resolution time).
-let _tlFetchTimer=null;
-let _tlFetchAbort=null;
-let _tlFetchToken=0;
-function _tlFetchTimeline(hours){
-  if(_tlFetchAbort){try{_tlFetchAbort.abort();}catch{}}
-  const ctrl=new AbortController();
-  _tlFetchAbort=ctrl;
-  const myToken=++_tlFetchToken;
-  const url=`/api/timeline?hours=${hours}${state.label?`&label=${encodeURIComponent(state.label)}`:''}`;
-  j(url,{signal:ctrl.signal}).then(data=>{
-    if(myToken!==_tlFetchToken) return;
-    if(state.tlHours!==hours) return;
-    state.timeline=data;
-    renderTimeline();
-  }).catch(()=>{/* abort or error: keep current data */});
-}
-byId('tlRangeSlider').addEventListener('input',e=>{
-  state.tlHours=parseInt(e.target.value);
-  renderTimeline();
-  clearTimeout(_tlFetchTimer);
-  const hours=state.tlHours;
-  _tlFetchTimer=setTimeout(()=>_tlFetchTimeline(hours),250);
-});
-byId('tlRangeSlider').addEventListener('change',e=>{
-  state.tlHours=parseInt(e.target.value);
-  clearTimeout(_tlFetchTimer);
-  _tlFetchTimeline(state.tlHours);
-});
 byId('closeCameraEdit')?.addEventListener('click',()=>_closeEditPanel());
-// ── Section-level save functions ──────────────────────────────────────────────
 window.saveMqttSettings=async function(){
   const existingPass=(state.config?.mqtt?.password||'');
   const payload={
@@ -931,9 +648,7 @@ window.saveMqttSettings=async function(){
   await loadAll();
 };
 // Camera-card placeholder rendering moved with the dashboard module
-// in stage 3 — the offline frame, the connecting animation, and
-// reloadCamera now live in dashboard.js. The camera_id stamp on the
-// retry button (window._camImgRetry) is bridged from there.
+
 
 byId('exportJsonBtn').onclick=()=>download('/api/settings/export?format=json');
 byId('exportYamlBtn').onclick=()=>download('/api/settings/export?format=yaml');
@@ -942,113 +657,14 @@ byId('importJsonBtn').onclick=async()=>{await importConfig('json');};
 byId('importYamlBtn').onclick=async()=>{await importConfig('yaml');};
 async function importConfig(format){ const content=byId('importBox').value.trim(); if(!content){showToast('Bitte Inhalt einfügen.','warn');return;} const r=await j('/api/settings/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,content})}); byId('importBox').value=''; await loadAll(); showToast('Import erfolgreich.','success'); }
 
-// ── Timelapse Settings ────────────────────────────────────────────────────────
-// deleteMediaCard / deleteTLCard / confirmMediaCard moved to
-// mediathek/orchestration.js (Stage 23 C). The window.* bridges below
-// keep the inline onclicks rendered by mediaCardHTML resolving.
-
-
-
-// Wire confirm modal
-// Confirm-modal click wiring — moved into core/toast.js's
-// bindConfirmModal() so the stage-2 module owns its own DOM
-// listeners. Idempotent via dataset.wired.
-bindConfirmModal();
-
-// Legacy hero squirrel ASCII-injector — the hero now uses a static
-// inline SVG ornament on the hyphen of "TAM-spy" so the random
-// SQUIRREL_CHARS pick is no longer wired. Kept null-safe in case a
-// stale template still has the #heroSquirrel element.
-(()=>{const el=byId('heroSquirrel');if(el)el.innerHTML='';})();
-
-
-loadAll().then(()=>{startLiveUpdate(); loadAchievements();});
-// loadLogs() now self-fires from chrome/logs.js's import-time boot.
-
-// ── Wetter-Ereignisse (Phase 2) ─────────────────────────────────────────────
-
-
-
-
-
-// ── Wetter-Ereignisse Phase 3: Recaps + push UI + hash anchor ───────────────
-
-
-
-// ─── Module-bridge exports (stage-1 of the ES-modules refactor) ────────────
-// As a regular <script> top-level function declarations attached themselves
-// to window automatically, which is how the inline onclick handlers in
-// templates and innerHTML strings find their callbacks. As a module we
-// lose that implicit bridge — these explicit assignments restore the
-// names the inline handlers reference. The 70-or-so explicit window.X = X
-// statements scattered through this file already covered most callbacks;
-// the names below were the gaps the static-grep audit surfaced.
-//
-// Future per-domain modules will move each function out of this legacy
-// file into js/<domain>.js with its own export-to-window line at the
-// module's bottom; this block shrinks accordingly.
-window._goToPage          = _goToPage;
-window._statOpenMedia     = _statOpenMedia;
-window.byId               = byId;
-window.closeMediaDrilldown = closeMediaDrilldown;
-window.openMediaDrilldown = openMediaDrilldown;
-// _openMediaItem is intentionally NOT bridged here. It has no
-// top-level binding — the only definition is `window._openMediaItem =
-// id => {...}` inside the media-grid render function (renderMedia),
-// which runs every time the gallery is populated. Bridging from a
-// module-level binding would throw ReferenceError because none
-// exists; the inline onclicks ("window._openMediaItem(...)") look
-// up the property directly and work as soon as the gallery renders.
-
-// Stage 6 — renderers/hydrators that loadAll() (now in live-update.js)
-// invokes via window.X because they still live in this file. Each
-// migrates to a direct named import as its domain extracts in
-// stage 7+, and the matching line below disappears at that point.
-window.renderShell             = renderShell;
-window.renderCameraSettings    = renderCameraSettings;
-window.renderProfiles          = renderProfiles;
-window.renderAudit             = renderAudit;
-window.hydrateSettings         = hydrateSettings;
-window.initWeatherTabs         = initWeatherTabs;
-window.initWeatherStats        = initWeatherStats;
-window.loadWeatherSightings    = loadWeatherSightings;
-window.hydrateWeatherSettings  = hydrateWeatherSettings;
-window.loadTlStatus            = loadTlStatus;
-window._updateTlActiveTags     = _updateTlActiveTags;
-// window.openWizard now lives inside camedit/wizard.js — duplicate
-// removed during Stage 25 C extraction.
-window.updateMediaSectionTitle = updateMediaSectionTitle;
-window.loadMedia               = loadMedia;
-window.renderMediaGrid         = renderMediaGrid;
-// Stage 23 bridges — these used to live next to the function bodies in
-// legacy.js. Now that mediathek/orchestration.js owns the bodies, the
-// bridges still live here so inline onclicks ("openMediaDrilldown(...)")
-// + still-resident callers (router.js, statistics.js, timeline.js,
-// chrome/storage-stats.js) keep resolving. Each bridge evaporates as
-// its consumer migrates to a direct import.
-window.openAllMediaDrilldown   = openAllMediaDrilldown;
-window.openCategoryDrilldown   = openCategoryDrilldown;
-window.calcItemsPerPage        = calcItemsPerPage;
-window.renderMediaPagination   = renderMediaPagination;
-window.renderMediaOverview     = renderMediaOverview;
-window.renderMediaFilterPills  = renderMediaFilterPills;
-window._pruneEmptyMediaFilters = _pruneEmptyMediaFilters;
-window._seedTopMediaLabel      = _seedTopMediaLabel;
-// Stage 23 B — lightbox bridges. Consumed by router.js
-// (_openLightboxByEventId), inline onclicks rendered in cards,
-// timeline.js's media-drill click handler, and a couple of cam-edit
-// flows that pop the lightbox after save.
-window.openLightbox            = openLightbox;
-window.closeLightbox           = closeLightbox;
-window.openTLPlayer            = openTLPlayer;
-// Stage 23 C — card-action bridges. Consumed by inline onclicks
-// rendered inside mediaCardHTML. Each evaporates when its card swaps
-// to delegated event listeners.
-window.deleteMediaCard         = deleteMediaCard;
-window.deleteTLCard            = deleteTLCard;
-window.confirmMediaCard        = confirmMediaCard;
-// Stage 6 — wire the merge-modal DOM listeners once. camera-merge.js
-// owns the open/select/close logic but its event listeners need to
-// fire after the static template has rendered (always true since this
-// script loads as a module = deferred).
-bindMergeModal();
+// ── window.* bridges (Stage 25 D) ───────────────────────────────────────────
+// loadAll() in live-update.js looks these up on window, and several
+// inline onclicks in the camera-list HTML (rendered by renderCameraSettings)
+// also reach for them by global name. The window assignments live here
+// next to the function bodies they bridge — when those callsites finally
+// migrate to direct named imports, this block evaporates.
+window.renderShell           = renderShell;
+window.renderCameraSettings  = renderCameraSettings;
+window.renderProfiles        = renderProfiles;
+window.renderAudit           = renderAudit;
+window.hydrateSettings       = hydrateSettings;

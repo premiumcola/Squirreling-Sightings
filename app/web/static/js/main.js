@@ -1,13 +1,81 @@
 // ─── TAM-spy frontend module entry ─────────────────────────────────────────
-// Stage 1 of the app.js → ES modules refactor: the index template now
-// loads this file with type="module" instead of the old monolithic
-// /static/app.js. main.js currently does nothing more than import the
-// legacy script for its top-level side effects so the boot order is
-// preserved byte-for-byte.
+// Boot shell. After Stage 25 D the legacy.js monolith is gone; main.js
+// is the single explicit module entry that:
+//   1. Imports every domain module so its DOM wiring runs at boot.
+//   2. Wires the cross-module init helpers (confirm modal, merge modal,
+//      hero-squirrel guard).
+//   3. Kicks off loadAll() and the live-update poll once the shell is
+//      ready. Achievement bootstrap rides the same kickoff so the
+//      Sichtungen panel hydrates without a separate hook.
 //
-// Subsequent stages move features out of legacy.js into per-domain
-// modules under js/* — each one imported here in the same order the
-// legacy file's top-level code currently runs. Adding a new domain
-// module is one new import line; the legacy bridge shrinks on the
-// other side until legacy.js is empty and gets deleted.
-import './legacy.js';
+// Each module owns its own window.* bridges where inline onclicks
+// rendered into innerHTML strings still need to find a global symbol;
+// those bridges evaporate as each consumer migrates to delegated event
+// listeners.
+import { byId } from './core/dom.js';
+import { bindConfirmModal } from './core/toast.js';
+// Cross-domain orchestration loops + bootstrappers.
+import { startLiveUpdate, loadAll } from './live-update.js';
+// Zusammenführen modal — bindMergeModal() wires its DOM listeners once.
+import { bindMergeModal } from './camera-merge.js';
+// Side-effect imports — these modules either auto-init on import or
+// expose their public surface via window assignments inside them.
+// Order matches the dependency graph: chrome shell → mediathek/lightbox
+// → weather → cam-edit subdomain → router. Each comment tags the stage
+// the module ships in so future archaeology stays cheap.
+import './chrome/settings-collapse.js';                 // stage 10
+import './chrome/sidebar.js';                           // stage 10
+import './chrome/mobile-dock.js';                       // stage 10
+import './chrome/live-view.js';                         // stage 11
+import './chrome/fullscreen.js';                        // stage 11
+import './chrome/logs.js';                              // stage 10
+import './statistics.js';                               // stage 15
+import './mediathek/rescan.js';                         // stage 13
+import './mediathek/bulk-delete.js';                    // stage 13
+import './mediathek/grid.js';                           // stage 13
+import './lightbox.js';                                 // stage 23 B
+import './mediathek/orchestration.js';                  // stage 23 A
+import './weather/stats.js';                            // stage 24 A
+import './weather/sightings.js';                        // stage 24 B
+import './weather/settings.js';                         // stage 24 C
+import './camedit/coral-test.js';                       // stage 25 A
+import './camedit/timelapse-settings.js';               // stage 25 B
+import './camedit/wizard.js';                           // stage 25 C
+import './camedit/discovery.js';                        // stage 25 C
+import './camedit/index.js';                            // stage 25 D
+import './router.js';                                   // stage 18
+// Achievement panel — loadAchievements rides the loadAll() kickoff
+// below; the named import makes it visible to the .then() callback.
+import { loadAchievements } from './sichtungen.js';
+// Telegram + push hydration is wired by their own modules at import
+// time; bringing the side-effect imports in keeps the load order
+// predictable.
+import './telegram.js';
+import './push.js';
+
+// Confirm-modal click wiring lives in core/toast.js's bindConfirmModal —
+// idempotent, so calling it from the boot shell is safe.
+bindConfirmModal();
+
+// Zusammenführen modal — same idempotent pattern; needs to run after
+// the static template renders, which is always true under
+// type="module" semantics (deferred parse).
+bindMergeModal();
+
+// Legacy hero squirrel ASCII-injector — the hero now uses a static
+// inline SVG ornament on the hyphen of "TAM-spy", so the random
+// SQUIRREL_CHARS pick is no longer wired. Kept null-safe in case a
+// stale template still has the #heroSquirrel element.
+(() => { const el = byId('heroSquirrel'); if (el) el.innerHTML = ''; })();
+
+// ── Boot kickoff ────────────────────────────────────────────────────────────
+// loadAll() fetches bootstrap + cameras + timeline + media stats, then
+// runs every domain renderer (most via window.X lookups in
+// live-update.js — those evaporate as each domain migrates). Once it
+// resolves, the 3 s status poll starts and Sichtungen hydrates.
+loadAll().then(() => { startLiveUpdate(); loadAchievements(); });
+// loadLogs() self-fires from chrome/logs.js's import-time boot.
+
+// debug helper used by a couple of inline-onclick attributes when the
+// page is reduced for diagnostics — leave alone.
+window.byId = byId;

@@ -561,3 +561,11 @@ window.addEventListener('resize', () => {
     }
   }, 400);
 });
+
+// ── window.* bridges (Stage 25 D) ───────────────────────────────────────────
+// router.js + a couple of cam-edit save flows reach for these by
+// global name; renderMediaGrid's _openMediaItem also looks up
+// window.openLightbox at runtime.
+window.openLightbox  = openLightbox;
+window.closeLightbox = closeLightbox;
+window.openTLPlayer  = openTLPlayer;

@@ -842,3 +842,26 @@ export async function confirmMediaCard(camId, eventId, btn){
     }
   } catch (e){ showToast('Bestätigen fehlgeschlagen: ' + e.message, 'error'); }
 }
+
+// ── window.* bridges (Stage 25 D) ───────────────────────────────────────────
+// router.js, statistics.js, timeline.js, chrome/storage-stats.js plus
+// inline onclicks rendered by mediaCardHTML / renderMediaOverview /
+// renderMediaPagination all reach for these by global name. Each
+// bridge evaporates when its consumer migrates to a direct import.
+window.openMediaDrilldown      = openMediaDrilldown;
+window.openAllMediaDrilldown   = openAllMediaDrilldown;
+window.openCategoryDrilldown   = openCategoryDrilldown;
+window.closeMediaDrilldown     = closeMediaDrilldown;
+window.loadMedia               = loadMedia;
+window.renderMediaGrid         = renderMediaGrid;
+window.renderMediaPagination   = renderMediaPagination;
+window.renderMediaOverview     = renderMediaOverview;
+window.renderMediaFilterPills  = renderMediaFilterPills;
+window.calcItemsPerPage        = calcItemsPerPage;
+window.updateMediaSectionTitle = updateMediaSectionTitle;
+window._pruneEmptyMediaFilters = _pruneEmptyMediaFilters;
+window._seedTopMediaLabel      = _seedTopMediaLabel;
+window._goToPage               = _goToPage;
+window.deleteMediaCard         = deleteMediaCard;
+window.deleteTLCard            = deleteTLCard;
+window.confirmMediaCard        = confirmMediaCard;

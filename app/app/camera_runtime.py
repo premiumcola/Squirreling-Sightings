@@ -2724,6 +2724,39 @@ class CameraRuntime:
         ok, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
         return buf.tobytes() if ok else None
 
+    def snapshot_jpeg_hires(self, quality=92):
+        """Like `snapshot_jpeg` but never falls back to the sub-stream
+        preview frame — meant for timelapse capture, where main-stream
+        resolution (e.g. 2560×1440 on Reolink) is the whole point. Order
+        of preference: raw main-stream frame → annotated main-stream
+        frame. The annotated path is only used if the raw frame is
+        somehow None (cold start), since the annotation overlay shows
+        detection boxes that look weird in a finished timelapse video.
+
+        Returns None when neither main-stream buffer has been populated
+        yet, e.g. during the first few seconds after the cam connects.
+        Caller is expected to retry — see frame_helpers.grab_valid_frame."""
+        with self.lock:
+            frame = self.frame if self.frame is not None else self.preview
+            if frame is None:
+                return None
+            frame = frame.copy()
+        # Lazily log the first hires snapshot per-runtime so an operator
+        # can confirm in `docker logs` that timelapses pulled from the
+        # main stream after this change shipped.
+        if not getattr(self, "_hires_snapshot_logged", False):
+            self._hires_snapshot_logged = True
+            try:
+                h, w = frame.shape[:2]
+                log.info(
+                    "[cam:%s] hires snapshot active — main-stream %dx%d",
+                    self.camera_id, w, h,
+                )
+            except Exception:
+                pass
+        ok, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+        return buf.tobytes() if ok else None
+
     def status(self):
         cfg = self.cfg
         now_t = time.time()

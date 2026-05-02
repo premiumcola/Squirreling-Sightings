@@ -1759,7 +1759,7 @@ class WeatherService:
     def _run_sun_capture_inner(self, cam_id: str, phase: str, sun_dt: datetime, pcfg: dict):
         from .frame_helpers import grab_valid_frame, CaptureStats
         rt = self.runtimes.get(cam_id)
-        if rt is None or not hasattr(rt, "snapshot_jpeg"):
+        if rt is None or not hasattr(rt, "snapshot_jpeg_hires"):
             log.warning("[weather] cam %s nicht verfügbar — capture abgebrochen", cam_id)
             return
         window_min = int(pcfg.get("window_min", 30) or 30)
@@ -1794,12 +1794,12 @@ class WeatherService:
         i = 0
         while datetime.now() < end_at:
             # Long-running capture loop — uses grab_valid_frame defaults
-            # (6 attempts × 0.4 s with a 5 s wall-clock cap). Each
-            # snapshot_jpeg pulls a fresh frame from the cam so the
-            # extra attempts catch the wandering-corruption cluster
-            # without stalling on a hung camera.
+            # (6 attempts × 0.4 s with a 5 s wall-clock cap). The hires
+            # variant reads only from the main-stream buffer so
+            # timelapses get the full sensor resolution rather than the
+            # 640x360 sub-stream the live preview path uses.
             jpg, attempt_used, last_reason = grab_valid_frame(
-                lambda: rt.snapshot_jpeg(quality=82),
+                lambda: rt.snapshot_jpeg_hires(quality=92),
             )
             if jpg:
                 out = frames_dir / f"{i:05d}.jpg"
@@ -2172,7 +2172,7 @@ class WeatherService:
                               window_min: int, interval_s: int, fps: int):
         from .frame_helpers import grab_valid_frame, CaptureStats
         rt = self.runtimes.get(cam_id)
-        if rt is None or not hasattr(rt, "snapshot_jpeg"):
+        if rt is None or not hasattr(rt, "snapshot_jpeg_hires"):
             log.warning("[weather] cam %s nicht verfügbar — capture abgebrochen", cam_id)
             return
         cam_name = self._cam_name(cam_id)
@@ -2191,7 +2191,7 @@ class WeatherService:
         i = 0
         while datetime.now() < end_at:
             jpg, attempt_used, last_reason = grab_valid_frame(
-                lambda: rt.snapshot_jpeg(quality=82),
+                lambda: rt.snapshot_jpeg_hires(quality=92),
             )
             if jpg:
                 try:

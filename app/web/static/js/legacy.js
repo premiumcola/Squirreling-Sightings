@@ -3071,6 +3071,18 @@ async function openAllMediaDrilldown(preFilterLabel){
   updateMediaSectionTitle();
   await loadMedia();
   renderMediaGrid();
+  // Same layout-race safety net as openMediaDrilldown — see comment there.
+  setTimeout(() => {
+    const ps = calcItemsPerPage();
+    if (state._allMedia?.length){
+      window._cachedPageSize = ps;
+      state.mediaTotalPages = Math.max(1, Math.ceil(state._allMedia.length / ps));
+      state.mediaPage = Math.min(state.mediaPage || 0, state.mediaTotalPages - 1);
+      const off = (state.mediaPage || 0) * ps;
+      state.media = state._allMedia.slice(off, off + ps);
+    }
+    renderMediaGrid();
+  }, 0);
 }
 window.openAllMediaDrilldown=openAllMediaDrilldown;
 async function openMediaDrilldown(camId){
@@ -3092,6 +3104,25 @@ async function openMediaDrilldown(camId){
   updateMediaSectionTitle();
   await loadMedia();
   renderMediaGrid();
+  // One-tick re-render. The drilldown wrapper just transitioned from
+  // display:none to display:'' — its layout box doesn't have a width
+  // until the next paint, so calcItemsPerPage() inside loadMedia()
+  // can read 0 from getBoundingClientRect and slice an empty page.
+  // setTimeout(0) yields to the browser, the layout settles, then
+  // we re-slice + re-render. Identical state → idempotent when the
+  // first render already worked, fixes the empty-grid race when it
+  // didn't (the user's "have to toggle a filter" symptom).
+  setTimeout(() => {
+    const ps = calcItemsPerPage();
+    if (state._allMedia?.length){
+      window._cachedPageSize = ps;
+      state.mediaTotalPages = Math.max(1, Math.ceil(state._allMedia.length / ps));
+      state.mediaPage = Math.min(state.mediaPage || 0, state.mediaTotalPages - 1);
+      const off = (state.mediaPage || 0) * ps;
+      state.media = state._allMedia.slice(off, off + ps);
+    }
+    renderMediaGrid();
+  }, 0);
 }
 function closeMediaDrilldown(){
   state.mediaCamera=null; state.media=[];

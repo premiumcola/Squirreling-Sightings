@@ -224,7 +224,11 @@ select option{background:#1e1e1e;color:#c8c8c8}
 .cv-tr-row .cv-pill-live-wrap{margin-left:0}
 
 /* ── Top-right pill container ─────────────────────────────────────────────── */
-.cv-tr{position:absolute;top:calc(var(--cv-overlay-inset) + 22px);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
+/* Top-right pill column. The +6px offset places the Live pill just
+   below the camera's burnt-in date/time row (~14px tall on Reolink
+   firmware). The previous +22px was sized for an older overlay and
+   left an obvious empty band between the date line and the pill. */
+.cv-tr{position:absolute;top:calc(var(--cv-overlay-inset) + 6px);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
 
 /* Base pill */
 .cv-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.02em;position:relative;cursor:default;backdrop-filter:blur(8px);min-height:0;line-height:1.2;box-sizing:border-box}

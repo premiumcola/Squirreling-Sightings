@@ -11,6 +11,7 @@ import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { j } from "../core/api.js";
 import { showToast } from "../core/toast.js";
+import { getCameraIcon } from "../core/icons.js";
 import { WEATHER_TYPES } from "../core/weather-types.js";
 
 function initWeatherTabs(){

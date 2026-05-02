@@ -11,8 +11,14 @@
 // timeline-fetch logic, paired with the dashboard-section slider.
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
+import { j } from "../core/api.js";
 import { showToast } from "../core/toast.js";
 import { loadAll } from "../live-update.js";
+// _renderTlCameraList + _updateTlActiveTags use getCameraIcon to
+// stamp the right thematic emoji (🐿️ / 🌿 / 🚗 / 📷) into each cam
+// row + the "active" tag pill. Missing this import was the cause of
+// "Fehler: getCameraIcon is not defined" on the Timelapse Settings tab.
+import { getCameraIcon } from "../core/icons.js";
 
 async function loadTimelapse(camId){
   const res=await fetch(`/api/camera/${encodeURIComponent(camId)}/timelapse`);

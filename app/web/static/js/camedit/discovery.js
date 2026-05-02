@@ -11,6 +11,7 @@ import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { j } from "../core/api.js";
 import { showToast, showConfirm } from "../core/toast.js";
+import { getCameraIcon } from "../core/icons.js";
 import { loadAll } from "../live-update.js";
 import { RTSP_PATH_OPTS, _rtspEnc, _unmaskUrlsForSubmit } from "./rtsp.js";
 import { getWhitelistState } from "./whitelist.js";

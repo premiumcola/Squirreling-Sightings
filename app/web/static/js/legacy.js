@@ -1553,6 +1553,88 @@ async function _populateCoralTestCameras(){
 }
 const _CORAL_LABEL_COLORS={person:'#6e6eff',cat:'#a06eff',bird:'#54d662',dog:'#00b0ff',car:'#f87171',fox:'#ff7a1a',squirrel:'#7c4a1f',hedgehog:'#a67c52'};
 function _coralLabelColor(lbl){return _CORAL_LABEL_COLORS[String(lbl||'').toLowerCase()]||'#ffb400';}
+// Render the per-model card stack below the annotated preview. Three
+// stages are emitted by the backend (detection, bird_species, wildlife);
+// each card shows category title + model filename + mode chip + latency,
+// then either a results table or a muted "Modell nicht aktiviert:
+// <reason>" line. Empty results array AND available=true → "Keine
+// Ergebnisse" so the user can tell "the model ran but found nothing"
+// apart from "the model didn't run".
+const _CORAL_TEST_CAT_TITLES = {
+  detection:    'Objekt-Erkennung',
+  bird_species: 'Vogelarten',
+  wildlife:     'Wildtiere',
+};
+function _renderCoralModelsRun(modelsRun){
+  if (!Array.isArray(modelsRun) || !modelsRun.length) return '';
+  const cards = modelsRun.map(m => {
+    const title = _CORAL_TEST_CAT_TITLES[m.category] || m.category;
+    const modeChip = m.mode === 'coral'
+      ? '<span class="ct-mr-chip ct-mr-chip--coral">⚡ Coral</span>'
+      : m.mode === 'cpu'
+        ? '<span class="ct-mr-chip ct-mr-chip--cpu">💻 CPU</span>'
+        : '<span class="ct-mr-chip ct-mr-chip--off">aus</span>';
+    const ms = (m.inference_ms != null && m.inference_ms > 0)
+      ? `<span class="ct-mr-ms">${m.inference_ms} ms</span>`
+      : '';
+    const file = m.model
+      ? `<code class="ct-mr-file" title="${esc(m.model)}">${esc(m.model)}</code>`
+      : '<span class="ct-mr-file ct-mr-file--missing">— kein Modell —</span>';
+    let body;
+    if (!m.available){
+      body = `<div class="ct-mr-empty">Modell nicht aktiviert: ${esc(m.reason || 'unbekannt')}</div>`;
+    } else if (m.error){
+      body = `<div class="ct-mr-empty ct-mr-empty--err">Fehler: ${esc(m.error)}</div>`;
+    } else if (!Array.isArray(m.results) || !m.results.length){
+      body = '<div class="ct-mr-empty">Keine Ergebnisse</div>';
+    } else if (m.category === 'detection'){
+      body = '<div class="ct-mr-rows">' + m.results.map(d => {
+        const c = _coralLabelColor(d.label);
+        return `<div class="ct-mr-row" style="border-left-color:${c}">
+          <span class="ct-mr-label">${esc(d.label)}</span>
+          <span class="ct-mr-pct">${(d.score * 100).toFixed(0)}%</span>
+        </div>`;
+      }).join('') + '</div>';
+    } else if (m.category === 'bird_species'){
+      body = '<div class="ct-mr-rows">' + m.results.map(b => {
+        const lat = b.latin && b.latin !== b.species ? ` <span class="ct-species-lat">(${esc(b.latin)})</span>` : '';
+        const pct = b.score != null ? `${(b.score * 100).toFixed(0)}%` : '—';
+        return `<div class="ct-mr-row">
+          <span class="ct-mr-label">${esc(b.species || '?')}${lat}</span>
+          <span class="ct-mr-pct">${pct}</span>
+        </div>`;
+      }).join('') + '</div>';
+    } else if (m.category === 'wildlife'){
+      body = '<div class="ct-mr-rows">' + m.results.map(w => {
+        const pct = w.score != null ? `${(w.score * 100).toFixed(0)}%` : '—';
+        const mapped = w.mapped
+          ? `<span class="ct-mr-mapped">→ ${esc(w.mapped)}</span>`
+          : '<span class="ct-mr-mapped ct-mr-mapped--none">→ keine Zuordnung</span>';
+        return `<div class="ct-mr-row">
+          <span class="ct-mr-label">
+            <span class="ct-mr-from">${esc(w.from_label || '?')}</span>
+            ${esc(w.imagenet || '?')}
+            ${mapped}
+          </span>
+          <span class="ct-mr-pct">${pct}</span>
+        </div>`;
+      }).join('') + '</div>';
+    } else {
+      body = '<div class="ct-mr-empty">—</div>';
+    }
+    return `<div class="ct-mr-card">
+      <div class="ct-mr-head">
+        <span class="ct-mr-title">${esc(title)}</span>
+        ${modeChip}
+        ${ms}
+      </div>
+      ${file}
+      ${body}
+    </div>`;
+  }).join('');
+  return `<div class="ct-mr-stack">${cards}</div>`;
+}
+
 async function _runCoralTest(){
   const btn=byId('coralTestBtn'); const out=byId('coralTestResult');
   if(!btn||!out) return;
@@ -1611,7 +1693,12 @@ async function _runCoralTest(){
     const reasonRow=(r.detector_reason&&r.detector_reason!=='ok')?`<div class="field-help" style="margin-top:6px;font-family:monospace">${esc(r.detector_reason)}</div>`:'';
     const usbRow=r.usb_info?`<div class="field-help" style="margin-top:4px;color:#a78bfa">🔌 ${esc(r.usb_info)}</div>`:'';
     const errRow=r.inference_error?`<div style="color:#fca5a5;margin-top:6px;font-size:12px">Inferenz-Fehler: ${esc(r.inference_error)}</div>`:'';
-    out.innerHTML=imgBlock+reasonRow+usbRow+errRow;
+    // Per-model breakdown stack — one card per stage (detection, bird,
+    // wildlife). Backend emits models_run with results[]; renderer
+    // shows the model's filename, mode chip, latency, and either the
+    // per-result rows or a "Modell nicht aktiviert: <reason>" line.
+    const modelsRunHtml=_renderCoralModelsRun(r.models_run);
+    out.innerHTML=imgBlock+reasonRow+usbRow+errRow+modelsRunHtml;
   }catch(e){
     out.innerHTML=`<div style="color:#fca5a5">Test fehlgeschlagen: ${esc(String(e))}</div>`;
   }finally{

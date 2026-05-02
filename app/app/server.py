@@ -3073,20 +3073,36 @@ def api_achievements_media(species_id: str):
 # ── System info ──────────────────────────────────────────────────────────────
 @app.post('/api/coral/test')
 def api_coral_test():
-    """Run a single object-detection inference for the user to verify the
-    Coral/CPU pipeline. Uses a live frame from the requested camera when
-    available, otherwise a synthetic test pattern. Returns the annotated
-    frame as base64, the detector mode + reason, inference time in ms,
-    and the matching lsusb line."""
-    import base64 as _b64, time as _time, subprocess as _sp
-    from .detectors import CoralObjectDetector, BirdSpeciesClassifier, Detection, draw_detections
+    """Run every classifier stage against a single frame and return a
+    per-model breakdown. The user wants to see "what each model would
+    say" in the Settings → Modelle test panel — including stages that
+    are currently disabled in the runtime, so the test bypasses the
+    .enabled flag for the second-stage classifiers.
+
+    Response shape:
+      {
+        ok, source, camera_id, camera_name, image_b64, usb_info,
+        models_run: [
+          {category, model, mode, available, reason, inference_ms, results: [...]},
+          ...
+        ],
+        # Legacy flat fields kept for the older test-panel UI:
+        detector_mode, detector_available, detector_reason, inference_ms,
+        detections, bird_species_mode, bird_species_reason,
+      }
+    """
+    import base64 as _b64, time as _time, subprocess as _sp, os as _os
+    from .detectors import (
+        CoralObjectDetector, BirdSpeciesClassifier, WildlifeClassifier,
+        Detection, draw_detections,
+    )
     payload = request.get_json(silent=True) or {}
     cam_id = (payload.get("camera_id") or "").strip() or None
 
-    # Detection config from the effective runtime config
     eff = get_effective_config()
     det_cfg = (eff.get("processing", {}) or {}).get("detection", {}) or {}
     bird_cfg = (eff.get("processing", {}) or {}).get("bird_species", {}) or {}
+    wild_cfg = (eff.get("processing", {}) or {}).get("wildlife", {}) or {}
 
     # Source frame: camera runtime → snapshot; otherwise a test pattern
     frame = None
@@ -3117,9 +3133,10 @@ def api_coral_test():
         frame[150:250, 100:200] = (80, 200, 0)
         frame[80:120, 200:280] = (50, 100, 180)
 
-    # Fresh detector per test so the result always reflects the current config
-    detector = CoralObjectDetector(det_cfg)
+    models_run: list[dict] = []
 
+    # ── Stage 1: COCO detection ──────────────────────────────────────────
+    detector = CoralObjectDetector(det_cfg)
     detections: list = []
     infer_ms = 0.0
     err_msg = None
@@ -3130,41 +3147,111 @@ def api_coral_test():
             infer_ms = round((_time.perf_counter() - t0) * 1000, 1)
         except Exception as e:
             err_msg = str(e)
+    models_run.append({
+        "category": "detection",
+        "model": _os.path.basename(det_cfg.get("model_path") or "") or None,
+        "mode": detector.mode,
+        "available": bool(detector.available),
+        "reason": detector.reason,
+        "inference_ms": infer_ms,
+        "error": err_msg,
+        "results": [d.to_dict() for d in detections],
+    })
 
-    # Optional bird species classification on each bird crop — gives the user
-    # immediate feedback in the Coral test panel ("bird 87% → Amsel 72%")
-    # instead of only seeing the generic COCO label.
-    bird_species_mode = "none"
-    bird_species_reason = "disabled"
-    if detections and bird_cfg.get("enabled"):
-        bird_clf = BirdSpeciesClassifier(bird_cfg)
-        bird_species_mode = bird_clf.mode
-        bird_species_reason = bird_clf.reason
-        if bird_clf.available:
-            h_full, w_full = frame.shape[:2]
-            for d in detections:
-                if d.label != "bird":
-                    continue
-                x1, y1, x2, y2 = d.bbox
-                # Expand the bbox slightly so the classifier sees a little
-                # context around the bird — the COCO bbox tends to be tight.
-                pad = 6
-                cx1 = max(0, x1 - pad); cy1 = max(0, y1 - pad)
-                cx2 = min(w_full, x2 + pad); cy2 = min(h_full, y2 + pad)
-                crop = frame[cy1:cy2, cx1:cx2]
-                if crop is None or crop.size == 0:
-                    continue
-                try:
-                    sp, sp_latin, sp_score = bird_clf.classify_crop(crop)
-                except Exception:
-                    sp, sp_latin, sp_score = None, None, None
-                if sp:
-                    d.species = sp
-                    d.species_latin = sp_latin
-                    d.species_score = float(sp_score) if sp_score is not None else None
+    # ── Stage 2: bird species classifier ─────────────────────────────────
+    # Test-mode override: ignore .enabled so the user can see what the
+    # model would say even when the runtime has it switched off.
+    bird_test_cfg = dict(bird_cfg)
+    bird_test_cfg["enabled"] = True
+    bird_clf = BirdSpeciesClassifier(bird_test_cfg)
+    bird_results: list[dict] = []
+    bird_ms = 0.0
+    if bird_clf.available and detections:
+        h_full, w_full = frame.shape[:2]
+        t0 = _time.perf_counter()
+        for d in detections:
+            if d.label != "bird":
+                continue
+            x1, y1, x2, y2 = d.bbox
+            pad = 6
+            cx1 = max(0, x1 - pad); cy1 = max(0, y1 - pad)
+            cx2 = min(w_full, x2 + pad); cy2 = min(h_full, y2 + pad)
+            crop = frame[cy1:cy2, cx1:cx2]
+            if crop is None or crop.size == 0:
+                continue
+            try:
+                sp, sp_latin, sp_score = bird_clf.classify_crop(crop)
+            except Exception:
+                sp, sp_latin, sp_score = None, None, None
+            if sp:
+                d.species = sp
+                d.species_latin = sp_latin
+                d.species_score = float(sp_score) if sp_score is not None else None
+                bird_results.append({
+                    "species": sp,
+                    "latin": sp_latin,
+                    "score": round(float(sp_score), 4) if sp_score is not None else None,
+                    "from_label": "bird",
+                })
+        bird_ms = round((_time.perf_counter() - t0) * 1000, 1)
+    models_run.append({
+        "category": "bird_species",
+        "model": _os.path.basename(bird_cfg.get("model_path") or "") or None,
+        "mode": bird_clf.mode,
+        "available": bool(bird_clf.available),
+        "reason": bird_clf.reason,
+        "inference_ms": bird_ms,
+        "error": None,
+        "results": bird_results,
+    })
 
+    # ── Stage 3: wildlife classifier (mammals not covered by COCO) ───────
+    # Same test-mode override: enabled=True so a CPU-only setup can
+    # validate that the wildlife pipeline would work, even if the
+    # runtime currently has it disabled. Runs on every detection that
+    # is NOT a bird and NOT a person — those are covered upstream.
+    wild_test_cfg = dict(wild_cfg)
+    wild_test_cfg["enabled"] = True
+    wild_clf = WildlifeClassifier(wild_test_cfg)
+    wild_results: list[dict] = []
+    wild_ms = 0.0
+    if wild_clf.available and detections:
+        h_full, w_full = frame.shape[:2]
+        t0 = _time.perf_counter()
+        for d in detections:
+            if d.label in ("bird", "person"):
+                continue
+            x1, y1, x2, y2 = d.bbox
+            pad = 6
+            cx1 = max(0, x1 - pad); cy1 = max(0, y1 - pad)
+            cx2 = min(w_full, x2 + pad); cy2 = min(h_full, y2 + pad)
+            crop = frame[cy1:cy2, cx1:cx2]
+            if crop is None or crop.size == 0:
+                continue
+            try:
+                category, imagenet_label, score = wild_clf.classify_crop(crop)
+            except Exception:
+                category, imagenet_label, score = None, None, None
+            wild_results.append({
+                "from_label": d.label,
+                "imagenet": imagenet_label,
+                "mapped": category,  # "squirrel" / "fox" / "hedgehog" / null
+                "score": round(float(score), 4) if score is not None else None,
+            })
+        wild_ms = round((_time.perf_counter() - t0) * 1000, 1)
+    models_run.append({
+        "category": "wildlife",
+        "model": _os.path.basename(wild_cfg.get("model_path") or "") or None,
+        "mode": wild_clf.mode,
+        "available": bool(wild_clf.available),
+        "reason": wild_clf.reason,
+        "inference_ms": wild_ms,
+        "error": None,
+        "results": wild_results,
+    })
+
+    # ── Annotated preview (uses Stage-1 boxes) ──────────────────────────
     annotated = draw_detections(frame, detections)
-    # Keep the preview small for transport (max width 640, JPEG q=80)
     h, w = annotated.shape[:2]
     if w > 640:
         scale = 640 / w
@@ -3172,7 +3259,6 @@ def api_coral_test():
     ok, buf = cv2.imencode('.jpg', annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
     image_b64 = ("data:image/jpeg;base64," + _b64.b64encode(buf.tobytes()).decode('ascii')) if ok else None
 
-    # lsusb line for the Coral stick (best-effort)
     usb_info = None
     try:
         lsusb = _sp.check_output(['lsusb'], text=True, timeout=3, stderr=_sp.DEVNULL)
@@ -3186,12 +3272,13 @@ def api_coral_test():
 
     return jsonify({
         "ok": True,
+        # Legacy flat fields — older test-panel renderers still read these.
         "detector_mode": detector.mode,
         "detector_available": detector.available,
         "detector_reason": detector.reason,
         "model_path": det_cfg.get("model_path"),
-        "bird_species_mode": bird_species_mode,
-        "bird_species_reason": bird_species_reason,
+        "bird_species_mode": bird_clf.mode,
+        "bird_species_reason": bird_clf.reason,
         "source": source,
         "camera_id": cam_id,
         "camera_name": camera_name,
@@ -3200,6 +3287,8 @@ def api_coral_test():
         "detections": [d.to_dict() for d in detections],
         "image_b64": image_b64,
         "usb_info": usb_info,
+        # New per-model breakdown.
+        "models_run": models_run,
     })
 
 

@@ -38,6 +38,7 @@ export default [
         URLSearchParams: 'readonly',
         Event: 'readonly',
         AbortController: 'readonly',
+        CustomEvent: 'readonly',
         FormData: 'readonly',
         FileReader: 'readonly',
         Image: 'readonly',

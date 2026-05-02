@@ -93,7 +93,7 @@ function _renderLbLabels(){
           // Re-pull timeline + storage stats so badges and dots reflect the retag.
           refreshTimelineAndStats();
         }
-      }catch(e){console.error('label update failed',e);}
+      }catch(e){ showToast('Label-Änderung fehlgeschlagen','error'); }
     };
   });
 }
@@ -1927,7 +1927,7 @@ function editCamera(camId){
     // can retry once loadAll() refreshes state. Without this the lock
     // would stick if a stale camId (post-rename) raced through here.
     _currentEditCamId=null;
-    console.error('editCamera: not found',camId); return;
+    return;  // diagnostic console.error retired — the lock reset above is the real recovery
   }
   // Toggle: clicking same camera closes the panel
   if(_currentEditCamId===camId){
@@ -3088,7 +3088,7 @@ function _bindPushHandlers(){
   // Presets
   document.querySelectorAll('.push-preset-btn').forEach(btn=>{
     btn.addEventListener('click', async () => {
-      if(!confirm('Aktuelle Push-Einstellungen überschreiben?')) return;
+      if(!await showConfirm('Aktuelle Push-Einstellungen überschreiben?')) return;
       const preset = btn.dataset.preset;
       const block = _buildPushPreset(preset);
       await savePushCfg(block);
@@ -3937,7 +3937,7 @@ function _bindCamProbeDeviceInfo(){
       const msg=`Mit erkanntem Wert überschreiben?\n\n`+
                 `Aktuell: '${cur.manufacturer||'—'}' / '${cur.model||'—'}'\n`+
                 `Neu: '${d.manufacturer}' / '${d.model}'`;
-      if(!confirm(msg)) return;
+      if(!await showConfirm(msg)) return;
     }
     if(f['manufacturer']){ f['manufacturer'].value=d.manufacturer; f['manufacturer'].dispatchEvent(new Event('input',{bubbles:true})); }
     if(f['model']){ f['model'].value=d.model; f['model'].dispatchEvent(new Event('input',{bubbles:true})); }
@@ -4758,7 +4758,7 @@ function renderTlStatusBar(){
 
 // ── Settings collapsible sections ────────────────────────────────────────────
 window.toggleSetSection=function(id){
-  const el=byId(id); if(!el){console.warn('[toggleSetSection] not found:',id);return;}
+  const el=byId(id); if(!el) return;  // diagnostic console.warn retired — silent no-op is fine here
   // Propagate the per-section accent (stored as "R,G,B" on data-accent) into
   // a CSS custom property so the accent-tinted border + header rules can pick
   // it up. Cheap to set unconditionally.
@@ -8222,9 +8222,12 @@ function openWeatherLightbox(idx){
       }
       if (action === 'delete') {
         const cur = state.weather.items[_wsLbIdx];
-        if (cur && confirm('Wetter-Ereignis wirklich löschen?')) {
-          fetch(`/api/weather/sightings/${encodeURIComponent(cur.id)}`, { method: 'DELETE' })
-            .then(() => { closeWeatherLightbox(); loadWeatherSightings(state.weather.filter); });
+        if (cur) {
+          showConfirm('Wetter-Ereignis wirklich löschen?').then(ok => {
+            if (!ok) return;
+            fetch(`/api/weather/sightings/${encodeURIComponent(cur.id)}`, { method: 'DELETE' })
+              .then(() => { closeWeatherLightbox(); loadWeatherSightings(state.weather.filter); });
+          });
         }
       }
     });

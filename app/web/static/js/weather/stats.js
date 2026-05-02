@@ -758,7 +758,9 @@ function initWeatherStats(){
 }
 
 // Per-type unit hint for the threshold slider in Settings → Ereignistypen.
-const WEATHER_THRESHOLD_HINTS = {
+// Exported so weather/settings.js can populate _renderWeatherEventsList +
+// the per-event slider rows from a single source of truth.
+export const WEATHER_THRESHOLD_HINTS = {
   thunder:    { unit: 'J/kg', min: 0,  max: 3000, step: 50, key: 'threshold' },
   heavy_rain: { unit: 'mm/h', min: 0,  max: 30,   step: 0.5, key: 'threshold' },
   snow:       { unit: 'cm/h', min: 0,  max: 5,    step: 0.1, key: 'threshold' },

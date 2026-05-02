@@ -13,6 +13,12 @@ import { j } from "../core/api.js";
 import { showToast } from "../core/toast.js";
 import { getCameraIcon } from "../core/icons.js";
 import { WEATHER_TYPES } from "../core/weather-types.js";
+// Threshold-slider unit hints — single source of truth lives in
+// weather/stats.js. Without this import _renderWeatherEventsList and
+// _renderEventsBlock throw "WEATHER_THRESHOLD_HINTS is not defined",
+// which propagates out of hydrateWeatherSettings → loadAll() →
+// .then(loadAchievements()) never fires → Sichtungen panel stays empty.
+import { WEATHER_THRESHOLD_HINTS } from "./stats.js";
 
 function initWeatherTabs(){
   const bar = document.querySelector('.ws-tab-bar'); if (!bar) return;

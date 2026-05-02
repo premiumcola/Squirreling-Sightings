@@ -1916,7 +1916,14 @@ async function _loadCoralModels(){
         try{
           const r=await j('/api/coral/models/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:p})});
           if(r.ok){
-            showToast('Modell aktiviert · Coral wird neu gestartet','success');
+            // Toast wording matches the runtime that will actually
+            // reload — Coral users get the TPU restart message; CPU-
+            // only systems see "CPU-Detector wird neu gestartet" so
+            // they don't expect a Coral lifecycle event that won't
+            // fire.
+            const coralAvail=!!state.cameras?.[0]?.coral_available;
+            const restartMsg=coralAvail?'Coral wird neu gestartet':'CPU-Detector wird neu gestartet';
+            showToast('Modell aktiviert · '+restartMsg,'success');
             await _loadCoralModels();
             await _updateCoralDeviceInfo();
           }else{

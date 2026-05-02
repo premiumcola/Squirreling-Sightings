@@ -3622,10 +3622,13 @@ def api_coral_models():
 
 @app.post('/api/coral/models/select')
 def api_coral_models_select():
-    """Switch the active detection model. The incoming path must live inside
-    /app/models/; anything else is rejected to stop directory-traversal
-    abuse. Writes through SettingsStore and triggers a runtime rebuild so
-    the new detector loads on every camera."""
+    """Switch the active model for ONE category. Routing is driven by
+    the filename's category (_categorize_tflite); writing a wildlife or
+    bird-species model into processing.detection.model_path would
+    clobber the COCO detector, which is the bug this guard fixes.
+
+    Path traversal protection: target must resolve inside /app/models/.
+    """
     payload = request.get_json(silent=True) or {}
     raw_path = (payload.get("path") or "").strip()
     if not raw_path:
@@ -3638,23 +3641,46 @@ def api_coral_models_select():
     if not target.exists() or target.suffix.lower() != ".tflite":
         return jsonify({"ok": False, "error": "model not found"}), 404
 
+    category = _categorize_tflite(target.name)
+    if category == "other":
+        return jsonify({
+            "ok": False,
+            "error": "Modell-Kategorie unbekannt — bitte Dateinamen prüfen",
+        }), 400
+
+    # Map category → settings.processing.<bucket> so each model writes
+    # into its own bucket. cpu_model_path mirrors the EdgeTPU pick to
+    # the non-edgetpu variant so the CPU fallback (or a no-Coral host)
+    # loads the matching tflite without further config.
+    bucket_by_cat = {
+        "detection": "detection",
+        "bird_species": "bird_species",
+        "wildlife": "wildlife",
+    }
+    bucket_name = bucket_by_cat[category]
     proc = settings.data.setdefault("processing", {})
-    det = proc.setdefault("detection", {})
-    det["model_path"] = str(target)
-    det["mode"] = "coral"
-    # cpu_model_path auto-derives the non-_edgetpu variant; keep in sync so
-    # the CPU fallback picks up the matching model when pycoral is missing.
+    bucket = proc.setdefault(bucket_name, {})
+    bucket["model_path"] = str(target)
     cpu_candidate = str(target).replace("_edgetpu.tflite", ".tflite")
     if cpu_candidate != str(target) and Path(cpu_candidate).exists():
-        det["cpu_model_path"] = cpu_candidate
+        bucket["cpu_model_path"] = cpu_candidate
     else:
-        det.pop("cpu_model_path", None)
+        bucket.pop("cpu_model_path", None)
+    # Detection always runs (it's the first stage); the second-stage
+    # classifiers ship disabled-by-default so flipping enabled=True on
+    # selection makes the model actually take effect. Mode flag mirrors
+    # the legacy "coral" string so the runtime picks up the new path
+    # via either branch.
+    if category == "detection":
+        bucket["mode"] = "coral"
+    else:
+        bucket["enabled"] = True
     settings.save()
     try:
         rebuild_runtimes()
     except Exception as e:
         logging.getLogger(__name__).warning("Coral model switch: rebuild_runtimes failed: %s", e)
-    return jsonify({"ok": True, "path": str(target)})
+    return jsonify({"ok": True, "path": str(target), "category": category})
 
 
 # ── Wetter-Sichtungen (Phase 1: read-only API) ───────────────────────────────

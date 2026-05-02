@@ -8,6 +8,7 @@ import { byId, esc } from './core/dom.js';
 import { state } from './core/state.js';
 import { showToast, showConfirm } from './core/toast.js';
 import { colors, OBJ_LABEL } from './core/icons.js';
+import { WEATHER_TYPES } from './core/weather-types.js';
 
 // Order in the "Was senden" list — matches the spec's reading order
 // (Person first, animals + person before motion).
@@ -306,11 +307,8 @@ function _renderPushWeatherEvents(weatherCfg){
   const wrap = byId('pushWeatherEventsList');
   if (!wrap) return;
   const events = (weatherCfg && weatherCfg.events) || {};
-  // WEATHER_TYPES still lives in legacy.js for now (moves with stage 16);
-  // window lookup keeps the chip styling in sync until that ships.
-  const types = (typeof window.WEATHER_TYPES === 'object') ? window.WEATHER_TYPES : {};
   wrap.innerHTML = _PUSH_WEATHER_ORDER.map(t => {
-    const meta = types[t] || { de: t, color: '#94a3b8', icon: '' };
+    const meta = WEATHER_TYPES[t] || { de: t, color: '#94a3b8', icon: '' };
     const on = events[t] !== undefined ? !!events[t] : false;
     return `
       <div class="push-label-row" data-weather-evt="${esc(t)}">

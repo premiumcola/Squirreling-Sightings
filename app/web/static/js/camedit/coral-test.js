@@ -585,3 +585,14 @@ async function _loadCoralModels(){
   }
 }
 byId('coralModelsReload')?.addEventListener('click',_loadCoralModels);
+
+// ── window.* bridges ────────────────────────────────────────────────────────
+// hydrateSettings() in camedit/index.js calls these via the
+// window._populateCoralTestCameras?.() / _updateCoralDeviceInfo?.()
+// indirection it set up before this module had named exports. Without
+// these bridges the Coral-Test camera <select> stays empty (no live
+// cams + no test-image folders) and the device-info widget never
+// hydrates. Same migration path as the rest: bridge here, drop the
+// indirection in camedit/index.js once both modules import directly.
+window._populateCoralTestCameras = _populateCoralTestCameras;
+window._updateCoralDeviceInfo    = _updateCoralDeviceInfo;

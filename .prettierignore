@@ -1,0 +1,10 @@
+# Files Prettier should never touch.
+storage/
+models/
+node_modules/
+.git/
+# Generated build outputs:
+app/web/static/app.css
+# CSS partials get formatted explicitly via the CSS-split commit;
+# leaving them out of the default prettier sweep until then prevents
+# mass-rewrite during the linter-foundation rollout.

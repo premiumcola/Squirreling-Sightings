@@ -66,5 +66,12 @@ Thumbs.db
 *.swp
 *.swo
 
+# Lint tooling caches (added in Stage: linter foundation)
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+node_modules/
+package-lock.json
+
 # Claude internal
 .claude/

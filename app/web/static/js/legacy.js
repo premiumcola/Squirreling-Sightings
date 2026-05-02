@@ -100,6 +100,15 @@ import {
   drawShapes, loadMaskSnapshot, saveShapesIntoForm, getCanvasCtx,
   _renderShapeList, _updateShapeDrawingBar, _updateShapeModeButtons,
 } from './shape-editor.js';
+// Stage 10 — chrome / UI subsystem. Each module either exports
+// helpers we still call here or runs a self-init IIFE on import
+// (sidebar collapse, mobile-dock scrollspy, logs panel boot).
+import './chrome/settings-collapse.js';
+import './chrome/sidebar.js';
+import { _setEyeState } from './chrome/password-toggle.js';
+import { loadMediaStorageStats, refreshTimelineAndStats } from './chrome/storage-stats.js';
+import './chrome/mobile-dock.js';
+import { loadLogs } from './chrome/logs.js';
 
 // _hmTip stays here — fixed-position heatmap tooltip used only by the
 // timeline view; will move with the timeline module in a later stage.
@@ -2985,213 +2994,10 @@ function renderTlStatusBar(){
     </div>`;
 }
 
-// ── Settings collapsible sections ────────────────────────────────────────────
-window.toggleSetSection=function(id){
-  const el=byId(id); if(!el) return;  // diagnostic console.warn retired — silent no-op is fine here
-  // Propagate the per-section accent (stored as "R,G,B" on data-accent) into
-  // a CSS custom property so the accent-tinted border + header rules can pick
-  // it up. Cheap to set unconditionally.
-  if(el.dataset.accent) el.style.setProperty('--sa',el.dataset.accent);
-  const opening=!el.classList.contains('open');
-  el.classList.toggle('open',opening);
-};
-// Seed --sa on page load so even closed sections render with the correct
-// accent once opened (without waiting for the first click to set it).
-// Top-level panels (#achievements, #weather) get the same RGB triplet on
-// --acc so accent-driven rules like the section-head icon and
-// .ach-progress-fill resolve to the panel's own colour.
-document.addEventListener('DOMContentLoaded',()=>{
-  document.querySelectorAll('.set-section[data-accent]').forEach(el=>{
-    el.style.setProperty('--sa',el.dataset.accent);
-  });
-  document.querySelectorAll('.panel.section[data-accent]').forEach(el=>{
-    el.style.setProperty('--acc',el.dataset.accent);
-  });
-});
 
-// ── Sidebar settings: scroll-link + chevron-toggle (separate handlers) ───────
-// The Einstellungen row is now two elements: an <a> that scrolls only and a
-// small <button> that toggles the sub-list only. Hover never reveals the
-// sub-list — it is shown only when the chevron has been clicked.
-const _NAV_OPEN_KEY='nav_settings_open';
-function _setSettingsNavOpen(isOpen){
-  const group=byId('navSettingsGroup');
-  const chev=group?.querySelector('.nav-settings-chev');
-  const sub=byId('navSettingsSub');
-  if(!group||!chev||!sub) return;
-  group.classList.toggle('nav--open',isOpen);
-  chev.setAttribute('aria-expanded',isOpen?'true':'false');
-  sub.classList.toggle('open',isOpen);
-  // Drive max-height in pixels so the transition is smooth without
-  // committing to a hardcoded ceiling. Measured from scrollHeight at
-  // toggle time so adding/removing sub-items keeps animating cleanly.
-  sub.style.maxHeight = isOpen ? (sub.scrollHeight + 'px') : '0px';
-  try{localStorage.setItem(_NAV_OPEN_KEY,isOpen?'1':'0');}catch{}
-}
-// Chevron click → toggle sub-list, never scroll.
-window.toggleSettingsNav=function(ev){
-  if(ev){ ev.preventDefault?.(); ev.stopPropagation?.(); }
-  const isOpen=!byId('navSettingsGroup')?.classList.contains('nav--open');
-  _setSettingsNavOpen(isOpen);
-  return false;
-};
-// Main link click → scroll to #settings, never toggle the accordion.
-window.navScrollToSettings=function(ev){
-  ev?.preventDefault?.();
-  const sec=byId('settings');
-  if(sec) sec.scrollIntoView({behavior:'smooth',block:'start'});
-  if(typeof _setActiveNav==='function') _setActiveNav('settings');
-  return false;
-};
-// Sub-item click → scroll AND open the matching set-section. Accordion
-// stays open (we never close it from sub-item interactions).
-window.navJumpToSetting=function(ev,secId){
-  ev?.preventDefault?.();
-  const sec=byId(secId); if(!sec) return false;
-  if(!sec.classList.contains('open')&&typeof window.toggleSetSection==='function'){
-    window.toggleSetSection(secId);
-    if(secId==='set-timelapse'&&typeof loadTlSettings==='function') loadTlSettings();
-  }
-  sec.scrollIntoView({behavior:'smooth',block:'start'});
-  _setActiveNav('settings');
-  return false;
-};
-document.addEventListener('DOMContentLoaded',()=>{
-  let open=false;
-  try{open=localStorage.getItem(_NAV_OPEN_KEY)==='1';}catch{}
-  _setSettingsNavOpen(open);
-});
 
-// ── Sidebar active-nav state ─────────────────────────────────────────────────
-// Tracks which top-level section is currently visible and applies the
-// section's accent color via the --na CSS variable. Click sets it eagerly,
-// scroll keeps it honest. Logs/Settings stay sticky once opened — neither
-// has a useful "scrolled past" signal.
-function _setActiveNav(targetId){
-  document.querySelectorAll('.nav [data-target]').forEach(el=>{
-    const isActive=el.dataset.target===targetId;
-    el.classList.toggle('nav-active',isActive);
-    if(isActive && el.dataset.accent){
-      el.style.setProperty('--na',el.dataset.accent);
-    }
-  });
-}
-window._setActiveNav=_setActiveNav;
-function _initSidebarNav(){
-  // Click: set active immediately so the highlight tracks the user's intent
-  // before the scroll animation finishes. Skip the Einstellungen button —
-  // it doesn't represent a navigable section, only the accordion toggle.
-  document.querySelectorAll('.nav a[data-target]').forEach(a=>{
-    a.addEventListener('click',()=>{
-      _setActiveNav(a.dataset.target);
-    });
-  });
-  // Scrollspy: pick the section whose top is closest to the viewport top
-  // without going past it. Cheap enough to run on every scroll tick.
-  const sectionIds=['dashboard','statistik','media','achievements','weather','cameras','settings','logs'];
-  let raf=0;
-  const tick=()=>{
-    raf=0;
-    const top=80; // account for sticky header / hero offset
-    let bestId=null, bestY=-Infinity;
-    for(const id of sectionIds){
-      const el=byId(id); if(!el) continue;
-      const r=el.getBoundingClientRect();
-      if(r.top<=top && r.top>bestY){ bestY=r.top; bestId=id; }
-    }
-    if(bestId) _setActiveNav(bestId);
-  };
-  window.addEventListener('scroll',()=>{ if(!raf) raf=requestAnimationFrame(tick); },{passive:true});
-  tick();
-}
-document.addEventListener('DOMContentLoaded',_initSidebarNav);
 
-// ── Password field visibility toggle ─────────────────────────────────────────
-// Eye glyphs — single source of truth, used by .pw-eye AND .url-eye buttons
-// across the app. SVG (not emoji) so size + centring stay pixel-stable.
-const EYE_SVG=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-const EYE_OFF_SVG=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.66 18.66 0 0 1 4.16-4.93"/><path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.66 18.66 0 0 1-1.66 2.66"/><path d="M14.12 14.12a3 3 0 0 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-function _setEyeState(btn,revealed){
-  if(!btn) return;
-  btn.innerHTML=revealed?EYE_OFF_SVG:EYE_SVG;
-  btn.classList.toggle('revealed',revealed);
-  btn.setAttribute('aria-label',revealed?'Passwort verbergen':'Passwort anzeigen');
-}
-window.togglePwField=function(btn,fieldName){
-  const f=btn.closest('form');
-  const input=f?.elements[fieldName]; if(!input) return;
-  input.type=input.type==='password'?'text':'password';
-  _setEyeState(btn,input.type==='text');
-};
-window.togglePwFieldById=function(id){
-  const input=byId(id); if(!input) return;
-  input.type=input.type==='password'?'text':'password';
-  const btn=input.parentElement?.querySelector('.pw-eye');
-  _setEyeState(btn,input.type==='text');
-};
 
-// ── Media storage stats ───────────────────────────────────────────────────────
-// Single source of truth for state.mediaStats. Every caller that mutates the
-// archive (delete, bulk-delete, rescan, fix-thumbnails completion, processing
-// poll completion) funnels through here so chips, size badges, and filter
-// pills always reflect server reality.
-async function loadMediaStorageStats(){
-  const bar=byId('mediaStorageBar'); if(!bar) return;
-  try{
-    const r=await j('/api/media/storage-stats');
-    state.mediaStats=r.cameras||[];
-    state.mediaArchived=r.archived||[];
-    bar.innerHTML='';
-    // renderMediaOverview rebuilds the overview cards AND calls
-    // renderMediaFilterPills('overview') internally.
-    renderMediaOverview();
-    // Drilldown pill bar reads from the same state.mediaStats — keep it
-    // in sync if the user is currently inside a drilldown.
-    if(byId('mediaDrilldown')?.style.display!=='none'){
-      if(_pruneEmptyMediaFilters()) _seedTopMediaLabel();
-      renderMediaFilterPills('drilldown');
-    }
-  }catch{bar.innerHTML=''; state.mediaStats=[]; state.mediaArchived=[];}
-}
-
-// Targeted refresh after a delete/retag — keeps timeline dots and media-overview
-// badges in sync without paying for a full loadAll().
-async function refreshTimelineAndStats(){
-  const url=`/api/timeline?hours=${state.tlHours||168}${state.label?`&label=${encodeURIComponent(state.label)}`:''}`;
-  try{
-    const [tl]=await Promise.all([j(url),loadMediaStorageStats()]);
-    state.timeline=tl;
-    renderTimeline();
-  }catch(_){ /* non-critical: leave previous render in place */ }
-}
-
-byId('cleanupNowBtn').onclick=async()=>{
-  if(!await showConfirm('Jetzt bereinigen? Alle Dateien älter als die konfigurierte Aufbewahrungszeit werden gelöscht.')) return;
-  const rdEl=byId('ms_retention_days');
-  const payload=rdEl?.value?{retention_days:Number(rdEl.value)}:{};
-  try{
-    const r=await j('/api/media/cleanup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    showToast(`Bereinigung abgeschlossen. ${r.removed||0} Dateien entfernt.`,'success');
-    await loadMediaStorageStats();
-  }catch(e){showToast('Fehler: '+e.message,'error');}
-};
-
-byId('purgeOrphansBtn').onclick=async()=>{
-  if(!await showConfirm('Verwaiste Events löschen? Alle Event-Einträge ohne zugehörige Mediendatei werden entfernt.')) return;
-  try{
-    const r=await j('/api/media/purge-orphans',{method:'POST'});
-    showToast(`${r.removed||0} verwaiste Events entfernt.`,'success');
-    await loadAll();
-  }catch(e){showToast('Fehler: '+e.message,'error');}
-};
-
-byId('mediaSettingsForm').onsubmit=async(e)=>{
-  e.preventDefault();
-  const f=e.target.elements;
-  const payload={storage:{retention_days:Number(f['retention_days'].value||14),auto_cleanup_enabled:!!(f['auto_cleanup_enabled']?.checked)}};
-  await fetch('/api/settings/app',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  await loadAll();
-};
 
 
 byId('wiz_cam_rtsp').value='rtsp://user:pass@192.168.X.X:554/Streaming/Channels/101';
@@ -3202,181 +3008,8 @@ byId('wizPrev').onclick=()=>{ wizStep=Math.max(1,wizStep-1); showWizardStep(wizS
 byId('wizNext').onclick=()=>{ wizStep=Math.min(4,wizStep+1); showWizardStep(wizStep); };
 byId('wizFinish').onclick=()=>finishWizard();
 
-// ── Sidebar ───────────────────────────────────────────────────���───────────────
-(function initSidebar(){
-  const sidebar=byId('sidebar');
-  const STORAGE_KEY='tspy_sidebar_collapsed';
 
-  function setCollapsed(yes){
-    sidebar.classList.toggle('collapsed',yes);
-    try{localStorage.setItem(STORAGE_KEY,yes?'1':'0');}catch{}
-  }
 
-  // Desktop (>1024px): always collapsed; CSS hover expands.
-  // Tablet  (768-1024px): collapsed by default, persisted via localStorage.
-  // Mobile  (≤768px): hidden — navigation lives in the bottom dock now,
-  // so the drawer + hamburger + edge-swipe machinery is gone.
-  if(window.innerWidth>1024){
-    sidebar.classList.add('collapsed');
-  } else if(window.innerWidth>768){
-    const saved=localStorage.getItem(STORAGE_KEY);
-    setCollapsed(saved!=='0');
-  }
-
-  document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',e=>{
-    e.preventDefault();
-    const target=document.querySelector(a.getAttribute('href'));
-    if(!target) return;
-    target.scrollIntoView({behavior:'smooth',block:'start'});
-    // One-shot offset correction: if scroll-margin + padding still leaves a gap,
-    // nudge to the top. Needed mainly for sections late in the flow.
-    setTimeout(()=>{
-      const el=document.querySelector(a.getAttribute('href'));
-      if(!el) return;
-      const rect=el.getBoundingClientRect();
-      if(rect.top>12){
-        window.scrollBy({top:rect.top-8,behavior:'smooth'});
-      }
-    },420);
-  }));
-})();
-
-// ── Mobile bottom dock ───────────────────────────────────────────────────────
-// 5-tab nav that replaces the old mobile topbar. Click → smooth-scroll;
-// scroll-spy auto-activates the tab whose section is centered. Sections
-// without a matching dock entry (cameras, media, logs) ride along with a
-// related tab via the data-dock-section attribute.
-function _initMobileDock(){
-  const dock=document.getElementById('mobileDock');
-  if(!dock) return;
-  const btns=Array.from(dock.querySelectorAll('.m-dock-btn'));
-  btns.forEach(btn=>{btn.style.setProperty('--m-acc',btn.dataset.accentRgb);});
-
-  function setActiveByDockTarget(target){
-    btns.forEach(b=>b.classList.toggle('is-active',b.dataset.target===target));
-  }
-
-  // Section-id → dock-target. data-dock-section overrides the default
-  // self-mapping so #cameras rides Live, #media rides Statistik, #logs
-  // rides Setup. trackedSections is in DOM/scroll order so the spy
-  // loop can early-break once it crosses the probe.
-  const sectionIds=['dashboard','cameras','statistik','media','achievements','weather','settings','logs'];
-  const targetById={};
-  const trackedSections=[];
-  for(const id of sectionIds){
-    const el=document.getElementById(id);
-    if(!el) continue;
-    targetById[id]=el.dataset.dockSection||id;
-    trackedSections.push(el);
-  }
-
-  // Click-lock keeps the tapped tab pinned for ~900 ms while the smooth-
-  // scroll settles, so scroll-spy can't flip-flop and force the user to
-  // tap twice.
-  let clickLockTarget=null;
-  let clickLockTimer=0;
-  let scrollRaf=0;
-
-  btns.forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const targetId=btn.dataset.target;
-      const el=document.getElementById(targetId);
-      if(!el) return;
-      const wasActive=btn.classList.contains('is-active');
-      clickLockTarget=targetId;
-      if(clickLockTimer) clearTimeout(clickLockTimer);
-      clickLockTimer=setTimeout(()=>{clickLockTarget=null;updateActiveFromScroll();},900);
-      setActiveByDockTarget(targetId);
-      if(wasActive){
-        window.scrollTo({top:el.offsetTop-12,behavior:'smooth'});
-      } else {
-        el.scrollIntoView({behavior:'smooth',block:'start'});
-      }
-      if(location.hash!=='#'+targetId){
-        try{history.replaceState(null,'','#'+targetId);}catch{}
-      }
-    });
-  });
-
-  // Position-based scroll-spy. The previous IntersectionObserver band
-  // (rootMargin -30%/-55%) was too narrow — short sections and the last
-  // section on the page never reached it, so their tabs never lit up.
-  // New rule: activate the last section whose top has crossed a probe
-  // line at vh*0.30. Bottom-of-page snaps to the last section regardless
-  // so settings/logs always lights Setup at the page foot.
-  function updateActiveFromScroll(){
-    scrollRaf=0;
-    if(clickLockTarget){setActiveByDockTarget(clickLockTarget);return;}
-    if(!trackedSections.length) return;
-    const vh=window.innerHeight;
-    const sy=window.scrollY;
-    const docH=document.documentElement.scrollHeight;
-    if(sy+vh>=docH-4){
-      const last=trackedSections[trackedSections.length-1];
-      setActiveByDockTarget(targetById[last.id]);
-      return;
-    }
-    const probe=sy+vh*0.30;
-    let bestId=null;
-    for(const el of trackedSections){
-      const top=el.getBoundingClientRect().top+sy;
-      if(top<=probe) bestId=targetById[el.id];
-      else break;
-    }
-    if(bestId) setActiveByDockTarget(bestId);
-  }
-  function scheduleScrollUpdate(){
-    if(scrollRaf) return;
-    scrollRaf=requestAnimationFrame(updateActiveFromScroll);
-  }
-  window.addEventListener('scroll',scheduleScrollUpdate,{passive:true});
-  window.addEventListener('resize',scheduleScrollUpdate);
-  updateActiveFromScroll();
-
-  window._updateMobileDockLiveDot=function(){
-    const dot=dock.querySelector('.m-dock-btn[data-target="dashboard"] .m-dock-livedot');
-    if(!dot) return;
-    const anyLive=(state.cameras||[]).some(c=>c.enabled&&c.armed);
-    dot.hidden=!anyLive;
-  };
-  _updateMobileDockLiveDot();
-}
-_initMobileDock();
-
-// ── Logs ─────────────────────────────────────────────────────────────────────
-function _logSubsystemShort(logger){
-  if(!logger) return '';
-  // Handle sub-loggers like camera_runtime.timelapse, camera_runtime.camera
-  if(logger.includes('camera_runtime.timelapse')) return 'tl';
-  if(logger.includes('camera_runtime.camera')) return 'cam';
-  const p=logger.split('.').pop()||logger;
-  const MAP={camera_runtime:'runtime',timelapse:'tl',telegram_bot:'tg',detectors:'coral',storage:'store',mqtt_service:'mqtt',server:'srv',discovery:'disc'};
-  return MAP[p]||p.slice(0,8);
-}
-async function loadLogs(){
-  const level=byId('logLevelFilter')?.value||'INFO';
-  const subsystem=byId('logSubsystemFilter')?.value||'';
-  try{
-    const params=`level=${level}${subsystem?'&subsystem='+encodeURIComponent(subsystem):''}`;
-    const r=await j(`/api/logs?${params}`);
-    renderLogs(r.logs||[]);
-  }catch(e){
-    byId('logOutput').innerHTML=`<div class="log-row ERROR"><span class="log-ts">--:--:--</span><span class="log-level">ERROR</span><span>${esc(String(e))}</span></div>`;
-  }
-}
-function renderLogs(logs){
-  const out=byId('logOutput');
-  if(!logs.length){out.innerHTML='<div class="log-row INFO"><span class="log-ts">—</span><span class="log-level">—</span><span>Keine Log-Einträge auf diesem Level.</span></div>'; return;}
-  out.innerHTML=logs.map(l=>{
-    const tag=_logSubsystemShort(l.logger);
-    return `<div class="log-row ${esc(l.level)}"><span class="log-ts">${esc(l.ts||'')}</span><span class="log-level">${esc(l.level||'')}</span>${tag?`<span class="log-subsys">${esc(tag)}</span>`:'<span class="log-subsys"></span>'}<span>${esc(l.msg||'')}</span></div>`;
-  }).join('');
-  out.scrollTop=out.scrollHeight;
-}
-byId('logRefreshBtn').onclick=loadLogs;
-byId('logClearBtn').onclick=()=>{byId('logOutput').innerHTML='';};
-byId('logLevelFilter').onchange=loadLogs;
-byId('logSubsystemFilter')?.addEventListener('change',loadLogs);
 
 // ── Telegram test button ──────────────────────────────────────────────────────
 byId('telegramTestBtn')?.addEventListener('click',async()=>{
@@ -7426,7 +7059,6 @@ window.loadTlStatus            = loadTlStatus;
 window._updateTlActiveTags     = _updateTlActiveTags;
 window.openWizard              = openWizard;
 window.updateMediaSectionTitle = updateMediaSectionTitle;
-window.loadMediaStorageStats   = loadMediaStorageStats;
 window.loadMedia               = loadMedia;
 window.renderMediaGrid         = renderMediaGrid;
 // Stage 6 — wire the merge-modal DOM listeners once. camera-merge.js

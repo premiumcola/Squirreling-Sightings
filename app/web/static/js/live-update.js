@@ -15,6 +15,7 @@ import {
 } from './dashboard.js';
 import { renderTimeline } from './timeline.js';
 import { _renderGlobalStatusRows } from './camedit/detection.js';
+import { loadMediaStorageStats } from './chrome/storage-stats.js';
 
 let _liveUpdateInterval = null;
 const _prevCamStatuses = new Map();
@@ -92,7 +93,7 @@ export async function loadAll() {
   _resetFailedSnapshotIds();
   if (typeof window._updateMobileDockLiveDot === 'function') window._updateMobileDockLiveDot();
   state.timeline = await j(`/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`);
-  if (typeof window.loadMediaStorageStats === 'function') await window.loadMediaStorageStats();
+  await loadMediaStorageStats();
   if (typeof window.renderShell === 'function')           window.renderShell();
   renderDashboard();
   renderTimeline();

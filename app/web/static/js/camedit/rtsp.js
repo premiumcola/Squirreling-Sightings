@@ -8,6 +8,7 @@
 //   • parseRtspUrl      — regex-free URL parser used by recovery + diagnostics
 //   • _defaultRtspPathForManufacturer — vendor → main-stream path mapping
 import { byId } from '../core/dom.js';
+import { _setEyeState } from '../chrome/password-toggle.js';
 
 export const RTSP_PATH_OPTS = [
   { label: 'Reolink H.264 – Main (RLC-810A, ältere FW)',  value: '/h264Preview_01_main' },
@@ -60,15 +61,14 @@ window._toggleUrlMask = function(btn){
   const input = wrap?.querySelector('input[data-mask-url="1"]');
   if (!input) return;
   const nowRevealed = input.dataset.masked === '1';
-  const setEye = window._setEyeState; // _setEyeState lives in legacy.js for now
   if (nowRevealed){
     _revealUrl(input);
-    if (typeof setEye === 'function') setEye(btn, true);
+    _setEyeState(btn, true);
   } else {
-    // User just edited the revealed value — stash new real before re-masking
+    // User just edited the revealed value — stash new real before re-masking.
     input.dataset.real = input.value;
     _applyUrlMask(input);
-    if (typeof setEye === 'function') setEye(btn, false);
+    _setEyeState(btn, false);
   }
 };
 

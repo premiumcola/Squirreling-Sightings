@@ -47,6 +47,7 @@ LOAD_ORDER = [
     "24-cam-edit-4.css",
     "25-mobile.css",
     "26-erk-sim-sheet.css",
+    "27-coral-test-modes.css",
 ]
 
 _BANNER = (

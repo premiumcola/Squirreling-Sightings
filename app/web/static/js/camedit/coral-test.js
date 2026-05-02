@@ -201,9 +201,15 @@ async function _runCoralTest(){
   // Batch mode: "test:<folder>" runs every image in storage/test_images/<folder>/
   if(sel.startsWith('test:')){
     const folder=sel.slice(5);
+    const mode=byId('coralTestModeSel')?.value||'cascade';
     out.innerHTML=`<div class="field-help" style="color:var(--muted)">Lade Testbilder aus <code>${esc(folder)}/</code> …</div>`;
+    // Reset the per-batch status strip — it gets re-populated from
+    // models_active in the response. Hidden until we have data.
+    const strip=byId('coralTestModelsStrip');
+    if(strip){strip.innerHTML='';strip.hidden=true;}
     try{
-      const r=await j('/api/coral/test-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder})});
+      const r=await j('/api/coral/test-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder,mode})});
+      _renderCoralModelsStrip(r);
       _renderCoralBatchResult(out,r,folder);
     }catch(e){
       out.innerHTML=`<div style="color:#fca5a5">Batch-Test fehlgeschlagen: ${esc(String(e))}</div>`;
@@ -280,20 +286,21 @@ function _renderCoralBatchResult(out,r,folder){
   if(rate>=0.75){summaryClass='cb-sum--ok';summaryIcon='✅';interp=`${modeLabel} erkennt diese Kategorie zuverlässig.`;}
   else if(rate>=0.5){summaryClass='cb-sum--warn';summaryIcon='⚠️';interp='Mittlere Erkennungsrate — ggf. Modell oder min_score prüfen.';}
   else{summaryClass='cb-sum--bad';summaryIcon='❌';interp='Niedrige Erkennungsrate — min_score zu hoch oder falsches Modell?';}
+  // Mode + per-model nicknames drive card layout. In all_independent
+  // mode each card groups detections under three sub-headers so the
+  // user can see what every model said about every image.
+  const respMode=r.mode||'cascade';
+  const modelNames=(r.models_active||{});
   const cards=results.map(item=>{
     if(item.error){
       return `<div class="cb-card"><div class="cb-card-err">${esc(item.filename)}: ${esc(item.error)}</div></div>`;
     }
     const dets=item.detections||[];
-    const pills=dets.length
-      ? dets.map(d=>{
-          const c=_coralLabelColor(d.label);
-          const spPct=d.species_score!=null?` ${(d.species_score*100).toFixed(0)}%`:'';
-          const spLat=d.species_latin && d.species && d.species!==d.species_latin?` <span class="ct-species-lat">(${esc(d.species_latin)})</span>`:'';
-          const speciesLine=d.species?`<span class="ct-species" style="color:${c}">→ ${esc(d.species)}${spLat}${spPct}</span>`:'';
-          return `<span class="ct-pill${d.species?' ct-pill--2line':''}" style="border-left-color:${c}"><span class="ct-pill-main">${esc(d.label)}<span class="ct-pct">${(d.score*100).toFixed(0)}%</span></span>${speciesLine}</span>`;
-        }).join('')
-      : '<span class="cb-empty">Keine Objekte erkannt</span>';
+    const pills=respMode==='all_independent'
+      ? _renderCoralGroupedPills(dets,modelNames)
+      : (dets.length
+          ? dets.map(d=>_renderCoralDetectionPill(d)).join('')
+          : '<span class="cb-empty">Keine Objekte erkannt</span>');
     // Wildlife (ImageNet) pill — only set for fox / squirrel / hedgehog
     // folders; shows the top ImageNet match and whether it maps to our
     // animal categories.
@@ -597,3 +604,85 @@ byId('coralModelsReload')?.addEventListener('click',_loadCoralModels);
 // indirection in camedit/index.js once both modules import directly.
 window._populateCoralTestCameras = _populateCoralTestCameras;
 window._updateCoralDeviceInfo    = _updateCoralDeviceInfo;
+
+// ── Mode-aware result helpers ────────────────────────────────────────────
+// Source-model badges are styled in css/27-coral-test-modes.css. The colour
+// ramp lives there too — keep these helpers HTML-only so a future cleanup
+// can move the templating to a single render function without re-flowing
+// the CSS.
+const _CORAL_SOURCE_NICK_FALLBACK = {
+  coco: 'COCO SSD',
+  bird_species: 'Vögel',
+  wildlife: 'Wildtiere',
+};
+
+// Per-image detection pill, optionally tagged with its source-model
+// badge. Reused by both the cascade/coco_only paths (flat list) and
+// the all_independent path (grouped under sub-headers).
+function _renderCoralDetectionPill(d){
+  const c = _coralLabelColor(d.label);
+  const spPct = d.species_score != null ? ` ${(d.species_score * 100).toFixed(0)}%` : '';
+  const spLat = (d.species_latin && d.species && d.species !== d.species_latin)
+    ? ` <span class="ct-species-lat">(${esc(d.species_latin)})</span>`
+    : '';
+  const speciesLine = d.species
+    ? `<span class="ct-species" style="color:${c}">→ ${esc(d.species)}${spLat}${spPct}</span>`
+    : '';
+  const src = d.source_model;
+  const badge = src
+    ? `<span class="ct-src-badge ct-src-badge--${esc(src)}">${esc(_CORAL_SOURCE_NICK_FALLBACK[src] || src)}</span>`
+    : '';
+  return `<span class="ct-pill${d.species ? ' ct-pill--2line' : ''}" style="border-left-color:${c}">
+    <span class="ct-pill-main">${esc(d.label)}<span class="ct-pct">${(d.score * 100).toFixed(0)}%</span></span>
+    ${speciesLine}
+    ${badge}
+  </span>`;
+}
+
+// "Alle Modelle einzeln" mode — render three rows under each card, one
+// per model, with a "kein Treffer" placeholder when the model produced
+// nothing for this image (the absence is itself diagnostic).
+function _renderCoralGroupedPills(dets, modelNames){
+  const groups = { coco: [], bird_species: [], wildlife: [] };
+  for (const d of (dets || [])){
+    const k = d.source_model;
+    if (k && groups[k]) groups[k].push(d);
+  }
+  const order = ['coco', 'bird_species', 'wildlife'];
+  const titleOf = (k) => (modelNames[k]?.nickname) || _CORAL_SOURCE_NICK_FALLBACK[k] || k;
+  return order.map(k => {
+    const head = `<div class="cb-group-head">${esc(titleOf(k))}</div>`;
+    if (!groups[k].length){
+      return `<div class="cb-group">
+        ${head}
+        <div class="cb-group-empty">kein Treffer</div>
+      </div>`;
+    }
+    return `<div class="cb-group">
+      ${head}
+      <div class="cb-group-pills">${groups[k].map(d => _renderCoralDetectionPill(d)).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+// Status strip above the result grid: each configured model gets a
+// small dot + nickname + "aktiv"/"deaktiviert" tag. Renders nothing on
+// responses without models_active so older endpoints stay invisible.
+function _renderCoralModelsStrip(r){
+  const strip = byId('coralTestModelsStrip');
+  if (!strip) return;
+  const ma = r && r.models_active;
+  if (!ma){ strip.innerHTML = ''; strip.hidden = true; return; }
+  const order = ['coco', 'bird_species', 'wildlife'];
+  const items = order.map(k => {
+    const m = ma[k] || {};
+    const ok = !!m.available;
+    return `<span class="ct-mstrip-item ${ok ? 'is-on' : 'is-off'}" title="${esc(m.reason || '')}">
+      <span class="ct-mstrip-dot"></span>
+      <span class="ct-mstrip-name">${esc(m.nickname || k)}</span>
+      <span class="ct-mstrip-state">${ok ? 'aktiv' : 'deaktiviert'}</span>
+    </span>`;
+  }).join('');
+  strip.innerHTML = items;
+  strip.hidden = false;
+}

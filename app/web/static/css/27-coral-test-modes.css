@@ -1,0 +1,124 @@
+/* ── Coral Test: mode selector + per-detection model badges ────────────────
+   Backs the diagnostic-mode batch view (see camedit/coral-test.js +
+   server.py::api_coral_test_batch). The badges sit under each detection
+   pill so the user can tell which model produced which result.
+*/
+
+/* Mode dropdown row sits between the cam-select row and the result grid. */
+.coral-test-row--mode{
+  display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;
+}
+.coral-test-row--mode .ctmode-lbl{
+  font-size:12px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;
+  flex:0 0 auto;
+}
+.coral-test-row--mode select{
+  /* iOS auto-zooms inputs below 16 px on focus — bump font-size to
+     16 px to suppress that. flex:1 1 auto stretches to fill the row on
+     desktop while keeping enough room next to the label. */
+  flex:1 1 220px;min-width:0;
+  font-size:16px;min-height:44px;
+  padding:8px 12px;border-radius:9px;
+}
+
+/* ── Status strip: per-model availability above the grid ────────────────── */
+.ct-models-strip{
+  margin-top:10px;
+  display:flex;flex-wrap:wrap;gap:8px;
+}
+.ct-mstrip-item{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 10px;border-radius:999px;
+  background:rgba(255,255,255,.05);
+  font-size:12px;font-weight:600;
+  color:var(--muted);
+  -webkit-tap-highlight-color:transparent;
+}
+.ct-mstrip-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:rgba(255,255,255,.25);
+  flex-shrink:0;
+}
+.ct-mstrip-item.is-on .ct-mstrip-dot{background:#22c55e}
+.ct-mstrip-item.is-on{color:var(--text)}
+.ct-mstrip-item.is-on .ct-mstrip-name{color:#fff}
+.ct-mstrip-item.is-off{opacity:.55}
+.ct-mstrip-name{font-weight:700}
+.ct-mstrip-state{
+  font-size:11px;font-weight:600;letter-spacing:.02em;
+  color:rgba(255,255,255,.55);
+}
+
+/* ── Per-detection source-model badge under each pill ──────────────────── */
+.ct-src-badge{
+  display:inline-block;
+  margin-top:4px;
+  padding:4px 8px;
+  border-radius:8px;
+  font-size:10px;font-weight:700;
+  letter-spacing:.04em;
+  text-transform:none;
+  background:rgba(255,255,255,.06);
+  color:rgba(255,255,255,.78);
+  white-space:nowrap;
+}
+/* Per-model colour ramp — distinct from the label-pill colour so the
+   badge reads as meta-info, not as another classification. */
+.ct-src-badge--coco{
+  background:rgba(255,255,255,.07);
+  color:rgba(255,255,255,.78);
+}
+.ct-src-badge--bird_species{
+  background:rgba(20,184,166,.16);   /* teal */
+  color:#5eead4;
+}
+.ct-src-badge--wildlife{
+  background:rgba(245,158,11,.16);    /* amber */
+  color:#fcd34d;
+}
+
+/* The detection pill needs to wrap the badge cleanly under its label
+   row — the existing .ct-pill flexbox direction handles two-line
+   pills (label + species), but the badge is a third line; allow the
+   inner content to flow vertically by switching to column layout. */
+.ct-pill{
+  flex-direction:column;
+  align-items:flex-start;
+  gap:2px;
+}
+.ct-pill .ct-pill-main{
+  display:flex;align-items:center;gap:6px;
+}
+
+/* ── all_independent grouped layout ─────────────────────────────────────── */
+.cb-group{
+  margin-top:8px;
+  padding:8px 0 6px;
+  border-top:1px solid rgba(255,255,255,.04);
+}
+.cb-group:first-child{
+  border-top:0;margin-top:0;padding-top:0;
+}
+.cb-group-head{
+  font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+.cb-group-pills{
+  display:flex;flex-wrap:wrap;gap:6px;
+}
+.cb-group-empty{
+  font-size:12px;color:rgba(255,255,255,.42);
+  font-style:italic;
+}
+
+@media (max-width:768px){
+  .coral-test-row--mode{flex-direction:column;align-items:stretch}
+  .coral-test-row--mode .ctmode-lbl{align-self:flex-start}
+  .coral-test-row--mode select{width:100%}
+  /* Smaller batch cards on narrow viewports already wrap pills via the
+     parent's flex layout; the badge inherits that wrap behaviour. */
+  .ct-src-badge{padding:5px 9px;font-size:11px}
+}

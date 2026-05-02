@@ -52,6 +52,7 @@ round, byte-identity wins.
 | 24 | `24-cam-edit-4.css` | 67 | Camera-edit live id preview |
 | 25 | `25-mobile.css` | 584 | iOS / mobile foundation through end of file |
 | 26 | `26-erk-sim-sheet.css` | — | Camera-edit Erkennung-tab tabbed sheet (Snapshot / Video) |
+| 27 | `27-coral-test-modes.css` | — | Coral test panel mode selector + per-detection model badges |
 
 Total: 3486 lines from the pre-split `app.css`, plus per-file additions.
 

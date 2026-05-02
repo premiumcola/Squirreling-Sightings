@@ -309,6 +309,17 @@
                 <select id="coralTestCamSel" class="dark-select"></select>
                 <button type="button" id="coralTestBtn" class="btn-action accent">▶ Testen</button>
               </div>
+              <div class="coral-test-row coral-test-row--mode">
+                <label for="coralTestModeSel" class="ctmode-lbl">Modus</label>
+                <select id="coralTestModeSel" class="dark-select">
+                  <option value="cascade">Standard-Cascade</option>
+                  <option value="coco_only">Nur COCO</option>
+                  <option value="bird_species_only">Nur Vögel-Klassifikation</option>
+                  <option value="wildlife_only">Nur Wildtiere</option>
+                  <option value="all_independent">Alle Modelle einzeln</option>
+                </select>
+              </div>
+              <div id="coralTestModelsStrip" class="ct-models-strip" hidden></div>
               <div id="coralTestResult" style="margin-top:10px"></div>
             </div>
 

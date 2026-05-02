@@ -969,6 +969,31 @@ textarea{width:100%;padding:12px 13px;border-radius:14px;background:var(--surfac
   padding:10px 0;
   background-clip:content-box;
   cursor:pointer;
+  /* Belt-and-braces: kill any inherited border / box-shadow / outline
+     so neither the form-validation `:invalid` ring nor a stray
+     cam-field-warn highlight (if a slider ever ends up inside a
+     warn-tagged wrap) draws a red rectangle past the thumb. */
+  border:0;
+  box-shadow:none;
+}
+/* Same scrub for the hidden-state pseudo-classes — Chrome's default
+   :invalid ring on range sliders with min/max/step is what produced
+   the user-visible "red rectangle past the thumb" in the Erkennung tab. */
+.erk-card input[type="range"]:invalid,
+.erk-card input[type="range"]:focus,
+.erk-card input[type="range"]:focus-visible{
+  outline:0;
+  box-shadow:none;
+  border:0;
+}
+/* Defensive scope: if a slider ever DOES end up inside a wrap that
+   the connection-warn flow tagged, cancel the inset highlight on
+   that wrap so the slider track stays clean. The actual warn-flagged
+   wraps in production are rtsp_ip / rtsp_user / rtsp_pass — none
+   contain sliders today, but this rule guards against future moves. */
+.field-wrap.cam-field-warn:has(input[type="range"]){
+  background:transparent;
+  box-shadow:none;
 }
 .erk-card input[type="range"]::-webkit-slider-thumb{
   -webkit-appearance:none;appearance:none;

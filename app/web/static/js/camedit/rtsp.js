@@ -26,7 +26,7 @@ export const RTSP_PATH_OPTS = [
 // Encode only URL-reserved chars that break parsing (?=query, @=host, #=fragment)
 // ! is allowed unencoded in userinfo per RFC 3986
 export function _rtspEnc(s){
-  return (s || '').replace(/%/g, '%25').replace(/\?/g, '%3F').replace(/@/g, '%40').replace(/#/g, '%23');
+  return (s || '').replaceAll('%', '%25').replaceAll('?', '%3F').replaceAll('@', '%40').replaceAll('#', '%23');
 }
 
 // Replace only the password portion of a URL with dots. The real URL is

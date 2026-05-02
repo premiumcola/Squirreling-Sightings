@@ -30,7 +30,7 @@ const _WS_FIELD_ORDER = [
 
 let _wsStatsTimer_chart = null;
 let _wsStatsObserver = null;
-let _wsStatsState = {
+const _wsStatsState = {
   hours: 24,
   isolated: null,         // field key in isolated-mode, null = all lines
   data: null,             // last fetched payload

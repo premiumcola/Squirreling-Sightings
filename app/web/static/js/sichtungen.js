@@ -204,7 +204,7 @@ function _achTier(count){
 }
 
 function _medalSVG(achId, tier, birdSvg, isUnlocked, size = 88){
-  const uid = achId.replace(/[^a-z0-9]/g, '');
+  const uid = achId.replaceAll(/[^a-z0-9]/g, '');
   // Locked medals are deliberately drab: two flat neutral greys, no
   // highlight arc. The silhouette is rendered faintly so the shape is
   // still recognisable without announcing itself.

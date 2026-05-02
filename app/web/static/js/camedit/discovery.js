@@ -25,7 +25,7 @@ function closeDiscoveryModal(){
   document.body.style.overflow='';
 }
 let _discoveryItems=[];
-function _hostnameToId(h){return h.toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40);}
+function _hostnameToId(h){return h.toLowerCase().replaceAll(/[^a-z0-9-]+/g,'-').replaceAll(/^-+|-+$/g,'').slice(0,40);}
 function _defaultRtspPath(x){
   const g=(x.guess||'').toLowerCase();
   if(g.includes('reolink')) return '/h264Preview_01_main';
@@ -73,10 +73,10 @@ function _renderDiscoveryResults(){
   const showFewHint=_discoveryItems.length<2;
   byId('discoveryResults').innerHTML=visible.map(x=>{
     const ports=(x.open_ports||[]).join(', ')||'—';
-    const uid=x.ip.replace(/\./g,'_');
+    const uid=x.ip.replaceAll('.','_');
     const already=allConfigured.has(x.ip);
     const vendor=x.guess==='Unbekannte Kamera'?`Unbekannte Kamera (${x.ip})`:esc(x.guess||'Unbekannte Kamera');
-    const computedId=x.hostname?_hostnameToId(x.hostname):'cam-'+x.ip.replace(/\./g,'-');
+    const computedId=x.hostname?_hostnameToId(x.hostname):'cam-'+x.ip.replaceAll('.','-');
     const displayName=x.hostname?esc(x.hostname.charAt(0).toUpperCase()+x.hostname.slice(1)):'';
     const defaultPath=_defaultRtspPath(x);
     const pathOptsForCam=RTSP_PATHS.map(p=>`<option value="${esc(p.value)}"${p.value===defaultPath?' selected':''}>${esc(p.label)}</option>`).join('');
@@ -140,11 +140,11 @@ byId('closeDiscoveryBtn').onclick=()=>closeDiscoveryModal();
 byId('discoveryModal').onclick=(e)=>{if(e.target===byId('discoveryModal')) closeDiscoveryModal();};
 byId('openWizardBtn').onclick=()=>openWizard();
 window.openDiscoveryAddForm=(ip)=>{
-  const uid=ip.replace(/\./g,'_');
+  const uid=ip.replaceAll('.','_');
   byId(`disc_add_form_${uid}`)?.classList.remove('hidden');
 };
 window.saveDiscoveryCamera=async(ip)=>{
-  const uid=ip.replace(/\./g,'_');
+  const uid=ip.replaceAll('.','_');
   const user=byId(`disc_user_${uid}`)?.value||'admin';
   const pass=byId(`disc_pass_${uid}`)?.value||'';
   const path=byId(`disc_path_${uid}`)?.value||'/Streaming/Channels/101';
@@ -152,7 +152,7 @@ window.saveDiscoveryCamera=async(ip)=>{
   const rtsp=`rtsp://${user}:${_rtspEnc(pass)}@${ip}:554${path}`;
   const snap=`http://${user}:${_rtspEnc(pass)}@${ip}/cgi-bin/snapshot.cgi`;
   const _item=_discoveryItems.find(x=>x.ip===ip);
-  const camId=_item?.hostname?_hostnameToId(_item.hostname):'cam-'+ip.replace(/\./g,'-');
+  const camId=_item?.hostname?_hostnameToId(_item.hostname):'cam-'+ip.replaceAll('.','-');
   const payload={id:camId,name,location:'',rtsp_url:rtsp,snapshot_url:snap,
     enabled:true,armed:true,
     object_filter:['person','cat','bird'],
@@ -167,7 +167,7 @@ window.saveDiscoveryCamera=async(ip)=>{
 };
 // Legacy alias – wizard still uses this
 window.applyDiscoveryRtsp=(ip)=>{
-  const uid=ip.replace(/\./g,'_');
+  const uid=ip.replaceAll('.','_');
   const user=byId(`disc_user_${uid}`)?.value||'admin';
   const pass=byId(`disc_pass_${uid}`)?.value||'';
   const path=byId(`disc_path_${uid}`)?.value||'/Streaming/Channels/101';

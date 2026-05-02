@@ -23,7 +23,7 @@ export function _initCameraFormListeners(){
   // Auto-generate ID from name (only for new cameras)
   f['name']?.addEventListener('input', () => {
     if (f['id'].dataset.autoGen === '1'){
-      f['id'].value = 'cam-' + f['name'].value.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      f['id'].value = 'cam-' + f['name'].value.toLowerCase().normalize('NFD').replaceAll(/[̀-ͯ]/g, '').replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/(^-|-$)/g, '');
     }
   });
   // Motion sensitivity slider — historical wiring for cards that still
@@ -64,7 +64,7 @@ export function _initErkSliders(form){
   // Compound: confirmation filter — "N Treffer in S Sekunden bestätigen".
   const cn = form.querySelector('[name="confirm_n"]');
   const cs = form.querySelector('[name="confirm_seconds"]');
-  const cl = document.getElementById('erkConfirmLbl');
+  const cl = document.querySelector('#erkConfirmLbl');
   if (cn && cs && cl){
     const upd = () => { cl.textContent = `${cn.value} Treffer in ${cs.value} Sekunden bestätigen`; };
     cn.addEventListener('input', upd);
@@ -75,7 +75,7 @@ export function _initErkSliders(form){
   // nearest integer; the slider's 100 ms low end is 10 fps, the 2000 ms
   // high end is 0.5 fps (rounds to 1).
   const fi = form.querySelector('[name="frame_interval_ms"]');
-  const fl = document.getElementById('erkFrameIntervalLbl');
+  const fl = document.querySelector('#erkFrameIntervalLbl');
   if (fi && fl){
     const upd = () => {
       const fps = Math.max(1, Math.round(1000 / parseFloat(fi.value)));

@@ -12,7 +12,7 @@ import { state } from './core/state.js';
 import { j } from './core/api.js';
 
 function _showRouterToast(msg){
-  let el = document.getElementById('_routerToast');
+  let el = document.querySelector('#_routerToast');
   if (!el){
     el = document.createElement('div');
     el.id = '_routerToast';

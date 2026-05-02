@@ -8,7 +8,7 @@ export const byId = (id) => document.getElementById(id);
 // Handles the OWASP-recommended five characters; the `??` falls back
 // to '' on null/undefined so we never write the literal "null" into
 // markup.
-export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (m) => ({
+export const esc = (s) => String(s ?? '').replaceAll(/[&<>"']/g, (m) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[m]));
 

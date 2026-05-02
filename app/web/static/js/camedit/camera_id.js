@@ -18,10 +18,10 @@ const _CAM_ID_TRANSLIT = {
 
 function _camIdSanitise(seg){
   if (seg == null) return '';
-  let s = String(seg).replace(/./g, ch => _CAM_ID_TRANSLIT[ch] ?? ch);
+  let s = String(seg).replaceAll(/./g, ch => _CAM_ID_TRANSLIT[ch] ?? ch);
   // NFKD decompose, drop combining marks (mirrors python unicodedata)
-  s = s.normalize('NFKD').replace(/[̀-ͯ]/g, '');
-  s = s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  s = s.normalize('NFKD').replaceAll(/[̀-ͯ]/g, '');
+  s = s.toLowerCase().replaceAll(/[^a-z0-9]+/g, '');
   return s;
 }
 

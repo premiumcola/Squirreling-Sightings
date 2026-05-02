@@ -705,6 +705,154 @@ class TelegramService:
     def _is_quiet_now(self) -> bool:
         return is_quiet_now(self.push_cfg.get("quiet_hours") or {})
 
+    def _best_frame_jpeg(self, meta: dict, camera_id: str) -> bytes | None:
+        """Resolve the "best frame" for an event from the tracking
+        sidecar and return JPEG bytes with the bbox burnt on. The
+        recording-side tracks.json (Phase 1 worker) carries the highest-
+        scoring detection across the whole clip; pushing that frame
+        gives the receiver the strongest single image instead of
+        whichever frame happened to trigger.
+
+        Returns None on any failure (worker not ready, ffmpeg missing,
+        tracks.json absent or corrupt, video missing). Caller is
+        expected to fall back to the trigger snapshot in that case.
+
+        Side effect: caches the rendered JPEG as <event_id>.best.jpg
+        next to the mp4. Re-sends (resilience retry, /resend command)
+        skip the ffmpeg + draw_detections work."""
+        try:
+            event_id = meta.get("event_id")
+            if not event_id or not self.store:
+                return None
+            ev = self.store.get_event(camera_id, event_id)
+            if not ev:
+                return None
+            video_rel = ev.get("video_relpath")
+            if not video_rel:
+                return None
+            video_path = self._storage_root() / video_rel
+            if not video_path.exists():
+                return None
+            from .tracking_worker import tracks_path_for
+            tracks_path = tracks_path_for(video_path)
+            # Up to 2 s wait — most clips finish tracking in well under
+            # that on this hardware. The poll interval is 100 ms so the
+            # happy path returns within a single tick.
+            deadline = time.time() + 2.0
+            while not tracks_path.exists() and time.time() < deadline:
+                time.sleep(0.1)
+            if not tracks_path.exists():
+                log.info("[tg] best-frame: tracks.json not ready for %s, fallback",
+                         event_id)
+                return None
+            import json as _json
+            try:
+                tracks = _json.loads(tracks_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                log.warning("[tg] best-frame: tracks.json parse fail %s: %s",
+                            tracks_path.name, e)
+                return None
+            best = tracks.get("best_frame")
+            if not best or not isinstance(best, dict):
+                log.info("[tg] best-frame: no best_frame in tracks.json for %s, fallback",
+                         event_id)
+                return None
+            # Cache check — skip ffmpeg + draw_detections when the
+            # rendered JPEG is newer than the tracks.json that drove it.
+            cache_path = video_path.with_name(video_path.stem + ".best.jpg")
+            if cache_path.exists():
+                try:
+                    if cache_path.stat().st_mtime >= tracks_path.stat().st_mtime:
+                        return cache_path.read_bytes()
+                except Exception:
+                    pass  # corrupt cache → re-render below
+            # Extract the frame with ffmpeg. -ss before -i seeks via
+            # keyframes (fast, may snap to nearest keyframe ≤2 s away);
+            # acceptable here because best_frame is normally well inside
+            # a continuous run with a keyframe nearby. -frames:v 1 +
+            # mjpeg gives a single-image stream piped to stdout.
+            import shutil as _shutil
+            ffmpeg_bin = _shutil.which("ffmpeg")
+            if not ffmpeg_bin:
+                log.info("[tg] best-frame: ffmpeg missing, fallback")
+                return None
+            t_seek = float(best.get("t") or 0.0)
+            import subprocess as _sp
+            try:
+                proc = _sp.run(
+                    [ffmpeg_bin, "-hide_banner", "-loglevel", "error",
+                     "-ss", f"{t_seek:.3f}", "-i", str(video_path),
+                     "-frames:v", "1", "-q:v", "2", "-f", "mjpeg", "-"],
+                    capture_output=True, timeout=1.0,
+                )
+            except _sp.TimeoutExpired:
+                log.warning("[tg] best-frame: ffmpeg timeout for %s, fallback",
+                            event_id)
+                return None
+            if proc.returncode != 0 or not proc.stdout:
+                log.warning("[tg] best-frame: ffmpeg rc=%s len=%d for %s, fallback",
+                            proc.returncode, len(proc.stdout or b""), event_id)
+                return None
+            jpeg_bytes = proc.stdout
+            # Decode JPEG → numpy frame, build synthetic Detection list
+            # from the tracks samples that fall on best_frame.f, draw
+            # boxes, re-encode. The on-disk MP4 stays untouched — this
+            # JPEG is Telegram-only, since receivers can't render the
+            # JSON overlay client-side the way the lightbox does.
+            try:
+                import cv2 as _cv2
+                import numpy as _np
+                arr = _np.frombuffer(jpeg_bytes, dtype=_np.uint8)
+                frame = _cv2.imdecode(arr, _cv2.IMREAD_COLOR)
+                if frame is None:
+                    log.warning("[tg] best-frame: imdecode failed for %s", event_id)
+                    return None
+                from .detectors import Detection, draw_detections
+                best_f = int(best.get("f") or 0)
+                synth_dets = []
+                for tr in tracks.get("tracks", []) or []:
+                    label = tr.get("label", "?")
+                    for s in tr.get("samples", []) or []:
+                        if s.get("f") != best_f:
+                            continue
+                        bb = s.get("bbox") or {}
+                        try:
+                            box = (int(bb["x1"]), int(bb["y1"]),
+                                   int(bb["x2"]), int(bb["y2"]))
+                        except Exception:
+                            continue
+                        score = s.get("score")
+                        if score is None:
+                            score = tr.get("best_score") or 0.0
+                        synth_dets.append(Detection(
+                            label=label, score=float(score), bbox=box,
+                        ))
+                        break  # one sample per track at this frame
+                if synth_dets:
+                    frame = draw_detections(frame, synth_dets)
+                ok, buf = _cv2.imencode(".jpg", frame,
+                                        [int(_cv2.IMWRITE_JPEG_QUALITY), 85])
+                if not ok:
+                    return None
+                out_bytes = buf.tobytes()
+                try:
+                    cache_path.write_bytes(out_bytes)
+                except Exception:
+                    pass  # non-fatal — return the rendered bytes anyway
+                log.info("[tg] best-frame: event=%s f=%d t=%.2f score=%.2f "
+                         "boxes=%d size=%dKB",
+                         event_id, best_f, t_seek,
+                         float(best.get("score") or 0.0),
+                         len(synth_dets), len(out_bytes) // 1024)
+                return out_bytes
+            except Exception as e:
+                log.warning("[tg] best-frame: render failed for %s: %s",
+                            event_id, e)
+                return None
+        except Exception as e:
+            log.debug("[tg] best-frame: %s", e)
+            return None
+
     def send_event_alert(self, meta: dict, camera_id: str, snapshot_path: str | Path | None = None):
         """Push entry point used by the camera runtime after an event is finalized.
 
@@ -864,7 +1012,16 @@ class TelegramService:
                 "ts":    time.time(),
             })
 
-        photo = meta.get("thumb_bytes")
+        # Push payload: prefer the highest-scoring frame from the
+        # tracking sidecar (Phase 1 worker → tracks.json) with the
+        # bbox burnt on. Receivers can't render the Canvas overlay
+        # the lightbox uses, so the burned JPEG is Telegram-specific
+        # — the on-disk mp4 stays untouched. Fallback chain when the
+        # worker hasn't finished yet (or ffmpeg is missing): trigger
+        # snapshot bytes from meta, then snapshot_path on disk.
+        photo = self._best_frame_jpeg(meta, camera_id)
+        if photo is None:
+            photo = meta.get("thumb_bytes")
         if photo is None and snapshot_path:
             photo = str(snapshot_path)
         self.send(caption, photo=photo, buttons=buttons, silent=silent, dark=is_night_now)

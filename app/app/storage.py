@@ -269,6 +269,15 @@ class EventStore:
                     tracks_deleted = True
                 except Exception:
                     pass
+            # `<event_id>.best.jpg` is the Telegram-only "best frame"
+            # cache (bbox burnt on) — recreated by the next push if
+            # tracks.json is rebuilt, but pointless to keep around
+            # once the source mp4 is gone.
+            for bp in list(cam_dir.rglob(f"{event_id}.best.jpg")):
+                try:
+                    bp.unlink()
+                except Exception:
+                    pass
         return {"json_deleted": event is not None, "snap_deleted": snap_deleted,
                 "vid_deleted": vid_deleted, "tracks_deleted": tracks_deleted}
 
@@ -307,6 +316,15 @@ class EventStore:
                 event_id = tp.stem.removesuffix(".tracks")
                 if not list(cam_dir.rglob(f"{event_id}.json")):
                     tp.unlink(missing_ok=True)
+                    removed += 1
+            # Same orphan check for the Telegram-only `.best.jpg`
+            # cache. Pattern: `<event_id>.best.jpg` → stem is
+            # `<event_id>.best`, the event JSON we look for is
+            # `<event_id>.json`.
+            for bp in list(cam_dir.rglob("*.best.jpg")):
+                event_id = bp.stem.removesuffix(".best")
+                if not list(cam_dir.rglob(f"{event_id}.json")):
+                    bp.unlink(missing_ok=True)
                     removed += 1
         return removed
 

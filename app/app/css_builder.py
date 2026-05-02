@@ -1,0 +1,104 @@
+"""CSS build step — concatenates per-domain partials into one /static/app.css.
+
+Source of truth is ``app/web/static/css/*.css``. The compiled file
+``app/web/static/app.css`` is a build artifact and gitignored once the partials
+exist. Build runs at server boot so a fresh clone + docker-compose up just
+works without an explicit pre-step.
+
+Load order is fixed and documented in ``app/web/static/css/README.md``:
+    tokens → base → utilities → chrome → (domain partials, any order) → mobile
+
+If the partials directory is empty (or missing), build is a no-op and the
+existing ``app.css`` is left untouched. That guard keeps the build harmless
+during the bootstrap phase before partials have been written.
+"""
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+# Authoritative load order. ``mobile.css`` MUST come last so its @media blocks
+# override anything they need to. Domain partials in the middle can be in any
+# order — CSS specificity, not source order, decides the cascade for them.
+LOAD_ORDER = [
+    "tokens.css",
+    "base.css",
+    "utilities.css",
+    "chrome.css",
+    "hero.css",
+    "dashboard.css",
+    "mediathek.css",
+    "timeline.css",
+    "cam-edit.css",
+    "timelapse.css",
+    "weather.css",
+    "statistics.css",
+    "sichtungen.css",
+    "coral.css",
+    "telegram.css",
+    "mobile.css",
+]
+
+_BANNER = (
+    "/* GENERATED FILE — do not edit. Source of truth: app/web/static/css/*.css\n"
+    " * Run scripts/build_css.py (or restart the server) to regenerate.\n"
+    " */\n"
+)
+
+
+def _repo_static_dir() -> Path:
+    """Locate ``app/web/static`` relative to this module.
+
+    Layout: ``<repo>/app/app/css_builder.py`` → static is two parents up at
+    ``<repo>/app/web/static``."""
+    return Path(__file__).resolve().parent.parent / "web" / "static"
+
+
+def build_css(*, log: logging.Logger | None = None) -> bool:
+    """Concatenate partials → app.css. Returns True if a write happened."""
+    static_dir = _repo_static_dir()
+    partials_dir = static_dir / "css"
+    out_path = static_dir / "app.css"
+
+    if not partials_dir.is_dir():
+        if log:
+            log.debug("[css] partials dir missing — skipping build")
+        return False
+
+    chunks: list[str] = [_BANNER]
+    found = 0
+    missing: list[str] = []
+    for name in LOAD_ORDER:
+        p = partials_dir / name
+        if not p.exists():
+            missing.append(name)
+            continue
+        body = p.read_text(encoding="utf-8")
+        if not body.endswith("\n"):
+            body += "\n"
+        chunks.append(f"/* ═══ {name} ═══ */\n{body}")
+        found += 1
+
+    if found == 0:
+        if log:
+            log.debug("[css] no partials present — skipping build (app.css untouched)")
+        return False
+
+    new_content = "\n".join(chunks)
+    if out_path.exists() and out_path.read_text(encoding="utf-8") == new_content:
+        if log:
+            log.debug("[css] app.css already current (%d partials)", found)
+        return False
+
+    out_path.write_text(new_content, encoding="utf-8")
+    if log:
+        msg = "[css] rebuilt app.css from %d partials"
+        if missing:
+            msg += " (missing: %s)" % ", ".join(missing)
+        log.info(msg, found)
+    return True
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    build_css(log=logging.getLogger("css"))

@@ -126,6 +126,13 @@ _fetch_github_commit_count()
 base_cfg = load_config()
 storage_root = Path(base_cfg["storage"]["root"])
 web_root = Path(__file__).resolve().parent.parent / "web"
+
+# Concatenate CSS partials into web/static/app.css before Flask boots.
+# No-op when the partials dir is empty (e.g. mid-bootstrap), so it's harmless
+# regardless of phase. See app/app/css_builder.py + app/web/static/css/README.md
+from .css_builder import build_css as _build_css
+_build_css(log=logging.getLogger("app.css"))
+
 app = Flask(__name__, template_folder=str(web_root / "templates"), static_folder=str(web_root / "static"))
 
 

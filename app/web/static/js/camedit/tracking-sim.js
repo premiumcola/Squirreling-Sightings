@@ -64,8 +64,18 @@ async function _loadPicker(camId){
   }
   picker.innerHTML = items.map(_pickerCardHtml).join('');
   picker.querySelectorAll('.ets-card').forEach(card => {
-    card.addEventListener('click', () => _selectCard(card.dataset.eventId, card.dataset.videoUrl));
+    card.addEventListener('click', () => _selectCard(card.dataset.eventId, card.dataset.videoRelpath));
   });
+}
+
+// Same-origin tracks.json path next to the mp4. Mirrors
+// mediathek/bbox-overlay.js::_tracksUrlFor so both consumers agree on
+// the URL shape; using video_url (which carries the configured
+// public_base_url with host:port) breaks the moment the user opens the
+// UI under a different hostname.
+function _tracksUrlFromRelpath(rel){
+  if (!rel || !rel.endsWith('.mp4')) return null;
+  return `/media/${rel.slice(0, -4)}.tracks.json`;
 }
 
 function _formatTimestamp(iso){
@@ -81,14 +91,40 @@ function _formatTimestamp(iso){
   return t.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' ' + hhmm;
 }
 
+// Resolve a thumbnail src from a media item. The /api/camera/<id>/media
+// endpoint exposes both `thumb_url` and `snapshot_url` for typical events,
+// but legacy / in-flight events sometimes only carry the relpath fields —
+// fall through to those before giving up so the card doesn't render the
+// browser's broken-image glyph.
+function _pickThumbSrc(it){
+  if (it.thumb_url) return it.thumb_url;
+  if (it.snapshot_url) return it.snapshot_url;
+  if (it.thumb_relpath) return `/media/${it.thumb_relpath}`;
+  if (it.snapshot_relpath) return `/media/${it.snapshot_relpath}`;
+  return '';
+}
+
 function _pickerCardHtml(it){
-  const thumb = it.thumb_url || it.snapshot_url || '';
+  const thumb = _pickThumbSrc(it);
   const ts = _formatTimestamp(it.time);
   const labels = (it.labels || []).slice(0, 4)
     .map(l => `<span class="ets-card-lbl">${esc(l)}</span>`).join('');
+  // Cards without video_relpath can't drive the timeline path — disable
+  // them with a hint so the user doesn't end up wondering why the action
+  // bar buttons silently no-op.
+  const hasRelpath = !!(it.video_relpath && it.video_relpath.endsWith('.mp4'));
+  const disabledAttrs = hasRelpath
+    ? ''
+    : ' aria-disabled="true" title="Pfad-Information fehlt — Tracking nicht verfügbar."';
+  // onerror collapses the <img> when the file is gone or the configured
+  // public_base_url points at a host we can't reach from this browser.
+  // The empty .ets-card-thumb stays visible as a flat black tile.
+  const thumbHtml = thumb
+    ? `<img src="${esc(thumb)}" alt="" loading="lazy" onerror="this.remove()" />`
+    : '';
   return `
-    <button type="button" class="ets-card" data-event-id="${esc(it.event_id)}" data-video-url="${esc(it.video_url || '')}" tabindex="0">
-      <div class="ets-card-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" />` : ''}</div>
+    <button type="button" class="ets-card${hasRelpath ? '' : ' is-disabled'}" data-event-id="${esc(it.event_id)}" data-video-relpath="${esc(it.video_relpath || '')}" tabindex="0"${disabledAttrs}>
+      <div class="ets-card-thumb">${thumbHtml}</div>
       <div class="ets-card-meta">
         <div class="ets-card-time">${esc(ts)}</div>
         <div class="ets-card-labels">${labels}</div>
@@ -96,13 +132,20 @@ function _pickerCardHtml(it){
     </button>`;
 }
 
-function _selectCard(eventId, videoUrl){
+function _selectCard(eventId, videoRelpath){
   document.querySelectorAll('.ets-card').forEach(c => {
     c.classList.toggle('is-selected', c.dataset.eventId === eventId);
   });
   const panel = byId('erkSimTab-video');
   panel.dataset.selectedEventId = eventId;
-  panel.dataset.selectedVideoUrl = videoUrl;
+  panel.dataset.selectedVideoRelpath = videoRelpath || '';
+  // Disable the timeline / regen buttons when the relpath is missing so
+  // the user has a visible signal that the card can't drive the flow.
+  const hasRelpath = !!(videoRelpath && videoRelpath.endsWith('.mp4'));
+  const showBtn = byId('etsShowTimelineBtn');
+  const regenBtn = byId('etsRegenBtn');
+  if (showBtn){ showBtn.disabled = !hasRelpath; }
+  if (regenBtn){ regenBtn.disabled = !hasRelpath; }
   byId('etsActions').hidden = false;
   byId('etsResult').innerHTML = '';
 }
@@ -110,35 +153,56 @@ function _selectCard(eventId, videoUrl){
 async function _showTimeline(){
   const panel = byId('erkSimTab-video');
   const eventId = panel?.dataset.selectedEventId;
-  const videoUrl = panel?.dataset.selectedVideoUrl;
-  if (!eventId || !videoUrl) return;
+  const videoRelpath = panel?.dataset.selectedVideoRelpath;
+  if (!eventId) return;
   const result = byId('etsResult');
+  const tracksUrl = _tracksUrlFromRelpath(videoRelpath);
+  if (!tracksUrl){
+    result.innerHTML = '';
+    showToast('Pfad ungültig — video_relpath fehlt für diesen Clip.', 'error');
+    return;
+  }
   result.innerHTML = '<div class="ets-empty">Lade Tracking-Daten…</div>';
   let payload = _trackCache.get(eventId);
   let mtime = null;
   if (!payload){
-    const tracksUrl = videoUrl.replace(/\.mp4$/, '.tracks.json');
+    let r;
     try {
-      const r = await fetch(tracksUrl);
-      if (r.status === 404){
-        result.innerHTML = `
-          <div class="ets-empty ets-empty--hint">
-            Noch kein Tracking — bitte über
-            <strong>↪ Tracking neu generieren</strong> erzeugen.
-          </div>`;
-        return;
-      }
-      if (!r.ok) throw new Error(r.statusText);
-      payload = await r.json();
-      mtime = r.headers.get('last-modified');
-      _trackCache.set(eventId, payload);
-    } catch {
+      r = await fetch(tracksUrl);
+    } catch (e){
+      // Network-level failure — no response at all (CORS, offline, DNS).
       result.innerHTML = '';
-      showToast('Tracking-Daten konnten nicht geladen werden.', 'error');
+      showToast(`Netzwerk-Fehler beim Laden: ${e.message || e}`, 'error');
       return;
     }
+    if (r.status === 404){
+      // Normal "no sidecar yet" state — silent, point at the regen button.
+      result.innerHTML = `
+        <div class="ets-empty ets-empty--hint">
+          Noch kein Tracking — bitte über
+          <strong>↪ Tracking neu generieren</strong> erzeugen.
+        </div>`;
+      return;
+    }
+    if (!r.ok){
+      result.innerHTML = '';
+      const bucket = r.status >= 500 ? 'Server-Fehler' : 'Anfrage abgelehnt';
+      showToast(`${bucket} (${r.status}) beim Laden der Tracking-Daten.`, 'error');
+      return;
+    }
+    try {
+      payload = await r.json();
+    } catch (e){
+      result.innerHTML = '';
+      showToast(`Tracking-JSON ungültig: ${e.message || e}`, 'error');
+      return;
+    }
+    mtime = r.headers.get('last-modified');
+    _trackCache.set(eventId, payload);
   }
-  const dur = await _resolveVideoDuration(videoUrl);
+  // Same-origin video path for duration probe — never use the absolute
+  // video_url (different host on remote-access deployments).
+  const dur = await _resolveVideoDuration(`/media/${videoRelpath}`);
   renderTracksTimeline(result, payload, dur, mtime);
 }
 

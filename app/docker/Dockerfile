@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # library (libedgetpu1-std). Package install is best-effort: on hosts where the
 # repo isn't reachable we still continue the build.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg libglib2.0-0 libsm6 libxext6 libgl1 curl gnupg ca-certificates usbutils netcat-openbsd \
+    ffmpeg libglib2.0-0 libsm6 libxext6 libgl1 curl gnupg ca-certificates usbutils netcat-openbsd tzdata \
  && (curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
      | gpg --dearmor -o /usr/share/keyrings/coral-edgetpu.gpg || true) \
  && echo "deb [signed-by=/usr/share/keyrings/coral-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" \

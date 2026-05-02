@@ -6173,7 +6173,12 @@ function _renderWeatherGrid(){
   const _activeCamIds = new Set((state.cameras || []).map(c => c.id));
   grid.innerHTML = items.map((s, idx) => {
     const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8', icon: '' };
-    const t = new Date(s.started_at);
+    // For sun-timelapse sightings the user wants the actual sunrise /
+    // sunset time on the card, not the window-end timestamp. sun_event_at
+    // is the manifest field added in this commit; fall back to started_at
+    // for older records that don't carry it.
+    const tsRaw = s.sun_event_at || s.started_at;
+    const t = new Date(tsRaw);
     const dateLabel = t.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
     const timeLabel = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     const sevPct = Math.round((s.score || s.severity || 0) * 100);

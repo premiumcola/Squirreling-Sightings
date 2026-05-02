@@ -217,6 +217,14 @@ def _emit_boot_inventory(base_cfg: dict, storage_root: Path):
     w = settings.data.get("weather", {}) or {}
     loc = base_cfg.get("server", {}).get("location") or {}
     lat, lon = loc.get("lat"), loc.get("lon")
+    elev = loc.get("elevation")
+    # Single-line resolved location so misconfigurations are visible
+    # in the boot inventory — astral takes lat/lon/elevation, sun
+    # event times depend on all three.
+    log.info("[boot] location: lat=%s, lon=%s, elevation=%sm",
+             lat if lat is not None else "—",
+             lon if lon is not None else "—",
+             elev if elev is not None else "—")
     log.info("[boot] weather: %s · location=%s · interval=%ss",
              "enabled" if w.get("enabled", True) else "disabled",
              f"{lat},{lon}" if lat is not None and lon is not None else "none",

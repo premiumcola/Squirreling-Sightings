@@ -498,7 +498,12 @@ class WeatherService:
             from astral.sun import elevation, azimuth
             obs = Observer(latitude=float(lat), longitude=float(lon),
                            elevation=float(loc.get("elevation") or 0.0))
-            now_dt = datetime.now()
+            # astral wants a tz-aware UTC datetime; passing naive
+            # datetime.now() makes it interpret local-clock-as-UTC and
+            # the resulting altitude/azimuth are off by the local UTC
+            # offset (visible as a 2 h sunset-time error in CEST).
+            from datetime import timezone as _tz
+            now_dt = datetime.now(tz=_tz.utc)
             data = {
                 "altitude": float(elevation(obs, now_dt)),
                 "azimuth":  float(azimuth(obs, now_dt)),
@@ -1463,7 +1468,14 @@ class WeatherService:
                 if sun_dt is None:
                     continue
                 window = int(pcfg.get("window_min", 30) or 30)
-                start_dt = sun_dt - timedelta(minutes=window // 2)
+                # 70/30 bias around the sun event: most of the captured
+                # time should be BEFORE the event (so a sunrise video
+                # starts in twilight and watches the sun come up; a
+                # sunset video catches the run-up to dusk and a short
+                # tail of afterglow). With a 30-min window that's
+                # -21 / +9 around the event.
+                pre_min = int(round(window * 0.7))
+                start_dt = sun_dt - timedelta(minutes=pre_min)
                 if start_dt <= datetime.now():
                     log.info("[weather] %s %s @ %s already passed — skipping today",
                              cam_name, phase, sun_dt.strftime("%H:%M"))
@@ -1697,6 +1709,11 @@ class WeatherService:
             "event_type":   "sun_timelapse",
             "sun_phase":    phase,
             "started_at":   datetime.now().isoformat(timespec="seconds"),
+            # Actual sun event (sunrise/sunset) time. Distinct from
+            # started_at, which is the moment the encode finished —
+            # the Sichtungen card prefers this so the user sees
+            # "Sonnenuntergang 20:32" instead of the window-end.
+            "sun_event_at": sun_dt.isoformat(timespec="seconds"),
             "score":        round(float(score), 3),
             "severity":     round(float(score), 3),
             "window_min":   window_min,

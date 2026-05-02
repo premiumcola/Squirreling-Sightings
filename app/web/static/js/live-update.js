@@ -18,6 +18,7 @@ import { _renderGlobalStatusRows } from './camedit/detection.js';
 import { loadMediaStorageStats } from './chrome/storage-stats.js';
 import { hydrateTelegram, initTelegramTabs } from './telegram.js';
 import { hydratePushUI } from './push.js';
+import { _renderAlertStatusStrip } from './alerting.js';
 
 let _liveUpdateInterval = null;
 const _prevCamStatuses = new Map();
@@ -71,12 +72,10 @@ export function startLiveUpdate() {
         state.cameras = r.cameras || state.cameras;
         renderDashboard();
       }
-      // Erkennung-tab status strip — direct import since stage 8.
-      // The Alerting-tab status strip is still resolved via window.X
-      // because the alerting matrix domain hasn't extracted yet; this
-      // lookup converts to a named import once that ships.
+      // Erkennung + Alerting status strips refresh on every tick.
+      // Both are direct named imports since stages 8 + 17.
       _renderGlobalStatusRows();
-      if (typeof window._renderAlertStatusStrip === 'function') window._renderAlertStatusStrip();
+      _renderAlertStatusStrip();
     } catch { /* silent */ }
   }, 3000);
 }

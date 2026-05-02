@@ -55,6 +55,29 @@ import { startLiveUpdate, loadAll } from './live-update.js';
 // Stage 6 — Zusammenführen modal. bindMergeModal() is called below
 // from the post-imports init block to wire its DOM listeners once.
 import { bindMergeModal } from './camera-merge.js';
+// Stage 7 — camedit subdomain. panelState replaces the file-local
+// _currentEditCamId; every read/write site here goes through
+// panelState.camId. RTSP/whitelist/camera_id/recovery helpers are
+// imported as named exports — the editCamera() function in this file
+// is their main consumer (still resident, queued for stage 8).
+import {
+  panelState, _restoreEditWrapper, _closeEditPanel,
+} from './camedit/panel.js';
+import {
+  RTSP_PATH_OPTS, _rtspEnc, _maskUrlPassword, _applyUrlMask,
+  _revealUrl, _unmaskUrlsForSubmit, _defaultRtspPathForManufacturer,
+  _updateRtspErweitertVisuals, initRtspBuilder, parseRtspUrl,
+} from './camedit/rtsp.js';
+import {
+  getWhitelistState, setWhitelistState,
+  _renderWhitelistChips, _updateWhitelistHidden,
+} from './camedit/whitelist.js';
+import {
+  buildCameraId, _refreshCamIdPreview, _bindCamIdPreviewListeners,
+} from './camedit/camera_id.js';
+import {
+  _loadCamDiagnostics, _refreshConnectionWarn,
+} from './camedit/recovery.js';
 
 // _hmTip stays here — fixed-position heatmap tooltip used only by the
 // timeline view; will move with the timeline module in a later stage.
@@ -134,35 +157,10 @@ const download=(url)=>window.open(url,'_blank');
 // the function so inline onclick="_camImgRetry(this)" keeps resolving.
 
 // ── Camera edit slide panel ───────────────────────────────────────────────────
-let _currentEditCamId=null;
-function _restoreEditWrapper(){
-  const w=byId('cameraEditWrapper');
-  if(!w) return;
-  w.classList.remove('slide-open');
-  document.querySelectorAll('.cam-item.editing').forEach(el=>el.classList.remove('editing'));
-  const sec=byId('cameras'); if(sec&&w.parentElement!==sec) sec.appendChild(w);
-  _currentEditCamId=null;
-}
-function _closeEditPanel(){
-  if(!_currentEditCamId) return;
-  const w=byId('cameraEditWrapper');
-  w?.classList.remove('slide-open');
-  document.querySelectorAll('.cam-item.editing').forEach(el=>el.classList.remove('editing'));
-  // The 400 ms timeout lets the slide-out animation finish before
-  // detaching the wrapper from its host row. If `w` was already null
-  // when we entered (the wrapper was destroyed by a renderCameraSettings
-  // innerHTML blow), or if it gets detached between now and the
-  // timeout firing, sec.appendChild(null) would throw
-  // "parameter 1 is not of type 'Node'". The guard inside the timer
-  // re-checks both `w` and `sec` so a transient null on either side
-  // is silently absorbed instead of cascading into an uncaught error.
-  setTimeout(()=>{
-    if(!w) return;
-    const sec=byId('cameras');
-    if(sec) sec.appendChild(w);
-  },400);
-  _currentEditCamId=null;
-}
+// Now lives in camedit/panel.js (Stage 7). _currentEditCamId is gone —
+// replaced by the imported `panelState.camId`. Mutating the field on
+// the shared object propagates to every importer because ES module
+// imports are live bindings to the same object reference.
 
 // ── Live update ───────────────────────────────────────────────────────────────
 // startLiveUpdate + loadAll now live in live-update.js (Stage 6).
@@ -371,173 +369,13 @@ window._flashDetection = function(camId, cls){
 // Now lives in timeline.js (Stage 6). renderTimeline + helpers +
 // CAT_COLORS / TL_LANES / GAP_MS constants moved together.
 
-// ── RTSP path options (shared with discovery) ────────────────────────────────
-const RTSP_PATH_OPTS=[
-  {label:'Reolink H.264 – Main (RLC-810A, ältere FW)',   value:'/h264Preview_01_main'},
-  {label:'Reolink H.265 – Main (CX810, neuere FW)',      value:'/h265Preview_01_main'},
-  {label:'Reolink – Sub (immer H.264)',                   value:'/h264Preview_01_sub'},
-  {label:'Hikvision – Main', value:'/Streaming/Channels/101'},
-  {label:'Hikvision – Sub',  value:'/Streaming/Channels/102'},
-  {label:'Dahua – Main',     value:'/cam/realmonitor?channel=1&subtype=0'},
-  {label:'Dahua – Sub',      value:'/cam/realmonitor?channel=1&subtype=1'},
-  {label:'Generic stream0',  value:'/stream0'},
-  {label:'Generic stream1',  value:'/stream1'},
-  {label:'Generic /live',    value:'/live'},
-];
-
-// Encode only URL-reserved chars that break parsing (?=query, @=host, #=fragment)
-// ! is allowed unencoded in userinfo per RFC 3986
-function _rtspEnc(s){ return (s||'').replace(/%/g,'%25').replace(/\?/g,'%3F').replace(/@/g,'%40').replace(/#/g,'%23'); }
-
-// ── URL password masking ────────────────────────────────────────────────
-// Replace only the password portion of a URL with dots. The real URL is
-// stored in input.dataset.real; .value holds the masked text so the input
-// visibly hides the secret. Before form submit we unmask (_unmaskUrlsForSubmit)
-// so the saved value is the real URL. In masked state the input is also
-// readonly — clicking the eye reveals AND makes the field editable.
-function _maskUrlPassword(url){
-  return (url||'').replace(/:([^@:/]+)@/,':••••••••@');
-}
-function _applyUrlMask(input){
-  if(!input) return;
-  const real=input.dataset.real!=null?input.dataset.real:input.value;
-  input.dataset.real=real;
-  input.value=_maskUrlPassword(real);
-  // While masked: readonly so keystrokes can't corrupt the masked dots.
-  // (rtsp_url is also readonly for other reasons — that's fine, stays so.)
-  input.setAttribute('readonly','readonly');
-  input.dataset.masked='1';
-}
-function _revealUrl(input){
-  if(!input) return;
-  if(input.dataset.real!=null) input.value=input.dataset.real;
-  input.dataset.masked='0';
-  // rtsp_url keeps its inherent readonly, only snapshot_url becomes editable
-  if(input.name!=='rtsp_url') input.removeAttribute('readonly');
-}
-window._toggleUrlMask=function(btn){
-  const wrap=btn.closest('.url-wrap'); const input=wrap?.querySelector('input[data-mask-url="1"]');
-  if(!input) return;
-  const nowRevealed=input.dataset.masked==='1';
-  if(nowRevealed){_revealUrl(input); _setEyeState(btn,true);}
-  else {
-    // User just edited the revealed value — stash new real before re-masking
-    input.dataset.real=input.value;
-    _applyUrlMask(input); _setEyeState(btn,false);
-  }
-};
-function _unmaskUrlsForSubmit(form){
-  form.querySelectorAll('input[data-mask-url="1"]').forEach(inp=>{
-    if(inp.dataset.masked==='1' && inp.dataset.real!=null){
-      inp.value=inp.dataset.real;
-    }
-  });
-}
-
-// Maps the manufacturer field to the vendor's RTSP "Main" stream path.
-// Used as the auto-default in the camera-edit form so the user never has
-// to know vendor-specific path strings. Discovery results have their
-// own _defaultRtspPath() (different — H.264 fallback, kept for legacy).
-function _defaultRtspPathForManufacturer(mfg){
-  const m = (mfg || '').toLowerCase().trim();
-  if (m.startsWith('reolink')) return '/h265Preview_01_main';
-  if (m.startsWith('hikvision')) return '/Streaming/Channels/101';
-  if (m.startsWith('dahua') || m.startsWith('amcrest')) return '/cam/realmonitor?channel=1&subtype=0';
-  return '/stream0';
-}
-
-window._toggleCamRtspErw = function(){
-  const body = byId('rtspPathErwBody');
-  const btn  = byId('camRtspErwBtn');
-  if (!body || !btn) return;
-  const wasOpen = !body.hidden;
-  body.hidden = wasOpen;
-  btn.setAttribute('aria-expanded', wasOpen ? 'false' : 'true');
-};
-
-// Drive the "manuell überschrieben" pill + auto-open the Erweitert
-// disclosure when the path doesn't match the manufacturer default.
-function _updateRtspErweitertVisuals(){
-  const sel = byId('rtspPathSelect');
-  if (!sel) return;
-  const isManual = sel.dataset.manual === '1';
-  const pill = byId('rtspPathCustomPill');
-  if (pill) pill.hidden = !isManual;
-  if (isManual) {
-    const body = byId('rtspPathErwBody');
-    const btn  = byId('camRtspErwBtn');
-    if (body) body.hidden = false;
-    if (btn)  btn.setAttribute('aria-expanded', 'true');
-  }
-}
-
-function initRtspBuilder(){
-  const sel=byId('rtspPathSelect');
-  // Defensive: editCamera can fire from a setTimeout race after the
-  // recovery / restart flow before the cam-edit form has been
-  // re-rendered into the DOM. Without this guard, sel is null and
-  // .options throws TypeError mid-init — leaving _currentEditCamId
-  // stale and locking every future cam-edit click until F5.
-  if(!sel) return;
-  const form=byId('cameraForm');
-  if(!form) return;
-  if(!sel.options.length) RTSP_PATH_OPTS.forEach(p=>{const o=document.createElement('option');o.value=p.value;o.textContent=p.label;sel.appendChild(o);});
-  const f=form.elements;
-  const rebuild=()=>{
-    const ip=(f['rtsp_ip']?.value||'').trim();
-    const user=(f['rtsp_user']?.value||'').trim();
-    const pass=(f['rtsp_pass']?.value||'').trim();
-    const port=(f['rtsp_port']?.value||'554').trim();
-    const path=f['rtsp_path']?.value||'';
-    const setMaskable=(input,realVal)=>{
-      if(!input) return;
-      input.dataset.real=realVal;
-      // Re-mask iff the eye is currently in masked mode; otherwise show real
-      if(input.dataset.masked==='1') input.value=_maskUrlPassword(realVal);
-      else input.value=realVal;
-    };
-    if(!ip){setMaskable(f['rtsp_url'],'');
-      if (typeof _refreshConnectionWarn === 'function') _refreshConnectionWarn();
-      return;}
-    const auth=user?(user+(pass?':'+_rtspEnc(pass):'')+'@'):'';
-    const portPart=port&&port!=='554'?':'+port:'';
-    setMaskable(f['rtsp_url'],`rtsp://${auth}${ip}${portPart}${path}`);
-    // auto-fill snapshot if empty
-    const snapReal=f['snapshot_url']?.dataset.real||f['snapshot_url']?.value||'';
-    if(!snapReal && user)
-      setMaskable(f['snapshot_url'],`http://${user}:${_rtspEnc(pass)}@${ip}/cgi-bin/snapshot.cgi`);
-    // Re-evaluate the connection-warn indicator + field highlights — the
-    // user may have just typed credentials that close the gap, no save
-    // needed for the indicator to flip back to grey.
-    if (typeof _refreshConnectionWarn === 'function') _refreshConnectionWarn();
-  };
-  ['rtsp_ip','rtsp_user','rtsp_pass','rtsp_port'].forEach(n=>f[n]?.addEventListener('input',rebuild));
-  sel.addEventListener('change',()=>{
-    // Flag manual mode unless the user happened to pick the current
-    // manufacturer's default (i.e. they reset themselves to auto).
-    const def=_defaultRtspPathForManufacturer(f['manufacturer']?.value);
-    sel.dataset.manual = (sel.value !== def) ? '1' : '0';
-    _updateRtspErweitertVisuals();
-    rebuild();
-  });
-  // Manufacturer typing propagates to the path picker unless the user
-  // has explicitly overridden it via the dropdown.
-  f['manufacturer']?.addEventListener('input',()=>{
-    if (sel.dataset.manual === '1') return;
-    const def=_defaultRtspPathForManufacturer(f['manufacturer'].value);
-    if (sel.value !== def) {
-      sel.value = def;
-      rebuild();
-    }
-  });
-}
-
-function parseRtspUrl(url){
-  try{
-    const u=new URL(url.replace(/^rtsp:\/\//,'http://'));
-    return{user:decodeURIComponent(u.username||''),pass:decodeURIComponent(u.password||''),host:u.hostname||'',port:u.port||'554',path:u.pathname+(u.search||'')||''};
-  }catch{return{};}
-}
+// ── RTSP / URL masking / Connection builder ─────────────────────────────────
+// Now lives in camedit/rtsp.js (Stage 7). RTSP_PATH_OPTS, _rtspEnc,
+// _maskUrlPassword, _applyUrlMask, _revealUrl, _unmaskUrlsForSubmit,
+// _defaultRtspPathForManufacturer, _updateRtspErweitertVisuals,
+// initRtspBuilder, parseRtspUrl all moved together. Inline-onclick
+// handlers (_toggleUrlMask, _toggleCamRtspErw) keep their window
+// bridges from inside the new module.
 
 window.toggleCameraEnabled=async function(camId,enabled){
   const cam=(state.cameras||[]).find(x=>x.id===camId);
@@ -609,30 +447,17 @@ window._quickDeleteCamera=async function(camId,camName){
   try{
     const r=await j(`/api/settings/cameras/${encodeURIComponent(camId)}`,{method:'DELETE'});
     if(r.event_count>0) showToast(`${r.event_count} gespeicherte Ereignisse bleiben im Archiv erhalten.`,'warn');
-    if(_currentEditCamId===camId) _restoreEditWrapper();
+    if(panelState.camId===camId) _restoreEditWrapper();
     await loadAll();
   }catch(e){showToast('Fehler beim Löschen: '+esc(e.message||e),'error');}
 };
 
 // ── Whitelist chips ───────────────────────────────────────────────────────────
-let _whitelistState=[];
-function _renderWhitelistChips(profiles,selected){
-  _whitelistState=[...(selected||[])];
-  const el=byId('whitelistChipsContainer'); if(!el) return;
-  if(!profiles.length){el.innerHTML='<span class="small muted">Keine Profile vorhanden</span>'; _updateWhitelistHidden(); return;}
-  el.innerHTML=profiles.map(p=>`<span class="wl-chip ${_whitelistState.includes(p.name)?'selected':''}" onclick="toggleWlChip('${esc(p.name)}')">${esc(p.name)}</span>`).join('');
-  _updateWhitelistHidden();
-}
-window.toggleWlChip=function(name){
-  const idx=_whitelistState.indexOf(name);
-  if(idx>=0) _whitelistState.splice(idx,1); else _whitelistState.push(name);
-  document.querySelectorAll('.wl-chip').forEach(c=>c.classList.toggle('selected',_whitelistState.includes(c.textContent)));
-  _updateWhitelistHidden();
-};
-function _updateWhitelistHidden(){
-  const f=byId('cameraForm')?.elements;
-  if(f&&f['whitelist_names']) f['whitelist_names'].value=_whitelistState.join(',');
-}
+// Now lives in camedit/whitelist.js (Stage 7). Internal _whitelistState
+// is hidden inside the module; this file reads/writes via the
+// imported getWhitelistState() / setWhitelistState() pair. The save
+// flow at line ~3300 and editCamera at line ~1600 are the two callers
+// inside this file.
 
 // ── Camera form one-time listeners ───────────────────────────────────────────
 let _camFormInited=false;
@@ -1447,46 +1272,10 @@ window._scrollToCoralSettings=function(ev){
 };
 
 // ── camera_id JS port — keep in lockstep with app/app/camera_id.py ──────────
-// The backend treats the persisted id as authoritative; this preview shows
-// the user what build_camera_id() will compute on save so there are no
-// surprises when the storage_migration kicks in.
-const _CAM_ID_TRANSLIT = {
-  'ä':'ae','ö':'oe','ü':'ue','Ä':'ae','Ö':'oe','Ü':'ue',
-  'ß':'ss','ñ':'n','ç':'c'
-};
-function _camIdSanitise(seg){
-  if(seg == null) return '';
-  let s = String(seg).replace(/./g, ch => _CAM_ID_TRANSLIT[ch] ?? ch);
-  // NFKD decompose, drop combining marks (mirrors python unicodedata)
-  s = s.normalize('NFKD').replace(/[̀-ͯ]/g, '');
-  s = s.toLowerCase().replace(/[^a-z0-9]+/g, '');
-  return s;
-}
-function _camIdLastIpSegment(ip){
-  if(!ip) return '';
-  const s = String(ip).trim();
-  if(s.indexOf('.') >= 0){
-    const last = s.split('.').pop();
-    const san = _camIdSanitise(last);
-    if(san) return san;
-  }
-  if(s.indexOf(':') >= 0){
-    const noZone = s.split('%')[0];
-    const last = noZone.split(':').pop();
-    const san = _camIdSanitise(last);
-    if(san) return san;
-  }
-  return '';
-}
-function buildCameraId(manufacturer, model, name, ip){
-  const parts = [manufacturer, model, name].map(raw => {
-    const c = _camIdSanitise(raw);
-    return c || 'unknown';
-  });
-  const ipSeg = _camIdLastIpSegment(ip);
-  parts.push(ipSeg || 'unknown');
-  return parts.join('_');
-}
+// Now lives in camedit/camera_id.js (Stage 7). buildCameraId,
+// _camIdSanitise, _camIdLastIpSegment, _CAM_ID_TRANSLIT all moved
+// together. _CW_DEFAULTS / _renderCamConfirmGrid below stay until
+// stage 8 ships the camedit/detection.js extraction.
 
 // Per-class fallbacks for the confirmation-window UI grid. Mirrors the
 // settings_store._CONFIRMATION_WINDOW_DEFAULTS Python-side dict so the
@@ -1527,26 +1316,8 @@ function _renderCamConfirmGrid(c){
   }).join('');
 }
 
-function _refreshCamIdPreview(){
-  const el = byId('camIdPreview'); if(!el) return;
-  const f = byId('cameraForm')?.elements; if(!f) return;
-  const newId = buildCameraId(
-    f['manufacturer']?.value || '',
-    f['model']?.value || '',
-    f['name']?.value || '',
-    f['rtsp_ip']?.value || ''
-  );
-  el.textContent = newId;
-}
-function _bindCamIdPreviewListeners(){
-  const form = byId('cameraForm'); if(!form || form.dataset.idPreviewWired) return;
-  ['manufacturer','model','name','rtsp_ip'].forEach(n => {
-    const el = form.elements[n]; if(el){
-      el.addEventListener('input', _refreshCamIdPreview);
-    }
-  });
-  form.dataset.idPreviewWired = '1';
-}
+// _refreshCamIdPreview + _bindCamIdPreviewListeners now live in
+// camedit/camera_id.js (Stage 7); editCamera below imports them.
 
 function editCamera(camId){
   // Defensive: if the cam-edit form isn't in the DOM yet (rare but
@@ -1569,15 +1340,15 @@ function editCamera(camId){
     // Camera not in current state → drop any half-set lock so the user
     // can retry once loadAll() refreshes state. Without this the lock
     // would stick if a stale camId (post-rename) raced through here.
-    _currentEditCamId=null;
+    panelState.camId=null;
     return;  // diagnostic console.error retired — the lock reset above is the real recovery
   }
   // Toggle: clicking same camera closes the panel
-  if(_currentEditCamId===camId){
+  if(panelState.camId===camId){
     _closeEditPanel(); return;
   }
   // From here on, ANY exception in the hydration helpers below would
-  // historically leave _currentEditCamId stale and the wrapper detached
+  // historically leave panelState.camId stale and the wrapper detached
   // from #cameras — every future click then matched the stale lock and
   // bailed via the toggle-close branch. The try/catch resets state to a
   // known-good baseline so the next click can re-open cleanly.
@@ -1771,7 +1542,7 @@ function editCamera(camId){
   _bindErkSimulate();
   const simResult = byId('erkSimResult');
   if (simResult) simResult.hidden = true;
-  _whitelistState=[...(c.whitelist_names||[])]; _updateWhitelistHidden();
+  setWhitelistState(c.whitelist_names||[]); _updateWhitelistHidden();
   shapeState.camera=camId; shapeState.zones=JSON.parse(JSON.stringify(c.zones||[])); shapeState.masks=JSON.parse(JSON.stringify(c.masks||[])); shapeState.points=[]; shapeState.pulse=null;
   f['zones_json'].value=JSON.stringify(shapeState.zones); f['masks_json'].value=JSON.stringify(shapeState.masks);
   // Keep the editor's auxiliary UI (polygon list, drawing-bar, mode
@@ -1784,7 +1555,7 @@ function editCamera(camId){
   const wrapper=byId('cameraEditWrapper');
   if(camRow){ camRow.appendChild(wrapper); camRow.classList.add('editing'); }
   requestAnimationFrame(()=>wrapper?.classList.add('slide-open'));
-  _currentEditCamId=camId;
+  panelState.camId=camId;
   setTimeout(()=>wrapper.scrollIntoView({behavior:'smooth',block:'nearest'}),120);
   // Populate connection diagnostics panel
   _loadCamDiagnostics(camId);
@@ -1801,346 +1572,22 @@ function editCamera(camId){
   } catch(e) {
     // Any hydration helper threw — restore the lock to a clean state
     // so the next click can re-attempt without the toggle-close branch
-    // mistakenly firing on the stale _currentEditCamId. Surface the
+    // mistakenly firing on the stale panelState.camId. Surface the
     // failure to the user via toast so they know to retry; rethrow so
     // the original stack remains visible in DevTools for diagnosis.
-    _currentEditCamId=null;
+    panelState.camId=null;
     _restoreEditWrapper();
     showToast('Kamera-Bearbeitung konnte nicht öffnen — bitte erneut versuchen','warn');
     throw e;
   }
 }
 
-// Compute the "connection warn" state from the live form and reflect it
-// on (a) the tab-bar ↺ indicator and (b) the specific .field-wrap blocks
-// for the inputs that are still empty. Single source — the listeners
-// attached by initRtspBuilder + the one-shot calls from editCamera /
-// post-save go through here.
-function _refreshConnectionWarn(){
-  const indicator = byId('camTabRecoveryBtn'); if (!indicator) return;
-  const f = byId('cameraForm')?.elements;
-  if (!f){
-    indicator.classList.remove('is-warn', 'is-pulsing');
-    return;
-  }
-  // 1. Resolve the effective rtsp_url. Order:
-  //    (a) the unmasked real value (set by initRtspBuilder.setMaskable),
-  //    (b) the visible field value,
-  //    (c) a synthesised URL built from the parts (mirrors rebuild()
-  //        in setupRtspBuilder so a half-typed form behaves consistently),
-  //    (d) "".
-  const rawReal = f['rtsp_url']?.dataset?.real;
-  const rawVis = f['rtsp_url']?.value;
-  const ip   = (f['rtsp_ip']?.value || '').trim();
-  const user = (f['rtsp_user']?.value || '').trim();
-  const pass = (f['rtsp_pass']?.value || '').trim();
-  const port = (f['rtsp_port']?.value || '554').trim();
-  const path = f['rtsp_path']?.value || '';
-  let effective = '';
-  if (rawReal && rawReal.trim()) effective = rawReal.trim();
-  else if (rawVis && rawVis.trim()) effective = rawVis.trim();
-  else if (ip) {
-    const auth = user ? (user + (pass ? ':' + (typeof _rtspEnc==='function'?_rtspEnc(pass):encodeURIComponent(pass)) : '') + '@') : '';
-    const portPart = (port && port !== '554') ? ':' + port : '';
-    effective = `rtsp://${auth}${ip}${portPart}${path}`;
-  }
-  // 2. Parse it and combine with the dedicated user field.
-  let parsed = {};
-  if (effective) {
-    try { parsed = parseRtspUrl(effective) || {}; } catch { parsed = {}; }
-  }
-  const hasHost  = !!(parsed.host && parsed.host.trim()) || !!ip;
-  const hasCreds = !!(parsed.user && parsed.user.trim()) || !!user;
-  const warn = !hasHost || !hasCreds;
-  // 3. Reflect on the tab-bar indicator.
-  if (warn){
-    if (!indicator.classList.contains('is-warn')){
-      indicator.classList.add('is-warn', 'is-pulsing');
-      // Pulse runs 4 iterations (~5.6s) then stays solid; strip the
-      // pulse class so the box-shadow animation doesn't loop forever.
-      setTimeout(() => indicator.classList.remove('is-pulsing'), 5600);
-    }
-    indicator.setAttribute('title',
-      'Verbindungsdaten unvollständig — klicken zum Wiederherstellen');
-  } else {
-    indicator.classList.remove('is-warn', 'is-pulsing');
-    indicator.setAttribute('title', 'Verbindung wiederherstellen');
-  }
-  // 4. Field-level highlights — only when the indicator is in WARN mode,
-  //    and only on the specific wraps that are missing input.
-  const setWarn = (input, on) => {
-    const wrap = input?.closest?.('.field-wrap');
-    if (!wrap) return;
-    wrap.classList.toggle('cam-field-warn', !!on);
-  };
-  setWarn(f['rtsp_ip'],   warn && !hasHost);
-  setWarn(f['rtsp_user'], warn && !hasCreds);
-  setWarn(f['rtsp_pass'], warn && !hasCreds);
-}
-
-// ── Connection-recovery modal (Verbindung tab "Wiederherstellen ↺") ──────────
-// Two paths, in priority order:
-//   A) Sicherung — settings.json.bak / .bak2 + storage/backups/*.json. Restores
-//      the four connection fields server-side and triggers an immediate
-//      reconnect via /api/settings/cameras/<id>/restore-connection.
-//   B) Auto-Erkennung — calls the existing /api/discover and lets the user
-//      pick a device; only IP + suggested RTSP path are written into the
-//      form. The user enters credentials and uses the normal Save button.
-window.openCamRecoveryModal=function(){
-  if(!_currentEditCamId) return;
-  const m=byId('camRecoveryModal'); if(!m) return;
-  m.classList.remove('hidden');
-  // Default to the Sicherung tab.
-  _switchCamRecoveryTab('rec-backup');
-  loadCamRecoveryBackups();
-  // Wire tab clicks once.
-  if(!m.dataset.wired){
-    m.querySelectorAll('.cam-recovery-tab').forEach(b=>{
-      b.addEventListener('click',()=>_switchCamRecoveryTab(b.dataset.tab));
-    });
-    m.dataset.wired='1';
-  }
-};
-window.closeCamRecoveryModal=function(){
-  const m=byId('camRecoveryModal'); if(!m) return;
-  m.classList.add('hidden');
-};
-function _switchCamRecoveryTab(tabId){
-  const m=byId('camRecoveryModal'); if(!m) return;
-  m.querySelectorAll('.cam-recovery-tab').forEach(b=>{
-    b.classList.toggle('active', b.dataset.tab===tabId);
-  });
-  m.querySelectorAll('.cam-recovery-tab-content').forEach(c=>{
-    c.hidden=(c.id!==tabId);
-  });
-}
-async function loadCamRecoveryBackups(){
-  const wrap=byId('camRecoveryBackupList'); if(!wrap) return;
-  wrap.innerHTML=`<div class="muted small">Lade Sicherungen…</div>`;
-  let items=[];
-  try{
-    const r=await fetch(`/api/settings/backups?cam_id=${encodeURIComponent(_currentEditCamId)}`);
-    items=(await r.json()).items||[];
-  }catch(e){
-    wrap.innerHTML=`<div class="cam-recovery-empty">Sicherungen nicht abrufbar (${esc(String(e))}).</div>`;
-    return;
-  }
-  if(!items.length){
-    wrap.innerHTML=`<div class="cam-recovery-empty">Noch keine Sicherungen vorhanden. Sicherungen werden ab dem nächsten Speichern automatisch angelegt — solange ist nur die Auto-Erkennung verfügbar.</div>`;
-    return;
-  }
-  wrap.innerHTML=items.map(it=>{
-    const dt=it.mtime_iso? it.mtime_iso.replace('T',' ').slice(0,16) : '?';
-    const sizeKb=(it.size/1024).toFixed(1);
-    let usable='', btn='';
-    if(!it.has_cam){
-      usable=`<span class="cam-recovery-tag cam-recovery-tag--off">Kamera nicht enthalten</span>`;
-    }else if(!it.has_connection){
-      usable=`<span class="cam-recovery-tag cam-recovery-tag--off">Verbindungsfelder leer</span>`;
-    }else{
-      usable=`<span class="cam-recovery-tag cam-recovery-tag--on">Verbindung gespeichert</span>`;
-      btn=`<button type="button" class="btn-action" onclick="applyCamRecoveryBackup('${esc(it.filename)}')">Übernehmen</button>`;
-    }
-    return `<div class="cam-recovery-row">
-      <div class="cam-recovery-row-meta">
-        <div class="cam-recovery-row-title">${esc(it.filename)}</div>
-        <div class="cam-recovery-row-sub">${dt} · ${it.n_cameras} Kameras · ${sizeKb} KB</div>
-      </div>
-      <div class="cam-recovery-row-actions">${usable}${btn}</div>
-    </div>`;
-  }).join('');
-}
-window.applyCamRecoveryBackup=async function(filename){
-  const camId=_currentEditCamId; if(!camId) return;
-  try{
-    const r=await fetch(`/api/settings/cameras/${encodeURIComponent(camId)}/restore-connection`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({filename}),
-    });
-    const d=await r.json();
-    if(!r.ok||!d.ok){
-      showToast(`Wiederherstellen fehlgeschlagen: ${d.error||r.statusText}`,'error');
-      return;
-    }
-    showToast(`Verbindung aus ${filename} wiederhergestellt — Kamera startet neu`,'success');
-    closeCamRecoveryModal();
-    // Refresh state + re-open the edit panel so the user sees the restored fields.
-    await loadAll();
-    if(_currentEditCamId===camId){_closeEditPanel();}
-    // Was: setTimeout(()=>editCamera(camId),250); — 250 ms was a guess
-    // and sometimes fired before the cam-edit form had rendered into
-    // the DOM. _whenFormReady polls until #rtspPathSelect appears (or
-    // gives up after 1 s) so editCamera never races with the post-
-    // loadAll render cycle. This is the TimerOut path that previously
-    // triggered the lock cascade via initRtspBuilder's TypeError.
-    _whenFormReady(()=>editCamera(camId));
-  }catch(e){
-    showToast(`Wiederherstellen fehlgeschlagen: ${String(e)}`,'error');
-  }
-};
-
-// Defer a callback until the cam-edit form is rendered into the DOM —
-// detected by the presence of #rtspPathSelect, which is the deepest
-// element editCamera's hydration touches first. Caps at 20 attempts ×
-// 50 ms = 1 s so a stuck render never leaves the recovery flow
-// silently waiting forever; the next manual click retries.
-function _whenFormReady(callback, attempts = 20){
-  if (byId('rtspPathSelect')) {
-    callback();
-    return;
-  }
-  if (attempts <= 0) return;
-  requestAnimationFrame(() => {
-    setTimeout(() => _whenFormReady(callback, attempts - 1), 50);
-  });
-}
-window.loadCamRecoveryDiscovery=async function(){
-  const wrap=byId('camRecoveryDiscoveryList');
-  const status=byId('camRecoveryDiscoverStatus');
-  if(!wrap) return;
-  wrap.innerHTML='';
-  if(status) status.textContent='Scanne Subnetz…';
-  let items=[];
-  try{
-    const r=await fetch('/api/discover');
-    items=(await r.json()).devices||[];
-  }catch(e){
-    if(status) status.textContent='Scan fehlgeschlagen';
-    return;
-  }
-  if(status) status.textContent=`${items.length} Geräte gefunden`;
-  if(!items.length){
-    wrap.innerHTML=`<div class="cam-recovery-empty">Keine Geräte im Subnetz erkannt.</div>`;
-    return;
-  }
-  wrap.innerHTML=items.map((d,idx)=>{
-    const guess=d.guess||'Unknown';
-    const host=d.hostname?` · ${esc(d.hostname)}`:'';
-    const ports=(d.open_ports||[]).join(', ')||'—';
-    const path=d.reolink_hints?.suggested_path||'';
-    const canApply=!!path;
-    const btn=canApply
-      ? `<button type="button" class="btn-action" onclick="applyCamRecoveryDiscovery(${idx})">In Formular übernehmen</button>`
-      : `<span class="cam-recovery-tag cam-recovery-tag--off">Kein RTSP-Pfad erkannt</span>`;
-    return `<div class="cam-recovery-row" data-idx="${idx}">
-      <div class="cam-recovery-row-meta">
-        <div class="cam-recovery-row-title">${esc(d.ip)} · ${esc(guess)}${host}</div>
-        <div class="cam-recovery-row-sub">Ports ${esc(ports)}${path?` · Pfad ${esc(path)}`:''}</div>
-      </div>
-      <div class="cam-recovery-row-actions">${btn}</div>
-    </div>`;
-  }).join('');
-  // Cache the device list so the apply handler can find it without re-fetching.
-  byId('camRecoveryModal').__discoveryCache=items;
-};
-window.applyCamRecoveryDiscovery=function(idx){
-  const cache=(byId('camRecoveryModal')||{}).__discoveryCache||[];
-  const d=cache[idx]; if(!d) return;
-  const f=byId('cameraForm').elements;
-  if(f['rtsp_ip']) f['rtsp_ip'].value=d.ip||'';
-  const path=d.reolink_hints?.suggested_path||'';
-  if(path && f['rtsp_path']){
-    // The select holds canonical Reolink paths; pick the option whose value
-    // matches, otherwise leave the existing default alone.
-    const opt=Array.from(f['rtsp_path'].options).find(o=>o.value===path);
-    if(opt) f['rtsp_path'].value=opt.value;
-  }
-  // Nudge the existing rtsp_url builder by dispatching an input event on
-  // any of the fields it listens to — that rebuild closure is private to
-  // initRtspBuilder so we trigger it via the DOM rather than calling it.
-  if(f['rtsp_ip']) f['rtsp_ip'].dispatchEvent(new Event('input',{bubbles:true}));
-  closeCamRecoveryModal();
-  showToast(`IP ${d.ip} übernommen — bitte Benutzer & Passwort ergänzen, dann speichern`,'success');
-};
-
-async function _loadCamDiagnostics(camId){
-  const panel=byId('camDiagnostics'); if(!panel) return;
-  panel.style.display='none';
-  try{
-    const s=await j(`/api/camera/${encodeURIComponent(camId)}/status`);
-    if(!s||s.ok===false) return;
-    // Frame age
-    const ageEl=byId('diagFrameAge');
-    if(ageEl){
-      const age=s.frame_age_s;
-      if(age==null){ageEl.textContent='—'; ageEl.className='cam-diag-val';}
-      else if(age<5){ageEl.textContent=age.toFixed(1)+'s'; ageEl.className='cam-diag-val ok';}
-      else if(age<30){ageEl.textContent=age.toFixed(1)+'s'; ageEl.className='cam-diag-val warn';}
-      else{ageEl.textContent=age.toFixed(1)+'s'; ageEl.className='cam-diag-val bad';}
-    }
-    // Reconnect count
-    const rcEl=byId('diagReconnects');
-    if(rcEl){
-      const rc=s.reconnect_count||0;
-      rcEl.textContent=rc; rcEl.className='cam-diag-val '+(rc===0?'ok':rc<5?'warn':'bad');
-    }
-    // Stale incidents
-    const stEl=byId('diagStale');
-    if(stEl){
-      const st=s.stale_incidents||0;
-      stEl.textContent=st; stEl.className='cam-diag-val '+(st===0?'ok':st<10?'warn':'bad');
-    }
-    // Error streak
-    const esEl=byId('diagErrorStreak');
-    if(esEl){
-      const es=s.error_streak||0;
-      esEl.textContent=es; esEl.className='cam-diag-val '+(es===0?'ok':es<5?'warn':'bad');
-    }
-    // Stale streak
-    const ssEl=byId('diagStaleStreak');
-    if(ssEl){
-      const ss=s.stale_streak||0;
-      ssEl.textContent=ss; ssEl.className='cam-diag-val '+(ss===0?'ok':ss<5?'warn':'bad');
-    }
-    // Preview FPS
-    const fpsDiagEl=byId('diagPreviewFps');
-    if(fpsDiagEl){
-      const pfps=s.preview_fps||0;
-      fpsDiagEl.textContent=pfps>0?pfps+' fps':'—';
-      fpsDiagEl.className='cam-diag-val '+(pfps>=8?'ok':pfps>=2?'warn':'');
-    }
-    // Stream mode
-    const modeEl=byId('diagStreamMode');
-    if(modeEl){
-      const mode=s.stream_mode||'baseline';
-      modeEl.textContent=mode==='live'?'Live':'Vorschau';
-      modeEl.className='cam-diag-val '+(mode==='live'?'ok':'');
-    }
-    // Live viewers
-    const viewEl=byId('diagLiveViewers');
-    if(viewEl){
-      const v=s.live_viewers||0;
-      viewEl.textContent=v; viewEl.className='cam-diag-val '+(v>0?'ok':'');
-    }
-    // Last error
-    const errEl=byId('diagLastError');
-    if(errEl){
-      if(s.last_error){errEl.textContent=s.last_error; errEl.style.display='';}
-      else errEl.style.display='none';
-    }
-    // Compute collapsible summary + auto-open on problems.
-    const reconnects=s.reconnect_count||0;
-    const errStreak=s.error_streak||0;
-    const hasErr=!!s.last_error;
-    const problem=errStreak>0 || reconnects>5 || hasErr;
-    const sumEl=byId('camDiagSummary');
-    if(sumEl){
-      sumEl.textContent = problem
-        ? `${reconnects} Reconnects · ${errStreak} Fehler${hasErr?' · Stream-Fehler':''}`
-        : 'Verbindung stabil';
-    }
-    // data-problem toggles the red/green CSS tinting on the entire block.
-    panel.dataset.problem = problem ? '1' : '0';
-    // Auto-open on problems; collapsed otherwise.
-    panel.classList.toggle('open', problem);
-    panel.style.display='';
-  }catch(e){/* no diagnostics available — stay hidden */}
-}
-window._toggleCamDiag=function(){
-  const panel=byId('camDiagnostics'); if(!panel) return;
-  panel.classList.toggle('open');
-};
+// ── Connection-recovery modal + indicator + diagnostics ─────────────────────
+// Now lives in camedit/recovery.js (Stage 7). _refreshConnectionWarn,
+// _loadCamDiagnostics, the Sicherung/Auto-Erkennung modal helpers and
+// the _toggleCamDiag inline handler all moved together. editCamera()
+// in this file calls _refreshConnectionWarn + _loadCamDiagnostics via
+// direct named imports; the modal opens through its window bridges.
 window.editCamera=editCamera;
 
 byId('deleteCameraBtn').onclick=async()=>{
@@ -3439,7 +2886,7 @@ byId('cameraForm').onsubmit=async(e)=>{
     // Prefer the live Alerting tab toggle state; fall back to persisted value.
     telegram_enabled:f['telegram_enabled']?f['telegram_enabled'].checked:(existingCam?.telegram_enabled??true),
     mqtt_enabled:f['mqtt_enabled']?f['mqtt_enabled'].checked:(existingCam?.mqtt_enabled??true),
-    whitelist_names:_whitelistState.filter(Boolean),
+    whitelist_names:getWhitelistState().filter(Boolean),
     timelapse:existingCam?.timelapse||{enabled:false,fps:25,period:'day',daily_target_seconds:60,weekly_target_seconds:180,telegram_send:false},
     // Two independent schedules — schedule_notify gates Telegram/MQTT,
     // schedule_record gates the on-disk archive. The legacy `schedule`

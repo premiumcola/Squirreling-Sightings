@@ -2441,9 +2441,31 @@ def api_camera_media(cam_id):
 @app.delete('/api/camera/<cam_id>/events/<event_id>')
 def api_event_delete(cam_id, event_id):
     result = store.delete_event(cam_id, event_id)
-    if not result["json_deleted"]:
+    # Timelapse fallback: tl_<stem> events live in storage/timelapse/<cam>/
+    # and may not have an EventStore JSON yet (the migration that
+    # registers them on boot can race against the user clicking delete
+    # before it finishes, and old installs predate the unified
+    # registration entirely). Also clean up the on-disk mp4 + sidecar +
+    # thumb so the file disappears from the gallery either way.
+    tl_cleaned = False
+    if event_id.startswith("tl_"):
+        stem = event_id[3:]
+        if "/" not in stem and "\\" not in stem and ".." not in stem:
+            tl_dir = storage_root / "timelapse" / cam_id
+            mp4 = tl_dir / f"{stem}.mp4"
+            if mp4.exists():
+                mp4.unlink(missing_ok=True)
+                tl_cleaned = True
+                for suffix in (".json", ".jpg"):
+                    companion = tl_dir / f"{stem}{suffix}"
+                    if companion.exists():
+                        try:
+                            companion.unlink()
+                        except Exception:
+                            pass
+    if not result["json_deleted"] and not tl_cleaned:
         return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
-    return jsonify({"ok": True, **result})
+    return jsonify({"ok": True, "tl_cleaned": tl_cleaned, **result})
 
 
 @app.post('/api/camera/<cam_id>/events/delete-bulk')

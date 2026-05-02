@@ -1,34 +1,37 @@
 
 from __future__ import annotations
-import os
+
 import copy as _copy
 import json
+import logging
+import os
 import threading
 import time
-from pathlib import Path
-from flask import Flask, jsonify, request, Response, send_from_directory, render_template
 from datetime import datetime, timedelta
+from pathlib import Path
+
 import cv2
-import logging
-from collections import deque
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 # Centralised logging setup — installs the explicit StreamHandler with a
 # parseable format, the in-memory buffer for the web UI, and the WARNING+
 # rate-limit filter. Must run before any subsystem imports that emit logs.
-from .logging_setup import setup_logging, log_buffer, console_level
+from .logging_setup import console_level, log_buffer, setup_logging
+
 setup_logging()
 
-import socket
 import ipaddress
-from .config_loader import load_config
-from .storage import EventStore
+import socket
+
 from .camera_runtime import CameraRuntime
-from .telegram_bot import TelegramService
-from .weather_service import WeatherService
 from .cat_identity import IdentityRegistry
-from .timelapse import TimelapseBuilder
+from .config_loader import load_config
 from .discovery import discover_hosts
 from .settings_store import SettingsStore
+from .storage import EventStore
+from .telegram_bot import TelegramService
+from .timelapse import TimelapseBuilder
+from .weather_service import WeatherService
 
 
 def _auto_detect_subnet() -> str:
@@ -41,12 +44,14 @@ def _auto_detect_subnet() -> str:
     except Exception:
         return "192.168.1.0/24"
 from .mqtt_service import MQTTService
-from .tracking_worker import build_worker as build_tracking_worker, TrackingJob, tracks_path_for
+from .tracking_worker import TrackingJob, build_worker as build_tracking_worker, tracks_path_for
+
 
 def _get_build_info() -> dict:
     """Return build info: ENV vars injected at build time → git subprocess (dev)
     → volume-mounted config/buildinfo.json → baked-in app/buildinfo.json."""
-    import subprocess, json as _json
+    import json as _json
+    import subprocess
     env_commit = os.environ.get("BUILD_COMMIT", "").strip()
     if env_commit and env_commit != "dev":
         return {
@@ -88,15 +93,18 @@ _BUILD_INFO = _get_build_info()
 # when the Flask process actually started — distinct from BUILD_DATE, which
 # only advances on a code rebuild. For bind-mounted dev setups the container
 # often runs code from days ago; users need to see when the restart happened.
-from datetime import datetime as _dt, timezone as _tz
-_PROCESS_START_ISO = _dt.now(_tz.utc).astimezone().isoformat(timespec="seconds")
+from datetime import UTC, datetime as _dt
+
+_PROCESS_START_ISO = _dt.now(UTC).astimezone().isoformat(timespec="seconds")
 
 
 def _fetch_github_commit_count():
     """One-shot background fetch of the live commit count from GitHub.
     Git isn't present inside the container, so buildinfo.json is frozen at build time.
     Pulling the real count from the public API keeps the dashboard in sync."""
-    import threading as _thr, urllib.request as _ur, re as _re
+    import re as _re
+    import threading as _thr
+    import urllib.request as _ur
     def _do():
         global _BUILD_INFO
         try:
@@ -246,6 +254,7 @@ def _emit_boot_inventory(base_cfg: dict, storage_root: Path):
 
 import hashlib as _hashlib
 import pathlib as _pathlib
+
 _static_hashes: dict[str, str] = {}
 
 def _file_hash(filename: str) -> str:
@@ -753,7 +762,8 @@ def _migrate_timelapse_events():
     in the EventStore (storage/motion_detection/<cam_id>/) under old code. These are now tracked
     as sidecar JSONs next to the .mp4 files in storage/timelapse/<cam_id>/.
     Covers both date-subdirectory and camera-level tl_*.json placements."""
-    import threading, shutil as _shutil
+    import shutil as _shutil
+    import threading
     def _do_migrate():
         log = logging.getLogger(__name__)
         try:
@@ -841,7 +851,9 @@ _migrate_timelapse_events()
 def _generate_missing_thumbnails():
     """Generate thumbnail .jpg for any timelapse .mp4 that does not have one yet.
     Runs once on startup in background — safe to re-run, skips if thumb exists."""
-    import threading, cv2 as _cv2
+    import threading
+
+    import cv2 as _cv2
     def _do():
         log = logging.getLogger(__name__)
         tl_base = storage_root / "timelapse"
@@ -886,7 +898,8 @@ def _migrate_timelapse_to_eventstore():
     Walks storage/timelapse/<cam>/*.json; for each sidecar that has no matching
     motion_detection/<cam>/tl_<stem>.json yet, builds a tl_event dict and calls
     store.add_event(). Safe to re-run; skips entries that already exist."""
-    import threading, json as _json
+    import json as _json
+    import threading
     def _do():
         log = logging.getLogger(__name__)
         tl_root = storage_root / "timelapse"
@@ -1549,7 +1562,9 @@ def api_test_detection(cam_id: str):
     # it inline without a separate snapshot fetch (and so the snapshot
     # is the same frame the boxes were computed against).
     try:
-        import base64, cv2
+        import base64
+
+        import cv2
         ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
         snapshot = f"data:image/jpeg;base64,{base64.b64encode(jpg.tobytes()).decode()}" if ok else None
     except Exception as e:
@@ -2049,12 +2064,13 @@ def api_media_rescan():
     try:
         count = store.scan_media_files(cam_ids, public_base_url=public_base)
         return jsonify({"ok": True, "registered": count})
-    except Exception as e:
+    except Exception:
         import traceback
         return jsonify({"ok": False, "error": traceback.format_exc()}), 500
 
 
 import threading as _threading_fix
+
 _thumb_task = {"running": False, "done": 0, "total": 0, "errors": 0, "recent": []}
 _fix_thumbs_lock = _threading_fix.Lock()
 
@@ -2328,6 +2344,7 @@ def api_camera_stream(cam_id):
 
 
 import shutil as _shutil_check
+
 _FFMPEG_AVAILABLE = _shutil_check.which('ffmpeg') is not None
 
 
@@ -2546,7 +2563,7 @@ def api_tracking_reindex_all():
     tracks.json — or whose tracks.json predates the current schema.
     Optional ?camera_id=… narrows the scan to a single camera."""
     cam_filter = request.args.get("camera_id")
-    from .tracking_worker import singleton as _tw, TRACKS_SCHEMA
+    from .tracking_worker import TRACKS_SCHEMA, singleton as _tw
     worker = _tw()
     if worker is None:
         return jsonify({"ok": False, "error": "Tracking-Worker nicht aktiv"}), 503
@@ -2624,7 +2641,7 @@ def api_tracking_delete(event_id):
 def api_tracking_status():
     """Worker-stats endpoint — useful for the operator and for the
     re-indexing UI (Phase 2) to show queue depth."""
-    from .tracking_worker import singleton as _tw, TRACKS_SCHEMA
+    from .tracking_worker import TRACKS_SCHEMA, singleton as _tw
     worker = _tw()
     if worker is None:
         return jsonify({"ok": False, "alive": False, "schema": TRACKS_SCHEMA})
@@ -2787,7 +2804,7 @@ def api_telegram_test():
 
 @app.get('/api/timelapse/status')
 def api_timelapse_status():
-    from .camera_runtime import _PROFILES, _PROFILE_PERIOD_DEFAULTS
+    from .camera_runtime import _PROFILE_PERIOD_DEFAULTS, _PROFILES
     today = datetime.now().strftime("%Y-%m-%d")
     tl_settings = settings.data.get("timelapse_settings", {})
     global_enabled = bool(tl_settings.get("global_enabled", False))
@@ -3106,10 +3123,16 @@ def api_coral_test():
         detections, bird_species_mode, bird_species_reason,
       }
     """
-    import base64 as _b64, time as _time, subprocess as _sp, os as _os
+    import base64 as _b64
+    import os as _os
+    import subprocess as _sp
+    import time as _time
+
     from .detectors import (
-        CoralObjectDetector, BirdSpeciesClassifier, WildlifeClassifier,
-        Detection, draw_detections,
+        BirdSpeciesClassifier,
+        CoralObjectDetector,
+        WildlifeClassifier,
+        draw_detections,
     )
     payload = request.get_json(silent=True) or {}
     cam_id = (payload.get("camera_id") or "").strip() or None
@@ -3358,7 +3381,12 @@ def api_coral_test_batch():
     sanity-check object-detection quality without live camera feeds."""
     import base64 as _b64
     import time as _time
-    from .detectors import CoralObjectDetector, BirdSpeciesClassifier, WildlifeClassifier, draw_detections
+
+    from .detectors import (
+        BirdSpeciesClassifier,
+        CoralObjectDetector,
+        WildlifeClassifier,
+    )
     payload = request.get_json(silent=True) or {}
     folder_filter = (payload.get("folder") or "").strip()
 
@@ -4004,7 +4032,6 @@ def api_weather_history():
 
 @app.get('/api/system')
 def api_system():
-    import time as _time
     mem_total = mem_used = proc_mem_mb = uptime_s = 0.0
     try:
         mem: dict = {}

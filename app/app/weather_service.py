@@ -19,7 +19,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from datetime import datetime, date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -627,16 +627,15 @@ class WeatherService:
         loc = self.server_cfg.get("location") or {}
         lat, lon = loc.get("lat"), loc.get("lon")
         try:
-            from astral import LocationInfo, Observer
-            from astral.sun import elevation, azimuth
+            from astral import Observer
+            from astral.sun import azimuth, elevation
             obs = Observer(latitude=float(lat), longitude=float(lon),
                            elevation=float(loc.get("elevation") or 0.0))
             # astral wants a tz-aware UTC datetime; passing naive
             # datetime.now() makes it interpret local-clock-as-UTC and
             # the resulting altitude/azimuth are off by the local UTC
             # offset (visible as a 2 h sunset-time error in CEST).
-            from datetime import timezone as _tz
-            now_dt = datetime.now(tz=_tz.utc)
+            now_dt = datetime.now(tz=UTC)
             data = {
                 "altitude": float(elevation(obs, now_dt)),
                 "azimuth":  float(azimuth(obs, now_dt)),
@@ -746,7 +745,6 @@ class WeatherService:
         """Mean per-cam contrast of the latest preview frame, normalised 0..1.
         Used as a sanity check for the fog detector."""
         import cv2
-        import numpy as np
         vals = []
         for cam_id in self._enabled_cam_ids():
             rt = self.runtimes.get(cam_id)
@@ -1229,7 +1227,7 @@ class WeatherService:
                  self._dashboard_url(f"#weather/{manifest.get('id', '')}")),
             ]]
             # Quiet hours respect — mirrors push.silent semantics from Phase 1.
-            silent = bool(_is_quiet_now((push_cfg.get("quiet_hours") or {})))
+            silent = bool(_is_quiet_now(push_cfg.get("quiet_hours") or {}))
             tg.send(cap, video=str(mp4_path), buttons=buttons, silent=silent)
             log.info("[weather] Push gesendet: %s (%s, sev=%.2f)",
                      evt, cam_name, score)
@@ -1681,6 +1679,7 @@ class WeatherService:
         never block the capture or mark a finished timelapse as failed.
         """
         from urllib.parse import urlparse
+
         from . import reolink_api
         cam = next((c for c in self._cfg_cameras() if c.get("id") == cam_id), None)
         if cam is None:
@@ -1757,7 +1756,7 @@ class WeatherService:
                                 cam_id, phase, e)
 
     def _run_sun_capture_inner(self, cam_id: str, phase: str, sun_dt: datetime, pcfg: dict):
-        from .frame_helpers import grab_valid_frame, CaptureStats
+        from .frame_helpers import CaptureStats, grab_valid_frame
         rt = self.runtimes.get(cam_id)
         if rt is None or not hasattr(rt, "snapshot_jpeg_hires"):
             log.warning("[weather] cam %s nicht verfügbar — capture abgebrochen", cam_id)
@@ -2170,7 +2169,7 @@ class WeatherService:
     def _run_event_tl_capture(self, cam_id: str, trigger: str, score: float,
                               api_now: dict, fc_snapshot: dict,
                               window_min: int, interval_s: int, fps: int):
-        from .frame_helpers import grab_valid_frame, CaptureStats
+        from .frame_helpers import CaptureStats, grab_valid_frame
         rt = self.runtimes.get(cam_id)
         if rt is None or not hasattr(rt, "snapshot_jpeg_hires"):
             log.warning("[weather] cam %s nicht verfügbar — capture abgebrochen", cam_id)

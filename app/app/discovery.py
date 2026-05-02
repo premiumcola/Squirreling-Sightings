@@ -1,8 +1,9 @@
 from __future__ import annotations
+
+import http.client
 import ipaddress
 import logging
 import socket
-import http.client
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 

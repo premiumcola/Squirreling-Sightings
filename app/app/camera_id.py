@@ -25,9 +25,9 @@ Examples (IPs from RFC 5737/3849 documentation ranges)::
         → "reolink_rlc810a_pfortnerhauschenalter_042a"
 """
 from __future__ import annotations
+
 import re
 import unicodedata
-
 
 # Map of common Latin diacritics + German umlauts to their ASCII fallback.
 # We do this BEFORE the regex strip so "ä → a" doesn't get dropped to nothing

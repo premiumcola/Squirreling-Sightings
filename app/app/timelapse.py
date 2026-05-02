@@ -1,13 +1,14 @@
 from __future__ import annotations
-from pathlib import Path
-from datetime import datetime, timedelta
-import cv2
+
 import hashlib
 import logging
-import numpy as np
 import os
 import subprocess
 import tempfile
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import cv2
 
 log = logging.getLogger(__name__)
 

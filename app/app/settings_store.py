@@ -1,18 +1,20 @@
 
 from __future__ import annotations
-from pathlib import Path
-from copy import deepcopy
+
 import json
 import logging
 import os
 import shutil
 import threading
+from copy import deepcopy
+from pathlib import Path
+
 import yaml
 
 from .schema import (
-    validate_and_coerce,
     CAMERA_SCHEMA,
     SECTION_SCHEMAS,
+    validate_and_coerce,
 )
 
 log = logging.getLogger(__name__)

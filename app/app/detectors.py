@@ -1,8 +1,10 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from pathlib import Path
+
 import logging
 import re
+from dataclasses import dataclass
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -29,7 +31,7 @@ IMPOSSIBLE_LABELS: frozenset[str] = frozenset({
 })
 
 
-def _apply_region_filter(dets: list["Detection"], enabled: bool) -> list["Detection"]:
+def _apply_region_filter(dets: list[Detection], enabled: bool) -> list[Detection]:
     if not enabled:
         return dets
     return [d for d in dets if d.label not in IMPOSSIBLE_LABELS]
@@ -143,8 +145,8 @@ class CoralObjectDetector:
 
         # ── Tier 1: pycoral + Coral TPU ────────────────────────────────────
         try:
-            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
             from pycoral.adapters import common, detect  # type: ignore
+            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
             self.common = common
             self.detect = detect
             self.interpreter = make_interpreter(model_path, device=self.device)
@@ -445,7 +447,7 @@ def _load_bird_latin_to_de(path: str | None) -> dict[str, str]:
         return _bird_latin_to_de_cache
     data: dict[str, str] = {}
     try:
-        with open(use_path, "r", encoding="utf-8") as f:
+        with open(use_path, encoding="utf-8") as f:
             raw = json.load(f)
         data = {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and not k.startswith("_")}
     except FileNotFoundError:
@@ -534,8 +536,8 @@ class BirdSpeciesClassifier:
 
         # ── Tier 1: pycoral ───────────────────────────────────────────────
         try:
+            from pycoral.adapters import classify, common  # type: ignore
             from pycoral.utils.edgetpu import make_interpreter  # type: ignore
-            from pycoral.adapters import common, classify  # type: ignore
             self.common = common
             self.classify = classify
             self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
@@ -878,8 +880,8 @@ class WildlifeClassifier:
         coral_error = ""
         # ── Tier 1: pycoral ───────────────────────────────────────────────
         try:
+            from pycoral.adapters import classify, common  # type: ignore
             from pycoral.utils.edgetpu import make_interpreter  # type: ignore
-            from pycoral.adapters import common, classify  # type: ignore
             self.common = common
             self.classify = classify
             self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
@@ -936,8 +938,8 @@ class WildlifeClassifier:
         self._inat_labels = load_label_map(cfg.get("labels_path"))
         # Tier 1: pycoral
         try:
+            from pycoral.adapters import classify, common  # type: ignore
             from pycoral.utils.edgetpu import make_interpreter  # type: ignore
-            from pycoral.adapters import common, classify  # type: ignore
             self._inat_common = common
             self._inat_classify = classify
             self._inat_interpreter = make_interpreter(model_path, device=cfg.get("device"))

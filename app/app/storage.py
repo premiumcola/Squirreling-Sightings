@@ -1,7 +1,8 @@
 from __future__ import annotations
-from pathlib import Path
-from datetime import datetime, timedelta
+
 import json
+from datetime import datetime, timedelta
+from pathlib import Path
 
 
 class EventStore:

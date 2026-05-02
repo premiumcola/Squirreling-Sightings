@@ -32,14 +32,13 @@ picks up where we stopped. A failed ``settings.save()`` triggers a
 restore from the timestamped backup.
 """
 from __future__ import annotations
+
+import logging
+import shutil
 from datetime import datetime
 from pathlib import Path
-import json
-import logging
-import re
-import shutil
 
-from .camera_id import build_camera_id, _sanitise
+from .camera_id import _sanitise, build_camera_id
 
 log = logging.getLogger(__name__)
 
@@ -288,7 +287,7 @@ def migrate(settings_store, storage_root) -> dict:
     total_merges = 0
     total_rewrites = 0
     id_changes = 0
-    for cam, plan in zip(cams, plans):
+    for cam, plan in zip(cams, plans, strict=False):
         new_id = plan["new_id"]
         old_id = plan["old_id"]
         for area in _AREAS:

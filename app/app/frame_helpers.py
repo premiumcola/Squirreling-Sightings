@@ -10,12 +10,13 @@ All thresholds are module constants so they're easy to retune later without
 hunting through call sites. The functions are stateless and side-effect free
 apart from the retry helper's ``time.sleep``."""
 from __future__ import annotations
-from dataclasses import dataclass, asdict, field
-from datetime import datetime
-from pathlib import Path
+
 import json
 import logging
 import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -118,7 +119,7 @@ _GREY_TONED_CHROMA_STD_MAX = 8.0
 
 
 # ── Decoding helper ──────────────────────────────────────────────────────────
-def _decode(img_or_bytes) -> "np.ndarray | None":
+def _decode(img_or_bytes) -> np.ndarray | None:
     """Accept either a decoded BGR ndarray or JPEG bytes; return ndarray or None."""
     if img_or_bytes is None:
         return None
@@ -208,9 +209,7 @@ def dead_area_score(img) -> tuple[float, int, int]:
             bstd = float(blurred_tile.std())
             tmean = float(blurred_tile.mean())
             tile_dead = False
-            if bstd < _TILE_DEAD_BLURRED_STD_FLOOR:
-                tile_dead = True
-            elif (_TILE_GREY_BAND_MIN <= tmean <= _TILE_GREY_BAND_MAX
+            if bstd < _TILE_DEAD_BLURRED_STD_FLOOR or (_TILE_GREY_BAND_MIN <= tmean <= _TILE_GREY_BAND_MAX
                   and bstd < _TILE_GREY_BAND_BLURRED_STD):
                 tile_dead = True
             elif _TILE_GREY_BAND_MIN <= tmean <= _TILE_GREY_BAND_MAX:

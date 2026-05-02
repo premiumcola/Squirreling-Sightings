@@ -5,8 +5,9 @@ detection and the most-specific label rule used both by the alert pipeline
 and the daily report.
 """
 from __future__ import annotations
-from datetime import datetime
+
 import logging
+from datetime import datetime
 
 log = logging.getLogger(__name__)
 

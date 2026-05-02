@@ -20,6 +20,7 @@ Design:
   without breaking compatibility.
 """
 from __future__ import annotations
+
 import json
 import logging
 import os
@@ -27,9 +28,9 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 log = logging.getLogger(__name__)
 

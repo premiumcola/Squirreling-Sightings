@@ -26,8 +26,9 @@ Usage from camera_runtime:
         ...
 """
 from __future__ import annotations
-from collections import deque
+
 import time
+from collections import deque
 
 
 class DetectionConfirmer:

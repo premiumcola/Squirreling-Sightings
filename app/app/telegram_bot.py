@@ -1,11 +1,12 @@
 from __future__ import annotations
-from io import BytesIO
-from threading import Thread, Lock
-from datetime import datetime, timedelta
-from pathlib import Path
+
 import asyncio
 import logging
 import time
+from datetime import datetime, timedelta
+from io import BytesIO
+from pathlib import Path
+from threading import Lock, Thread
 
 from telegram import (
     Bot,
@@ -27,13 +28,13 @@ from telegram.ext import (
 )
 
 from .telegram_helpers import (
+    DULL_BIRDS,
     LABEL_DE,
     LABEL_WEIGHT,
     OBJECT_LABELS,
-    DULL_BIRDS,
-    most_specific_label,
-    is_quiet_now,
     is_night,
+    is_quiet_now,
+    most_specific_label,
     truncate_caption,
 )
 
@@ -1479,7 +1480,7 @@ class TelegramService:
                 f"{icon} <b>{name}</b> · {arm_label}{extra} · {n_today} Events heute")
             rows.append([
                 InlineKeyboardButton(("🔇 Stumm" if armed else "🛡 Scharf") + f" {name[:10]}", callback_data=f"cam:{cam_id}:arm"),
-                InlineKeyboardButton(f"🔄 Reconnect", callback_data=f"cam:{cam_id}:reconnect"),
+                InlineKeyboardButton("🔄 Reconnect", callback_data=f"cam:{cam_id}:reconnect"),
             ])
         rows.append([self._back_btn()])
         return "\n".join(lines), InlineKeyboardMarkup(rows)
@@ -2827,7 +2828,7 @@ class TelegramService:
                     ]]))
         # Header (reuse the cam block formatter from phase-1).
         lines = list(self._render_camera_block(info))
-        lines.insert(0, f"📊 <b>Status</b>")
+        lines.insert(0, "📊 <b>Status</b>")
         lines.append("─────────────")
         # Today's events for this cam — first 6 entries.
         today_iso = datetime.now().strftime("%Y-%m-%d")

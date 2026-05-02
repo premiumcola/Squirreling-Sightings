@@ -10,8 +10,9 @@ logged and the next file is processed. Only the per-window JPEG
 ringbuffer under ``storage/timelapse_frames/`` is touched; finalised
 ``.mp4`` files under ``storage/timelapse/`` are never read or deleted."""
 from __future__ import annotations
-from pathlib import Path
+
 import logging
+from pathlib import Path
 
 from .frame_helpers import is_valid_frame
 

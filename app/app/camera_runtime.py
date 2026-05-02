@@ -1,19 +1,33 @@
 from __future__ import annotations
-import cv2
-import time
-import threading
-import logging
+
 import json as _json_mod
+import logging
 import shutil as _shutil
 import subprocess as _subprocess
+import threading
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-import requests
+
+import cv2
 import numpy as np
-from .detectors import CoralObjectDetector, BirdSpeciesClassifier, WildlifeClassifier, Detection, draw_detections
+import requests
+
 from .detection_confirmer import DetectionConfirmer
-from .event_logic import is_in_schedule, choose_alarm_level, schedule_action_active, is_schedule_window_active, compute_severity_from_matrix
+from .detectors import (
+    BirdSpeciesClassifier,
+    CoralObjectDetector,
+    Detection,
+    WildlifeClassifier,
+    draw_detections,
+)
+from .event_logic import (
+    choose_alarm_level,
+    compute_severity_from_matrix,
+    is_schedule_window_active,
+    schedule_action_active,
+)
 
 # Does this container have an ffmpeg binary? If so, motion recording uses the
 # fast stream-copy path (direct RTSP → mp4, no CPU re-encode). Otherwise we
@@ -1601,7 +1615,7 @@ class CameraRuntime:
         # (early boot).
         if video_relpath and vid_path is not None and vid_path.exists():
             try:
-                from .tracking_worker import singleton as _tw_singleton, TrackingJob
+                from .tracking_worker import TrackingJob, singleton as _tw_singleton
                 worker = _tw_singleton()
                 if worker is not None:
                     snap_path = (storage_root / thumb_rel) if thumb_rel else None
@@ -1755,8 +1769,9 @@ class CameraRuntime:
         """Encode a completed timelapse window into a video, write a sidecar metadata JSON
         next to the video (NOT in EventStore), then delete the frame directory.
         Called from _timelapse_profile_loop only."""
-        import shutil
         import json as _json
+        import shutil
+
         from .timelapse import TimelapseBuilder as _TLB
         storage_root = Path(self.global_cfg["storage"]["root"])
         frames_dir = storage_root / "timelapse_frames" / self.camera_id / profile_name / window_key
@@ -1959,7 +1974,7 @@ class CameraRuntime:
         - custom: fixed-duration rolling windows (period_seconds long each)
         - daily/weekly/monthly: one window per calendar day, encoded at day boundary
         """
-        from .frame_helpers import is_valid_frame as _fh_valid, CaptureStats as _CaptureStats
+        from .frame_helpers import CaptureStats as _CaptureStats, is_valid_frame as _fh_valid
         window_key: str | None = None
         window_start_t: float = 0.0
         _last_frame_ts: float = 0.0   # frame_ts at last capture — detects stale buffer

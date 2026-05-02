@@ -680,3 +680,8 @@ window.renderCameraSettings  = renderCameraSettings;
 window.renderProfiles        = renderProfiles;
 window.renderAudit           = renderAudit;
 window.hydrateSettings       = hydrateSettings;
+// Inline `onclick="editCamera('<id>')"` rendered into each cam-row by
+// renderCameraSettings — this bridge is the production callsite, not a
+// vestige. window.toggleArm / saveMqttSettings / etc. are assigned
+// inline at their function definitions higher up.
+window.editCamera            = editCamera;

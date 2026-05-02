@@ -121,6 +121,12 @@ import { _initFsBtn } from './chrome/fullscreen.js';
 // in legacy.js until stage 16 ships weather/sightings.js.
 import { hydrateTelegram, initTelegramTabs } from './telegram.js';
 import { hydratePushUI } from './push.js';
+// Stage 13 — easy mediathek pieces. Lightbox / bbox / iOS-video /
+// drilldown stay in this file for now; their _lbItem state is shared
+// across 90+ callsites and needs a coordinated extraction.
+import './mediathek/rescan.js';
+import './mediathek/bulk-delete.js';
+import './mediathek/grid.js';
 
 // _hmTip stays here — fixed-position heatmap tooltip used only by the
 // timeline view; will move with the timeline module in a later stage.
@@ -215,7 +221,11 @@ const download=(url)=>window.open(url,'_blank');
 
 // Single source of truth for page size: rows × dynamic column count.
 // Called before every load, page-change, delete, resize, and filter-change.
-let _lastKnownCols=0;
+// _lastKnownCols + window._cachedPageSize are bridged on window so the grid.js
+// resize observer (extracted in stage 13) can read AND write the same
+// counter — without the bridge it would set its own copy and the
+// re-render below would never see the update.
+window._lastKnownCols ??= 0;
 const _MEDIA_ROWS=4;
 function calcItemsPerPage(){
   const grid=byId('mediaGrid');
@@ -230,9 +240,10 @@ function calcItemsPerPage(){
     containerW=Math.max(193,mediaEl&&mediaEl.clientWidth>192?mediaEl.clientWidth-24:window.innerWidth-(isMobile?24:320));
   }
   const GAP=10,MIN_CARD=192;
-  const cols=_lastKnownCols||Math.max(1,Math.floor((containerW+GAP)/(MIN_CARD+GAP)));
+  const cols=window._lastKnownCols||Math.max(1,Math.floor((containerW+GAP)/(MIN_CARD+GAP)));
   return _MEDIA_ROWS*cols;
 }
+window.calcItemsPerPage = calcItemsPerPage;
 // Filter labels rendered in the Mediathek pill bar. Sort happens at render
 // time (by count desc); this list seeds the canonical set + tie-break order.
 const MEDIA_FILTER_LABELS=['motion','person','cat','bird','car','dog','squirrel','timelapse'];
@@ -325,10 +336,10 @@ function renderMediaFilterPills(mode){
     });
   });
 }
-let _cachedPageSize=0;
+window._cachedPageSize ??= 0;
 async function loadMedia(){
   const labels=state.mediaLabels;
-  const ps=calcItemsPerPage(); _cachedPageSize=ps;
+  const ps=calcItemsPerPage(); window._cachedPageSize=ps;
   const cams=state.mediaCamera?[state.mediaCamera]:state.cameras.map(c=>c.id);
   // Unified filter — EventStore now holds both motion and timelapse events.
   const allLabels=[...labels];
@@ -2544,111 +2555,6 @@ byId('wizFinish').onclick=()=>finishWizard();
 
 
 
-// ── Media rescan button ───────────────────────────────────────────────────────
-byId('rescanMediaBtn')?.addEventListener('click',async()=>{
-  const btn=byId('rescanMediaBtn');
-  if(btn.disabled) return;
-  btn.disabled=true; btn.classList.add('scanning');
-  try{
-    const r=await j('/api/media/rescan',{method:'POST'});
-    showToast(`Scan abgeschlossen: ${r.registered||0} neue Medien registriert.`,'success');
-    await loadAll();
-  }catch(e){showToast('Fehler beim Scan: '+e.message,'error');}
-  finally{btn.disabled=false; btn.classList.remove('scanning');}
-});
-let _fixThumbsPoll=null;
-let _fixThumbsLastDone=-1;
-let _shownThumbFiles=new Set();
-function _showFixThumbsBar(done,total,finalMsg){
-  let bar=byId('fixThumbsBar');
-  if(!bar){
-    bar=document.createElement('div');
-    bar.id='fixThumbsBar';
-    bar.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:500;background:var(--panel);border-top:1px solid rgba(255,255,255,.08);font-size:13px;color:var(--text)';
-    bar.innerHTML=`
-      <div id="ftp-prog-line" style="height:3px;background:var(--accent);width:0%;transition:width .3s ease"></div>
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px">
-        <span id="ftp-icon" style="font-size:16px;animation:spin 1.2s linear infinite;display:inline-block">⚙</span>
-        <span id="ftp-label" style="flex:1">Thumbnails werden erzeugt…</span>
-        <button onclick="(function(){const d=byId('ftp-details');if(d)d.style.display=d.style.display==='none'?'block':'none';})()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:4px 8px;border-radius:6px">▲ Details</button>
-        <button onclick="document.getElementById('fixThumbsBar').remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 8px">✕</button>
-      </div>
-      <div id="ftp-details" style="display:none;padding:0 16px 10px;max-height:260px;overflow-y:auto;font-family:monospace;font-size:11px;color:var(--muted)"></div>`;
-    document.body.appendChild(bar);
-  }
-  const pct=total>0?(done/total)*100:0;
-  const prog=byId('ftp-prog-line');
-  const lbl=byId('ftp-label');
-  const icon=byId('ftp-icon');
-  if(prog) prog.style.width=pct+'%';
-  if(finalMsg){
-    if(lbl) lbl.textContent=finalMsg;
-    if(icon){icon.textContent='✓';icon.style.animation='none';icon.style.color='var(--good)';}
-    if(prog) prog.style.background='var(--good)';
-    return;
-  }
-  if(lbl) lbl.textContent=`Thumbnails werden erzeugt: ${done} / ${total}`;
-}
-function _hideFixThumbsBar(){
-  const bar=byId('fixThumbsBar');
-  if(bar) bar.remove();
-}
-function _startFixThumbsPoll(){
-  if(_fixThumbsPoll) clearInterval(_fixThumbsPoll);
-  _fixThumbsLastDone=-1;
-  _fixThumbsPoll=setInterval(async()=>{
-    try{
-      const s=await j('/api/media/fix-thumbnails/status');
-      _showFixThumbsBar(s.done||0,s.total||0);
-      // Append per-filename log lines for any newly completed files
-      const det=byId('ftp-details');
-      if(det && Array.isArray(s.recent)){
-        s.recent.forEach(fname=>{
-          if(_shownThumbFiles.has(fname)) return;
-          _shownThumbFiles.add(fname);
-          const line=document.createElement('div');
-          line.style.cssText='padding:3px 0;border-bottom:1px solid rgba(255,255,255,.04);white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-          line.textContent='✓ '+fname;
-          det.appendChild(line);
-          det.scrollTop=det.scrollHeight;
-        });
-      }
-      _fixThumbsLastDone=s.done||0;
-      if(!s.running){
-        clearInterval(_fixThumbsPoll); _fixThumbsPoll=null;
-        const done=s.done||0, errs=s.errors||0;
-        const msg=errs>0?`✓ ${done-errs} Thumbnails erzeugt, ${errs} Fehler`:`✓ ${done} Thumbnails erzeugt`;
-        _showFixThumbsBar(done,s.total||0,msg);
-        setTimeout(_hideFixThumbsBar,12000);
-        try{renderMediaGrid();}catch(_){}
-        // Newly-generated thumbnails may also have surfaced previously
-        // unscanned media — refresh overview chips + size badges.
-        loadMediaStorageStats();
-      }
-    }catch(_){ /* transient — keep polling */ }
-  },1500);
-}
-byId('fixThumbsBtn')?.addEventListener('click',async()=>{
-  const btn=byId('fixThumbsBtn');
-  if(btn.disabled) return;
-  btn.disabled=true; btn.classList.add('scanning');
-  _shownThumbFiles=new Set();
-  try{
-    const r=await j('/api/media/fix-thumbnails',{method:'POST'});
-    if(!r.ok){
-      showToast('Thumbnail-Erzeugung: '+(r.error||'Fehler'),'error');
-      return;
-    }
-    if((r.total||0)===0&&!r.already_running){
-      _showFixThumbsBar(0,0,'✓ Alle Thumbnails vorhanden');
-      setTimeout(_hideFixThumbsBar,12000);
-    }else{
-      _showFixThumbsBar(r.done||0,r.total||0);
-      _startFixThumbsPoll();
-    }
-  }catch(e){showToast('Fehler: '+e.message,'error');}
-  finally{btn.disabled=false; btn.classList.remove('scanning');}
-});
 
 // ── Lightbox / Media viewer ───────────────────────────────────────────────────
 let _lbItem=null;
@@ -2770,8 +2676,8 @@ function openLightbox(item){
   // the grid's page so the thumbnails behind the lightbox match what
   // the user sees on the lightbox itself. Re-rendering keeps current
   // scroll because the user is still inside the lightbox modal.
-  const ps=_cachedPageSize||calcItemsPerPage();
-  if(_cachedPageSize && globalList.length>0){
+  const ps=window._cachedPageSize||calcItemsPerPage();
+  if(window._cachedPageSize && globalList.length>0){
     const targetPage=Math.floor(_lbIndex/ps);
     if(targetPage!==state.mediaPage){
       state.mediaPage=targetPage;
@@ -2842,8 +2748,8 @@ function openTLPlayer(item){
   // Jump the grid page when this item lives outside the current page
   // window, so the thumbnails behind the lightbox match the lightbox
   // content — same rule as openLightbox above.
-  const ps=_cachedPageSize||calcItemsPerPage();
-  if(_lbIndex>=0 && _cachedPageSize && navItems.length>0){
+  const ps=window._cachedPageSize||calcItemsPerPage();
+  if(_lbIndex>=0 && window._cachedPageSize && navItems.length>0){
     const targetPage=Math.floor(_lbIndex/ps);
     if(targetPage!==state.mediaPage){
       state.mediaPage=targetPage;
@@ -3466,6 +3372,10 @@ function _goToPage(n){
   renderMediaGrid();
   renderMediaPagination();
 }
+// Stage 13 — bridges so the extracted mediathek modules (grid.js,
+// bulk-delete.js) can call back into these renderers via window.
+// Removed once the lightbox surgery extracts the rest of mediathek.
+window.renderMediaPagination = renderMediaPagination;
 function renderMediaPagination(){
   const pg=byId('mediaPagination'); if(!pg) return;
   const total=state.mediaTotalPages||1;
@@ -3540,10 +3450,10 @@ function renderMediaGrid(){
     const containerW=grid.getBoundingClientRect().width;
     if(actualW<=0||containerW<=0) return;
     const actualCols=Math.max(1,Math.round(containerW/actualW));
-    if(actualCols!==_lastKnownCols) _lastKnownCols=actualCols;
+    if(actualCols!==window._lastKnownCols) window._lastKnownCols=actualCols;
     const correctPs=_MEDIA_ROWS*actualCols;
-    if(correctPs!==_cachedPageSize&&state._allMedia&&state._allMedia.length){
-      _cachedPageSize=correctPs;
+    if(correctPs!==window._cachedPageSize&&state._allMedia&&state._allMedia.length){
+      window._cachedPageSize=correctPs;
       state.mediaTotalPages=Math.max(1,Math.ceil(state._allMedia.length/correctPs));
       state.mediaPage=0;
       state.media=state._allMedia.slice(0,correctPs);
@@ -3627,98 +3537,8 @@ function updateMediaSectionTitle(){
   }
 }
 
-// ── Multi-select / bulk delete ──────────────────────────────────────────────
-function _updateMediaSelectToggle(){
-  const btn=byId('mediaSelectToggleBtn'); if(!btn) return;
-  btn.style.display=state.mediaCamera?'inline-flex':'none';
-  btn.classList.toggle('btn-action',state.mediaSelectMode);
-  btn.classList.toggle('action-green',state.mediaSelectMode);
-  btn.classList.toggle('btn-neutral',!state.mediaSelectMode);
-}
-function _exitMediaSelectMode(){
-  state.mediaSelectMode=false;
-  state.mediaSelected.clear();
-  document.body.classList.remove('media-select-mode');
-  const bar=byId('mediaSelectBar'); if(bar) bar.style.display='none';
-  document.querySelectorAll('.media-card.media-card--selected').forEach(c=>c.classList.remove('media-card--selected'));
-  _updateMediaSelectToggle();
-}
-function _enterMediaSelectMode(){
-  state.mediaSelectMode=true;
-  state.mediaSelected.clear();
-  document.body.classList.add('media-select-mode');
-  _refreshMediaSelectBar();
-  _updateMediaSelectToggle();
-}
-function _refreshMediaSelectBar(){
-  const bar=byId('mediaSelectBar'); if(!bar) return;
-  if(!state.mediaSelectMode){ bar.style.display='none'; return; }
-  bar.style.display='';
-  const c=byId('msbCount'); if(c) c.textContent=String(state.mediaSelected.size);
-}
-function _toggleMediaSelected(eventId){
-  if(!eventId) return;
-  if(state.mediaSelected.has(eventId)) state.mediaSelected.delete(eventId);
-  else state.mediaSelected.add(eventId);
-  const card=document.querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`);
-  if(card) card.classList.toggle('media-card--selected',state.mediaSelected.has(eventId));
-  _refreshMediaSelectBar();
-}
-window.toggleMediaSelectMode=function(){
-  if(state.mediaSelectMode) _exitMediaSelectMode();
-  else _enterMediaSelectMode();
-};
-window.bulkDeleteSelectedMedia=async function(){
-  const ids=Array.from(state.mediaSelected);
-  const camId=state.mediaCamera;
-  if(!camId||!ids.length) return;
-  if(!await showConfirm(`${ids.length} ausgewählte Einträge wirklich löschen?`)) return;
-  try{
-    const r=await j(`/api/camera/${encodeURIComponent(camId)}/events/delete-bulk`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_ids:ids})});
-    const okSet=new Set(ids.filter(id=>!(r.failed||[]).includes(id)));
-    state._allMedia=(state._allMedia||[]).filter(x=>!okSet.has(x.event_id));
-    const ps_d=calcItemsPerPage();
-    state.mediaTotalPages=Math.max(1,Math.ceil(state._allMedia.length/ps_d));
-    state.mediaPage=Math.min(state.mediaPage||0,state.mediaTotalPages-1);
-    state.media=state._allMedia.slice(state.mediaPage*ps_d,(state.mediaPage+1)*ps_d);
-    _exitMediaSelectMode();
-    renderMediaGrid();
-    renderMediaPagination();
-    refreshTimelineAndStats();
-    const failed=(r.failed||[]).length;
-    showToast(failed?`${r.deleted} gelöscht, ${failed} fehlgeschlagen`:`${r.deleted} gelöscht`,failed?'error':'success');
-  }catch(e){showToast('Bulk-Löschen fehlgeschlagen: '+e.message,'error');}
-};
 // Legacy alias — pills are now rendered dynamically via renderMediaFilterPills.
 function syncMediaPills(){ renderMediaFilterPills('drilldown'); }
-// ── Media grid resize observer ───────────────────────────────────────────────
-(function(){
-  const grid=byId('mediaGrid');
-  if(!grid||typeof ResizeObserver==='undefined') return;
-  let lastW=0;
-  const ro=new ResizeObserver(entries=>{
-    const w=entries[0]?.contentRect?.width||0;
-    if(!w||Math.abs(w-lastW)<192) return;
-    lastW=w;
-    if(byId('mediaDrilldown')?.style.display==='none') return;
-    const firstCard=grid.querySelector('.media-card');
-    if(!firstCard) return;
-    const cardW=firstCard.getBoundingClientRect().width;
-    if(cardW<=0) return;
-    const newCols=Math.max(1,Math.floor(w/cardW));
-    if(newCols===_lastKnownCols) return;
-    _lastKnownCols=newCols;
-    if(!state._allMedia?.length) return;
-    const ps=calcItemsPerPage();
-    _cachedPageSize=ps;
-    state.mediaTotalPages=Math.max(1,Math.ceil(state._allMedia.length/ps));
-    state.mediaPage=0;
-    state.media=state._allMedia.slice(0,ps);
-    renderMediaGrid();
-    renderMediaPagination();
-  });
-  ro.observe(grid);
-})();
 window.deleteMediaCard=async(btn)=>{
   const card=btn.closest('.media-card');
   const eventId=card?.dataset.eventId;
@@ -4454,8 +4274,8 @@ window.addEventListener('resize',()=>{
   _mediaResizeTimer=setTimeout(()=>{
     if(byId('mediaDrilldown')?.style.display!=='none'){
       const ns=calcItemsPerPage();
-      if(Math.abs(ns-_cachedPageSize)>=4){
-        _cachedPageSize=ns;
+      if(Math.abs(ns-window._cachedPageSize)>=4){
+        window._cachedPageSize=ns;
         state.mediaTotalPages=Math.max(1,Math.ceil((state._allMedia||[]).length/ns));
         state.mediaPage=0;
         state.media=(state._allMedia||[]).slice(0,ns);

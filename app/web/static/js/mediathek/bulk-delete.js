@@ -10,7 +10,9 @@ import { j } from '../core/api.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import { refreshTimelineAndStats } from '../chrome/storage-stats.js';
 
-function _updateMediaSelectToggle(){
+// Exported so the mediathek/orchestration.js drilldown openers can
+// re-use them without reaching through window. (Stage 23 extract.)
+export function _updateMediaSelectToggle(){
   const btn = byId('mediaSelectToggleBtn');
   if (!btn) return;
   btn.style.display = state.mediaCamera ? 'inline-flex' : 'none';
@@ -19,7 +21,7 @@ function _updateMediaSelectToggle(){
   btn.classList.toggle('btn-neutral', !state.mediaSelectMode);
 }
 
-function _exitMediaSelectMode(){
+export function _exitMediaSelectMode(){
   state.mediaSelectMode = false;
   state.mediaSelected.clear();
   document.body.classList.remove('media-select-mode');

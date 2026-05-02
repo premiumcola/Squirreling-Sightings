@@ -35,8 +35,18 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 # Schema version of the tracks.json file. Bump when the shape changes;
-# the reindex-all endpoint can use this to enqueue stale sidecars.
-TRACKS_SCHEMA = 1
+# the reindex-all endpoint uses schema mismatch as the trigger to re-queue
+# stale sidecars.
+#
+#   v1 — initial release (schema, video_path, fps, frame_count, duration_s,
+#        best_frame, tracks, built_at).
+#   v2 — adds top-level "filter_applied": list[str] | None recording the
+#        camera's object_filter at write time. Detections with labels
+#        outside the filter are dropped BEFORE track association, so the
+#        sidecar only carries tracks the camera would have notified on.
+#        None means "no filter, all classes accepted" (distinct from an
+#        empty list).
+TRACKS_SCHEMA = 2
 
 # Detection-job timing target. A 30-second clip should finish in
 # under ~10 s on CPU; anything slower triggers a one-line WARN so the
@@ -165,12 +175,17 @@ class TrackingWorker(threading.Thread):
     in this module; access the singleton via `tracking_worker.singleton()`."""
 
     def __init__(self, *, storage_root: Path,
-                 detection_cfg_getter: Callable[[], dict] | None = None):
+                 detection_cfg_getter: Callable[[], dict] | None = None,
+                 cam_cfg_getter: Callable[[str], dict] | None = None):
         super().__init__(name="tracking-worker", daemon=True)
         self._q: queue.Queue[TrackingJob | None] = queue.Queue()
         self._stop = threading.Event()
         self._storage_root = Path(storage_root)
         self._cfg_getter = detection_cfg_getter or (lambda: {})
+        # Per-camera live config lookup (typically settings.get_camera).
+        # Used to pull each job's object_filter so the worker mirrors the
+        # camera_runtime/_main_loop label filter exactly.
+        self._cam_cfg_getter = cam_cfg_getter or (lambda _cam_id: {})
         self._detector = None        # built lazily on first job
         self._detector_cfg_id = None  # id() of cfg dict — rebuild on swap
         self._jobs_done = 0
@@ -290,6 +305,19 @@ class TrackingWorker(threading.Thread):
             duration_s = frame_count / fps
             sample_interval = max(1, int(round(fps)))  # ~1 Hz
             detector = self._ensure_detector()
+            # Per-camera object_filter — drop detections outside the
+            # allowed label set BEFORE track association so filtered
+            # classes can't spawn or extend tracks. Mirrors the runtime
+            # behaviour in camera_runtime/_main_loop. None == no filter
+            # (all classes pass), [] == filter active but allows nothing.
+            try:
+                cam_cfg = self._cam_cfg_getter(job.camera_id) or {}
+            except Exception:
+                cam_cfg = {}
+            of_raw = cam_cfg.get("object_filter")
+            allowed: set[str] | None = (
+                {str(x) for x in of_raw} if isinstance(of_raw, list) and of_raw else None
+            )
             tracks_active: list[_Track] = []
             tracks_closed: list[_Track] = []
             frame_idx = 0
@@ -307,6 +335,8 @@ class TrackingWorker(threading.Thread):
                     dets = detector.detect_frame(frame)
                 else:
                     dets = []
+                if allowed is not None:
+                    dets = [d for d in dets if d.label in allowed]
                 # Match each detection to the best-IoU active track of the
                 # same label. Greedy assignment per frame — for typical
                 # 1-3 detections this is correct and orders-of-magnitude
@@ -384,6 +414,10 @@ class TrackingWorker(threading.Thread):
                 "frame_count": frame_count,
                 "duration_s": round(duration_s, 3),
                 "best_frame": best_top,
+                # `filter_applied` records the allowed object_filter at
+                # write time. None = no filter (all classes accepted),
+                # list = exactly these classes were considered.
+                "filter_applied": sorted(allowed) if allowed is not None else None,
                 "tracks": [t.to_dict() for t in tracks_closed],
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
@@ -421,16 +455,18 @@ _worker_lock = threading.Lock()
 
 
 def build_worker(*, storage_root: Path,
-                 detection_cfg_getter: Callable[[], dict] | None = None) -> TrackingWorker:
+                 detection_cfg_getter: Callable[[], dict] | None = None,
+                 cam_cfg_getter: Callable[[str], dict] | None = None) -> TrackingWorker:
     """Construct and start the singleton. Idempotent — second call
-    returns the existing instance even if a different cfg getter is
-    provided (the getter is captured on first build)."""
+    returns the existing instance even if different getters are provided
+    (both are captured on first build)."""
     global _worker
     with _worker_lock:
         if _worker is not None and _worker.is_alive():
             return _worker
         _worker = TrackingWorker(storage_root=storage_root,
-                                 detection_cfg_getter=detection_cfg_getter)
+                                 detection_cfg_getter=detection_cfg_getter,
+                                 cam_cfg_getter=cam_cfg_getter)
         _worker.start()
         return _worker
 

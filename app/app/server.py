@@ -528,7 +528,8 @@ _tracking_cfg_getter = lambda: (
     .get("detection", {})
 )
 build_tracking_worker(storage_root=storage_root,
-                      detection_cfg_getter=_tracking_cfg_getter)
+                      detection_cfg_getter=_tracking_cfg_getter,
+                      cam_cfg_getter=lambda cam_id: settings.get_camera(cam_id) or {})
 logging.getLogger("app.app.boot").info("[boot] ── inventory complete ──")
 
 

@@ -12,6 +12,7 @@ import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { j } from "../core/api.js";
 import { showToast } from "../core/toast.js";
+import { loadAll } from "../live-update.js";
 
 window._toggleCoralSetting=async function(key,inputEl){
   const nowOn=!!inputEl.checked;

@@ -73,7 +73,10 @@ export default [
       // Warnings + errors stay legal — those are real diagnostic
       // signals, not log spam.
       'no-console': ['error', { allow: ['warn', 'error'] }],
-      eqeqeq: 'error',
+      // `eqeqeq` enforces ===/!== EXCEPT for `x == null` / `x != null` —
+      // those are the canonical JS one-shot null+undefined check and
+      // converting them to `x === null || x === undefined` is just noise.
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-var': 'error',
       'prefer-const': 'warn',
 

@@ -768,7 +768,7 @@ export const WEATHER_THRESHOLD_HINTS = {
   sunset:     { unit: '°',    min: -10,max: 15,   step: 1,    key: 'alt_max' },
 };
 
-const WEATHER_FIELD_LABEL_DE = {
+export const WEATHER_FIELD_LABEL_DE = {
   precipitation:       'Niederschlag',
   snowfall:            'Schneefall',
   lightning_potential: 'Blitz-Potential',
@@ -777,7 +777,7 @@ const WEATHER_FIELD_LABEL_DE = {
   cloud_cover:         'Bewölkung',
   weather_code:        'WMO-Code',
 };
-const WEATHER_FIELD_UNIT_DE = {
+export const WEATHER_FIELD_UNIT_DE = {
   precipitation:       'mm/h',
   snowfall:            'cm/h',
   lightning_potential: 'J/kg',

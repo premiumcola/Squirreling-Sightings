@@ -243,7 +243,7 @@ window._tlApplyCustomPreset=function(camId,profKey,val){
   const tEl=byId(`tlProfTarget_${camId}_${profKey}`);
   if(pEl) pEl.value=periodS;
   if(tEl) tEl.value=targetS;
-  _tlRefreshDesc(camId,profKey);
+  window._tlRefreshDesc(camId,profKey);
 };
 window.selectTlCam=function(camId){
   document.querySelectorAll('#tlCamTabs .set-tab').forEach(b=>b.classList.toggle('active',b.id===`tlTab_${camId}`));
@@ -321,7 +321,7 @@ window.saveTlCameraProfiles=async function(camId){
   await loadAll();
   _updateTlActiveTags(state.cameras||[]);
   const content=byId('tlSettingsContent');
-  if(content){content.innerHTML=_renderTlCameraList(state.cameras||[]);selectTlCam(camId);}
+  if(content){content.innerHTML=_renderTlCameraList(state.cameras||[]);window.selectTlCam(camId);}
 };
 
 // ── Timelapse Status Bar (Dashboard in Cameras section) ───────────────────────

@@ -10,6 +10,7 @@ import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { showToast, showConfirm } from "../core/toast.js";
 import { WEATHER_TYPES } from "../core/weather-types.js";
+import { WEATHER_FIELD_LABEL_DE, WEATHER_FIELD_UNIT_DE } from "./stats.js";
 
 async function loadWeatherSightings(filter){
   // Filter migrates from single-string to Set semantics: state.weather.filter
@@ -390,7 +391,7 @@ function _handleWeatherHashAnchor(){
   const target = byId('weather') || byId('weatherSightingsBlock');
   if (h === '#weather') {
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (typeof _setActiveNav === 'function') _setActiveNav('weather');
+    if (typeof window._setActiveNav === 'function') window._setActiveNav('weather');
     return;
   }
   if (!h.startsWith('#weather/')) return;
@@ -398,7 +399,7 @@ function _handleWeatherHashAnchor(){
   const items = state.weather.items || [];
   const idx = items.findIndex(s => s.id === id);
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  if (typeof _setActiveNav === 'function') _setActiveNav('weather');
+  if (typeof window._setActiveNav === 'function') window._setActiveNav('weather');
   if (idx >= 0 && typeof openWeatherLightbox === 'function') {
     setTimeout(() => openWeatherLightbox(idx), 350);
   }

@@ -17,6 +17,8 @@ import { RTSP_PATH_OPTS, _rtspEnc, _unmaskUrlsForSubmit } from "./rtsp.js";
 import { getWhitelistState } from "./whitelist.js";
 import { panelState, _restoreEditWrapper } from "./panel.js";
 import { openWizard } from "./wizard.js";
+import { _collectClassSeverity, _collectAlertCooldown } from "../alerting.js";
+import { _collectLabelThresholds, _collectConfirmationWindow } from "./detection.js";
 
 // alias so discovery modal code still works
 const RTSP_PATHS=RTSP_PATH_OPTS;

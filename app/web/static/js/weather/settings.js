@@ -731,3 +731,11 @@ export {
   hydrateWeatherSettings,
 
 };
+
+// ── window.* bridges ────────────────────────────────────────────────────────
+// loadAll() in live-update.js looks these up by global name; without
+// the bridges the weather-settings panel never hydrates and the
+// initWeatherTabs DOM listeners never bind. Each evaporates when its
+// caller migrates to a direct named import.
+window.initWeatherTabs       = initWeatherTabs;
+window.hydrateWeatherSettings = hydrateWeatherSettings;

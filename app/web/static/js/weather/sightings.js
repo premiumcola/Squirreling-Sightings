@@ -429,3 +429,12 @@ export {
   openWeatherRecapLightbox,
 
 };
+
+// ── window.* bridges ────────────────────────────────────────────────────────
+// loadAll() + router.js (Telegram deep-link routing) reach for these
+// by global name. The hash-anchor handler at module-import time
+// already binds; these bridges are about cross-module callers.
+window.loadWeatherSightings = loadWeatherSightings;
+window.loadWeatherRecaps    = loadWeatherRecaps;
+window.openWeatherLightbox  = openWeatherLightbox;
+window.openWeatherRecap     = openWeatherRecapLightbox;

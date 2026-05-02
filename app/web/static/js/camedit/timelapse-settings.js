@@ -393,3 +393,10 @@ export {
   _updateTlActiveTags,
 
 };
+
+// ── window.* bridges ────────────────────────────────────────────────────────
+// loadAll() in live-update.js looks these up by global name; without
+// them the dashboard timelapse status pill stays empty and the cam-
+// edit Timelapse-Tab "active" tags never refresh.
+window.loadTlStatus        = loadTlStatus;
+window._updateTlActiveTags = _updateTlActiveTags;

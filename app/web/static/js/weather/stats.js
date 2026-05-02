@@ -806,3 +806,8 @@ export {
   initWeatherStats,
 
 };
+
+// ── window.* bridge ─────────────────────────────────────────────────────────
+// loadAll() in live-update.js calls this by global name to wire the
+// chart's IntersectionObserver + pill-bar listeners.
+window.initWeatherStats = initWeatherStats;

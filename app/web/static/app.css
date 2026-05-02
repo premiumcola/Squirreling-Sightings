@@ -1012,6 +1012,14 @@ textarea{width:100%;padding:12px 13px;border-radius:14px;background:var(--surfac
 .erk-card input[type="range"]::-moz-range-track{
   height:3px;background:rgba(255,255,255,.14);border-radius:2px;
 }
+/* WebKit/Chrome/iOS Safari needs an explicit runnable-track when
+   -webkit-appearance:none is set on the input — otherwise no rail is
+   drawn and only the thumbs render. Mirrors the Firefox track above
+   so the visual is identical across engines. */
+.erk-card input[type="range"]::-webkit-slider-runnable-track{
+  height:3px;background:rgba(255,255,255,.14);border-radius:2px;
+  border:0;
+}
 
 /* Two-column row used by step 3 — confirm_n + confirm_seconds side by
    side. Drops to single column on phones below 380 px. */

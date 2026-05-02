@@ -31,6 +31,17 @@ import {
   showCameraReloadAnimation, reloadCamera,
   _cvCardClick,
 } from './dashboard.js';
+// Stage 4 — lightbox pure DOM helpers. The state singletons
+// (_lbItem, _lbIndex, _lbDeletePending) and the orchestration
+// (openLightbox / closeLightbox / keydown) stay in this file for now
+// because they reach into mediathek + timelapse + live-view modules
+// that haven't extracted yet; once those follow, the orchestration
+// migrates to lightbox.js too.
+import {
+  _LB_CHECK_SVG, _LB_CHECK2_SVG, _LB_HINT, _LB_TRASH_HTML,
+  _updateLbConfirmBtn,
+  _lbClearDetections, _lbResetToPhoto, _lbShowError,
+} from './lightbox.js';
 
 // _hmTip stays here — fixed-position heatmap tooltip used only by the
 // timeline view; will move with the timeline module in a later stage.
@@ -5486,23 +5497,8 @@ function _lbHandleDeleteKey(){
   }
   byId('lightboxDelete').click();
 }
-const _LB_CHECK_SVG=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,12 9,18 20,6"/></svg>`;
-const _LB_CHECK2_SVG=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,13 6,18 13,9"/><polyline points="10,13 15,18 23,6"/></svg>`;
-const _LB_HINT='<span style="font-size:9px;line-height:1;opacity:.7;white-space:nowrap">↑ behalten</span>';
-const _LB_TRASH_HTML='<span style="font-size:14px;line-height:1;opacity:.8">↓</span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
-function _updateLbConfirmBtn(confirmed){
-  const btn=byId('lightboxConfirm');
-  if(!btn) return;
-  if(confirmed){
-    btn.style.background='#166534';
-    btn.innerHTML=_LB_CHECK2_SVG;
-    btn.title='Bestätigt';
-  } else {
-    btn.style.background='';
-    btn.innerHTML=_LB_CHECK_SVG;
-    btn.title='Behalten (↑)';
-  }
-}
+// _LB_CHECK_SVG / _LB_CHECK2_SVG / _LB_HINT / _LB_TRASH_HTML and
+// _updateLbConfirmBtn now live in lightbox.js (Stage 4).
 // ── Detection-bbox overlay ───────────────────────────────────────────────────
 // Draws coloured rectangles + labels over the active lightbox media. Bbox
 // coords come from _lbItem.detections[].bbox in the original frame's pixel
@@ -5562,12 +5558,7 @@ function _lbDrawDetections(){
     }
   }
 }
-function _lbClearDetections(){
-  const cv=byId('lightboxDetections'); if(!cv) return;
-  const ctx=cv.getContext('2d');
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.clearRect(0,0,cv.width,cv.height);
-}
+// _lbClearDetections now lives in lightbox.js (Stage 4).
 // Wire the one-time draw/clear hooks. load fires even for cached images,
 // so reopening the same snapshot still repaints. A single RAF-debounced
 // resize handler handles window resize while the lightbox is visible.
@@ -5584,32 +5575,7 @@ function _lbClearDetections(){
   });
 })();
 
-function _lbResetToPhoto(){
-  // Ensure photo mode is active (cleanup from any prior timelapse view)
-  const videoEl=byId('lightboxVideo');
-  if(videoEl){videoEl.pause();videoEl.src='';videoEl.style.display='none';}
-  byId('lightboxImg').style.display='';
-  _lbClearDetections();
-  const errEl=byId('lightboxErrorMsg');
-  if(errEl) errEl.style.display='none';
-  const confirmBtn=byId('lightboxConfirm');
-  if(confirmBtn) confirmBtn.style.display='';
-}
-function _lbShowError(text){
-  let errEl=byId('lightboxErrorMsg');
-  if(!errEl){
-    errEl=document.createElement('div');
-    errEl.id='lightboxErrorMsg';
-    errEl.style.cssText='align-items:center;justify-content:center;width:100%;min-height:240px;max-height:80vh;color:rgba(255,255,255,.55);font-size:15px;font-weight:500;background:#080510;border-radius:18px';
-    const wrap=byId('lightboxMediaWrap');
-    if(wrap) wrap.appendChild(errEl);
-  }
-  errEl.textContent=text;
-  errEl.style.display='flex';
-  byId('lightboxImg').style.display='none';
-  const videoEl=byId('lightboxVideo');
-  if(videoEl){videoEl.style.display='none';videoEl.pause();videoEl.src='';}
-}
+// _lbResetToPhoto and _lbShowError now live in lightbox.js (Stage 4).
 function openLightbox(item){
   if(item.type==='timelapse'){openTLPlayer(item);return;}
   // iOS hand-off — for video items, skip the custom shell entirely and

@@ -352,16 +352,23 @@
                   <span class="erk-test-btn-lbl">Erkennung jetzt simulieren</span>
                 </button>
                 <div class="erk-test-hint">prüft das aktuelle Snapshot · zeigt was Coral findet</div>
-                <div class="erk-test-result" id="erkSimResult" hidden>
+                <div class="erk-test-result erk-sim-sheet" id="erkSimResult" hidden>
                   <div class="erk-test-result-head">
                     <span class="erk-test-result-title" id="erkSimTitle">Ergebnis</span>
                     <button type="button" class="erk-test-close" id="erkSimClose" aria-label="schließen">×</button>
                   </div>
-                  <div class="erk-test-result-imgwrap">
-                    <img id="erkSimImg" alt="Simulations-Snapshot" />
-                    <svg id="erkSimOverlay" preserveAspectRatio="none"></svg>
+                  <div class="erk-sim-tabs" role="tablist" aria-label="Simulationsmodus">
+                    <button type="button" class="erk-sim-tab is-active" id="erkSimTabBtn-snapshot" role="tab" aria-selected="true" aria-controls="erkSimTab-snapshot" tabindex="0">Snapshot</button>
+                    <button type="button" class="erk-sim-tab" id="erkSimTabBtn-video" role="tab" aria-selected="false" aria-controls="erkSimTab-video" tabindex="-1">Video</button>
                   </div>
-                  <div class="erk-test-result-list" id="erkSimList"></div>
+                  <div class="erk-sim-tab-panel" id="erkSimTab-snapshot" role="tabpanel" aria-labelledby="erkSimTabBtn-snapshot">
+                    <div class="erk-test-result-imgwrap">
+                      <img id="erkSimImg" alt="Simulations-Snapshot" />
+                      <svg id="erkSimOverlay" preserveAspectRatio="none"></svg>
+                    </div>
+                    <div class="erk-test-result-list" id="erkSimList"></div>
+                  </div>
+                  <div class="erk-sim-tab-panel" id="erkSimTab-video" role="tabpanel" aria-labelledby="erkSimTabBtn-video" hidden></div>
                 </div>
               </div>
             </div>

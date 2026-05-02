@@ -284,6 +284,55 @@ export function _bindErkSimulate(){
       if (wrap) wrap.hidden = true;
     });
   }
+  _bindErkSimTabs();
+}
+
+// Tab strip wiring for the simulation sheet (Snapshot / Video). Click
+// + arrow-key navigation, ARIA states stay in sync. Idempotent — re-run
+// whenever a camera is opened in the editor; the dataset.wired guard
+// keeps it cheap.
+export function _bindErkSimTabs(){
+  const strip = document.querySelector('#erkSimResult .erk-sim-tabs');
+  if (!strip || strip.dataset.wired) return;
+  strip.dataset.wired = '1';
+  const tabs = Array.from(strip.querySelectorAll('[role="tab"]'));
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => _activateErkSimTab(tab.id.replace('erkSimTabBtn-', '')));
+    tab.addEventListener('keydown', (e) => {
+      const idx = tabs.indexOf(tab);
+      let next = -1;
+      if (e.key === 'ArrowRight') next = (idx + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      tabs[next].focus();
+      _activateErkSimTab(tabs[next].id.replace('erkSimTabBtn-', ''));
+    });
+  });
+}
+
+// Switch the visible tab. `name` is one of 'snapshot' | 'video'. Caller
+// is responsible for ensuring the simulation sheet itself is visible
+// (the simulate button does that on a successful response).
+export function _activateErkSimTab(name){
+  const strip = document.querySelector('#erkSimResult .erk-sim-tabs');
+  if (!strip) return;
+  strip.querySelectorAll('[role="tab"]').forEach(t => {
+    const active = t.id === `erkSimTabBtn-${name}`;
+    t.classList.toggle('is-active', active);
+    t.setAttribute('aria-selected', active ? 'true' : 'false');
+    t.tabIndex = active ? 0 : -1;
+  });
+  document.querySelectorAll('#erkSimResult .erk-sim-tab-panel').forEach(p => {
+    p.hidden = (p.id !== `erkSimTab-${name}`);
+  });
+  // Notify any listener (e.g. tracking-sim.js) that the video tab just
+  // became visible so it can lazy-render its picker.
+  if (name === 'video'){
+    document.dispatchEvent(new CustomEvent('erk-sim-tab:video'));
+  }
 }
 
 async function _onErkSimulateClick(ev){
@@ -323,6 +372,9 @@ const _ERK_VERDICT_TXT = {
 function _renderErkSimResult(data){
   const wrap = byId('erkSimResult');
   if (!wrap) return;
+  // Always land on the Snapshot tab when the simulate button runs —
+  // the Video tab is opt-in and remembers its own selection separately.
+  _activateErkSimTab('snapshot');
   const img  = byId('erkSimImg');
   const ovl  = byId('erkSimOverlay');
   const list = byId('erkSimList');

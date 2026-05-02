@@ -51,8 +51,9 @@ round, byte-identity wins.
 | 23 | `23-weather-3.css` | 136 | Wetterdaten & Prognose chart block |
 | 24 | `24-cam-edit-4.css` | 67 | Camera-edit live id preview |
 | 25 | `25-mobile.css` | 584 | iOS / mobile foundation through end of file |
+| 26 | `26-erk-sim-sheet.css` | — | Camera-edit Erkennung-tab tabbed sheet (Snapshot / Video) |
 
-Total: 3486 lines (matches the pre-split `app.css` exactly).
+Total: 3486 lines from the pre-split `app.css`, plus per-file additions.
 
 ## Editing partials
 

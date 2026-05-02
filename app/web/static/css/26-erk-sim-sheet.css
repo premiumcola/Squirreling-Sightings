@@ -1,0 +1,52 @@
+/* ── Erkennung-Tab: Simulations-Sheet (tabbed shell) ───────────────────────
+   Wraps the legacy #erkSimResult panel in a tabbed sheet so the snapshot
+   inference and the new video-tracking timeline (camedit/tracking-sim.js)
+   can share the same modal surface without stacking two unrelated UIs on
+   top of each other. Snapshot tab keeps the existing markup/behaviour;
+   Video tab is populated lazily by tracking-sim.js when first activated.
+*/
+
+.erk-sim-sheet .erk-sim-tabs{
+  display:flex;gap:6px;padding:4px;
+  background:rgba(0,0,0,.32);
+  border-radius:12px;
+  margin:0 0 12px 0;
+}
+
+.erk-sim-tab{
+  flex:1 1 auto;
+  min-height:36px;
+  padding:8px 14px;
+  background:transparent;
+  border:0;
+  color:rgba(255,255,255,.62);
+  font:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;
+  border-radius:9px;
+  display:inline-flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .15s,color .15s;
+}
+.erk-sim-tab:hover{
+  color:#fff;
+  background:rgba(255,255,255,.05);
+}
+.erk-sim-tab.is-active{
+  background:var(--accent);
+  color:#fff;
+}
+.erk-sim-tab:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+
+.erk-sim-tab-panel[hidden]{display:none}
+
+@media (max-width:768px){
+  .erk-sim-tab{
+    min-height:44px;
+    padding:10px 14px;
+    font-size:14px;
+  }
+  .erk-sim-sheet .erk-sim-tabs{width:100%}
+}

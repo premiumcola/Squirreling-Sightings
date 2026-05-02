@@ -5462,7 +5462,7 @@ function _wsBuildLinePath(samples, key, x0, y0, w, h){
   let d = '';
   for (const run of runs){
     if (run.length >= 6){
-      d += (d ? ' ' : '') + _wsCatmullRomPath(run, 0.5);
+      d += (d ? ' ' : '') + _wsCatmullRomPath(run, 0.3);
     } else {
       d += (d ? ' M' : 'M') + run[0][0].toFixed(1) + ',' + run[0][1].toFixed(1);
       for (let j = 1; j < run.length; j++){
@@ -5600,6 +5600,108 @@ function renderWeatherStats(){
   renderWeatherStatsExplainer();
 }
 
+// Round to a "nice number" — 1 / 2 / 5 × 10^n. round=true picks the
+// nearest nice value (good for tick steps); round=false picks the
+// next nice value ≥ input (good for axis bounds). Used by the
+// Wetterstatistik chart for human-readable Y labels (0/5/10/15
+// instead of 0.13/4.97/9.81/14.65).
+function _niceNum(value, round){
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const exp = Math.floor(Math.log10(value));
+  const f = value / Math.pow(10, exp);
+  let nf;
+  if (round){
+    if (f < 1.5)      nf = 1;
+    else if (f < 3)   nf = 2;
+    else if (f < 7)   nf = 5;
+    else              nf = 10;
+  } else {
+    if (f <= 1)       nf = 1;
+    else if (f <= 2)  nf = 2;
+    else if (f <= 5)  nf = 5;
+    else              nf = 10;
+  }
+  return nf * Math.pow(10, exp);
+}
+
+// Generate ~`target` evenly-spaced "nice" tick values across [lo, hi].
+// Returns the tick array plus the snapped lo/hi so the caller can use
+// the rounded bounds as the Y-axis baseline.
+function _niceAxisTicks(lo, hi, target){
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi - lo < 1e-9){
+    return { ticks: [lo], step: 1, niceLo: lo, niceHi: hi };
+  }
+  const range = _niceNum(hi - lo, false);
+  const step  = _niceNum(range / Math.max(1, target - 1), true);
+  const niceLo = Math.floor(lo / step) * step;
+  const niceHi = Math.ceil(hi / step) * step;
+  const ticks = [];
+  for (let v = niceLo; v <= niceHi + step / 2; v += step) ticks.push(v);
+  return { ticks, step, niceLo, niceHi };
+}
+
+// Time-tick step ladder used by the chart's X-axis. Each entry is a
+// candidate spacing in milliseconds; the picker snaps to the entry
+// that gets the visible tick count closest to `target` for the
+// current window. Covers 5 min through 1 year so a 24 h zoom shows
+// 6 hourly ticks and a 6 mo zoom shows monthly ticks without a
+// fixed if-else ladder.
+const _WS_TIME_STEP_LADDER_MS = [
+  5*60_000, 10*60_000, 15*60_000, 30*60_000,
+  60*60_000, 2*60*60_000, 3*60*60_000, 6*60*60_000, 12*60*60_000,
+  24*60*60_000, 2*24*60*60_000, 7*24*60*60_000, 14*24*60*60_000,
+  30*24*60*60_000, 90*24*60*60_000, 180*24*60*60_000, 365*24*60*60_000,
+];
+
+function _wsPickTimeStep(spanMs, target){
+  let best = _WS_TIME_STEP_LADDER_MS[0];
+  let bestDiff = Infinity;
+  for (const s of _WS_TIME_STEP_LADDER_MS){
+    const count = spanMs / s;
+    if (count < 2) continue;  // would yield <2 ticks → skip
+    const diff = Math.abs(count - target);
+    if (diff < bestDiff){ bestDiff = diff; best = s; }
+  }
+  return best;
+}
+
+// Snap a timestamp to the next "nice" boundary AT OR AFTER it,
+// matching the step magnitude. Sub-day → round to the next hour;
+// 1 d → midnight; ≥ 1 mo → start-of-month.
+function _wsAnchorTickStart(tFirst, stepMs){
+  const d = new Date(tFirst);
+  if (stepMs < 24*60*60_000){
+    d.setMinutes(0, 0, 0);
+    if (d.getTime() < tFirst) d.setHours(d.getHours() + 1);
+    return d.getTime();
+  }
+  if (stepMs < 30*24*60*60_000){
+    d.setHours(0, 0, 0, 0);
+    if (d.getTime() < tFirst) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  // Month-magnitude or larger: anchor at the 1st of the next month.
+  d.setHours(0, 0, 0, 0);
+  d.setDate(1);
+  if (d.getTime() < tFirst) d.setMonth(d.getMonth() + 1);
+  return d.getTime();
+}
+
+const _WS_MONTHS_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+
+function _wsFmtTimeTick(t, stepMs){
+  const d = new Date(t);
+  const p2 = n => (n < 10 ? '0' : '') + n;
+  if (stepMs < 24*60*60_000){
+    return p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  if (stepMs < 60*24*60*60_000){
+    return p2(d.getDate()) + '. ' + _WS_MONTHS_DE[d.getMonth()];
+  }
+  return _WS_MONTHS_DE[d.getMonth()] + ' ' + String(d.getFullYear()).slice(-2);
+}
+
 function renderWeatherStatsChart(){
   const wrap = byId('weatherStatsChartWrap'); if (!wrap) return;
   const data = _wsStatsState.data;
@@ -5621,93 +5723,48 @@ function renderWeatherStatsChart(){
   const fields = isolated ? [isolated] : _WS_FIELD_ORDER;
   const hours = _wsStatsState.hours || 24;
 
-  // Time-based tick spacing keyed off the configured window:
-  //   1 h  → every 10 min  · 6 ticks
-  //   6 h  → every 1 h     · 6 ticks
-  //   24 h → every 4 h     · 6 ticks
-  //   7 d  → every 1 day   · 7 ticks
-  //   30 d → every 5 days  · 6 ticks
-  // Format adapts: HH:MM for ≤24 h, dd.MM for ≥7 d. Falls back to the
-  // legacy index-based 6-tick scheme if timestamps fail to parse.
+  // X-axis tick generation. Picks a step from a candidate ladder so
+  // the visible tick count stays close to 6 regardless of window
+  // size; format adapts to step magnitude (HH:MM / dd. MMM / MMM YY).
+  // Falls back to the legacy index-based 6-tick scheme if timestamps
+  // don't parse.
   const tFirst = new Date(samples[0]?.ts).getTime();
   const tLast = new Date(samples[samples.length - 1]?.ts).getTime();
   const tSpan = tLast - tFirst;
   let tickSvg = '';
-  let xAxisFmt = (d) => {
-    const p2 = n => (n < 10 ? '0' : '') + n;
-    return p2(d.getHours()) + ':' + p2(d.getMinutes());
-  };
-  if (hours >= 168){
-    xAxisFmt = (d) => {
-      const p2 = n => (n < 10 ? '0' : '') + n;
-      return p2(d.getDate()) + '.' + p2(d.getMonth() + 1);
-    };
-  }
   if (Number.isFinite(tFirst) && Number.isFinite(tLast) && tSpan > 0){
-    let stepMs;
-    if (hours <= 1)        stepMs = 10 * 60 * 1000;          // 10 min
-    else if (hours <= 6)   stepMs = 60 * 60 * 1000;          // 1 h
-    else if (hours <= 24)  stepMs = 4 * 60 * 60 * 1000;      // 4 h
-    else if (hours <= 168) stepMs = 24 * 60 * 60 * 1000;     // 1 d
-    else                   stepMs = 5 * 24 * 60 * 60 * 1000; // 5 d
-    // Anchor first tick at first ceil-step boundary inside the window.
-    const firstTick = Math.ceil(tFirst / stepMs) * stepMs;
+    const stepMs = _wsPickTimeStep(tSpan, 6);
+    const firstTick = _wsAnchorTickStart(tFirst, stepMs);
     const ticks = [];
-    for (let t = firstTick; t <= tLast; t += stepMs){
-      ticks.push(t);
-    }
-    // Cap to a sane number so a 1-min-data 30-d zoom doesn't render 720 ticks.
-    while (ticks.length > 8) ticks.splice(1, 2);  // thin every other inner tick
-    // For ≤24 h windows that cross a midnight boundary, append a muted
-    // "· dd.MM" suffix to the first tick of each new day so consecutive
-    // "06:00 / 06:00" labels can be told apart. The dd.MM format already
-    // shows the date for ≥7 d windows, so suffix only kicks in here.
-    const isShortWindow = hours <= 24;
-    let multiDay = false;
-    if (isShortWindow){
-      const dayKeys = new Set();
-      for (const t of ticks){
-        const dt = new Date(t);
-        dayKeys.add(dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate());
-      }
-      multiDay = dayKeys.size > 1;
-    }
-    let lastDayKey = null;
-    const p2 = n => (n < 10 ? '0' : '') + n;
+    for (let t = firstTick; t <= tLast; t += stepMs) ticks.push(t);
     for (const t of ticks){
       const x = pad.l + ((t - tFirst) / tSpan) * cw;
-      const dt = new Date(t);
-      const dayKey = dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate();
-      const label = xAxisFmt(dt);
-      let suffix = '';
-      if (multiDay && dayKey !== lastDayKey){
-        suffix = ` · ${p2(dt.getDate())}.${p2(dt.getMonth() + 1)}`;
-      }
-      lastDayKey = dayKey;
-      tickSvg += `<line x1="${x.toFixed(1)}" y1="${(pad.t + ch).toFixed(1)}" x2="${x.toFixed(1)}" y2="${(pad.t + ch + 5).toFixed(1)}" stroke="rgba(255,255,255,.18)" stroke-width="1" shape-rendering="geometricPrecision"/>`;
-      const suffixSvg = suffix ? `<tspan fill="rgba(255,255,255,.4)" font-size="9">${suffix}</tspan>` : '';
-      tickSvg += `<text x="${x.toFixed(1)}" y="${(VB_H - 8).toFixed(1)}" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.55)" text-rendering="geometricPrecision" shape-rendering="geometricPrecision">${label}${suffixSvg}</text>`;
+      const label = _wsFmtTimeTick(t, stepMs);
+      tickSvg += `<line x1="${x.toFixed(1)}" y1="${(pad.t + ch).toFixed(1)}" x2="${x.toFixed(1)}" y2="${(pad.t + ch + 5).toFixed(1)}" stroke="rgba(255,255,255,.12)" stroke-width="1" shape-rendering="geometricPrecision"/>`;
+      tickSvg += `<text x="${x.toFixed(1)}" y="${(VB_H - 8).toFixed(1)}" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.55)" text-rendering="optimizeLegibility" shape-rendering="geometricPrecision">${label}</text>`;
     }
   } else {
-    // Legacy fallback — no parseable timestamps, fall back to 6 ticks
-    // anchored to data extremes.
     const last = samples.length - 1;
     const intervals = 5;
     for (let k = 0; k <= intervals; k++){
       const idx = Math.round(last * k / intervals);
       const x = pad.l + (idx / last) * cw;
       const anchor = k === 0 ? 'start' : k === intervals ? 'end' : 'middle';
-      tickSvg += `<text x="${x.toFixed(1)}" y="${(VB_H - 8).toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="rgba(255,255,255,.55)" text-rendering="geometricPrecision">${_wsFmtTick(samples[idx]?.ts, hours)}</text>`;
+      tickSvg += `<text x="${x.toFixed(1)}" y="${(VB_H - 8).toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="rgba(255,255,255,.55)" text-rendering="optimizeLegibility">${_wsFmtTick(samples[idx]?.ts, hours)}</text>`;
     }
   }
 
-  // Horizontal grid: 4 evenly-spaced lines across the plotting area.
-  // Subtle so they don't fight the data lines visually. Drawn UNDER
-  // the lines (precedes linesSvg in the final concat).
+  // Horizontal gridlines — the Y-axis loop further down emits its own
+  // gridline at every nice tick when the chart is in isolated mode
+  // (so the lines hit the labelled values exactly). In all-lines mode
+  // we draw 4 evenly-spaced lines as a fallback, since each line is
+  // independently normalised and there's no shared Y scale.
   let gridSvg = '';
-  for (let g = 0; g <= 4; g++){
-    const y = pad.t + (g / 4) * ch;
-    gridSvg += `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${(pad.l + cw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.06)" stroke-width="1" vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision"/>`;
+  if (!isolated){
+    for (let g = 0; g <= 4; g++){
+      const y = pad.t + (g / 4) * ch;
+      gridSvg += `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${(pad.l + cw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1" vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision"/>`;
+    }
   }
   // Lines — collect per-field meta so the threshold pass can renormalise
   // each tick against the same {lo, hi} the line was drawn against.
@@ -5719,7 +5776,7 @@ function renderWeatherStatsChart(){
     lineMetas[key] = meta;
     const colour = WEATHER_STATS_PALETTE[key] || '#94a3b8';
     const opacity = isolated && isolated !== key ? 0.15 : 1;
-    linesSvg += `<path d="${meta.path}" fill="none" stroke="${colour}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision" />`;
+    linesSvg += `<path d="${meta.path}" fill="none" stroke="${colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}" vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision" />`;
   }
   // Threshold overlay.
   //
@@ -5745,15 +5802,18 @@ function renderWeatherStatsChart(){
       if (norm >= -0.05 && norm <= 1.05){
         const y = pad.t + ch - Math.max(0, Math.min(1, norm)) * ch;
         const u = (data?.units || {})[isolated] || '';
-        // Floating annotation that sits ON the dashed line at the right
-        // edge. The CSS class adds a paint-order=stroke halo so the red
-        // text stays legible even when crossing a coloured data line.
-        const lbl = `▲ ${thr}${u ? ' ' + u : ''} Schwelle`;
+        const colour = WEATHER_STATS_PALETTE[isolated] || '#94a3b8';
+        // Grafana-style: thin dashed horizontal in the LINE's colour
+        // (not red) so the threshold reads as part of the same series,
+        // plus a colour-tinted small label outside the right edge of
+        // the plot. Keeps paint-order halo for legibility against the
+        // chart background.
+        const lbl = `${thr}${u ? ' ' + u : ''}`;
         thresholdSvg = `
           <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + cw}" y2="${y.toFixed(1)}"
-                stroke="#fb7185" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.85"
+                stroke="${colour}" stroke-width="1" stroke-dasharray="5 4" opacity="0.55"
                 vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision" />
-          <text class="ws-stats-threshold-label" x="${pad.l + cw - 8}" y="${(y - 4).toFixed(1)}" text-anchor="end">${lbl}</text>
+          <text class="ws-chart-threshold-label" x="${(pad.l + cw + 4).toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${colour}" opacity="0.85" text-rendering="optimizeLegibility">${lbl}</text>
         `;
       } else {
         noThresholdHint = '<div class="ws-stats-no-threshold">Schwelle außerhalb des sichtbaren Bereichs</div>';
@@ -5812,31 +5872,36 @@ function renderWeatherStatsChart(){
       `;
     }
   }
-  // Y-axis labels: when a line is isolated (or fields == 1), surface
-  // its min and max in the line's own colour at the top-left and
-  // bottom-left of the plotting area. In all-lines mode each line is
-  // independently normalised, so a shared Y label would be meaningless;
-  // skip the labels entirely in that mode (gridlines still anchor the
-  // visual reading).
+  // Y-axis labels — isolated mode only. 4 nice-rounded values (top,
+  // 2/3, 1/3, bottom) in the line's own colour, plus a horizontal
+  // gridline at each label's Y position so the lines reads against
+  // the labelled value exactly. niceNum() rounds to 1/2/5 × 10^n so
+  // labels read 0 / 5 / 10 / 15 instead of 0.13 / 4.97 / 9.81 / 14.65.
+  // All-lines mode: each line is independently normalised, no shared
+  // Y scale to label — the fixed 4-line gridSvg above provides the
+  // visual anchoring.
   let yAxisSvg = '';
   if (isolated && lineMetas[isolated]){
     const meta = lineMetas[isolated];
     const u = (data?.units || {})[isolated] || '';
     const colour = WEATHER_STATS_PALETTE[isolated] || '#94a3b8';
-    const fmt = (v) => {
-      if (Math.abs(v) < 100 && !Number.isInteger(v)) return v.toFixed(2);
-      return Math.round(v).toString();
+    const { ticks } = _niceAxisTicks(meta.lo, meta.hi, 4);
+    const span = (meta.hi - meta.lo) || 1;
+    const fmtNice = v => {
+      if (Number.isInteger(v)) return String(v);
+      return v.toFixed(Math.abs(v) < 10 ? 1 : 0);
     };
-    const hiTxt = `${fmt(meta.hi)}${u ? ' ' + u : ''}`;
-    const loTxt = `${fmt(meta.lo)}${u ? ' ' + u : ''}`;
-    // Top label sits 14 px BELOW the top gridline (was 4 px above) so it
-    // never tips outside the SVG viewBox at the top edge. Bottom label
-    // tucks 4 px above the bottom gridline. Both labels stay inside the
-    // plot area no matter the wrapper's overflow.
-    yAxisSvg = `
-      <text x="${pad.l - 6}" y="${(pad.t + 14).toFixed(1)}" text-anchor="end" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="10" fill="${colour}" opacity="0.75" text-rendering="geometricPrecision" shape-rendering="geometricPrecision">${hiTxt}</text>
-      <text x="${pad.l - 6}" y="${(pad.t + ch - 4).toFixed(1)}" text-anchor="end" font-family="ui-monospace, SF Mono, Menlo, monospace" font-size="10" fill="${colour}" opacity="0.75" text-rendering="geometricPrecision" shape-rendering="geometricPrecision">${loTxt}</text>
-    `;
+    for (const v of ticks){
+      // Skip ticks outside the data range (niceNum can over-shoot).
+      if (v < meta.lo - span * 0.05 || v > meta.hi + span * 0.05) continue;
+      const norm = (v - meta.lo) / span;
+      const y = pad.t + ch - norm * ch;
+      const txt = `${fmtNice(v)}${u ? ' ' + u : ''}`;
+      // Horizontal gridline at this label's Y — opacity 0.07 so it
+      // recedes behind the data line.
+      yAxisSvg += `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${(pad.l + cw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.07)" stroke-width="1" vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision"/>`;
+      yAxisSvg += `<text x="${pad.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="${colour}" opacity="0.75" text-rendering="optimizeLegibility" shape-rendering="geometricPrecision">${txt}</text>`;
+    }
   }
 
   // viewBox padded by VB_PAD on every side so a label sitting on the very

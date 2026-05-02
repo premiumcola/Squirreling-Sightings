@@ -291,17 +291,13 @@ export function _refreshLivePillForCard(camId){
   if (resEl) resEl.textContent = hdOn ? 'Main-Stream' : (c.preview_resolution || c.resolution || '—');
 }
 
-// Tile click → live-view modal. openLiveView still lives in legacy.js
-// (it's part of the live-view domain, scheduled for a later stage's
-// extraction); the dashboard tile only knows how to dispatch via the
-// window bridge. typeof guard keeps the click silent if the live-view
-// module hasn't loaded yet.
+// Tile click → live-view modal. openLiveView lives in chrome/live-view.js
+// since stage 11 — direct import keeps the dispatch synchronous.
+import { openLiveView } from './chrome/live-view.js';
 export function _cvCardClick(e, camId){
   const cam = (state.cameras || []).find(c => c.id === camId);
   if (!cam) return;
-  if (typeof window.openLiveView === 'function') {
-    window.openLiveView(camId, cam.name || camId);
-  }
+  openLiveView(camId, cam.name || camId);
 }
 
 // Camera-tile grid renderer. Builds every visible cv-card from

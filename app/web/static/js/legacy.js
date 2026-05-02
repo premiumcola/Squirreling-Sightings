@@ -109,6 +109,12 @@ import { _setEyeState } from './chrome/password-toggle.js';
 import { loadMediaStorageStats, refreshTimelineAndStats } from './chrome/storage-stats.js';
 import './chrome/mobile-dock.js';
 import { loadLogs } from './chrome/logs.js';
+// Stage 11 — live-view modal + generic fullscreen wiring. live-view's
+// inline onclicks live in index.html; fullscreen.js exports _initFsBtn
+// for the live-view IIFE binding at the bottom of this file (and the
+// lightbox in stage 13).
+import { closeLiveView } from './chrome/live-view.js';
+import { _initFsBtn } from './chrome/fullscreen.js';
 
 // _hmTip stays here — fixed-position heatmap tooltip used only by the
 // timeline view; will move with the timeline module in a later stage.
@@ -1137,98 +1143,6 @@ async function loadTimelapse(camId){
 }
 window.loadTimelapse=loadTimelapse;
 
-// ── Live View Modal ───────────────────────────────────────────────────────────
-let _liveViewCamId=null;
-let _liveViewHd=false;
-function openLiveView(camId,camName){
-  const modal=byId('liveViewModal'); if(!modal) return;
-  _liveViewCamId=camId;
-  _liveViewHd=_hdCards.has(camId); // inherit shared HD state
-  byId('liveViewTitle').textContent=camName||camId;
-  _setLiveViewStream(_liveViewHd);
-  const imgEl=byId('liveViewImg');
-  // Image click no longer toggles fullscreen — the dedicated FS button owns that.
-  if(imgEl) imgEl.onclick=null;
-  modal.classList.remove('hidden');
-  document.body.style.overflow='hidden';
-}
-function _setLiveViewStream(hd){
-  _liveViewHd=hd;
-  const img=byId('liveViewImg'); if(!img||!_liveViewCamId) return;
-  img.src=''; // disconnect current stream first
-  const url=hd?`/api/camera/${encodeURIComponent(_liveViewCamId)}/stream_hd.mjpg`
-               :`/api/camera/${encodeURIComponent(_liveViewCamId)}/stream.mjpg`;
-  img.src=url;
-  // Shared state: keep the card's HD badge + img in sync
-  if(hd) _hdCards.add(_liveViewCamId); else _hdCards.delete(_liveViewCamId);
-  const cardBadge=document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-hd-badge`);
-  if(cardBadge) cardBadge.classList.toggle('active',hd);
-  const cardImg=document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-img`);
-  if(cardImg){
-    if(hd && cardImg.dataset.hdMode!=='1'){
-      cardImg.dataset.hdMode='1';
-      cardImg.src=`/api/camera/${encodeURIComponent(_liveViewCamId)}/stream_hd.mjpg`;
-    } else if(!hd && cardImg.dataset.hdMode==='1'){
-      cardImg.dataset.hdMode='0';
-      cardImg.src=`/api/camera/${encodeURIComponent(_liveViewCamId)}/snapshot.jpg?t=${Date.now()}`;
-    }
-  }
-  const hdBtn=byId('liveViewHdBtn');
-  if(hdBtn){
-    hdBtn.textContent='HD';
-    hdBtn.style.border='none';
-    if(hd){
-      hdBtn.style.background='rgba(255,255,255,0.85)';
-      hdBtn.style.color='#0a0e1a';
-      hdBtn.style.fontWeight='800';
-    } else {
-      hdBtn.style.background='rgba(255,255,255,0.08)';
-      hdBtn.style.color='rgba(255,255,255,0.35)';
-      hdBtn.style.fontWeight='700';
-    }
-  }
-}
-function closeLiveView(){
-  const modal=byId('liveViewModal'); if(!modal) return;
-  const img=byId('liveViewImg'); if(img) img.src=''; // disconnect MJPEG stream → remove_viewer
-  if(document.fullscreenElement||document.webkitFullscreenElement){
-    (document.exitFullscreen||document.webkitExitFullscreen||function(){}).call(document).catch(()=>{});
-  }
-  const wrap=byId('liveViewWrap'); if(wrap) wrap.classList.remove('fake-fullscreen');
-  modal.classList.add('hidden');
-  document.body.style.overflow='';
-  _liveViewCamId=null;
-}
-window.openLiveView=openLiveView;
-window.closeLiveView=closeLiveView;
-
-// ── Fullscreen helpers ────────────────────────────────────────────────────────
-const _FS_EXPAND=`<svg viewBox="0 0 24 24" width="18" height="18" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`;
-const _FS_COMPRESS=`<svg viewBox="0 0 24 24" width="18" height="18" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0 2-2h3M3 16h3a2 2 0 0 0 2 2v3"/></svg>`;
-function _fsToggle(wrapEl,targetEl){
-  const fsEl=document.fullscreenElement||document.webkitFullscreenElement;
-  if(fsEl){
-    if(document.exitFullscreen) document.exitFullscreen().catch(()=>{});
-    else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
-  }else{
-    const req=targetEl.requestFullscreen||targetEl.webkitRequestFullscreen||targetEl.mozRequestFullScreen;
-    if(req) req.call(targetEl).catch(()=>{wrapEl.classList.add('fake-fullscreen');});
-    else wrapEl.classList.add('fake-fullscreen');
-  }
-}
-function _initFsBtn(btnId,wrapEl,getTarget){
-  const btn=byId(btnId); if(!btn||!wrapEl) return;
-  btn.innerHTML=_FS_EXPAND;
-  btn.addEventListener('click',e=>{e.stopPropagation();_fsToggle(wrapEl,getTarget());});
-  const update=()=>{
-    const fsEl=document.fullscreenElement||document.webkitFullscreenElement;
-    const isFs=!!(fsEl&&(fsEl===wrapEl||wrapEl.contains(fsEl)));
-    btn.innerHTML=isFs?_FS_COMPRESS:_FS_EXPAND;
-    if(!fsEl) wrapEl.classList.remove('fake-fullscreen');
-  };
-  document.addEventListener('fullscreenchange',update);
-  document.addEventListener('webkitfullscreenchange',update);
-}
 
 async function toggleTimelapse(camId,currentlyEnabled){
   const cam=(state.config?.cameras||[]).find(c=>c.id===camId)||(state.cameras||[]).find(c=>c.id===camId);
@@ -7026,7 +6940,6 @@ window.addEventListener('load',()=>{ setTimeout(_routeFromHash,1500); });
 // file into js/<domain>.js with its own export-to-window line at the
 // module's bottom; this block shrinks accordingly.
 window._goToPage          = _goToPage;
-window._setLiveViewStream = _setLiveViewStream;
 window._statOpenMedia     = _statOpenMedia;
 window.byId               = byId;
 window.closeMediaDrilldown = closeMediaDrilldown;

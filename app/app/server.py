@@ -2579,8 +2579,10 @@ def api_tracking_reindex_all():
                                        video_path=vid, snapshot_path=None,
                                        camera_id=cam_id))
             queued += 1
-    log.info("[tracking] reindex-all cam=%s queued=%d up_to_date=%d missing=%d",
-             cam_filter or "*", queued, skipped_uptodate, skipped_missing)
+    logging.getLogger(__name__).info(
+        "[tracking] reindex-all cam=%s queued=%d up_to_date=%d missing=%d",
+        cam_filter or "*", queued, skipped_uptodate, skipped_missing,
+    )
     return jsonify({"ok": True, "queued": queued,
                     "skipped_up_to_date": skipped_uptodate,
                     "skipped_missing_video": skipped_missing})

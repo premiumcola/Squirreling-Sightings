@@ -251,12 +251,26 @@ class EventStore:
                 snap_path.unlink(missing_ok=True)
                 snap_deleted = True
         vid_deleted = False
+        tracks_deleted = False
         if event and event.get("video_relpath"):
             vid_path = self.root / event["video_relpath"]
             if vid_path.exists():
                 vid_path.unlink(missing_ok=True)
                 vid_deleted = True
-        return {"json_deleted": event is not None, "snap_deleted": snap_deleted, "vid_deleted": vid_deleted}
+            # tracks.json sidecar lives next to the mp4 as
+            # `<event_id>.tracks.json`. Drop it whenever the event is
+            # deleted so the lightbox doesn't try to render boxes
+            # against a missing video. The sidecar may also be stored
+            # next to the camera root for legacy events without a
+            # date-subdir; rglob picks both up.
+            for tp in list(cam_dir.rglob(f"{event_id}.tracks.json")):
+                try:
+                    tp.unlink()
+                    tracks_deleted = True
+                except Exception:
+                    pass
+        return {"json_deleted": event is not None, "snap_deleted": snap_deleted,
+                "vid_deleted": vid_deleted, "tracks_deleted": tracks_deleted}
 
     def purge_orphans(self) -> int:
         """Delete event JSON files whose media file no longer exists. Returns count removed."""
@@ -265,6 +279,11 @@ class EventStore:
             return 0
         for cam_dir in (d for d in self.events_dir.iterdir() if d.is_dir()):
             for jf in list(cam_dir.rglob("*.json")):
+                # Skip our own tracking sidecars — they're handled in
+                # the second pass below so an orphaned tracks.json
+                # (event already deleted) doesn't survive forever.
+                if jf.name.endswith(".tracks.json"):
+                    continue
                 try:
                     obj = json.loads(jf.read_text(encoding="utf-8"))
                 except Exception:
@@ -278,6 +297,16 @@ class EventStore:
                 # Orphan: has a media reference that no longer exists on disk
                 if snap_missing or vid_missing:
                     jf.unlink(missing_ok=True)
+                    removed += 1
+            # Second pass — tracks.json sidecars whose matching event
+            # manifest is already gone (delete_event was bypassed at
+            # some point, e.g. manual rm -rf). Stem of "<event_id>.
+            # tracks.json" is "<event_id>.tracks"; the event JSON we
+            # look for is "<event_id>.json".
+            for tp in list(cam_dir.rglob("*.tracks.json")):
+                event_id = tp.stem.removesuffix(".tracks")
+                if not list(cam_dir.rglob(f"{event_id}.json")):
+                    tp.unlink(missing_ok=True)
                     removed += 1
         return removed
 

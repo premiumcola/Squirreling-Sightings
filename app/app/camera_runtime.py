@@ -1593,6 +1593,27 @@ class CameraRuntime:
             event["encode_error"] = encode_error
         self.store.add_event(self.camera_id, event)
 
+        # Phase 1 object tracking — enqueue a background pass that
+        # writes <event_id>.tracks.json next to the mp4. Fire-and-
+        # forget; the recording finalize must not block on it. Skip
+        # when the clip never produced a playable mp4 (encode_error
+        # set) or when the tracking worker hasn't been built yet
+        # (early boot).
+        if video_relpath and vid_path is not None and vid_path.exists():
+            try:
+                from .tracking_worker import singleton as _tw_singleton, TrackingJob
+                worker = _tw_singleton()
+                if worker is not None:
+                    snap_path = (storage_root / thumb_rel) if thumb_rel else None
+                    worker.enqueue(TrackingJob(
+                        event_id=event_id,
+                        video_path=vid_path,
+                        snapshot_path=snap_path,
+                        camera_id=self.camera_id,
+                    ))
+            except Exception as _te:
+                log.debug("[%s] tracking enqueue failed: %s", self.camera_id, _te)
+
         if self.mqtt and self.cfg.get("mqtt_enabled", True):
             self.mqtt.publish(f"events/{self.camera_id}", event)
 

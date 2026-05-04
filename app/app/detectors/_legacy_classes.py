@@ -2,11 +2,27 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+# Primitives carved out into per-concern submodules during R02.1. The
+# classes below still see them under the same names thanks to these
+# re-imports — the move is purely structural.
+from ._label_loader import (
+    _extract_latin,
+    _load_bird_latin_to_de,
+    _pretty_bird_label,
+    load_label_map,
+)
+from ._types import IMPOSSIBLE_LABELS, Detection, _apply_region_filter
+from ._wildlife_rules import (
+    _inat_wildlife_category,
+    _is_sciuridae_inat,
+    _is_squirrel_likely,
+    _wildlife_category,
+)
 
 log = logging.getLogger(__name__)
 
@@ -16,95 +32,6 @@ log = logging.getLogger(__name__)
 # these (typically a low-quality hallucination on a dark blob: e.g. a crow
 # coming back as "elephant"), we drop it instead of polluting the event log.
 # Disable via config: processing.detection.region_filter_enabled = false
-IMPOSSIBLE_LABELS: frozenset[str] = frozenset({
-    "elephant", "bear", "zebra", "giraffe",
-    "cow", "sheep", "horse",
-    "airplane", "train", "bus", "truck", "boat",
-    "surfboard", "snowboard", "skis",
-    "baseball bat", "baseball_bat",
-    "baseball glove", "baseball_glove",
-    "frisbee", "skateboard", "kite",
-    "fire hydrant", "fire_hydrant",
-    "parking meter", "parking_meter",
-    "stop sign", "stop_sign",
-    "traffic light", "traffic_light",
-})
-
-
-def _apply_region_filter(dets: list[Detection], enabled: bool) -> list[Detection]:
-    if not enabled:
-        return dets
-    return [d for d in dets if d.label not in IMPOSSIBLE_LABELS]
-
-
-def load_label_map(path: str | None) -> dict[int, str]:
-    """Load a TFLite label file.
-
-    Supports two formats:
-      A) numeric-prefixed (e.g. Coral COCO)   "16 bird"     / "16: bird"
-      B) plain lines      (e.g. Coral iNat)   "Turdus merula (Common Blackbird)"
-
-    In format B the line index (0-based) becomes the label id, which is what
-    the classifier output layer uses for iNaturalist-style models.
-    """
-    if not path:
-        return {}
-    p = Path(path)
-    if not p.exists():
-        return {}
-    text = p.read_text(encoding="utf-8", errors="ignore").splitlines()
-    out: dict[int, str] = {}
-    lines_nonblank: list[str] = []
-    for line in text:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        lines_nonblank.append(line)
-        if ":" in line:
-            k, v = line.split(":", 1)
-        elif " " in line:
-            k, v = line.split(" ", 1)
-        else:
-            continue
-        try:
-            out[int(k.strip())] = v.strip()
-        except Exception:
-            continue
-    if not out and lines_nonblank:
-        # Format B — plain labels, one per line, indexed by position.
-        out = {i: s for i, s in enumerate(lines_nonblank)}
-    return out
-
-
-@dataclass
-class Detection:
-    label: str
-    score: float
-    bbox: tuple[int, int, int, int]
-    species: str | None = None          # display name (German when mapped, else raw iNat)
-    species_latin: str | None = None    # "Genus species" binomial from the iNat label
-    species_score: float | None = None
-    identity: str | None = None
-    raw_cls_id: int = -1  # unmapped class id as emitted by the model
-    # Trigger flags inherited from the zone this detection passed through.
-    # None when the detection didn't go through any zone (legacy or
-    # zone-less camera) — caller treats that as "all flags True". A dict
-    # like {"save_photo": True, "save_video": False, "send_telegram": True}
-    # means the matching zone explicitly opted in/out for the listed actions.
-    zone_flags: dict | None = None
-
-    def to_dict(self):
-        x1, y1, x2, y2 = self.bbox
-        return {
-            "label": self.label,
-            "score": round(float(self.score), 4),
-            "bbox": {"x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2)},
-            "species": self.species,
-            "species_latin": self.species_latin,
-            "species_score": round(float(self.species_score), 4) if self.species_score is not None else None,
-            "identity": self.identity,
-            "raw_cls_id": int(self.raw_cls_id),
-        }
 
 
 class CoralObjectDetector:
@@ -427,78 +354,6 @@ class CoralObjectDetector:
         return _apply_region_filter(out, self._region_filter)
 
 
-import json
-
-# Latin binomial → German common name. Lazily loaded from a JSON file so
-# editing the list doesn't require a Python redeploy. The file is optional —
-# when missing, classifier output simply stays in Latin/English.
-_BIRD_LATIN_TO_DE_PATH_DEFAULT = "/app/config/inat_to_german.json"
-_bird_latin_to_de_cache: dict[str, str] | None = None
-_bird_latin_to_de_cache_path: str | None = None
-
-
-def _load_bird_latin_to_de(path: str | None) -> dict[str, str]:
-    """Cached load of the Latin→German map. `path` may be overridden per
-    classifier instance; reloads only when the path changes or the file has
-    not been read yet."""
-    global _bird_latin_to_de_cache, _bird_latin_to_de_cache_path
-    use_path = path or _BIRD_LATIN_TO_DE_PATH_DEFAULT
-    if _bird_latin_to_de_cache is not None and _bird_latin_to_de_cache_path == use_path:
-        return _bird_latin_to_de_cache
-    data: dict[str, str] = {}
-    try:
-        with open(use_path, encoding="utf-8") as f:
-            raw = json.load(f)
-        data = {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and not k.startswith("_")}
-    except FileNotFoundError:
-        log.info("Bird latin→de map: %s not found — species will show Latin names only.", use_path)
-    except Exception as e:
-        log.warning("Bird latin→de map: failed to parse %s: %s", use_path, e)
-    _bird_latin_to_de_cache = data
-    _bird_latin_to_de_cache_path = use_path
-    if data:
-        log.info("Bird latin→de map loaded from %s (%d entries)", use_path, len(data))
-    return data
-
-
-def _extract_latin(raw: str | None) -> str | None:
-    """Pull a clean "Genus species" string out of any iNat label shape.
-
-    Examples:
-      "Turdus merula (Common Blackbird)"  → "Turdus merula"
-      "PARUS MAJOR"                        → "Parus major"
-      "Passer_domesticus"                  → "Passer domesticus"
-    """
-    if not raw:
-        return None
-    base = str(raw).strip()
-    if not base:
-        return None
-    latin = base.split("(", 1)[0].strip().replace("_", " ")
-    parts = latin.split()
-    if len(parts) < 2:
-        return latin or None
-    return parts[0].capitalize() + " " + parts[1].lower()
-
-
-def _pretty_bird_label(raw: str | None, mapping: dict[str, str] | None = None) -> tuple[str | None, str | None]:
-    """Return (display_name, latin_binomial) for an iNaturalist label.
-
-    Display name is the German common name when the Latin binomial is in
-    the mapping. If no mapping exists we return (None, latin) so the UI
-    keeps the generic COCO "bird" label and does not invent a fake species
-    line. The caller can use a None display name as a signal to fall back
-    to the next top-k candidate.
-    """
-    if not raw:
-        return raw, None
-    latin = _extract_latin(raw)
-    m = mapping if mapping is not None else _load_bird_latin_to_de(None)
-    de = m.get(latin) if latin else None
-    if de:
-        return de, latin
-    # No German mapping → suppress fake species line, keep latin for logs.
-    return None, latin
 
 
 class BirdSpeciesClassifier:
@@ -650,111 +505,6 @@ class BirdSpeciesClassifier:
         return None, None, None
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Wildlife classifier: ImageNet MobileNetV2 → fox / squirrel / hedgehog
-# ──────────────────────────────────────────────────────────────────────────
-#
-# COCO SSD has 80 classes and does not contain fox, squirrel, or hedgehog —
-# so when motion hits a garden camera we need a second-stage classifier that
-# *can* name these animals. The classic ImageNet-1000 model includes:
-#   • "red fox, Vulpes vulpes"        (idx 277)
-#   • "fox squirrel, Sciurus niger"   (idx 335)
-#   • "hedgehog, Erinaceus europaeus" (idx 334 in most label files)
-#
-# We map any ImageNet top-1 whose human-readable label matches one of those
-# substrings down to our three target categories. Everything else is None.
-
-# Substring→category rules. Case-insensitive match against the ImageNet
-# human-readable label. Ordering matters — first hit wins, so put the more
-# specific rule first (e.g. "red fox" before bare "fox" to avoid flying-fox
-# or corsac-fox false positives).
-_WILDLIFE_LABEL_RULES: tuple[tuple[str, str], ...] = (
-    ("red fox",       "fox"),
-    ("grey fox",      "fox"),
-    ("gray fox",      "fox"),
-    ("kit fox",       "fox"),
-    ("arctic fox",    "fox"),
-    ("fox squirrel",  "squirrel"),
-    ("squirrel",      "squirrel"),
-    ("hedgehog",      "hedgehog"),
-)
-
-
-def _wildlife_category(raw_label: str | None) -> str | None:
-    """Map an ImageNet top-1 label to one of our wildlife categories, or None."""
-    if not raw_label:
-        return None
-    low = str(raw_label).lower()
-    for needle, cat in _WILDLIFE_LABEL_RULES:
-        if needle in low:
-            return cat
-    return None
-
-
-# Latin-genus → wildlife category. Substring match (case-insensitive)
-# against the full iNaturalist label string, e.g.
-# "Sciurus vulgaris (Eurasian Red Squirrel)" → "squirrel".
-# Used by WildlifeClassifier when an iNat second-stage model is configured
-# and its labels file contains mammal binomials. The bird-only iNat model
-# shipped by default does NOT contain any of these genera — these rules
-# only fire once a mammal-capable iNat model is dropped into models/ and
-# pointed at via processing.wildlife.inat_*.
-_INAT_WILDLIFE_RULES: tuple[tuple[str, str], ...] = (
-    ("sciurus",   "squirrel"),     # Sciurus vulgaris, S. carolinensis, etc.
-    ("tamias",    "squirrel"),     # chipmunk genus — close enough for our purposes
-    ("vulpes",    "fox"),          # Vulpes vulpes, V. lagopus, V. corsac
-    ("erinaceus", "hedgehog"),     # Erinaceus europaeus
-    ("meles",     "hedgehog"),     # badger genus — optional fallback per spec
-)
-
-
-def _inat_wildlife_category(raw_label: str | None) -> str | None:
-    """Map a full iNaturalist label string to a wildlife category, or None."""
-    if not raw_label:
-        return None
-    low = str(raw_label).lower()
-    for needle, cat in _INAT_WILDLIFE_RULES:
-        if needle in low:
-            return cat
-    return None
-
-
-# ImageNet labels MobileNetV2 commonly emits on European squirrel crops.
-# These are NOT direct squirrel matches — using them alone would generate
-# false positives on real hares/mongooses. They count as squirrel ONLY
-# when an independent iNat-secondary check returns a Sciuridae genus
-# (see classify_crop cross-validation).
-_SQUIRREL_LIKELY_LABELS: tuple[str, ...] = (
-    "hare", "mongoose", "mink", "weasel",
-    "polecat", "ferret", "marmot",
-    # Bias-from-American-training-set cases — already in
-    # _WILDLIFE_LABEL_RULES as direct hits, but listed here too so the
-    # cross-check can boost a soft 0.45-ish "fox squirrel" with a strong
-    # iNat "Sciurus vulgaris".
-    "fox squirrel", "gray squirrel",
-)
-
-
-def _is_squirrel_likely(label: str | None) -> bool:
-    if not label:
-        return False
-    low = str(label).lower()
-    return any(needle in low for needle in _SQUIRREL_LIKELY_LABELS)
-
-
-# Sciuridae-family Latin genera the iNat secondary may emit on a squirrel
-# crop. Used as the cross-check half of the "squirrel-likely" rule above.
-_SCIURIDAE_GENERA: tuple[str, ...] = (
-    "sciurus", "tamias", "marmota", "tamiasciurus", "callosciurus",
-    "spermophilus", "glaucomys",
-)
-
-
-def _is_sciuridae_inat(label: str | None) -> bool:
-    if not label:
-        return False
-    low = str(label).lower()
-    return any(g in low for g in _SCIURIDAE_GENERA)
 
 
 def discover_wildlife_paths(models_dir: str | Path = "/app/models") -> dict:
@@ -1151,27 +901,3 @@ class WildlifeClassifier:
         return [(self._inat_labels.get(int(c.id), str(c.id)), float(c.score)) for c in classes]
 
 
-def draw_detections(frame: np.ndarray, detections: list[Detection]) -> np.ndarray:
-    if frame is None:
-        return frame
-    out = frame.copy()
-    colors = {
-        "bird": (84, 214, 98),
-        "cat": (160, 110, 255),
-        "person": (110, 110, 255),
-        # BGR — same dark brown #7c2d12 (RGB 124,45,18) used everywhere else.
-        "dog": (18, 45, 124),
-    }
-    for det in detections:
-        x1, y1, x2, y2 = det.bbox
-        color = colors.get(det.label, (255, 180, 0))
-        cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
-        parts = [det.label]
-        if det.species:
-            parts.append(det.species)
-        if det.identity:
-            parts.append(det.identity)
-        parts.append(f"{det.score:.2f}")
-        text = " | ".join(parts)
-        cv2.putText(out, text, (x1, max(24, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.58, color, 2, cv2.LINE_AA)
-    return out

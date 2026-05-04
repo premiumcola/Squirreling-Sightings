@@ -51,7 +51,7 @@ import {
 import {
   drawShapes, loadMaskSnapshot,
   _renderShapeList, _updateShapeDrawingBar, _updateShapeModeButtons,
-} from '../shape-editor.js';
+} from '../shape-editor/index.js';
 import { _bindCamProbeDeviceInfo } from './discovery.js';
 import {
   _renderSeverityMatrix, _checkAlertingConflicts,

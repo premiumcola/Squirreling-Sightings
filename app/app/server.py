@@ -28,7 +28,7 @@ from .cat_identity import IdentityRegistry
 from .config_loader import load_config
 from .discovery import discover_hosts
 from .settings_store import SettingsStore
-from .storage import EventStore
+from .storage import EventStore, _atomic_write_text
 from .telegram_bot import TelegramService
 from .timelapse import TimelapseBuilder
 from .weather_service import WeatherService
@@ -3039,7 +3039,7 @@ def _load_achievements() -> dict:
 
 def _save_achievements(data: dict):
     try:
-        _ach_path.write_text(_json_mod.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_text(_ach_path, _json_mod.dumps(data, ensure_ascii=False, indent=2))
     except Exception as e:
         logging.getLogger(__name__).warning("achievements save: %s", e)
 

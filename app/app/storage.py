@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` to `path` via temp file + os.replace so a crash
+    mid-write never leaves a truncated or corrupt file. Mirrors
+    settings_store.save()'s pattern."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(str(tmp), str(path))
 
 
 class EventStore:
@@ -28,7 +38,7 @@ class EventStore:
         event_id = payload.get("event_id") or datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         payload["event_id"] = event_id
         path = self._cam_dir(camera_id) / f"{event_id}.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
         return path
 
     def get_event(self, camera_id: str, event_id: str) -> dict | None:
@@ -67,7 +77,7 @@ class EventStore:
         matches = list(cam_dir.rglob(f"{event_id}.json"))
         if not matches:
             return False
-        matches[0].write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        _atomic_write_text(matches[0], json.dumps(payload, ensure_ascii=False, indent=2))
         return True
 
     def delete_event_by_id(self, camera_id: str, event_id: str) -> bool:

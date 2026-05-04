@@ -831,13 +831,22 @@ class WildlifeClassifier:
         # file in /app/models. Lets users drop a model in without editing
         # yaml. Always runs (cheap glob) so partial configs — common case:
         # model_path set but labels_path missing — still get the labels
-        # filled in. Existing keys win via setdefault; broken paths get
-        # replaced with the discovered alternative.
+        # filled in. setdefault only — never overwrite a user-supplied
+        # value, even when the file is missing on disk. A non-existent
+        # configured path is more often a transient mount issue at boot
+        # than a bad config; silently swapping in the discovery default
+        # would erase the operator's intent.
         disc = discover_wildlife_paths()
         for k, v in disc.items():
-            self.cfg.setdefault(k, v)
-            if not self.cfg.get(k) or not Path(self.cfg[k]).exists():
+            if not self.cfg.get(k):
                 self.cfg[k] = v
+                continue
+            if not Path(self.cfg[k]).exists():
+                log.warning(
+                    "Wildlife classifier: configured %s=%s does not exist; "
+                    "leaving config as-is. Discovered alternative was %s.",
+                    k, self.cfg[k], v,
+                )
         self.labels = load_label_map(self.cfg.get("labels_path"))
         self.min_score = float(self.cfg.get("min_score", 0.35))
         self.interpreter = None

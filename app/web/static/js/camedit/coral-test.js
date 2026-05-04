@@ -35,9 +35,8 @@ import { _loadCoralModels } from "./coral-test/models-tab.js";
 import { _renderCoralPipelineTree } from "./coral-test/pipeline-tree.js";
 import { _updateCoralDeviceInfo } from "./coral-test/device-info.js";
 
-// Re-export the names index.js (and any future direct importer) consumes
-// so the refactor doesn't ripple into camedit/index.js. The window-
-// bridges below keep the still-thunked consumers working until R13.
+// Re-export the names index.js (and any future direct importer) consumes.
+// R13 dropped the window-bridge thunks; direct ES imports replaced them.
 export {
   _renderCoralPipelineTree,
   _updateCoralDeviceInfo,
@@ -177,15 +176,7 @@ async function _runCoralTest(){
 
 byId('coralTestBtn')?.addEventListener('click',_runCoralTest);
 byId('coralModelsReload')?.addEventListener('click',_loadCoralModels);
-
-// ── window.* bridges ────────────────────────────────────────────────────────
-// hydrateSettings() in camedit/index.js calls these via the
-// window._populateCoralTestCameras?.() / _updateCoralDeviceInfo?.()
-// indirection it set up before this module had named exports. Without
-// these bridges the Coral-Test camera <select> stays empty (no live
-// cams + no test-image folders) and the device-info widget never
-// hydrates. Same migration path as the rest: bridge here, drop the
-// indirection in camedit/index.js once both modules import directly.
-window._populateCoralTestCameras = _populateCoralTestCameras;
-window._updateCoralDeviceInfo    = _updateCoralDeviceInfo;
-window._renderCoralPipelineTree  = _renderCoralPipelineTree;
+// Note: R13 dropped the window-bridges that previously published
+// _populateCoralTestCameras / _updateCoralDeviceInfo / _renderCoralPipelineTree.
+// All three are exported as ES names — consumers (camedit/index.js)
+// import them directly.

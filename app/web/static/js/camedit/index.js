@@ -60,17 +60,20 @@ import {
   _renderAlertStatusStrip,
 } from '../alerting.js';
 
-// Coral pipeline tree + device info + test cam list are bridged on
-// window inside camedit/coral-test.js — reach them that way until that
-// module exposes named exports.
-const _updateCoralDeviceInfo   = (...a) => window._updateCoralDeviceInfo?.(...a);
-const _renderCoralPipelineTree = (...a) => window._renderCoralPipelineTree?.(...a);
-const _populateCoralTestCameras = (...a) => window._populateCoralTestCameras?.(...a);
+// Coral pipeline tree + device info + test cam list — direct ES imports
+// since R13 dropped the window-bridge thunks that used to wait for
+// coral-test.js's load order. Static imports guarantee these are
+// callable by the time index.js's module body runs.
+import {
+  _updateCoralDeviceInfo,
+  _renderCoralPipelineTree,
+  _populateCoralTestCameras,
+} from './coral-test.js';
 
 // Tiny helper used by the export-config buttons in the App-Section.
 const download = (url) => window.open(url, '_blank');
 
-function renderShell(){
+export function renderShell(){
   // Hero title is now a static "TAM-spy" lockup with the squirrel-on-
   // hyphen ornament — no longer driven by config.app.{name,tagline,
   // subtitle}. Side-nav app-name still hydrates if present so users
@@ -128,7 +131,7 @@ window.toggleCameraEnabled=async function(camId,enabled){
   await fetch('/api/settings/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...cam,enabled})});
   await loadAll();
 };
-function renderCameraSettings(){
+export function renderCameraSettings(){
   byId('cameraSettingsList').innerHTML=state.cameras.map(c=>{
     // Merge is offered only for cameras that have been offline for ≥ 10 min
     // straight (frame_age_s is the seconds-since-last-good-frame counter the
@@ -460,19 +463,19 @@ function editCamera(camId){
   }
 }
 
-async function renderProfiles(){
+export async function renderProfiles(){
   const cats=await j('/api/cats'); const persons=await j('/api/persons');
   const catEl=byId('catList'); const perEl=byId('personList');
   if(catEl) catEl.innerHTML=cats.profiles.map(p=>`<div style="padding:3px 0;font-size:13px">${esc(p.name)}</div>`).join('')||'<span class="muted small">—</span>';
   if(perEl) perEl.innerHTML=persons.profiles.map(p=>`<div style="padding:3px 0;font-size:13px">${esc(p.name)}${p.whitelisted?' <span class="muted small">(Whitelist)</span>':''}</div>`).join('')||'<span class="muted small">—</span>';
 }
-async function renderAudit(){ const actions=await j('/api/telegram/actions'); byId('auditPanel').innerHTML=actions.items.map(a=>`<div class="audit-item"><strong>${esc(a.action)}</strong><div class="small">${esc(a.time)}${a.camera_id?` · ${esc(a.camera_id)}`:''}</div></div>`).join('')||'<div class="audit-item">Noch keine Telegram-Aktionen.</div>'; }
+export async function renderAudit(){ const actions=await j('/api/telegram/actions'); byId('auditPanel').innerHTML=actions.items.map(a=>`<div class="audit-item"><strong>${esc(a.action)}</strong><div class="small">${esc(a.time)}${a.camera_id?` · ${esc(a.camera_id)}`:''}</div></div>`).join('')||'<div class="audit-item">Noch keine Telegram-Aktionen.</div>'; }
 
 async function toggleArm(camId,armed){ await fetch(`/api/camera/${camId}/arm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({armed})}); await loadAll(); }
 window.toggleArm=toggleArm;
 // _cvCardClick now lives in dashboard.js (Stage 3b). Its window
 
-function hydrateSettings(){
+export function hydrateSettings(){
   const mqtt=state.config.mqtt||{};
   const proc=state.config.processing||{}, coral=state.config.coral||{};
   // App section — Public Base URL + Discovery-Subnet now render read-only
@@ -669,19 +672,16 @@ byId('importJsonBtn').onclick=async()=>{await importConfig('json');};
 byId('importYamlBtn').onclick=async()=>{await importConfig('yaml');};
 async function importConfig(format){ const content=byId('importBox').value.trim(); if(!content){showToast('Bitte Inhalt einfügen.','warn');return;} const r=await j('/api/settings/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format,content})}); byId('importBox').value=''; await loadAll(); showToast('Import erfolgreich.','success'); }
 
-// ── window.* bridges (Stage 25 D) ───────────────────────────────────────────
-// loadAll() in live-update.js looks these up on window, and several
-// inline onclicks in the camera-list HTML (rendered by renderCameraSettings)
-// also reach for them by global name. The window assignments live here
-// next to the function bodies they bridge — when those callsites finally
-// migrate to direct named imports, this block evaporates.
-window.renderShell           = renderShell;
-window.renderCameraSettings  = renderCameraSettings;
-window.renderProfiles        = renderProfiles;
-window.renderAudit           = renderAudit;
-window.hydrateSettings       = hydrateSettings;
-// Inline `onclick="editCamera('<id>')"` rendered into each cam-row by
-// renderCameraSettings — this bridge is the production callsite, not a
-// vestige. window.toggleArm / saveMqttSettings / etc. are assigned
-// inline at their function definitions higher up.
-window.editCamera            = editCamera;
+// ── Inline-onclick bridges (template + JS-rendered HTML handlers) ──────────
+// Only names read by `onclick="..."` strings (template-side or
+// rendered into innerHTML by other modules) survive here. Every other
+// bridge dropped in R13 — direct ES imports replaced them.
+//
+// editCamera               — onclick on cam-rows in renderCameraSettings()
+// toggleCameraEnabled      — onchange on the cam-row enable switch
+// _reconnectCam            — onclick on the cam-row "Verbinden" button
+// _quickDeleteCamera       — onclick on the cam-row delete button
+// _flashDetection          — debug entry-point (DevTools / future SSE bridge)
+// toggleArm                — assigned next to its definition higher up
+// saveMqttSettings         — onclick="saveMqttSettings()" in settings.html
+window.editCamera = editCamera;

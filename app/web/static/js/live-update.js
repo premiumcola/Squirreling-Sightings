@@ -15,6 +15,10 @@ import {
 } from './dashboard.js';
 import { renderTimeline } from './timeline.js';
 import { _renderGlobalStatusRows } from './camedit/detection.js';
+import {
+  renderShell, renderCameraSettings, renderProfiles, renderAudit,
+  hydrateSettings,
+} from './camedit/index.js';
 import { loadMediaStorageStats } from './chrome/storage-stats.js';
 import { hydrateTelegram, initTelegramTabs } from './telegram.js';
 import { hydratePushUI } from './push.js';
@@ -95,13 +99,13 @@ export async function loadAll() {
   if (typeof window._updateMobileDockLiveDot === 'function') window._updateMobileDockLiveDot();
   state.timeline = await j(`/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`);
   await loadMediaStorageStats();
-  if (typeof window.renderShell === 'function')           window.renderShell();
+  renderShell();
   renderDashboard();
   renderTimeline();
-  if (typeof window.renderCameraSettings === 'function')  window.renderCameraSettings();
-  if (typeof window.renderProfiles === 'function')        await window.renderProfiles();
-  if (typeof window.renderAudit === 'function')           await window.renderAudit();
-  if (typeof window.hydrateSettings === 'function')       window.hydrateSettings();
+  renderCameraSettings();
+  await renderProfiles();
+  await renderAudit();
+  hydrateSettings();
   hydrateTelegram();
   initTelegramTabs();
   hydratePushUI();

@@ -46,7 +46,12 @@ async function _fetchTracks(item){
   if (_tracksInflight.has(eid)) return _tracksInflight.get(eid);
   const p = (async () => {
     try {
-      const r = await fetch(url, { cache: 'no-store' });
+      // Cache-buster query param in addition to `cache: 'no-store'`:
+      // post-reindex flows depend on a fresh sidecar and Flask's
+      // send_from_directory ships standard caching headers. Belt &
+      // braces keeps the chip from showing the previous tracks set.
+      const bustUrl = `${url}?_t=${Date.now()}`;
+      const r = await fetch(bustUrl, { cache: 'no-store' });
       if (!r.ok){
         // 404 = "no tracking data" — cache the negative so we don't
         // hammer the server on every RAF / reseek tick.

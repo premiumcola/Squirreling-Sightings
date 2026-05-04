@@ -185,8 +185,13 @@ async function _showTimeline(){
   let mtime = null;
   if (!payload){
     let r;
+    // Cache-buster: Flask's send_from_directory ships standard caching
+    // headers, so a post-regen GET could otherwise be served from the
+    // browser cache. The session-scoped _trackCache Map dedupes within
+    // a single page-load; this query param keeps cross-load freshness.
+    const bustUrl = `${tracksUrl}?_t=${Date.now()}`;
     try {
-      r = await fetch(tracksUrl);
+      r = await fetch(bustUrl);
     } catch (e){
       // Network-level failure — no response at all (CORS, offline, DNS).
       result.innerHTML = '';
@@ -198,7 +203,7 @@ async function _showTimeline(){
       result.innerHTML = `
         <div class="ets-empty ets-empty--hint">
           Noch kein Tracking — bitte über
-          <strong>↪ Tracking neu generieren</strong> erzeugen.
+          <strong>Tracking neu generieren</strong> erzeugen.
         </div>`;
       return;
     }
@@ -228,6 +233,13 @@ async function _showTimeline(){
 // to 0 (and the timeline falls back to its own end-of-last-sample) on
 // any failure / timeout.
 async function _resolveVideoDuration(videoUrl){
+  // Bail immediately on an unusable URL — defensive disable cases
+  // produce '/media/' which the browser handles slowly (404 races the
+  // 5s timeout). The caller falls back to last-sample-time as
+  // duration anyway, so we may as well return 0 instantly.
+  if (!videoUrl || videoUrl === '/media/' || !videoUrl.endsWith('.mp4')){
+    return 0;
+  }
   return new Promise((resolve) => {
     const v = document.createElement('video');
     v.preload = 'metadata';

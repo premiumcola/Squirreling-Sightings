@@ -342,6 +342,15 @@ _runtime_cfgs: dict[str, dict] = {}  # cam_id → deep copy of camera cfg at run
 app_state.runtimes = runtimes
 app_state._runtime_cfgs = _runtime_cfgs
 
+# Register all per-domain route blueprints in one shot. Their handlers
+# resolve shared state at request time via `app_state`, so registering
+# here (after every singleton has been assigned onto app_state above)
+# is safe even though the runtimes / services may still be None at this
+# exact moment — they'll be populated by rebuild_services /
+# rebuild_runtimes a few hundred lines below.
+from .routes import register_blueprints as _register_blueprints
+_register_blueprints(app)
+
 # Single-flight lock + last-applied snapshot for telegram reloads. The lock
 # prevents two HTTP saves landing simultaneously from each starting a fresh
 # polling thread; the snapshot avoids a 3 s slot-wait on every camera-config
@@ -1008,15 +1017,7 @@ def media_file(subpath):
     return send_from_directory(storage_root, subpath)
 
 
-@app.get('/api/logs')
-def api_logs():
-    level_name = request.args.get('level', 'DEBUG').upper()
-    min_level = getattr(logging, level_name, logging.DEBUG)
-    subsystem = (request.args.get('subsystem') or '').strip().lower()
-    logs = log_buffer.get(min_level)
-    if subsystem:
-        logs = [l for l in logs if subsystem in (l.get('logger') or '').lower()]
-    return jsonify({"logs": logs})
+# /api/logs lives in routes/admin.py since R01.2.
 
 
 @app.get('/api/bootstrap')
@@ -2226,103 +2227,12 @@ def api_media_cleanup():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.post('/api/admin/timelapse/cleanup')
-def api_admin_timelapse_cleanup():
-    """Delete invalid JPEGs from storage/timelapse_frames/.
-
-    Body: {"dry_run": bool, "cam_id": str?, "profile": str?}.
-    Returns one summary entry per cam/profile pair so a UI can render
-    'scanned X, kept K, deleted D' rows. Finalised .mp4 files are never
-    touched — only the JPEG ringbuffer."""
-    from .timelapse_cleanup import cleanup as _cleanup
-    payload = request.get_json(force=True, silent=True) or {}
-    dry_run = bool(payload.get("dry_run", False))
-    cam_id = payload.get("cam_id") or None
-    profile = payload.get("profile") or None
-    storage_root = Path(get_effective_config().get("storage", {}).get("root", "/app/storage"))
-    try:
-        summaries = _cleanup(storage_root, dry_run=dry_run,
-                             cam_id=cam_id, profile=profile)
-        total_scanned = sum(s["scanned"] for s in summaries)
-        total_deleted = sum(s["deleted"] for s in summaries)
-        return jsonify({
-            "ok": True,
-            "dry_run": dry_run,
-            "summaries": summaries,
-            "total_scanned": total_scanned,
-            "total_deleted": total_deleted,
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+# /api/admin/timelapse/cleanup and /api/reload live in
+# routes/admin.py since R01.2.
 
 
-@app.post('/api/reload')
-def api_reload():
-    rebuild_runtimes()
-    return jsonify({"ok": True})
-
-
-@app.get('/api/cats')
-def api_cats():
-    return jsonify({"profiles": cat_registry.list_profiles()})
-
-
-@app.get('/api/persons')
-def api_persons():
-    return jsonify({"profiles": person_registry.list_profiles()})
-
-
-def _register_identity(registry: IdentityRegistry, cam_id: str, identity_type: str):
-    payload = request.get_json(force=True, silent=True) or {}
-    event_id = payload.get("event_id")
-    name = (payload.get("name") or "").strip()
-    whitelisted = bool(payload.get("whitelisted", False))
-    notes = payload.get("notes", "")
-    if not event_id or not name:
-        return jsonify({"ok": False, "error": "event_id und name erforderlich"}), 400
-    event = store.get_event(cam_id, event_id)
-    if not event:
-        return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
-    snap_rel = event.get("snapshot_relpath")
-    snap_path = storage_root / snap_rel if snap_rel else None
-    if not snap_path or not snap_path.exists():
-        return jsonify({"ok": False, "error": "Snapshot-Datei fehlt"}), 404
-    img = cv2.imread(str(snap_path))
-    if img is None:
-        return jsonify({"ok": False, "error": "Snapshot nicht lesbar"}), 400
-    det = next((d for d in event.get("detections", []) if d.get("label") == identity_type), None)
-    if not det:
-        return jsonify({"ok": False, "error": f"Kein {identity_type} in diesem Event"}), 400
-    b = det.get("bbox") or {}
-    crop = img[max(0, int(b.get("y1", 0))):max(0, int(b.get("y2", 0))), max(0, int(b.get("x1", 0))):max(0, int(b.get("x2", 0)))]
-    if crop.size == 0:
-        return jsonify({"ok": False, "error": "Crop leer"}), 400
-    ok = registry.register_crop(name, crop, whitelisted=whitelisted, notes=notes)
-    if ok:
-        if identity_type == "cat":
-            event["cat_name"] = name
-        else:
-            event["person_name"] = name
-            event["whitelisted"] = whitelisted
-        store.update_event(cam_id, event_id, event)
-    return jsonify({"ok": bool(ok), "profiles": registry.list_profiles()})
-
-
-@app.post('/api/camera/<cam_id>/cats/register')
-def api_cat_register(cam_id):
-    return _register_identity(cat_registry, cam_id, "cat")
-
-
-@app.post('/api/camera/<cam_id>/persons/register')
-def api_person_register(cam_id):
-    return _register_identity(person_registry, cam_id, "person")
-
-
-@app.post('/api/persons/<name>/flags')
-def api_person_flags(name):
-    payload = request.get_json(force=True, silent=True) or {}
-    ok = person_registry.set_profile_flags(name, whitelisted=payload.get("whitelisted"), notes=payload.get("notes"))
-    return jsonify({"ok": ok, "profiles": person_registry.list_profiles()})
+# Cat/person identity + achievements endpoints live in
+# routes/sichtungen.py since R01.2.
 
 
 @app.get('/api/camera/<cam_id>/status')
@@ -2556,134 +2466,8 @@ def api_event_delete(cam_id, event_id):
     return jsonify({"ok": True, "tl_cleaned": tl_cleaned, **result})
 
 
-# ── Object-tracking sidecar (Phase 1) ─────────────────────────────────────
-# tracks.json lives next to the mp4 as <event_id>.tracks.json. The
-# /api/tracking/* endpoints are management-only; live tracking jobs are
-# enqueued automatically by camera_runtime._finalize_motion_clip.
-
-def _resolve_event_video(event_id: str, cam_id_hint: str | None = None):
-    """Return (camera_id, video_path) for an event_id, or (None, None) if
-    the event has no usable video. cam_id_hint short-circuits the cross-
-    camera scan when the caller already knows the camera."""
-    if cam_id_hint:
-        ev = store.get_event(cam_id_hint, event_id)
-        if ev and ev.get("video_relpath"):
-            return cam_id_hint, storage_root / ev["video_relpath"]
-        return None, None
-    ev = store.find_event_anywhere(event_id)
-    if not ev:
-        return None, None
-    if not ev.get("video_relpath"):
-        return ev.get("camera_id"), None
-    return ev.get("camera_id"), storage_root / ev["video_relpath"]
-
-
-@app.post('/api/tracking/reindex/<event_id>')
-def api_tracking_reindex(event_id):
-    cam_id_hint = request.args.get("camera_id")
-    cam_id, vid = _resolve_event_video(event_id, cam_id_hint)
-    if cam_id is None or vid is None:
-        return jsonify({"ok": False, "error": "Event nicht gefunden oder ohne Video"}), 404
-    if not vid.exists():
-        return jsonify({"ok": False, "error": "Video-Datei fehlt"}), 404
-    from .tracking_worker import singleton as _tw
-    worker = _tw()
-    if worker is None:
-        return jsonify({"ok": False, "error": "Tracking-Worker nicht aktiv"}), 503
-    worker.enqueue(TrackingJob(event_id=event_id, video_path=vid,
-                               snapshot_path=None, camera_id=cam_id))
-    return jsonify({"ok": True, "queued": 1, "camera_id": cam_id})
-
-
-@app.post('/api/tracking/reindex-all')
-def api_tracking_reindex_all():
-    """Enqueue every event in scope that has a video_relpath but no
-    tracks.json — or whose tracks.json predates the current schema.
-    Optional ?camera_id=… narrows the scan to a single camera."""
-    cam_filter = request.args.get("camera_id")
-    from .tracking_worker import TRACKS_SCHEMA, singleton as _tw
-    worker = _tw()
-    if worker is None:
-        return jsonify({"ok": False, "error": "Tracking-Worker nicht aktiv"}), 503
-    queued = 0
-    skipped_uptodate = 0
-    skipped_missing = 0
-    cam_dirs = []
-    if cam_filter:
-        d = store.events_dir / cam_filter
-        if d.exists():
-            cam_dirs.append(d)
-    else:
-        if store.events_dir.exists():
-            cam_dirs = [d for d in store.events_dir.iterdir() if d.is_dir()]
-    for cam_dir in cam_dirs:
-        cam_id = cam_dir.name
-        for jf in cam_dir.rglob("*.json"):
-            # Skip our own sidecars.
-            if jf.name.endswith(".tracks.json"):
-                continue
-            try:
-                ev = json.loads(jf.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            video_rel = ev.get("video_relpath")
-            if not video_rel:
-                continue
-            vid = storage_root / video_rel
-            if not vid.exists():
-                skipped_missing += 1
-                continue
-            tp = tracks_path_for(vid)
-            if tp.exists():
-                # Already indexed — only re-queue when schema is older.
-                try:
-                    existing = json.loads(tp.read_text(encoding="utf-8"))
-                    if existing.get("schema") == TRACKS_SCHEMA:
-                        skipped_uptodate += 1
-                        continue
-                except Exception:
-                    pass  # corrupt sidecar → re-queue below
-            worker.enqueue(TrackingJob(event_id=ev.get("event_id", jf.stem),
-                                       video_path=vid, snapshot_path=None,
-                                       camera_id=cam_id))
-            queued += 1
-    logging.getLogger(__name__).info(
-        "[tracking] reindex-all cam=%s queued=%d up_to_date=%d missing=%d",
-        cam_filter or "*", queued, skipped_uptodate, skipped_missing,
-    )
-    return jsonify({"ok": True, "queued": queued,
-                    "skipped_up_to_date": skipped_uptodate,
-                    "skipped_missing_video": skipped_missing})
-
-
-@app.delete('/api/tracking/<event_id>')
-def api_tracking_delete(event_id):
-    """Remove the tracks.json sidecar for an event so the lightbox
-    falls back to the no-overlay view. Idempotent — 404 only when the
-    event itself doesn't exist."""
-    cam_id_hint = request.args.get("camera_id")
-    cam_id, vid = _resolve_event_video(event_id, cam_id_hint)
-    if cam_id is None or vid is None:
-        return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
-    tp = tracks_path_for(vid)
-    if tp.exists():
-        try:
-            tp.unlink()
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
-        return jsonify({"ok": True, "deleted": True})
-    return jsonify({"ok": True, "deleted": False})
-
-
-@app.get('/api/tracking/status')
-def api_tracking_status():
-    """Worker-stats endpoint — useful for the operator and for the
-    re-indexing UI (Phase 2) to show queue depth."""
-    from .tracking_worker import TRACKS_SCHEMA, singleton as _tw
-    worker = _tw()
-    if worker is None:
-        return jsonify({"ok": False, "alive": False, "schema": TRACKS_SCHEMA})
-    return jsonify({"ok": True, "schema": TRACKS_SCHEMA, **worker.stats()})
+# Object-tracking sidecar endpoints (`/api/tracking/*`) live in
+# routes/tracking.py since R01.2.
 
 
 @app.post('/api/camera/<cam_id>/events/delete-bulk')
@@ -3044,100 +2828,7 @@ def api_camera_timelapse_rolling(cam_id):
     return jsonify({"ok": True, "minutes": minutes, "url": f"/media/{rel.as_posix()}"})
 
 
-# ── Achievements / Sichtungen ────────────────────────────────────────────────
-import json as _json_mod
-import threading as _threading_mod
-
-_ach_lock = _threading_mod.Lock()
-_ach_path = storage_root / "achievements.json"
-
-def _load_achievements() -> dict:
-    try:
-        if _ach_path.exists():
-            return _json_mod.loads(_ach_path.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
-
-def _save_achievements(data: dict):
-    try:
-        _atomic_write_text(_ach_path, _json_mod.dumps(data, ensure_ascii=False, indent=2))
-    except Exception as e:
-        logging.getLogger(__name__).warning("achievements save: %s", e)
-
-@app.get('/api/achievements')
-def api_achievements_get():
-    with _ach_lock:
-        return jsonify({"achievements": _load_achievements()})
-
-@app.post('/api/achievements/unlock')
-def api_achievements_unlock():
-    payload = request.get_json(force=True, silent=True) or {}
-    species_id = (payload.get("id") or "").strip().lower()
-    if not species_id:
-        return jsonify({"ok": False, "error": "id fehlt"}), 400
-    with _ach_lock:
-        data = _load_achievements()
-        already = species_id in data
-        if not already:
-            data[species_id] = {
-                "date": datetime.now().isoformat(timespec="seconds"),
-                "camera_id": payload.get("camera_id", ""),
-                "species": payload.get("species", species_id),
-                "count": 1,
-            }
-        else:
-            data[species_id]["count"] = data[species_id].get("count", 1) + 1
-        _save_achievements(data)
-    return jsonify({"ok": True, "already_had": already, "achievements": data})
-
-
-@app.get('/api/achievements/<species_id>/media')
-def api_achievements_media(species_id: str):
-    """All media events for a species, across every camera. The species
-    is identified by its achievement ID (e.g. "gruenfink"); we walk the
-    camera_runtime._SPECIES_TO_ACH_ID reverse-map to find every German
-    variant that collapses into that ID ("Grünfink" / "Gruenfink") and
-    union the results."""
-    from .camera_runtime import _SPECIES_TO_ACH_ID
-    sid = (species_id or "").strip().lower()
-    # Collect every species-name key that maps to this achievement ID
-    name_variants = {name for name, ach in _SPECIES_TO_ACH_ID.items() if ach == sid}
-    if not name_variants:
-        return jsonify({"items": [], "total_count": 0})
-    try:
-        limit = max(1, int(request.args.get('limit') or 24))
-    except ValueError:
-        limit = 24
-    try:
-        offset = max(0, int(request.args.get('offset') or 0))
-    except ValueError:
-        offset = 0
-    cams = get_effective_config().get("cameras", []) or []
-    seen_ids: set[str] = set()
-    pool: list = []
-    for cam in cams:
-        cam_id = cam.get("id")
-        if not cam_id:
-            continue
-        for variant in name_variants:
-            # list_events sorts desc by time internally. media_only skips
-            # metadata-only entries — the drilldown only wants visible cards.
-            for ev in store.list_events(cam_id, bird_species=variant, media_only=True, limit=5000):
-                eid = ev.get("event_id")
-                if not eid or eid in seen_ids:
-                    continue
-                seen_ids.add(eid)
-                # Attach any stored review so the drilldown matches what the
-                # main Mediathek shows for the same event.
-                review = settings.get_review(f"{cam_id}:{eid}")
-                if review:
-                    ev["review"] = review
-                pool.append(ev)
-    pool.sort(key=lambda x: x.get("time", ""), reverse=True)
-    total = len(pool)
-    page = pool[offset:offset + limit]
-    return jsonify({"items": page, "total_count": total})
+# Achievements endpoints live in routes/sichtungen.py since R01.2.
 
 
 # ── System info ──────────────────────────────────────────────────────────────

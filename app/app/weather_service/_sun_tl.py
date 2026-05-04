@@ -475,15 +475,25 @@ class SunTimelapseMixin:
                 # boundary is what determines whether the recording is
                 # still ahead of us — the sun event itself can be in
                 # the past while the post-roll is still recording.
+                #
+                # Tomorrow-fallback fires in BOTH cases — today's event
+                # missing (polar day / astral failure) AND today's
+                # window already past. Without the None-branch the row
+                # would silently render empty even when tomorrow has a
+                # valid event.
                 sun_dt = self.sun_event_today(phase)
                 next_is_tomorrow = False
-                if sun_dt is not None:
-                    start_dt, _, _, _ = _sun_window_bounds(sun_dt, window)
-                    if start_dt <= now:
-                        sun_dt = self.sun_event_today(phase, date.today() + timedelta(days=1))
-                        next_is_tomorrow = sun_dt is not None
+                if sun_dt is None or _sun_window_bounds(sun_dt, window)[0] <= now:
+                    sun_dt = self.sun_event_today(phase, date.today() + timedelta(days=1))
+                    next_is_tomorrow = sun_dt is not None
                 if sun_dt is None:
+                    # Genuine no-event (polar night spanning ≥ 2 days).
+                    # Write next_is_tomorrow explicitly so the response
+                    # shape matches the success path — frontend treats
+                    # absent and False the same today, but consistency
+                    # matters as the consumer grows.
                     p["window_start"] = p["window_end"] = None
+                    p["next_is_tomorrow"] = False
                     continue
                 start_dt, end_dt, _, _ = _sun_window_bounds(sun_dt, window)
                 p["window_start"]      = start_dt.strftime("%H:%M")

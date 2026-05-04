@@ -4,6 +4,16 @@
 html{-webkit-text-size-adjust:100%}
 body{overscroll-behavior-y:none}
 button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+/* iOS suppresses user-scalable=no since 10 (accessibility), so double-tap
+   zoom on buttons is the default. touch-action:manipulation kills exactly
+   that without blocking pinch-zoom (gestures.js / lightbox image keep
+   pinch via their own touch-action overrides). Side effect: the legacy
+   ~300 ms iOS click-delay disappears, so taps feel instant. */
+button,[role="button"],a,input,select,textarea,
+.btn,.clickable,.tappable,.toggle{touch-action:manipulation}
+/* Leaflet owns its own pinch + pan handling; manipulation would block
+   map pinch-zoom. Restore default. */
+.leaflet-container{touch-action:auto}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* Body-scroll lock when the off-canvas sidebar is open. The class is

@@ -22,6 +22,11 @@ import './core/standalone.js';
 // drop doesn't blank the screen. Live data (/api, /media, MJPEG) is
 // excluded by sw.js's fetch handler.
 import './pwa.js';
+// iOS playback hardening — fires `tamspy:viewport-resumed` after the
+// app comes back from a backgrounded tab so video/MJPEG consumers can
+// re-init their streams. Also exports isIOS / MAX_CONCURRENT_STREAMS
+// for any module that needs to gate behaviour.
+import './core/ios-video.js';
 // Cross-domain orchestration loops + bootstrappers.
 import { startLiveUpdate, loadAll } from './live-update.js';
 // Zusammenführen modal — bindMergeModal() wires its DOM listeners once.

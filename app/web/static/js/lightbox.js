@@ -562,6 +562,19 @@ window.addEventListener('resize', () => {
   }, 400);
 });
 
+// iOS Safari hard-pauses the lightbox <video> when the tab/PWA goes
+// background. On resume the play() promise often rejects silently —
+// re-arm by reloading + replaying. Cheap on desktop too (no-op when
+// the video isn't open / isn't paused).
+document.addEventListener('tamspy:viewport-resumed', () => {
+  const v = byId('lightboxVideo');
+  if (!v || v.style.display === 'none' || !v.src) return;
+  if (v.paused){
+    v.load();
+    v.play().catch(() => {});
+  }
+});
+
 // ── window.* bridges (Stage 25 D) ───────────────────────────────────────────
 // router.js + a couple of cam-edit save flows reach for these by
 // global name; renderMediaGrid's _openMediaItem also looks up

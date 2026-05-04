@@ -23,6 +23,7 @@ setup_logging()
 import ipaddress
 import socket
 
+from . import app_state
 from .camera_runtime import CameraRuntime
 from .cat_identity import IdentityRegistry
 from .config_loader import load_config
@@ -125,6 +126,11 @@ _fetch_github_commit_count()
 
 base_cfg = load_config()
 storage_root = Path(base_cfg["storage"]["root"])
+# Mirror into app_state so future blueprints can `from . import app_state`
+# and reach the same singletons. server.py keeps its local globals for
+# the duration of the migration; both names point at the same object.
+app_state.base_cfg = base_cfg
+app_state.storage_root = storage_root
 web_root = Path(__file__).resolve().parent.parent / "web"
 
 # Concatenate CSS partials into web/static/app.css before Flask boots.
@@ -276,12 +282,14 @@ def _file_hash(filename: str) -> str:
 app.jinja_env.globals["static_v"] = _file_hash
 
 store = EventStore(str(storage_root))
+app_state.store = store
 # storage/object_detection/ used to be pre-created here as a placeholder for
 # a feature that never landed (motion_detection events already carry
 # classifier results via top_label + detections[]). The startup migration
 # below rmdirs it when empty; future per-classifier physical separation,
 # if we ever do it, will route by top_label at write time instead.
 settings = SettingsStore(storage_root / "settings.json", base_cfg)
+app_state.settings = settings
 # Boot inventory — single block summarising the bootstrap state. Runs
 # right after settings load, before any subsystem starts emitting its
 # own log lines, so the inventory sits at the top of every restart's
@@ -316,13 +324,23 @@ except Exception as _e:
     )
 cfg = settings.export_effective_config(base_cfg)
 cat_registry = IdentityRegistry(storage_root / "cat_registry.json", threshold=int(cfg.get("processing", {}).get("cat_identity", {}).get("match_threshold", 10)))
+app_state.cat_registry = cat_registry
 person_registry = IdentityRegistry(storage_root / "person_registry.json", threshold=int(cfg.get("processing", {}).get("person_identity", {}).get("match_threshold", 10)))
+app_state.person_registry = person_registry
 timelapse_builder = TimelapseBuilder(storage_root)
+app_state.timelapse_builder = timelapse_builder
 mqtt_service = None
 telegram_service = None
 weather_service = None
 runtimes: dict[str, CameraRuntime] = {}
 _runtime_cfgs: dict[str, dict] = {}  # cam_id → deep copy of camera cfg at runtime start
+# Bind the same dict object on both sides so dict mutations
+# (runtimes[cam_id] = rt, .pop(...)) are visible to importers of
+# app_state without a re-mirror at every mutation site. The service
+# globals (mqtt/telegram/weather) get rebound by reassignment, so
+# rebuild_services / _reload_telegram_service mirror them explicitly.
+app_state.runtimes = runtimes
+app_state._runtime_cfgs = _runtime_cfgs
 
 # Single-flight lock + last-applied snapshot for telegram reloads. The lock
 # prevents two HTTP saves landing simultaneously from each starting a fresh
@@ -368,6 +386,7 @@ def _reload_telegram_service():
             except Exception as e:
                 log.warning("[tg] Stop during reload failed: %s", e)
             telegram_service = None
+            app_state.telegram_service = None
             # Telegram's getUpdates slot can stay reserved for a couple of
             # seconds after we close it; without this pause the new bot's
             # first poll collides with the tail of the old long-poll and
@@ -383,6 +402,7 @@ def _reload_telegram_service():
             timelapse_builder=timelapse_builder,
             settings_store=settings,
         )
+        app_state.telegram_service = telegram_service
         telegram_service.start()
         _last_telegram_cfg_snapshot = _copy.deepcopy(new_tg_cfg)
         # Camera runtimes hold their own per-runtime ref to the notifier;
@@ -396,6 +416,7 @@ def rebuild_services():
     global cfg, mqtt_service
     cfg = get_effective_config()
     mqtt_service = MQTTService(cfg.get("mqtt", {}))
+    app_state.mqtt_service = mqtt_service
     _reload_telegram_service()
     # WeatherService: same lifecycle pattern. Builds once per process; on
     # subsequent rebuild_services calls (settings change) it reloads in place.
@@ -412,6 +433,7 @@ def rebuild_services():
             # point at a dead service.
             telegram_getter=lambda: telegram_service,
         )
+        app_state.weather_service = weather_service
         weather_service.start()
     else:
         weather_service.reload(cfg.get("weather", {}), server_cfg=cfg.get("server", {}))

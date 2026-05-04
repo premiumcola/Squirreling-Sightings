@@ -236,26 +236,35 @@ liefert die maßgebliche Runtime-Config.
 
 ## Architektur · `app/app/`
 
-22 Module, gruppiert nach Verantwortung. Vollständige Aufstellung in
-`app/README.md`.
+51 Python-Dateien (22 Top-Level-Module + 29 Dateien in den drei
+Service-Paketen), gruppiert nach Verantwortung. Vollständige
+Aufstellung in `app/README.md`.
 
 - **`server.py`** — Flask app, alle `/api/*`-Routen. Modul-Init läuft
   `rebuild_runtimes()`; gleiches Re-Run wendet Config-Änderungen an.
-- **`camera_runtime.py`** — `RuntimeThread` pro Kamera. Capture →
-  Motion → Detector-Cascade → Event-Persist → MQTT → Telegram. 24-h-
-  Reconnect-Counter pro Kamera.
+- **`camera_runtime/`** — Paket (11 Dateien). `RuntimeThread` pro
+  Kamera plus Mixins für Capture, Motion, Recording, Zonen, Timelapse,
+  Lifecycle, Status. 24-h-Reconnect-Counter pro Kamera.
 - **`detectors.py`** — `CoralObjectDetector` → `BirdSpeciesClassifier`
   → `WildlifeClassifier`. Drei-Tier-Fallback (pycoral / tflite-runtime
   / disabled) pro Stage.
+- **`detection_confirmer.py`** — Zwei-Frame-Bestätigung gegen
+  Einzelbild-Fehlalarme.
+- **`tracking_worker.py`** — Hintergrund-Thread, schreibt
+  `tracks.json`-Sidecars für Lightbox-Bbox-Overlay.
 - **`frame_helpers.py`** — `is_valid_frame` + `grab_valid_frame`-Retry.
   Zentraler Frame-Filter (grey/pink/block).
-- **`telegram_bot.py`** + **`telegram_helpers.py`** — Anchor-Bubble
-  Edit-in-Place, Backoff-Polling, deutsche Labels.
-- **`weather_service.py`** — Open-Meteo-Polling, History-Persistenz,
-  Wetter-Sichtungen.
-- **`mqtt_service.py`** — paho-mqtt-Wrapper.
+- **`telegram_bot/`** + **`telegram_helpers.py`** — Paket (7 Dateien)
+  mit `TelegramService` und Mixins für Lifecycle, In-/Outbound,
+  Formatting; Anchor-Bubble Edit-in-Place, Backoff-Polling, deutsche
+  Labels.
+- **`weather_service/`** — Paket (11 Dateien). Open-Meteo-Polling,
+  History, Wetter-Sichtungen, Sun-/Event-Timelapse, Recaps.
+- **`mqtt_service.py`** — paho-mqtt-Wrapper mit Rate-Limit-Logging
+  bei publish-Fehlern.
 - **`settings_store.py`** — Source of Truth für `settings.json`.
-- **`storage.py`** — `EventStore`, Per-Cam-Event-JSONs.
+- **`storage.py`** — `EventStore`, Per-Cam-Event-JSONs (atomar via
+  `_atomic_write_text`).
 - **`storage_migration.py`** — idempotenter Boot-Reconcile.
 - **`camera_id.py`** — Schema `manufacturer_model_name_iplastoctet`.
 - **`schema.py`** — JSON-Schema-Validierung.
@@ -264,6 +273,9 @@ liefert die maßgebliche Runtime-Config.
 - **`discovery.py`** — Two-Phase-Subnet-Scan.
 - **`event_logic.py`** — Schedule + Alarm-Profile.
 - **`cat_identity.py`** — Histogramm-Re-ID für Katzen/Personen.
+- **`reolink_api.py`** — Reolink-spezifische API-Helpers.
+- **`css_builder.py`** — Build-Helper, der `app.css` aus `web/static/css/`
+  zusammensetzt.
 - **`timelapse.py`** + **`timelapse_cleanup.py`** — Daily-MP4-Builder
   und Frame-Cleanup-Helfer.
 

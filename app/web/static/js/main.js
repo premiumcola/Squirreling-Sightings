@@ -14,6 +14,10 @@
 // listeners.
 import { byId } from './core/dom.js';
 import { bindConfirmModal } from './core/toast.js';
+// PWA / iOS-Standalone detection — adds `is-standalone` to <body> when
+// the app is launched from the home-screen so CSS can pull stronger
+// safe-area paddings without affecting the in-browser experience.
+import './core/standalone.js';
 // Cross-domain orchestration loops + bootstrappers.
 import { startLiveUpdate, loadAll } from './live-update.js';
 // Zusammenführen modal — bindMergeModal() wires its DOM listeners once.

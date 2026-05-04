@@ -31,7 +31,7 @@ export function _exitMediaSelectMode(){
   _updateMediaSelectToggle();
 }
 
-function _enterMediaSelectMode(){
+export function _enterMediaSelectMode(){
   state.mediaSelectMode = true;
   state.mediaSelected.clear();
   document.body.classList.add('media-select-mode');

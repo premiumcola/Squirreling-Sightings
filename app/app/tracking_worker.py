@@ -21,6 +21,7 @@ Design:
 """
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import os
@@ -190,6 +191,16 @@ class TrackingWorker(threading.Thread):
         self._detector_cfg_id = None  # id() of cfg dict — rebuild on swap
         self._jobs_done = 0
         self._jobs_failed = 0
+        # Bounded ring of recent per-event failures so the UI can tell
+        # the user *why* a re-index didn't produce a fresh sidecar.
+        # Keyed by event_id; oldest entries fall off when the cap is
+        # exceeded. 32 is plenty for the polling UI to find the failure
+        # before it ages out.
+        self._recent_failures: collections.OrderedDict[str, dict] = (
+            collections.OrderedDict()
+        )
+        self._recent_failures_cap = 32
+        self._failures_lock = threading.Lock()
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -204,12 +215,41 @@ class TrackingWorker(threading.Thread):
         self.join(timeout=timeout)
 
     def stats(self) -> dict:
+        now = time.time()
+        with self._failures_lock:
+            # Newest first — OrderedDict preserves insertion order so
+            # reversed() is the freshest-to-oldest view.
+            recent = [
+                {
+                    "event_id": eid,
+                    "error": entry["error"],
+                    "age_seconds": max(0, int(now - entry["ts"])),
+                }
+                for eid, entry in reversed(self._recent_failures.items())
+            ]
         return {
             "queued": self._q.qsize(),
             "done": self._jobs_done,
             "failed": self._jobs_failed,
             "alive": self.is_alive(),
+            "recent_failures": recent,
         }
+
+    def _record_failure(self, event_id: str, error: str) -> None:
+        """Push a per-event failure into the bounded recent-failures ring.
+        Called from the run-loop's exception branch only; the lock keeps
+        a concurrent stats() reader from observing a torn dict during
+        the popitem/__setitem__ sequence."""
+        with self._failures_lock:
+            if event_id in self._recent_failures:
+                # Re-insert to refresh recency ordering.
+                self._recent_failures.pop(event_id)
+            self._recent_failures[event_id] = {
+                "error": error,
+                "ts": time.time(),
+            }
+            while len(self._recent_failures) > self._recent_failures_cap:
+                self._recent_failures.popitem(last=False)
 
     # ── Thread loop ──────────────────────────────────────────────────────
 
@@ -234,6 +274,7 @@ class TrackingWorker(threading.Thread):
                 self._jobs_done += 1
             except Exception as e:
                 self._jobs_failed += 1
+                self._record_failure(job.event_id, str(e) or e.__class__.__name__)
                 log.error("[tracking] event=%s failed: %s",
                           job.event_id, e, exc_info=True)
             finally:

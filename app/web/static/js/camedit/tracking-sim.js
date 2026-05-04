@@ -250,6 +250,10 @@ async function _regenerateTracks(){
   btn.disabled = true;
   prog.hidden = false;
   prog.textContent = 'starte …';
+  // Capture a wall-clock anchor BEFORE the POST so the recent-failures
+  // poll below can tell a fresh worker error apart from a stale entry
+  // for the same event_id from a previous attempt.
+  const t0_ms = Date.now();
   try {
     const r = await fetch(
       `/api/tracking/reindex/${encodeURIComponent(eventId)}` +
@@ -262,8 +266,7 @@ async function _regenerateTracks(){
     }
     // Poll worker status. Drains usually within a couple of seconds for
     // a single clip; cap at 90s to avoid pinning the button forever.
-    const t0 = Date.now();
-    while (Date.now() - t0 < 90_000){
+    while (Date.now() - t0_ms < 90_000){
       await new Promise(res => setTimeout(res, 2000));
       let s = null;
       try { s = await (await fetch('/api/tracking/status')).json(); } catch { /* transient */ }
@@ -271,6 +274,20 @@ async function _regenerateTracks(){
       if (!s.alive){
         showToast('Tracking-Worker nicht erreichbar', 'error');
         return;
+      }
+      // Did the worker fail this specific event? `recent_failures`
+      // carries `age_seconds` — convert against the wall-clock anchor
+      // so a stale entry from before the POST doesn't mis-trigger.
+      const fails = Array.isArray(s.recent_failures) ? s.recent_failures : [];
+      const failedNow = fails.find(f => {
+        if (f?.event_id !== eventId) return false;
+        const age_ms = (Number(f.age_seconds) || 0) * 1000;
+        const failed_at_ms = Date.now() - age_ms;
+        return failed_at_ms >= t0_ms - 500;  // 500ms slack for clock skew
+      });
+      if (failedNow){
+        showToast(`Tracking-Generierung fehlgeschlagen: ${failedNow.error || 'unbekannter Fehler'}`, 'error');
+        return;  // do NOT re-fetch the (stale) sidecar
       }
       const q = s.queued || 0;
       prog.textContent = q > 0 ? `Tracking läuft … noch ${q} in der Queue` : 'fast fertig …';

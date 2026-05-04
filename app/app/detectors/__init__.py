@@ -27,11 +27,12 @@ from ._wildlife_rules import (
 )
 from .draw import draw_detections
 
-# Classes still live in the legacy single file at this point;
-# re-export from there until R02.2/R02.3 move them out.
-from ._legacy_classes import (  # noqa: E402  — re-export after primitives
-    BirdSpeciesClassifier,
-    CoralObjectDetector,
+# R02.2 moved CoralObjectDetector and BirdSpeciesClassifier into their
+# own modules. WildlifeClassifier + discover_wildlife_paths still live
+# in _legacy_classes.py until R02.3 finishes the carve-out.
+from .bird_species import BirdSpeciesClassifier
+from .coral_object import CoralObjectDetector
+from ._legacy_classes import (  # noqa: E402
     WildlifeClassifier,
     discover_wildlife_paths,
 )

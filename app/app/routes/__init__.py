@@ -23,7 +23,10 @@ def register_blueprints(app) -> None:
     `/api/...` paths internally (no `url_prefix=` on the registration
     side) so the URL space remains identical to the pre-split layout.
     """
-    from . import admin, sichtungen, tracking
+    from . import admin, bootstrap, cameras, sichtungen, streams, tracking
     app.register_blueprint(tracking.bp)
     app.register_blueprint(sichtungen.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(bootstrap.bp)
+    app.register_blueprint(cameras.bp)
+    app.register_blueprint(streams.bp)

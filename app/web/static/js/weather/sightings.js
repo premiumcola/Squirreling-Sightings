@@ -126,13 +126,14 @@ function _renderWeatherFilterPills(){
 
 // Viewport-aware page size: tight on phones (4 = 2×2 mosaic that
 // matches the .ws-grid 2-col mobile layout), comfortable on tablets,
-// generous on desktop. Recomputed on every render so a window resize
-// adjusts the page count without a reload.
+// 3×3 on desktop so the pagination control stays in view on a
+// 1080 p screen without scrolling. Recomputed on every render so a
+// window resize adjusts the page count without a reload.
 function _weatherPageSize(){
   const w = window.innerWidth || 1200;
   if (w <= 768)  return 4;
   if (w <= 1180) return 8;
-  return 12;
+  return 9;
 }
 
 function _renderWeatherGrid(){

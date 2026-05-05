@@ -184,17 +184,134 @@ const ACH_DEFS = [
 ];
 
 let _achData = {};
+let _questsData = {};
 
 export async function loadAchievements(){
   try {
     const r = await j('/api/achievements');
     _achData = r.achievements || {};
+    _questsData = r.quests || (r.achievements && r.achievements.quests) || {};
   } catch {
     _achData = {};
+    _questsData = {};
   }
   renderAchievements();
+  renderQuestsPinboard();
 }
 window.loadAchievements = loadAchievements;
+
+// ── Quest pinboard (F09) ─────────────────────────────────────────────────
+// Renders progress-tracked seasonal quests above the species grid. The
+// data comes from the same /api/achievements payload — server adds a
+// top-level `quests` key alongside the species map. Active quests
+// render with a progress bar; completed quests show a ✓ badge and stay
+// visible for 30 days before getting filtered out, so the user has a
+// chance to celebrate before the pinboard recycles them.
+
+function _relativeTime(iso){
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return '';
+  const delta = Math.max(0, Date.now() - t);
+  const min = Math.floor(delta / 60000);
+  if (min < 60) return `vor ${min} Min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `vor ${h} h`;
+  const d = Math.floor(h / 24);
+  return `vor ${d} ${d === 1 ? 'Tag' : 'Tagen'}`;
+}
+
+function _isQuestVisible(q){
+  // Always show active quests. Completed quests linger for 30 days as
+  // a reward display, then get hidden so the pinboard doesn't keep
+  // bloating with last-year's wins.
+  if (!q || typeof q !== 'object') return false;
+  if (!q.completed_at) return true;
+  const t = Date.parse(q.completed_at);
+  if (!Number.isFinite(t)) return false;
+  return (Date.now() - t) < 30 * 24 * 3600 * 1000;
+}
+
+export async function reevaluateQuests(){
+  const btn = byId('questsReevalBtn');
+  if (btn){
+    btn.disabled = true;
+    btn.textContent = 'Re-Eval läuft…';
+  }
+  try {
+    await j('/api/achievements/quests/reevaluate', { method: 'POST' });
+  } catch (e) {
+    // Falls /api/-Aufruf scheitert: einfach reload und das ist gut so —
+    // der Eval-Job läuft dann beim nächsten Stundentakt wieder.
+  }
+  await loadAchievements();
+  if (btn){
+    btn.disabled = false;
+    btn.textContent = 'Re-Eval';
+  }
+}
+window.reevaluateQuests = reevaluateQuests;
+
+export function renderQuestsPinboard(){
+  const wrap = byId('questsPinboard');
+  if (!wrap) return;
+  const all = Object.values(_questsData || {});
+  const visible = all.filter(_isQuestVisible);
+  // Sort: active (no completed_at) first, then most-recently completed.
+  visible.sort((a, b) => {
+    const ac = a.completed_at ? 1 : 0;
+    const bc = b.completed_at ? 1 : 0;
+    if (ac !== bc) return ac - bc;
+    if (ac && bc) return (b.completed_at || '').localeCompare(a.completed_at || '');
+    return (b.progress || 0) / Math.max(1, b.target || 1)
+         - (a.progress || 0) / Math.max(1, a.target || 1);
+  });
+
+  if (!visible.length){
+    wrap.innerHTML = `
+      <div class="quests-pinboard-head">
+        <h4 class="quests-pinboard-title">🎯 Saison-Quests</h4>
+        <button type="button" id="questsReevalBtn" class="btn-action quests-reeval"
+          onclick="reevaluateQuests()">Re-Eval</button>
+      </div>
+      <div class="quests-pinboard-empty">Aktuell keine aktiven Quests.</div>`;
+    return;
+  }
+
+  const cards = visible.map(q => {
+    const target = Math.max(1, q.target || 1);
+    const progress = Math.max(0, Math.min(target, q.progress || 0));
+    const pct = Math.round(progress / target * 100);
+    const done = !!q.completed_at;
+    const stateCls = done ? ' quest-card--done' : '';
+    const badge = done
+      ? `<span class="quest-done-badge" title="${esc(q.completed_at || '')}">✓ ${esc(_relativeTime(q.completed_at))}</span>`
+      : `<span class="quest-progress-num">${progress}/${target}</span>`;
+    return `<article class="quest-card${stateCls}">
+      <div class="quest-card-head">
+        <span class="quest-icon">${esc(q.icon || '🎯')}</span>
+        <div class="quest-titles">
+          <div class="quest-title">${esc(q.title || q.id || '')}</div>
+          <div class="quest-desc">${esc(q.description || '')}</div>
+        </div>
+        ${badge}
+      </div>
+      <div class="quest-progress-track">
+        <div class="quest-progress-fill${done ? ' quest-progress-fill--done' : ''}"
+             style="width:${pct}%"></div>
+      </div>
+    </article>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="quests-pinboard-head">
+      <h4 class="quests-pinboard-title">🎯 Saison-Quests</h4>
+      <button type="button" id="questsReevalBtn" class="btn-action quests-reeval"
+        onclick="reevaluateQuests()">Re-Eval</button>
+    </div>
+    <div class="quests-pinboard-grid">${cards}</div>`;
+}
+window.renderQuestsPinboard = renderQuestsPinboard;
 
 function _achTier(count){
   if (!count || count < 1) return 'locked';

@@ -98,16 +98,12 @@ async function openBirdDossier(latin){
     firstSnap = firstEvent.snapshot_url;
   }
   const heroImg = firstSnap || d.wikipedia_thumb_url || '';
-  const audioBlock = d.audio_url ? `
-    <div class="bird-modal-audio">
-      <audio controls preload="none" src="${esc(d.audio_url)}"></audio>
-      <div class="bird-modal-attribution">
-        ♪ Audio: ${esc(d.audio_attribution || 'unbekannt')}${d.audio_license
-          ? ` · <a href="${esc(d.audio_license)}" target="_blank" rel="noopener noreferrer">Lizenz</a>`
-          : ''}
-        · Quelle: <a href="https://xeno-canto.org/" target="_blank" rel="noopener noreferrer">xeno-canto.org</a>
-      </div>
-    </div>` : '';
+  // Multi-clip audio block — iterates dossier.recordings[] (up to 3
+  // clips per species, picked by the backend with type diversity in
+  // mind: Gesang / Ruf / Warnruf etc.). Falls back to the legacy
+  // single-clip `audio_url` field for older dossiers that haven't
+  // been refetched yet.
+  const audioBlock = _renderAudioBlock(d);
   const wikiBlock = d.wikipedia_summary ? `
     <p class="bird-modal-summary">${esc(d.wikipedia_summary)}</p>` : `
     <p class="bird-modal-summary bird-modal-summary--missing">
@@ -124,9 +120,12 @@ async function openBirdDossier(latin){
     <a class="bird-modal-wiki-link" href="${esc(d.wikipedia_url)}" target="_blank" rel="noopener noreferrer">
       Auf Wikipedia ansehen ↗
     </a>` : '';
-  const refetchBtn = `<button type="button" class="btn-action bird-refetch"
-    onclick="window.refetchBirdDossier('${esc(d.latin)}')">Re-Fetch</button>`;
-
+  // Re-fetch button removed from the visible UI: the auto-fetch on
+  // first species sighting (bird_dossiers.on_new_species) covers the
+  // happy path, and stale-cache cases are rare enough that an
+  // operator can curl POST /api/bird-dossiers/<latin>/refetch when
+  // needed. Keeping the route intact for that ops use; just no
+  // affordance on the card.
   const html = `
     <div class="bird-modal-backdrop" onclick="this.remove()">
       <div class="bird-modal" onclick="event.stopPropagation()">
@@ -136,7 +135,6 @@ async function openBirdDossier(latin){
             <h3>${esc(d.common_name_de || d.latin)}</h3>
             <div class="bird-modal-latin">${esc(d.latin)}</div>
           </div>
-          ${refetchBtn}
         </header>
         ${heroImg ? `<div class="bird-modal-hero"><img src="${esc(heroImg)}" alt=""/></div>` : ''}
         ${wikiBlock}
@@ -170,19 +168,43 @@ function _eventThumbHtml(ev){
   </a>`;
 }
 
-export async function refetchBirdDossier(latin){
-  if (!latin) return;
-  try {
-    await j(`/api/bird-dossiers/${encodeURIComponent(latin)}/refetch`, { method: 'POST' });
-  } catch {
-    // Refetch is best-effort — failures are silent on the server, so
-    // we don't need to surface them here either.
-  }
-  // The bg fetch needs a couple seconds; reload the modal data after a
-  // short delay so the user sees the refresh land without polling.
-  setTimeout(() => {
-    document.querySelector('.bird-modal-backdrop')?.remove();
-    loadBirdDossiers().then(() => openBirdDossier(latin));
-  }, 4000);
+// Render the dossier's audio recordings as up to three labelled
+// <audio controls> rows. Prefers `dossier.recordings[]` (multi-clip,
+// new shape) but falls back to the single-clip legacy fields so
+// older dossiers that haven't been re-fetched still play their one
+// known clip. Returns an empty string when nothing is available so
+// the modal renders cleanly without an audio block (no error UI).
+function _renderAudioBlock(d){
+  const list = Array.isArray(d.recordings) && d.recordings.length
+    ? d.recordings.slice(0, 3)
+    : (d.audio_url ? [{
+        file_url: d.audio_url,
+        type_de: 'Aufnahme',
+        recordist: d.audio_attribution,
+        license_url: d.audio_license,
+      }] : []);
+  if (!list.length) return '';
+  const rows = list.map(r => {
+    const recordist = esc(r.recordist || 'unbekannt');
+    const license = r.license_url
+      ? ` · <a href="${esc(r.license_url)}" target="_blank" rel="noopener noreferrer">Lizenz</a>`
+      : '';
+    return `
+      <div class="bird-audio-row">
+        <div class="bird-audio-row-head">
+          <span class="bird-audio-type">${esc(r.type_de || 'Aufnahme')}</span>
+        </div>
+        <audio class="bird-audio-player" controls preload="none" src="${esc(r.file_url)}"></audio>
+        <div class="bird-modal-attribution">
+          ♪ ${recordist}${license}
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="bird-modal-audio">
+      ${rows}
+      <div class="bird-modal-attribution bird-modal-attribution--source">
+        Quelle: <a href="https://xeno-canto.org/" target="_blank" rel="noopener noreferrer">xeno-canto.org</a>
+      </div>
+    </div>`;
 }
-window.refetchBirdDossier = refetchBirdDossier;

@@ -129,15 +129,54 @@ def _fetch_wikipedia(latin: str) -> dict | None:
     return None
 
 
-def _fetch_xeno_canto(latin: str) -> dict | None:
-    """Pull the first quality-A 5-15 s recording for the species.
+# Map xeno-canto English call-type strings to a short German caption.
+# Keys are matched case-insensitively via substring search; the order
+# matters because longer keys must be tested before shorter ones
+# they could collide with — "flight call" must win over "call",
+# "alarm call" over "call". Unrecognised types fall back to the raw
+# string capitalised — better than nothing.
+_XC_TYPE_DE: dict[str, str] = {
+    "flight call":   "Flugruf",
+    "alarm call":    "Warnruf",
+    "begging call":  "Bettelruf",
+    "alarm":         "Warnruf",
+    "begging":       "Bettelruf",
+    "subsong":       "Subgesang",
+    "song":          "Gesang",
+    "drumming":      "Trommeln",
+    "duet":          "Duett",
+    "wing":          "Flügelschlag",
+    "call":          "Ruf",
+}
 
-    Subspecies fallback mirrors the Wikipedia path. Returns None when
-    no recording is available — typical for rare or recently-named
-    species — OR when no API key is configured (XENO_CANTO_API_KEY
-    env var). Both cases let the frontend hide the audio player."""
+
+def _de_type(raw: str | None) -> str:
+    """Translate an xeno-canto call-type string to a short German caption."""
+    if not raw:
+        return "Aufnahme"
+    s = raw.lower().strip()
+    for k, v in _XC_TYPE_DE.items():
+        if k in s:
+            return v
+    return raw.strip().capitalize() or "Aufnahme"
+
+
+def _fetch_xeno_canto(latin: str, max_recordings: int = 3) -> list[dict]:
+    """Pull up to `max_recordings` quality-A 5-15 s clips for the species.
+
+    Returns a list of recording dicts (`id`, `file_url`, `type_en`,
+    `type_de`, `recordist`, `license_url`, `length`). Empty list when
+    no recordings are available — typical for rare or recently-named
+    species — OR when no API key is configured. Both cases let the
+    frontend hide the audio block.
+
+    Subspecies fallback mirrors the Wikipedia path. The picker prefers
+    a diverse set of call types when available (one Gesang + one Ruf
+    + one Warnruf reads better than three Gesänge), then fills the
+    remaining slots in API order.
+    """
     if not _XC_API_KEY:
-        return None
+        return []
     candidates = [latin]
     stripped = _strip_subspecies(latin)
     if stripped != latin:
@@ -150,18 +189,45 @@ def _fetch_xeno_canto(latin: str) -> dict | None:
         recordings = data.get("recordings") or []
         if not recordings:
             continue
-        rec = recordings[0]
-        # The "file" field is a relative or absolute media URL; xeno-canto
-        # serves both forms in practice. Normalise to https.
-        file_url = rec.get("file") or ""
-        if file_url.startswith("//"):
-            file_url = "https:" + file_url
-        return {
-            "audio_url": file_url or None,
-            "audio_attribution": rec.get("rec") or None,
-            "audio_license": rec.get("lic") or None,
-        }
-    return None
+        # Diversity-first picker: walk the list and prefer a new type
+        # each round; when we run out of new types, fall back to API
+        # order to fill remaining slots.
+        seen_types: set[str] = set()
+        first_pass: list[dict] = []
+        leftover: list[dict] = []
+        for rec in recordings:
+            type_de = _de_type(rec.get("type"))
+            if type_de in seen_types:
+                leftover.append(rec)
+                continue
+            seen_types.add(type_de)
+            first_pass.append(rec)
+            if len(first_pass) >= max_recordings:
+                break
+        picked = first_pass
+        for rec in leftover:
+            if len(picked) >= max_recordings:
+                break
+            picked.append(rec)
+        out: list[dict] = []
+        for rec in picked:
+            file_url = rec.get("file") or ""
+            if file_url.startswith("//"):
+                file_url = "https:" + file_url
+            if not file_url:
+                continue
+            out.append({
+                "id": str(rec.get("id") or "").strip() or None,
+                "file_url": file_url,
+                "type_en": rec.get("type") or "",
+                "type_de": _de_type(rec.get("type")),
+                "recordist": rec.get("rec") or None,
+                "license_url": rec.get("lic") or None,
+                "length": rec.get("length") or None,
+            })
+        if out:
+            return out
+    return []
 
 
 # ── Service ────────────────────────────────────────────────────────────────
@@ -236,6 +302,14 @@ class BirdDossierService:
                 "wikipedia_url": None,
                 "wikipedia_thumb_url": None,
                 "wikipedia_fetched_at": None,
+                # Multi-clip xeno-canto store. Each entry carries id /
+                # file_url / type_en / type_de / recordist / license_url /
+                # length so the frontend can render a labelled <audio>
+                # row per clip and the cache check can skip refetch on
+                # subsequent views. The legacy single-clip fields below
+                # mirror recordings[0] for backward-compat with older
+                # dossier consumers; the frontend prefers `recordings`.
+                "recordings": [],
                 "audio_url": None,
                 "audio_attribution": None,
                 "audio_license": None,
@@ -301,18 +375,29 @@ class BirdDossierService:
 
     def _fetch_and_apply(self, latin: str) -> None:
         wiki = _fetch_wikipedia(latin)
-        xc = _fetch_xeno_canto(latin)
+        # Cache check: if recordings are already populated, skip the
+        # xeno-canto round-trip. The frontend's "open dossier" path
+        # ends up here whenever a fresh species is detected; for known
+        # species we keep the cached clips instead of re-pulling.
+        with self._lock:
+            d_existing = self.data["dossiers"].get(latin)
+            already_have_audio = bool(
+                d_existing and d_existing.get("recordings")
+            )
+        recordings = [] if already_have_audio else _fetch_xeno_canto(latin)
         now_iso = datetime.now().isoformat(timespec="seconds")
         with self._lock:
             d = self.data["dossiers"].get(latin)
             if d is None:
                 return
             self._apply_wikipedia(d, wiki, now_iso)
-            self._apply_xeno_canto(d, xc, now_iso)
+            if not already_have_audio:
+                self._apply_xeno_canto(d, recordings, now_iso)
             self._save_locked()
         log.info("[dossiers] fetched %s — wiki=%s xc=%s",
                  latin, "ok" if wiki else "miss",
-                 "ok" if xc and xc.get("audio_url") else "miss")
+                 f"{len(recordings)} clips" if recordings
+                 else ("cached" if already_have_audio else "miss"))
 
     @staticmethod
     def _apply_wikipedia(dossier: dict, wiki: dict | None, now_iso: str) -> None:
@@ -336,11 +421,22 @@ class BirdDossierService:
             dossier["common_name_de"] = wiki.get("title")
 
     @staticmethod
-    def _apply_xeno_canto(dossier: dict, xc: dict | None, now_iso: str) -> None:
-        """Merge a successful Xeno-canto recording into the dossier."""
-        if not xc:
+    def _apply_xeno_canto(dossier: dict, recordings: list, now_iso: str) -> None:
+        """Merge xeno-canto recordings into the dossier.
+
+        `recordings` is a list of dicts (see _fetch_xeno_canto). Stored
+        on `dossier["recordings"]` directly; the legacy single-clip
+        fields (`audio_url` / `audio_attribution` / `audio_license`)
+        mirror the first entry for backward-compat with older
+        consumers but the frontend prefers iterating `recordings[]`.
+        """
+        if not recordings:
             return
-        dossier["audio_url"] = xc.get("audio_url")
-        dossier["audio_attribution"] = xc.get("audio_attribution")
-        dossier["audio_license"] = xc.get("audio_license")
+        dossier["recordings"] = recordings
         dossier["audio_fetched_at"] = now_iso
+        # Legacy mirror — keeps any older code path that still reads
+        # the single-clip fields working without a coordinated change.
+        head = recordings[0]
+        dossier["audio_url"] = head.get("file_url")
+        dossier["audio_attribution"] = head.get("recordist")
+        dossier["audio_license"] = head.get("license_url")

@@ -169,14 +169,6 @@
   color:rgba(255,255,255,.5);
   margin-top:2px;
 }
-.bird-refetch{
-  font-size:12px;
-  padding:6px 12px;
-  border-radius:8px;
-  min-height:32px;
-  opacity:.85;
-}
-.bird-refetch:hover{opacity:1}
 .bird-modal-hero{
   margin:8px 0 12px;
   border-radius:12px;
@@ -192,18 +184,59 @@
   color:rgba(255,255,255,.82);
 }
 .bird-modal-summary--missing{font-style:italic;color:var(--muted)}
+/* Audio block — up to three xeno-canto recordings, each labelled
+   with its call type (Gesang / Ruf / Warnruf etc.). Per-row stack
+   keeps the player-attribution pair clearly grouped; on iPhone-SE
+   width the rows stack vertically and the controls stay tappable. */
 .bird-modal-audio{
   margin:0 0 12px;
   padding:10px 12px;
   border-radius:10px;
   background:rgba(255,255,255,.04);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
-.bird-modal-audio audio{width:100%;outline:none}
+.bird-audio-row{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.bird-audio-row + .bird-audio-row{
+  padding-top:10px;
+  /* Subtle inner separator — single 1 px line because audio rows
+     genuinely benefit from a divider here; depth-via-color alone
+     reads as one big audio mass. */
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.bird-audio-row-head{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.bird-audio-type{
+  font-size:11px;
+  font-weight:700;
+  color:rgba(var(--acc),.95);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.bird-audio-player{
+  width:100%;
+  outline:none;
+  /* iOS Safari renders <audio controls> at ~44 px high which already
+     meets the touch-target floor. Lock the height so a future UA
+     style doesn't shrink it below that on mobile. */
+  min-height:44px;
+}
 .bird-modal-attribution{
-  margin-top:6px;
   font-size:11px;
   color:var(--muted);
   line-height:1.4;
+}
+.bird-modal-attribution--source{
+  margin-top:4px;
+  font-style:italic;
 }
 .bird-modal-attribution a{color:rgba(var(--acc),.95);text-decoration:none}
 .bird-modal-attribution a:hover{text-decoration:underline}

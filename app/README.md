@@ -38,6 +38,43 @@ gruppiert, nicht alphabetisch.
   Lazy-Imports von `rebuild_runtimes` / `restart_single_camera` als
   einseitige Boot-Helpers).
 
+### Newer Module (F-Task-Reihe)
+
+- **`quests.py`** — Saisonale Quests (F09). Hardcoded Definitions in
+  `QUESTS`, Window-Resolver (december / april_rolling_week /
+  year_to_date / fixe Sonderfälle für Sun-TL+Wildlife-Kombos),
+  idempotenter `evaluate_quests`. Hourly cron via Threading-Timer in
+  `server.py`, plus inkrementeller Trigger nach jedem Motion-Event in
+  `_recording.py::_finalize_motion_clip`. Telegram-Glückwunsch beim
+  Übergang von active → completed mit `notified_at`-Gate.
+- **`bird_dossiers.py`** — Auto-recherchiertes Bestimmungsbuch (F08).
+  `BirdDossierService` legt bei jeder neuen Latin-Art einen Eintrag an
+  und holt im Hintergrund Wikipedia-Auszug + Thumbnail (DE → EN →
+  Subspezies-fallback) plus bis zu 3 Xeno-Canto-Aufnahmen mit
+  Diversitäts-Picker (bevorzugt Gesang / Ruf / Warnruf statt drei
+  Mal Gesang). Persistiert die Recording-IDs in
+  `bird_dossiers.json` so dass weitere Aufrufe nicht erneut fetchen.
+  Rate-Limit 1 req/s, 5 s Timeout, License-Compliance via
+  `audio_attribution` + `audio_license`.
+- **`first_since.py`** — Anomalie-Tagger (F06). Pro Klasse eigene
+  Schwelle (Built-in-Defaults für person / bird / squirrel / fox /
+  hedgehog / marten / deer plus YAML-Override unter
+  `processing.first_since.thresholds`). Hook in
+  `_finalize_motion_clip`, Side-File `first_since_records.json`
+  trackt das jemals höchste Gap pro (cam, label) für `is_new_record`.
+  24-h-Boot-Grace verhindert Spam unmittelbar nach Restart.
+- **`weather_service/_precip_label.py`** — DWD-Niederschlagsklassen
+  (F-task). `precipitation_label(mm_per_h)` → Trocken / Niesel /
+  Leicht / Mäßig / Stark / Starkregen. JS-Mirror unter
+  `web/static/js/core/weather-precip.js`. Nutzung in der
+  Wetter-Mediathek-Pille, Telegram-Wetter-Status, MQTT-Payloads.
+- **`weather_service/_event_tl.py`** — Event-Timelapses für lange
+  Wetter-Phänomene (F-task). Drei Trigger im selben Pipeline-Path:
+  `thunder_rising`, `front_passing`, `storm_front`. 60-min-Capture
+  via APScheduler + Cooldown + Daily-Cap. Klar getrennt von den
+  Sun-Timelapses unter `_sun_tl.py` (75-min-Fenster, fest
+  verdrahtet, mit symmetrischer Day/Night-Mode-Steuerung).
+
 ### Camera Pipeline
 
 - **`camera_runtime/`** — Paket (11 Dateien). `RuntimeThread` pro
@@ -138,6 +175,9 @@ storage/
   test_images/                  # Coral-Test-Batch-Fixtures
   cat_registry.json             # gitignored
   person_registry.json          # gitignored
+  achievements.json             # F09 quest progress, gitignored
+  bird_dossiers.json            # F08 dossier cache, gitignored
+  first_since_records.json      # F06 max-gap memo, gitignored
 ```
 
 `settings.json` ist die einzige Source of Truth zur Laufzeit. `config.yaml`

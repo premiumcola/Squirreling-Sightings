@@ -488,9 +488,14 @@ def restart_single_camera(cam_id: str, *, reason: str = "bound"):
     if not cam_cfg:
         log.info("[boot] cam %s: skipped (not in settings)", cam_id)
         return
-    if not cam_cfg.get("enabled", True):
-        log.info("[boot] cam %s: skipped (disabled)", cam_id)
-        return
+    # Per the dashboard simplification: every configured camera is
+    # treated as active. The `enabled` field stays in settings.json
+    # for forward-compat / external readers but no longer gates
+    # runtime startup — the per-row toggle was removed from the UI,
+    # and a stranded enabled=False from a previous version would
+    # otherwise leave the camera permanently dark with no way back.
+    # TODO: drop the `enabled` field entirely once a settings-store
+    # migration scrubs it from existing JSONs.
     try:
         rt = CameraRuntime(cam_id, get_camera_cfg, cfg, store, telegram_service,
                            mqtt=mqtt_service, cat_registry=cat_registry,
@@ -513,12 +518,13 @@ def rebuild_runtimes():
     rebuild_services()
     mqtt_service.publish("status/reload", {"time": datetime.now().isoformat(timespec="seconds")})
 
+    # Auto-connect every configured camera regardless of the legacy
+    # `enabled` flag (see restart_single_camera for context).
     new_cam_cfgs: dict = {}
     for cam in cfg.get("cameras", []):
-        if cam.get("enabled", True):
-            cam_cfg = get_camera_cfg(cam["id"])
-            if cam_cfg:
-                new_cam_cfgs[cam["id"]] = cam_cfg
+        cam_cfg = get_camera_cfg(cam["id"])
+        if cam_cfg:
+            new_cam_cfgs[cam["id"]] = cam_cfg
 
     to_remove, to_add, to_restart = _compute_camera_diff(
         set(runtimes.keys()), _runtime_cfgs, new_cam_cfgs

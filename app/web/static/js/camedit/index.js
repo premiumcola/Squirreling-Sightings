@@ -143,6 +143,17 @@ export function renderCameraSettings(){
     const MERGE_OFFLINE_THRESHOLD_S = 600;
     const canMerge = typeof c.frame_age_s === 'number'
                   && c.frame_age_s >= MERGE_OFFLINE_THRESHOLD_S;
+    // Collapsed Geräte row keeps only the icon+name on the left and the
+    // expand chevron on the right. The previous cluster (active toggle,
+    // Verbinden button, Zusammenführen, trash) was removed because:
+    //   - configured cameras are always treated as active (auto-connect
+    //     on boot via rebuild_runtimes); no per-row toggling needed
+    //   - manual "Verbinden" duplicates auto-connect
+    //   - trash already lives inside the expanded settings (#deleteCameraBtn)
+    // canMerge is intentionally unused here now — the merge affordance
+    // is reachable from the camera-merge modal flow elsewhere. Keep the
+    // data-camid attribute so the bulk re-renderer can locate the row.
+    void canMerge;
     return `
     <div class="cam-item" data-camid="${esc(c.id)}">
       <div class="cam-item-head" style="cursor:pointer" onclick="editCamera('${esc(c.id)}')">
@@ -150,31 +161,7 @@ export function renderCameraSettings(){
           <span class="cam-item-head-icon">${getCameraIcon(c.name)}</span>
           <span class="cam-item-head-name">${esc(c.name)}</span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center" onclick="event.stopPropagation()">
-          <label class="switch" title="${c.enabled?'Aktiv · klicken zum Deaktivieren':'Inaktiv · klicken zum Aktivieren'}">
-            <input type="checkbox" ${c.enabled?'checked':''} onchange="toggleCameraEnabled('${esc(c.id)}',this.checked)">
-            <span class="slider"></span>
-          </label>
-          <button class="btn-reconnect" title="Neu verbinden" onclick="event.stopPropagation();_reconnectCam('${esc(c.id)}',this)">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M2.5 8A5.5 5.5 0 0 1 13 5M13.5 8A5.5 5.5 0 0 1 3 11"/>
-              <polyline points="12,2 12,5.5 8.5,5.5"/>
-              <polyline points="4,14 4,10.5 7.5,10.5"/>
-            </svg>
-            Verbinden
-          </button>
-          ${canMerge?`<button class="btn-cam-merge" title="In aktive Kamera zusammenführen" data-merge-action="open" data-merge-id="${esc(c.id)}" data-merge-name="${esc(c.name)}">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 3v3a3 3 0 0 0 3 3h4a3 3 0 0 1 3 3v1"/><polyline points="11,11 13,13 11,15"/>
-            </svg>
-            Zusammenführen
-          </button>`:''}
-          <button class="btn-cam-delete" title="Kamera löschen" onclick="event.stopPropagation();_quickDeleteCamera('${esc(c.id)}','${esc(c.name)}')">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="2,4 14,4"/><path d="M5 4V2h6v2"/><path d="M3 4l1 10h8l1-10"/>
-              <line x1="6.5" y1="7" x2="6.5" y2="11"/><line x1="9.5" y1="7" x2="9.5" y2="11"/>
-            </svg>
-          </button>
+        <div class="cam-item-head-right">
           <!-- Expand chevron — pure visual cue; the whole row is clickable. -->
           <svg class="cam-item-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5,3 11,8 5,13"/></svg>
         </div>

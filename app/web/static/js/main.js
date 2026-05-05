@@ -61,6 +61,9 @@ import './router.js';                                   // stage 18
 // Achievement panel — loadAchievements rides the loadAll() kickoff
 // below; the named import makes it visible to the .then() callback.
 import { loadAchievements } from './sichtungen.js';
+// Bird dossiers (F08) — same boot-pattern as loadAchievements; sits
+// underneath the species grid in the Sichtungen panel.
+import { loadBirdDossiers } from './birds.js';
 // Telegram + push hydration is wired by their own modules at import
 // time; bringing the side-effect imports in keeps the load order
 // predictable.
@@ -87,7 +90,7 @@ bindMergeModal();
 // runs every domain renderer (most via window.X lookups in
 // live-update.js — those evaporate as each domain migrates). Once it
 // resolves, the 3 s status poll starts and Sichtungen hydrates.
-loadAll().then(() => { startLiveUpdate(); loadAchievements(); });
+loadAll().then(() => { startLiveUpdate(); loadAchievements(); loadBirdDossiers(); });
 // loadLogs() self-fires from chrome/logs.js's import-time boot.
 
 // debug helper used by a couple of inline-onclick attributes when the

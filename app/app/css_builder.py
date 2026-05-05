@@ -49,6 +49,7 @@ LOAD_ORDER = [
     "26-erk-sim-sheet.css",
     "27-coral-test-modes.css",
     "28-quests.css",
+    "29-birds.css",
 ]
 
 _BANNER = (

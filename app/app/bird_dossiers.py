@@ -35,12 +35,15 @@ from urllib.parse import quote
 
 log = logging.getLogger("app.bird_dossiers")
 
-# Xeno-canto returns audio bound to recordings of a given length range.
-# 5–15 s clips are short enough to play inline as an MP3 in the modal.
-# q:A means "Quality A" — the platform's highest tier.
+# Xeno-canto API v3 requires a per-account `key` parameter (v2 is gone
+# as of early 2026). When `XENO_CANTO_API_KEY` is unset, the audio
+# fetch is silently skipped — `audio_url` stays None and the frontend
+# hides the player. q:A means "Quality A"; len:5-15 picks recordings
+# short enough to play inline as MP3 in the modal.
+_XC_API_KEY = os.environ.get("XENO_CANTO_API_KEY", "").strip()
 _XC_QUERY_TEMPLATE = (
-    "https://xeno-canto.org/api/2/recordings"
-    "?query={latin}+q:A+len:5-15"
+    "https://xeno-canto.org/api/3/recordings"
+    "?query={latin}+q:A+len:5-15&key={key}"
 )
 
 # The MediaWiki REST summary endpoint. Returns title, extract, thumbnail,
@@ -131,13 +134,16 @@ def _fetch_xeno_canto(latin: str) -> dict | None:
 
     Subspecies fallback mirrors the Wikipedia path. Returns None when
     no recording is available — typical for rare or recently-named
-    species. The frontend hides the audio player in that case."""
+    species — OR when no API key is configured (XENO_CANTO_API_KEY
+    env var). Both cases let the frontend hide the audio player."""
+    if not _XC_API_KEY:
+        return None
     candidates = [latin]
     stripped = _strip_subspecies(latin)
     if stripped != latin:
         candidates.append(stripped)
     for cand in candidates:
-        url = _XC_QUERY_TEMPLATE.format(latin=quote(cand))
+        url = _XC_QUERY_TEMPLATE.format(latin=quote(cand), key=_XC_API_KEY)
         data = _rate_limited_get(url)
         if not data:
             continue

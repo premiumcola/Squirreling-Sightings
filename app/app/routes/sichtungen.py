@@ -164,6 +164,56 @@ def api_achievements_unlock():
     return jsonify({"ok": True, "already_had": already, "achievements": data})
 
 
+# ── Bird dossiers (F08) ────────────────────────────────────────────────────
+
+
+@bp.get('/api/bird-dossiers')
+def api_bird_dossiers_list():
+    svc = app_state.bird_dossiers
+    if svc is None:
+        return jsonify({"dossiers": []})
+    return jsonify({"dossiers": svc.list_dossiers()})
+
+
+@bp.get('/api/bird-dossiers/<path:latin>')
+def api_bird_dossier_detail(latin: str):
+    """Single dossier plus the last 10 motion events that featured this
+    species. The events are gathered from every camera (a species
+    visits multiple cams over time) and sorted by time DESC."""
+    svc = app_state.bird_dossiers
+    if svc is None:
+        return jsonify({"ok": False, "error": "service unavailable"}), 404
+    d = svc.get_dossier(latin)
+    if not d:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    store = app_state.store
+    settings = app_state.settings
+    cams = settings.export_effective_config(app_state.base_cfg).get("cameras", []) or [] if settings else []
+    events: list = []
+    for cam in cams:
+        cam_id = cam.get("id")
+        if not cam_id:
+            continue
+        for ev in store.list_events(cam_id, limit=200, media_only=True):
+            for det in ev.get("detections") or []:
+                if (det.get("species_latin") or "").strip() == latin:
+                    events.append(ev)
+                    break
+    events.sort(key=lambda e: e.get("time", ""), reverse=True)
+    return jsonify({"ok": True, "dossier": d, "events": events[:10]})
+
+
+@bp.post('/api/bird-dossiers/<path:latin>/refetch')
+def api_bird_dossier_refetch(latin: str):
+    svc = app_state.bird_dossiers
+    if svc is None:
+        return jsonify({"ok": False, "error": "service unavailable"}), 404
+    started = svc.refetch_dossier(latin)
+    if not started:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    return jsonify({"ok": True, "queued": True})
+
+
 @bp.get('/api/achievements/<species_id>/media')
 def api_achievements_media(species_id: str):
     """All media events for a species, across every camera. The species

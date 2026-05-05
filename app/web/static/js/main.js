@@ -39,6 +39,7 @@ import { bindMergeModal } from './camera-merge.js';
 import './chrome/settings-collapse.js';                 // stage 10
 import './chrome/sidebar.js';                           // stage 10
 import './chrome/mobile-dock.js';                       // stage 10
+import './chrome/tab-strip.js';                          // .is-end toggle
 import './chrome/live-view.js';                         // stage 11
 import './chrome/fullscreen.js';                        // stage 11
 import './chrome/logs.js';                              // stage 10

@@ -4,6 +4,66 @@
 html{-webkit-text-size-adjust:100%}
 body{overscroll-behavior-y:none}
 button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+
+/* ── Inline horizontal tab strips ────────────────────────────────────────
+   Single shared rule for every "tabs in a row" component in the app
+   (.set-tabs / .coral-tabs in settings panes, .erk-sim-tabs in the
+   simulation sheet, .cam-recovery-tabs in the recovery modal). All
+   four are visually different but behave the same on touch: a row
+   the user swipes horizontally, never vertically.
+
+   Why this rule lives here, outside the mobile @media block: touch
+   matters on tablets and Surface-style desktops too, and the iOS
+   pan-x lock has zero downside on a mouse-only device.
+
+   Behaviour:
+     - overflow-x:auto + overflow-y:hidden → only horizontal scroll
+       happens; the strip never adds a vertical scrollbar
+     - touch-action:pan-x → iOS Safari only lets horizontal pans
+       reach the strip; vertical pans bubble straight to the page,
+       fixing the "I tried to swipe between tabs and the page
+       scrolled instead" bug
+     - overscroll-behavior-x:contain → rubber-band stops at the
+       strip's edges, doesn't escape into the page
+     - overscroll-behavior-y:none → vertical bouncing on the strip
+       never bleeds into the page
+     - scroll-snap-type:x proximity → tabs snap softly into view
+     - scrollbar hidden visually (still scrollable)
+     - mask-image right-edge fade hints "more content here". JS
+       toggles a `.is-end` class once the strip is scrolled all the
+       way; matching :not() drops the mask so the last tab isn't
+       cosmetically faded when fully visible. */
+:where(.set-tabs,.coral-tabs,.erk-sim-tabs,.cam-recovery-tabs){
+  overflow-x:auto;
+  overflow-y:hidden;
+  touch-action:pan-x;
+  overscroll-behavior-x:contain;
+  overscroll-behavior-y:none;
+  -webkit-overflow-scrolling:touch;
+  scroll-snap-type:x proximity;
+  scrollbar-width:none;
+}
+:where(.set-tabs,.coral-tabs,.erk-sim-tabs,.cam-recovery-tabs)::-webkit-scrollbar{
+  display:none;
+}
+/* Right-edge fade — visible only while there is more content to the
+   right. The 24 px transparent ramp sits flush against the strip
+   edge so it reads as "this scrolls" without obscuring tab labels.
+   `.is-end` lands when JS detects the strip is at scrollLeft-max. */
+:where(.set-tabs,.coral-tabs,.erk-sim-tabs,.cam-recovery-tabs):not(.is-end){
+  -webkit-mask-image:linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  mask-image:linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
 /* iOS suppresses user-scalable=no since 10 (accessibility), so double-tap
    zoom on buttons is the default. touch-action:manipulation kills exactly
    that without blocking pinch-zoom (gestures.js / lightbox image keep
@@ -257,11 +317,14 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
   /* Settings accordion chevron — keep it in view at narrow widths. */
   .set-chevron{margin-left:auto;flex-shrink:0}
 
-  /* Coral / settings inner tabs — already overflow-x:auto upstream;
-     add scroll-snap for a tighter UX on touch devices. */
-  .set-tabs,.coral-tabs{scroll-snap-type:x proximity;scrollbar-width:none}
-  .set-tabs::-webkit-scrollbar,.coral-tabs::-webkit-scrollbar{display:none}
-  .set-tab,.coral-tab{scroll-snap-align:start;flex-shrink:0;min-height:44px}
+  /* Inline tab strips — touch-target floor for every horizontal tab
+     strip in the app. The scroll-lock + right-edge fade rules live
+     outside this @media block (further down in this file) so the
+     touch behaviour is consistent on tablets and Surface-style touch
+     desktops too. */
+  .set-tab,.coral-tab,.erk-sim-tab,.cam-recovery-tab{
+    scroll-snap-align:start;flex-shrink:0;min-height:44px;
+  }
 
   /* Toggle row hit area — switch is 24 px tall, padding 10 px ⇒ 44 px
      row total. Lock that floor explicitly so future padding tweaks

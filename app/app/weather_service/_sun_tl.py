@@ -41,6 +41,18 @@ from ._consts import (
 # sun_times_today so the two never drift again.
 _SUN_PRE_BIAS = 0.70
 
+# Locked sunrise/sunset capture window — single value, not user-tunable.
+# Sized to comfortably cover civil twilight (sun 0–6° below horizon, ~30
+# min either side at mid-latitudes) PLUS golden hour (~30 min after the
+# event). With the 70/30 pre-bias above that gives 52 min before and
+# 23 min after the sun event, so the recording starts well into
+# nautical twilight (when the first colours appear in the sky) and
+# ends after the bright phase has settled. Smaller windows (the
+# previous 30-min default) miss the early twilight transition; larger
+# ones bloat the file without adding visible content. Per the F-task
+# spec the user-facing slider was removed — fewer knobs to mis-set.
+_SUN_TL_LOCKED_WINDOW_MIN = 75
+
 
 def _sun_window_bounds(sun_dt: datetime, window_min: int) -> tuple[datetime, datetime, int, int]:
     """Apply _SUN_PRE_BIAS to (sun_dt, window_min). Returns
@@ -139,7 +151,11 @@ class SunTimelapseMixin:
                 sun_dt = self.sun_event_today(phase, today)
                 if sun_dt is None:
                     continue
-                window = int(pcfg.get("window_min", 30) or 30)
+                # Window locked to a known-good range — the previous
+                # user-tunable slider let mis-configurations land at
+                # 10 min, far too short to capture civil twilight.
+                # See _SUN_TL_LOCKED_WINDOW_MIN above for sizing rationale.
+                window = _SUN_TL_LOCKED_WINDOW_MIN
                 # 70/30 bias around the sun event — see _SUN_PRE_BIAS.
                 # With a 30-min window that's -21 / +9 around the event.
                 start_dt, _end_dt, _pre, _post = _sun_window_bounds(sun_dt, window)
@@ -301,7 +317,7 @@ class SunTimelapseMixin:
         if rt is None or not hasattr(rt, "snapshot_jpeg_hires"):
             log.warning("[weather] cam %s nicht verfügbar — capture abgebrochen", cam_id)
             return
-        window_min = int(pcfg.get("window_min", 30) or 30)
+        window_min = _SUN_TL_LOCKED_WINDOW_MIN
         interval_s = max(1, int(pcfg.get("interval_s", 3) or 3))
         target_fps = max(1, int(pcfg.get("fps", 25) or 25))
         cam_name = self._cam_name(cam_id)

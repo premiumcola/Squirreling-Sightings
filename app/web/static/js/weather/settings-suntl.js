@@ -53,11 +53,15 @@ function _renderSunDnovRow(camId, phase, pcfg, isReolink){
 const _WS_LENGTH_OPTIONS = [10, 15, 20, 30, 45];
 const _WS_DEFAULT_LENGTH_S = 20;
 const _WS_FPS = 25;
+// Mirror of _SUN_TL_LOCKED_WINDOW_MIN in app/app/weather_service/_sun_tl.py.
+// The UI no longer surfaces a duration slider — keep this constant in
+// sync with the backend if the lock value ever changes.
+const _SUN_TL_LOCKED_WINDOW_MIN = 75;
 
 function _wsLengthPlan(window_min, target_duration_s){
   const fps = _WS_FPS;
   const target = parseInt(target_duration_s, 10) || _WS_DEFAULT_LENGTH_S;
-  const window_s = (parseInt(window_min, 10) || 30) * 60;
+  const window_s = (parseInt(window_min, 10) || _SUN_TL_LOCKED_WINDOW_MIN) * 60;
   const frames_target = Math.max(1, target * fps);
   const interval_s = Math.max(1, Math.round(window_s / frames_target));
   const actual_frames = Math.floor(window_s / interval_s);
@@ -78,7 +82,11 @@ function _wsRenderLengthPreview(plan){
 }
 
 function _wsRenderLengthRow(phase, pcfg){
-  const window_min = parseInt(pcfg.window_min, 10) || 30;
+  // window_min is locked on the backend; pcfg.window_min may still
+  // carry a stale value from older settings.json. Use the locked
+  // value so the on-screen frame-count preview matches actual
+  // capture behaviour.
+  const window_min = _SUN_TL_LOCKED_WINDOW_MIN;
   const target = parseInt(pcfg.target_duration_s, 10) || _WS_DEFAULT_LENGTH_S;
   const plan = _wsLengthPlan(window_min, target);
   const opts = _WS_LENGTH_OPTIONS.map(s =>
@@ -159,8 +167,7 @@ function _renderWeatherCamPanel(c){
           <span class="ws-sun-icon" style="color:#e89540">${WEATHER_TYPES.sun_timelapse_rise.icon}</span>
           <span class="ws-sun-name">Sonnenaufgang</span>
           <label class="switch ws-sun-toggle"><input type="checkbox" data-sun-toggle="sunrise" ${sr.enabled ? 'checked' : ''}/><span class="slider"></span></label>
-          <input type="range" class="ws-sun-slider" min="10" max="60" step="5" value="${sr.window_min || 30}" data-sun-window="sunrise"/>
-          <span class="ws-sun-window"><span class="ws-sun-window-num">${sr.window_min || 30}</span> min</span>
+          <span class="ws-sun-window-locked" title="Fenster fest auf 75 Min — deckt Civil Twilight + Goldene Stunde sicher ab.">75 min · fest</span>
           ${previewLine('sunrise', sr)}
           ${sr.enabled ? _wsRenderLengthRow('sunrise', sr) : ''}
           ${sr.enabled ? _renderSunDnovRow(c.id, 'sunrise', sr, isReolink) : ''}
@@ -169,8 +176,7 @@ function _renderWeatherCamPanel(c){
           <span class="ws-sun-icon" style="color:#d4823a">${WEATHER_TYPES.sun_timelapse_set.icon}</span>
           <span class="ws-sun-name">Sonnenuntergang</span>
           <label class="switch ws-sun-toggle"><input type="checkbox" data-sun-toggle="sunset" ${ss.enabled ? 'checked' : ''}/><span class="slider"></span></label>
-          <input type="range" class="ws-sun-slider" min="10" max="60" step="5" value="${ss.window_min || 30}" data-sun-window="sunset"/>
-          <span class="ws-sun-window"><span class="ws-sun-window-num">${ss.window_min || 30}</span> min</span>
+          <span class="ws-sun-window-locked" title="Fenster fest auf 75 Min — deckt Civil Twilight + Goldene Stunde sicher ab.">75 min · fest</span>
           ${previewLine('sunset', ss)}
           ${ss.enabled ? _wsRenderLengthRow('sunset', ss) : ''}
           ${ss.enabled ? _renderSunDnovRow(c.id, 'sunset', ss, isReolink) : ''}
@@ -194,27 +200,11 @@ function _bindWeatherCamPanel(wrap, c){
   block.querySelectorAll('[data-sun-toggle]').forEach(cb => {
     cb.addEventListener('change', () => _saveSunPhase(camId, cb.dataset.sunToggle, { enabled: cb.checked }));
   });
-  // Window slider — saving also recomputes interval_s so the backend sees
-  // the new pacing without us round-tripping the formula on Python side.
-  block.querySelectorAll('[data-sun-window]').forEach(sl => {
-    const phase = sl.dataset.sunWindow;
-    const numEl = sl.parentElement.querySelector('.ws-sun-window-num');
-    const previewEl = block.querySelector(`[data-sun-length-preview="${phase}"]`);
-    const refreshPreview = () => {
-      if (!previewEl) return;
-      const plan = _wsLengthPlan(parseInt(sl.value, 10), targetFor(phase));
-      previewEl.innerHTML = _wsRenderLengthPreview(plan);
-    };
-    sl.addEventListener('input', () => {
-      if (numEl) numEl.textContent = sl.value;
-      refreshPreview();
-    });
-    sl.addEventListener('change', () => {
-      const window_min = parseInt(sl.value, 10);
-      const plan = _wsLengthPlan(window_min, targetFor(phase));
-      _saveSunPhase(camId, phase, { window_min, interval_s: plan.interval_s });
-    });
-  });
+  // Window length is now locked to _SUN_TL_LOCKED_WINDOW_MIN (75) on
+  // the backend — the slider was removed because user-tunable values
+  // could land at 10 min, far too short to capture civil twilight.
+  // The video-length select still drives interval_s (captured frames
+  // per minute) so the user can pick a 30 / 60 / 90 s output.
   // Video-length select — persists the user's TARGET; backend uses the
   // recomputed interval_s for actual capture pacing.
   block.querySelectorAll('[data-sun-length]').forEach(sel => {
@@ -222,8 +212,7 @@ function _bindWeatherCamPanel(wrap, c){
     const previewEl = block.querySelector(`[data-sun-length-preview="${phase}"]`);
     sel.addEventListener('change', () => {
       const target_duration_s = parseInt(sel.value, 10) || _WS_DEFAULT_LENGTH_S;
-      const sliderEl = block.querySelector(`[data-sun-window="${phase}"]`);
-      const window_min = sliderEl ? parseInt(sliderEl.value, 10) : 30;
+      const window_min = _SUN_TL_LOCKED_WINDOW_MIN;
       const plan = _wsLengthPlan(window_min, target_duration_s);
       if (previewEl) previewEl.innerHTML = _wsRenderLengthPreview(plan);
       _saveSunPhase(camId, phase, { target_duration_s, interval_s: plan.interval_s });

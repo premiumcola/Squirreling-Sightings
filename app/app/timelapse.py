@@ -202,6 +202,12 @@ class TimelapseBuilder:
         skipped = 0
         dup_count = 0
         ref_size: tuple[int, int] | None = None
+        # Audit counter for the magenta-pattern detector — surfaces in
+        # the build summary so we can spot corruption-burst trends
+        # without drowning in per-frame DEBUG lines.
+        magenta_drops = 0
+        magenta_first: str | None = None
+        magenta_last: str | None = None
 
         for img_path in images:
             img = cv2.imread(str(img_path))
@@ -209,6 +215,11 @@ class TimelapseBuilder:
             if not ok:
                 log.debug("timelapse: skip corrupt frame %s — %s", img_path.name, reason)
                 skipped += 1
+                if reason.startswith("patterned_magenta") or reason.startswith("pink_artifact") or reason.startswith("partial_pink"):
+                    magenta_drops += 1
+                    if magenta_first is None:
+                        magenta_first = img_path.name
+                    magenta_last = img_path.name
                 if img is not None:
                     del img
                 continue
@@ -228,6 +239,12 @@ class TimelapseBuilder:
         # so log filters can pull all encode outcomes at a glance.
         log.info("[timelapse] %s: %d frames total, %d valid, %d skipped (grey/colorbar/corrupt)",
                  out_path.name, total_input, len(valid_paths), skipped)
+        if magenta_drops > 0:
+            log.info(
+                "[timelapse] %s: %d magenta-corruption frame(s) dropped, first=%s last=%s",
+                out_path.name, magenta_drops,
+                magenta_first or "?", magenta_last or "?",
+            )
         if skipped > 0:
             log.info("timelapse: skipped %d/%d corrupt frames for %s",
                      skipped, total_input, out_path.name)

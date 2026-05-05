@@ -41,6 +41,21 @@ _PINK_FULL_RATIO = 2.5
 _PINK_QUAD_R_MIN = 180.0
 _PINK_QUAD_RATIO = 3.0
 
+# Patterned-magenta detector — catches H.265 corruption blobs that have
+# real spatial texture (so means+std-based rules above pass) but a
+# huge fraction of pixels stuck in the magenta wedge of colour space.
+# A "magenta pixel" here = R high AND B high AND G clearly lower than
+# both, plus a minimum dominance margin so legitimate dawn/dusk pinks
+# (which lift G almost as much as R/B) don't trip. We downscale the
+# frame before the per-pixel pass so the cost stays bounded — even on
+# a full-day timelapse rebuild this is cheap.
+_PATTERN_MAGENTA_DOWNSCALE = 256        # max width for the per-pixel scan
+_PATTERN_MAGENTA_R_MIN = 130            # red channel must reach this
+_PATTERN_MAGENTA_B_MIN = 130            # blue channel must reach this
+_PATTERN_MAGENTA_GREEN_MAX = 110        # green must be clearly below R+B
+_PATTERN_MAGENTA_DOMINANCE = 25         # min(R,B) must beat G by this much
+_PATTERN_MAGENTA_AREA_FRAC = 0.20       # ≥ 20 % of pixels in the wedge → reject
+
 # Spatial-detail floor in grayscale std. A truly flat frame (single color,
 # no texture, no noise) sits below ~2; legitimate dark frames at night still
 # have sensor noise and easily clear this bar.
@@ -354,6 +369,36 @@ def is_valid_frame(img) -> tuple[bool, str]:
         sr = float(sub[:, :, 2].mean())
         if sr > _PINK_QUAD_R_MIN and sr > sg * _PINK_QUAD_RATIO and sr > sb * _PINK_QUAD_RATIO:
             return False, f"partial_pink_q{qi}(r={sr:.0f},g={sg:.0f},b={sb:.0f})"
+
+    # Patterned-magenta detector — counts the *fraction* of pixels in
+    # the magenta wedge (high R + high B, low G) regardless of whether
+    # those pixels form a smooth fill or a corruption pattern. Catches
+    # H.265 partial-block-loss frames where the broken region carries
+    # real spatial texture (variance survives) but the colour stays
+    # locked in magenta. Downscaled first so the cost is bounded.
+    if w > _PATTERN_MAGENTA_DOWNSCALE:
+        scale = _PATTERN_MAGENTA_DOWNSCALE / float(w)
+        small = cv2.resize(img,
+                           (_PATTERN_MAGENTA_DOWNSCALE, max(1, int(h * scale))),
+                           interpolation=cv2.INTER_AREA)
+    else:
+        small = img
+    sb_ch = small[:, :, 0].astype("int16")
+    sg_ch = small[:, :, 1].astype("int16")
+    sr_ch = small[:, :, 2].astype("int16")
+    # Per-pixel magenta mask. min(R,B) must beat G by the dominance
+    # margin so dawn/dusk pinks (which lift G almost as high as R/B)
+    # don't trigger. Numpy-vectorised — single pass.
+    rb_min = np.minimum(sr_ch, sb_ch)
+    mask = ((sr_ch >= _PATTERN_MAGENTA_R_MIN)
+            & (sb_ch >= _PATTERN_MAGENTA_B_MIN)
+            & (sg_ch <= _PATTERN_MAGENTA_GREEN_MAX)
+            & ((rb_min - sg_ch) >= _PATTERN_MAGENTA_DOMINANCE))
+    total = mask.size
+    if total > 0:
+        mfrac = float(mask.sum()) / float(total)
+        if mfrac >= _PATTERN_MAGENTA_AREA_FRAC:
+            return False, f"patterned_magenta(area={mfrac:.0%})"
 
     # Truly flat frame (any solid color)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)

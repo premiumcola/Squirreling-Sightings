@@ -108,6 +108,20 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      safe-area so the notch doesn't overlap the brand row. */
   .sidebar{padding-top:calc(12px + env(safe-area-inset-top))}
 
+  /* Single anchor for the iPhone status bar / Dynamic Island offset.
+     The shell collapses to display:block at this width, so .main
+     IS the page scroll container and the hero card is its first
+     child — padding-top here keeps every section (hero, dashboard,
+     settings, statistik, …) clear of the status bar.
+     12 px is the existing .main mobile top-padding (set in
+     04-coral-1.css); the env() inset is added on top so phones
+     with a notch / Dynamic Island clear it cleanly while
+     notch-less devices keep the design margin via the 0 fallback.
+     Note: the sidebar above already pads its own top inset because
+     it's a separate fixed overlay; padding .main does NOT double-
+     up there because the sidebar isn't a child of .main. */
+  .main{padding-top:calc(12px + env(safe-area-inset-top,0px))}
+
   /* Lightbox button placement on mobile —
        Close             top-right (notch-safe)
        Confirm + Delete  bottom row, above prev/next

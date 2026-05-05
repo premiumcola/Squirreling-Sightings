@@ -1,41 +1,39 @@
 /* ── Mobile bottom dock ─────────────────────────────────────────
-   Geometry tuned for iPhone 15 Pro Max:
-     display corner radius ≈ 55 px
-     gap-edge               = 8 px (left/right/bottom equal)
-     dock corner radius     = 55 − 8 = 47 px (concentric to bezel)
-   The safe-area-inset-bottom adds the home-indicator clearance
-   ON TOP of the 8 px gap. Other iPhones look fine too — only
-   on 15 Pro Max it nests visually flush with the bezel curve. */
+   Anchored flush to the viewport's bottom and side edges. The
+   home-indicator clearance is implemented as inner padding via
+   env(safe-area-inset-bottom) so the bar background extends all
+   the way to the screen edge while the labels still sit above
+   the indicator. Rounded TOP corners only — the bottom is glued
+   to the bezel, so rounding it would just leave a slim cosmetic
+   strip below the bar.
+   Surface is a neutral solid dark slightly lighter than the
+   page so depth comes from contrast alone, not from a border or
+   a blurred + saturated backdrop (the previous saturate(1.4)
+   amplified blue/cool tones bleeding through and gave the bar
+   a noticeable Blaustich on iOS). No backdrop-filter at all. */
 .m-dock{display:none}
 @media (max-width:768px){
   .m-dock{
-    --m-dock-gap:12px;
-    --m-dock-radius:47px;
     display:grid;
     grid-template-columns:repeat(5,1fr);
     gap:2px;
     position:fixed;
-    left:var(--m-dock-gap);
-    right:var(--m-dock-gap);
-    /* Equal floating gap on all three exposed sides. The previous
-       formula  max(--m-dock-gap, env(safe-area-inset-bottom) - 8px)
-       was effectively additive on home-indicator phones (safe-area
-       ~34 px → bottom ~26 px while the sides stayed at 12 px), so
-       the bar visually drifted upward. max(--m-dock-gap, env())
-       lets the device-imposed safe-area kick in only when it's
-       larger than the design margin — notch-less iPhones and iPads
-       (env() == 0) get true 12/12/12 margins; phones with a home
-       indicator clear it cleanly without trimming. */
-    bottom:max(var(--m-dock-gap),env(safe-area-inset-bottom,0px));
-    padding:10px 8px;
-    border-radius:var(--m-dock-radius);
-    background:rgba(38,40,48,.78);
-    backdrop-filter:blur(22px) saturate(1.4);
-    -webkit-backdrop-filter:blur(22px) saturate(1.4);
-    border:1px solid rgba(255,255,255,.08);
-    box-shadow:
-      0 12px 32px rgba(0,0,0,.55),
-      0 4px 10px rgba(0,0,0,.32);
+    left:0;
+    right:0;
+    bottom:0;
+    /* env() with a 0 fallback so notch-less devices get no extra
+       padding — the bar still hugs the bottom there. On home-
+       indicator iPhones the inset (~34 px) keeps tap targets
+       clear of the indicator without bleed. */
+    padding:10px 8px calc(10px + env(safe-area-inset-bottom,0px));
+    border-radius:18px 18px 0 0;
+    /* True neutral grayscale — page is #111, panel is #1a1a, dock
+       takes the panel tone so the chrome reads as one family. No
+       hue, no saturation, no risk of an iOS Blaustich. */
+    background:#1a1a1a;
+    /* Single shadow at the top edge to lift the bar visually off
+       the page content; no rim line. */
+    box-shadow:0 -8px 24px rgba(0,0,0,.45);
     z-index:90;
     outline:0;
   }
@@ -85,10 +83,13 @@
     70%  {box-shadow:0 0 0 6px rgba(34,197,94,0)}
     100% {box-shadow:0 0 0 0 rgba(34,197,94,0)}
   }
-  /* Reserve scroll-space at the bottom so content isn't permanently
-     hidden behind the floating dock. 78 ≈ dock height + gap + safe. */
+  /* Reserve scroll-space at the bottom so the dock never overlaps
+     the last bit of page content. The dock is now anchored flush
+     so no outer floating gap to add — only the inner padding
+     (≈ 16 px chrome around 54 px buttons → ~74 px) plus the home-
+     indicator inset is needed. */
   body{
-    padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))!important;
+    padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;
   }
   /* Narrow iPhones: nudge label down a hair so "Sichtungen" doesn't
      wrap. Only triggers under 380 px. */

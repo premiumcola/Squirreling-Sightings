@@ -153,17 +153,59 @@ class ManifestsMixin:
         return m
 
     def delete_sighting(self, sighting_id: str) -> bool:
+        """Best-effort delete: scrub every sibling file that shares the
+        sighting's stem regardless of which (if any) of them exist.
+
+        Used to bail out with `False` when the manifest JSON was
+        missing — the canonical "ghost" case where the user sees a
+        listed entry (because the cache or the on-disk frames remain)
+        but the JSON sidecar was already gone, leaving the entry
+        permanently undeletable from the UI. We now treat a missing
+        manifest as a half-deleted record and continue scrubbing the
+        remaining siblings so the entry disappears on next reload.
+
+        Only returns `False` when the sighting_id can't be parsed at
+        all (route handler returns 404 in that case). Missing files
+        are not errors — silently skipped.
+        """
         path = self._manifest_path_for(sighting_id)
-        if not path or not path.exists():
+        if path is None:
             return False
         stem = path.with_suffix("")
-        for ext in (".json", ".mp4", ".jpg"):
-            p = stem.with_suffix(ext)
+        # Known sidecar extensions for weather sightings. Listed
+        # explicitly rather than glob'd so we never delete unrelated
+        # files that happen to share the stem in the same directory.
+        sidecar_exts = (".json", ".mp4", ".jpg", ".jpeg", ".webp", ".tracks.json")
+        any_removed = False
+        for ext in sidecar_exts:
+            p = stem.with_suffix(ext) if ext.startswith(".") and ext.count(".") == 1 \
+                else stem.with_name(stem.name + ext)
             try:
                 if p.exists():
                     p.unlink()
+                    any_removed = True
+            except FileNotFoundError:
+                # Race with a concurrent delete — treat as success.
+                pass
             except Exception as e:
+                # Don't abort the sweep just because one sibling failed
+                # (permissions, FS quirks). Log and move on so the
+                # remaining files still get cleaned.
                 log.warning("[weather] delete %s: %s", p.name, e)
+        # Also scrub any leftover scratch frame dir from a crashed
+        # capture — `.scratch_<stem>/` next to the manifest. Best-
+        # effort only; never blocks the delete result.
+        try:
+            scratch = stem.parent / f".scratch_{stem.name}"
+            if scratch.exists() and scratch.is_dir():
+                import shutil as _sh
+                _sh.rmtree(scratch, ignore_errors=True)
+                any_removed = True
+        except Exception as e:
+            log.debug("[weather] delete scratch %s: %s", sighting_id, e)
+        if not any_removed:
+            log.info("[weather] delete %s: nothing on disk — treated as already-gone",
+                     sighting_id)
         return True
 
     def _manifest_path_for(self, sighting_id: str) -> Path | None:

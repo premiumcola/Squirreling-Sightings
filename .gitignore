@@ -23,6 +23,10 @@ storage/person_registry.json
 app/storage/cat_registry.json
 app/storage/person_registry.json
 
+# Achievements + F09 quest progress - per-install runtime state
+storage/achievements.json
+app/storage/achievements.json
+
 # Logs - may contain RTSP URLs with credentials, IPs, timestamps
 storage/logs/
 app/storage/logs/

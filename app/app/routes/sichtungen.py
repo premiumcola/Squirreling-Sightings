@@ -125,7 +125,21 @@ def _save_achievements(data: dict):
 @bp.get('/api/achievements')
 def api_achievements_get():
     with _ach_lock:
-        return jsonify({"achievements": _load_achievements()})
+        data = _load_achievements()
+    # Surface the quests block alongside the species map. Existing
+    # clients ignore unknown keys, so this is additive — pinned at
+    # top-level so the JS doesn't need a second roundtrip.
+    return jsonify({"achievements": data, "quests": data.get("quests") or {}})
+
+
+@bp.post('/api/achievements/quests/reevaluate')
+def api_achievements_quests_reevaluate():
+    """Manual full re-eval — wired up to the "Re-Eval"-Button in the
+    Sichtungen pinboard. Same evaluator that runs hourly in the
+    background and after every motion event."""
+    from ..quests import reevaluate_and_save
+    result = reevaluate_and_save()
+    return jsonify(result)
 
 
 @bp.post('/api/achievements/unlock')

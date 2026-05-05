@@ -560,6 +560,27 @@ class OutboundMixin:
         log.info("[tg] event alert: cam=%s label=%s score=%.2f severity=%s silent=%s dark=%s",
                  camera_id, primary, top_score, severity or "—", silent, is_night_now)
 
+    def send_quest_completed(self, quest: dict):
+        """Push a one-shot Glückwunsch when an F09 quest hits its target.
+
+        Caller (quest evaluator) is responsible for the notified_at
+        gate — this method only formats and sends. Silent push so it
+        joins the daily-summary tier of "informational" pings rather
+        than waking the user at 3 AM the moment a wildlife threshold
+        flips.
+        """
+        if not self.enabled:
+            return
+        icon = quest.get("icon") or "🎉"
+        title = quest.get("title") or quest.get("id") or "Quest"
+        desc = quest.get("description") or ""
+        text = f"<b>🎉 Quest abgeschlossen: {icon} {title}</b>\n{desc}"
+        try:
+            self.send(text, silent=True)
+            log.info("[tg] quest completion sent: %s", quest.get("id"))
+        except Exception as e:
+            log.warning("[tg] quest push failed for %s: %s", quest.get("id"), e)
+
     def send_timelapse_alert(self, video_path: str | Path, cam_name: str,
                              profile_de: str, duration_s: int, rel_path: str):
         """Fired by camera_runtime after a successful timelapse encode."""

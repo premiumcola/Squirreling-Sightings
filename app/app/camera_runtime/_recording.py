@@ -531,6 +531,18 @@ class RecordingMixin:
                 except Exception:
                     pass
 
+        # Quest re-evaluation (F09). Best-effort: every motion event
+        # triggers a full re-eval. Performance is fine — running over a
+        # year of events is a few-ms disk walk. The hourly job in
+        # server.py is the safety net; this trigger keeps the pinboard
+        # in sync without waiting up to an hour. Wrapped tightly so a
+        # quest-eval bug never poisons the recording pipeline.
+        try:
+            from ..quests import reevaluate_and_save
+            threading.Thread(target=reevaluate_and_save, daemon=True).start()
+        except Exception as _qe:
+            log.debug("[%s] quest re-eval skipped: %s", self.camera_id, _qe)
+
         # Telegram — gate the event through the same camera-level switches
         # the old code respected (armed, zone send_telegram, telegram_enabled,
         # notify-from-alarm-profile), then hand the event to the push system

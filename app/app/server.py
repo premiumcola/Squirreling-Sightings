@@ -584,6 +584,28 @@ def _run_daily_cleanup():
 _run_daily_cleanup()
 
 
+def _run_hourly_quest_eval():
+    """Trigger (b) for the F09 quest system: hourly full re-evaluation.
+
+    The motion-finalize hook (trigger a) covers the common case, but
+    this safety net catches drift — e.g. when events get deleted from
+    the archive or when a window-boundary tick crosses a quest's
+    `from`/`to`. Idempotent; runs detached.
+    """
+    import threading as _thr
+    try:
+        from .quests import reevaluate_and_save
+        reevaluate_and_save()
+    except Exception as e:
+        logging.getLogger(__name__).warning("[quests] hourly eval failed: %s", e)
+    t = _thr.Timer(3600, _run_hourly_quest_eval)
+    t.daemon = True
+    t.start()
+
+
+_run_hourly_quest_eval()
+
+
 # ── Heartbeat + shutdown ─────────────────────────────────────────────────────
 _BOOT_TS = time.time()
 _DISK_FREE_CACHE: list = [0.0, 0.0]  # (last_check_ts, free_gb)

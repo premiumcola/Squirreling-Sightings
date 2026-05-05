@@ -312,7 +312,18 @@
   padding:9px 11px;
 }
 .erk-card + .erk-card{ margin-top:5px; }
-.erk-card .row{ display:flex;align-items:center;gap:10px; }
+/* The slider thumb (13 px wide) gets centred on the track at the
+   current value, so at min/max it projects ~7 px past the input's
+   content box. Without the lateral padding here, the thumb at max
+   visually escapes the .erk-card and gets clipped by the iPhone's
+   right edge — most visible in step 3 where the .two-col cells
+   are narrowest. The 7 px gutter on each side reserves exactly
+   that thumb-radius clearance so the slider stays fully inside
+   its card at min and max alike. The rule lives on .erk-card .row
+   so it applies to step 1-4 AND the per-class drilldown
+   (#erkConfirmPerClass / #erkPerClass), which use the same row
+   pattern — shared fix, no duplication. */
+.erk-card .row{ display:flex;align-items:center;gap:10px;padding:0 7px;min-width:0; }
 .erk-card .lbl{
   font-size:10.5px;color:rgba(255,255,255,.5);
   margin-top:3px;display:block;

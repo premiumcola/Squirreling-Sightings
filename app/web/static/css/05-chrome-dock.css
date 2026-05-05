@@ -1,19 +1,31 @@
 /* ── Mobile bottom dock ─────────────────────────────────────────
    Floating pill-style bar detached from every edge. Bottom margin
-   uses max(env(safe-area-inset-bottom), 12px) so home-indicator
-   iPhones float above the indicator while notch-less devices
-   still get ≥12 px breathing room at the bottom. Corner radius
-   echoes the iPhone 15 Pro / Pro Max device curvature (~30 px).
-   Soft outward shadow underneath dims the page content scrolling
-   behind without screaming for attention.
-   Surface stays neutral grayscale (#1a1a1a) — same family as the
-   panels, no blue cast, no border, no backdrop-filter saturate
-   that would re-introduce the iOS Blaustich. */
+   uses max(env(safe-area-inset-bottom), 8px) so home-indicator
+   iPhones float just above the indicator (closer than the older
+   12 px floor felt) while notch-less devices still get a clear
+   8 px gap. Corner radius echoes the iPhone 15 Pro / Pro Max
+   device curvature (~30 px).
+
+   Visual separation from the page underneath comes from three
+   compound shadows:
+     - inset 0 1px 0 rgba(255,255,255,.08) — a 1 px inner top
+       highlight that defines the silhouette against busy content
+       (e.g. Wetter snapshots, Library thumbnails). This is the
+       only acceptable thin line — it adds depth, not a border.
+     - 0 -4px 16px rgba(0,0,0,.40) — a soft halo rising upward to
+       separate the bar from page content scrolling above it.
+     - 0 10px 32px rgba(0,0,0,.55) — a stronger drop shadow below
+       that anchors the bar visually to its hovering position.
+
+   Surface stays neutral grayscale (#1f1f23, slightly lighter than
+   the panel #1a1a1a) — no blue cast, no backdrop-filter saturate.
+   The half-step toward brighter gives the bar more contrast
+   against the #111 page without re-introducing any hue. */
 .m-dock{display:none}
 @media (max-width:768px){
   .m-dock{
     --m-dock-side-gap:12px;
-    --m-dock-bottom-gap:max(12px, env(safe-area-inset-bottom, 12px));
+    --m-dock-bottom-gap:max(8px, env(safe-area-inset-bottom, 8px));
     display:grid;
     grid-template-columns:repeat(5,1fr);
     gap:2px;
@@ -22,18 +34,12 @@
     right:var(--m-dock-side-gap);
     bottom:var(--m-dock-bottom-gap);
     padding:8px 6px;
-    /* Echoes the iPhone 15 Pro Max outer corner curvature (~55 px
-       device radius). 30 px on the bar nests cleanly without
-       trying to be perfectly concentric — the visual rhyme is
-       what matters, not metric fidelity. */
     border-radius:30px;
-    background:#1a1a1a;
-    /* Calm outward drop shadow — wide spread, low intensity so
-       the bar reads as floating above the content rather than
-       stamped onto it. */
+    background:#1f1f23;
     box-shadow:
-      0 8px 24px rgba(0,0,0,.45),
-      0 2px 6px rgba(0,0,0,.30);
+      inset 0 1px 0 rgba(255,255,255,.08),
+      0 -4px 16px rgba(0,0,0,.40),
+      0 10px 32px rgba(0,0,0,.55);
     z-index:90;
     outline:0;
   }
@@ -84,15 +90,13 @@
     100% {box-shadow:0 0 0 0 rgba(34,197,94,0)}
   }
   /* Reserve scroll-space at the bottom so the floating dock never
-     overlaps the last bit of page content. Account for the dock's
-     own height (~70 px = 16 px chrome + 54 px buttons) plus the
-     bottom-gap floor and the home-indicator inset. The bottom gap
-     uses the same max(safe-area, 12px) formula as the dock itself
-     so the values move together if the design margin changes. */
+     overlaps the last bit of page content. Tracks the same
+     max(safe-area, 8px) formula as the dock's bottom-gap variable
+     so the two values move together if the design margin changes. */
   body{
     padding-bottom:calc(
       70px
-      + max(12px, env(safe-area-inset-bottom, 12px))
+      + max(8px, env(safe-area-inset-bottom, 8px))
       + 8px
     )!important;
   }

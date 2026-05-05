@@ -80,11 +80,19 @@
 .cv-tr-row .cv-pill-live-wrap{margin-left:0}
 
 /* ── Top-right pill container ─────────────────────────────────────────────── */
-/* Top-right pill column. The +6px offset places the Live pill just
-   below the camera's burnt-in date/time row (~14px tall on Reolink
-   firmware). The previous +22px was sized for an older overlay and
-   left an obvious empty band between the date line and the pill. */
-.cv-tr{position:absolute;top:calc(var(--cv-overlay-inset) + 6px);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
+/* Top-right pill column. Vertical offset is dynamic so the Live pill
+   tracks the actual content rendered in the top-left title-wrap:
+     - No location row (.cv-loc absent / empty cam.location data):
+       pill sits at the natural card-padding top — same line as the
+       camera-name row.
+     - Location/daytime row present: pill drops to share that row's
+       baseline so the eye reads "name | empty" on row 1 and
+       "location | live pill" on row 2.
+   :has() lets us do this with pure CSS — no JS resize listener.
+   The 22 px offset matches the cv-name row's effective height
+   (font-size 15 × line-height 1.2 + 3 px gap from .cv-title-wrap). */
+.cv-tr{position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
+.cv-card:has(.cv-loc) .cv-tr{top:calc(var(--cv-overlay-inset) + 22px)}
 
 /* Base pill */
 .cv-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.02em;position:relative;cursor:default;backdrop-filter:blur(8px);min-height:0;line-height:1.2;box-sizing:border-box}

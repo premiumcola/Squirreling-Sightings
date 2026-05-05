@@ -317,6 +317,16 @@ app_state.timelapse_builder = timelapse_builder
 # layer reads via app_state.bird_dossiers and triggers manual refetches.
 from .bird_dossiers import BirdDossierService as _BirdDossierService
 app_state.bird_dossiers = _BirdDossierService(storage_root / "bird_dossiers.json")
+# F06 first-since detector — flags motion events that arrive after an
+# unusually long gap for their class. Built once at boot; the recording
+# finalize path reads it via app_state.first_since_detector. The
+# settings handle is bound after settings is constructed (above), so
+# the detector lazily resolves the merged effective config on each
+# evaluate() call.
+from .first_since import FirstSinceDetector as _FirstSinceDetector
+app_state.first_since_detector = _FirstSinceDetector(
+    store=store, settings=settings, storage_root=storage_root,
+)
 mqtt_service = None
 telegram_service = None
 weather_service = None

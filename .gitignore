@@ -31,6 +31,10 @@ app/storage/achievements.json
 storage/bird_dossiers.json
 app/storage/bird_dossiers.json
 
+# F06 first-since records - per-install max-gap memoization
+storage/first_since_records.json
+app/storage/first_since_records.json
+
 # Logs - may contain RTSP URLs with credentials, IPs, timestamps
 storage/logs/
 app/storage/logs/

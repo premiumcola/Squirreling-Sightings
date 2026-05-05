@@ -492,6 +492,26 @@ class RecordingMixin:
         }
         if encode_error:
             event["encode_error"] = encode_error
+
+        # F06 first-since marker — runs BEFORE add_event so the JSON on
+        # disk carries the marker for downstream consumers (lightbox
+        # badge, /api/insights/first-since later). The detector reads
+        # the prior event of the same class via EventStore; cheap
+        # because list_events is indexed and we cap at limit=10.
+        try:
+            from .. import app_state as _app_state
+            fs = getattr(_app_state, "first_since_detector", None)
+            if fs is not None:
+                marker = fs.evaluate(event)
+                if marker:
+                    event["first_since"] = marker
+                    # Surface on the meta dict too so the telegram path
+                    # below picks up the headline label/gap without a
+                    # second store read.
+                    meta["first_since"] = marker
+        except Exception as _fe:
+            log.debug("[%s] first_since skipped: %s", self.camera_id, _fe)
+
         self.store.add_event(self.camera_id, event)
 
         # Phase 1 object tracking — enqueue a background pass that

@@ -511,7 +511,26 @@ class OutboundMixin:
 
         eid = meta.get("event_id") or datetime.now().strftime("%Y%m%d-%H%M%S")
         score_pct = int(round(top_score * 100))
-        caption = f"<b>{LABEL_DE.get(primary, primary)}</b> · {score_pct}% · {cam_name}"
+        # F06 first-since: when this event is the first of its class
+        # after a long gap, lead with a celebratory headline. The marker
+        # may name a different label than `primary` (e.g. event has
+        # "person" + "squirrel" but only squirrel crossed its 12 h
+        # threshold) — we use the marker's label for the headline so
+        # the user sees the actually-anomalous class. is_new_record
+        # adds a sparkle so users notice the rarity.
+        first_since = meta.get("first_since") if isinstance(meta.get("first_since"), dict) else None
+        if first_since:
+            fs_label = first_since.get("label") or primary
+            fs_label_de = LABEL_DE.get(fs_label, fs_label)
+            gap_h = float(first_since.get("gap_hours") or 0.0)
+            gap_str = f"{int(round(gap_h))} h" if gap_h >= 1 else f"{int(round(gap_h * 60))} min"
+            record_tag = " ✨ (neuer Rekord)" if first_since.get("is_new_record") else ""
+            caption = (
+                f"<b>Erstes {fs_label_de} seit {gap_str}{record_tag}</b>\n"
+                f"{cam_name} · {score_pct}%"
+            )
+        else:
+            caption = f"<b>{LABEL_DE.get(primary, primary)}</b> · {score_pct}% · {cam_name}"
 
         buttons = [
             [("✅ Gültig", f"ev:{eid}:ok"),

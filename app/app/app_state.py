@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from .bird_dossiers import BirdDossierService
     from .camera_runtime import CameraRuntime
     from .cat_identity import IdentityRegistry
+    from .first_since import FirstSinceDetector
     from .mqtt_service import MQTTService
     from .settings_store import SettingsStore
     from .storage import EventStore
@@ -52,6 +53,7 @@ cat_registry: IdentityRegistry | None = None
 person_registry: IdentityRegistry | None = None
 timelapse_builder: TimelapseBuilder | None = None
 bird_dossiers: BirdDossierService | None = None
+first_since_detector: FirstSinceDetector | None = None
 
 # ── Services (mutable — rebuild_services() reassigns) ─────────────────────
 mqtt_service: MQTTService | None = None

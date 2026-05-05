@@ -66,6 +66,19 @@ processing:
     match_threshold: 10
   person_identity:
     match_threshold: 10
+  # F06 first-since detector — flags events that arrive after an unusually
+  # long gap for their class. The Telegram push then leads with a
+  # celebratory caption ("Erstes Eichhörnchen seit 14 h"). Threshold values
+  # accept "Nh" / "Nm" / a bare number (interpreted as hours).
+  first_since:
+    enabled: true
+    boot_grace: 24h            # suppress for first N after process start
+    thresholds:
+      default: 8h
+      person: 6h
+      bird: 4h
+      squirrel: 12h
+      fox: 24h
 
 cameras:
   - id: cam-beispiel-1

@@ -65,9 +65,7 @@ function _runSplash(){
     'position:fixed',
     'inset:0',
     'z-index:9999',
-    // Use the theme token so the splash bg matches the user's
-    // resolved mode (light cream vs dark) instead of always-dark.
-    'background:var(--bg)',
+    'background:#111111',
     'display:flex',
     'align-items:center',
     'justify-content:center',

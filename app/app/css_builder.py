@@ -50,7 +50,6 @@ LOAD_ORDER = [
     "27-coral-test-modes.css",
     "28-quests.css",
     "29-birds.css",
-    "30-theme-picker.css",
 ]
 
 _BANNER = (

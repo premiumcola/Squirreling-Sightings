@@ -223,7 +223,20 @@ function _fmtMb(mb){
 const _ARCHIVE_ICON = `<svg width="13" height="12" viewBox="0 0 13 12" fill="none" aria-hidden="true" style="flex-shrink:0"><rect x="1" y="4.5" width="11" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="0.5" y="2" width="12" height="2.5" rx="1" stroke="currentColor" stroke-width="1.1"/><rect x="4.5" y="6.25" width="4" height="2" rx="0.75" stroke="currentColor" stroke-width="1"/></svg>`;
 
 // All-media multi-camera grid icon — 4 quads: TL=timelapse(violet), TR=motion(blue), BL=person(blue), BR=object(amber)
-export const _MOC_ALL_SVG = `<svg width="168" height="106" viewBox="0 0 80 50" fill="none" aria-hidden="true"><rect x="1" y="1" width="34" height="21" rx="3.5" fill="#1a2535" stroke="#4a6890" stroke-width="1.3"/><rect x="45" y="1" width="34" height="21" rx="3.5" fill="#1a2535" stroke="#4a6890" stroke-width="1.3"/><rect x="1" y="28" width="34" height="21" rx="3.5" fill="#1a2535" stroke="#4a6890" stroke-width="1.3"/><rect x="45" y="28" width="34" height="21" rx="3.5" fill="#1a2535" stroke="#4a6890" stroke-width="1.3"/><circle cx="6" cy="6" r="2" fill="#4a6890"/><circle cx="50" cy="6" r="2" fill="#4a6890"/><circle cx="6" cy="33" r="2" fill="#4a6890"/><circle cx="50" cy="33" r="2" fill="#4a6890"/><line x1="9" y1="7.5" x2="25" y2="7.5" stroke="#c4b5fd" stroke-width="1.2" stroke-linecap="round" opacity=".9"/><polygon points="9,8.5 25,8.5 17,13" fill="#c4b5fd" opacity=".75"/><polygon points="17,13 9,17 25,17" fill="#c4b5fd" opacity=".5"/><line x1="9" y1="17.5" x2="25" y2="17.5" stroke="#c4b5fd" stroke-width="1.2" stroke-linecap="round" opacity=".9"/><circle cx="64" cy="7" r="2" fill="#93c5fd" opacity=".8"/><path d="M63.5 9L61 14L59 19" stroke="#93c5fd" stroke-width="1.4" stroke-linecap="round" fill="none" opacity=".75"/><path d="M62 11L59.5 9.5" stroke="#93c5fd" stroke-width="1.2" stroke-linecap="round" opacity=".7"/><path d="M62 11L65 10.5" stroke="#93c5fd" stroke-width="1.2" stroke-linecap="round" opacity=".7"/><path d="M61 14L59 19" stroke="#93c5fd" stroke-width="1.4" stroke-linecap="round" opacity=".75"/><path d="M61 14L64 19" stroke="#93c5fd" stroke-width="1.4" stroke-linecap="round" opacity=".75"/><circle cx="18" cy="34" r="2.8" fill="#60a5fa" opacity=".7"/><path d="M12 48C12 42 24 42 24 48" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".65"/><rect x="57" y="34" width="14" height="10" rx="1.5" fill="#f59e0b" opacity=".55"/><rect x="59.5" y="31.5" width="5" height="3" rx="1" fill="#f59e0b" opacity=".45"/><circle cx="40" cy="25" r="5.5" fill="#1a2a40" stroke="#3a5878" stroke-width="1.2"/><polygon points="38,22.5 44,25 38,27.5" fill="#4a7090"/></svg>`;
+// Single coherent stacked-media glyph for the "Alle Medien" tile.
+// Replaces a previous 2×2 collage of small thumbnails (timelapse,
+// walker, face, archive bag) which read as cluttered. Three overlapping
+// rounded "media cards" stacked top-down with a play triangle on the
+// front card communicate "all archived clips" cleanly. Single muted-
+// blue family, flat fill, ≥ 8 px corner radius per CLAUDE.md design
+// rules. Container CSS centers + pads it so the mark sits with
+// comfortable breathing room on all four sides of the tile.
+export const _MOC_ALL_SVG = `<svg width="96" height="96" viewBox="0 0 80 80" fill="none" aria-hidden="true">
+  <rect x="14" y="22" width="44" height="32" rx="6" fill="#3a5878" opacity=".55"/>
+  <rect x="20" y="16" width="44" height="32" rx="6" fill="#4a7090" opacity=".8"/>
+  <rect x="26" y="10" width="44" height="32" rx="6" fill="#7faec9"/>
+  <polygon points="44,18 44,34 58,26" fill="#1a2535"/>
+</svg>`;
 
 // Count chips for media overview cards
 export const _MOC_OBJECT_TYPES = { person: 1, cat: 1, bird: 1, car: 1, dog: 1 };

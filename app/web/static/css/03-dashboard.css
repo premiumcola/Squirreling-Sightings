@@ -307,8 +307,14 @@
 .moc-card.moc-active:hover{background:#3a3a40}
 .moc-thumb{width:100%;aspect-ratio:16/9;overflow:hidden;flex-shrink:0;background:#0a0a0a;position:relative}
 .moc-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.moc-all-thumb{width:100%;aspect-ratio:16/9;min-height:88px;overflow:hidden;flex-shrink:0;background:#2a2e36;display:flex;align-items:center;justify-content:center;position:relative}
-.moc-all-thumb svg{opacity:.95}
+/* "Alle Medien" tile placeholder. The aspect-ratio matches the
+   per-camera tiles so the row reads as a uniform grid; padding gives
+   the centred glyph generous margin to all four edges so the mark
+   feels deliberately placed instead of pressed against the top.
+   The MB badge is positioned absolutely (see thumbBadgeStyle in the
+   orchestration module), so the padding only governs the SVG. */
+.moc-all-thumb{width:100%;aspect-ratio:16/9;min-height:88px;overflow:hidden;flex-shrink:0;background:#2a2e36;display:flex;align-items:center;justify-content:center;position:relative;padding:14px}
+.moc-all-thumb svg{opacity:.95;max-width:100%;max-height:100%}
 /* Archived cameras section */
 .moc-archive-section{margin-top:20px;padding-top:4px}
 .moc-archive-hdr{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}

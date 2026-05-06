@@ -1,17 +1,16 @@
       <section class="hero panel">
         <div class="hero-title-wrap">
           <h1 class="hero-title" aria-label="TAM-spy">
-            <!-- Single source of truth — the same squirrel-with-camera
-                 PNG that powers the iOS PWA icon, sized down to fit
-                 the title row. The 192 px asset is plenty for a
-                 ~32 px display because it gets rasterised once and
-                 cached; serving the 1024 master would just bloat the
-                 first-paint payload. The launch-transition logic in
-                 chrome/launch-splash.js targets this <img> by id, so
-                 keep the id stable. -->
+            <!-- Header brand logo — randomly Spy Scout OR Acorn Cam,
+                 50/50, picked once per page-load by chrome/brand-logo.js.
+                 The SVG src + alt are populated by JS once the
+                 module loads; the `data-brand-locked` attribute is
+                 set after first paint so re-renders don't reroll.
+                 The launch-transition logic targets `#heroBrandLogo`
+                 — keep the id stable. -->
             <img id="heroBrandLogo" class="hero-brand-glyph"
-                 src="/static/icons/icon-192.png?v={{ static_v('icons/icon-192.png') }}"
-                 alt="TAM-spy logo" width="32" height="32" />
+                 src="/static/img/logos/logo-acorn-cam-dark.svg"
+                 alt="TAM-spy" />
             <span class="hero-tam">TAM</span><span class="hero-hyphen" aria-hidden="true">-</span><span class="hero-spy">spy</span>
           </h1>
           <p class="hero-subtitle">Reolink · Coral TPU · Telegram</p>

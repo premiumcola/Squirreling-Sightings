@@ -1,21 +1,20 @@
-"""Parametric icon + iOS-splash builder for TAM-spy.
+"""PWA icon + iOS-splash builder for TAM-spy.
 
-Renders a squirrel-with-camera motif at 1024×1024 master resolution
-using only cv2 + numpy (no Pillow / cairosvg needed in the container),
-then downsamples to every iOS-relevant icon size and composes splash
-backgrounds for the common iPhone/iPad fleet.
+Source: ``app/web/static/img/logos/logo-acorn-cam-dark.svg`` — single
+master SVG. We rasterise it onto a warm-cream square plate so the
+darker camera-lens body separates cleanly from typical iOS dark
+wallpapers, and emit the iOS-relevant icon sizes plus all the
+apple-touch-startup-image splash variants.
 
-Outputs land beside this script under app/web/static/icons/. The HTML
-fragment for splash <link> tags is written to
-app/web/templates/partials/splash_links.html so index.html can pull
-it via {% include %} without hand-editing 30+ media queries.
+Usage inside the container::
 
-Run inside the container:
-
+    docker exec tam-spy pip install cairosvg     # transient one-shot
     docker exec tam-spy python /app/web/static/icons/_build_icons.py
 
-Idempotent — the parametric design has no random component, so the
-same script always produces byte-identical PNGs.
+The PNG outputs are committed to git, so future rebuilds don't need
+cairosvg unless the master SVG changes. The corresponding splash
+backgrounds use the same cream `#F0E5D0` so iOS shows one seamless
+surface from native splash → web app first paint.
 """
 from __future__ import annotations
 
@@ -23,290 +22,143 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import cairosvg
 
 
+# ── Paths ─────────────────────────────────────────────────────────────
+THIS = Path(__file__).resolve()
+LOGO_DIR = THIS.parent.parent / "img" / "logos"
+MASTER_SVG = LOGO_DIR / "logo-acorn-cam-dark.svg"
+OUT_DIR = THIS.parent
+SPLASH_DIR = OUT_DIR / "splash"
+SPLASH_PARTIAL = (
+    THIS.parent.parent.parent
+    / "templates"
+    / "partials"
+    / "splash_links.html"
+)
+
+
+# ── Plate / palette ───────────────────────────────────────────────────
 def _bgr(hex_str: str) -> tuple[int, int, int]:
-    """Hex string → cv2 BGR triple."""
     s = hex_str.lstrip("#")
-    r, g, b = int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
-    return (b, g, r)
+    return (int(s[4:6], 16), int(s[2:4], 16), int(s[0:2], 16))
 
 
-# Warm sand plate so the dark squirrel pops against typical iOS dark
-# wallpapers — the previous near-black plate (#0a0a0a) with a navy
-# centre glow disappeared into anything dark behind it. The new plate
-# stays in the same warm-earth family as the squirrel itself
-# (complementary, not competing) and the radial centre glow lifts
-# even brighter so the silhouette has a soft halo to read against.
-PLATE_BG = _bgr("#d4a76a")     # warm sand
-PLATE_GLOW = _bgr("#f1d7a3")   # bright cream centre
-SQUIRREL = _bgr("#8B5A2B")
-SQUIRREL_DK = _bgr("#5a3a18")
-SQUIRREL_LT = _bgr("#a06d35")
-EYE = _bgr("#0a0a0a")
-EYE_LIGHT = _bgr("#ffffff")
-CAMERA_BODY = _bgr("#1f2937")
-CAMERA_ACC = _bgr("#3b82f6")
-LENS_RIM = _bgr("#0a0a0a")
-LENS_GLINT = _bgr("#ffffff")
+PLATE_BG_HEX = "#F0E5D0"        # warm cream — manifest background_color
+PLATE_BG = _bgr(PLATE_BG_HEX)
 
 
-def _rounded_rect_mask(size: int, inset: int, radius: int) -> np.ndarray:
+# ── SVG rasterisation ─────────────────────────────────────────────────
+def _rasterise_logo(target_height_px: int) -> np.ndarray:
+    """Render the master Acorn Cam SVG to a numpy BGRA array of the
+    requested height. Width follows the SVG's intrinsic aspect ratio.
+    """
+    png_bytes = cairosvg.svg2png(
+        url=str(MASTER_SVG),
+        output_height=target_height_px,
+    )
+    arr = np.frombuffer(png_bytes, dtype=np.uint8)
+    rgba = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
+    if rgba is None:
+        raise RuntimeError(f"cairosvg → imdecode failed for {MASTER_SVG}")
+    if rgba.shape[2] == 3:
+        # cairosvg always outputs RGBA but be safe.
+        alpha = np.full(rgba.shape[:2] + (1,), 255, dtype=np.uint8)
+        rgba = np.concatenate([rgba, alpha], axis=2)
+    return rgba
+
+
+def _rounded_rect_mask(size: int, radius: int) -> np.ndarray:
+    """Full-size rounded-square alpha mask (255 inside, 0 outside)."""
     mask = np.zeros((size, size), dtype=np.uint8)
-    a, b = inset, size - inset
-    cv2.rectangle(mask, (a + radius, a), (b - radius, b), 255, cv2.FILLED)
-    cv2.rectangle(mask, (a, a + radius), (b, b - radius), 255, cv2.FILLED)
+    cv2.rectangle(mask, (radius, 0), (size - radius, size), 255, cv2.FILLED)
+    cv2.rectangle(mask, (0, radius), (size, size - radius), 255, cv2.FILLED)
     for cx, cy in (
-        (a + radius, a + radius),
-        (b - radius, a + radius),
-        (a + radius, b - radius),
-        (b - radius, b - radius),
+        (radius, radius),
+        (size - radius, radius),
+        (radius, size - radius),
+        (size - radius, size - radius),
     ):
         cv2.circle(mask, (cx, cy), radius, 255, cv2.FILLED)
     return mask
 
 
-def _radial_gradient(size: int, inner: tuple, outer: tuple) -> np.ndarray:
-    """Subtle radial fill — plate-glow at center fading to plate-bg
-    at the corners. Pure numpy; ~10 ms at 1024 px."""
-    cx = cy = size / 2
-    yy, xx = np.indices((size, size))
-    dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-    max_d = (size / 2) * np.sqrt(2)
-    t = np.clip(dist / max_d, 0, 1)[..., None]
-    inner_arr = np.array(inner, dtype=np.float32)
-    outer_arr = np.array(outer, dtype=np.float32)
-    img = (1 - t) * inner_arr + t * outer_arr
-    return img.astype(np.uint8)
-
-
-def _draw_squirrel(img: np.ndarray, cx: int, cy: int, h: int) -> None:
-    """Sitting squirrel with bushy tail sweeping up-left. h sets the
-    overall body-height; everything else is derived so proportions stay
-    stable across sizes. (cx, cy) is roughly the body center."""
-    tail_outer = np.array(
-        [
-            (cx - int(0.06 * h), cy + int(0.10 * h)),
-            (cx - int(0.46 * h), cy + int(0.04 * h)),
-            (cx - int(0.62 * h), cy - int(0.22 * h)),
-            (cx - int(0.55 * h), cy - int(0.50 * h)),
-            (cx - int(0.30 * h), cy - int(0.60 * h)),
-            (cx - int(0.08 * h), cy - int(0.48 * h)),
-            (cx - int(0.02 * h), cy - int(0.20 * h)),
-            (cx + int(0.05 * h), cy - int(0.05 * h)),
-        ],
-        dtype=np.int32,
-    )
-    cv2.fillPoly(img, [tail_outer], SQUIRREL, lineType=cv2.LINE_AA)
-    tail_inner = np.array(
-        [
-            (cx - int(0.20 * h), cy - int(0.20 * h)),
-            (cx - int(0.40 * h), cy - int(0.27 * h)),
-            (cx - int(0.46 * h), cy - int(0.42 * h)),
-            (cx - int(0.30 * h), cy - int(0.52 * h)),
-            (cx - int(0.16 * h), cy - int(0.40 * h)),
-            (cx - int(0.10 * h), cy - int(0.25 * h)),
-        ],
-        dtype=np.int32,
-    )
-    cv2.fillPoly(img, [tail_inner], SQUIRREL_LT, lineType=cv2.LINE_AA)
-
-    # Body — vertical ellipse, sits below the head.
-    body_cy = cy + int(0.10 * h)
-    cv2.ellipse(
-        img,
-        (cx, body_cy),
-        (int(0.22 * h), int(0.30 * h)),
-        0,
-        0,
-        360,
-        SQUIRREL,
-        cv2.FILLED,
-        cv2.LINE_AA,
-    )
-    # Belly highlight — lighter ellipse on the front.
-    cv2.ellipse(
-        img,
-        (cx, body_cy + int(0.08 * h)),
-        (int(0.13 * h), int(0.20 * h)),
-        0,
-        0,
-        360,
-        SQUIRREL_LT,
-        cv2.FILLED,
-        cv2.LINE_AA,
-    )
-
-    # Head — round, slightly smaller than body.
-    head_cy = cy - int(0.20 * h)
-    head_r = int(0.20 * h)
-    cv2.circle(img, (cx, head_cy), head_r, SQUIRREL, cv2.FILLED, cv2.LINE_AA)
-
-    # Ears — two filled triangles capped with a darker inner triangle.
-    ear_w = max(4, int(0.08 * h))
-    ear_h = max(4, int(0.11 * h))
-    for sign in (-1, 1):
-        ex = cx + sign * int(0.13 * h)
-        ey = head_cy - int(0.13 * h)
-        outer = np.array(
-            [
-                (ex - ear_w // 2, ey + ear_h // 2),
-                (ex + ear_w // 2, ey + ear_h // 2),
-                (ex, ey - ear_h // 2),
-            ],
-            dtype=np.int32,
-        )
-        cv2.fillPoly(img, [outer], SQUIRREL, lineType=cv2.LINE_AA)
-        # Inner triangle — shrunk toward (ex,ey) to give a darker pinna.
-        inner = (outer * 0.6 + np.array([ex, ey]) * 0.4).astype(np.int32)
-        cv2.fillPoly(img, [inner], SQUIRREL_DK, lineType=cv2.LINE_AA)
-
-    # Snout — small lighter ellipse below the head center.
-    snout_y = head_cy + int(0.07 * h)
-    cv2.ellipse(
-        img,
-        (cx, snout_y),
-        (max(3, int(0.075 * h)), max(2, int(0.05 * h))),
-        0,
-        0,
-        360,
-        SQUIRREL_LT,
-        cv2.FILLED,
-        cv2.LINE_AA,
-    )
-    # Nose dot.
-    cv2.circle(
-        img, (cx, snout_y + max(2, int(0.025 * h))),
-        max(2, int(0.014 * h)), EYE, cv2.FILLED, cv2.LINE_AA,
-    )
-
-    # Eye — single eye visible (head turned slightly).
-    eye_x = cx + int(0.085 * h)
-    eye_y = head_cy - int(0.02 * h)
-    eye_r = max(3, int(0.04 * h))
-    cv2.circle(img, (eye_x, eye_y), eye_r, EYE, cv2.FILLED, cv2.LINE_AA)
-    glint = max(1, int(0.013 * h))
-    cv2.circle(
-        img, (eye_x - glint, eye_y - glint), glint, EYE_LIGHT, cv2.FILLED, cv2.LINE_AA,
-    )
-
-    # Front paws — small lobes at the lower body, cradling the camera.
-    paw_y = body_cy + int(0.12 * h)
-    for sign in (-1, 1):
-        cv2.circle(
-            img,
-            (cx + sign * int(0.13 * h), paw_y),
-            max(3, int(0.05 * h)),
-            SQUIRREL_DK,
-            cv2.FILLED,
-            cv2.LINE_AA,
-        )
-
-
-def _draw_camera(img: np.ndarray, cx: int, cy: int, w: int) -> None:
-    """A tiny camera centered at (cx, cy) with body-width w. The
-    motif sits on the squirrel's chest so the lens and a glint are
-    the dominant feature at small sizes."""
-    bw = w
-    bh = int(w * 0.65)
-    x0, y0 = cx - bw // 2, cy - bh // 2
-    x1, y1 = cx + bw // 2, cy + bh // 2
-    radius = max(3, bh // 6)
-    cv2.rectangle(img, (x0 + radius, y0), (x1 - radius, y1), CAMERA_BODY, cv2.FILLED)
-    cv2.rectangle(img, (x0, y0 + radius), (x1, y1 - radius), CAMERA_BODY, cv2.FILLED)
-    for ccx, ccy in (
-        (x0 + radius, y0 + radius),
-        (x1 - radius, y0 + radius),
-        (x0 + radius, y1 - radius),
-        (x1 - radius, y1 - radius),
-    ):
-        cv2.circle(img, (ccx, ccy), radius, CAMERA_BODY, cv2.FILLED, cv2.LINE_AA)
-    # Top hump (viewfinder).
-    hump_w = max(6, bw // 3)
-    hump_h = max(4, bh // 5)
-    cv2.rectangle(
-        img,
-        (cx - hump_w // 2, y0 - hump_h),
-        (cx + hump_w // 2, y0 + 2),
-        CAMERA_BODY,
-        cv2.FILLED,
-    )
-    # Lens — concentric circles ending in a bright catchlight.
-    lens_r = max(4, int(bh * 0.40))
-    cv2.circle(img, (cx, cy), lens_r, LENS_RIM, cv2.FILLED, cv2.LINE_AA)
-    cv2.circle(img, (cx, cy), int(lens_r * 0.75), CAMERA_ACC, cv2.FILLED, cv2.LINE_AA)
-    cv2.circle(img, (cx, cy), int(lens_r * 0.45), LENS_RIM, cv2.FILLED, cv2.LINE_AA)
-    glint_r = max(2, lens_r // 4)
-    cv2.circle(
-        img,
-        (cx - lens_r // 3, cy - lens_r // 3),
-        glint_r,
-        LENS_GLINT,
-        cv2.FILLED,
-        cv2.LINE_AA,
-    )
-
-
-def render_master(size: int = 1024, pad_pct: float = 0.0) -> np.ndarray:
-    """Full icon at `size` px square. pad_pct shrinks the motif so
-    the maskable variant survives Android launcher cropping (~10%)."""
-    bg = _radial_gradient(size, PLATE_GLOW, PLATE_BG)
-    plate_inset = max(2, int(size * 0.04))
-    plate_radius = int(size * 0.22)
-    mask = _rounded_rect_mask(size, plate_inset, plate_radius)
-
+def _compose_icon(size: int, *, padding_pct: float = 0.16,
+                  rounded: bool = True) -> np.ndarray:
+    """Compose a cream-plated icon at `size` px. The logo occupies
+    ~(1 − 2·padding_pct) of the plate height so it doesn't touch the
+    rounded corners. iOS renders its own corner mask on apple-touch-
+    icons, so the rounded plate here is purely a fallback for devices
+    that don't apply an OS-level mask (older Android launchers,
+    favicon contexts).
+    """
     canvas = np.full((size, size, 3), PLATE_BG, dtype=np.uint8)
-    canvas[mask > 0] = bg[mask > 0]
-
-    motif_h = int(size * (0.72 - pad_pct))
-    cx = size // 2
-    cy = int(size * 0.50)
-    _draw_squirrel(canvas, cx, cy, motif_h)
-
-    cam_w = int(size * (0.24 - pad_pct * 0.5))
-    cam_cy = cy + int(motif_h * 0.32)
-    _draw_camera(canvas, cx, cam_cy, cam_w)
+    # Logo target height → rasterise SVG to that height, then centre.
+    logo_h = max(8, int(size * (1 - 2 * padding_pct)))
+    rgba = _rasterise_logo(logo_h)
+    lh, lw = rgba.shape[:2]
+    if lw > size - 2:
+        # Pathological: SVG aspect very wide. Re-rasterise constrained.
+        rgba = _rasterise_logo(int(logo_h * (size - 2) / lw))
+        lh, lw = rgba.shape[:2]
+    x0 = (size - lw) // 2
+    y0 = (size - lh) // 2
+    # Composite RGBA over the cream canvas.
+    rgb = rgba[..., :3]
+    a = rgba[..., 3:].astype(np.float32) / 255.0
+    canvas_slice = canvas[y0:y0 + lh, x0:x0 + lw].astype(np.float32)
+    blended = rgb.astype(np.float32) * a + canvas_slice * (1 - a)
+    canvas[y0:y0 + lh, x0:x0 + lw] = blended.astype(np.uint8)
+    if rounded:
+        # Rounded-square plate via alpha channel. Saved as RGBA so the
+        # transparent corners don't show the cream plate at any
+        # rotation iOS might apply on the lock screen.
+        radius = max(8, int(size * 0.22))
+        mask = _rounded_rect_mask(size, radius)
+        rgba_out = np.concatenate(
+            [canvas, mask[..., None]], axis=2,
+        )
+        return rgba_out
     return canvas
 
 
-# ── output sizes ───────────────────────────────────────────────────────
-ICON_SIZES: list[tuple[str, int, float]] = [
-    ("icon-1024.png", 1024, 0.0),
-    ("icon-512.png", 512, 0.0),
-    # Maskable variant (10% safe-zone inset) — used by I02 PWA manifest.
-    ("icon-512-maskable.png", 512, 0.10),
-    ("icon-192.png", 192, 0.0),
-    ("icon-180.png", 180, 0.0),
-    ("icon-167.png", 167, 0.0),
-    ("icon-152.png", 152, 0.0),
-    ("icon-120.png", 120, 0.0),
-    ("favicon-32.png", 32, 0.0),
-    ("favicon-16.png", 16, 0.0),
+# ── Output catalogue ──────────────────────────────────────────────────
+ICON_SIZES: list[tuple[str, int, float, bool]] = [
+    # (filename, pixel size, padding %, rounded plate?)
+    ("icon-1024.png", 1024, 0.16, True),
+    ("icon-512.png", 512, 0.16, True),
+    # Maskable: 10% safe-zone inset so Android launcher masks crop only
+    # the plate, never the logo.
+    ("icon-512-maskable.png", 512, 0.20, False),
+    ("icon-192.png", 192, 0.16, True),
+    ("icon-180.png", 180, 0.16, True),
+    ("icon-167.png", 167, 0.16, True),
+    ("icon-152.png", 152, 0.16, True),
+    ("icon-120.png", 120, 0.16, True),
+    ("favicon-32.png", 32, 0.10, True),
+    ("favicon-16.png", 16, 0.06, True),
 ]
 
 
-# Splash sizes covering the iPhone + iPad fleet through 2026. Each
-# entry has an exact device-points + dpr + orientation triple so the
-# media-query mapping below stays unambiguous.
 SPLASH_SIZES: list[tuple[int, int]] = [
-    (1290, 2796), (2796, 1290),     # 15 Pro Max / 14 Pro Max
-    (1179, 2556), (2556, 1179),     # 15 Pro / 14 Pro / 15 / 14
-    (1284, 2778), (2778, 1284),     # 14 Plus / 13 Pro Max / 12 Pro Max
-    (1170, 2532), (2532, 1170),     # 14 / 13 / 13 Pro / 12 / 12 Pro
-    (1080, 2340), (2340, 1080),     # 13 mini / 12 mini
-    (828, 1792),  (1792, 828),      # 11 / XR
-    (1242, 2688), (2688, 1242),     # 11 Pro Max / XS Max
-    (1125, 2436), (2436, 1125),     # 11 Pro / XS / X
-    (1242, 2208), (2208, 1242),     # 8 Plus / 7 Plus / 6s Plus / 6 Plus
-    (750, 1334),  (1334, 750),      # SE3 / SE2 / 8 / 7 / 6s / 6
-    (2048, 2732), (2732, 2048),     # iPad Pro 12.9
-    (1668, 2388), (2388, 1668),     # iPad Pro 11
-    (1668, 2224), (2224, 1668),     # iPad Air / 10.5
-    (1536, 2048), (2048, 1536),     # iPad Mini / 9.7
+    (1290, 2796), (2796, 1290),
+    (1179, 2556), (2556, 1179),
+    (1284, 2778), (2778, 1284),
+    (1170, 2532), (2532, 1170),
+    (1242, 2688), (2688, 1242),
+    (1125, 2436), (2436, 1125),
+    (1242, 2208), (2208, 1242),
+    (750, 1334),  (1334, 750),
+    (2048, 2732), (2732, 2048),
+    (1668, 2388), (2388, 1668),
+    (1668, 2224), (2224, 1668),
+    (1536, 2048), (2048, 1536),
+    (1080, 2340), (2340, 1080),
+    (828, 1792),  (1792, 828),
 ]
 
 
-# (target_w, target_h) → (device_w_pts, device_h_pts, dpr, orientation)
 SPLASH_MEDIA: dict[tuple[int, int], tuple[int, int, int, str]] = {
     (1290, 2796): (430, 932, 3, "portrait"),
     (2796, 1290): (430, 932, 3, "landscape"),
@@ -316,10 +168,6 @@ SPLASH_MEDIA: dict[tuple[int, int], tuple[int, int, int, str]] = {
     (2778, 1284): (428, 926, 3, "landscape"),
     (1170, 2532): (390, 844, 3, "portrait"),
     (2532, 1170): (390, 844, 3, "landscape"),
-    (1080, 2340): (360, 780, 3, "portrait"),
-    (2340, 1080): (360, 780, 3, "landscape"),
-    (828, 1792):  (414, 896, 2, "portrait"),
-    (1792, 828):  (414, 896, 2, "landscape"),
     (1242, 2688): (414, 896, 3, "portrait"),
     (2688, 1242): (414, 896, 3, "landscape"),
     (1125, 2436): (375, 812, 3, "portrait"),
@@ -328,6 +176,10 @@ SPLASH_MEDIA: dict[tuple[int, int], tuple[int, int, int, str]] = {
     (2208, 1242): (414, 736, 3, "landscape"),
     (750, 1334):  (375, 667, 2, "portrait"),
     (1334, 750):  (375, 667, 2, "landscape"),
+    (1080, 2340): (360, 780, 3, "portrait"),
+    (2340, 1080): (360, 780, 3, "landscape"),
+    (828, 1792):  (414, 896, 2, "portrait"),
+    (1792, 828):  (414, 896, 2, "landscape"),
     (2048, 2732): (1024, 1366, 2, "portrait"),
     (2732, 2048): (1024, 1366, 2, "landscape"),
     (1668, 2388): (834, 1194, 2, "portrait"),
@@ -339,20 +191,21 @@ SPLASH_MEDIA: dict[tuple[int, int], tuple[int, int, int, str]] = {
 }
 
 
-def render_splash(w: int, h: int, master_icon_512: np.ndarray) -> np.ndarray:
-    """Compose a splash background sized w×h with the icon centered
-    at ~25% of the smaller dimension. background colour matches the
-    web app's first-paint #111 so iOS shows a single seamless
-    surface from native splash → web app — no flash, no colour
-    seam. The icon itself carries its own warm-sand plate so it
-    still pops against the dark splash background. */"""
-    SPLASH_BG_BGR = _bgr("#111111")
-    canvas = np.full((h, w, 3), SPLASH_BG_BGR, dtype=np.uint8)
-    icon_size = max(64, int(min(w, h) * 0.25))
-    icon = cv2.resize(master_icon_512, (icon_size, icon_size), interpolation=cv2.INTER_AREA)
-    x0 = (w - icon_size) // 2
-    y0 = (h - icon_size) // 2
-    canvas[y0:y0 + icon_size, x0:x0 + icon_size] = icon
+def _render_splash(w: int, h: int) -> np.ndarray:
+    """Splash background is the same cream plate as the icon (manifest
+    background_color). Logo centred at ~25 % of the smaller dimension.
+    """
+    canvas = np.full((h, w, 3), PLATE_BG, dtype=np.uint8)
+    icon_size = max(96, int(min(w, h) * 0.25))
+    rgba = _rasterise_logo(int(icon_size * 0.7))
+    lh, lw = rgba.shape[:2]
+    x0 = (w - lw) // 2
+    y0 = (h - lh) // 2
+    rgb = rgba[..., :3]
+    a = rgba[..., 3:].astype(np.float32) / 255.0
+    slice_ = canvas[y0:y0 + lh, x0:x0 + lw].astype(np.float32)
+    blended = rgb.astype(np.float32) * a + slice_ * (1 - a)
+    canvas[y0:y0 + lh, x0:x0 + lw] = blended.astype(np.uint8)
     return canvas
 
 
@@ -369,48 +222,41 @@ def _splash_link(w: int, h: int) -> str:
     )
 
 
-def write_splash_partial(out_path: Path, sizes: list[tuple[int, int]]) -> None:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [
-        "{# Generated by app/web/static/icons/_build_icons.py — do not edit. #}\n",
-    ]
-    for w, h in sizes:
-        lines.append(_splash_link(w, h))
-    out_path.write_text("".join(lines), encoding="utf-8")
+def _write_splash_partial() -> None:
+    SPLASH_PARTIAL.parent.mkdir(parents=True, exist_ok=True)
+    rows = "".join(_splash_link(w, h) for (w, h) in SPLASH_SIZES)
+    SPLASH_PARTIAL.write_text(rows, encoding="utf-8")
+    print(f"wrote {SPLASH_PARTIAL}")
 
 
+# ── Main entrypoint ───────────────────────────────────────────────────
 def main() -> None:
-    here = Path(__file__).resolve().parent
-    splash_out = here / "splash"
-    here.mkdir(parents=True, exist_ok=True)
-    splash_out.mkdir(parents=True, exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    SPLASH_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("rendering master 1024 (standard + maskable)…")
-    master = render_master(1024, pad_pct=0.0)
-    master_maskable = render_master(1024, pad_pct=0.10)
+    print(f"master SVG: {MASTER_SVG}")
+    print(f"plate color: {PLATE_BG_HEX}")
 
-    png_opts = [cv2.IMWRITE_PNG_COMPRESSION, 9]
-    for name, size, pad in ICON_SIZES:
-        src = master_maskable if pad > 0 else master
-        if size != 1024:
-            img = cv2.resize(src, (size, size), interpolation=cv2.INTER_AREA)
+    # Icons
+    for fname, size, pad, rounded in ICON_SIZES:
+        out = _compose_icon(size, padding_pct=pad, rounded=rounded)
+        path = OUT_DIR / fname
+        # If RGBA, write as PNG keeping alpha.
+        if out.shape[2] == 4:
+            cv2.imwrite(str(path), out)
         else:
-            img = src
-        cv2.imwrite(str(here / name), img, png_opts)
-        print(f"  ↳ {name} ({size}×{size})")
+            cv2.imwrite(str(path), out)
+        print(f"  ↳ {fname} ({size}x{size})")
 
-    # Pre-resize a 512-px master once for splash composition — every
-    # splash uses the same intermediate, no need to re-downsample
-    # 1024→25%×min(w,h) per call.
-    master_512 = cv2.resize(master, (512, 512), interpolation=cv2.INTER_AREA)
+    # Splash images
     for w, h in SPLASH_SIZES:
-        img = render_splash(w, h, master_512)
-        cv2.imwrite(str(splash_out / f"splash-{w}x{h}.png"), img, png_opts)
+        out = _render_splash(w, h)
+        path = SPLASH_DIR / f"splash-{w}x{h}.png"
+        cv2.imwrite(str(path), out)
         print(f"  ↳ splash-{w}x{h}.png")
 
-    partials = here.parent.parent / "templates" / "partials" / "splash_links.html"
-    write_splash_partial(partials, SPLASH_SIZES)
-    print(f"wrote {partials}")
+    _write_splash_partial()
+    print("done.")
 
 
 if __name__ == "__main__":

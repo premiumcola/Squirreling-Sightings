@@ -35,22 +35,17 @@
   width:.42em;
   text-align:center;
 }
-/* Brand glyph — same squirrel-with-camera asset that ships as the
-   iOS PWA icon, sized to roughly the title's cap height. Rounded so
-   the warm-sand plate doesn't read as a hard square next to the
-   smooth title type. flex-shrink:0 protects the icon when the title
-   row wraps to two lines on narrow widths. */
+/* Brand glyph — randomly Spy Scout (wider) OR Acorn Cam (taller)
+   per chrome/brand-logo.js. Fixed height so the title row stays
+   consistent; width auto follows the chosen asset's aspect ratio.
+   Both SVGs are tinted variants of the same illustration — no plate,
+   so no rounded background needed here. flex-shrink:0 protects the
+   icon when the title row wraps. */
 .hero-brand-glyph{
   display:inline-block;
-  width:32px;height:32px;
-  border-radius:8px;
+  height:40px;width:auto;
   flex-shrink:0;
   vertical-align:middle;
-  /* Slight outline for depth on the page's #111 background — the
-     icon's own warm-sand plate already gives it enough lift, but a
-     hairline of inner shadow stops the rounded edge from feeling
-     pasted-on. */
-  box-shadow:0 1px 2px rgba(0,0,0,.4);
 }
 .hero-subtitle{
   margin:0;

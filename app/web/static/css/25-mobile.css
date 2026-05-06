@@ -466,27 +466,20 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    vertically — title in full, buttons row below — and relax the
    ellipsis since wrapping is fine here. */
 @media (max-width:768px){
-  #media .section-head{flex-direction:column;align-items:stretch;gap:10px}
-  #media .media-section-title{max-width:100%;width:100%}
+  /* Long drilldown titles ("Mediathek · cam_xyz") need to wrap on
+     iPhone — the .mst-text rule in 18-telegram-2.css keeps the
+     title on a single line with text-overflow:ellipsis (so the
+     whole title doesn't squeeze the right-side button when one
+     is shown), so we relax that here only for the title text. */
   #media .media-section-title .mst-text{
     white-space:normal;overflow:visible;text-overflow:clip;
     word-break:normal;overflow-wrap:break-word;
   }
-  .media-section-actions{
-    display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;
-    margin-left:0;width:100%;
+  /* Auswahl button is the only contextual right-side button; bump
+     touch target to ≥44 px when it's actually visible. */
+  #media #mediaSelectToggleBtn{
+    min-height:44px;padding:10px 14px;
   }
-  /* Touch-target floor: ≥44 px high, generous tap padding. The base
-     .btn-action min-height is 38 px which is below iOS HIG. */
-  .media-section-actions .btn,
-  .media-section-actions .btn-action{
-    min-height:44px;padding:10px 14px;flex:1 1 auto;justify-content:center;
-  }
-}
-/* Desktop / tablet: keep the inline-row layout the page used to have
-   when the inline style="margin-left:auto" lived on the div. */
-.media-section-actions{
-  display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto;
 }
 
 /* Mobile perf — drop backdrop-filter on the high-density overlay pills.

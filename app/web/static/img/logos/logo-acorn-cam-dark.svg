@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 64" width="50" height="64" role="img" aria-label="TAM-spy">
+  <rect x="23" y="2" width="4" height="6" rx="1" fill="#5C8A4A"/>
+  <path d="M27 6 Q 33 4, 34 9 Q 30 11, 27 8 Z" fill="#6BA050"/>
+  <path d="M10 24 Q 10 12, 25 12 Q 40 12, 40 24 L 40 26 L 10 26 Z" fill="#2A2F38"/>
+  <rect x="10" y="24" width="30" height="3" fill="#15191E"/>
+  <circle cx="25" cy="22" r="6" fill="#15191E"/>
+  <circle cx="25" cy="22" r="4.2" fill="#3A3F48"/>
+  <circle cx="25" cy="22" r="2.4" fill="#6CC4F0"/>
+  <circle cx="26" cy="21" r="0.9" fill="#FFFFFF"/>
+  <path d="M10 27 Q 10 56, 25 60 Q 40 56, 40 27 Z" fill="#D4A574"/>
+  <path d="M14 27 Q 14 52, 24 58 L 24 27 Z" fill="#E8C39A" opacity="0.5"/>
+</svg>

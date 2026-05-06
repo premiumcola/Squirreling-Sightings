@@ -43,7 +43,18 @@
     --m-dock-radius:47px;
     --m-dock-inner-pad:8px;
     --m-dock-pill-radius:calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
-    --m-dock-bottom-gap:max(var(--m-dock-margin), env(safe-area-inset-bottom, var(--m-dock-margin)));
+    /* Bottom inset is ADDITIVE: the symmetric --m-dock-margin sits
+       on top of the home-indicator band (env(safe-area-inset-bottom)).
+       Order from the screen edge upward is:
+         home indicator strip → safe-area-inset-bottom → 8 px
+         symmetric gap → dock pill.
+       On notch-less devices safe-area resolves to 0, so the bottom
+       gap collapses to exactly --m-dock-margin and matches the
+       left/right insets pixel-for-pixel. The previous max() variant
+       used the safe-area as the sole bottom inset, leaving the dock
+       flush with the home indicator and no breathing room between
+       them on home-indicator iPhones. */
+    --m-dock-bottom-gap:calc(env(safe-area-inset-bottom, 0px) + var(--m-dock-margin));
     display:grid;
     grid-template-columns:repeat(5,1fr);
     gap:2px;
@@ -111,14 +122,16 @@
     100% {box-shadow:0 0 0 0 rgba(34,197,94,0)}
   }
   /* Reserve scroll-space at the bottom so the floating dock never
-     overlaps the last bit of page content. Tracks the same
-     `max(safe-area, --m-dock-margin)` formula as the dock's
-     bottom-gap variable so the two move together if the design
-     margin changes. */
+     overlaps the last bit of page content. Tracks the additive
+     bottom-gap formula above (`safe-area + margin`) so the two
+     move together if the design margin changes. The +8 trailing
+     gives a final breathing buffer between the last page element
+     and the dock's top edge. */
   body{
     padding-bottom:calc(
       70px
-      + max(8px, env(safe-area-inset-bottom, 8px))
+      + env(safe-area-inset-bottom, 0px)
+      + 8px
       + 8px
     )!important;
   }

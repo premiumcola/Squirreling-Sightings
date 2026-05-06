@@ -13,7 +13,7 @@
 /* Card = just the video frame */
 .cv-card{border-radius:18px;overflow:hidden;cursor:pointer;background:#0a0a0a;transition:transform .18s,box-shadow .18s;position:relative;min-width:0;contain:paint}
 .cv-card:hover{transform:scale(1.012);box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:1}
-.cv-frame{position:relative;aspect-ratio:16/9;overflow:hidden;contain:paint;transform:translateZ(0);--cv-overlay-inset:14px}
+.cv-frame{position:relative;aspect-ratio:16/9;overflow:hidden;contain:paint;transform:translateZ(0);--cv-overlay-inset:10px}
 .cv-img-wrap{position:relative;width:100%;height:100%}.cv-img{width:100%;height:100%;object-fit:cover;display:block;background:#0a0a0a;opacity:0;transition:opacity .4s;position:absolute;inset:0}.cv-img.loaded{opacity:1}.cv-loading-placeholder{position:absolute;inset:0;height:100%;background:#0a0a0a}@keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── Monitoring-style camera placeholders (offline / connecting) ────────── */
@@ -80,19 +80,13 @@
 .cv-tr-row .cv-pill-live-wrap{margin-left:0}
 
 /* ── Top-right pill container ─────────────────────────────────────────────── */
-/* Top-right pill column. Vertical offset is dynamic so the Live pill
-   tracks the actual content rendered in the top-left title-wrap:
-     - No location row (.cv-loc absent / empty cam.location data):
-       pill sits at the natural card-padding top — same line as the
-       camera-name row.
-     - Location/daytime row present: pill drops to share that row's
-       baseline so the eye reads "name | empty" on row 1 and
-       "location | live pill" on row 2.
-   :has() lets us do this with pure CSS — no JS resize listener.
-   The 22 px offset matches the cv-name row's effective height
-   (font-size 15 × line-height 1.2 + 3 px gap from .cv-title-wrap). */
+/* Live pill anchored to the upper-right corner of the video frame.
+   Stays close to the corner regardless of whether the title-wrap
+   shows a location row — the pill is tall enough that aligning it
+   with the title row would crowd the camera name. The 10 px inset
+   keeps it clear of the rounded video corner without intruding
+   into the actual stream content. */
 .cv-tr{position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
-.cv-card:has(.cv-loc) .cv-tr{top:calc(var(--cv-overlay-inset) + 22px)}
 
 /* Base pill */
 .cv-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.02em;position:relative;cursor:default;backdrop-filter:blur(8px);min-height:0;line-height:1.2;box-sizing:border-box}
@@ -106,7 +100,20 @@
 /* Slimmer collapsed row — 3 px vertical padding, 10.5 px font, 1.2 line-
    height. The 22 px max-height on the wrap clips any overflow but the
    inner padding has been tightened so nothing visually clips. */
-.cv-live-collapsed{display:flex;align-items:center;gap:6px;padding:3px 8px;white-space:nowrap;font-size:10.5px;line-height:1.2;min-height:0;box-sizing:border-box;opacity:1;transform:translateY(0);transition:opacity .18s ease,transform .28s ease}
+.cv-live-collapsed{display:flex;align-items:center;gap:6px;padding:3px 10px;white-space:nowrap;font-size:10.5px;line-height:1.2;min-height:0;box-sizing:border-box;opacity:1;transform:translateY(0);transition:opacity .18s ease,transform .28s ease}
+/* FPS suffix inside the live pill — same colour family as the
+   "Live" word so the whole pill reads as one cohesive shape. The
+   slight opacity drop + lighter font-weight differentiates it from
+   "Live" without making it look orphaned in a separate style group
+   (the previous rgba(134,239,172,.55) treatment looked half-styled
+   and detached from the green background). */
+.cv-live-collapsed .cv-live-fps{
+  color:#c8f5e0;
+  opacity:.78;
+  font-size:10px;
+  font-weight:600;
+  margin-left:1px;
+}
 .cv-pill-live-wrap.cv-lp-open .cv-live-collapsed{opacity:0;transform:translateY(-4px);pointer-events:none;max-height:0;padding:0;overflow:hidden}
 .cv-live-expanded{padding:0 12px;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease,padding .3s ease;width:100%;min-width:0}
 .cv-pill-live-wrap.cv-lp-open .cv-live-expanded{max-height:160px;opacity:1;padding:8px 12px 10px}

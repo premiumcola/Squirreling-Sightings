@@ -347,7 +347,7 @@ ${isActive ? `
           <div class="cv-live-collapsed">
             <div class="cv-pdot"></div>
             <span>Live</span>
-            ${previewFps ? `<span style="color:rgba(134,239,172,.55);font-size:10px;font-weight:400;margin-left:3px">${previewFps} fps</span>` : ''}
+            ${previewFps ? `<span class="cv-live-fps">${previewFps} fps</span>` : ''}
             <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="rgba(200,245,224,.55)" stroke-width="1.8" stroke-linecap="round" style="margin-left:auto;margin-right:2px;flex-shrink:0"><path d="M3 4.5l3 3 3-3"/></svg>
           </div>
           <div class="cv-live-expanded">

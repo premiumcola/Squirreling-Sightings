@@ -756,6 +756,11 @@ class CaptureStats:
     # operator can read "23 dead_area" vs "23 dead_area (all scene-skip)"
     # at a glance.
     scene_skips_by_reason: dict = field(default_factory=dict)
+    # First observed full reason string per reason head — keeps a
+    # representative diagnostic blob (e.g. "dead_area(40/40=100%)") so
+    # the UI can show a concrete number under the bare key. Populated
+    # on the first hit per head; subsequent hits are ignored.
+    rejected_by_reason_examples: dict = field(default_factory=dict)
     # Optional capture-context metadata. Populated by the caller right
     # before flush() lands to ``_stats.json`` and surfaces in the UI.
     # All optional so the existing call sites that don't set them
@@ -786,6 +791,11 @@ class CaptureStats:
                 self.scene_skips_by_reason[key] = (
                     self.scene_skips_by_reason.get(key, 0) + 1
                 )
+            # Keep the FIRST full reason string per head — the value
+            # carries the diagnostic detail (e.g. "(40/40=100%)") that
+            # the UI shows alongside the bare key.
+            if key not in self.rejected_by_reason_examples:
+                self.rejected_by_reason_examples[key] = reason
 
     def flush(self):
         try:
@@ -799,6 +809,7 @@ class CaptureStats:
                 "retry_recoveries": int(self.retry_recoveries),
                 "rejected_by_reason": dict(self.rejected_by_reason),
                 "scene_skips_by_reason": dict(self.scene_skips_by_reason),
+                "rejected_by_reason_examples": dict(self.rejected_by_reason_examples),
                 "validator_profile": self.validator_profile,
                 "baseline_brightness": self.baseline_brightness,
                 "phase_drift_min": self.phase_drift_min,

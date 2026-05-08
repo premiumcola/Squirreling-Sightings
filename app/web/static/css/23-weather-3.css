@@ -204,10 +204,32 @@
 .suntltest-section{display:grid;gap:8px}
 .suntltest-section-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .suntltest-rej-list{display:grid;gap:4px}
-.suntltest-rej-row{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-radius:10px;background:rgba(251,113,133,0.10);font-size:13px}
+.suntltest-rej-row{display:grid;gap:4px;padding:8px 12px;border-radius:10px;background:rgba(251,113,133,0.10);font-size:13px}
+.suntltest-rej-row-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .suntltest-rej-key{color:var(--text);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .suntltest-rej-val{color:#fca5b5;font-weight:700;font-variant-numeric:tabular-nums}
+.suntltest-rej-detail{font-size:11.5px;color:rgba(252,165,181,0.75);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.suntltest-rej-hint{font-size:12px;color:rgba(255,255,255,0.62);line-height:1.35}
 .suntltest-rej-empty{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.04);font-size:13px;color:var(--muted)}
+
+/* ── Profile + drift pill row ───────────────────────────────────────
+   Sits between the live-head and the tile grid. Tints encode the
+   active validator profile (DAY = sun yellow, TWILIGHT = horizon
+   orange, NIGHT = night blue). The drift pill only renders when the
+   backend flagged a window > _SUN_TL_DRIFT_LIMIT_MIN from the real
+   sun event. Background-tint only — no thin border lines per
+   project rules. */
+.suntltest-pill-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 8px}
+.suntltest-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.04em;line-height:1.2}
+.suntltest-pill--day{background:rgba(250,204,21,0.18);color:#fde68a}
+.suntltest-pill--twilight{background:rgba(251,146,60,0.20);color:#fed7aa}
+.suntltest-pill--night{background:rgba(96,165,250,0.20);color:#bfdbfe}
+.suntltest-pill--drift{background:rgba(245,158,11,0.20);color:#fde68a;text-transform:none;letter-spacing:0;font-weight:600;font-size:11.5px;flex:1 1 100%}
+.suntltest-pill-sub{opacity:.75;font-weight:500;font-size:10.5px;text-transform:none;letter-spacing:0}
+@media (max-width:540px){
+  .suntltest-pill{min-height:24px}
+  .suntltest-pill--drift{font-size:11px}
+}
 
 .suntltest-log-box{
   max-height:240px;overflow-y:auto;overflow-x:auto;

@@ -233,16 +233,37 @@ function _renderLive(d){
   const camName = (state.cameras || []).find(c => c.id === d.cam_id)?.name || d.cam_id;
   const stateClass = d.finished ? 'is-done' : (d.running ? 'is-running' : 'is-idle');
   const rejected = d.rejected_by_reason || {};
+  const examples = d.rejected_by_reason_examples || {};
   const rejectedRows = Object.entries(rejected)
     .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `
+    .map(([k, v]) => {
+      const ex = examples[k] || '';
+      // Detail tail = the part inside the FIRST observed reason's
+      // parens, e.g. "40/40=100%" from "dead_area(40/40=100%)".
+      let detail = '';
+      if (ex && ex.includes('(') && ex.endsWith(')')){
+        detail = ex.slice(ex.indexOf('(') + 1, -1);
+      }
+      const hint = _rejectHintDe(k);
+      return `
       <div class="suntltest-rej-row">
-        <span class="suntltest-rej-key">${esc(k)}</span>
-        <span class="suntltest-rej-val">${v}</span>
-      </div>`).join('');
+        <div class="suntltest-rej-row-head">
+          <span class="suntltest-rej-key">${esc(k)}</span>
+          <span class="suntltest-rej-val">${v}</span>
+        </div>
+        ${detail ? `<div class="suntltest-rej-detail">${esc(detail)}</div>` : ''}
+        ${hint ? `<div class="suntltest-rej-hint">${esc(hint)}</div>` : ''}
+      </div>`;
+    }).join('');
   const rejectedBlock = rejectedRows
     ? `<div class="suntltest-rej-list">${rejectedRows}</div>`
     : `<div class="suntltest-rej-empty">— keine Rejects bisher —</div>`;
+  // Profile + drift pills above the existing tile grid.
+  const profileBadge = _profileBadge(d.validator_profile, d.baseline_brightness);
+  const driftBadge   = _driftBadge(d.phase_drift_warning, d.phase_drift_min);
+  const pillRow = (profileBadge || driftBadge)
+    ? `<div class="suntltest-pill-row">${profileBadge}${driftBadge}</div>`
+    : '';
   const logBlock = (d.last_log_lines || [])
     .slice(-60)
     .map(line => `<div class="suntltest-log-line">${esc(line)}</div>`)
@@ -253,6 +274,7 @@ function _renderLive(d){
       <div class="suntltest-live-title">${esc(camName)} · ${phaseLabel}</div>
       <div class="suntltest-live-status">${d.finished ? '✅ fertig' : (d.running ? '⏺ läuft' : '⏸ pausiert')}</div>
     </div>
+    ${pillRow}
     <div class="suntltest-live-grid">
       <div class="suntltest-tile">
         <div class="suntltest-tile-label">Tag/Nacht-Override</div>
@@ -314,6 +336,49 @@ function _dnBadge(v){
   if (v === true)  return '<span class="suntltest-badge suntltest-badge--ok">Color gesetzt</span>';
   if (v === false) return '<span class="suntltest-badge suntltest-badge--err">fehlgeschlagen</span>';
   return '<span class="suntltest-badge suntltest-badge--mute">übersprungen</span>';
+}
+
+// Profile pill — DAY (sun yellow) / TWILIGHT (horizon orange) / NIGHT
+// (deep blue). Soft tinted background, rounded ≥ 8 px, no thin border
+// per project rules.
+function _profileBadge(profile, brightness){
+  if (!profile) return '';
+  const labels = { day: 'DAY', twilight: 'TWILIGHT', night: 'NIGHT' };
+  const cls = `suntltest-pill suntltest-pill--${profile}`;
+  const lbl = labels[profile] || profile.toUpperCase();
+  const sub = (typeof brightness === 'number')
+    ? ` <span class="suntltest-pill-sub">brightness ${brightness}</span>`
+    : '';
+  return `<span class="${cls}">${esc(lbl)}${sub}</span>`;
+}
+
+// Drift pill — only renders when the backend flagged a drift > limit.
+// Amber tint. Reads e.g. "Sunset-Capture lief 312 min nach Sonnen-
+// untergang — Frames sind reine Nacht".
+function _driftBadge(warning, _drift_min){
+  if (!warning) return '';
+  return `<span class="suntltest-pill suntltest-pill--drift">⚠ ${esc(warning)}</span>`;
+}
+
+// One-liner German hints under each rejected_by_reason row. Frontend
+// strings only — backend stays language-agnostic.
+const _REJECT_HINT_DE = {
+  dead_area: 'Wenig Textur — wahrscheinlich Nachthimmel oder leere Wand',
+  grey_midband: 'IR-Cut-Filter-Transition oder gleichmäßig grauer Himmel',
+  grey_uniform: 'IR-Cut-Filter-Transition oder gleichmäßig grauer Himmel',
+  no_detail: 'Frame fast komplett uniform — Encoder-Hickup oder Kamera-Reset',
+  pink_artifact: 'H.265-Decode-Fehler — typisch bei schwacher Verbindung',
+  patterned_magenta: 'H.265-Decode-Fehler — typisch bei schwacher Verbindung',
+  colorbar: 'Kamera hat ein Test-Pattern gesendet',
+  too_dark: 'Belichtung außerhalb des gültigen Bereichs',
+  too_bright: 'Belichtung außerhalb des gültigen Bereichs',
+};
+function _rejectHintDe(key){
+  if (!key) return '';
+  // Strip split-direction suffix (split_left_dead → split) so the four
+  // split variants share one hint.
+  const base = key.startsWith('split_') ? 'split' : key;
+  return _REJECT_HINT_DE[base] || _REJECT_HINT_DE[key] || '';
 }
 
 function _renderResult(d){

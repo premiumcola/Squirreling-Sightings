@@ -5,14 +5,27 @@
         <button id="closeDiscoveryBtn" class="close-btn" type="button">✕</button>
       </div>
       <div class="field-help">Gefundene Hosts mit typischen Kamera-Ports. Klick auf "Als RTSP übernehmen" trägt die IP direkt in die Form ein.</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap">
         <div id="discoveryStatus" class="small muted">Noch keine Suche gestartet.</div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0">
-          <input type="checkbox" id="discoveryHideConfigured" style="cursor:pointer" />
-          Bereits konfigurierte ausblenden
-        </label>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;min-height:44px">
+            <input type="checkbox" id="discoveryShowLog" checked style="cursor:pointer" />
+            Live-Log anzeigen
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;min-height:44px">
+            <input type="checkbox" id="discoveryHideConfigured" style="cursor:pointer" />
+            Bereits konfigurierte ausblenden
+          </label>
+        </div>
       </div>
-      <div id="discoveryResults" class="list" style="margin-top:8px"></div>
+      <div id="discoveryProgressWrap" style="margin-top:6px;display:none">
+        <div id="discoveryProgressBar" style="height:6px;border-radius:6px;background:rgba(148,163,184,0.18);overflow:hidden">
+          <div id="discoveryProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#38bdf8,#22d3ee);transition:width .15s linear"></div>
+        </div>
+        <div id="discoveryProgressLabel" class="small muted" style="margin-top:4px"></div>
+      </div>
+      <div id="discoveryLogPanel" style="margin-top:8px;background:#0b1220;color:#cbd5e1;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.45;border-radius:10px;padding:8px 10px;max-height:min(180px,32dvh);overflow:auto;white-space:pre-wrap"></div>
+      <div id="discoveryResults" class="list" style="margin-top:10px"></div>
     </div>
   </div>
 

@@ -15,7 +15,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, render_template, request, send_from_directory
 
 from .. import app_state
-from ..discovery import discover_hosts
+from ..discovery import discover_hosts, discover_hosts_stream
 from ._camera_helpers import _auto_detect_device_info
 
 bp = Blueprint("bootstrap", __name__)
@@ -143,6 +143,53 @@ def api_discover():
     cameras, total_scanned = discover_hosts(subnet)
     logging.info(f"[discovery] scan done — {len(cameras)} cameras found out of {total_scanned} hosts")
     return jsonify({"subnet": subnet, "results": cameras, "total_scanned": total_scanned})
+
+
+@bp.get('/api/discover/stream')
+def api_discover_stream():
+    """Server-Sent Events variant of /api/discover. Streams progress
+    events while the two-phase scan runs; ends with a `done` event
+    that carries the same payload the sync endpoint returns.
+
+    Event types:
+      • phase        — {phase, subnet, total_hosts}
+      • progress     — {scanned, total, current_ip}     (~5/s)
+      • phase1_hit   — {ip, ports}
+      • phase2_check — {ip, action}                     ("banner_fetch"|"vendor_guess")
+      • candidate    — {ip, hostname, guess, open_ports}
+      • done         — {subnet, total_scanned, found, results}
+      • error        — {message}
+    """
+    import json as _json
+    configured = app_state.get_effective_config().get("server", {}).get("default_discovery_subnet", "")
+    subnet = request.args.get('subnet') or configured or _auto_detect_subnet()
+    logging.info(f"[discovery] starting SSE scan on subnet={subnet}")
+
+    def _gen():
+        # Initial keep-alive comment so EventSource fires `open` even
+        # before the first phase event lands.
+        yield ": ready\n\n"
+        try:
+            for kind, payload in discover_hosts_stream(subnet):
+                yield f"event: {kind}\ndata: {_json.dumps(payload)}\n\n"
+                if kind == "done":
+                    res = payload.get("results", [])
+                    logging.info(
+                        "[discovery] SSE scan done — %d cameras found out of %d hosts",
+                        len(res), payload.get("total_scanned", 0),
+                    )
+        except GeneratorExit:
+            # Client disconnected mid-scan — silent.
+            return
+        except Exception as exc:
+            logging.exception("[discovery] SSE scan failed")
+            yield f"event: error\ndata: {_json.dumps({'message': str(exc)})}\n\n"
+
+    return Response(_gen(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",  # disable nginx/proxy buffering if any
+        "Connection": "keep-alive",
+    })
 
 
 @bp.get('/api/status')

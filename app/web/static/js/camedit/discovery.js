@@ -26,6 +26,9 @@ const RTSP_PATHS=RTSP_PATH_OPTS;
 function closeDiscoveryModal(){
   byId('discoveryModal').classList.add('hidden');
   document.body.style.overflow='';
+  // Tear down any running SSE stream so we don't leak connections
+  // when the user closes mid-scan.
+  if(typeof _closeDiscoveryStream==='function') _closeDiscoveryStream();
 }
 let _discoveryItems=[];
 function _hostnameToId(h){return h.toLowerCase().replaceAll(/[^a-z0-9-]+/g,'-').replaceAll(/^-+|-+$/g,'').slice(0,40);}
@@ -118,12 +121,132 @@ function _renderDiscoveryResults(){
   }
 }
 
-byId('discoverBtn')?.addEventListener('click',async()=>{
+// Live-log helpers — pushed-by-EventSource updates render here. Each
+// log line is one node so we can keep the autoscroll cheap (no full
+// re-render) and so phase1_hit lines can de-dupe on re-emission.
+let _discoveryES=null;
+let _discoverySubnet='';
+const _phase1Lines=new Map(); // ip → DOM node
+function _logPush(html, opts){
+  const panel=byId('discoveryLogPanel'); if(!panel) return;
+  const div=document.createElement('div');
+  div.innerHTML=html;
+  if(opts?.id) div.dataset.id=opts.id;
+  if(opts?.muted) div.style.color='#64748b';
+  panel.appendChild(div);
+  // Autoscroll only if user hasn't manually scrolled up.
+  const nearBottom=(panel.scrollHeight-panel.scrollTop-panel.clientHeight)<24;
+  if(nearBottom) panel.scrollTop=panel.scrollHeight;
+  return div;
+}
+function _setProgress(scanned, total, currentIp){
+  const wrap=byId('discoveryProgressWrap'); if(!wrap) return;
+  wrap.style.display='block';
+  const pct=total?Math.min(100,Math.round((scanned/total)*100)):0;
+  const fill=byId('discoveryProgressFill'); if(fill) fill.style.width=pct+'%';
+  const lbl=byId('discoveryProgressLabel');
+  if(lbl){
+    lbl.textContent=`Phase 1 · ${scanned} / ${total} Hosts${currentIp?' · '+currentIp:''}`;
+  }
+}
+function _resetDiscoveryUI(){
+  byId('discoveryLogPanel').innerHTML='';
+  byId('discoveryProgressFill').style.width='0%';
+  byId('discoveryProgressLabel').textContent='';
+  byId('discoveryProgressWrap').style.display='none';
+  byId('discoveryResults').innerHTML='';
+  _phase1Lines.clear();
+  _discoveryItems=[];
+}
+function _closeDiscoveryStream(){
+  if(_discoveryES){ try{_discoveryES.close();}catch{} _discoveryES=null; }
+}
+byId('discoverBtn')?.addEventListener('click',()=>{
   byId('discoveryModal').classList.remove('hidden');
   document.body.style.overflow='hidden';
   byId('discoveryStatus').textContent='Suche läuft …';
-  byId('discoveryResults').innerHTML='';
-  _discoveryItems=[];
+  _resetDiscoveryUI();
+  // Honor the toggle's current state (default ON via `checked` attr).
+  const showLog=!!byId('discoveryShowLog')?.checked;
+  byId('discoveryLogPanel').style.display=showLog?'block':'none';
+  _closeDiscoveryStream();
+  // Use EventSource for live progress. Browsers without EventSource
+  // (very rare in 2026) fall back to the sync /api/discover via the
+  // catch handler below.
+  if(typeof EventSource!=='function'){
+    return _legacyDiscoverFallback();
+  }
+  const es=new EventSource('/api/discover/stream');
+  _discoveryES=es;
+  es.addEventListener('phase',(ev)=>{
+    const d=JSON.parse(ev.data||'{}');
+    _discoverySubnet=d.subnet||_discoverySubnet;
+    if(d.phase==='1'){
+      _logPush(`<strong>Phase 1</strong> · Subnetz ${esc(d.subnet)} · ${d.total_hosts} Hosts werden gescannt`);
+    }else if(d.phase==='2'){
+      _logPush(`<strong>Phase 2</strong> · ${d.total_hosts} Kandidat${d.total_hosts===1?'':'en'} werden geprüft`);
+    }
+  });
+  es.addEventListener('progress',(ev)=>{
+    const d=JSON.parse(ev.data||'{}');
+    _setProgress(d.scanned||0, d.total||0, d.current_ip||'');
+  });
+  es.addEventListener('phase1_hit',(ev)=>{
+    const d=JSON.parse(ev.data||'{}');
+    const id='hit_'+d.ip;
+    const ports=(d.ports||[]).join(',');
+    const html=`<span style="color:#22c55e">✓</span> ${esc(d.ip)} — ports ${esc(ports)}`;
+    const existing=_phase1Lines.get(d.ip);
+    if(existing){
+      existing.innerHTML=html;
+    }else{
+      const n=_logPush(html,{id});
+      _phase1Lines.set(d.ip, n);
+    }
+  });
+  es.addEventListener('phase2_check',(ev)=>{
+    const d=JSON.parse(ev.data||'{}');
+    const action=d.action==='banner_fetch'?'banner':'vendor';
+    _logPush(`  ↳ ${esc(d.ip)} · ${esc(action)}`,{muted:true});
+  });
+  es.addEventListener('candidate',(ev)=>{
+    const d=JSON.parse(ev.data||'{}');
+    // Push into the visible items array as it arrives — don't wait
+    // for `done`. Replace any earlier placeholder entry for the same IP.
+    const idx=_discoveryItems.findIndex(x=>x.ip===d.ip);
+    if(idx>=0) _discoveryItems[idx]=d; else _discoveryItems.push(d);
+    _renderDiscoveryResults();
+    _logPush(`  ⇒ Kandidat: ${esc(d.ip)} · ${esc(d.guess||'?')}`);
+  });
+  es.addEventListener('done',(ev)=>{
+    const d=JSON.parse(ev.data||'{}');
+    _discoveryItems=d.results||_discoveryItems;
+    const total=d.total_scanned||'?';
+    const found=d.found||_discoveryItems.length;
+    byId('discoveryStatus').innerHTML=`Subnetz <strong>${esc(d.subnet||_discoverySubnet)}</strong> · ${total} Hosts · <strong>Gefundene Geräte (${found})</strong>`;
+    _logPush(`<strong>Fertig</strong> · ${found} Kamera${found===1?'':'s'} gefunden in ${total} Hosts`);
+    _renderDiscoveryResults();
+    _closeDiscoveryStream();
+  });
+  es.addEventListener('error',(ev)=>{
+    // EventSource error fires both on transport error AND on a server-side
+    // `error` event payload — try to read .data for the latter.
+    let msg='';
+    try{ if(ev?.data){ msg=(JSON.parse(ev.data)||{}).message||''; } }catch{}
+    if(msg){
+      _logPush(`<span style="color:#f87171">✗</span> ${esc(msg)}`);
+    }
+    // If the connection died with no data and we have nothing yet, fall
+    // back to the sync endpoint so the user still gets results.
+    if(!_discoveryItems.length && es.readyState===2){
+      _logPush('Stream beendet — Fallback auf klassische Suche …',{muted:true});
+      _closeDiscoveryStream();
+      _legacyDiscoverFallback();
+    }
+  });
+});
+
+async function _legacyDiscoverFallback(){
   try{
     const r=await j('/api/discover');
     _discoveryItems=r.results||[];
@@ -135,6 +258,10 @@ byId('discoverBtn')?.addEventListener('click',async()=>{
     byId('discoveryStatus').textContent='Discovery fehlgeschlagen';
     byId('discoveryResults').innerHTML=`<div class="item">${esc(err.message||err)}</div>`;
   }
+}
+
+byId('discoveryShowLog')?.addEventListener('change',(e)=>{
+  byId('discoveryLogPanel').style.display=e.target.checked?'block':'none';
 });
 byId('discoveryHideConfigured')?.addEventListener('change',_renderDiscoveryResults);
 byId('closeDiscoveryBtn').onclick=()=>closeDiscoveryModal();

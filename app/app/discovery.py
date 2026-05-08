@@ -4,10 +4,18 @@ import http.client
 import ipaddress
 import logging
 import socket
+import time
 from collections import defaultdict
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger(__name__)
+
+# Type alias: a progress callback receives (event_type, payload_dict).
+# event_type is one of: phase, progress, phase1_hit, phase2_check,
+# candidate, done, error. payload shapes are documented in
+# bootstrap.api_discover_stream alongside the SSE wire format.
+ProgressCb = Callable[[str, dict], None]
 
 # Phase-1 sweep: only these ports are checked across ALL hosts in parallel.
 # Every port here MUST be camera-private — anything generic (80, 443, 8080)
@@ -161,11 +169,31 @@ def _reolink_rtsp_hints(ip: str, rtsp_port: int, user: str = "admin") -> dict:
     }
 
 
-def discover_hosts(subnet: str, max_hosts: int = 254) -> tuple[list, int]:
+def discover_hosts(
+    subnet: str,
+    max_hosts: int = 254,
+    progress: ProgressCb | None = None,
+) -> tuple[list, int]:
     """Two-phase scan. Phase 1: sweep all hosts × CAMERA_INDICATOR_PORTS in parallel.
     Phase 2: banner-fetch only the handful of camera candidates.
     Returns (camera_candidates, total_ips_attempted).
+
+    When ``progress`` is given, emits live event tuples (type, payload):
+      • phase        — {phase, subnet, total_hosts}
+      • progress     — {scanned, total, current_ip}  (~5/s)
+      • phase1_hit   — {ip, ports}
+      • phase2_check — {ip, action}
+      • candidate    — {ip, hostname, guess, open_ports}
+    Errors are NOT emitted from here — the caller wraps the call.
     """
+    def _emit(kind: str, payload: dict) -> None:
+        if progress is None:
+            return
+        try:
+            progress(kind, payload)
+        except Exception:
+            log.exception("[discovery] progress callback raised")
+
     try:
         net = ipaddress.ip_network(subnet, strict=False)
     except Exception:
@@ -176,17 +204,35 @@ def discover_hosts(subnet: str, max_hosts: int = 254) -> tuple[list, int]:
     # ── Phase 1: parallel sweep across all (host, camera_port) combos ──────────
     tasks = [(ip, port) for ip in hosts for port in CAMERA_INDICATOR_PORTS]
 
+    _emit("phase", {"phase": "1", "subnet": subnet, "total_hosts": len(hosts)})
+
     # 1.2s phase-1 timeout: newer Reolink firmware (v3.x+) is slow to ACK on 554.
     def probe_one(args: tuple) -> tuple | None:
         ip, port = args
         return (ip, port) if _tcp_open(ip, port, timeout=1.2) else None
 
     hits: dict[str, list[int]] = defaultdict(list)
+    scanned_ips: set[str] = set()
+    last_emit = 0.0
     with ThreadPoolExecutor(max_workers=300) as ex:
-        for result in ex.map(probe_one, tasks):
+        for result, args in zip(ex.map(probe_one, tasks), tasks):
+            ip, _port = args
+            scanned_ips.add(ip)
             if result:
-                ip, port = result
-                hits[ip].append(port)
+                hit_ip, hit_port = result
+                hits[hit_ip].append(hit_port)
+                # Re-emit on every new port — frontend de-dupes by ip.
+                _emit("phase1_hit", {"ip": hit_ip, "ports": sorted(hits[hit_ip])})
+            now = time.monotonic()
+            # Throttle progress events to ~5/s so the SSE channel doesn't drown
+            # the browser. Always emit the very first and last update unthrottled.
+            if (now - last_emit) >= 0.2 or len(scanned_ips) == len(hosts):
+                _emit("progress", {
+                    "scanned": len(scanned_ips),
+                    "total": len(hosts),
+                    "current_ip": ip,
+                })
+                last_emit = now
 
     # Phase-1 visibility: log every host that answered, even ones _guess() will
     # later reject. Helps debug "Reolink not found" cases where only one of
@@ -202,6 +248,8 @@ def discover_hosts(subnet: str, max_hosts: int = 254) -> tuple[list, int]:
         return [], len(hosts)
 
     # ── Phase 2: enrich camera candidates ───────────────────────────────────────
+    _emit("phase", {"phase": "2", "subnet": subnet, "total_hosts": len(hits)})
+
     results = []
     for ip, cam_ports in hits.items():
         open_ports = list(cam_ports)
@@ -212,13 +260,17 @@ def discover_hosts(subnet: str, max_hosts: int = 254) -> tuple[list, int]:
                 open_ports.append(port)
 
         banners: dict = {}
-        for web_port in [p for p in open_ports if p in (80, 8080, 8000, 443, 8443)]:
+        web_ports = [p for p in open_ports if p in (80, 8080, 8000, 443, 8443)]
+        if web_ports:
+            _emit("phase2_check", {"ip": ip, "action": "banner_fetch"})
+        for web_port in web_ports:
             b = _http_banner(ip, web_port)
             if b:
                 banners = b
                 break
 
-        for rtsp_port in [p for p in open_ports if p in (554, 8554)]:
+        rtsp_ports = [p for p in open_ports if p in (554, 8554)]
+        for rtsp_port in rtsp_ports:
             if _rtsp_banner(ip, rtsp_port):
                 banners["rtsp_confirmed"] = True
                 break
@@ -235,6 +287,7 @@ def discover_hosts(subnet: str, max_hosts: int = 254) -> tuple[list, int]:
             socket.setdefaulttimeout(_prev_timeout)
 
         open_ports.sort()
+        _emit("phase2_check", {"ip": ip, "action": "vendor_guess"})
         guess = _guess(open_ports, banners)
         entry = {"ip": ip, "open_ports": open_ports, "guess": guess, "hostname": hostname}
         # Attach Reolink-specific RTSP URL hints so the wizard can pre-populate fields
@@ -242,6 +295,61 @@ def discover_hosts(subnet: str, max_hosts: int = 254) -> tuple[list, int]:
             rtsp_port = next((p for p in (554, 8554) if p in open_ports), 554)
             entry["reolink_hints"] = _reolink_rtsp_hints(ip, rtsp_port)
         results.append(entry)
+        _emit("candidate", {
+            "ip": ip,
+            "hostname": hostname,
+            "guess": guess,
+            "open_ports": open_ports,
+        })
 
     results.sort(key=lambda x: list(map(int, x["ip"].split("."))))
     return results, len(hosts)
+
+
+def discover_hosts_stream(
+    subnet: str,
+    max_hosts: int = 254,
+) -> Iterator[tuple[str, dict]]:
+    """Generator wrapper around :func:`discover_hosts` — yields the
+    same (event_type, payload) tuples that the callback variant emits,
+    plus a final ``done`` event with the result summary. Used by the
+    SSE endpoint; the sync ``/api/discover`` route still calls
+    :func:`discover_hosts` directly and ignores progress.
+    """
+    import queue
+    import threading
+
+    q: queue.Queue[tuple[str, dict] | None] = queue.Queue()
+
+    def _cb(kind: str, payload: dict) -> None:
+        q.put((kind, payload))
+
+    result: dict = {"results": [], "total_scanned": 0, "error": None}
+
+    def _runner() -> None:
+        try:
+            cams, total = discover_hosts(subnet, max_hosts, progress=_cb)
+            result["results"] = cams
+            result["total_scanned"] = total
+        except Exception as exc:
+            result["error"] = str(exc)
+            log.exception("[discovery] stream worker failed")
+        finally:
+            q.put(None)
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    while True:
+        item = q.get()
+        if item is None:
+            break
+        yield item
+    if result["error"]:
+        yield ("error", {"message": result["error"]})
+        return
+    yield ("done", {
+        "subnet": subnet,
+        "total_scanned": result["total_scanned"],
+        "found": len(result["results"]),
+        "results": result["results"],
+    })

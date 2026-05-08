@@ -747,6 +747,13 @@
   min-width:0;
   min-height:44px;
   font-variant-numeric:tabular-nums;
+  /* Default text-align:start renders "21:00" at the LEFT cell's
+     left edge and "08:00" at the RIGHT cell's left edge, so the
+     dash sits flush against the right value while the left value
+     is far away — visually it reads as "21:00 [gap] –08:00".
+     Centering the value in each cell puts both numbers
+     symmetrically with the dash optically between them. */
+  text-align:center;
 }
 .lbl-tiny{
   font-size:10.5px;

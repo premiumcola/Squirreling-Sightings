@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 64" role="img" aria-label="Squirreling Sightings — leaf variant">
+  <ellipse cx="14" cy="20" rx="8" ry="13" fill="#2d6a4f" transform="rotate(-30 14 20)"/>
+  <ellipse cx="10" cy="38" rx="9" ry="11" fill="#1b4332"/>
+  <ellipse cx="14" cy="48" rx="8" ry="11" fill="#40916c" transform="rotate(30 14 48)"/>
+  <ellipse cx="50" cy="8" rx="14" ry="7" fill="#74c69d"/>
+  <ellipse cx="36" cy="6" rx="9" ry="5" fill="#52b788"/>
+  <ellipse cx="62" cy="10" rx="9" ry="5" fill="#2d6a4f"/>
+  <ellipse cx="22" cy="6" rx="8" ry="5" fill="#40916c"/>
+  <ellipse cx="56" cy="20" rx="8" ry="11" fill="#52b788" transform="rotate(30 56 20)"/>
+  <ellipse cx="60" cy="38" rx="8" ry="9" fill="#1b4332"/>
+  <ellipse cx="56" cy="48" rx="8" ry="11" fill="#74c69d" transform="rotate(-30 56 48)"/>
+  <circle cx="35" cy="33" r="16" fill="#1a1a1a"/>
+  <circle cx="35" cy="33" r="10" fill="#0a0a0a"/>
+  <circle cx="35" cy="33" r="6.5" fill="#1f1f1f"/>
+  <circle cx="32.5" cy="30.5" r="2.8" fill="#4cc9f0"/>
+  <circle cx="31.5" cy="29.5" r="1" fill="#fff"/>
+  <circle cx="46" cy="22" r="1.4" fill="#52b788"/>
+  <path d="M 60 50 Q 80 52 100 50" stroke="#6b4423" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <ellipse cx="92" cy="48" rx="4" ry="2" fill="#2d6a4f" transform="rotate(15 92 48)"/>
+  <g transform="translate(82, 36)">
+    <path d="M 7 4 Q 18 -2 16 -14 Q 8 -22 -2 -20 Q -8 -14 -4 -8 Z" fill="#c89464" stroke="#a06c2c" stroke-width="0.4"/>
+    <ellipse cx="14" cy="-14" rx="3.5" ry="2.5" fill="#d4a574" transform="rotate(-20 14 -14)"/>
+    <ellipse cx="0" cy="2" rx="8" ry="11" fill="#b87333"/>
+    <ellipse cx="0" cy="6" rx="5" ry="7" fill="#d4a574"/>
+    <circle cx="0" cy="-11" r="7" fill="#b87333"/>
+    <ellipse cx="-5" cy="-8" rx="2.6" ry="2" fill="#a06c2c" opacity="0.5"/>
+    <ellipse cx="5" cy="-8" rx="2.6" ry="2" fill="#a06c2c" opacity="0.5"/>
+    <path d="M -6 -16 L -3 -21 L -1 -17 Z" fill="#b87333"/>
+    <path d="M 1 -17 L 3 -21 L 6 -16 Z" fill="#b87333"/>
+    <path d="M -4 -17 L -3 -19 L -2 -17 Z" fill="#7a4a26"/>
+    <path d="M 2 -17 L 3 -19 L 4 -17 Z" fill="#7a4a26"/>
+    <path d="M -5 -12 Q -3 -14 -1 -12" stroke="#0a0a0a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <path d="M 1 -12 Q 3 -14 5 -12" stroke="#0a0a0a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <ellipse cx="0" cy="-8" rx="1.2" ry="0.9" fill="#0a0a0a"/>
+    <path d="M -2 -6 Q 0 -4.5 2 -6" stroke="#0a0a0a" stroke-width="0.7" fill="none" stroke-linecap="round"/>
+    <ellipse cx="-5" cy="-3" rx="2" ry="2.5" fill="#a06c2c"/>
+    <ellipse cx="5" cy="-3" rx="2" ry="2.5" fill="#a06c2c"/>
+    <ellipse cx="0" cy="-3" rx="2.8" ry="3.2" fill="#8b5a3c"/>
+    <path d="M -3 -5 Q 0 -8 3 -5 L 2.5 -4 L -2.5 -4 Z" fill="#5a3a1c"/>
+    <ellipse cx="-5" cy="13" rx="3.5" ry="2" fill="#a06c2c"/>
+    <ellipse cx="5" cy="13" rx="3.5" ry="2" fill="#a06c2c"/>
+  </g>
+</svg>

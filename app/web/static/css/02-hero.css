@@ -28,23 +28,18 @@
 }
 .hero-title{
   margin:0;
-  /* Brand-mark scale — one step above the section-header weight so
-     the squirrel + "TAM-spy" lockup reads as the page anchor without
-     re-introducing the old hero-banner card. 28 / 800 lands between
-     the previous 22 / 700 (too small) and the original 30 / 800
-     hero-banner (too loud) and pairs cleanly with the 40 px glyph. */
-  font-size:28px;font-weight:800;
-  letter-spacing:-.01em;line-height:1.1;
+  /* Wordmark scale — heavier and a touch tighter than the previous
+     "TAM-spy" lockup so "Squirreling · Sightings" still reads as a
+     single brand anchor instead of two columns of plain text. 32 / 800
+     with -.025em tracking keeps the long word from wandering on a
+     phone-width row, and pairs cleanly with the 52 px glyph below
+     (cap-height + gap + subtitle cap-height ≈ 52). */
+  font-size:32px;font-weight:800;
+  letter-spacing:-.025em;line-height:1.1;
   color:#fff;
   display:inline-flex;align-items:center;gap:8px;
 }
-.hero-tam,.hero-spy{ color:#fff; }
-.hero-hyphen{
-  color:#fff;
-  display:inline-block;
-  width:.42em;
-  text-align:center;
-}
+.hero-wordmark{ color:#fff; }
 /* Brand glyph — randomly Spy Scout (wider) OR Acorn Cam (taller)
    per chrome/brand-logo.js. Fixed height so the title row stays
    consistent; width auto follows the chosen asset's aspect ratio.
@@ -53,35 +48,28 @@
    icon when the title row wraps. */
 .hero-brand-glyph{
   display:inline-block;
-  /* Sized to fill the hero row visually — title (28 / 800, line-box
-     ~31 px) plus 4 px gap plus subtitle (14 px italic, line-box
-     ~19 px) totals roughly 54 px; the glyph reads strongest a touch
-     above that so it carries the brand mark instead of just balancing
-     it. 68 px lands in that pocket on desktop, with width auto
-     following the chosen asset's aspect ratio
-     (Acorn Cam 50:64 → ~53 px; Spy Scout 80:70 → ~78 px). The hero
-     row uses align-items:center, so the taller glyph centers across
-     the title+subtitle stack without pushing the title down. */
-  height:68px;width:auto;
+  /* Glyph height matches the title + subtitle stack so the squirrel
+     and the wordmark read as one visual block. The new 110×64
+     viewBox renders at ~89 px wide for height 52 — wider than the
+     previous logos but the hero row uses flex with min-width:0 on
+     the title-wrap, so the wordmark still wraps gracefully on the
+     narrowest phones. align-items:center on .hero centers the glyph
+     against the stack so the title baseline never shifts. */
+  height:52px;width:auto;
   flex-shrink:0;
   vertical-align:middle;
 }
 .hero-subtitle{
   margin:0;
-  /* One step bigger than before — clearly readable on a phone but
-     still subordinate to the 28 px / 800 title above. Italic + muted
-     keeps the visual hierarchy intact. */
-  font-size:14px;font-weight:500;
+  /* Compact subordinate caption to the wordmark — the small-caps-ish
+     scale keeps the brand line clean. Flush under the title (no
+     padding-left) because the new wordmark is itself the visual
+     left edge; an indent past the glyph would push the subtitle
+     into the right half of the row and break the stack. */
+  font-size:11px;font-weight:500;
   font-style:italic;
   color:var(--muted);
   letter-spacing:.02em;
-  /* Indent past the title's left edge so the subtitle starts roughly
-     where the title TEXT begins (right of the glyph). At the
-     enlarged 68 px glyph the SVGs land between ~53 px (Acorn Cam)
-     and ~78 px (Spy Scout) wide, plus the 8 px title-row gap →
-     88 px clears the wider variant on desktop and reads cleanly
-     under both options without recomputing per-asset. */
-  padding-left:88px;
 }
 .ghost{background:var(--surface)!important;border:none!important}.section{padding:12px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-subtitle{font-size:12px;font-style:italic;color:var(--muted);font-weight:400;margin-left:auto}.toolbar{display:grid;grid-template-columns:240px 220px 160px;gap:12px;margin-bottom:18px}.toolbar select,.toolbar input,.form input,.form select{width:100%;padding:12px 40px 12px 14px;border-radius:14px;background:var(--surface);color:var(--text);border:none;outline:none}.toolbar select:focus,.toolbar input:focus,.form input:focus,.form select:focus{box-shadow:0 0 0 2px var(--accent)}
 .toolbar select,.form select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' stroke='%2391a4b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center}
@@ -104,18 +92,16 @@ select option{background:#1e1e1e;color:#c8c8c8}
 @media(max-width:640px){.hero-build{font-size:10px;padding-left:8px}}
 
 /* Mobile compact — proportional shrink of glyph + title + subtitle
-   so the larger desktop scale doesn't crowd a 375 px iPhone SE. The
-   glyph stays clearly larger than the title cap-height so the brand
-   mark still carries; at 54 px the SVGs land between ~42 px
-   (Acorn Cam) and ~62 px (Spy Scout) wide, plus the 8 px row gap →
-   70 px clears the wider variant. The title row stays on a single
-   line at 24 px / 800 plus a 54 px glyph on a 375 px iPhone SE
-   (TAM-spy + glyph + 8 px gap measures ~140 px, well inside the
-   viewport minus side padding). */
+   so the desktop scale doesn't crowd a 375 px iPhone SE. The 110×64
+   viewBox at height 44 renders ~76 px wide; "Squirreling · Sightings"
+   at 26 / 800 fits beside it on a 375 px viewport (glyph + 8 px gap +
+   wordmark ≈ 280 px, well inside the inner column). Subtitle stays
+   flush left under the title — no indent — at 10.5 px so it reads
+   as a faint subordinate line, not a second column. */
 @media (max-width:540px){
-  .hero-brand-glyph{ height:54px; }
-  .hero-title{ font-size:24px; }
-  .hero-subtitle{ font-size:13px; padding-left:70px; }
+  .hero-brand-glyph{ height:44px; }
+  .hero-title{ font-size:26px; }
+  .hero-subtitle{ font-size:10.5px; }
   .hero-build{ display:none; }
 }
 @media (max-width:768px){

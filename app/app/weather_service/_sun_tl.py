@@ -43,6 +43,14 @@ from ._consts import (
 # sun_times_today so the two never drift again.
 _SUN_PRE_BIAS = 0.70
 
+# Drift guard: refuse a "sunset" capture that fires hours after the
+# real solar sunset. Without this, a misconfigured schedule produced an
+# MP4 labelled "sunset · score=0.60" that was actually 312 minutes
+# after the real event — pure IR night with no afterglow at all.
+# Production runs refuse outright; test mode logs a WARNING and
+# proceeds (the user is deliberately diagnosing).
+_SUN_TL_DRIFT_LIMIT_MIN = 90
+
 # Locked sunrise/sunset capture window — single value, not user-tunable.
 # Sized to comfortably cover civil twilight (sun 0–6° below horizon, ~30
 # min either side at mid-latitudes) PLUS golden hour (~30 min after the
@@ -98,6 +106,13 @@ class _SunTLTestSession:
     # samples came back). Updated at the end of the capture loop.
     validator_profile: str | None = None
     baseline_brightness: float | None = None
+    # Drift guard — set when the capture started outside the
+    # _SUN_TL_DRIFT_LIMIT_MIN window relative to the real sun event.
+    # ``phase_drift_min`` is signed (+ = after, - = before). The UI
+    # surfaces ``phase_drift_warning`` as an amber pill when it's set
+    # so the operator sees "yes the MP4 is real night, that's why".
+    phase_drift_min: int | None = None
+    phase_drift_warning: str | None = None
     # Final stats snapshot — captured before scratch dir cleanup so the
     # post-completion status read still has accurate counters even
     # though `_stats.json` is gone with the scratch dir.
@@ -455,6 +470,35 @@ class SunTimelapseMixin:
         else:
             window_seconds = _SUN_TL_LOCKED_WINDOW_MIN * 60
             log_tag = "weather"
+        # ── Drift guard ────────────────────────────────────────────────────
+        # Compute the difference between "now" and the requested sun
+        # event. Production refuses; test mode warns + proceeds (so
+        # the user can deliberately reproduce a "midnight sunset" run).
+        drift_min = int(round((datetime.now() - sun_dt).total_seconds() / 60.0))
+        if abs(drift_min) > _SUN_TL_DRIFT_LIMIT_MIN:
+            warn_msg = (
+                f"{phase}-Capture lief {drift_min} min nach Sonnen"
+                f"{'aufgang' if phase == 'sunrise' else 'untergang'} — "
+                "Frames sind reine Nacht"
+            )
+            if test_session is None:
+                log.warning(
+                    "[%s] refusing capture: drift=%dmin > limit=%dmin cam=%s phase=%s",
+                    log_tag, drift_min, _SUN_TL_DRIFT_LIMIT_MIN, cam_id, phase,
+                )
+                return
+            # Test mode: log and proceed; surface drift on session.
+            log.warning(
+                "[%s] drift=%dmin (limit=%dmin) — proceeding because this "
+                "is a diagnostic test run",
+                log_tag, drift_min, _SUN_TL_DRIFT_LIMIT_MIN,
+            )
+            test_session.phase_drift_min = drift_min
+            test_session.phase_drift_warning = warn_msg
+        elif test_session is not None:
+            # Within limits but still record the drift for the UI to
+            # show "right on time" without a warning pill.
+            test_session.phase_drift_min = drift_min
         interval_s = max(1, int(pcfg.get("interval_s", 3) or 3))
         target_fps = max(1, int(pcfg.get("fps", 25) or 25))
         cam_name = self._cam_name(cam_id)
@@ -535,6 +579,15 @@ class SunTimelapseMixin:
             f"{baseline_med:.0f}" if baseline_med is not None else "?",
             cam_name, phase,
         )
+        # Mirror the profile + baseline into the CaptureStats so the
+        # _stats.json blob picks them up on every flush — production
+        # runs (no test_session) still leave the data on disk for the
+        # build-side manifest to read later.
+        stats.validator_profile = active_profile.name
+        stats.baseline_brightness = baseline_med
+        stats.phase_drift_min = drift_min
+        if test_session is not None and test_session.phase_drift_warning:
+            stats.phase_drift_warning = test_session.phase_drift_warning
         if test_session is not None:
             test_session.validator_profile = active_profile.name
             test_session.baseline_brightness = baseline_med
@@ -764,6 +817,8 @@ class SunTimelapseMixin:
                 "scene_skips_by_reason": dict(stats.scene_skips_by_reason),
                 "validator_profile": active_profile.name,
                 "baseline_brightness": baseline_med,
+                "phase_drift_min": test_session.phase_drift_min,
+                "phase_drift_warning": test_session.phase_drift_warning,
             }
         # Cancellation: skip the encode path entirely — a half-length
         # cancelled capture should not produce a sighting. Don't
@@ -1129,6 +1184,8 @@ class SunTimelapseMixin:
                 if session.baseline_brightness is not None
                 else None
             ),
+            "phase_drift_min": session.phase_drift_min,
+            "phase_drift_warning": session.phase_drift_warning,
         }
 
     def sun_times_today(self) -> dict:

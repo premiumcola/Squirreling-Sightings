@@ -756,6 +756,14 @@ class CaptureStats:
     # operator can read "23 dead_area" vs "23 dead_area (all scene-skip)"
     # at a glance.
     scene_skips_by_reason: dict = field(default_factory=dict)
+    # Optional capture-context metadata. Populated by the caller right
+    # before flush() lands to ``_stats.json`` and surfaces in the UI.
+    # All optional so the existing call sites that don't set them
+    # produce the same _stats.json shape as before.
+    validator_profile: str | None = None
+    baseline_brightness: float | None = None
+    phase_drift_min: int | None = None
+    phase_drift_warning: str | None = None
 
     def record_capture(self, attempt_used: int = 0):
         """attempt_used==0 means first try succeeded; >0 means a retry saved it."""
@@ -791,6 +799,10 @@ class CaptureStats:
                 "retry_recoveries": int(self.retry_recoveries),
                 "rejected_by_reason": dict(self.rejected_by_reason),
                 "scene_skips_by_reason": dict(self.scene_skips_by_reason),
+                "validator_profile": self.validator_profile,
+                "baseline_brightness": self.baseline_brightness,
+                "phase_drift_min": self.phase_drift_min,
+                "phase_drift_warning": self.phase_drift_warning,
             }
             path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except Exception as e:

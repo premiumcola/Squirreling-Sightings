@@ -84,6 +84,7 @@ function _renderHeader(cams){
       </div>
       <div class="suntltest-form-row suntltest-form-row--start">
         <button type="button" id="suntltestStart" class="btn-action accent suntltest-start">▶ Jetzt starten</button>
+        <button type="button" id="suntltestCancel" class="btn-action danger suntltest-cancel" hidden>⏹ Abbrechen</button>
       </div>
       <div class="field-help suntltest-hint">Test fährt die echte Capture-Pipeline an (gleicher Code, kürzeres Fenster). Ergebnis landet als <code>_test_HHMMSS_…</code> in den Sichtungen.</div>
     </div>
@@ -118,9 +119,29 @@ function _bindForm(root){
     });
   });
   byId('suntltestStart')?.addEventListener('click', _startTest);
+  byId('suntltestCancel')?.addEventListener('click', _cancelTest);
+}
+
+// Centralised UI toggle — hide the start button while a test is in
+// flight so a fast clicker can't fire a second start before the
+// poller has reset state. The cancel button mirrors the inverse.
+function _setRunningUi(isRunning){
+  const start = byId('suntltestStart');
+  const cancel = byId('suntltestCancel');
+  if (start)  { start.hidden = !!isRunning;  start.disabled = !!isRunning; }
+  if (cancel) { cancel.hidden = !isRunning; cancel.disabled = false; }
 }
 
 async function _startTest(){
+  // Synchronous reset BEFORE the network round-trip so the user
+  // never sees the previous run's MP4 card or live tile while the
+  // new run is starting. Polling will repaint these from the live
+  // status response within ~2 s.
+  const wrap = byId('suntltestResult');
+  if (wrap) { wrap.hidden = true; wrap.innerHTML = ''; }
+  const live = byId('suntltestLive');
+  if (live) { live.hidden = true; live.innerHTML = ''; }
+
   const btn = byId('suntltestStart');
   if (!_selCam) { showToast('Keine Wetter-Kamera ausgewählt.', 'error'); return; }
   if (btn) btn.disabled = true;
@@ -141,9 +162,31 @@ async function _startTest(){
       return;
     }
     showToast('Test läuft …', 'success');
+    _setRunningUi(true);
     _startPolling();
   } catch (e) {
     showToast('Netzwerkfehler beim Start: ' + e, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function _cancelTest(){
+  const btn = byId('suntltestCancel');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/weather/sun-tl/test/cancel', { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) {
+      showToast('Abbruch fehlgeschlagen: ' + (j.error || r.statusText), 'error');
+      if (btn) btn.disabled = false;
+      return;
+    }
+    showToast('Abbruch wird gesendet …', 'info');
+    // Don't stop polling — let the status endpoint confirm the run
+    // actually stopped, then _pollOnce will swap the UI back to the
+    // start state and render the cancelled-state card.
+  } catch (e) {
+    showToast('Netzwerkfehler beim Abbruch: ' + e, 'error');
     if (btn) btn.disabled = false;
   }
 }
@@ -169,8 +212,7 @@ async function _pollOnce(){
   _renderLive(d);
   if (d && (d.finished || !d.running)) {
     stopSunTlTestPolling();
-    const startBtn = byId('suntltestStart');
-    if (startBtn) startBtn.disabled = false;
+    _setRunningUi(false);
     _renderResult(d);
   }
 }
@@ -277,6 +319,20 @@ function _dnBadge(v){
 function _renderResult(d){
   const wrap = byId('suntltestResult'); if (!wrap) return;
   if (!d || !d.finished) { wrap.hidden = true; wrap.innerHTML = ''; return; }
+  // Cancelled-state card — distinct from a generic error so the user
+  // recognises this as their own action, not a failure. Render BEFORE
+  // the generic error branch so a session that ends with both
+  // ``cancelled=true`` AND ``error="abgebrochen"`` set still gets the
+  // mute card, not the red one.
+  if (d.cancelled) {
+    wrap.hidden = false;
+    wrap.innerHTML = `
+      <div class="suntltest-result-card suntltest-result-card--mute">
+        <div class="suntltest-result-title">⏹ Test abgebrochen</div>
+        <div class="suntltest-result-msg">Aufnahme wurde manuell abgebrochen — kein MP4 erzeugt.</div>
+      </div>`;
+    return;
+  }
   if (d.error && !d.result_sighting_id) {
     wrap.hidden = false;
     wrap.innerHTML = `
@@ -323,6 +379,10 @@ export function renderSunTlTestPanel(){
   fetch('/api/weather/sun-tl/test/status').then(r => r.json()).then(d => {
     if (d && d.cam_id) {
       _renderLive(d);
+      // Tab-open re-render: if a test is still in flight when the user
+      // navigates back, surface the abort button immediately so they
+      // can stop it without waiting for the next poll tick.
+      _setRunningUi(d.running && !d.finished);
       if (d.running && !d.finished) _startPolling();
       else _renderResult(d);
     }

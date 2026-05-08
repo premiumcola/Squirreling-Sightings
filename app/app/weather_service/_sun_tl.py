@@ -84,6 +84,13 @@ class _SunTLTestSession:
     # that the on_reject hook builds during the slot loop. Production
     # captures stay None and keep the original cleanup behaviour.
     raw_dir: Path | None = None
+    # Cancellation flags — protected by `lock`. The HTTP cancel
+    # endpoint sets ``cancel_requested``; the capture loop polls it
+    # at the slot boundary and at every 0.5 s sleep tick, sets
+    # ``cancelled`` when it actually unwinds, and skips the encode
+    # path so a cancelled session never produces a sighting.
+    cancel_requested: bool = False
+    cancelled: bool = False
     # Final stats snapshot — captured before scratch dir cleanup so the
     # post-completion status read still has accurate counters even
     # though `_stats.json` is gone with the scratch dir.
@@ -585,6 +592,21 @@ class SunTimelapseMixin:
         # breakdown stays diagnostic.
         last_valid_jpg: bytes | None = None
         while datetime.now() < end_at:
+            # Cancellation polling at the slot boundary — the user-
+            # facing Abbrechen button sets ``cancel_requested`` via
+            # the HTTP cancel endpoint. The lock acquisition is
+            # cheap and matches the lifecycle invariant (HTTP writes
+            # under the lock, capture loop reads under it).
+            if test_session is not None:
+                with test_session.lock:
+                    if test_session.cancel_requested:
+                        log.info(
+                            "[sun-tl-test] cancel requested at slot %05d "
+                            "(%d frames captured)", i, n_written,
+                        )
+                        test_session.cancelled = True
+                if test_session.cancelled:
+                    break
             # Long-running capture loop — uses grab_valid_frame defaults
             # (6 attempts × 0.4 s with a 5 s wall-clock cap). The hires
             # variant reads only from the main-stream buffer so
@@ -629,16 +651,24 @@ class SunTimelapseMixin:
             # Sleep in short chunks so we react quickly to stop signals.
             slept = 0.0
             while slept < interval_s and datetime.now() < end_at:
+                if test_session is not None:
+                    with test_session.lock:
+                        if test_session.cancel_requested:
+                            test_session.cancelled = True
+                    if test_session.cancelled:
+                        break
                 time.sleep(0.5)
                 slept += 0.5
+            if test_session is not None and test_session.cancelled:
+                break
         sun_at_end = self._sun_position()
         log.info("[%s] Capture done: %s %s · %d Frames erfasst",
                  log_tag, cam_name, phase, n_written)
         if test_session is not None:
             # Stats snapshot — taken once the loop ends so every
             # early-return branch below (too-few-frames, encode-fail,
-            # encode-crash) still leaves accurate counters on the
-            # session for the UI to read after cleanup.
+            # encode-crash, cancellation) still leaves accurate counters
+            # on the session for the UI to read after cleanup.
             test_session.final_stats = {
                 "expected_frames": int(stats.expected_frames),
                 "captured_frames": int(stats.captured_frames),
@@ -646,6 +676,16 @@ class SunTimelapseMixin:
                 "retry_recoveries": int(stats.retry_recoveries),
                 "rejected_by_reason": dict(stats.rejected_by_reason),
             }
+        # Cancellation: skip the encode path entirely — a half-length
+        # cancelled capture should not produce a sighting. Don't
+        # overwrite ``error`` if a prior failure path already set it
+        # (e.g. cancel landing while encode_failed was already true).
+        if test_session is not None and test_session.cancelled:
+            log.info("[sun-tl-test] capture cancelled — skipping encode")
+            if not test_session.error:
+                test_session.error = "abgebrochen"
+            _finalise_scratch()
+            return
         # The "≥ 2 s of video" guard fits 75-min real captures fine
         # but kills 60-s tests at 3-s intervals (only ~20 frames).
         # Drop the guard to a static minimum during test so a short
@@ -915,6 +955,25 @@ class SunTimelapseMixin:
                         pass
                     _active_test_handler = None
 
+    def cancel_sun_tl_test(self) -> dict:
+        """Public API hit by ``POST /api/weather/sun-tl/test/cancel``.
+        Sets the cancel flag on the active session — the capture loop
+        polls it at slot boundaries and at every 0.5 s sleep tick, so
+        the actual stop happens within ~0.5 s of this call. Returns
+        a small status dict; never raises."""
+        global _active_test_session
+        with _test_session_lock:
+            session = _active_test_session
+        if session is None:
+            return {"ok": False, "error": "no test running"}
+        if session.finished:
+            return {"ok": False, "error": "test already finished"}
+        with session.lock:
+            session.cancel_requested = True
+        log.info("[sun-tl-test] cancel signal sent (cam=%s phase=%s)",
+                 session.cam_id, session.phase)
+        return {"ok": True}
+
     def get_sun_tl_test_status(self) -> dict:
         """Snapshot for the UI's live panel. Counters come from
         `_stats.json` written by CaptureStats.flush(); buffered log
@@ -941,8 +1000,12 @@ class SunTimelapseMixin:
             stats = {}
         with session.lock:
             log_tail = list(session.log_lines)
+            cancelled = bool(session.cancelled)
+            cancel_requested = bool(session.cancel_requested)
         return {
             "running": bool(running),
+            "cancelled": cancelled,
+            "cancel_requested": cancel_requested,
             "cam_id": session.cam_id,
             "phase": session.phase,
             "started_at": session.started_at.isoformat(timespec="seconds"),

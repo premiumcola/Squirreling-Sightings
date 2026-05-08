@@ -168,6 +168,16 @@
 .suntltest-chip.is-active{background:#7faec9;color:#0b1320}
 .suntltest-start{min-height:48px;padding:10px 22px;font-size:15px;border-radius:14px}
 .suntltest-start:disabled{opacity:.55;cursor:not-allowed}
+/* Abbrechen — destructive action, red background tint (no border per
+   project rules). Sits next to the start button via the form-row's
+   default flex layout. Mobile bumps min-height to 48 px to clear the
+   iOS 44 px touch-target floor with margin. */
+.suntltest-cancel{min-height:44px;padding:10px 18px;font-size:14px;border-radius:14px;background:rgba(239,68,68,0.20);color:#fecaca;border:0}
+.suntltest-cancel:hover{background:rgba(239,68,68,0.30);color:#fff}
+.suntltest-cancel:disabled{opacity:.55;cursor:not-allowed}
+@media (max-width:540px){
+  .suntltest-cancel{min-height:48px;width:100%}
+}
 .suntltest-hint{margin:0}
 
 .suntltest-live{display:grid;gap:14px;padding:14px;border-radius:14px;background:rgba(127,174,201,0.06);box-shadow:inset 4px 0 0 rgba(127,174,201,0.6)}
@@ -211,6 +221,7 @@
 .suntltest-result-card{padding:14px;border-radius:14px;display:grid;gap:8px}
 .suntltest-result-card--ok{background:rgba(52,211,153,0.10);box-shadow:inset 4px 0 0 #34d399}
 .suntltest-result-card--err{background:rgba(251,113,133,0.10);box-shadow:inset 4px 0 0 #fb7185}
+.suntltest-result-card--mute{background:rgba(148,163,184,0.10);box-shadow:inset 4px 0 0 #94a3b8}
 .suntltest-result-title{font-weight:700;font-size:15px;color:var(--text)}
 .suntltest-result-msg{font-size:13px;color:var(--muted)}
 .suntltest-result-msg code{background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:6px;color:#cfe7ff}

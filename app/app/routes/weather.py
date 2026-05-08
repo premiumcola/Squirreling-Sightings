@@ -249,6 +249,22 @@ def api_weather_sun_tl_test_status():
     return jsonify(ws.get_sun_tl_test_status())
 
 
+@bp.post('/api/weather/sun-tl/test/cancel')
+def api_weather_sun_tl_test_cancel():
+    """Signal the active sun-tl test capture to stop at the next
+    poll boundary (~0.5 s). The capture loop sets ``cancelled=True``
+    and skips the encode path; the status endpoint surfaces the
+    cancellation so the frontend can render the right end-state."""
+    ws = app_state.weather_service
+    if ws is None:
+        return jsonify({"ok": False,
+                        "error": "weather service not available"}), 503
+    res = ws.cancel_sun_tl_test()
+    if not res.get("ok"):
+        return jsonify(res), 409
+    return jsonify(res)
+
+
 @bp.get('/api/weather/history')
 def api_weather_history():
     """Backing endpoint for the Wetterstatistik chart. `hours` clamped

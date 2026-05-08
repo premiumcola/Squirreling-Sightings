@@ -112,8 +112,7 @@
                     <option value="objects_only">Nur Objekte (KI)</option>
                     <option value="motion_only">Nur Bewegung</option>
                   </select>
-                  <span class="field-label">Erkennungs-Modus</span>
-                  <div class="field-help">Welche Art von Event diese Kamera erkennt.</div>
+                  <span class="field-label">Erkennungs-Modus · Welche Art von Event diese Kamera erkennt.</span>
                 </div>
               </div>
             </div>
@@ -658,24 +657,6 @@
             <!-- Panel: Zonen -->
             <div class="cam-tab-panel" id="cam-tab-zonen">
               <div class="mask-editor panel inset">
-                <!-- Legend — single source of truth for what blue/red mean -->
-                <div class="shape-legend">
-                  <span class="shape-legend-item"><span class="shape-legend-swatch shape-legend-swatch--zone"></span>Zone — nur hier erkennen</span>
-                  <span class="shape-legend-item"><span class="shape-legend-swatch shape-legend-swatch--mask"></span>Maske — hier NICHT erkennen</span>
-                </div>
-
-                <!-- Mode selector: colour-coded active state (blue/red) -->
-                <div class="shape-mode-row">
-                  <button class="shape-mode-btn" data-mode="zone" id="editZoneBtn" type="button">
-                    <span class="shape-mode-dot shape-mode-dot--zone"></span>Zone zeichnen
-                  </button>
-                  <button class="shape-mode-btn" data-mode="mask" id="editMaskBtn" type="button">
-                    <span class="shape-mode-dot shape-mode-dot--mask"></span>Maske zeichnen
-                  </button>
-                  <div class="shape-mode-spacer"></div>
-                  <button class="ghost small-btn" id="refreshMaskSnapshotBtn" type="button">Snapshot aktualisieren</button>
-                </div>
-
                 <div class="canvas-wrap">
                   <img id="maskSnapshot" src="" alt="Snapshot" />
                   <canvas id="maskCanvas" width="1280" height="720"></canvas>
@@ -698,8 +679,16 @@
             </div>
 
             <div class="cam-form-actions">
+              <button type="button" id="deleteCameraBtn" class="cam-delete-btn">
+                <svg class="cam-delete-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  <path d="M10 11v6"/><path d="M14 11v6"/>
+                  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                </svg>
+                Kamera löschen
+              </button>
               <button class="cam-save-btn">Speichern &amp; Reload</button>
-              <button type="button" id="deleteCameraBtn" class="cam-delete-btn">Kamera löschen</button>
             </div>
           </form>
           </div><!-- /.cam-edit-inner -->

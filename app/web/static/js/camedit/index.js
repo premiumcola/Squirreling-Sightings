@@ -50,7 +50,7 @@ import {
 } from './detection.js';
 import {
   drawShapes, loadMaskSnapshot,
-  _renderShapeList, _updateShapeDrawingBar, _updateShapeModeButtons,
+  _renderShapeList, _updateShapeDrawingBar,
 } from '../shape-editor/index.js';
 import { _bindCamProbeDeviceInfo } from './discovery.js';
 import {
@@ -432,9 +432,9 @@ function editCamera(camId){
   setWhitelistState(c.whitelist_names||[]); _updateWhitelistHidden();
   shapeState.camera=camId; shapeState.zones=JSON.parse(JSON.stringify(c.zones||[])); shapeState.masks=JSON.parse(JSON.stringify(c.masks||[])); shapeState.points=[]; shapeState.pulse=null;
   f['zones_json'].value=JSON.stringify(shapeState.zones); f['masks_json'].value=JSON.stringify(shapeState.masks);
-  // Keep the editor's auxiliary UI (polygon list, drawing-bar, mode
-  // buttons) in sync with shapeState whenever a camera is opened.
-  _renderShapeList(); _updateShapeDrawingBar(); _updateShapeModeButtons();
+  // Keep the editor's auxiliary UI (polygon list + drawing bar) in
+  // sync with shapeState whenever a camera is opened.
+  _renderShapeList(); _updateShapeDrawingBar();
   byId('deleteCameraBtn').dataset.camId=camId;
   loadMaskSnapshot(camId); drawShapes();
   // Slide down inside the clicked camera card.

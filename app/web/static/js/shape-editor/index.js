@@ -9,6 +9,4 @@ import './pointer.js';
 
 export { drawShapes, getCanvasCtx } from './canvas.js';
 export { loadMaskSnapshot, saveShapesIntoForm } from './persistence.js';
-export {
-  _renderShapeList, _updateShapeDrawingBar, _updateShapeModeButtons,
-} from './ui.js';
+export { _renderShapeList, _updateShapeDrawingBar } from './ui.js';

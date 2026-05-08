@@ -26,12 +26,6 @@ export function _updateShapeDrawingBar(){
   if (save) save.disabled = n < 3;
 }
 
-export function _updateShapeModeButtons(){
-  document.querySelectorAll('.shape-mode-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.mode === shapeState.mode);
-  });
-}
-
 // Tracks which row's trigger options panel is currently expanded.
 // Keyed as `${kind}:${idx}`. Auto-expands the row that gets selected
 // via canvas click (see onUp in pointer.js).

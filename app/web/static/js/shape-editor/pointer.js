@@ -16,10 +16,8 @@ import {
   _hitVertex, _isClosingPoint, _findPolygonAt, _polyPoints, canvasPoint,
 } from './geometry.js';
 import { drawShapes } from './canvas.js';
-import { saveShapesIntoForm, loadMaskSnapshot, _nextPolyName } from './persistence.js';
-import {
-  _renderShapeList, _updateShapeDrawingBar, _updateShapeModeButtons,
-} from './ui.js';
+import { saveShapesIntoForm, _nextPolyName } from './persistence.js';
+import { _renderShapeList, _updateShapeDrawingBar } from './ui.js';
 
 
 function _commitInProgressPolygon(){
@@ -157,18 +155,6 @@ function _commitInProgressPolygon(){
   canvas.addEventListener('touchend',   onUp,   { passive: false });
   canvas.addEventListener('touchcancel', () => { drag = null; downPt = null; });
 
-  byId('refreshMaskSnapshotBtn')?.addEventListener('click', () =>
-    loadMaskSnapshot(shapeState.camera || byId('cameraForm').elements['id'].value));
-
-  byId('editZoneBtn')?.addEventListener('click', () => {
-    shapeState.mode = 'zone';
-    _updateShapeModeButtons();
-  });
-  byId('editMaskBtn')?.addEventListener('click', () => {
-    shapeState.mode = 'mask';
-    _updateShapeModeButtons();
-  });
-
   byId('undoShapeBtn')?.addEventListener('click', () => {
     shapeState.points.pop();
     drawShapes();
@@ -198,7 +184,6 @@ function _commitInProgressPolygon(){
   byId('maskSnapshot')?.addEventListener('load', () => {
     drawShapes();
     _renderShapeList();
-    _updateShapeModeButtons();
     _updateShapeDrawingBar();
   });
 })();

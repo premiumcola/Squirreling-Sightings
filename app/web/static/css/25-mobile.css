@@ -170,15 +170,16 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
 
 /* ── Dashboard / live-card mobile sizing ──────────────────────────────── */
 @media (max-width:768px){
-  /* Multi-cam layouts (.cam-grid-2/-4/-n) collapse to one column at 900 px,
-     so on phones two stacked 16/9 tiles eat ~470 px of vertical space just
-     for the live feed. Compressing them to 21/9 keeps both cameras visible
-     within roughly one viewport while object-fit:cover on .cv-img keeps the
-     surveillance-relevant region centred. Single-cam (.cam-grid-1) stays
-     16/9 — solo users have plenty of room. */
+  /* Multi-cam layouts (.cam-grid-2/-4/-n) collapse to one column at 900 px.
+     The previous 21/9 letterbox flattened the frames and read as broken
+     proportions on iPhone — sticking to 16/9 (the actual security-cam
+     ratio) keeps the geometry honest at the cost of a bit more vertical
+     scrolling. object-fit:cover on .cv-img still centres the
+     surveillance-relevant region. Single-cam (.cam-grid-1) is also
+     16/9 — multi-cam matches it now. */
   .cam-grid-2 .cv-frame,
   .cam-grid-4 .cv-frame,
-  .cam-grid-n .cv-frame{aspect-ratio:21/9}
+  .cam-grid-n .cv-frame{aspect-ratio:16/9}
 
   /* Placeholder geometry rescales for the ~165 px-tall frame. The 180 px
      fixed stage and 72/48 px icons would otherwise clip; everything below

@@ -138,4 +138,17 @@
 .set-inner .set-bd{display:grid;grid-template-rows:0fr;transition:grid-template-rows .38s cubic-bezier(.4,0,.2,1)}
 .set-inner .set-section.open .set-bd{grid-template-rows:1fr}
 .set-inner .set-section+.set-section{margin-top:6px}
+/* iPhone: section headers were eating up to 1/3 of the viewport on
+   the Coral surface ("Objekterkennung · Google Coral TPU / CPU"
+   wrapped to two extra lines + "⚠ CPU-Fallback aktiv" badge to a
+   third). Hide the suffix span on the few headers that have one,
+   and shrink the status-badge so the whole header stays on a
+   single 50 px line. The .set-hd-suffix is only present where the
+   author opts in — JS-emitted titles (e.g. weather) keep their
+   layout. */
+@media (max-width:520px){
+  .set-hd .set-hd-suffix{display:none}
+  .set-hd .set-status-badge{font-size:9px;padding:2px 6px;gap:4px}
+  .set-hd .set-status-badge::before{width:4px;height:4px}
+}
 

@@ -90,16 +90,17 @@
     --m-dock-radius:47px;
     --m-dock-inner-pad:8px;
     --m-dock-pill-radius:calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
-    /* Bottom inset rides just above the home-indicator band. The
-       previous +8 px additive (var(--m-dock-margin)) felt like the
-       dock was floating mid-screen on iPhone 15 Pro — safe-area
-       (~34) + 8 = 42 px of space below the dock. The user wanted
-       the dock pulled visibly closer to the bottom edge, so the
-       additive drops to 2 px — just enough breathing room above the
-       safe-area zone without re-introducing the old "flush against
-       indicator" complaint. Notch-less devices still get 2 px gap
-       to the screen edge. */
-    --m-dock-bottom-gap:calc(env(safe-area-inset-bottom, 0px) + 2px);
+    /* Flush-bottom layout: the dock plate now meets the screen's
+       bottom edge with the blur extending through the safe-area
+       zone. The previous +2 px additive parked the dock above the
+       safe-area band so a sliver of page content peeked through
+       on iPhone 15 Pro between the dock and the home indicator —
+       reading as "floating mid-screen" rather than as a chrome
+       anchor. Buttons stay clear of the home indicator via a
+       padding-bottom equal to safe-area-inset-bottom; the upward
+       box-shadow gives the floating impression even though the
+       backdrop reaches the rounded bottom corner of the screen. */
+    --m-dock-bottom-gap:0px;
     display:grid;
     grid-template-columns:repeat(5,1fr);
     gap:2px;
@@ -107,8 +108,12 @@
     left:var(--m-dock-margin);
     right:var(--m-dock-margin);
     bottom:var(--m-dock-bottom-gap);
-    padding:var(--m-dock-inner-pad) var(--m-dock-inner-pad);
-    border-radius:var(--m-dock-radius);
+    padding:var(--m-dock-inner-pad) var(--m-dock-inner-pad)
+            calc(var(--m-dock-inner-pad) + env(safe-area-inset-bottom, 0px));
+    /* Bottom now flushes with the screen edge → only the top
+       corners curve. */
+    border-radius:var(--m-dock-radius) var(--m-dock-radius) 0 0;
+    box-shadow:0 -8px 24px rgba(0,0,0,.45),0 -2px 6px rgba(0,0,0,.30);
     /* Translucent neutral fill + heavy backdrop blur. The blur is
        what makes page content scrolling underneath unreadable
        through the dock — without it the dock was a solid plate

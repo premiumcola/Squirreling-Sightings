@@ -16,10 +16,18 @@
 .coral-test-row--mode select{
   /* iOS auto-zooms inputs below 16 px on focus — bump font-size to
      16 px to suppress that. flex:1 1 auto stretches to fill the row on
-     desktop while keeping enough room next to the label. */
+     desktop while keeping enough room next to the label.
+     height + max-height pinned to 44 px (NOT min-height) because iOS
+     Safari stretches an appearance:none <select> to fill the flex
+     parent's main-axis height when only min-height is set, producing
+     the 600 px-tall closed dropdown reported in the redesign brief.
+     box-sizing:border-box folds the 8 px vertical padding INTO the
+     44 px instead of adding to it. */
   flex:1 1 220px;min-width:0;
-  font-size:16px;min-height:44px;
+  font-size:16px;
+  height:44px;max-height:44px;
   padding:8px 12px;border-radius:9px;
+  box-sizing:border-box;
 }
 
 /* ── Status strip: per-model availability above the grid ────────────────── */

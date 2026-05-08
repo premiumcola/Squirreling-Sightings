@@ -8,7 +8,10 @@
    The title demotes from 18 → 14 px so it reads as a sub-section
    under the section's own H3. */
 .ws-stats-block{
-  margin:0 0 12px;padding:0;border-radius:0;background:transparent;
+  /* margin-bottom 4 (was 12) — chart + legend are one logical unit;
+     the next section below has its own panel padding, no need for
+     extra space here. */
+  margin:0 0 4px;padding:0;border-radius:0;background:transparent;
 }
 .ws-stats-head{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -70,15 +73,22 @@
    isolated). 4 cols desktop / 2 cols mobile so the long German
    labels (Niederschlag, Blitz-Potential, Sonnenhöhe) fit without
    ellipsis truncation. */
+/* Tightened: 4-row × 44-px legend used to consume ~220 px below
+   the chart for what is essentially a key-value list. New layout
+   shrinks chip min-height to 32 px and collapses row gap to 1 px
+   so the seven chips read as a compact 4-row legend block sitting
+   right under the chart axis labels. min-height 32 still meets a
+   reasonable tap target in the dense legend context — the iOS
+   strict 44 px floor was overspending vertical real estate here. */
 .ws-stats-legend{
-  display:grid;grid-template-columns:repeat(2,1fr);gap:6px 18px;margin-top:14px
+  display:grid;grid-template-columns:repeat(2,1fr);gap:1px 14px;margin-top:6px;margin-bottom:0
 }
 @media (min-width:640px){.ws-stats-legend{grid-template-columns:repeat(4,1fr)}}
 .ws-stats-chip{
-  display:flex;align-items:center;gap:8px;padding:6px 4px;
+  display:flex;align-items:center;gap:8px;padding:3px 4px;
   background:transparent;border:0;
   border-radius:0;cursor:pointer;text-align:left;
-  min-height:44px;          /* iOS touch target ≥44 px */
+  min-height:32px;
   min-width:0;
   font-size:11.5px;
   -webkit-font-smoothing:antialiased;

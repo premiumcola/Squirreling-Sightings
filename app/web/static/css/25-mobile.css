@@ -276,8 +276,9 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
   /* Stat chips on mobile: tighten padding + drop label/value font
      to 10.5 px so full German labels (Niederschlag, Blitz-Energie,
      Sonnenhöhe, Bewölkung) fit in a 3-column grid on iPhone widths
-     without ellipsis truncation. */
-  .ws-stats-chip{padding:6px 6px;gap:5px}
+     without ellipsis truncation. min-height pinned to 32 here too
+     so the mobile legend matches the trimmed default. */
+  .ws-stats-chip{padding:3px 5px;gap:5px;min-height:32px}
   .ws-stats-chip-meta{gap:5px}
   .ws-stats-chip-label{font-size:10.5px}
   .ws-stats-chip-value{font-size:10.5px}

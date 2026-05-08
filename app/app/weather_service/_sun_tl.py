@@ -412,7 +412,15 @@ class SunTimelapseMixin:
             else:
                 log.info("[weather] daynight override %s: %s", mode, cam_name)
         else:
-            log.warning("[weather] daynight override %s: SetIspCfg(%s) failed", cam_name, mode)
+            # The detailed cause lives in the [reolink] WARNING line
+            # emitted by reolink_api.set_daynight a few lines above
+            # this one (rspCode + error.detail + body). Mention that
+            # explicitly so the operator knows where to look.
+            log.warning(
+                "[weather] daynight override %s: SetIspCfg(%s) failed — "
+                "siehe vorhergehende [reolink] Zeile für rspCode/detail",
+                cam_name, mode,
+            )
         return ok
 
     def _cfg_cameras(self) -> list[dict]:

@@ -73,18 +73,38 @@ def login(host: str, username: str, password: str, timeout: float = 5.0) -> str 
         return None
 
 
+# Reolink rspCode mapping. Sourced from the published API doc + the
+# firmware-shape variations we've observed in the wild on RLC-810A
+# and CX810 cameras. Used to translate the cryptic numeric code into
+# a human-readable hint in the WARNING line — important when a user
+# is staring at "set_daynight … rspCode=-6" trying to figure out why
+# the override silently no-ops.
+_REOLINK_RSPCODE_HINTS: dict[int, str] = {
+     0: "ok",
+    -1: "ungültige Parameter (Firmware erwartet andere Feldnamen?)",
+    -6: "kein Admin-Recht — User-Account hat keine ISP-Rechte",
+    -7: "Login fehlgeschlagen / Token ungültig",
+   -10: "Fähigkeit nicht unterstützt (Firmware kennt SetIspCfg.dayNight nicht)",
+}
+
+
 def set_daynight(host: str, token: str, mode: str,
                  channel: int = 0, timeout: float = 5.0) -> bool:
     """Force the cam's day/night mode. mode ∈ {Color, Black&White, Auto}.
 
-    Returns True iff Reolink reports rspCode == 200. False on any other
-    response, network error or parse failure (caller logs the cam_id
-    context — we only know `host` here).
+    Returns True iff Reolink reports a success rspCode (0 or 200 —
+    different firmware versions report success with either). False on
+    any other response, network error or parse failure. Failure paths
+    log the full HTTP status, rspCode, and Reolink ``error.detail``
+    string so the operator can tell apart "wrong field" / "no admin
+    right" / "command not supported by firmware" without rerunning
+    against tcpdump.
     """
     if mode not in ("Color", "Black&White", "Auto"):
         log.warning("[reolink] set_daynight invalid mode=%r", mode)
         return False
     if not token:
+        log.warning("[reolink] set_daynight host=%s mode=%s: empty token", host, mode)
         return False
     body = [{
         "cmd":    "SetIspCfg",
@@ -94,36 +114,80 @@ def set_daynight(host: str, token: str, mode: str,
     try:
         r = _session.post(
             _base_url(host),
+            # Mask the token in any debug logging — the token is a
+            # short-lived session id, but it grants ISP-write access
+            # for ~30 min, so don't leak it into log files. The
+            # underlying request still carries the full token; we
+            # just keep it out of any string we format ourselves.
             params={"cmd": "SetIspCfg", "token": token},
             json=body,
             timeout=timeout,
         )
     except Exception as e:
-        log.warning("[reolink] set_daynight network error host=%s mode=%s: %s",
-                    host, mode, e)
+        log.warning(
+            "[reolink] set_daynight network error host=%s mode=%s ch=%d: %s",
+            host, mode, channel, e,
+        )
         return False
-    if r.status_code != 200:
-        log.warning("[reolink] set_daynight HTTP %s host=%s mode=%s",
-                    r.status_code, host, mode)
+    status = r.status_code
+    body_txt = (r.text or "")
+    # Truncate the formatted body in the log line to 600 chars — the
+    # full JSON for an error response runs ~120 chars but a future
+    # firmware may pad it; 600 is a safe upper bound that still fits
+    # one log line.
+    body_log = body_txt[:600]
+    if status != 200:
+        log.warning(
+            "[reolink] set_daynight HTTP %d host=%s mode=%s ch=%d body=%s",
+            status, host, mode, channel, body_log,
+        )
         return False
     try:
         payload = r.json()
-        first = payload[0] if isinstance(payload, list) and payload else {}
-        code = ((first.get("value") or {}).get("rspCode")
-                if isinstance(first.get("value"), dict)
-                else first.get("code"))
-        if code == 200:
-            return True
-        # Log the raw body once at WARNING so firmware-shape mismatches
-        # surface for diagnosis (different RLC firmware versions vary on
-        # the param.Isp.channel vs param.channel placement).
-        log.warning("[reolink] set_daynight host=%s mode=%s rsp=%s",
-                    host, mode, str(payload)[:200])
-        return False
     except Exception as e:
-        log.warning("[reolink] set_daynight parse error host=%s: %s body=%s",
-                    host, e, r.text[:200])
+        log.warning(
+            "[reolink] set_daynight parse error host=%s mode=%s: %s body=%s",
+            host, mode, e, body_log,
+        )
         return False
+    first = payload[0] if isinstance(payload, list) and payload else {}
+    # Two response shapes — success carries the rspCode under
+    # ``value.rspCode``, error carries it under ``error.rspCode`` plus
+    # a human ``error.detail`` string. We read both so a permission
+    # rejection doesn't slip through as "unknown failure".
+    value = first.get("value") if isinstance(first.get("value"), dict) else None
+    err = first.get("error") if isinstance(first.get("error"), dict) else None
+    rsp_code = None
+    if value is not None and "rspCode" in value:
+        rsp_code = value.get("rspCode")
+    elif err is not None and "rspCode" in err:
+        rsp_code = err.get("rspCode")
+    err_detail = (err or {}).get("detail", "") if err else ""
+    outer_code = first.get("code")
+    # Success conditions:
+    #   • value.rspCode == 200 (RLC-810A / older firmware)
+    #   • value.rspCode == 0   (CX810 / newer firmware)
+    #   • outer code == 0 with no error block (some firmwares omit
+    #     value entirely on a no-op success)
+    if rsp_code in (0, 200):
+        return True
+    if outer_code == 0 and err is None:
+        return True
+    # Failure path — emit a single rich WARNING the operator can
+    # diagnose from. Include outer code, rspCode (when present),
+    # error.detail, and the truncated raw body as a last-resort
+    # forensic anchor.
+    hint = ""
+    if isinstance(rsp_code, int):
+        hint = _REOLINK_RSPCODE_HINTS.get(rsp_code, "")
+    log.warning(
+        "[reolink] set_daynight host=%s mode=%s ch=%d FAILED · "
+        "outer_code=%s rspCode=%s detail=%r%s · body=%s",
+        host, mode, channel, outer_code, rsp_code, err_detail,
+        f" · hint={hint!r}" if hint else "",
+        body_log,
+    )
+    return False
 
 
 def get_device_info(host: str, token: str, timeout: float = 5.0) -> dict | None:

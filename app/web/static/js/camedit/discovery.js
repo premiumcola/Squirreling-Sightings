@@ -29,6 +29,14 @@ function closeDiscoveryModal(){
   // Tear down any running SSE stream so we don't leak connections
   // when the user closes mid-scan.
   if(typeof _closeDiscoveryStream==='function') _closeDiscoveryStream();
+  // Cancel any in-flight credential probes and forget per-IP state so
+  // a second open of the modal starts fresh — passwords from the prior
+  // session never live across opens.
+  if(typeof _credAbort!=='undefined'){
+    for(const ac of _credAbort.values()){ try{ac.abort();}catch{} }
+    _credAbort.clear(); _credTimers.forEach(clearTimeout); _credTimers.clear();
+    _credState.clear();
+  }
 }
 let _discoveryItems=[];
 function _hostnameToId(h){return h.toLowerCase().replaceAll(/[^a-z0-9-]+/g,'-').replaceAll(/^-+|-+$/g,'').slice(0,40);}
@@ -94,19 +102,24 @@ function _renderDiscoveryResults(){
         <span class="small muted">Ports: ${esc(ports)}</span>
       </div>
       <div class="small" style="color:${already?'var(--good)':'var(--muted)'};margin-bottom:6px">${vendor}</div>
-      ${already?'':(`<div id="disc_form_wrap_${uid}">
+      ${already?'':(`<div id="disc_form_wrap_${uid}" data-disc-ip="${esc(x.ip)}">
         ${reolinkNote}
         <div class="discovery-creds">
-          <input id="disc_user_${uid}" class="disc-input" placeholder="Benutzer" value="admin" />
-          <input id="disc_pass_${uid}" class="disc-input" type="password" placeholder="Passwort" />
+          <input id="disc_user_${uid}" class="disc-input" placeholder="Benutzer" value="admin" autocomplete="off" />
+          <input id="disc_pass_${uid}" class="disc-input" type="password" placeholder="Passwort" autocomplete="off" />
           <select id="disc_path_${uid}" class="disc-select">${pathOptsForCam}</select>
+        </div>
+        <div id="disc_cred_status_${uid}" class="disc-cred-status" data-state="idle" hidden>
+          <span class="dcs-icon" aria-hidden="true"></span>
+          <span class="dcs-text"></span>
+          <button type="button" class="dcs-retry" data-disc-retry="${esc(x.ip)}">erneut prüfen</button>
         </div>
         <div id="disc_add_form_${uid}" class="disc-add-form hidden">
           <div class="discovery-creds" style="margin-top:8px">
             <input id="disc_name_${uid}" class="disc-input" placeholder="${x.hostname?'Kameraname':esc(vendor)}" value="${displayName}" style="flex:1.5"/>
           </div>
           <div style="display:flex;gap:8px;margin-top:10px">
-            <button class="btn-action accent" style="flex:1;min-height:40px" onclick="saveDiscoveryCamera('${esc(x.ip)}')"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,8 7,12 13,4"/></svg> Kamera speichern</button>
+            <button id="disc_save_btn_${uid}" class="btn-action accent" style="flex:1;min-height:40px" onclick="saveDiscoveryCamera('${esc(x.ip)}')"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,8 7,12 13,4"/></svg> <span class="dcs-save-label">Kamera speichern</span></button>
             <button class="btn-action ghost" style="min-height:40px" onclick="byId('disc_add_form_${uid}').classList.add('hidden')">Abbrechen</button>
           </div>
         </div>
@@ -118,6 +131,180 @@ function _renderDiscoveryResults(){
   }).join('');
   if(showFewHint){
     byId('discoveryResults').insertAdjacentHTML('beforeend',reolinkHint);
+  }
+  // After innerHTML re-renders, wire cred-probing per candidate. Each
+  // re-render wipes listeners — _wireCredProbes re-attaches and paints
+  // any state already known from _credState (so a filter toggle keeps
+  // the green check that was already there).
+  _wireCredProbes(visible);
+}
+
+// ── Inline credential validation ────────────────────────────────────────
+// Per-IP state survives re-renders so a filter toggle ("Bereits
+// konfigurierte ausblenden") doesn't wipe a freshly-painted "ok" pill.
+// Shape: { state, vendor, detail, ts }
+const _credState=new Map();
+const _credAbort=new Map();    // ip → AbortController of an in-flight probe
+const _credTimers=new Map();   // ip → debounce timer id
+const _DEBOUNCE_MS=600;
+
+function _credPaint(ip){
+  const uid=ip.replaceAll('.','_');
+  const row=byId(`disc_cred_status_${uid}`);
+  if(!row) return;
+  const st=_credState.get(ip);
+  // No probe yet → keep idle (hidden).
+  if(!st){
+    row.hidden=true;
+    row.dataset.state='idle';
+    _credSetSaveButton(ip,'enabled');
+    return;
+  }
+  row.hidden=false;
+  row.dataset.state=st.state;
+  const iconEl=row.querySelector('.dcs-icon');
+  const textEl=row.querySelector('.dcs-text');
+  const ICON={
+    probing:`<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 1.5a5.5 5.5 0 0 1 5.5 5.5"><animateTransform attributeName="transform" type="rotate" from="0 7 7" to="360 7 7" dur="0.9s" repeatCount="indefinite"/></path></svg>`,
+    ok:`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,8.5 7,12.5 13,4.5"/></svg>`,
+    bad:`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`,
+    warn:`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5L14.5 13.5h-13z"/><line x1="8" y1="6.5" x2="8" y2="9.5"/><circle cx="8" cy="11.5" r="0.6" fill="currentColor"/></svg>`,
+    unknown:`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M6 6.5c0-1.2 1-2 2-2s2 .8 2 2c0 1.5-2 1.5-2 3"/><circle cx="8" cy="11.5" r="0.6" fill="currentColor"/></svg>`,
+  };
+  const variant=({
+    probing:'probing', ok:'ok', bad:'bad',
+    unreachable:'warn', timeout:'warn', unknown:'warn',
+  })[st.state]||'warn';
+  row.classList.remove('ok','bad','warn','probing');
+  row.classList.add(variant);
+  iconEl.innerHTML=ICON[variant]||'';
+  const vendorLabel=({reolink:'Reolink',rtsp:'RTSP'})[st.vendor]||'Kamera';
+  let txt=st.detail||'';
+  if(st.state==='probing') txt='Prüfe Zugangsdaten …';
+  else if(st.state==='ok') txt=`Passwort korrekt · ${vendorLabel}`;
+  else if(st.state==='bad') txt='Passwort falsch — bitte korrigieren';
+  else if(st.state==='unreachable') txt=`Kamera nicht erreichbar (${ip}:${st.port||554})`;
+  else if(st.state==='timeout') txt=`Kamera antwortet nicht (${ip}:${st.port||554})`;
+  else if(st.state==='unknown') txt='Konnte nicht eindeutig prüfen — speichern auf eigene Verantwortung';
+  textEl.textContent=txt;
+  // Red ring on the password field for bad_auth only.
+  const passEl=byId(`disc_pass_${uid}`);
+  if(passEl){
+    if(st.state==='bad') passEl.classList.add('is-bad');
+    else passEl.classList.remove('is-bad');
+  }
+  _credSetSaveButton(ip, st.state==='probing'?'probing':(st.state==='bad'?'disabled':'enabled'));
+}
+
+function _credSetSaveButton(ip, mode){
+  const uid=ip.replaceAll('.','_');
+  const btn=byId(`disc_save_btn_${uid}`);
+  if(!btn) return;
+  const lbl=btn.querySelector('.dcs-save-label');
+  if(mode==='disabled'){
+    btn.disabled=true;
+    btn.setAttribute('aria-disabled','true');
+    if(lbl) lbl.textContent='Kamera speichern';
+  }else if(mode==='probing'){
+    btn.disabled=true;
+    btn.setAttribute('aria-disabled','true');
+    if(lbl) lbl.textContent='Prüfe …';
+  }else{
+    btn.disabled=false;
+    btn.removeAttribute('aria-disabled');
+    if(lbl) lbl.textContent='Kamera speichern';
+  }
+}
+
+async function _credProbeNow(ip){
+  const uid=ip.replaceAll('.','_');
+  const passEl=byId(`disc_pass_${uid}`);
+  const userEl=byId(`disc_user_${uid}`);
+  const pathEl=byId(`disc_path_${uid}`);
+  if(!passEl) return;
+  const pw=passEl.value||'';
+  if(!pw){
+    // Empty password → idle. Cancel any running probe so a fast typist
+    // who clears the field gets immediate feedback.
+    _credState.delete(ip);
+    const ac=_credAbort.get(ip); if(ac){ ac.abort(); _credAbort.delete(ip); }
+    _credPaint(ip);
+    return;
+  }
+  // Cancel any in-flight probe for this IP first.
+  const prev=_credAbort.get(ip); if(prev){ try{prev.abort();}catch{} }
+  const ac=new AbortController();
+  _credAbort.set(ip, ac);
+  _credState.set(ip,{state:'probing',vendor:'unknown',detail:'',port:554});
+  _credPaint(ip);
+  let r;
+  try{
+    r=await fetch('/api/discover/test-credentials',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      signal:ac.signal,
+      body:JSON.stringify({
+        ip,
+        user:(userEl?.value||'admin'),
+        password:pw,
+        path:(pathEl?.value||'/'),
+        port:554,
+      }),
+    });
+  }catch(err){
+    if(err?.name==='AbortError') return;  // superseded by a newer probe
+    _credState.set(ip,{state:'unknown',vendor:'unknown',detail:'',port:554});
+    _credPaint(ip);
+    return;
+  }finally{
+    if(_credAbort.get(ip)===ac) _credAbort.delete(ip);
+  }
+  let d;
+  try{ d=await r.json(); }catch{ d={ok:false,reason:'error',detail:''}; }
+  // Translate the backend's ``reason`` into our internal state vocabulary.
+  const stateMap={
+    auth_ok:'ok', auth_failed:'bad', unreachable:'unreachable',
+    timeout:'timeout', auth_unknown:'unknown', error:'unknown',
+  };
+  const state=stateMap[d.reason]||'unknown';
+  _credState.set(ip,{state,vendor:d.vendor||'unknown',detail:d.detail||'',port:554});
+  _credPaint(ip);
+}
+
+function _credSchedule(ip){
+  // Debounce — restart the timer on every keystroke / select change.
+  const prev=_credTimers.get(ip); if(prev) clearTimeout(prev);
+  const tid=setTimeout(()=>{
+    _credTimers.delete(ip);
+    _credProbeNow(ip);
+  }, _DEBOUNCE_MS);
+  _credTimers.set(ip,tid);
+}
+
+function _wireCredProbes(items){
+  for(const x of items){
+    if(!x||!x.ip) continue;
+    const ip=x.ip;
+    const uid=ip.replaceAll('.','_');
+    // Skip already-configured candidates (no form rendered for them).
+    if(!byId(`disc_form_wrap_${uid}`)) continue;
+    // Repaint any state we already had from a previous render.
+    _credPaint(ip);
+    const userEl=byId(`disc_user_${uid}`);
+    const passEl=byId(`disc_pass_${uid}`);
+    const pathEl=byId(`disc_path_${uid}`);
+    const onChange=()=>{
+      // The instant feedback rule: peeling the red ring off the password
+      // field on the very next keystroke makes the bad_auth state feel
+      // self-correcting rather than nagging.
+      if(passEl) passEl.classList.remove('is-bad');
+      _credSchedule(ip);
+    };
+    if(userEl) userEl.addEventListener('input',onChange);
+    if(passEl) passEl.addEventListener('input',onChange);
+    if(pathEl) pathEl.addEventListener('change',onChange);
+    const retry=byId(`disc_cred_status_${uid}`)?.querySelector('.dcs-retry');
+    if(retry) retry.addEventListener('click',(e)=>{e.preventDefault(); _credProbeNow(ip);});
   }
 }
 
@@ -273,6 +460,11 @@ window.openDiscoveryAddForm=(ip)=>{
 };
 window.saveDiscoveryCamera=async(ip)=>{
   const uid=ip.replaceAll('.','_');
+  // Belt & braces: the save button is already disabled in `bad` /
+  // `probing` states via _credSetSaveButton, but a stale event from a
+  // double-click could still slip through. Block here too.
+  const st=_credState.get(ip);
+  if(st && (st.state==='bad' || st.state==='probing')) return;
   const user=byId(`disc_user_${uid}`)?.value||'admin';
   const pass=byId(`disc_pass_${uid}`)?.value||'';
   const path=byId(`disc_path_${uid}`)?.value||'/Streaming/Channels/101';

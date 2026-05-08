@@ -142,7 +142,41 @@
   #logs.panel #logRefreshBtn,
   #logs.panel #logClearBtn{flex:1 1 calc(50% - 4px)}
 }
-.discovery-creds{display:grid;grid-template-columns:.75fr .75fr 2fr;gap:8px;margin-top:10px}.disc-input{padding:9px 11px;border-radius:12px;background:var(--surface);color:var(--text);border:none;width:100%;font:inherit}.disc-input::placeholder{color:var(--muted)}.disc-input:focus{outline:none;box-shadow:0 0 0 2px var(--accent)}.disc-select{padding:9px 28px 9px 11px;border-radius:12px;background:var(--surface);color:var(--text);border:none;width:100%;font:inherit;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}.disc-select:focus{outline:none;box-shadow:0 0 0 2px var(--accent)}
+.discovery-creds{display:grid;grid-template-columns:.75fr .75fr 2fr;gap:8px;margin-top:10px}.disc-input{padding:9px 11px;border-radius:12px;background:var(--surface);color:var(--text);border:none;width:100%;font:inherit;transition:box-shadow .12s ease}.disc-input::placeholder{color:var(--muted)}.disc-input:focus{outline:none;box-shadow:0 0 0 2px var(--accent)}.disc-input.is-bad{box-shadow:0 0 0 2px #ef4444}.disc-input.is-bad:focus{box-shadow:0 0 0 2px #ef4444}.disc-select{padding:9px 28px 9px 11px;border-radius:12px;background:var(--surface);color:var(--text);border:none;width:100%;font:inherit;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}.disc-select:focus{outline:none;box-shadow:0 0 0 2px var(--accent)}
+/* ── Inline credential check status row ──────────────────────────────
+   Sits directly under .discovery-creds inside each candidate card.
+   Background-tint pill (no thin borders, per project design rules).
+   States:
+     .probing  — muted slate
+     .ok       — green
+     .bad      — red, paired with .disc-input.is-bad on the password
+     .warn     — amber (unreachable / timeout / unknown)
+   The retry link sits to the right with a 44 px touch target. The row
+   wraps below the credential grid on narrow viewports — never pushes
+   the grid offscreen. */
+.disc-cred-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;padding:8px 10px;border-radius:10px;font-size:12.5px;line-height:1.3;background:rgba(148,163,184,0.10);color:#cbd5e1}
+.disc-cred-status .dcs-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;flex-shrink:0}
+.disc-cred-status .dcs-text{flex:1 1 auto;min-width:0;font-weight:500}
+.disc-cred-status .dcs-retry{margin-left:auto;background:transparent;border:0;padding:6px 10px;min-height:44px;color:inherit;opacity:.75;font-size:12px;font-weight:600;cursor:pointer;border-radius:8px}
+.disc-cred-status .dcs-retry:hover{opacity:1;background:rgba(255,255,255,.06)}
+.disc-cred-status.probing{background:rgba(148,163,184,0.12);color:#cbd5e1}
+.disc-cred-status.probing .dcs-icon{animation:dcs-spin .9s linear infinite}
+.disc-cred-status.ok{background:rgba(34,197,94,0.16);color:#bbf7d0}
+.disc-cred-status.bad{background:rgba(239,68,68,0.18);color:#fecaca}
+.disc-cred-status.warn{background:rgba(245,158,11,0.16);color:#fde68a}
+@keyframes dcs-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+/* Disabled save button — keep it visually distinct but still rounded.
+   #disc_save_btn_… inherits .btn-action.accent; we only need to handle
+   the disabled state since the base style is good. */
+#disc_form_wrap[id^="disc_form_wrap_"] [id^="disc_save_btn_"][disabled],
+[id^="disc_save_btn_"][disabled]{opacity:.45;cursor:not-allowed;filter:grayscale(.4)}
+@media (max-width:480px){
+  .disc-cred-status{font-size:12px;padding:8px 10px}
+  /* On a 375 px iPhone the credential grid wraps to two rows already
+     — keep the status row visually attached without pushing past the
+     card edge. */
+  .disc-cred-status .dcs-retry{margin-left:0;width:100%;text-align:left;padding-left:0;padding-right:0}
+}
 .modal-inner-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .modal-actions{display:flex;justify-content:flex-end;padding-top:14px;margin-top:14px}
 .group-inline{padding-top:12px;margin-top:10px}

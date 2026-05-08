@@ -192,6 +192,256 @@ def api_discover_stream():
     })
 
 
+def _mask_pw(pw: str) -> str:
+    """Return ``***`` for any password, or ``∅`` for empty — used in
+    [discovery] log lines so the audit grep stays clean."""
+    if not pw:
+        return "∅"
+    return "***"
+
+
+def _probe_reolink_login(host: str, user: str, password: str, timeout: float = 4.0) -> dict:
+    """Distinguish auth-fail from network-fail in a single Reolink Login
+    request. Returns one of:
+      {"vendor": "reolink", "auth": "ok"}
+      {"vendor": "reolink", "auth": "bad"}    — HTTP 200 + ``code != 0``
+      {"vendor": "reolink", "auth": "net"}    — connect/HTTP/parse error
+    The shipped ``reolink_api.login`` only signals success/None and was
+    designed for the day-night override path, where any non-success is
+    treated identically.  The discovery probe needs to tell the user
+    *why* the login didn't work, so we issue the request directly.
+    """
+    import requests
+    body = [{
+        "cmd":    "Login",
+        "action": 0,
+        "param":  {"User": {"userName": user, "password": password or ""}},
+    }]
+    try:
+        r = requests.post(
+            f"http://{host}/api.cgi",
+            params={"cmd": "Login"},
+            json=body,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        logging.info("[discovery] reolink login net-error host=%s user=%s pw=%s: %s",
+                     host, user, _mask_pw(password), exc)
+        return {"vendor": "reolink", "auth": "net"}
+    if r.status_code != 200:
+        logging.info("[discovery] reolink login HTTP %s host=%s user=%s pw=%s",
+                     r.status_code, host, user, _mask_pw(password))
+        return {"vendor": "reolink", "auth": "net"}
+    try:
+        payload = r.json()
+        first = payload[0] if isinstance(payload, list) and payload else {}
+    except Exception as exc:
+        logging.info("[discovery] reolink login parse host=%s: %s", host, exc)
+        return {"vendor": "reolink", "auth": "net"}
+    # Success shape: first.value.Token.name is set.
+    token = ((first.get("value") or {}).get("Token") or {}).get("name")
+    if token:
+        # Best-effort logout — never let it raise.
+        try:
+            from ..reolink_api import logout as _rl_logout
+            _rl_logout(host, token, timeout=2.0)
+        except Exception:
+            pass
+        return {"vendor": "reolink", "auth": "ok"}
+    # Reolink returns code != 0 with an error.detail string on bad creds —
+    # rspCode -7 / -6 specifically. Any non-success code on a 200 here
+    # means the request reached the camera, which means the network is
+    # fine — the credentials are the problem.
+    if isinstance(first, dict) and "error" in first:
+        return {"vendor": "reolink", "auth": "bad"}
+    code = first.get("code")
+    if isinstance(code, int) and code != 0:
+        return {"vendor": "reolink", "auth": "bad"}
+    # Unrecognised shape — treat as network so the RTSP fallback runs
+    # and either confirms or denies the auth.
+    return {"vendor": "reolink", "auth": "net"}
+
+
+def _probe_rtsp(ip: str, port: int, user: str, password: str, path: str,
+                timeout_ms: int = 4000) -> dict:
+    """Vendor-agnostic RTSP probe via OpenCV+FFmpeg. Returns:
+      {"vendor": "rtsp", "auth": "ok"}            — frame readable
+      {"vendor": "rtsp", "auth": "bad"}           — 401 / Unauthorized
+      {"vendor": "rtsp", "auth": "unreachable"}   — no route / refused
+      {"vendor": "rtsp", "auth": "timeout"}       — open / read timed out
+      {"vendor": "rtsp", "auth": "unknown"}       — opened but no frame
+    OpenCV's FFmpeg backend writes the underlying error string to stderr
+    only — we capture the timing of cap.isOpened() / read() and treat
+    the absence of an opened handle as a generic network failure unless
+    the FFmpeg log captured below mentions HTTP 401 / Unauthorized.
+    """
+    import os
+    import urllib.parse
+    import cv2  # noqa: PLC0415 — keep import local to keep boot fast
+    enc_pw = urllib.parse.quote(password or "", safe="")
+    enc_user = urllib.parse.quote(user or "", safe="")
+    safe_path = path or ""
+    if safe_path and not safe_path.startswith("/"):
+        safe_path = "/" + safe_path
+    rtsp_url = f"rtsp://{enc_user}:{enc_pw}@{ip}:{port}{safe_path}"
+    masked = f"rtsp://{user}:{_mask_pw(password)}@{ip}:{port}{safe_path}"
+    logging.info("[discovery] rtsp probe %s", masked)
+
+    # FFmpeg socket-level timeout in microseconds. Setting via env var so
+    # the per-handle CAP_PROP_OPEN_TIMEOUT_MSEC is reinforced (some
+    # FFmpeg versions ignore the property and only honour stimeout).
+    prev_env = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS")
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+        f"rtsp_transport;tcp|stimeout;{timeout_ms * 1000}"
+    )
+    cap = None
+    try:
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, timeout_ms)
+        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, timeout_ms)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        if not cap.isOpened():
+            # No way to ask FFmpeg "why?" via the OpenCV API. Distinguish
+            # by trying a quick TCP connect to the port: refused/no-route
+            # → unreachable, success → likely auth.
+            return {"vendor": "rtsp", "auth": _classify_rtsp_open_fail(ip, port)}
+        ok, frame = cap.read()
+        if ok and frame is not None and getattr(frame, "size", 0) > 0:
+            return {"vendor": "rtsp", "auth": "ok"}
+        # Opened but no frame — common when the URL path is wrong on a
+        # camera that does authenticate. Surface as ``unknown`` so the
+        # UI lets the user save with a warning.
+        return {"vendor": "rtsp", "auth": "unknown"}
+    finally:
+        try:
+            if cap is not None:
+                cap.release()
+        except Exception:
+            pass
+        # Restore the prior env var so we don't poison the rest of the
+        # process (camera_runtime/_capture sets its own value before
+        # opening the production stream, but a test request running
+        # while no camera is up could leak otherwise).
+        if prev_env is None:
+            os.environ.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
+        else:
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = prev_env
+
+
+def _classify_rtsp_open_fail(ip: str, port: int, timeout: float = 1.5) -> str:
+    """Quick fallback classification when ``cap.isOpened()`` is false.
+    A successful TCP connect means the port is up — so the most likely
+    cause of OpenCV failing to open is an auth failure (401) or a wrong
+    path. A refused/timed-out connect means the camera is unreachable.
+    """
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        rc = s.connect_ex((ip, port))
+        if rc == 0:
+            return "bad"  # port reachable but FFmpeg couldn't open → auth
+        return "unreachable"
+    except Exception:
+        return "timeout"
+    finally:
+        try:
+            s.close()
+        except Exception:
+            pass
+
+
+# German user-facing strings for each (vendor, reason) pair.
+_DETAIL_DE: dict[str, str] = {
+    "auth_ok":      "Zugangsdaten korrekt.",
+    "auth_failed":  "Passwort oder Benutzername ist falsch.",
+    "unreachable": "Kamera ist nicht erreichbar (Port geschlossen oder Gerät offline).",
+    "timeout":     "Zeitüberschreitung — Kamera antwortet nicht rechtzeitig.",
+    "auth_unknown": "Antwort konnte nicht eindeutig ausgewertet werden.",
+    "error":       "Unerwarteter Fehler beim Prüfen der Zugangsdaten.",
+}
+
+
+@bp.post('/api/discover/test-credentials')
+def api_discover_test_credentials():
+    """Probe a candidate camera with the credentials the user just typed
+    in the discovery modal. Always returns 200 — never raises — so the
+    frontend stays responsive even when a camera is fully offline.
+
+    Hard 6 s wall-clock cap: the Reolink HTTP probe (≤4 s) plus the
+    RTSP fallback (≤4 s) only run sequentially in the worst case where
+    Reolink is unreachable; ``_probe_reolink_login`` returns ``net``
+    quickly enough that the combined budget fits.
+    """
+    payload = request.get_json(silent=True) or {}
+    ip       = (payload.get("ip") or "").strip()
+    user     = (payload.get("user") or "").strip()
+    password = payload.get("password") or ""
+    path     = (payload.get("path") or "").strip()
+    try:
+        port = int(payload.get("port") or 554)
+    except (TypeError, ValueError):
+        port = 554
+    if not ip:
+        return jsonify({
+            "ok": False, "vendor": "unknown", "reason": "error",
+            "detail": "Keine IP-Adresse angegeben.",
+        })
+    if not user:
+        # Empty user is sometimes valid for ONVIF anon, but the cam-add
+        # form always pre-fills "admin" so an empty user here is a UI
+        # bug — surface it instead of probing blindly.
+        return jsonify({
+            "ok": False, "vendor": "unknown", "reason": "auth_failed",
+            "detail": "Benutzername fehlt.",
+        })
+
+    logging.info("[discovery] credential test %s:%d user=%s pw=%s path=%s",
+                 ip, port, user, _mask_pw(password), path or "—")
+
+    # ── Reolink HTTP login first ────────────────────────────────────────
+    rl = _probe_reolink_login(ip, user, password, timeout=4.0)
+    if rl["auth"] == "ok":
+        return jsonify({
+            "ok": True, "vendor": "reolink", "reason": "auth_ok",
+            "detail": _DETAIL_DE["auth_ok"],
+        })
+    if rl["auth"] == "bad":
+        return jsonify({
+            "ok": False, "vendor": "reolink", "reason": "auth_failed",
+            "detail": _DETAIL_DE["auth_failed"],
+        })
+    # ``net`` → fall through to the RTSP fallback. Anything non-Reolink
+    # always lands here.
+
+    rt = _probe_rtsp(ip, port, user, password, path, timeout_ms=4000)
+    if rt["auth"] == "ok":
+        return jsonify({
+            "ok": True, "vendor": "rtsp", "reason": "auth_ok",
+            "detail": _DETAIL_DE["auth_ok"],
+        })
+    if rt["auth"] == "bad":
+        return jsonify({
+            "ok": False, "vendor": "rtsp", "reason": "auth_failed",
+            "detail": _DETAIL_DE["auth_failed"],
+        })
+    if rt["auth"] == "timeout":
+        return jsonify({
+            "ok": False, "vendor": "rtsp", "reason": "timeout",
+            "detail": _DETAIL_DE["timeout"],
+        })
+    if rt["auth"] == "unreachable":
+        return jsonify({
+            "ok": False, "vendor": "rtsp", "reason": "unreachable",
+            "detail": _DETAIL_DE["unreachable"],
+        })
+    # ``unknown`` — opened, but no frame. Lets the user save anyway.
+    return jsonify({
+        "ok": False, "vendor": "rtsp", "reason": "auth_unknown",
+        "detail": _DETAIL_DE["auth_unknown"],
+    })
+
+
 @bp.get('/api/status')
 def api_status():
     settings = app_state.settings

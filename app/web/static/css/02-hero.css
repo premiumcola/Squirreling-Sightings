@@ -16,58 +16,59 @@
 }
 .hero-actions{display:flex;gap:10px}
 .hero button,.form button{padding:12px 16px;border:0;border-radius:14px;background:var(--accent);color:white;font-weight:700;min-height:40px}
-/* Title + subtitle stack vertically — subtitle sits directly under
-   the title, left-aligned to its left edge. Same on desktop and
-   mobile; we deliberately give up the previous inline-on-desktop
-   variant because the stacked form reads cleaner and isn't viewport-
-   conditional. */
+/* Title + subtitle as a TIGHT pair, vertically centred against the
+   logo. The glyph is positioned absolutely inside the title-wrap
+   (which is the relative anchor) so it doesn't contribute to flex
+   flow — without that escape hatch, the inline-flex title row
+   would inherit the glyph's 88 px height and centre the wordmark
+   text against the glyph's midline, leaving the subtitle stranded
+   far below in a fat empty band. With the glyph out of flow, the
+   wrap reserves horizontal space for it via padding-left, sets a
+   min-height equal to the glyph height, and uses justify-content:
+   center so the (wordmark + 4 px gap + subtitle) pair sits as one
+   compact block centred on the glyph's vertical midline. */
 .hero-title-wrap{
   flex:1;min-width:0;
-  display:flex;flex-direction:column;align-items:flex-start;
+  display:flex;flex-direction:column;
+  align-items:flex-start;justify-content:center;
   gap:4px;
+  position:relative;
+  /* Reserve space for the absolutely-positioned glyph: 88 px tall
+     × ~151 px wide (110×64 viewBox) plus a small visual gap. */
+  padding-left:160px;
+  min-height:88px;
 }
 .hero-title{
   margin:0;
-  /* Wordmark scale — heavier and a touch tighter than the previous
-     "TAM-spy" lockup so "Squirreling · Sightings" still reads as a
-     single brand anchor instead of two columns of plain text. 32 / 800
-     with -.025em tracking keeps the long word from wandering on a
-     phone-width row, and pairs cleanly with the 52 px glyph below
-     (cap-height + gap + subtitle cap-height ≈ 52). */
+  /* Wordmark text only — the glyph escapes the title row via
+     position:absolute on .hero-brand-glyph below, so the h1's
+     intrinsic height is just the wordmark line-box (~35 px) and
+     the title + subtitle pair stays compact. */
   font-size:32px;font-weight:800;
   letter-spacing:-.025em;line-height:1.1;
   color:#fff;
-  display:inline-flex;align-items:center;gap:8px;
+  display:block;
 }
 .hero-wordmark{ color:#fff; }
 /* Brand glyph — one of three squirrel-themed variants per
-   chrome/brand-logo.js. Fixed height so the title row stays
-   consistent; width auto follows the asset's aspect ratio.
-   flex-shrink:0 protects the icon when the title row wraps. */
+   chrome/brand-logo.js. Anchored to .hero-title-wrap (the
+   position:relative ancestor above), vertically centred at 50 %.
+   Out of flow so the title row's height collapses to the
+   wordmark and the pair below packs tight. */
 .hero-brand-glyph{
-  display:inline-block;
-  /* Glyph anchors the entire title + subtitle block — visually the
-     dominant element of the hero row, not just an inline icon
-     beside the wordmark. At height 88 the 110×64 viewBox renders
-     ~151 px wide; on a 540+ px viewport the wordmark + glyph row
-     comfortably fits, and on iPhone widths the mobile override
-     below shrinks to 64 px so the lockup still reads on a single
-     line at 375 px. */
+  position:absolute;left:0;top:50%;transform:translateY(-50%);
   height:88px;width:auto;
   flex-shrink:0;
-  vertical-align:middle;
 }
 .hero-subtitle{
   margin:0;
   /* Subtitle sits horizontally under "Sightings" rather than under
      "Squirreling" — visual hierarchy points to the noun, not the
-     verb. 200 px is empirical for the 32 / 800 / -.025em wordmark:
-     glyph + gap + width("Squirreling · ") lands close to that x.
+     verb. 200 px is empirical for the 32 / 800 / -.025em wordmark
+     and is measured from the wrap's content edge (which already
+     starts at the wordmark's x via the wrap's padding-left:160).
      Mobile drops the indent (override below) because phone width
-     can't spare the columns. Neutral grey (no blue cast) so the
-     subtitle reads as a quiet caption against the dark hero
-     instead of inheriting the cool --muted token used everywhere
-     else in the UI. */
+     can't spare the columns. Neutral grey (no blue cast). */
   font-size:11px;font-weight:500;
   font-style:italic;
   color:rgba(255,255,255,.55);
@@ -98,11 +99,14 @@ select option{background:#1e1e1e;color:#c8c8c8}
    wordmark to 26 / 800. Subtitle indent is REMOVED on mobile —
    phone widths don't have spare columns to align under
    "Sightings", and the subtitle reads better flush under the
-   title at this scale. Neutral grey carries through. */
+   title at this scale. The wrap's padding-left and min-height
+   shrink in lockstep so the pair stays centred against the
+   smaller glyph. Neutral grey carries through. */
 @media (max-width:540px){
   .hero-brand-glyph{ height:64px; }
   .hero-title{ font-size:26px; }
   .hero-subtitle{ font-size:10.5px; padding-left:0; }
+  .hero-title-wrap{ padding-left:120px; min-height:64px; }
   .hero-build{ display:none; }
 }
 @media (max-width:768px){

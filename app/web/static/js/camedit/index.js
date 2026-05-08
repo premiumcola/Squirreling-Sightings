@@ -440,7 +440,20 @@ function editCamera(camId){
   // Slide down inside the clicked camera card.
   const camRow=byId('cameraSettingsList')?.querySelector(`[data-camid="${camId}"]`);
   const wrapper=byId('cameraEditWrapper');
-  if(camRow){ camRow.appendChild(wrapper); camRow.classList.add('editing'); }
+  if(camRow){
+    camRow.appendChild(wrapper);
+    camRow.classList.add('editing');
+    // Move the recovery button out of the tab bar and into the
+    // cam-item header (left of the chevron). On iPhone widths the
+    // tab list is horizontally scrollable; with the button parked
+    // there it overlapped the tabs. Keeping the same DOM node (vs
+    // duplicating markup) preserves the JS that drives its
+    // .is-warn / .is-pulsing state.
+    const recBtn = document.getElementById('camTabRecoveryBtn');
+    const headRight = camRow.querySelector('.cam-item-head-right');
+    const chevron = headRight && headRight.querySelector('.cam-item-chevron');
+    if (recBtn && headRight && chevron) headRight.insertBefore(recBtn, chevron);
+  }
   requestAnimationFrame(()=>wrapper?.classList.add('slide-open'));
   panelState.camId=camId;
   setTimeout(()=>wrapper.scrollIntoView({behavior:'smooth',block:'nearest'}),120);

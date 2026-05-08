@@ -13,6 +13,17 @@ import { byId } from '../core/dom.js';
 // now goes through this object.
 export const panelState = { camId: null };
 
+// editCamera() relocates #camTabRecoveryBtn into the cam-item header
+// (left of the chevron) so the tab bar isn't blocked on iPhone widths.
+// On close we move the same node back into the tab bar so the next
+// open finds it where it was authored — keeps DOM-source-of-truth
+// honest and avoids a duplicate-id collision.
+function _reparkRecoveryBtnInTabBar(){
+  const recBtn = document.getElementById('camTabRecoveryBtn');
+  const tabBar = document.querySelector('.cam-tab-bar');
+  if (recBtn && tabBar && recBtn.parentElement !== tabBar) tabBar.appendChild(recBtn);
+}
+
 // Reset the slide-panel to its closed state and re-park the wrapper
 // back inside #cameras (its original DOM home). Idempotent — safe to
 // call when the panel is already closed.
@@ -20,6 +31,7 @@ export function _restoreEditWrapper(){
   const w = byId('cameraEditWrapper');
   if (!w) return;
   w.classList.remove('slide-open');
+  _reparkRecoveryBtnInTabBar();
   document.querySelectorAll('.cam-item.editing').forEach(el => el.classList.remove('editing'));
   const sec = byId('cameras');
   if (sec && w.parentElement !== sec) sec.appendChild(w);
@@ -34,6 +46,7 @@ export function _closeEditPanel(){
   if (!panelState.camId) return;
   const w = byId('cameraEditWrapper');
   w?.classList.remove('slide-open');
+  _reparkRecoveryBtnInTabBar();
   document.querySelectorAll('.cam-item.editing').forEach(el => el.classList.remove('editing'));
   setTimeout(() => {
     if (!w) return;

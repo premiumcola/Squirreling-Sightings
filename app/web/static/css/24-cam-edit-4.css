@@ -15,7 +15,6 @@
   font-size:13px;color:#cfe1ee;
   min-width:0;overflow-wrap:anywhere;word-break:normal
 }
-.cam-id-preview-hint{font-size:10.5px;color:var(--muted);font-style:italic}
 
 /* Anzeigename + leading icon-emoji slot. The standalone "Icon
    (Emoji)" row was removed because a tiny wrench-icon column on the
@@ -26,7 +25,7 @@
 .cam-name-row{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:end}
 .cam-name-row .cam-icon-slot{position:relative}
 .cam-name-row .cam-icon-slot input{text-align:center;font-size:18px;padding-left:8px;padding-right:8px}
-.cam-icon-microlabel{font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.cam-icon-microlabel{font-size:10.5px;font-style:italic}
 
 /* Manuf + model + labelled probe button row. The probe button shares
    the .btn-action.action-green token with the Netzwerk-Discovery
@@ -43,7 +42,12 @@
    iPhone-narrow widths drop the button to a full second row so the
    two inputs keep usable widths; the label stays visible there. */
 .cam-id-row{
-  display:grid;grid-template-columns:1fr 1fr max-content;gap:8px;align-items:end
+  /* minmax(0,1fr) on the input columns lets them shrink below their
+     default content width when the probe-button label would otherwise
+     push the row past the cam-edit-inner right edge. Plain 1fr held
+     a min-width:auto floor and produced the overflow seen in the
+     redesign brief. */
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) max-content;gap:8px;align-items:end
 }
 .cam-probe-btn{
   /* Carries the .btn-action.action-green base (radius, font). We

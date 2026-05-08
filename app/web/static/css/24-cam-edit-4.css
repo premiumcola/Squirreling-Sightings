@@ -17,24 +17,33 @@
 }
 .cam-id-preview-hint{font-size:10.5px;color:var(--muted);font-style:italic}
 
-/* Manuf + model + rescan-icon row. Two flex inputs and a 44 px square
-   icon button (iOS touch-target floor). The button stays visually
-   secondary to the inputs — flat icon, transparent bg, accent on hover
-   so it never distracts from the primary form fields. */
+/* Anzeigename + leading icon-emoji slot. The standalone "Icon
+   (Emoji)" row was removed because a tiny wrench-icon column on the
+   left and an empty input on the right read as a layout bug. The
+   emoji input is now a 56 px leading slot of the Anzeigename row,
+   with a tiny "Icon" microlabel underneath. The hidden form input
+   keeps name="icon" so submit semantics are unchanged. */
+.cam-name-row{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:end}
+.cam-name-row .cam-icon-slot{position:relative}
+.cam-name-row .cam-icon-slot input{text-align:center;font-size:18px;padding-left:8px;padding-right:8px}
+.cam-icon-microlabel{font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+
+/* Manuf + model + labelled probe button row. The probe button shares
+   the .btn-action.action-green token with the Netzwerk-Discovery
+   button up top so its purpose ("Hersteller & Modell abfragen") reads
+   at a glance — the previous tiny icon-only square left users
+   guessing. Grid: two equal input columns plus an auto column for
+   the labelled button. iPhone-narrow widths drop the button to a full
+   second row so the two inputs keep usable widths. */
 .cam-id-row{
-  display:grid;grid-template-columns:1fr 1fr 44px;gap:8px;align-items:end
+  display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end
 }
 .cam-probe-btn{
-  width:44px;height:44px;flex-shrink:0;
-  display:inline-flex;align-items:center;justify-content:center;
-  background:rgba(127,174,201,0.08);
-  border:0;border-radius:10px;
-  color:rgba(127,174,201,.85);
-  cursor:pointer;
-  transition:background .15s,color .15s
+  /* Carries the .btn-action.action-green base (padding, radius, font).
+     We only add the iOS touch-target floor and the busy-spinner
+     animation hooks here. */
+  min-height:44px;flex-shrink:0
 }
-.cam-probe-btn:hover{background:rgba(127,174,201,0.18);color:#cfe1ee}
-.cam-probe-btn:active{background:rgba(127,174,201,0.28)}
 .cam-probe-btn.is-busy{opacity:.55;pointer-events:none}
 .cam-probe-btn.is-busy svg{animation:cam-probe-spin .9s linear infinite}
 @keyframes cam-probe-spin{
@@ -58,11 +67,13 @@
 .cam-autodetected-hint[hidden]{display:none}
 
 @media (max-width:520px){
-  /* On narrow phones the rescan button drops to a full-width row
-     beneath the inputs so the inputs don't squeeze to unusable widths. */
+  /* On narrow phones the probe button drops to a full-width row
+     beneath the inputs so the inputs don't squeeze to unusable widths.
+     Label stays visible — green tint + min-height 44 carries iOS
+     touch-target conformance. */
   .cam-id-row{grid-template-columns:1fr 1fr;grid-template-areas:'a b' 'c c';gap:6px}
   .cam-id-row .field-wrap:first-of-type{grid-area:a}
   .cam-id-row .field-wrap:nth-of-type(2){grid-area:b}
-  .cam-id-row .cam-probe-btn{grid-area:c;width:100%;height:36px}
+  .cam-id-row .cam-probe-btn{grid-area:c;width:100%;justify-content:center}
 }
 

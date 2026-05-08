@@ -26,11 +26,13 @@
               <button type="button" class="cam-tab-btn" data-tab="cam-tab-zonen"><svg class="cam-tab-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg><span>Zonen</span></button>
               <!-- Connection-recovery indicator: always present, pinned to
                    the right edge so the existing horizontal-scrolling tab
-                   list keeps its behaviour. Two states (.is-warn flips
-                   colour + adds the ⚠ badge). The state is driven by
-                   _refreshConnectionWarn() in app.js. -->
+                   list keeps its behaviour. Default state shares the
+                   action-green token with the Netzwerk-Discovery button
+                   so its purpose reads at a glance; .is-warn flips it
+                   to orange and reveals the ⚠ badge. The state is
+                   driven by _refreshConnectionWarn() in app.js. -->
               <button type="button" id="camTabRecoveryBtn"
-                      class="cam-tab-recovery-btn"
+                      class="btn-action action-green cam-tab-recovery-btn"
                       onclick="openCamRecoveryModal()"
                       aria-label="Verbindung wiederherstellen"
                       title="Verbindung wiederherstellen">
@@ -40,6 +42,7 @@
                   <path d="M3 12a9 9 0 1 0 3-6.7"/>
                   <polyline points="3 4 3 9 8 9"/>
                 </svg>
+                <span class="cam-tab-recovery-label">Verbindung wiederherstellen</span>
                 <span class="cam-tab-recovery-badge" aria-hidden="true">⚠</span>
               </button>
             </div>
@@ -49,14 +52,30 @@
                  connection-troubleshooting fields live in the next tab. -->
             <div class="cam-tab-panel active" id="cam-tab-allgemein">
               <div style="display:grid;gap:8px">
-                <div class="field-wrap"><input name="name" placeholder="Werkstatt" required /><span class="field-label">Anzeigename</span></div>
-                <!-- Manuf + Model row plus a tiny rescan icon. Backend
-                     auto-detects via Reolink GetDevInfo on save when
-                     these are blank; rescan triggers a fresh probe even
-                     when filled (firmware update / device replaced at
-                     same IP). The "automatisch erkannt" hint surfaces
-                     when the most recent save filled the field by
-                     auto-detect — disappears on the next manual edit. -->
+                <!-- Anzeigename row carries the icon-emoji slot inline as
+                     a 56 px leading column so the previous standalone
+                     "Icon (Emoji)" row collapses into a single, dense
+                     identity row. The hidden-input semantics are
+                     unchanged (name="icon"), so the form-submit path
+                     still picks up the emoji. -->
+                <div class="cam-name-row">
+                  <div class="field-wrap cam-icon-slot">
+                    <input name="icon" placeholder="🔧" maxlength="4" autocomplete="off" />
+                    <span class="field-label cam-icon-microlabel">Icon</span>
+                  </div>
+                  <div class="field-wrap">
+                    <input name="name" placeholder="Werkstatt" required />
+                    <span class="field-label">Anzeigename</span>
+                  </div>
+                </div>
+                <!-- Manuf + Model row plus a labelled green probe button.
+                     Backend auto-detects via Reolink GetDevInfo on save
+                     when these are blank; the probe button triggers a
+                     fresh probe even when filled (firmware update /
+                     device replaced at same IP). The "automatisch
+                     erkannt" hint surfaces when the most recent save
+                     filled the field by auto-detect — disappears on the
+                     next manual edit. -->
                 <div class="cam-id-row">
                   <div class="field-wrap">
                     <input name="manufacturer" placeholder="Reolink" autocomplete="off" />
@@ -68,13 +87,13 @@
                     <span class="field-label">Modell</span>
                     <span class="cam-autodetected-hint" data-for="model" hidden>automatisch erkannt</span>
                   </div>
-                  <button type="button" id="camProbeDeviceInfo" class="cam-probe-btn"
-                          title="Vom Gerät erkennen (Reolink GetDevInfo)"
-                          aria-label="Vom Gerät erkennen">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  <button type="button" id="camProbeDeviceInfo" class="btn-action action-green cam-probe-btn"
+                          title="Hersteller &amp; Modell abfragen (Reolink GetDevInfo)"
+                          aria-label="Hersteller &amp; Modell abfragen">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    <span>Hersteller &amp; Modell abfragen</span>
                   </button>
                 </div>
-                <div class="field-wrap"><input name="icon" placeholder="🔧" maxlength="4" /><span class="field-label">Icon (Emoji)</span></div>
                 <!-- Live ID preview. Read-only and updated by JS on every
                      change to manufacturer / model / name / IP. -->
                 <div class="cam-id-preview">

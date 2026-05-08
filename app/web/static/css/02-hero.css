@@ -40,36 +40,39 @@
   display:inline-flex;align-items:center;gap:8px;
 }
 .hero-wordmark{ color:#fff; }
-/* Brand glyph — randomly Spy Scout (wider) OR Acorn Cam (taller)
-   per chrome/brand-logo.js. Fixed height so the title row stays
-   consistent; width auto follows the chosen asset's aspect ratio.
-   Both SVGs are tinted variants of the same illustration — no plate,
-   so no rounded background needed here. flex-shrink:0 protects the
-   icon when the title row wraps. */
+/* Brand glyph — one of three squirrel-themed variants per
+   chrome/brand-logo.js. Fixed height so the title row stays
+   consistent; width auto follows the asset's aspect ratio.
+   flex-shrink:0 protects the icon when the title row wraps. */
 .hero-brand-glyph{
   display:inline-block;
-  /* Glyph height matches the title + subtitle stack so the squirrel
-     and the wordmark read as one visual block. The new 110×64
-     viewBox renders at ~89 px wide for height 52 — wider than the
-     previous logos but the hero row uses flex with min-width:0 on
-     the title-wrap, so the wordmark still wraps gracefully on the
-     narrowest phones. align-items:center on .hero centers the glyph
-     against the stack so the title baseline never shifts. */
-  height:52px;width:auto;
+  /* Glyph anchors the entire title + subtitle block — visually the
+     dominant element of the hero row, not just an inline icon
+     beside the wordmark. At height 88 the 110×64 viewBox renders
+     ~151 px wide; on a 540+ px viewport the wordmark + glyph row
+     comfortably fits, and on iPhone widths the mobile override
+     below shrinks to 64 px so the lockup still reads on a single
+     line at 375 px. */
+  height:88px;width:auto;
   flex-shrink:0;
   vertical-align:middle;
 }
 .hero-subtitle{
   margin:0;
-  /* Compact subordinate caption to the wordmark — the small-caps-ish
-     scale keeps the brand line clean. Flush under the title (no
-     padding-left) because the new wordmark is itself the visual
-     left edge; an indent past the glyph would push the subtitle
-     into the right half of the row and break the stack. */
+  /* Subtitle sits horizontally under "Sightings" rather than under
+     "Squirreling" — visual hierarchy points to the noun, not the
+     verb. 200 px is empirical for the 32 / 800 / -.025em wordmark:
+     glyph + gap + width("Squirreling · ") lands close to that x.
+     Mobile drops the indent (override below) because phone width
+     can't spare the columns. Neutral grey (no blue cast) so the
+     subtitle reads as a quiet caption against the dark hero
+     instead of inheriting the cool --muted token used everywhere
+     else in the UI. */
   font-size:11px;font-weight:500;
   font-style:italic;
-  color:var(--muted);
+  color:rgba(255,255,255,.55);
   letter-spacing:.02em;
+  padding-left:200px;
 }
 .ghost{background:var(--surface)!important;border:none!important}.section{padding:12px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-subtitle{font-size:12px;font-style:italic;color:var(--muted);font-weight:400;margin-left:auto}.toolbar{display:grid;grid-template-columns:240px 220px 160px;gap:12px;margin-bottom:18px}.toolbar select,.toolbar input,.form input,.form select{width:100%;padding:12px 40px 12px 14px;border-radius:14px;background:var(--surface);color:var(--text);border:none;outline:none}.toolbar select:focus,.toolbar input:focus,.form input:focus,.form select:focus{box-shadow:0 0 0 2px var(--accent)}
 .toolbar select,.form select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' stroke='%2391a4b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center}
@@ -91,17 +94,15 @@ select option{background:#1e1e1e;color:#c8c8c8}
 .hero-build .hero-build-sep{color:rgba(255,255,255,.25)}
 @media(max-width:640px){.hero-build{font-size:10px;padding-left:8px}}
 
-/* Mobile compact — proportional shrink of glyph + title + subtitle
-   so the desktop scale doesn't crowd a 375 px iPhone SE. The 110×64
-   viewBox at height 44 renders ~76 px wide; "Squirreling · Sightings"
-   at 26 / 800 fits beside it on a 375 px viewport (glyph + 8 px gap +
-   wordmark ≈ 280 px, well inside the inner column). Subtitle stays
-   flush left under the title — no indent — at 10.5 px so it reads
-   as a faint subordinate line, not a second column. */
+/* Mobile compact — glyph drops to 64 px (110×64 → ~110 px wide),
+   wordmark to 26 / 800. Subtitle indent is REMOVED on mobile —
+   phone widths don't have spare columns to align under
+   "Sightings", and the subtitle reads better flush under the
+   title at this scale. Neutral grey carries through. */
 @media (max-width:540px){
-  .hero-brand-glyph{ height:44px; }
+  .hero-brand-glyph{ height:64px; }
   .hero-title{ font-size:26px; }
-  .hero-subtitle{ font-size:10.5px; }
+  .hero-subtitle{ font-size:10.5px; padding-left:0; }
   .hero-build{ display:none; }
 }
 @media (max-width:768px){

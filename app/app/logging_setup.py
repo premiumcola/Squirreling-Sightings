@@ -175,6 +175,91 @@ class BurstRateLimitFilter(logging.Filter):
 RateLimitFilter = BurstRateLimitFilter
 
 
+class _TelegramPollingFilter(logging.Filter):
+    """Tames the ``telegram.ext.Updater`` poll-loop error chatter.
+
+    PTB's network-retry loop logs every ``get_updates`` failure at ERROR
+    with a 30-line traceback via its own ``telegram.ext.Updater`` logger.
+    The ``Application.add_error_handler`` hook only catches errors
+    raised inside Update HANDLERS, not inside the Updater's own polling
+    loop, so the only way to tame this stream is a logger-level filter.
+
+    Decision tree, evaluated only when ``record.exc_info`` carries a
+    ``telegram.error.*`` exception. Order matters: ``Conflict`` is a
+    subclass of ``NetworkError`` in PTB's hierarchy, so it must be
+    checked first.
+
+    - ``Conflict`` (another bot instance is running OR a prior session
+      hasn't expired Telegram-side): keep the FIRST occurrence per
+      60-s window at full ERROR + traceback so the operator can see
+      exactly which token is contested. Subsequent ones in the same
+      window get downgraded to a WARNING one-liner — the operator
+      still sees the bot is unhealthy without the 30-line wall every
+      few seconds.
+    - ``InvalidToken``: pass through unchanged. Always loud — the
+      operator must fix the token before anything else works.
+    - ``NetworkError`` / ``TimedOut`` (transient httpx drops, DNS
+      hiccups, ``Server disconnected without sending a response``):
+      downgrade to WARNING one-liner, drop the traceback. PTB retries
+      internally; the operator just needs a heartbeat that "the
+      network was choppy" without re-living it line-by-line.
+    - Anything else: pass through unchanged (real bug — keep ERROR
+      + traceback so it's debuggable).
+    """
+
+    _CONFLICT_WINDOW_S = 60.0
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_conflict_at = 0.0
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        exc_info = record.exc_info
+        if not exc_info:
+            return True
+        exc = exc_info[1]
+        # Lazy import — telegram is a hard dep, but we don't want it as
+        # a module-level import inside logging_setup (which is loaded
+        # extremely early during boot, before site-packages work has
+        # always settled).
+        try:
+            from telegram.error import (
+                Conflict,
+                InvalidToken,
+                NetworkError,
+                TimedOut,
+            )
+        except Exception:
+            return True
+        if isinstance(exc, Conflict):
+            now = time.time()
+            elapsed = now - self._last_conflict_at
+            if elapsed > self._CONFLICT_WINDOW_S:
+                self._last_conflict_at = now
+                return True
+            record.levelno = logging.WARNING
+            record.levelname = "WARNING"
+            record.msg = (
+                "[tg] polling conflict still active "
+                "(suppressing duplicate trace; next full report in %ds)"
+            )
+            record.args = (int(self._CONFLICT_WINDOW_S - elapsed),)
+            record.exc_info = None
+            record.exc_text = None
+            return True
+        if isinstance(exc, InvalidToken):
+            return True
+        if isinstance(exc, (NetworkError, TimedOut)):
+            record.levelno = logging.WARNING
+            record.levelname = "WARNING"
+            record.msg = "[tg] transient polling network error: %s"
+            record.args = (exc,)
+            record.exc_info = None
+            record.exc_text = None
+            return True
+        return True
+
+
 # ── Setup ──────────────────────────────────────────────────────────────────
 def _resolve_level() -> int:
     raw = (os.environ.get("LOG_LEVEL") or "INFO").upper().strip()
@@ -249,6 +334,15 @@ def setup_logging():
         ("asyncio",      logging.WARNING),
     ]:
         logging.getLogger(noisy).setLevel(lvl)
+    # PTB's polling loop logs every getUpdates failure at ERROR with a
+    # 30-line traceback via `telegram.ext.Updater`. The
+    # Application.add_error_handler hook only catches errors raised
+    # inside Update HANDLERS, not inside the Updater's own polling
+    # loop — so the only way to tame this stream is a logger-level
+    # filter. _TelegramPollingFilter routes by exception class:
+    # transient blips → WARNING one-liner, recurring Conflict → loud
+    # once per minute then quiet, real bugs left untouched.
+    logging.getLogger("telegram.ext.Updater").addFilter(_TelegramPollingFilter())
 
 
 def console_level() -> int:

@@ -22,6 +22,13 @@ export function openLiveView(camId, camName){
   _setLiveViewStream(window._liveViewHd);
   const imgEl = byId('liveViewImg');
   // Image click no longer toggles fullscreen — the dedicated FS button owns that.
+  // True iOS-native fullscreen (the YouTube experience the user referenced)
+  // requires a <video> element fed by HLS or DASH. Our streams are MJPEG via
+  // <img>, which iOS Safari refuses to fullscreen. requestFullscreen on the
+  // wrap div does work on desktop and Chrome/Firefox-iOS; on Safari iPhone
+  // it falls back to .fake-fullscreen CSS so the modal still covers the
+  // chrome. A future HLS pipeline (server-side transmux of RTSP→HLS) is
+  // the only path to real native fullscreen on iPhone Safari.
   if (imgEl) imgEl.onclick = null;
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';

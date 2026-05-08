@@ -22,3 +22,71 @@
 .section-head-icon{display:inline-flex;align-items:center;color:rgb(var(--acc, 143,158,181))}
 .section-head-icon svg{display:block}
 
+/* ── Live-view modal · safe-area-aware overlay controls ─────────────────
+   Click-target geometry: tap close → exit, tap FS → fullscreen, tap
+   image → nothing (no toggle, no surprise). The MJPEG stream is served
+   via <img>, so true iOS-native fullscreen (which requires <video> +
+   HLS) isn't reachable from here; the FS button calls requestFullscreen
+   on the wrap and falls back to .fake-fullscreen on iPhone Safari.
+   Top/bottom bars use pointer-events:none so the dead zone over the
+   centre of the image stays tap-through; only the actual buttons opt
+   back in via `.lvm-top > * { pointer-events:auto }`. Insets use
+   max(14px, env(safe-area-inset-*)) so notch / Dynamic-Island devices
+   get the system-reserved padding while flat-edge devices keep the
+   14 px baseline. */
+.lvm{position:fixed;inset:0;background:#000;z-index:1000;
+     display:flex;align-items:center;justify-content:center}
+.lvm.hidden{display:none}
+.lvm-wrap{position:relative;width:100%;height:100dvh;
+          display:flex;align-items:center;justify-content:center;
+          background:#000}
+.lvm-img{max-width:100%;max-height:100dvh;object-fit:contain;display:block}
+.lvm-top{position:absolute;
+         top:max(12px, env(safe-area-inset-top, 0px));
+         left:0;right:0;
+         padding:0 max(14px, env(safe-area-inset-right, 0px))
+                0 max(14px, env(safe-area-inset-left, 0px));
+         display:flex;align-items:center;
+         justify-content:space-between;gap:12px;
+         pointer-events:none;z-index:2}
+.lvm-top > *{pointer-events:auto}
+.lvm-title{font-size:14px;font-weight:600;color:#fff;
+           background:rgba(0,0,0,.55);
+           padding:6px 14px;border-radius:18px;
+           backdrop-filter:blur(8px);
+           -webkit-backdrop-filter:blur(8px);
+           max-width:60%;
+           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lvm-close-btn{width:40px;height:40px;border-radius:50%;
+               background:rgba(0,0,0,.55);border:none;cursor:pointer;
+               display:flex;align-items:center;justify-content:center;
+               backdrop-filter:blur(8px);
+               -webkit-backdrop-filter:blur(8px)}
+.lvm-close-btn:hover{background:rgba(0,0,0,.75)}
+.lvm-bot{position:absolute;
+         bottom:max(14px, env(safe-area-inset-bottom, 0px));
+         left:max(14px, env(safe-area-inset-left, 0px));
+         display:flex;gap:8px;align-items:center;z-index:2}
+.lvm-hd-btn{height:36px;padding:0 14px;border-radius:10px;
+            border:1.5px solid rgba(255,255,255,.20);
+            background:rgba(0,0,0,.55);color:rgba(255,255,255,.55);
+            font-size:11px;font-weight:700;letter-spacing:.05em;
+            cursor:pointer;
+            backdrop-filter:blur(8px);
+            -webkit-backdrop-filter:blur(8px);
+            transition:background .15s ease,color .15s ease}
+/* HD-active state — chrome/live-view.js _setLiveViewStream paints
+   inline styles directly on the element; element-level inline beats
+   class-level so the JS still wins. The class rule below covers
+   future call paths that might use a class swap. */
+.lvm-hd-btn.lvm-hd-on{background:rgba(255,255,255,.92);color:#0a0e1a;
+                      font-weight:800;border-color:transparent}
+.lvm-fs-btn{width:40px;height:40px;border-radius:10px;
+            background:rgba(0,0,0,.55);
+            border:1px solid rgba(255,255,255,.15);cursor:pointer;
+            display:flex;align-items:center;justify-content:center;
+            backdrop-filter:blur(8px);
+            -webkit-backdrop-filter:blur(8px);
+            transition:background .15s ease}
+.lvm-fs-btn:hover{background:rgba(0,0,0,.75)}
+

@@ -34,36 +34,37 @@
     </div>
   </div>
 
-  <!-- Live view modal -->
-  <div id="liveViewModal" class="modal hidden" style="position:fixed;inset:0;background:#000;z-index:1000;display:flex;align-items:center;justify-content:center;">
-    <div id="liveViewWrap" style="position:relative;width:100%;height:100dvh;display:flex;align-items:center;justify-content:center;background:#000;">
-      <img id="liveViewImg" src="" alt="Live"
-           style="max-width:100%;max-height:100dvh;object-fit:contain;display:block;cursor:pointer;" />
-
-      <!-- top-left: camera name -->
-      <div style="position:absolute;top:14px;left:14px;pointer-events:none;">
-        <span id="liveViewTitle"
-              style="font-size:15px;font-weight:600;color:#fff;background:rgba(0,0,0,0.5);padding:5px 12px;border-radius:20px;backdrop-filter:blur(4px)"></span>
+  <!-- Live view modal · safe-area-aware overlay controls. All
+       inline styles hoisted to .lvm-* in 11-chrome-overlays.css so
+       env(safe-area-inset-*) actually applies (env() inside the
+       style="" attribute is brittle and harder to reason about
+       than a class rule). -->
+  <div id="liveViewModal" class="modal hidden lvm">
+    <div id="liveViewWrap" class="lvm-wrap">
+      <!-- Image click is intentionally NOT a fullscreen toggle —
+           only the FS button below opens fullscreen. live-view.js
+           enforces this by setting imgEl.onclick=null on every open. -->
+      <img id="liveViewImg" class="lvm-img" src="" alt="Live" />
+      <!-- Top bar — title left, close right. Both children opt back
+           into pointer events; the bar itself is pass-through so a
+           drag/swipe over the centre of the image isn't blocked. -->
+      <div class="lvm-top">
+        <span id="liveViewTitle" class="lvm-title"></span>
+        <button class="lvm-close-btn" type="button"
+                onclick="closeLiveView()" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" width="18" height="18"
+               stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
-
-      <!-- top-right: close button -->
-      <button onclick="closeLiveView()"
-              style="position:absolute;top:12px;right:12px;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.55);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;">
-        <svg viewBox="0 0 24 24" width="18" height="18" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-
-      <!-- bottom-left: SD/HD toggle + Fullscreen button -->
-      <div style="position:absolute;bottom:14px;left:14px;display:flex;gap:8px;align-items:center;">
-        <button id="liveViewHdBtn"
-                onclick="_setLiveViewStream(!_liveViewHd)"
-                style="height:32px;padding:0 12px;border-radius:8px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.55);color:rgba(255,255,255,0.5);font-size:11px;font-weight:700;letter-spacing:.05em;cursor:pointer;backdrop-filter:blur(4px);transition:all .2s">
-          HD
-        </button>
-        <button id="liveViewFsBtn"
-                style="width:40px;height:40px;border-radius:10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.15);cursor:pointer;display:flex;align-items:center;justify-content:center;">
-        </button>
+      <!-- Bottom bar — HD + fullscreen left, safe-area aware. -->
+      <div class="lvm-bot">
+        <button id="liveViewHdBtn" class="lvm-hd-btn" type="button"
+                onclick="_setLiveViewStream(!_liveViewHd)">HD</button>
+        <button id="liveViewFsBtn" class="lvm-fs-btn" type="button"
+                aria-label="Vollbild"></button>
       </div>
     </div>
   </div>

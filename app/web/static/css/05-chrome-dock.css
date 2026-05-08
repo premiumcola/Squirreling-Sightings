@@ -90,17 +90,16 @@
     --m-dock-radius:47px;
     --m-dock-inner-pad:8px;
     --m-dock-pill-radius:calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
-    /* Flush-bottom layout: the dock plate now meets the screen's
-       bottom edge with the blur extending through the safe-area
-       zone. The previous +2 px additive parked the dock above the
-       safe-area band so a sliver of page content peeked through
-       on iPhone 15 Pro between the dock and the home indicator —
-       reading as "floating mid-screen" rather than as a chrome
-       anchor. Buttons stay clear of the home indicator via a
-       padding-bottom equal to safe-area-inset-bottom; the upward
-       box-shadow gives the floating impression even though the
-       backdrop reaches the rounded bottom corner of the screen. */
-    --m-dock-bottom-gap:0px;
+    /* Floating-strip layout: the dock sits with a small visible
+       gap above the home-indicator zone, all corners curved, with
+       a single soft drop shadow surrounding it. The previous
+       flush-bottom pass (radius:top-only + upward double-shadow)
+       killed the floating identity and added a hard top edge that
+       read as a partition line. 6 px additive over safe-area is
+       the right calibration: the gap is noticeable as a strip
+       without re-introducing the 36 px chasm of the very first
+       version. */
+    --m-dock-bottom-gap:calc(env(safe-area-inset-bottom, 0px) + 6px);
     display:grid;
     grid-template-columns:repeat(5,1fr);
     gap:2px;
@@ -108,12 +107,13 @@
     left:var(--m-dock-margin);
     right:var(--m-dock-margin);
     bottom:var(--m-dock-bottom-gap);
-    padding:var(--m-dock-inner-pad) var(--m-dock-inner-pad)
-            calc(var(--m-dock-inner-pad) + env(safe-area-inset-bottom, 0px));
-    /* Bottom now flushes with the screen edge → only the top
-       corners curve. */
-    border-radius:var(--m-dock-radius) var(--m-dock-radius) 0 0;
-    box-shadow:0 -8px 24px rgba(0,0,0,.45),0 -2px 6px rgba(0,0,0,.30);
+    padding:var(--m-dock-inner-pad) var(--m-dock-inner-pad);
+    border-radius:var(--m-dock-radius);
+    /* Single diffuse drop shadow — small downward y to anchor the
+       strip visually above the home-indicator band, 24 px blur for
+       softness, no second sharp layer (the previous 0 -2px 6px
+       layer painted as a hard line on iPhone). */
+    box-shadow:0 4px 24px rgba(0,0,0,.55);
     /* Translucent neutral fill + heavy backdrop blur. The blur is
        what makes page content scrolling underneath unreadable
        through the dock — without it the dock was a solid plate

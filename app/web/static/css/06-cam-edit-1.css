@@ -1120,15 +1120,21 @@
   font-size:10.5px;font-style:italic;color:#a3a3a3;
   margin-top:5px;padding-left:14px;display:block
 }
-/* Inputs uniform 40 px so labels below align across rows. */
+/* Inputs uniform 40 px so labels below align across rows.
+   The previous rgba(255,255,255,.06) over the dark panel made filled
+   values read like a faded raised tile — users mistook committed
+   entries for placeholders. Solid #1c1c20 surface gives the field a
+   recessed-slot feel (background depth, not borders, per project
+   design rules). The text colour bumps to a clean #ffffff so filled
+   values are visibly brighter than the muted #737373 placeholder. */
 .cam-edit-inner .field-wrap input:not([type=range]):not([type=number]):not([type=checkbox]),
 .cam-edit-inner .field-wrap input[type=number],
 .cam-edit-inner .field-wrap select,
 .cam-edit-inner .field-wrap textarea{
   height:40px;
-  background:rgba(255,255,255,.06);
-  color:#edf4fb;
-  border:1px solid rgba(255,255,255,.08);
+  background:#1c1c20;
+  color:#ffffff;
+  border:1px solid rgba(255,255,255,.04);
   box-shadow:none;
   padding:0 14px;
   border-radius:10px
@@ -1143,6 +1149,25 @@
 }
 .cam-edit-inner .field-wrap input::placeholder,
 .cam-edit-inner .field-wrap textarea::placeholder{color:#737373}
+/* Browser-autofill override — Chrome/Safari paint a yellow tint that
+   ignores the field's background. The huge inset box-shadow is the
+   long-standing workaround that re-paints the field with our solid
+   surface; -webkit-text-fill-color forces the autofilled text to use
+   our white instead of the browser's default near-black. The
+   transition keeps the autofill style stable across focus/blur — the
+   `5000s` value is the documented trick that delays the OS-fallback
+   long enough that a user never sees the yellow flash. */
+.cam-edit-inner .field-wrap input:-webkit-autofill,
+.cam-edit-inner .field-wrap input:-webkit-autofill:hover,
+.cam-edit-inner .field-wrap input:-webkit-autofill:focus,
+.cam-edit-inner .field-wrap input:-webkit-autofill:active,
+.cam-edit-inner .field-wrap select:-webkit-autofill,
+.cam-edit-inner .field-wrap textarea:-webkit-autofill{
+  -webkit-text-fill-color:#ffffff !important;
+  -webkit-box-shadow:0 0 0 1000px #1c1c20 inset !important;
+  caret-color:#ffffff;
+  transition:background-color 5000s ease-in-out 0s;
+}
 /* Native chevron in selects: a single neutral chevron at the right
    edge, no-repeat. The previous rule emitted a chevron without
    locking background-repeat — Firefox/Chrome tile-painted the SVG

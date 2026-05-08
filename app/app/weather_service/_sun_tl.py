@@ -579,6 +579,16 @@ class SunTimelapseMixin:
             f"{baseline_med:.0f}" if baseline_med is not None else "?",
             cam_name, phase,
         )
+        # ── stats container first ──────────────────────────────────────────
+        # The stats mutations + slot loop below all reference ``stats``;
+        # build it here before any code path can touch it. The baseline
+        # grabs above intentionally bypassed grab_valid_frame so they
+        # never wired an on_reject callback that could have hit
+        # stats.record_invalid before this assignment.
+        expected_frames = int(window_seconds / max(1, interval_s))
+        if test_session is not None:
+            test_session.expected_frames = expected_frames
+        stats = CaptureStats(out_dir=frames_dir, expected_frames=expected_frames)
         # Mirror the profile + baseline into the CaptureStats so the
         # _stats.json blob picks them up on every flush — production
         # runs (no test_session) still leave the data on disk for the
@@ -595,10 +605,6 @@ class SunTimelapseMixin:
         # twilight drifts to the right profile mid-run. Only one extra
         # snapshot per 5-minute window, so the cost is bounded.
         next_repick_at = datetime.now() + timedelta(minutes=5)
-        expected_frames = int(window_seconds / max(1, interval_s))
-        if test_session is not None:
-            test_session.expected_frames = expected_frames
-        stats = CaptureStats(out_dir=frames_dir, expected_frames=expected_frames)
         n_written = 0
         i = 0
         # ── Test-mode reject sink ─────────────────────────────────────────

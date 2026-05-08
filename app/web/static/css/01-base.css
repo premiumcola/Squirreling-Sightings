@@ -76,5 +76,52 @@ html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@me
 .nav a.nav-logs-item.nav-active .nav-icon svg,
 .nav a.nav-logs-item:hover .nav-icon svg{stroke:#4ade80}
 .sidebar.collapsed .nav a.nav-logs-item{margin-top:0}
+
+/* ── Collapsed sidebar · active highlight hugs the icon ──────────────────
+   In the 52 px collapsed rail the full-width pill background reads as a
+   stretched selection bar. Move the active/hover tint OFF the anchor and
+   onto the icon itself, sized to a 36×36 rounded square centred in the
+   rail. The expanded sidebar keeps its full-width pill — these rules are
+   only active under .sidebar.collapsed, and never under the
+   :hover-expanded state (handled by 04-coral-1.css). */
+.sidebar.collapsed .nav-icon{
+  width:36px;height:36px;border-radius:12px;
+  transition:background .15s ease;
+}
+.sidebar.collapsed .nav a{padding:4px 8px;background:transparent}
+.sidebar.collapsed .nav a:hover{background:transparent}
+.sidebar.collapsed .nav a:hover .nav-icon{background:rgba(255,255,255,.07)}
+.sidebar.collapsed .nav a.nav-active{background:transparent;color:#fff}
+.sidebar.collapsed .nav a.nav-active .nav-icon{background:rgba(255,255,255,.16)}
+/* Variant colour overrides — same rule shape, variant-specific tint. */
+.sidebar.collapsed .nav a.nav-achievements-item:hover{background:transparent}
+.sidebar.collapsed .nav a.nav-achievements-item:hover .nav-icon{background:rgba(251,191,36,.14)}
+.sidebar.collapsed .nav a.nav-achievements-item.nav-active{background:transparent}
+.sidebar.collapsed .nav a.nav-achievements-item.nav-active .nav-icon{background:rgba(251,191,36,.20)}
+.sidebar.collapsed .nav a.nav-weather-item:hover{background:transparent}
+.sidebar.collapsed .nav a.nav-weather-item:hover .nav-icon{background:rgba(127,174,201,.14)}
+.sidebar.collapsed .nav a.nav-weather-item.nav-active{background:transparent}
+.sidebar.collapsed .nav a.nav-weather-item.nav-active .nav-icon{background:rgba(127,174,201,.20)}
+.sidebar.collapsed .nav a.nav-logs-item:hover{background:transparent}
+.sidebar.collapsed .nav a.nav-logs-item:hover .nav-icon{background:rgba(0,255,65,.10)}
+.sidebar.collapsed .nav a.nav-logs-item.nav-active{background:transparent}
+.sidebar.collapsed .nav a.nav-logs-item.nav-active .nav-icon{background:rgba(0,255,65,.16)}
+/* When the user hovers the rail (04-coral-1.css re-expands it back to
+   260 px), restore the full-pill behaviour so the highlight no longer
+   looks like a square halo around the icon. The :not() guard kept the
+   collapsed rules above from leaking into the hover-expanded state. */
+.sidebar.collapsed:hover .nav-icon{
+  width:20px;height:20px;border-radius:0;background:transparent;
+}
+.sidebar.collapsed:hover .nav a{padding:8px}
+.sidebar.collapsed:hover .nav a:hover{background:rgba(255,255,255,.05)}
+.sidebar.collapsed:hover .nav a.nav-active{background:rgba(255,255,255,.10)}
+.sidebar.collapsed:hover .nav a.nav-achievements-item:hover{background:rgba(251,191,36,.09)}
+.sidebar.collapsed:hover .nav a.nav-achievements-item.nav-active{background:rgba(251,191,36,.13)}
+.sidebar.collapsed:hover .nav a.nav-weather-item:hover{background:rgba(127,174,201,.09)}
+.sidebar.collapsed:hover .nav a.nav-weather-item.nav-active{background:rgba(127,174,201,.13)}
+.sidebar.collapsed:hover .nav a.nav-logs-item:hover{background:rgba(0,255,65,.06)}
+.sidebar.collapsed:hover .nav a.nav-logs-item.nav-active{background:rgba(0,255,65,.10)}
+
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199}.sidebar-overlay.visible{display:block}
 .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}h1,h2,h3,p{margin:0}.muted{color:var(--muted)}.main{display:grid;gap:14px;flex:1;min-width:0;padding-bottom:60vh}

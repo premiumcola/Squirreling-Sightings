@@ -234,6 +234,15 @@ class MotionMixin:
         if not any_with_flags and not detections:
             # Motion-only event: keep legacy defaults.
             ev_save_photo = ev_save_video = ev_send_tg = True
+        # Feed the live-tile red-glow indicator. We use the
+        # surviving `labels` list (post-whitelist, post-zone,
+        # post-confidence, post-confirm) so the UI only lights up
+        # on detections the pipeline actually treats as real
+        # events. Time is epoch seconds for cheap age-comparison
+        # in routes/cameras.py.
+        now_epoch = time.time()
+        for lbl in sorted(set(labels)):
+            self.recent_detections.append((lbl, now_epoch))
         return {
             "event_id": event_id,
             "time": ts,

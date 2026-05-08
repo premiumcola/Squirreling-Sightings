@@ -249,6 +249,29 @@
     background:rgba(var(--surveil-acc),.35);
   }
 }
+/* Persistent red glow while a class was detected within the last 10 s.
+   Driven by live-update.js's per-tick toggle of .is-hot from the
+   backend's recent_detections feed — separate from the .is-detecting
+   3 s accent flash above (which is reserved for future SSE-driven
+   instant feedback). The 1.6 s breathing pulse keeps the glow legible
+   on long sustained detections without seizure-triggering. The drop-
+   shadow on the inner SVG lifts the icon glyph against the red fill
+   so e.g. the dim "person" stroke stays readable. */
+.cv-surveil-tgt.is-hot{
+  background:rgba(239,68,68,.55);
+  box-shadow:0 0 8px rgba(239,68,68,.45);
+  animation:cvTgtHotPulse 1.6s ease-in-out infinite;
+}
+.cv-surveil-tgt.is-hot svg{
+  filter:drop-shadow(0 0 1.5px rgba(255,255,255,.6));
+}
+@keyframes cvTgtHotPulse{
+  0%, 100% {box-shadow:0 0 6px  rgba(239,68,68,.35);}
+  50%      {box-shadow:0 0 12px rgba(239,68,68,.65);}
+}
+@media (prefers-reduced-motion: reduce){
+  .cv-surveil-tgt.is-hot{ animation:none; }
+}
 .cv-surveil-time{
   font-size:9.5px;
   color:rgba(255,255,255,.6);

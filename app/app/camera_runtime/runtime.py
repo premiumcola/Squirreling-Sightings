@@ -215,6 +215,13 @@ class CameraRuntime(
         # enough that the deque stays small even on a chronically flaky
         # cam (a 5-minute reconnect interval gives 288 entries / 24 h).
         self._reconnect_log: deque = deque()
+        # Rolling history of recent confirmed-detection labels for the
+        # live-tile object-icon red-glow indicator. Each entry is
+        # (label, epoch_seconds). Sized generously so a frame with
+        # multiple classes fits without eviction; routes/cameras.py
+        # filters to the 10 s window at read time so this is just a
+        # memory upper bound, not the visible decay window.
+        self.recent_detections: deque = deque(maxlen=64)
         # First-frame latency markers — set when cv2.VideoCapture opens,
         # cleared after the first decoded frame logs an "[cam:<id>] RTSP
         # opened — first frame in <ms> ms" line. Tells the operator

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import shutil as _shutil
+import time as _time
 from datetime import datetime
 from pathlib import Path
 
@@ -78,6 +79,21 @@ def api_cameras():
         s["snapshot_interval_s"] = cam.get("snapshot_interval_s", 3)
         s["timelapse"] = cam.get("timelapse", {})
         s["weather"] = cam.get("weather") or {"enabled": False}
+        # Recent-detection feed for the live-tile object-icon red glow.
+        # Filter to entries within the last 10 s; the dashboard polls
+        # this endpoint every 3 s so a fresh detection lights the chip
+        # on the very next tick and decays naturally as entries age
+        # out of the window. Older entries stay in the runtime deque
+        # until the deque's maxlen evicts them; only the filter here
+        # controls the visible glow window.
+        now_epoch = _time.time()
+        recent: list[dict] = []
+        if rt is not None and getattr(rt, "recent_detections", None):
+            for lbl, ts in list(rt.recent_detections):
+                age = now_epoch - ts
+                if 0 <= age <= 10.0:
+                    recent.append({"label": lbl, "age_s": round(age, 2)})
+        s["recent_detections"] = recent
         cams.append(s)
     return jsonify({"cameras": cams})
 

@@ -70,6 +70,21 @@ export function startLiveUpdate() {
             }
             _refreshLivePillForCard(c.id);
           }
+          // Object-icon red glow: each .cv-surveil-tgt whose data-cls
+          // is in c.recent_detections (within the 10 s window the
+          // backend filters to) gets .is-hot. Tgts whose class is
+          // absent on this tick get .is-hot stripped. classList.toggle
+          // with a boolean second arg is idempotent — the DOM only
+          // mutates when the state actually flips, so steady-state
+          // polls don't churn. Backend feeds this list only when an
+          // event was finalised, so absence of glow during a walk-
+          // through means no event ever fired (capture/motion/confirm
+          // upstream of telegram).
+          const recentSet = new Set((c.recent_detections || []).map(d => d.label));
+          card.querySelectorAll('.cv-surveil-tgt').forEach(tgt => {
+            const cls = tgt.dataset.cls;
+            tgt.classList.toggle('is-hot', !!cls && recentSet.has(cls));
+          });
         }
       });
       if (needsRedraw) {

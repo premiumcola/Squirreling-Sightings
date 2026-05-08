@@ -53,12 +53,16 @@
    icon when the title row wraps. */
 .hero-brand-glyph{
   display:inline-block;
-  /* Roughly title-cap-height tall — at title 28 px line-height 1.1
-     the cap-height sits at ~22 px and the line-box at ~31 px; 40 px
-     reads as a proper brand mark sitting on the line, not as an inline
-     icon. Width auto follows the chosen asset's aspect ratio
-     (Acorn Cam 50:64 → ~31 px; Spy Scout 80:70 → ~46 px). */
-  height:40px;width:auto;
+  /* Sized to fill the hero row visually — title (28 / 800, line-box
+     ~31 px) plus 4 px gap plus subtitle (14 px italic, line-box
+     ~19 px) totals roughly 54 px; the glyph reads strongest a touch
+     above that so it carries the brand mark instead of just balancing
+     it. 68 px lands in that pocket on desktop, with width auto
+     following the chosen asset's aspect ratio
+     (Acorn Cam 50:64 → ~53 px; Spy Scout 80:70 → ~78 px). The hero
+     row uses align-items:center, so the taller glyph centers across
+     the title+subtitle stack without pushing the title down. */
+  height:68px;width:auto;
   flex-shrink:0;
   vertical-align:middle;
 }
@@ -72,13 +76,12 @@
   color:var(--muted);
   letter-spacing:.02em;
   /* Indent past the title's left edge so the subtitle starts roughly
-     where the title TEXT begins (right of the glyph). Glyph height
-     is 40 px and the chosen SVGs land between ~31 and ~46 px wide,
-     plus the 8 px title-row gap → 48 px is just past the wider
-     variant, reads cleanly under both options without recomputing
-     per-asset. The subtitle stays stacked under the title (not
-     inline) — only the horizontal anchor moves. */
-  padding-left:48px;
+     where the title TEXT begins (right of the glyph). At the
+     enlarged 68 px glyph the SVGs land between ~53 px (Acorn Cam)
+     and ~78 px (Spy Scout) wide, plus the 8 px title-row gap →
+     88 px clears the wider variant on desktop and reads cleanly
+     under both options without recomputing per-asset. */
+  padding-left:88px;
 }
 .ghost{background:var(--surface)!important;border:none!important}.section{padding:12px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-subtitle{font-size:12px;font-style:italic;color:var(--muted);font-weight:400;margin-left:auto}.toolbar{display:grid;grid-template-columns:240px 220px 160px;gap:12px;margin-bottom:18px}.toolbar select,.toolbar input,.form input,.form select{width:100%;padding:12px 40px 12px 14px;border-radius:14px;background:var(--surface);color:var(--text);border:none;outline:none}.toolbar select:focus,.toolbar input:focus,.form input:focus,.form select:focus{box-shadow:0 0 0 2px var(--accent)}
 .toolbar select,.form select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' stroke='%2391a4b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center}
@@ -102,13 +105,17 @@ select option{background:#1e1e1e;color:#c8c8c8}
 
 /* Mobile compact — proportional shrink of glyph + title + subtitle
    so the larger desktop scale doesn't crowd a 375 px iPhone SE. The
-   subtitle indent shrinks in lockstep with the glyph so the indent
-   keeps clearing the brand mark without floating too far right on
-   narrow widths. */
+   glyph stays clearly larger than the title cap-height so the brand
+   mark still carries; at 54 px the SVGs land between ~42 px
+   (Acorn Cam) and ~62 px (Spy Scout) wide, plus the 8 px row gap →
+   70 px clears the wider variant. The title row stays on a single
+   line at 24 px / 800 plus a 54 px glyph on a 375 px iPhone SE
+   (TAM-spy + glyph + 8 px gap measures ~140 px, well inside the
+   viewport minus side padding). */
 @media (max-width:540px){
-  .hero-brand-glyph{ height:34px; }
+  .hero-brand-glyph{ height:54px; }
   .hero-title{ font-size:24px; }
-  .hero-subtitle{ font-size:13px; padding-left:42px; }
+  .hero-subtitle{ font-size:13px; padding-left:70px; }
   .hero-build{ display:none; }
 }
 @media (max-width:768px){

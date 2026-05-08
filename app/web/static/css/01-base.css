@@ -3,19 +3,29 @@
 html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@media (max-width:768px){html{scroll-padding-top:8px}}
 .shell{display:flex;gap:12px;max-width:1900px;margin:0 auto;padding:8px 14px 18px 14px}
 .panel{background:var(--panel);border-radius:24px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
-/* Sidebar collapse model: only the WIDTH animates (260 → 52 px and
-   back). Icons sit at fixed left padding in both states (the
-   .nav a base rule's padding:8px 10px never changes), and there
-   is no vertical reflow at any point. Section labels and the
-   brand block are intentionally hidden — visual grouping comes
-   from the .nav-divider lines between groups, branding lives in
-   the hero up top. The previous "reserve their height with
-   opacity:0" approach kept icons stable but left visible empty
-   placeholders in the collapsed state; dropping them out of flow
-   entirely is the only way to satisfy "no empty boxes AND icons
-   never move". The markup stays — only CSS hides them — so a
-   future a11y pass can keep aria-hidden semantics if needed. */
-.sidebar{padding:12px 6px;position:sticky;top:8px;height:max-content;flex-shrink:0;width:260px;transition:width .35s cubic-bezier(0.4,0,0.2,1);overflow:hidden}
+/* Sidebar geometry — only the WIDTH animates (260 → 52 px and back).
+   Padding is uniform 8 px on both the sidebar AND each nav item, so
+   the first icon's TOP and LEFT offsets from the sidebar's outer
+   edge are exactly equal: 8 (sidebar) + 8 (nav-a) = 16 px in both
+   directions, identical in expanded and collapsed states. The
+   previous 12 px top + 6 px side gave a visible top-vs-left
+   asymmetry; uniform 8 px kills it.
+
+   min-height is `auto` on desktop so the nav-a's natural height
+   (8 + 20 px icon + 8 = 36 px) lines up with the equal-padding
+   geometry. Mobile (≤768 px) restores the 44 px touch-target
+   floor — hover precision on desktop is fine at 36 px, but a
+   finger needs the full 44 px hit area.
+
+   Inner radius is 20 px — strongly rounded to rhyme with the
+   .panel's 24 px outer mask without going full pill. The 12 px
+   value used previously read as visually-disconnected from the
+   outer curve.
+
+   Section labels and brand are hidden (display:none) — visual
+   grouping comes from .nav-divider lines, branding lives in the
+   hero. Keeping them in flow forced icon shifts between states. */
+.sidebar{padding:8px;position:sticky;top:8px;height:max-content;flex-shrink:0;width:260px;transition:width .35s cubic-bezier(0.4,0,0.2,1);overflow:hidden}
 .sidebar.collapsed{width:52px}
 .sidebar.collapsed .nav-label,.sidebar.collapsed .nav-chev{opacity:0;pointer-events:none}
 /* Sidebar brand block — redundant with the hero header, dropped
@@ -24,7 +34,8 @@ html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@me
 .sidebar .brand{display:none}
 .logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:#14314c;flex-shrink:0}
 .nav{display:grid;gap:2px}
-.nav a{padding:8px 10px;border-radius:12px;background:transparent;display:flex;align-items:center;justify-content:flex-start;gap:10px;white-space:nowrap;min-height:44px;color:#cbd5e1;transition:background .15s ease,color .15s ease;-webkit-tap-highlight-color:transparent;border:none;width:100%;font:inherit;text-align:left;cursor:pointer}
+.nav a{padding:8px;border-radius:20px;background:transparent;display:flex;align-items:center;justify-content:flex-start;gap:10px;white-space:nowrap;min-height:auto;color:#cbd5e1;transition:background .15s ease,color .15s ease;-webkit-tap-highlight-color:transparent;border:none;width:100%;font:inherit;text-align:left;cursor:pointer}
+@media (max-width:768px){.nav a{min-height:44px}}
 .nav a:hover{background:rgba(255,255,255,.05)}
 .nav a.nav-active{background:rgba(255,255,255,.10);color:#fff}
 .nav-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
@@ -58,7 +69,7 @@ html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@me
 /* ~/logs item: monospace green text, NO permanent box. The full terminal
    surface lives on the #logs panel — the nav item only previews the look
    on hover so the sidebar stays visually quiet by default. */
-.nav a.nav-logs-item{background:transparent;color:#4ade80;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;border:none;border-radius:12px;letter-spacing:.05em}
+.nav a.nav-logs-item{background:transparent;color:#4ade80;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;border:none;border-radius:20px;letter-spacing:.05em}
 .nav a.nav-logs-item:hover{background:rgba(0,255,65,.06);color:#4ade80}
 .nav a.nav-logs-item.nav-active{background:rgba(0,255,65,.10);color:#4ade80}
 .nav a.nav-logs-item .nav-icon svg,

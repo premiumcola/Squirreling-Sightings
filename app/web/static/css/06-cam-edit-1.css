@@ -87,8 +87,17 @@
   appearance:none;-webkit-appearance:none;-moz-appearance:none;
   background:#000000;color:#00ff41;border:1px solid #00aa33;border-radius:0;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
-  min-height:38px;line-height:1.2;
-  padding:8px 30px 8px 12px;
+  /* Explicit height + box-sizing forces iOS Safari to render the
+     native select control at exactly 38 px regardless of its UA-
+     internal padding (min-height:38px alone left iOS rendering it
+     visibly taller than the sibling Refresh button). line-height:1
+     + zero vertical padding keeps the option text vertically
+     centred inside the 38 px box. The chevron stays optically
+     centred via background-position:right 10px center below. */
+  height:38px;
+  box-sizing:border-box;
+  line-height:1;
+  padding:0 30px 0 12px;
   accent-color:#00ff41;outline:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2300ff41' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 10px center;
@@ -122,8 +131,13 @@
   #logs.panel select,
   #logs.panel .log-level-select{
     flex:1 1 calc(50% - 4px);min-width:0;
+    /* font-size:16 keeps the iOS Safari focus-zoom suppressor in
+       place. min-height was 44 (iOS touch-target floor) but that
+       overrode the base height:38 fix and made selects visibly
+       taller than the Refresh button on iPhone — the spec
+       intentionally accepts sub-44 px in the dense Logs panel
+       so the select + button heights match. */
     font-size:16px;
-    min-height:44px;
   }
   #logs.panel #logRefreshBtn,
   #logs.panel #logClearBtn{flex:1 1 calc(50% - 4px)}

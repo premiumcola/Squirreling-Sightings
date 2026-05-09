@@ -1,19 +1,12 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="Squirreling · Sightings" width="100%" />
+  <img src="docs/img/banner.svg" alt="Squirreling · Sightings" width="100%" />
 </p>
-
-<h1 align="center">Squirreling · Sightings</h1>
 
 <p align="center"><strong>Self-hosted, weather-aware IP-camera + AI manager
 that turns motion noise into actual stories.</strong></p>
 
 <p align="center">
   <em>Coral TPU · weather-aware · quest-driven</em>
-</p>
-
-<p align="center">
-  <em>Reolink RTSP · Coral TPU · Telegram · MQTT · Open-Meteo —
-      everything stays in your LAN.</em>
 </p>
 
 <p align="center">
@@ -25,9 +18,10 @@ that turns motion noise into actual stories.</strong></p>
 </p>
 
 <p align="center">
-  <a href="#-was-squirreling-macht">Was Squirreling macht</a> ·
+  <a href="#-was-squirreling-macht">Was es macht</a> ·
   <a href="#-show-dont-tell">Show, don't tell</a> ·
-  <a href="#-wie-es-funktioniert">Wie es funktioniert</a> ·
+  <a href="#-frame-validation-pipeline">Pipeline</a> ·
+  <a href="#-test-suite">Tests</a> ·
   <a href="#-loslegen">Loslegen</a> ·
   <a href="#-tieferer-blick">Tieferer Blick</a>
 </p>
@@ -50,78 +44,78 @@ abschließt (oder verfehlst).
      keeps the README single-page on wide screens. -->
 </td></tr></table>
 
-### Live & Bewegung
+### <img src="docs/img/icon-live.svg" width="24" height="24" align="absmiddle"/>  Live & Bewegung
 
-🎥 **Live-Mosaic** — eine Kachel pro Kamera, FPS-Pille, HD-Toggle pro Cam.
+**Live-Mosaic** — eine Kachel pro Kamera, FPS-Pille, HD-Toggle pro Cam.
 Native Fullscreen + Swipe-Gesten auf iOS, Safe-Area-Insets respektiert.
 Kameras starten automatisch — nichts zu klicken, kein "Verbinden"-Button.
 
-🧠 **Coral-TPU-Pipeline** — drei Tiers in Reihe: EdgeTPU (~30 ms) → tflite
+**Coral-TPU-Pipeline** — drei Tiers in Reihe: EdgeTPU (~30 ms) → tflite
 CPU (~300 ms) → motion-only. Status-Pill zeigt jederzeit, welcher Tier
 gerade läuft. Coral-Stick optional, kein Zwang.
 
-🎯 **First-Since-Detektor** — wenn dein erstes Eichhörnchen seit 36 h
+**First-Since-Detektor** — wenn dein erstes Eichhörnchen seit 36 h
 auftaucht, weißt du das. Pro Klasse eigene Schwelle (Vögel 4 h, Personen
 6 h, Füchse 24 h). Telegram bekommt eine eigene Caption: *"Erstes
 Eichhörnchen seit 36 h ✨ (neuer Rekord)"*.
 
-### Wetter-Wachen
+### <img src="docs/img/icon-weather.svg" width="24" height="24" align="absmiddle"/>  Wetter-Wachen
 
-⛈ **Wetter-Trigger** — Open-Meteo poll-driven. Gewitter, Starkregen,
+**Wetter-Trigger** — Open-Meteo poll-driven. Gewitter, Starkregen,
 Schnee und Nebel produzieren kurze Clips am Score-Maximum.
 
-🌅 **Sun-Timelapses** — Sonnenauf- und -untergänge als 75-min-Zeitraffer
+**Sun-Timelapses** — Sonnenauf- und -untergänge als 75-min-Zeitraffer
 (deckt Civil Twilight + Goldene Stunde ab, Fenster fest verdrahtet).
 Day/Night-Mode wird symmetrisch *vor* und *nach* dem Fenster geschaltet,
 nie währenddessen.
 
-🌪 **Event-Timelapses** — heranziehende Gewitter, Frontdurchgänge und
+**Event-Timelapses** — heranziehende Gewitter, Frontdurchgänge und
 Sturmfronten lösen 60-min-Zeitraffer aus, ein Cooldown verhindert
 Doppelauslösung am selben Tag.
 
-🌈 **DWD-Bands** — Niederschlag wird nicht über pauschale "Starkregen"-
+**DWD-Bands** — Niederschlag wird nicht über pauschale "Starkregen"-
 Labels eingeordnet, sondern in DWD-Klassen: Trocken / Niesel / Leichter /
 Mäßiger / Starker / Starkregen — dieselbe Logik in UI, Telegram und MQTT.
 
-### Identität & Dossiers
+### <img src="docs/img/icon-identity.svg" width="24" height="24" align="absmiddle"/>  Identität & Dossiers
 
-🐦 **Vogel-Dossiers** — wenn der iNat-Klassifizierer eine neue Art
+**Vogel-Dossiers** — wenn der iNat-Klassifizierer eine neue Art
 findet, baut Squirreling automatisch ein persönliches Dossier auf:
 Wikipedia-Auszug, Foto, plus bis zu drei Xeno-Canto-Aufnahmen mit
 deutschem Caption (Gesang / Ruf / Warnruf) und sichtbarer
 Recordist-Attribution + CC-Lizenz.
 
-🦔 **Wildtier-Cascade** — Coral findet das Tier, der Wildlife-
+**Wildtier-Cascade** — Coral findet das Tier, der Wildlife-
 Klassifizierer benennt es: Eichhörnchen (rot/schwarz/hell), Igel, Fuchs,
 Reh, Feldhase. Ohne Coral läuft das Ganze als CPU-Fallback weiter.
 
-🐱 **Cat / Person Identity** — Histogramm-Re-ID auf Crop-Ebene. Whitelist
+**Cat / Person Identity** — Histogramm-Re-ID auf Crop-Ebene. Whitelist
 für Personen unterdrückt Push-Alerts schedule-aware.
 
-### Quests & Meilensteine
+### <img src="docs/img/icon-quests.svg" width="24" height="24" align="absmiddle"/>  Quests & Meilensteine
 
-🎯 **Saisonale Quests** — z. B. *"Wintervorrat"*: 50 Eichhörnchen-
+**Saisonale Quests** — z. B. *"Wintervorrat"*: 50 Eichhörnchen-
 Sichtungen im Dezember. Oder *"Mondtiere"*: 5 Wildtiere zwischen
 2 und 4 Uhr morgens. Fortschritts-Pinboard auf der Sichtungen-Seite,
 Telegram-Glückwunsch beim Abschluss.
 
-🏅 **Achievement-Medaillen** — Bronze (1–4 Sichtungen) → Silber (5–19) →
+**Achievement-Medaillen** — Bronze (1–4 Sichtungen) → Silber (5–19) →
 Gold (20+). Top-20 bayerische Gartenvögel + die wichtigsten Säugetiere.
 
-### Operations
+### <img src="docs/img/icon-ops.svg" width="24" height="24" align="absmiddle"/>  Operations
 
-💬 **Self-mutating Telegram-Anchor** — eine Bubble pro Kamera, Drilldowns
+**Self-mutating Telegram-Anchor** — eine Bubble pro Kamera, Drilldowns
 ändern dieselbe Nachricht via Edit-in-Place. Kein Chat-Spam, ein
 ständiger Steuerstand.
 
-📊 **Strukturiertes Logging** — Tag-Schema (`[boot]`, `[cam:<id>]`,
+**Strukturiertes Logging** — Tag-Schema (`[boot]`, `[cam:<id>]`,
 `[det]`, `[tg]`, `[weather]`, `[quests]`, `[dossiers]` …),
 Boot-Inventory, periodischer Heartbeat, 24-h-Reconnect-Counter pro Cam.
 
-🆔 **Deterministische Cam-IDs** — `manufacturer_model_name_iplastoctet`.
+**Deterministische Cam-IDs** — `manufacturer_model_name_iplastoctet`.
 Storage-Migration bindet Legacy-Folder bei jedem Boot idempotent um.
 
-🛡 **Frame-Validity-Filter** — verworfene Frames werden bei jedem
+**Frame-Validity-Filter** — verworfene Frames werden bei jedem
 Timelapse-Build separat gezählt; das Modul fängt sowohl flat-magenta
 als auch *gemusterte* H.265-Korruption ab.
 

@@ -372,6 +372,8 @@ const _REJECT_HINT_DE = {
   colorbar: 'Kamera hat ein Test-Pattern gesendet',
   too_dark: 'Belichtung außerhalb des gültigen Bereichs',
   too_bright: 'Belichtung außerhalb des gültigen Bereichs',
+  bottom_strip_white: 'H.265-Decoder hat unteren Bildbereich mit weißem Füllmuster ersetzt — RTSP-Paketverlust oder defekter Slice',
+  bottom_strip_bright: 'Unterer Bildbereich deutlich heller als Szene — wahrscheinlich Macroblock-Korruption',
 };
 function _rejectHintDe(key){
   if (!key) return '';

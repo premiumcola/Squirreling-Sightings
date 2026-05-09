@@ -21,6 +21,7 @@ from app.frame_helpers import (  # noqa: E402
     TWILIGHT_PROFILE,
     dead_area_score,
     grab_valid_frame,
+    is_bottom_strip_anomaly,
     is_grey_frame,
     is_valid_frame,
     pick_profile_from_baseline,
@@ -353,3 +354,76 @@ class TestPickProfileFromBaseline:
         let real corruption through with night-loose thresholds)."""
         assert pick_profile_from_baseline([]) is DAY_PROFILE
         assert pick_profile_from_baseline([None, None]) is DAY_PROFILE
+
+
+class TestBottomStripAnomaly:
+    """Localised bottom-strip corruption detector — H.265 NAL/slice
+    loss on Reolink streams produces a near-white-saturation band or
+    a bright macroblock smear glued to the bottom 10–25 % of an
+    otherwise dark scene. None of the global heuristics catch this;
+    the new gate must reject it AND must not trip on legitimate
+    daytime scenes with a naturally bright foreground."""
+
+    def test_dark_with_white_bottom_rejects(self):
+        """Top 70 % at luma ≈ 16, bottom 20 % saturated to 245 →
+        bottom_strip_white. Mirrors frame 00020 from the night
+        capture that triggered this work."""
+        h, w = 720, 1280
+        img = np.full((h, w, 3), 16, dtype=np.uint8)
+        # Bottom 20 % (≈ 144 rows) saturated to 245.
+        bot_start = int(h * 0.80)
+        img[bot_start:, :, :] = 245
+        ok, reason = is_bottom_strip_anomaly(img)
+        assert ok, "expected bottom_strip rule to fire"
+        assert "bottom_strip_white" in reason
+
+    def test_dark_with_bright_bottom_rejects(self):
+        """Top 70 % at luma ≈ 16, bottom 20 % at 130 (delta 114 > 100)
+        → bottom_strip_bright. Mirrors frame 00115 from the night
+        capture (macroblock smear, doesn't saturate to white)."""
+        h, w = 720, 1280
+        img = np.full((h, w, 3), 16, dtype=np.uint8)
+        bot_start = int(h * 0.80)
+        img[bot_start:, :, :] = 130
+        ok, reason = is_bottom_strip_anomaly(img)
+        assert ok, "expected bottom_strip rule to fire"
+        assert "bottom_strip_bright" in reason
+
+    def test_dark_clean_passes(self):
+        """A genuinely dark scene with mild noise must not trip
+        either rule — top is dark but the bottom isn't bright."""
+        rng = np.random.default_rng(0)
+        h, w = 720, 1280
+        base = np.full((h, w, 3), 16, dtype=np.int16)
+        noise = rng.integers(-3, 4, size=base.shape, dtype=np.int16)
+        img = np.clip(base + noise, 0, 255).astype(np.uint8)
+        ok, reason = is_bottom_strip_anomaly(img)
+        assert not ok, f"clean dark frame rejected: {reason}"
+
+    def test_daylight_with_shadow_bottom_passes(self):
+        """Negative control — the top is bright (180), the bottom is
+        a real shadow (130). The corrupt-on-dark guard requires a
+        dark TOP, so a daytime scene with bright sky and shaded
+        ground must NOT trip the detector even when bottom < top
+        is reversed and delta is large."""
+        h, w = 720, 1280
+        img = np.full((h, w, 3), 180, dtype=np.uint8)
+        bot_start = int(h * 0.80)
+        img[bot_start:, :, :] = 130
+        ok, reason = is_bottom_strip_anomaly(img)
+        assert not ok, f"daylight scene with shadow bottom rejected: {reason}"
+
+    def test_is_valid_frame_rejects_white_bottom(self):
+        """End-to-end through is_valid_frame — a corrupt frame must
+        be flagged as bottom_strip_* even though it's also dark
+        enough that no_detail / dead_area would otherwise catch it
+        (or, on NIGHT_PROFILE, would let it through). Order matters:
+        the bottom-strip gate runs BEFORE the scene gates so a real
+        corruption is never misclassified as 'empty scene'."""
+        h, w = 720, 1280
+        img = np.full((h, w, 3), 16, dtype=np.uint8)
+        bot_start = int(h * 0.80)
+        img[bot_start:, :, :] = 245
+        ok, reason = is_valid_frame(img, profile=NIGHT_PROFILE)
+        assert not ok
+        assert "bottom_strip_" in reason

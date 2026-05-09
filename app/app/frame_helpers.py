@@ -439,6 +439,83 @@ def is_colorbar(img) -> tuple[bool, str]:
     return False, ""
 
 
+# ── Bottom-strip anomaly thresholds ──────────────────────────────────────────
+# H.265 decode failures on Reolink streams produce a near-white-saturated
+# horizontal band across the bottom 10–25 % of a dark frame, sometimes
+# mixed with violet macroblock smears. None of the global gates
+# (pink_artifact, patterned_magenta, colorbar, split_*_dead, grey_*) flag
+# this — they look for whole-frame or half-frame anomalies, not localised
+# bottom-strip corruption. Empirical thresholds verified on 7 sample
+# frames from a real night capture: 4/4 corrupt rejected, 3/3 clean
+# preserved. Top vs bottom luminance delta is +171…+220 in corrupt frames
+# vs +18 in clean — clean separation that survives a generous threshold.
+_BOTTOM_STRIP_TOP_FRAC = 0.70   # rows used for "top luminance"
+_BOTTOM_STRIP_BOT_FRAC = 0.20   # rows used for "bottom luminance"
+_BOTTOM_NEAR_WHITE_CHAN = 235   # all 3 channels ≥ this → "near white" pixel
+_BOTTOM_NEAR_WHITE_FRAC = 0.15  # ≥ 15 % near-white pixels in bottom strip
+_BOTTOM_TOP_DARK_LUMA = 60.0    # the top must be this dark for rule 1
+_BOTTOM_TOP_DARK_RULE2 = 80.0   # less strict for rule 2
+_BOTTOM_DELTA_FLOOR = 100.0     # rule 2 fires above this top→bottom delta
+
+
+def is_bottom_strip_anomaly(img) -> tuple[bool, str]:
+    """Detect localised bottom-strip corruption: near-white saturation
+    band OR macroblock smear that's much brighter than the top of the
+    frame. Returns (True, reason) when the bottom of a dark scene
+    contains a corruption signature, (False, "") otherwise.
+
+    Two separable rules:
+      • bottom_strip_white  — top is dark AND ≥ 15 % of pixels in the
+        bottom 20 % are near-white (all three channels ≥ 235).
+      • bottom_strip_bright — top is dark AND bottom mean luminance
+        exceeds top mean luminance by > 100. Catches macroblock
+        smears that don't saturate to white but still glow against
+        the dark scene.
+    Both rules require a dark top so daytime scenes with naturally
+    bright foreground (path / pavement / illuminated wall) don't
+    falsely trip the detector.
+    """
+    img = _decode(img)
+    if img is None or img.size == 0:
+        return False, ""
+    if img.ndim < 3 or img.shape[2] < 3:
+        return False, ""
+    h, w = img.shape[:2]
+    if h < 20:
+        return False, ""
+    # Luma is computed off the BGR channels with the standard 601
+    # weights. Cheaper than cvtColor(BGR2GRAY) because we only need
+    # two regional means.
+    b = img[:, :, 0].astype(np.float32)
+    g = img[:, :, 1].astype(np.float32)
+    r = img[:, :, 2].astype(np.float32)
+    luma = 0.114 * b + 0.587 * g + 0.299 * r
+    top_rows = max(1, int(h * _BOTTOM_STRIP_TOP_FRAC))
+    bot_rows = max(1, int(h * _BOTTOM_STRIP_BOT_FRAC))
+    top_lum = float(luma[:top_rows, :].mean())
+    bot_lum = float(luma[h - bot_rows:, :].mean())
+    bot_band = img[h - bot_rows:, :, :]
+    near_white = (
+        (bot_band[:, :, 0] >= _BOTTOM_NEAR_WHITE_CHAN)
+        & (bot_band[:, :, 1] >= _BOTTOM_NEAR_WHITE_CHAN)
+        & (bot_band[:, :, 2] >= _BOTTOM_NEAR_WHITE_CHAN)
+    )
+    bot_white_frac = float(near_white.sum()) / float(near_white.size or 1)
+    # Rule 1 — white-saturation band on a dark scene.
+    if top_lum < _BOTTOM_TOP_DARK_LUMA and bot_white_frac > _BOTTOM_NEAR_WHITE_FRAC:
+        return True, (
+            f"bottom_strip_white(top_lum={top_lum:.1f},"
+            f"bot_white_pct={bot_white_frac * 100:.1f}%)"
+        )
+    # Rule 2 — macroblock smear (bright bottom on a dark scene).
+    delta = bot_lum - top_lum
+    if delta > _BOTTOM_DELTA_FLOOR and top_lum < _BOTTOM_TOP_DARK_RULE2:
+        return True, (
+            f"bottom_strip_bright(delta={delta:.0f},top_lum={top_lum:.1f})"
+        )
+    return False, ""
+
+
 def is_valid_frame(img, profile: FrameValidatorProfile = DAY_PROFILE) -> tuple[bool, str]:
     """Bundled validity check used by every timelapse capture and build path.
 
@@ -512,6 +589,16 @@ def is_valid_frame(img, profile: FrameValidatorProfile = DAY_PROFILE) -> tuple[b
         mfrac = float(mask.sum()) / float(total)
         if mfrac >= profile.pattern_magenta_area_frac:
             return False, f"patterned_magenta(area={mfrac:.0%})"
+
+    # Localised bottom-strip corruption — H.265 NAL/slice loss produces
+    # a near-white saturation band OR a bright macroblock smear glued
+    # to the bottom of an otherwise dark scene. Has to run BEFORE the
+    # scene-level gates (no_detail / dead_area) — those would otherwise
+    # let a corrupt frame through on a low-texture night, where it
+    # could become the "last_valid" backfill reference.
+    bs, bs_reason = is_bottom_strip_anomaly(img)
+    if bs:
+        return False, bs_reason
 
     # Truly flat frame (any solid color)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -593,6 +680,10 @@ _TRANSIENT_REASONS: frozenset[str] = frozenset({
     "split_left_dead", "split_right_dead",
     "split_top_dead", "split_bottom_dead",
     "grey_toned",
+    # H.265 bottom-strip corruption — encoder/decoder hickup, the
+    # next frame is usually clean, so retrying within the wall-clock
+    # budget genuinely helps.
+    "bottom_strip_white", "bottom_strip_bright",
 })
 _SCENE_REASONS: frozenset[str] = frozenset({
     "dead_area", "no_detail", "too_dark", "too_bright",

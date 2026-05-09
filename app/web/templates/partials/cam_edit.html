@@ -392,16 +392,25 @@
                          the loop. Hidden until live mode starts. -->
                     <div class="erk-tl" id="erkSimTimeline" hidden></div>
                     <div class="erk-test-result-list" id="erkSimList"></div>
-                    <!-- Decision-trace log: green-on-black terminal block
-                         walking every gate from capture → final push.
-                         Hidden until the first run; populated from
-                         data.decision_trace by snapshot.js. -->
+                    <!-- Decision-trace log: collapsible block walking
+                         every gate from capture → final push, plus an
+                         "active config" chip strip up top and an
+                         optional size-floor hint at the bottom.
+                         Populated from data.decision_trace by
+                         erk-sim/trace.js. -->
                     <div class="erk-sim-log" id="erkSimLog" hidden>
-                      <div class="erk-sim-log-head">
-                        <span class="erk-sim-log-title">⏱ Decision Trace</span>
-                        <button type="button" class="erk-sim-log-clear" id="erkSimLogClear" aria-label="Log leeren">leeren</button>
+                      <div class="erk-sim-cfg" id="erkSimCfg" hidden></div>
+                      <button type="button" class="erk-sim-log-head" id="erkSimLogToggle" aria-expanded="false" aria-controls="erkSimLogBodyWrap">
+                        <span class="erk-sim-log-summary" id="erkSimLogSummary">Trace</span>
+                        <span class="erk-sim-log-chev" aria-hidden="true">⌄</span>
+                      </button>
+                      <div class="erk-sim-log-body-wrap" id="erkSimLogBodyWrap" hidden>
+                        <div class="erk-sim-log-actions">
+                          <button type="button" class="erk-sim-log-clear" id="erkSimLogClear" aria-label="Log leeren">leeren</button>
+                        </div>
+                        <div class="erk-sim-log-body" id="erkSimLogBody"></div>
                       </div>
-                      <pre class="erk-sim-log-body" id="erkSimLogBody"></pre>
+                      <div class="erk-sim-size-hint" id="erkSimSizeHint" hidden></div>
                     </div>
                   </div>
                 </div>

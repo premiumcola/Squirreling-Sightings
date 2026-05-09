@@ -5,6 +5,7 @@
 // trace log. Called per-tick by live.js; the polling lifecycle and
 // the IoU tracker live there.
 import { byId, esc } from '../../core/dom.js';
+import { renderTrace } from './trace.js';
 
 const _ERK_VERDICT_TXT = {
   'pass':         'würde Alarm auslösen',
@@ -90,18 +91,11 @@ export function _renderErkSimResult(data){
       }).join('');
     }
   }
-  // Decision-trace log — green-on-black terminal block walking every
-  // gate from capture → final push verdict. Rendered only when the
-  // backend included the array (older responses are forward-compatible).
-  const logWrap = byId('erkSimLog');
-  const logBody = byId('erkSimLogBody');
-  if (logWrap && logBody && Array.isArray(data.decision_trace)){
-    const ts = new Date().toLocaleTimeString('de-DE');
-    const passCount = (data.detections || []).filter(d => d.verdict === 'pass').length;
-    const header = `[${ts}] simulate → ${(data.detections || []).length} dets, ${passCount} pass`;
-    logBody.textContent = header + '\n' + data.decision_trace.join('\n');
-    logWrap.hidden = false;
-  }
+  // Decision-trace block — collapsible terminal log + active-config
+  // chips + size-floor hint. trace.js owns all of that; we just hand
+  // it the response payload + the camera id for localStorage scoping.
+  const camId = byId('cameraForm')?.elements?.['id']?.value || '';
+  renderTrace(data, camId);
   // First-render-only scroll-keep: only the very first tick of a
   // live run runs this. live.js sets wrap.dataset.everShown after
   // the first successful _renderErkSimResult; subsequent ticks see

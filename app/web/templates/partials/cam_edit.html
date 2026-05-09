@@ -386,6 +386,11 @@
                          warning variant when the backend reports
                          >2000 ms (added by snapshot.js). -->
                     <div class="erk-test-frame-age" id="erkSimFrameAge" hidden></div>
+                    <!-- Sliding 30-second per-class presence timeline.
+                         Populated by live.js while live mode is running;
+                         remains visible (frozen) after the user stops
+                         the loop. Hidden until live mode starts. -->
+                    <div class="erk-tl" id="erkSimTimeline" hidden></div>
                     <div class="erk-test-result-list" id="erkSimList"></div>
                     <!-- Decision-trace log: green-on-black terminal block
                          walking every gate from capture → final push.

@@ -17,11 +17,13 @@ export class IoUTracker {
   constructor(){
     this._tracks = new Map();   // id -> track entry
     this._nextId = 1;
+    this._lastDropped = [];     // tracks dropped on the most recent tick(); read once via lastDropped()
   }
 
   // dets : Array<{ label:string, bbox:[x,y,w,h], score:number, verdict:string }>
   // returns confirmed tracks (hit_count ≥ _PROMOTE_HITS), in insertion order
   tick(dets, now_ms){
+    this._lastDropped = [];
     // 1. Build per-label candidate pairs (same label only — a "person"
     //    detection should never inherit a "bird" track even if their
     //    bboxes happen to overlap).
@@ -76,19 +78,27 @@ export class IoUTracker {
       }
       const stale = track.miss_count >= _MAX_MISSES
         || (now_ms - track.last_seen_ms) > _MAX_AGE_MS;
-      if (stale) this._tracks.delete(id);
+      if (stale){
+        this._tracks.delete(id);
+        // Capture the dropped track for the next caller of
+        // lastDropped() — the timeline uses this to render a "× lost"
+        // marker at the row's trailing edge.
+        if (track.hit_count >= _PROMOTE_HITS){
+          this._lastDropped.push(track);
+        }
+      }
     }
 
     // 5. Confirmed tracks only (hit_count ≥ promote threshold).
     return Array.from(this._tracks.values()).filter(t => t.hit_count >= _PROMOTE_HITS);
   }
 
-  // All currently-live tracks regardless of confirmation state — used
-  // by the timeline so a one-shot detection still leaves a slice on
-  // the chart. Renderers that draw bboxes use the confirmed set from
-  // tick() instead.
-  liveTracks(){
-    return Array.from(this._tracks.values());
+  // Tracks dropped on the most recent tick(). Returns confirmed
+  // tracks only — a provisional one-hit-then-gone subject doesn't
+  // emit a lost marker because it was never visualised in the first
+  // place. Snapshot-style copy: the renderer can mutate the array.
+  lastDropped(){
+    return this._lastDropped.slice();
   }
 }
 

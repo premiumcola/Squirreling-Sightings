@@ -14,6 +14,7 @@
 import { byId } from '../../core/dom.js';
 import { _renderErkSimResult } from './snapshot.js';
 import { IoUTracker } from './tracker.js';
+import { LiveTimeline } from './timeline.js';
 
 const _TICK_MS  = 1000;   // 1 Hz polling — kept simple, no UI control
 const _PATH_CAP = 12;     // points painted per trail; tracker stores up to 60
@@ -63,10 +64,18 @@ function startLive(btn){
   if (!camId || !btn) return;
   btn.classList.add('is-live');
   btn.innerHTML = _LIVE_HTML;
+  const timeline = new LiveTimeline();
+  const tlHost = byId('erkSimTimeline');
+  if (tlHost){
+    tlHost.hidden = false;
+    timeline.render(tlHost, Date.now(), Date.now());  // empty-state hello
+  }
   _session = {
     btn,
     camId,
     tracker: new IoUTracker(),
+    timeline,
+    startedAt: Date.now(),
     abort: null,
     tickHandle: null,
   };
@@ -113,8 +122,13 @@ async function _tick(){
       score: d.score,
       verdict: d.verdict,
     }));
-    const confirmed = session.tracker.tick(dets, Date.now());
+    const now_ms = Date.now();
+    const confirmed = session.tracker.tick(dets, now_ms);
+    const dropped = session.tracker.lastDropped();
     _renderTrails(confirmed, data.frame_size);
+    session.timeline.observe(confirmed, dropped, now_ms);
+    const tlHost = byId('erkSimTimeline');
+    if (tlHost) session.timeline.render(tlHost, now_ms, session.startedAt);
   } catch (e) {
     if (e?.name === 'AbortError') return;
     // network error — keep polling, intentionally silent (a toast on

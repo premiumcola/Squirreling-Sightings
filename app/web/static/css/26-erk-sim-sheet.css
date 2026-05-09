@@ -70,3 +70,105 @@
 .erk-track-trail.is-pass        { stroke:#22c55e; }
 .erk-track-trail.is-belowthresh { stroke:#fb923c; }
 .erk-track-trail.is-filtered    { stroke:#6b7280; opacity:.35; }
+
+
+/* ── Live presence timeline (sliding 30 s, per class) ──────────────────────
+   Sits between the snapshot preview and the detection list; renders
+   one row per class with at least one confirmed detection in the
+   30 s window. Right edge is always "now"; bars age leftward each
+   tick. Pure DOM (no SVG) so each per-row badge is a real button
+   with its own ≥44 px touch target — the slot tooltip works on
+   both pointer hover and tap. */
+.erk-tl{
+  margin-top:10px;
+  padding:10px 10px 8px;
+  background:rgba(255,255,255,.03);
+  border-radius:10px;
+}
+.erk-tl-grid{
+  display:flex;flex-direction:column;gap:6px;
+}
+.erk-tl-empty{
+  padding:14px 8px;
+  text-align:center;
+  font-size:12px;color:rgba(255,255,255,.45);
+  font-style:italic;
+}
+.erk-tl-row{
+  display:flex;align-items:center;gap:10px;
+  min-height:28px;
+}
+.erk-tl-badge{
+  /* Real button — gives us a ≥44 px tap target without any extra
+     hit-area math. Padding goes inside the button so the bubble +
+     label stay flush against each other. */
+  display:inline-flex;align-items:center;gap:8px;
+  flex:0 0 auto;
+  min-width:44px;min-height:44px;
+  padding:6px 10px 6px 6px;
+  background:transparent;border:0;
+  cursor:default;
+  -webkit-tap-highlight-color:transparent;
+  border-radius:8px;
+}
+.erk-tl-badge-text{
+  font-size:11.5px;font-weight:600;
+  color:rgba(255,255,255,.78);
+  letter-spacing:.01em;
+}
+.erk-tl-strip{
+  position:relative;
+  flex:1 1 auto;min-width:0;
+  height:18px;
+  background:rgba(0,0,0,.35);
+  border-radius:6px;
+  overflow:hidden;
+}
+.erk-tl-slot{
+  position:absolute;top:0;bottom:0;
+  /* Default state — empty 1 s slot, faint stripe so the strip reads
+     as a grid even when no class fired. */
+  background:rgba(255,255,255,.025);
+}
+.erk-tl-slot.is-hit{
+  /* `background` is set inline per class colour. The opacity here
+     scales it down so two adjacent hits read as a continuous bar
+     while still showing the slice boundaries. */
+  opacity:.78;
+}
+.erk-tl-slot.is-hit:hover,
+.erk-tl-slot.is-hit:focus{
+  opacity:1;
+  cursor:pointer;
+}
+.erk-tl-lost{
+  /* Track-lost marker — small × at the lost-time x position. Sits
+     above the slot fills and reads even on a busy strip. */
+  position:absolute;top:0;
+  transform:translate(-50%, 1px);
+  font-size:11px;font-weight:700;
+  color:rgba(248,113,113,.85);
+  pointer-events:none;
+  line-height:1;
+}
+
+/* Custom hover/tap tooltip — single page-level element managed by
+   timeline.js. Fixed-positioned so layout reflows in the panel
+   below don't shift it. Compact, dark surface, rounded corners. */
+.erk-tl-tooltip{
+  position:fixed;z-index:1300;
+  padding:5px 9px;
+  background:rgba(15,23,42,.96);
+  color:#e2e8f0;
+  font-size:11px;font-weight:600;
+  letter-spacing:.01em;
+  border-radius:6px;
+  pointer-events:none;
+  white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.45);
+}
+
+@media (max-width:480px){
+  .erk-tl-badge-text{ display:none; }
+  .erk-tl-badge{ min-width:44px;padding:6px; }
+}

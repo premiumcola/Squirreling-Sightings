@@ -51,7 +51,7 @@ round, byte-identity wins.
 | 23 | `23-weather-3.css` | 136 | Wetterdaten & Prognose chart block |
 | 24 | `24-cam-edit-4.css` | 67 | Camera-edit live id preview |
 | 25 | `25-mobile.css` | 584 | iOS / mobile foundation through end of file |
-| 26 | `26-erk-sim-sheet.css` | — | Camera-edit Erkennung-tab tabbed sheet (Snapshot / Video) |
+| 26 | `26-erk-sim-sheet.css` | — | Camera-edit Erkennung-tab simulation sheet (single-body) |
 | 27 | `27-coral-test-modes.css` | — | Coral test panel mode selector + per-detection model badges |
 | 28 | `28-quests.css` | — | Quest pinboard (F09) — saisonale Quests in Sichtungen |
 | 29 | `29-birds.css` | — | Vogel-Dossier-Galerie + Modal mit Audio-Player (F08) |

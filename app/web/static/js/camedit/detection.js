@@ -24,15 +24,11 @@ export {
   setCamObjectFilterState,
   _renderCamObjectPills,
 } from './detection-objectfilter.js';
-// Simulation-sheet entry points — implementations live in erk-sim/.
-import {
-  bindErkSimulate,
-  bindErkSimTabs,
-  activateErkSimTab,
-} from './erk-sim/index.js';
-export const _bindErkSimulate    = bindErkSimulate;
-export const _bindErkSimTabs     = bindErkSimTabs;
-export const _activateErkSimTab  = activateErkSimTab;
+// Simulation-sheet entry point — implementation lives in erk-sim/.
+// The tab API got removed when the Video sub-tab went away; only
+// the bind-button entry point survives.
+import { bindErkSimulate } from './erk-sim/index.js';
+export const _bindErkSimulate = bindErkSimulate;
 
 
 let _camFormInited = false;

@@ -1,235 +1,27 @@
-/* ── Erkennung-Tab: Simulations-Sheet (tabbed shell) ───────────────────────
-   Wraps the legacy #erkSimResult panel in a tabbed sheet so the snapshot
-   inference and the new video-tracking timeline (camedit/tracking-sim.js)
-   can share the same modal surface without stacking two unrelated UIs on
-   top of each other. Snapshot tab keeps the existing markup/behaviour;
-   Video tab is populated lazily by tracking-sim.js when first activated.
+/* ── Erkennung-Tab: Simulations-Sheet (single-body shell) ──────────────────
+   Wraps the #erkSimResult panel under the Erkennung tab. The Video
+   sub-tab plus its tab strip got removed in commit "erk-sim: drop
+   Video sub-tab + scroll-fix"; what survives is the min-width:0 chain
+   that keeps a long detection list from forcing the camera-edit modal
+   wider than the viewport. Live-detection styling (toggle button,
+   timeline, polished trace) lands in subsequent commits.
 */
 
-.erk-sim-sheet .erk-sim-tabs{
-  display:flex;gap:6px;padding:4px;
-  background:rgba(0,0,0,.32);
-  border-radius:12px;
-  margin:0 0 12px 0;
-}
-
-.erk-sim-tab{
-  flex:1 1 auto;
-  min-height:36px;
-  padding:8px 14px;
-  background:transparent;
-  border:0;
-  color:rgba(255,255,255,.62);
-  font:inherit;font-size:13px;font-weight:600;
-  cursor:pointer;
-  border-radius:9px;
-  display:inline-flex;align-items:center;justify-content:center;
-  -webkit-tap-highlight-color:transparent;
-  transition:background .15s,color .15s;
-}
-.erk-sim-tab:hover{
-  color:#fff;
-  background:rgba(255,255,255,.05);
-}
-.erk-sim-tab.is-active{
-  background:var(--accent);
-  color:#fff;
-}
-.erk-sim-tab:focus-visible{
-  outline:2px solid var(--accent);
-  outline-offset:2px;
-}
-
-.erk-sim-tab-panel[hidden]{display:none}
-
-@media (max-width:768px){
-  .erk-sim-tab{
-    min-height:44px;
-    padding:10px 14px;
-    font-size:14px;
-  }
-  .erk-sim-sheet .erk-sim-tabs{width:100%}
-}
-
-/* ── Video sub-tab: picker + actions + timeline ────────────────────────── */
-
 /* `min-width:0` is the boilerplate fix for "flex/grid item forces
-   parent wider than viewport". The picker rail's intrinsic content
-   width otherwise blows past every ancestor in the chain. The chain
-   from picker up to the camera-edit modal is:
-       .ets-picker
-       .ets-video
-       .erk-sim-tab-panel  (sibling tab panels too)
+   parent wider than viewport". The detection list + decision-trace
+   block can exceed the modal's intrinsic content width otherwise.
+   The chain from the live-body up to the camera-edit modal is:
+       #erkSimLiveBody
        #erkSimResult / .erk-sim-sheet
        .erk-test-row       (legacy ancestor)
        .cam-tab-panel      (Erkennung tab body)
-   Every level needs the explicit min-width:0 — applying it on a single
-   level just shifts the overflow up one parent. */
+   Every level needs the explicit min-width:0 — applying it on a
+   single level just shifts the overflow up one parent. */
 .cam-tab-panel,
 .erk-test-row,
 #erkSimResult,
 .erk-sim-sheet,
-.erk-sim-tab-panel,
-.erk-sim-tab-panel > *{
+#erkSimLiveBody,
+#erkSimLiveBody > *{
   min-width:0;max-width:100%;
 }
-
-.ets-video{
-  display:flex;flex-direction:column;gap:12px;
-  width:100%;max-width:100%;min-width:0;
-}
-
-.ets-picker-wrap{
-  width:100%;max-width:100%;min-width:0;
-  /* Negative inset removed — when the wrapper is full-width and the
-     parent is min-width:0, the rail can scroll cleanly without leaking
-     past the modal edge. */
-}
-.ets-picker{
-  display:flex;flex-wrap:nowrap;gap:12px;
-  overflow-x:auto;overflow-y:hidden;
-  -webkit-overflow-scrolling:touch;
-  padding:2px 2px 6px;          /* extra bottom-pad so the scrollbar
-                                   doesn't clip card shadows / rings */
-  scroll-snap-type:x mandatory;
-  min-width:0;max-width:100%;
-}
-.ets-picker::-webkit-scrollbar{height:6px}
-.ets-picker::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
-
-.ets-card{
-  flex:0 0 auto;
-  width:160px;min-height:128px;
-  background:var(--surface);
-  border:0;border-radius:11px;
-  padding:0;
-  overflow:hidden;
-  cursor:pointer;
-  display:flex;flex-direction:column;
-  text-align:left;
-  -webkit-tap-highlight-color:transparent;
-  scroll-snap-align:start;
-  transition:transform .12s ease;
-}
-.ets-card:hover{transform:translateY(-1px)}
-.ets-card.is-selected{
-  /* Fill the surrounding ring with the accent color rather than a thin
-     border (per design rules: no thin border lines). */
-  outline:3px solid var(--accent);
-  outline-offset:0;
-}
-.ets-card.is-disabled{
-  opacity:.55;cursor:not-allowed;
-}
-.ets-card.is-disabled:hover{transform:none}
-.ets-card-thumb{
-  position:relative;
-  width:100%;height:90px;
-  background:#000;
-  display:flex;align-items:center;justify-content:center;
-  overflow:hidden;
-  /* Centred film-strip SVG sits behind the <img>. When onerror removes
-     the img (file missing / CORS / wrong host), this placeholder stays
-     visible — much friendlier than the browser's broken-image glyph or
-     a flat black void. Inline-SVG data URI keeps the bundle one file. */
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b9ab5' stroke-opacity='0.40' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='3' y1='15' x2='21' y2='15'/><circle cx='7' cy='7' r='0.7' fill='%238b9ab5'/><circle cx='12' cy='7' r='0.7' fill='%238b9ab5'/><circle cx='17' cy='7' r='0.7' fill='%238b9ab5'/><circle cx='7' cy='17' r='0.7' fill='%238b9ab5'/><circle cx='12' cy='17' r='0.7' fill='%238b9ab5'/><circle cx='17' cy='17' r='0.7' fill='%238b9ab5'/></svg>");
-  background-repeat:no-repeat;
-  background-position:center;
-  background-size:32px 32px;
-}
-.ets-card-thumb img{
-  position:relative;
-  width:100%;height:100%;object-fit:cover;display:block;
-  /* Dark backdrop on the img itself so the placeholder doesn't leak
-     through behind a successfully-loaded thumbnail. */
-  background:#000;
-}
-
-/* "nur N Videos vorhanden" sentinel at the end of the rail. */
-.ets-picker-trail{
-  flex:0 0 auto;
-  align-self:center;
-  padding:0 14px;
-  font-size:12px;
-  color:rgba(255,255,255,.45);
-  font-style:italic;
-  white-space:nowrap;
-}
-.ets-card-meta{
-  padding:6px 10px 8px;
-  display:flex;flex-direction:column;gap:3px;
-}
-.ets-card-time{
-  font-size:12px;font-weight:700;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.ets-card-labels{
-  display:flex;gap:4px;flex-wrap:wrap;
-}
-.ets-card-lbl{
-  font-size:10px;font-weight:600;
-  padding:2px 6px;border-radius:6px;
-  background:rgba(255,255,255,.06);
-  color:rgba(255,255,255,.62);
-}
-
-.ets-actions{
-  display:flex;gap:8px;align-items:center;flex-wrap:wrap;
-}
-.ets-actions .btn{
-  min-height:44px;
-}
-.ets-progress{
-  font-size:12px;color:rgba(255,255,255,.65);
-  font-weight:600;letter-spacing:.01em;
-}
-
-.ets-result{min-height:24px}
-.ets-empty{
-  padding:18px 14px;text-align:center;
-  color:rgba(255,255,255,.55);font-size:13px;
-  background:rgba(0,0,0,.18);border-radius:9px;
-}
-.ets-empty--hint{color:rgba(255,255,255,.78)}
-.ets-empty--hint strong{color:#fff}
-
-.ets-timeline{
-  background:rgba(0,0,0,.28);
-  border-radius:11px;
-  padding:14px 14px 12px;
-}
-/* Cap the SVG render width so the timeline doesn't dominate the very
-   wide camera-edit modal (~1800 px on desktop). 760 px matches the
-   readable-diagram width used elsewhere. The viewBox-driven SVG keeps
-   its responsive scaling — only the wrapper changes. */
-.ets-timeline-svg-wrap{
-  max-width:760px;
-  margin-inline:auto;
-}
-.ets-timeline svg{
-  display:block;width:100%;height:auto;
-  font-family:Inter,system-ui,sans-serif;
-}
-.ets-legend{
-  max-width:760px;margin-inline:auto;
-  display:flex;gap:14px;flex-wrap:wrap;
-  margin-top:10px;
-  font-size:12px;color:rgba(255,255,255,.62);
-}
-.ets-legend-item{
-  display:inline-flex;align-items:center;gap:6px;
-}
-.ets-stats{
-  max-width:760px;margin-inline:auto;
-  margin-top:10px;
-  font-size:12px;color:rgba(255,255,255,.5);
-}
-.ets-stats-hidden{
-  margin-top:6px;font-size:11px;color:rgba(255,255,255,.6);
-  text-align:right;
-}
-
-@media (max-width:480px){
-  .ets-legend{flex-direction:column;gap:6px}
-}
-

@@ -4,7 +4,6 @@
 // is in flight, then renders the snapshot + bounding boxes inline.
 import { byId, esc } from '../../core/dom.js';
 import { showToast } from '../../core/toast.js';
-import { activateErkSimTab } from './index.js';
 
 const _ERK_VERDICT_TXT = {
   'pass':         'würde Alarm auslösen',
@@ -72,9 +71,6 @@ export async function _onErkSimulateClick(ev){
 export function _renderErkSimResult(data){
   const wrap = byId('erkSimResult');
   if (!wrap) return;
-  // Always land on the Snapshot tab when the simulate button runs —
-  // the Video tab is opt-in and remembers its own selection separately.
-  activateErkSimTab('snapshot');
   const img  = byId('erkSimImg');
   const ovl  = byId('erkSimOverlay');
   const list = byId('erkSimList');
@@ -163,6 +159,20 @@ export function _renderErkSimResult(data){
     logWrap.hidden = false;
   }
   wrap.hidden = false;
-  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  wrap.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'nearest' });
+  // Keep the simulate button visible after the result lands. The
+  // panel sits BELOW the button in DOM order, so showing it doesn't
+  // move the button — but a previous run may have left the user
+  // scrolled past it. Pull the button back to the top only if it's
+  // currently outside the viewport; CSS scroll-margin-top on
+  // .erk-test-btn (06-cam-edit-1.css) leaves a small chrome gap.
+  const btn = byId('erkSimulateBtn');
+  if (btn){
+    const rect = btn.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const inView = rect.top >= 0 && rect.bottom <= vh;
+    if (!inView){
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      btn.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    }
+  }
 }

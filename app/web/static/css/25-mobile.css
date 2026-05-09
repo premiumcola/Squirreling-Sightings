@@ -7,10 +7,10 @@ button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:trans
 
 /* ── Inline horizontal tab strips ────────────────────────────────────────
    Single shared rule for every "tabs in a row" component in the app
-   (.set-tabs / .coral-tabs in settings panes, .erk-sim-tabs in the
-   simulation sheet, .cam-recovery-tabs in the recovery modal). All
-   four are visually different but behave the same on touch: a row
-   the user swipes horizontally, never vertically.
+   (.set-tabs / .coral-tabs in settings panes, .cam-recovery-tabs in
+   the recovery modal, plus the various filter bars). They are
+   visually different but behave the same on touch: a row the user
+   swipes horizontally, never vertically.
 
    Why this rule lives here, outside the mobile @media block: touch
    matters on tablets and Surface-style desktops too, and the iOS
@@ -33,7 +33,7 @@ button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:trans
        toggles a `.is-end` class once the strip is scrolled all the
        way; matching :not() drops the mask so the last tab isn't
        cosmetically faded when fully visible. */
-:where(.set-tabs,.coral-tabs,.erk-sim-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar){
+:where(.set-tabs,.coral-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar){
   overflow-x:auto;
   overflow-y:hidden;
   touch-action:pan-x;
@@ -43,14 +43,14 @@ button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:trans
   scroll-snap-type:x proximity;
   scrollbar-width:none;
 }
-:where(.set-tabs,.coral-tabs,.erk-sim-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar)::-webkit-scrollbar{
+:where(.set-tabs,.coral-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar)::-webkit-scrollbar{
   display:none;
 }
 /* Right-edge fade — visible only while there is more content to the
    right. The 24 px transparent ramp sits flush against the strip
    edge so it reads as "this scrolls" without obscuring tab labels.
    `.is-end` lands when JS detects the strip is at scrollLeft-max. */
-:where(.set-tabs,.coral-tabs,.erk-sim-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar):not(.is-end){
+:where(.set-tabs,.coral-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar):not(.is-end){
   -webkit-mask-image:linear-gradient(
     to right,
     #000 0,
@@ -363,7 +363,7 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      outside this @media block (further down in this file) so the
      touch behaviour is consistent on tablets and Surface-style touch
      desktops too. */
-  .set-tab,.coral-tab,.erk-sim-tab,.cam-recovery-tab{
+  .set-tab,.coral-tab,.cam-recovery-tab{
     scroll-snap-align:start;flex-shrink:0;min-height:44px;
   }
 

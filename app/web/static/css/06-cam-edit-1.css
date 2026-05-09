@@ -902,6 +902,11 @@
   cursor:pointer;
   transition:background .15s,color .15s,opacity .15s;
   min-height:44px;
+  /* Breathing offset when the simulate handler scrolls the button
+     back into view (snapshot.js falls back to this when the user has
+     scrolled past the button between runs). 60 px keeps it clear of
+     the camera-edit modal's sticky tab bar. */
+  scroll-margin-top:60px;
 }
 .erk-test-btn:hover{ background:#26262a;color:#fff; }
 .erk-test-btn:disabled{ opacity:.55;cursor:wait; }
@@ -1273,7 +1278,7 @@
 
 /* ── Erkennung-Simulator: decision-trace log ─────────────────────────────
    Green-on-black terminal block sitting under the detection list inside
-   #erkSimTab-snapshot. Same aesthetic family as the System-Logs Matrix
+   #erkSimLiveBody. Same aesthetic family as the System-Logs Matrix
    surface (#logs.panel) — monospace, classic green text, sharp dark
    background — so the user reads it as "what would land in the logs"
    without context-switch. Header strip stays subtle; the body is the

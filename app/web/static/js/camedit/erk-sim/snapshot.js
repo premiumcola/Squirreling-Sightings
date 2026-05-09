@@ -80,6 +80,29 @@ export function _renderErkSimResult(data){
   const list = byId('erkSimList');
   const ttl  = byId('erkSimTitle');
   if (img) img.src = data.snapshot || '';
+  // Frame-age caption — backend reports the age of the cached frame
+  // it ran inference against. Stays muted for fresh frames; flips to
+  // a warning class when the captured frame was > 2 s old (the
+  // user-visible bug was 2-min-stale snapshots showing yesterday's
+  // datetime overlay). The element starts ``hidden`` and is shown
+  // only when the backend includes the field, so older responses
+  // are forward-compatible.
+  const ageEl = byId('erkSimFrameAge');
+  if (ageEl){
+    const ageMs = parseInt(data.frame_age_ms, 10);
+    if (Number.isFinite(ageMs)){
+      const ageS = ageMs / 1000;
+      const stale = ageMs > 2000;
+      ageEl.textContent = stale
+        ? `Snapshot · vor ${ageS.toFixed(1)} s aufgenommen — Stream hängt evtl.`
+        : `Snapshot · vor ${ageS.toFixed(1)} s aufgenommen`;
+      ageEl.classList.toggle('is-stale', stale);
+      ageEl.hidden = false;
+    } else {
+      ageEl.textContent = '';
+      ageEl.hidden = true;
+    }
+  }
   // viewBox in absolute frame pixel coordinates so backend bbox values
   // (which are pixel-space) drop in unchanged. preserveAspectRatio in
   // the inline element default is xMidYMid meet — but since the wrapper

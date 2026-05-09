@@ -964,6 +964,21 @@
   width:100%;height:100%;
   pointer-events:none;
 }
+/* Frame-age caption — single muted line directly under the snapshot
+   so the user sees how old the rendered frame was. Flips to a
+   warning colour when the backend reports >2000 ms staleness. Wraps
+   cleanly at iPhone width (line-height + word-break keep it inside
+   the existing snapshot card). */
+.erk-test-frame-age{
+  margin:6px 2px 0;
+  font-size:12px;
+  line-height:1.35;
+  color:var(--muted);
+  word-break:break-word;
+}
+.erk-test-frame-age.is-stale{
+  color:#fbbf24;
+}
 /* Bounding box stroke + label colours per verdict.
    pass = green, belowthresh = orange, filtered = grey-dashed. The
    stroke-width is fixed (vector-effect=non-scaling-stroke is set on

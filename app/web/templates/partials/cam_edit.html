@@ -384,6 +384,13 @@
                       <img id="erkSimImg" alt="Simulations-Snapshot" />
                       <svg id="erkSimOverlay" preserveAspectRatio="none"></svg>
                     </div>
+                    <!-- Frame-age caption: surfaces how old the captured
+                         frame was so the user is never confused about
+                         whether they're looking at a stale snapshot.
+                         Single-line, muted by default; flips to a
+                         warning variant when the backend reports
+                         >2000 ms (added by snapshot.js). -->
+                    <div class="erk-test-frame-age" id="erkSimFrameAge" hidden></div>
                     <div class="erk-test-result-list" id="erkSimList"></div>
                     <!-- Decision-trace log: green-on-black terminal block
                          walking every gate from capture → final push.

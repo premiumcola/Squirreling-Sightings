@@ -148,6 +148,42 @@ als auch *gemusterte* H.265-Korruption ab.
 
 ---
 
+## 🛡 Frame Validation Pipeline
+
+Jeder einzelne Timelapse-Frame durchläuft denselben adaptiven
+Validator. Der Profil-Picker wird vor jedem Capture frisch
+gewählt und alle 2 min mit-laufend nachjustiert — so läuft auch
+ein 75-min Sun-Timelapse, der durch zivile Dämmerung bricht,
+nie mit den falschen Schwellen. Korrupte Decoder-Frames werden
+durch ein Sanity-Gate aus dem Picker-Sample gefiltert, bevor sie
+das Profil "vergiften" können.
+
+<p align="center">
+  <img src="docs/img/validator-pipeline.svg" alt="Frame validation pipeline" width="100%" />
+</p>
+
+**Drei Profile**, jeweils mit eigenen Schwellen für `tile_dead_fraction`,
+`flat_gray_std_floor` und `grey_midband_total_std`:
+
+- **DAY** — `median brightness ≥ 110` · strikt (35 % dead-tile threshold)
+- **TWILIGHT** — `50 ≤ median < 110` · ausgewogen (55 % threshold)
+- **NIGHT** — `median brightness < 50` · locker (85 % threshold) —
+  echte IR-Nachtszenen haben legitim flache dunkle Bereiche
+
+**Validator-Stack** (in dieser Reihenfolge — der erste Reject gewinnt):
+brightness gates → `horizontal_anomaly_band` (H.265-Bandkorruption)
+→ `flat_gray_full_frame` (Vollbild-Decoder-Grau) → `grey_uniform`
+→ `no_detail` → `dead_area` (8×5-Tile-Grid) → `split_left/right_dead`
+(halb-korrupt) → `grey_midband` (Macroblock-Smear). Pro Slot wird
+bis zu 6× retried mit 0,4 s Abstand.
+
+Reject-Reasons sind parametrisiert (`horizontal_anomaly_band(y=50%,h=6%,score=2.6)`)
+und landen in `_rejected/<reason_head>/` — so siehst du beim
+Audit auf einen Blick, an welcher y-Position das Problem saß
+und welcher Sub-Detektor angeschlagen hat.
+
+---
+
 ## 🏗 Wie es funktioniert
 
 ```mermaid

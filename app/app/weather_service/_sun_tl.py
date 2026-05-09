@@ -622,10 +622,18 @@ class SunTimelapseMixin:
         if test_session is not None:
             test_session.validator_profile = active_profile.name
             test_session.baseline_brightness = baseline_med
-        # Re-pick every 5 minutes so a 75-min run that crosses civil
-        # twilight drifts to the right profile mid-run. Only one extra
-        # snapshot per 5-minute window, so the cost is bounded.
-        next_repick_at = datetime.now() + timedelta(minutes=5)
+        # Re-pick every 2 minutes — was 5 min before the slot-287
+        # false-positive wave showed that 5 min is too coarse: by
+        # the time the 5-min sample fired, the loop had already
+        # burned through 60+ rejections after the scene recovered
+        # from a corruption episode. The picker sanity gate (added
+        # in the same fix) prevents a corruption sample from
+        # locking us back into DAY, so a tighter cadence is safe.
+        # ``last_repick_at`` rate-limits the dead_area-triggered
+        # forced re-pick (below) so a noisy slot can't stampede the
+        # picker into running on every iteration.
+        next_repick_at = datetime.now() + timedelta(minutes=2)
+        last_repick_at: datetime | None = None
         n_written = 0
         i = 0
         # ── Test-mode reject sink ─────────────────────────────────────────
@@ -759,7 +767,9 @@ class SunTimelapseMixin:
             # Periodic profile re-pick — production sun-tl windows span
             # 75 min and cross civil twilight, so the right thresholds
             # mid-window aren't necessarily the ones the start sample
-            # picked. One snapshot every 5 min keeps cost bounded.
+            # picked. Cadence is 2 min (down from 5 min) so a scene
+            # transition is detected before the slot loop burns
+            # through dozens of false-positive rejects.
             now_dt = datetime.now()
             if now_dt >= next_repick_at:
                 try:
@@ -777,7 +787,8 @@ class SunTimelapseMixin:
                                 test_session.validator_profile = active_profile.name
                 except Exception:
                     pass
-                next_repick_at = now_dt + timedelta(minutes=5)
+                last_repick_at = now_dt
+                next_repick_at = now_dt + timedelta(minutes=2)
             # Long-running capture loop — uses grab_valid_frame defaults
             # (6 attempts × 0.4 s with a 5 s wall-clock cap). The hires
             # variant reads only from the main-stream buffer so
@@ -805,6 +816,20 @@ class SunTimelapseMixin:
                     pass
             else:
                 stats.record_invalid(last_reason)
+                # ── Force re-pick on a dead_area reject ─────────────────
+                # A genuine scene-transition (twilight → night, daytime
+                # cloud rolling in) shows up first as a dead_area
+                # rejection: the validator's tile-fraction threshold
+                # for the OLD profile no longer fits the NEW lighting.
+                # Schedule the next re-pick immediately so the loop
+                # doesn't burn through 60+ false-positive slots
+                # waiting for the 2-min timer. Rate-limited to once
+                # per 30 s so a noisy slot can't stampede the picker
+                # into running on every iteration.
+                if last_reason and "dead_area" in last_reason:
+                    if (last_repick_at is None
+                            or (now_dt - last_repick_at).total_seconds() >= 30):
+                        next_repick_at = now_dt
                 # Self-defence: re-validate the cached jpg under a
                 # tighter profile after > 3 consecutive uses. If even
                 # the stricter gate accepts it, keep using it; if it

@@ -329,7 +329,12 @@ class EventTimelapseMixin:
         active_profile = pick_profile_from_baseline(baseline_samples)
         log.info("[weather] event-tl profile=%s cam=%s trigger=%s",
                  active_profile.name.upper(), cam_name, trigger)
-        next_repick_at = datetime.now() + timedelta(minutes=5)
+        # 2 min cadence (was 5) so a scene transition is detected
+        # before the loop burns through dozens of false-positive
+        # rejects. ``last_repick_at`` rate-limits the dead_area-
+        # triggered forced re-pick.
+        next_repick_at = datetime.now() + timedelta(minutes=2)
+        last_repick_at: datetime | None = None
         while datetime.now() < end_at:
             now_dt = datetime.now()
             if now_dt >= next_repick_at:
@@ -343,7 +348,8 @@ class EventTimelapseMixin:
                             active_profile = new_prof
                 except Exception:
                     pass
-                next_repick_at = now_dt + timedelta(minutes=5)
+                last_repick_at = now_dt
+                next_repick_at = now_dt + timedelta(minutes=2)
             jpg, attempt_used, last_reason = grab_valid_frame(
                 lambda: rt.snapshot_jpeg_hires(quality=92),
                 profile=active_profile,
@@ -357,6 +363,12 @@ class EventTimelapseMixin:
                     pass
             else:
                 stats.record_invalid(last_reason)
+                # Force a profile re-pick on a dead_area reject (rate-
+                # limited to once per 30 s) — same logic as sun-tl.
+                if last_reason and "dead_area" in last_reason:
+                    if (last_repick_at is None
+                            or (now_dt - last_repick_at).total_seconds() >= 30):
+                        next_repick_at = now_dt
                 log.info("[weather] %s slot %05d: invalid grabs, leaving slot empty (%s)",
                          cam_name, i, last_reason)
             stats.flush()

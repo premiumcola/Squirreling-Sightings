@@ -355,6 +355,31 @@ class TestPickProfileFromBaseline:
         assert pick_profile_from_baseline([]) is DAY_PROFILE
         assert pick_profile_from_baseline([None, None]) is DAY_PROFILE
 
+    def test_flat_grey_corruption_sample_rejected(self):
+        """A flat-grey 130-luma sample with std < 10 (decoder hickup)
+        must NOT influence the picker. Combined with one real night
+        sample, the picker should ignore the corruption and pick
+        NIGHT based on the genuine sample."""
+        corrupt = np.full((240, 320, 3), 130, dtype=np.uint8)
+        # Real night sample — uniform 30 with mild noise so std > 10.
+        rng = np.random.default_rng(7)
+        night = np.clip(
+            np.full((240, 320, 3), 30, dtype=np.int16)
+            + rng.integers(-15, 16, size=(240, 320, 3), dtype=np.int16),
+            0, 255,
+        ).astype(np.uint8)
+        prof = pick_profile_from_baseline([corrupt, night])
+        assert prof is NIGHT_PROFILE, f"got {prof.name}"
+
+    def test_all_corruption_falls_back_to_night(self):
+        """When EVERY baseline sample is flat-grey corruption,
+        falling back to DAY here is what produced the slot-287
+        false-positive wave. NIGHT is the safer default — its loose
+        thresholds let real scene content through."""
+        corrupt = np.full((240, 320, 3), 130, dtype=np.uint8)
+        prof = pick_profile_from_baseline([corrupt, corrupt, corrupt])
+        assert prof is NIGHT_PROFILE, f"got {prof.name}"
+
 
 class TestBottomStripAnomaly:
     """Localised bottom-strip corruption detector — H.265 NAL/slice

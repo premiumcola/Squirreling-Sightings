@@ -194,6 +194,34 @@ NIGHT_PROFILE = FrameValidatorProfile(
 )
 
 
+# Picker sanity-gate constants — a sample whose mean sits in
+# [115, 145] AND whose grayscale std is < 10 is a flat-grey decoder
+# corruption frame, not real scene content. Letting such samples
+# influence the profile choice is what produced the slot-287 false-
+# positive wave: corruption baseline → mean ≈ 130 → picker chose DAY
+# → DAY's strict 35 % dead-tile threshold rejected genuine 38 %-dead
+# twilight frames. The gate drops these samples before the median.
+_FLAT_GRAY_STD_MAX = 10.0
+_FLAT_GRAY_BAND_MIN = 115.0
+_FLAT_GRAY_BAND_MAX = 145.0
+
+
+def _is_flat_gray_corruption_sample(img: np.ndarray) -> bool:
+    """A sample whose mean is in [115, 145] AND whose grayscale std
+    is < 10 has no real scene content — it's a flat mid-grey decoder
+    corruption frame. Not used to influence the profile choice."""
+    if img is None or img.size == 0:
+        return False
+    try:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+        m = float(gray.mean())
+        s = float(gray.std())
+    except Exception:
+        return False
+    return (_FLAT_GRAY_BAND_MIN <= m <= _FLAT_GRAY_BAND_MAX
+            and s < _FLAT_GRAY_STD_MAX)
+
+
 def pick_profile_from_baseline(samples) -> FrameValidatorProfile:
     """Pick a validator profile based on the median scene brightness
     of 2-3 reference frames. The capture loop takes a few quick
@@ -208,28 +236,58 @@ def pick_profile_from_baseline(samples) -> FrameValidatorProfile:
 
     ``samples`` may contain decoded BGR ndarrays or raw JPEG bytes;
     each is decoded via the module-private ``_decode`` helper.
-    Falls back to DAY when no usable samples were supplied — a
-    no-signal callsite shouldn't accidentally inherit night-loose
-    thresholds and let real corruption through.
+
+    Sanity gate: any sample matching the flat-grey corruption
+    fingerprint is dropped before the median. If EVERY sample was
+    flat-grey corruption (i.e. an entire baseline burst sat inside
+    a decoder hickup), we fall back to NIGHT — the loose end of the
+    profile spectrum — because letting DAY through here is what
+    triggered the slot-287 false-positive wave that motivated this
+    fix. NIGHT's relaxed thresholds let real scene content survive,
+    and an actual bright-day capture is unlikely to produce three
+    all-corruption baselines in a row. ``DAY`` is still the default
+    on a "no samples at all" callsite — a literal no-signal call
+    shouldn't accidentally inherit night-loose thresholds.
     """
     means: list[float] = []
+    rejected_corruption = 0
+    total = 0
     for s in samples or []:
         img = _decode(s)
         if img is None or img.size == 0 or img.ndim < 2:
+            continue
+        total += 1
+        if _is_flat_gray_corruption_sample(img):
+            rejected_corruption += 1
             continue
         try:
             means.append(float(img.mean()))
         except Exception:
             continue
     if not means:
+        if rejected_corruption > 0:
+            log.info(
+                "[picker] %d/%d baseline samples rejected as flat-grey "
+                "corruption; using night",
+                rejected_corruption, total,
+            )
+            return NIGHT_PROFILE
         return DAY_PROFILE
     means.sort()
     med = means[len(means) // 2]
     if med < 50.0:
-        return NIGHT_PROFILE
-    if med < 110.0:
-        return TWILIGHT_PROFILE
-    return DAY_PROFILE
+        picked = NIGHT_PROFILE
+    elif med < 110.0:
+        picked = TWILIGHT_PROFILE
+    else:
+        picked = DAY_PROFILE
+    if rejected_corruption > 0:
+        log.info(
+            "[picker] %d/%d baseline samples rejected as flat-grey "
+            "corruption; using %s",
+            rejected_corruption, total, picked.name,
+        )
+    return picked
 
 
 # ── Decoding helper ──────────────────────────────────────────────────────────

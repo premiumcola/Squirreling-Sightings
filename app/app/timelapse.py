@@ -193,14 +193,28 @@ class TimelapseBuilder:
             step = frames_on_disk / expected_frames
             images = [images[int(i * step)] for i in range(expected_frames)]
 
-        # ── Pass 1: validate + duplicate diagnostic ──────────────────────────
-        # Duplicates are NOT filtered here — they may represent legitimate static scenes.
-        # Capture-time dedup (_timelapse_profile_loop) already prevents stuck-stream frames
-        # from accumulating on disk. Encode-time dedup is diagnostic only.
+        # ── Pass 1: validate + active dedup ─────────────────────────────────
+        # Active dedup: pixel-identical replicated buffers (stuck stream
+        # / RTSP redelivery) silently inflated source frame counts and
+        # produced visible "frozen-time" runs in the encoded video. Two
+        # passes:
+        #   1. Fast exact-match — MD5 of img[::8, ::8] catches truly
+        #      pixel-identical replicas.
+        #   2. Near-dup — pHash hamming ≤4 AND mean-abs-diff ≤1.5 vs
+        #      the most recently kept frame. Catches the case where
+        #      the camera resampled the same buffer with a fresh
+        #      JPEG-compress and so the bit-pattern differs.
+        # A slowly-rotating scene (real timelapse content) clears both
+        # gates because its mean-abs-diff exceeds 1.5 byte-units.
+        from .frame_helpers import perceptual_hash, is_near_duplicate
         seen_hashes: set = set()
+        kept_phashes: list[int] = []
+        last_kept_frame = None
         valid_paths: list = []
         skipped = 0
         dup_count = 0
+        dup_first: str | None = None
+        dup_last: str | None = None
         ref_size: tuple[int, int] | None = None
         # Audit counter for the magenta-pattern detector — surfaces in
         # the build summary so we can spot corruption-burst trends
@@ -223,22 +237,52 @@ class TimelapseBuilder:
                 if img is not None:
                     del img
                 continue
-            # Count duplicates for diagnostics (sample every 8th pixel)
+            # Pass-1a: exact-match dedup via MD5 of the 8× sub-sampled
+            # frame. A pixel-identical replicated buffer trips this in
+            # microseconds; the perceptual-hash leg below handles the
+            # near-duplicate case.
             fhash = hashlib.md5(img[::8, ::8].tobytes()).hexdigest()
             if ref_size is None:
                 ref_size = (img.shape[1], img.shape[0])
-            del img  # free immediately — do NOT accumulate
             if fhash in seen_hashes:
                 dup_count += 1
-            else:
-                seen_hashes.add(fhash)
-            valid_paths.append(img_path)  # keep all valid frames regardless of duplicates
+                dup_last = img_path.name
+                if dup_first is None:
+                    dup_first = img_path.name
+                del img
+                continue
+            seen_hashes.add(fhash)
+            # Pass-1b: near-duplicate dedup. Compare against the most
+            # recently kept frame (pHash + full mean-abs-diff). The
+            # last-kept reference moves forward on every kept frame so
+            # a slowly-rotating scene where each step is < 1.5 byte-
+            # units — extremely rare in a real outdoor scene — still
+            # kept the first frame and dropped the rest. That trade-
+            # off is the right one: we'd rather drop a marginal-motion
+            # frame than ship a stuck-stream burst.
+            this_phash = perceptual_hash(img)
+            if last_kept_frame is not None and is_near_duplicate(
+                kept_phashes[-1] if kept_phashes else 0,
+                last_kept_frame, img,
+            ):
+                dup_count += 1
+                dup_last = img_path.name
+                if dup_first is None:
+                    dup_first = img_path.name
+                del img
+                continue
+            kept_phashes.append(this_phash)
+            last_kept_frame = img.copy()
+            del img  # free original; last_kept_frame holds the reference
+            valid_paths.append(img_path)
 
-        total_input = skipped + len(valid_paths)
+        total_input = skipped + dup_count + len(valid_paths)
         # One-line build summary in the structured "[timelapse]" prefix
         # so log filters can pull all encode outcomes at a glance.
-        log.info("[timelapse] %s: %d frames total, %d valid, %d skipped (grey/colorbar/corrupt)",
-                 out_path.name, total_input, len(valid_paths), skipped)
+        log.info(
+            "[timelapse] %s: %d frames total, %d valid, %d skipped (grey/colorbar/corrupt), %d duplicates dropped",
+            out_path.name, total_input, len(valid_paths), skipped, dup_count,
+        )
         if magenta_drops > 0:
             log.info(
                 "[timelapse] %s: %d magenta-corruption frame(s) dropped, first=%s last=%s",
@@ -249,14 +293,19 @@ class TimelapseBuilder:
             log.info("timelapse: skipped %d/%d corrupt frames for %s",
                      skipped, total_input, out_path.name)
         if dup_count > 0:
-            dup_ratio = dup_count / max(1, len(valid_paths))
+            # Now an active-filter count, not diagnostic — the duplicates
+            # were dropped from valid_paths above, so we report against
+            # the original valid-frame total (kept + dropped).
+            dup_ratio = dup_count / max(1, dup_count + len(valid_paths))
+            log.info(
+                "[timelapse] %s: duplicates dropped: %d (%.0f%% of valid frames) · first=%s last=%s",
+                out_path.name, dup_count, dup_ratio * 100,
+                dup_first or "?", dup_last or "?",
+            )
             if dup_ratio > 0.6:
-                log.warning("timelapse: %.0f%% duplicate frames detected in %s (%d/%d) — "
-                            "check if camera stream was stuck during capture window",
-                            dup_ratio * 100, out_path.name, dup_count, len(valid_paths))
-            else:
-                log.debug("timelapse: %d/%d duplicate frames in %s (static scene?)",
-                          dup_count, len(valid_paths), out_path.name)
+                log.warning("timelapse: %.0f%% duplicate frames in %s (%d) — "
+                            "stuck stream during capture window?",
+                            dup_ratio * 100, out_path.name, dup_count)
 
         if len(valid_paths) < 2:
             log.warning("timelapse: only %d valid frames (of %d total) — "

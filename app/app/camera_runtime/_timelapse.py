@@ -304,12 +304,25 @@ class TimelapseMixin:
         from ..frame_helpers import (
             CaptureStats as _CaptureStats,
             DAY_PROFILE as _DAY_PROFILE,
+            hamming_distance as _ph_hamming,
             is_valid_frame as _fh_valid,
+            perceptual_hash as _ph_phash,
             pick_profile_from_baseline as _pick_profile,
         )
         window_key: str | None = None
         window_start_t: float = 0.0
         _last_frame_ts: float = 0.0   # frame_ts at last capture — detects stale buffer
+        # Capture-side dedup guard. The frame_ts == _last_frame_ts test
+        # below catches "RTSP buffer literally hasn't changed", but the
+        # main loop assigns a new frame_ts on every grab regardless of
+        # pixel content — so a stuck camera that hands us the same
+        # buffer with a fresh timestamp slips past. The pHash leg here
+        # rejects frames whose perceptual hash is within hamming-4 of
+        # the most recently saved frame: replicated buffers never
+        # write to disk, the encoder never has to filter them, and the
+        # storage footprint shrinks too. Reset on window roll-over.
+        _last_saved_phash: int = 0
+        _saved_dup_dropped: int = 0
         # Per-camera adaptive validator profile. Re-evaluated every 5 min
         # using the most-recent shared frame buffer (no extra snapshot
         # call — the camera_runtime main loop already keeps `self.frame`
@@ -430,6 +443,12 @@ class TimelapseMixin:
                             stats = _CaptureStats(out_dir=tl_dir,
                                                   expected_frames=int(period_s / max(0.5, interval_s)))
                             stats_window_key = window_key
+                            # Reset the dedup pHash on a fresh window —
+                            # a window-boundary scene shift would
+                            # otherwise look like a "duplicate" of the
+                            # last frame of the previous window.
+                            _last_saved_phash = 0
+                            _saved_dup_dropped = 0
                         # Adaptive validator profile re-pick — every 5 min,
                         # using the freshest shared frame as the baseline so
                         # there's no extra capture cost. A camera that
@@ -492,13 +511,33 @@ class TimelapseMixin:
                             log_tl.info("[timelapse] %s frame %s: invalid grabs, leaving slot empty (%s)",
                                         self.camera_id, now.strftime("%H%M%S_%f")[:10], reason)
                         else:
-                            ts = now.strftime("%H%M%S_%f")[:10]
-                            out = tl_dir / f"{ts}.jpg"
-                            cv2.imwrite(str(out), frame, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_q])
-                            stats.record_capture(attempt_used=attempt_used)
-                            log_tl.debug("[%s][%s] frame saved: %s window=%s (%.2fs/frame, q=%d, attempt=%d)",
-                                      self.camera_id, profile_name, out.name, window_key, interval_s, jpeg_q,
-                                      attempt_used + 1)
+                            # Capture-side dedup guard — drop the frame
+                            # before it hits disk if its perceptual hash
+                            # is within hamming-4 of the most recently
+                            # saved frame. Without this, a stuck stream
+                            # that delivers the same buffer with a fresh
+                            # timestamp inflates the on-disk footprint
+                            # AND produces frozen-time runs in the
+                            # encoded video.
+                            this_phash = _ph_phash(frame)
+                            if (_last_saved_phash != 0
+                                    and _ph_hamming(_last_saved_phash, this_phash) <= 4):
+                                _saved_dup_dropped += 1
+                                if _saved_dup_dropped in (1, 5, 25, 100):
+                                    log_tl.info(
+                                        "[timelapse] %s/%s skipped duplicate frame "
+                                        "(pHash match) — total dropped this run: %d",
+                                        self.camera_id, profile_name, _saved_dup_dropped,
+                                    )
+                            else:
+                                ts = now.strftime("%H%M%S_%f")[:10]
+                                out = tl_dir / f"{ts}.jpg"
+                                cv2.imwrite(str(out), frame, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_q])
+                                stats.record_capture(attempt_used=attempt_used)
+                                _last_saved_phash = this_phash
+                                log_tl.debug("[%s][%s] frame saved: %s window=%s (%.2fs/frame, q=%d, attempt=%d)",
+                                          self.camera_id, profile_name, out.name, window_key, interval_s, jpeg_q,
+                                          attempt_used + 1)
                         # Cheap to flush each interval; lets the build path
                         # see partial-window stats if it runs while capture
                         # is still going.

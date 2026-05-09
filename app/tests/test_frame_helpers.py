@@ -21,9 +21,9 @@ from app.frame_helpers import (  # noqa: E402
     TWILIGHT_PROFILE,
     dead_area_score,
     grab_valid_frame,
-    is_bottom_strip_anomaly,
     is_flat_gray_full_frame,
     is_grey_frame,
+    is_horizontal_anomaly_band,
     is_valid_frame,
     pick_profile_from_baseline,
 )
@@ -191,14 +191,21 @@ class TestExistingPatternsStillReject:
 
 class TestNewCorruptionPatternsReject:
     def test_partial_grey_top_strip_rejects(self):
-        """Real OSD strip at top + uniform mid-grey below → dead-area gate fires."""
+        """Real OSD strip at top + uniform mid-grey below.
+        Originally caught by the dead-area gate; the location-
+        agnostic horizontal_anomaly_band detector now flags it too
+        (the OSD strip's row-delta signature is exactly what stage
+        A finds). Either head is fine — what matters is rejection."""
         img = _partial_grey_top_strip()
         ok, reason = is_valid_frame(img)
         assert not ok, "partial-grey-top-strip frame slipped through"
-        # The dead-area gate should be the one that catches this — the
-        # global std heuristic doesn't because the strip has plenty of
-        # texture.
-        assert "dead_area" in reason or "grey_midband" in reason, reason
+        assert (
+            "dead_area" in reason
+            or "grey_midband" in reason
+            or "horizontal_anomaly_band" in reason
+            or "bottom_strip_" in reason
+            or "grey_uniform" in reason
+        ), reason
 
     def test_blocky_grey_noise_rejects(self):
         ok, reason = is_valid_frame(_blocky_grey_noise_frame())
@@ -382,77 +389,105 @@ class TestPickProfileFromBaseline:
         assert prof is NIGHT_PROFILE, f"got {prof.name}"
 
 
-class TestBottomStripAnomaly:
-    """Localised bottom-strip corruption detector — H.265 NAL/slice
-    loss on Reolink streams produces a near-white-saturation band or
-    a bright macroblock smear glued to the bottom 10–25 % of an
-    otherwise dark scene. None of the global heuristics catch this;
-    the new gate must reject it AND must not trip on legitimate
-    daytime scenes with a naturally bright foreground."""
+class TestHorizontalAnomalyBand:
+    """Location-agnostic horizontal-band corruption detector. Two
+    stages: row-delta (catches scrambled-block macroblock smears
+    where each row is a different scrambled block) and chroma
+    (catches saturated non-warm hue leaks). Either firing rejects
+    the frame. The legacy ``bottom_strip_white`` /
+    ``bottom_strip_bright`` reason heads are still emitted when
+    the band sits in the bottom 25 % so existing log greps
+    survive.
 
-    def test_dark_with_white_bottom_rejects(self):
-        """Top 70 % at luma ≈ 16, bottom 20 % saturated to 245 →
-        bottom_strip_white. Mirrors frame 00020 from the night
-        capture that triggered this work."""
-        h, w = 720, 1280
-        img = np.full((h, w, 3), 16, dtype=np.uint8)
-        # Bottom 20 % (≈ 144 rows) saturated to 245.
-        bot_start = int(h * 0.80)
-        img[bot_start:, :, :] = 245
-        ok, reason = is_bottom_strip_anomaly(img)
-        assert ok, "expected bottom_strip rule to fire"
-        assert "bottom_strip_white" in reason
+    Synthetic fixtures use real per-row variation inside the band
+    (random scrambled noise) so they look like the actual
+    macroblock-smear corruption — a uniform-fill band has no
+    row-to-row delta and the new detector legitimately can't see it
+    without intensity-based heuristics, which the user's spec
+    deliberately excluded. Real ground-truth coverage lives in
+    test_frame_validation_fixtures.py."""
 
-    def test_dark_with_bright_bottom_rejects(self):
-        """Top 70 % at luma ≈ 16, bottom 20 % at 130 (delta 114 > 100)
-        → bottom_strip_bright. Mirrors frame 00115 from the night
-        capture (macroblock smear, doesn't saturate to white)."""
+    def _scene_with_corrupt_band(self, h, w, band_y0, band_h, seed=0):
+        """Build a dark scene with a band of scrambled-block
+        corruption — uniform-coloured tiles inside the band, with
+        each row randomised. This is the row-delta signature of
+        real macroblock smears."""
+        rng = np.random.default_rng(seed)
+        img = np.clip(
+            np.full((h, w, 3), 16, dtype=np.int16)
+            + rng.integers(-3, 4, size=(h, w, 3), dtype=np.int16),
+            0, 255,
+        ).astype(np.uint8)
+        # Replace the band with rows of independently random luma —
+        # that's what makes row_delta spike inside the band.
+        band = (rng.integers(80, 220, size=(band_h, w, 3))
+                .astype(np.uint8))
+        img[band_y0:band_y0 + band_h] = band
+        return img
+
+    def test_mid_band_corruption_rejected(self):
+        """Macroblock smear at y≈50 % — the case the previous
+        bottom-strip-only detector missed."""
         h, w = 720, 1280
-        img = np.full((h, w, 3), 16, dtype=np.uint8)
-        bot_start = int(h * 0.80)
-        img[bot_start:, :, :] = 130
-        ok, reason = is_bottom_strip_anomaly(img)
-        assert ok, "expected bottom_strip rule to fire"
-        assert "bottom_strip_bright" in reason
+        img = self._scene_with_corrupt_band(h, w, int(h * 0.45), 70, seed=1)
+        ok, reason = is_horizontal_anomaly_band(img)
+        assert ok, f"mid-band corruption not rejected (reason={reason!r})"
+        assert "horizontal_anomaly_band" in reason
+
+    def test_lower_band_corruption_rejected(self):
+        """Macroblock smear at y≈90 % — covered by the legacy
+        bottom_strip_* head for backwards-compat in the reject
+        folder layout."""
+        h, w = 720, 1280
+        img = self._scene_with_corrupt_band(h, w, int(h * 0.85), 60, seed=2)
+        ok, reason = is_horizontal_anomaly_band(img)
+        assert ok, f"lower-band corruption not rejected (reason={reason!r})"
+        # band_y_pct >= 75 → legacy bottom_strip_* head
+        assert ("bottom_strip_" in reason) or ("horizontal_anomaly_band" in reason)
 
     def test_dark_clean_passes(self):
         """A genuinely dark scene with mild noise must not trip
-        either rule — top is dark but the bottom isn't bright."""
+        the detector — the row-delta signal stays at the noise
+        baseline, no chroma leak."""
         rng = np.random.default_rng(0)
         h, w = 720, 1280
         base = np.full((h, w, 3), 16, dtype=np.int16)
         noise = rng.integers(-3, 4, size=base.shape, dtype=np.int16)
         img = np.clip(base + noise, 0, 255).astype(np.uint8)
-        ok, reason = is_bottom_strip_anomaly(img)
+        ok, reason = is_horizontal_anomaly_band(img)
         assert not ok, f"clean dark frame rejected: {reason}"
 
-    def test_daylight_with_shadow_bottom_passes(self):
-        """Negative control — the top is bright (180), the bottom is
-        a real shadow (130). The corrupt-on-dark guard requires a
-        dark TOP, so a daytime scene with bright sky and shaded
-        ground must NOT trip the detector even when bottom < top
-        is reversed and delta is large."""
+    def test_daylight_with_shadow_passes(self):
+        """Negative control — daytime scene, no corruption band, no
+        chroma leak. Stage A's max-band-height cap protects against
+        the "whole frame has texture" false positive."""
+        rng = np.random.default_rng(3)
         h, w = 720, 1280
-        img = np.full((h, w, 3), 180, dtype=np.uint8)
-        bot_start = int(h * 0.80)
-        img[bot_start:, :, :] = 130
-        ok, reason = is_bottom_strip_anomaly(img)
-        assert not ok, f"daylight scene with shadow bottom rejected: {reason}"
+        # Three solid coloured regions stacked vertically with
+        # noise — real-world-ish, no abrupt random-row cluster.
+        img = np.zeros((h, w, 3), dtype=np.uint8)
+        img[:h // 3] = 180
+        img[h // 3:2 * h // 3] = 130
+        img[2 * h // 3:] = 90
+        noise = rng.integers(-5, 6, size=img.shape, dtype=np.int16)
+        img = np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+        ok, reason = is_horizontal_anomaly_band(img)
+        assert not ok, f"daylight scene rejected: {reason}"
 
-    def test_is_valid_frame_rejects_white_bottom(self):
-        """End-to-end through is_valid_frame — a corrupt frame must
-        be flagged as bottom_strip_* even though it's also dark
-        enough that no_detail / dead_area would otherwise catch it
-        (or, on NIGHT_PROFILE, would let it through). Order matters:
-        the bottom-strip gate runs BEFORE the scene gates so a real
-        corruption is never misclassified as 'empty scene'."""
+    def test_is_valid_frame_rejects_mid_band(self):
+        """End-to-end through is_valid_frame — a corrupt mid-band
+        frame must be flagged BEFORE the scene-level gates fire so
+        the reject sink routes it into the band-corruption folder
+        rather than dead_area."""
         h, w = 720, 1280
-        img = np.full((h, w, 3), 16, dtype=np.uint8)
-        bot_start = int(h * 0.80)
-        img[bot_start:, :, :] = 245
+        img = self._scene_with_corrupt_band(h, w, int(h * 0.45), 70, seed=4)
         ok, reason = is_valid_frame(img, profile=NIGHT_PROFILE)
         assert not ok
-        assert "bottom_strip_" in reason
+        # Either the location-agnostic head OR (when stage A's z
+        # placement maps to bottom %) the legacy head. Both indicate
+        # the band detector fired, which is what we care about.
+        assert ("horizontal_anomaly_band" in reason
+                or "bottom_strip_" in reason)
 
 
 class TestFlatGrayFullFrame:

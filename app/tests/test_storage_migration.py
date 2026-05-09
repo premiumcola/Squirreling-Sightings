@@ -197,3 +197,126 @@ class TestMigrate:
         s = migrate(store, storage)
         assert s["noop"] is True
         assert s["cameras"] == 0
+
+
+class TestBackupRetentionAndPrune:
+    """Pruning + conditional-promotion regression coverage. The prune
+    helper MUST never touch the bare ``settings.json.bak`` /
+    ``settings.json.bak2`` rotation files, and it MUST cap the
+    timestamped backups at the configured ``keep`` value."""
+
+    def _seed_history(self, settings_path: Path, n: int = 5) -> list[Path]:
+        """Drop ``n`` synthetic ``.bak.<ts>`` files plus the bare
+        rotation pair next to the settings file. Returns the
+        timestamped paths in age order (oldest first) so callers can
+        assert which ones got pruned."""
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text("{}", encoding="utf-8")
+        # Rotation pair (no timestamp) — never pruned.
+        (settings_path.parent / "settings.json.bak").write_text("rot1", encoding="utf-8")
+        (settings_path.parent / "settings.json.bak2").write_text("rot2", encoding="utf-8")
+        out: list[Path] = []
+        # Use distinct mtimes so the prune helper's age sort is
+        # deterministic — naming alone isn't enough on filesystems
+        # that round mtime to the second.
+        import os as _os
+        import time as _t
+        base_t = _t.time() - 86400
+        # Real migration backups carry exactly 8 digits (YYYYMMDD)
+        # and 6 digits (HHMMSS); the prune regex requires that.
+        # Walk through January 2026 day-by-day for a deterministic
+        # 8-digit date string regardless of ``n``.
+        for i in range(n):
+            ts = f"2026{(i // 28) + 1:02d}{(i % 28) + 1:02d}_120000"
+            p = settings_path.parent / f"settings.json.bak.{ts}"
+            p.write_text(f"hist-{i}", encoding="utf-8")
+            _os.utime(p, (base_t + i, base_t + i))
+            out.append(p)
+        return out
+
+    def test_prune_skips_rotation_files(self, tmp_path):
+        from app.storage_migration import _prune_old_settings_backups
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
+        seeded = self._seed_history(store.path, n=3)
+        # keep=10 — nothing to prune yet.
+        pruned = _prune_old_settings_backups(store, keep=10)
+        assert pruned == 0
+        for p in seeded:
+            assert p.exists()
+        # Rotation pair still present.
+        assert (store.path.parent / "settings.json.bak").exists()
+        assert (store.path.parent / "settings.json.bak2").exists()
+
+    def test_prune_caps_timestamped_to_keep(self, tmp_path):
+        from app.storage_migration import _prune_old_settings_backups
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
+        seeded = self._seed_history(store.path, n=12)
+        pruned = _prune_old_settings_backups(store, keep=5)
+        # Oldest 7 (12 - 5) must be gone; newest 5 must survive.
+        assert pruned == 7
+        for old in seeded[:7]:
+            assert not old.exists(), f"expected {old.name} to be pruned"
+        for kept in seeded[7:]:
+            assert kept.exists(), f"expected {kept.name} to survive"
+        # Rotation pair still present.
+        assert (store.path.parent / "settings.json.bak").exists()
+        assert (store.path.parent / "settings.json.bak2").exists()
+
+    def test_prune_clamps_invalid_keep(self, tmp_path):
+        """A malformed ``settings.server.settings_backup_keep`` value
+        must clamp to the [1, 100] range, not wipe history."""
+        from app.storage_migration import _prune_old_settings_backups
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
+        seeded = self._seed_history(store.path, n=4)
+        # keep=0 → clamped to 1 (newest survives, rest pruned).
+        pruned = _prune_old_settings_backups(store, keep=0)
+        assert pruned == 3
+        assert seeded[-1].exists()
+        for old in seeded[:-1]:
+            assert not old.exists()
+
+    def test_idle_boot_prunes_no_new_backup(self, tmp_path):
+        """An idempotent re-run does not create a new timestamped
+        backup, but it DOES prune any leftover history beyond keep."""
+        storage = _make_storage(tmp_path)
+        store = _FakeSettingsStore(tmp_path / "settings.json",
+                                   {"cameras": _make_cams()})
+        # First run: real migration → one backup is promoted.
+        summary1 = migrate(store, storage)
+        assert summary1["backup_retained"] is True
+        # Seed a few extra fake history files so the second (idle) run
+        # has something to prune.
+        extra = self._seed_history(store.path, n=12)
+        # Set a tight keep cap on the store config.
+        store.data.setdefault("server", {})["settings_backup_keep"] = 3
+        # Second run: nothing changes → no new .bak.<ts> file, but
+        # prune fires.
+        before_count = len(list(store.path.parent.glob("settings.json.bak.*")))
+        summary2 = migrate(store, storage)
+        after_count = len(list(store.path.parent.glob("settings.json.bak.*")))
+        assert summary2["noop"] is True
+        assert summary2["backup_retained"] is False
+        assert summary2["pruned"] >= 1
+        assert after_count <= 3
+        assert after_count < before_count
+        # Rotation pair still present.
+        assert (store.path.parent / "settings.json.bak").exists()
+        assert (store.path.parent / "settings.json.bak2").exists()
+        # Suppress unused-warning on `extra` — it's the population set
+        # the assertion above is implicitly comparing against.
+        del extra
+
+    def test_no_op_run_leaves_no_partial_file(self, tmp_path):
+        """Idle boots must not leave a ``.bak.<ts>.partial`` file
+        behind. The first run writes one (during Pass 2), the second
+        (idle) run never enters Pass 2 at all so neither a partial
+        nor a final should appear."""
+        storage = tmp_path / "storage"
+        storage.mkdir()
+        store = _FakeSettingsStore(tmp_path / "settings.json",
+                                   {"cameras": []})
+        migrate(store, storage)
+        for p in store.path.parent.iterdir():
+            assert not p.name.endswith(".partial"), (
+                f"unexpected partial file left behind: {p.name}"
+            )

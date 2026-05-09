@@ -34,6 +34,8 @@ restore from the timestamped backup.
 from __future__ import annotations
 
 import logging
+import os
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +43,14 @@ from pathlib import Path
 from .camera_id import _sanitise, build_camera_id
 
 log = logging.getLogger(__name__)
+
+# Regex used by the prune helper to tell timestamped migration backups
+# apart from the .bak / .bak2 rotation files SettingsStore.save() owns.
+# A timestamped backup looks like ``settings.json.bak.20260508_235553`` —
+# 8 digits, underscore, 6 digits. The bare ``.bak`` / ``.bak2`` rotation
+# files MUST NEVER be touched here; they belong to a different lifecycle.
+_TIMESTAMPED_BAK_RE = re.compile(r".+\.bak\.\d{8}_\d{6}$")
+_DEFAULT_BACKUP_KEEP = 10
 
 
 _AREAS = ("motion_detection", "timelapse_frames", "timelapse", "weather")
@@ -236,19 +246,124 @@ def _plan_camera(cam: dict, storage_root: Path) -> dict:
     return out
 
 
-def _backup_settings(settings_store) -> Path | None:
-    """Drop a timestamped backup next to settings.json before any change."""
+def _backup_settings_partial(settings_store) -> tuple[Path | None, Path | None]:
+    """Drop a timestamped backup next to settings.json BEFORE any
+    write, but under a ``.partial`` suffix so the boot can decide
+    whether to keep it.
+
+    Returns ``(final_path, partial_path)`` where ``final_path`` is the
+    eventual ``settings.json.bak.<ts>`` location and ``partial_path``
+    is the on-disk file that currently holds the copy. If creation
+    failed both are ``None``.
+
+    The two-step "create partial → promote on real change" dance is
+    the whole point of this refactor: idle reboots no longer leave a
+    permanent file behind, but crash safety during the rewrite
+    survives because the partial is on disk for the duration of
+    Pass 2."""
     src = settings_store.path
     if not src.exists():
-        return None
+        return None, None
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dst = src.with_suffix(src.suffix + f".bak.{ts}")
+    final = src.with_suffix(src.suffix + f".bak.{ts}")
+    partial = final.with_suffix(final.suffix + ".partial")
     try:
-        shutil.copy2(str(src), str(dst))
-        return dst
+        shutil.copy2(str(src), str(partial))
+        return final, partial
     except Exception as e:
         log.warning("[migration] settings backup failed: %s", e)
+        return None, None
+
+
+def _promote_or_discard_partial(final: Path | None, partial: Path | None,
+                                actually_changed: bool) -> Path | None:
+    """Finalise the partial backup. Promote to ``.bak.<ts>`` when the
+    migration mutated state, discard otherwise. Returns the path of
+    the retained backup, or ``None`` when discarded / never created.
+
+    ``actually_changed`` is computed by the caller from the migration
+    summary so callers and tests share the exact same trigger
+    condition."""
+    if not partial:
         return None
+    if not partial.exists():
+        return None
+    if actually_changed and final is not None:
+        try:
+            os.replace(str(partial), str(final))
+            return final
+        except Exception as e:
+            log.warning("[migration] could not promote partial backup %s → %s: %s",
+                        partial, final, e)
+            # Best-effort cleanup of the orphaned partial — leaving it
+            # behind would defeat the whole point of the refactor.
+            try:
+                partial.unlink()
+            except Exception:
+                pass
+            return None
+    # No mutations OR no `final` path → discard the partial.
+    try:
+        partial.unlink()
+    except Exception as e:
+        log.debug("[migration] could not unlink partial %s: %s", partial, e)
+    return None
+
+
+def _prune_old_settings_backups(settings_store, keep: int = _DEFAULT_BACKUP_KEEP) -> int:
+    """Delete timestamped migration backups beyond the ``keep`` most
+    recent. Returns the number of files actually pruned. The bare
+    ``settings.json.bak`` / ``settings.json.bak2`` rotation files
+    SettingsStore.save() maintains are explicitly excluded — only
+    paths matching ``_TIMESTAMPED_BAK_RE`` are candidates.
+
+    ``keep`` is clamped to [1, 100] so a malformed
+    ``settings.server.settings_backup_keep`` config value can never
+    wipe history."""
+    try:
+        keep = int(keep)
+    except (TypeError, ValueError):
+        keep = _DEFAULT_BACKUP_KEEP
+    keep = max(1, min(100, keep))
+    parent = settings_store.path.parent
+    stem = settings_store.path.name
+    if not parent.exists():
+        return 0
+    candidates = list(parent.glob(f"{stem}.bak.*"))
+    timestamped = [p for p in candidates if _TIMESTAMPED_BAK_RE.match(p.name)]
+    if not timestamped:
+        return 0
+    # Newest first by mtime; everything past `keep` index gets pruned.
+    timestamped.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    pruned = 0
+    for old in timestamped[keep:]:
+        try:
+            old.unlink()
+            pruned += 1
+            log.info("[migration] pruned old backup: %s", old.name)
+        except Exception as e:
+            log.debug("[migration] prune failed for %s: %s", old.name, e)
+    return pruned
+
+
+def _resolve_backup_keep(settings_store) -> int:
+    """Read the user-configurable cap from settings.json (server block)
+    or fall back to the default. Out-of-range or non-int values fall
+    back silently — power-user override, not a UI surface."""
+    try:
+        cfg = settings_store.data.get("server", {}) or {}
+        raw = cfg.get("settings_backup_keep")
+    except Exception:
+        raw = None
+    if raw is None:
+        return _DEFAULT_BACKUP_KEEP
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_BACKUP_KEEP
+    if n < 1 or n > 100:
+        return _DEFAULT_BACKUP_KEEP
+    return n
 
 
 def migrate(settings_store, storage_root) -> dict:
@@ -257,10 +372,16 @@ def migrate(settings_store, storage_root) -> dict:
 
     Returns a summary dict for the caller's log line."""
     storage_root = Path(storage_root)
+    keep_n = _resolve_backup_keep(settings_store)
     cams = list(settings_store.data.get("cameras", []) or [])
     if not cams:
-        log.info("[migration] no cameras configured — nothing to migrate.")
-        return {"cameras": 0, "merges": 0, "rewrites": 0, "noop": True}
+        # Even on a "no cameras" boot, prune any leftover history from
+        # a prior config so heavy dev cycles don't pile up indefinitely.
+        pruned = _prune_old_settings_backups(settings_store, keep=keep_n)
+        log.info("[migration] no cameras configured — nothing to migrate. pruned=%d", pruned)
+        return {"cameras": 0, "merges": 0, "rewrites": 0,
+                "noop": True, "changed": False,
+                "backup_retained": False, "pruned": pruned}
 
     # Pass 1: analysis only, no disk writes.
     plans: list[dict] = []
@@ -278,11 +399,24 @@ def migrate(settings_store, storage_root) -> dict:
                          and not any(obj_det.iterdir()))
 
     if not needs_work and not obj_det_empty_dir:
-        log.info("[migration] all storage paths already in canonical form — no migration needed.")
-        return {"cameras": len(cams), "merges": 0, "rewrites": 0, "noop": True}
+        # Idle boots still get the prune pass so old history shrinks
+        # over time even when Pass 2 never runs.
+        pruned = _prune_old_settings_backups(settings_store, keep=keep_n)
+        log.info(
+            "[migration] all storage paths already in canonical form — no migration needed. "
+            "backup skipped (no changes) pruned=%d", pruned,
+        )
+        return {"cameras": len(cams), "merges": 0, "rewrites": 0,
+                "noop": True, "changed": False,
+                "backup_retained": False, "pruned": pruned}
 
-    # Pass 2: take a tagged settings backup, then execute.
-    backup_path = _backup_settings(settings_store)
+    # Pass 2: take a tagged settings backup AS A PARTIAL first. We
+    # only promote it to the visible ``.bak.<ts>`` name once we
+    # confirm the migration actually mutated state AND save() didn't
+    # crash. Idle boots stop leaving a permanent file behind; crash
+    # safety survives because the partial sits on disk for the
+    # duration of Pass 2.
+    backup_final, backup_partial = _backup_settings_partial(settings_store)
 
     total_merges = 0
     total_rewrites = 0
@@ -314,43 +448,75 @@ def migrate(settings_store, storage_root) -> dict:
             cam["id"] = new_id
             id_changes += 1
 
-    # Persist settings.json. On failure, restore from the .bak.<ts> we
-    # took at the start so we never leave the JSON in a half-updated state.
+    # Persist settings.json. On failure, restore from the .partial we
+    # took at the start so we never leave the JSON in a half-updated
+    # state. The partial hasn't been promoted yet, but it's still on
+    # disk under the .partial name and is the freshest pre-mutation
+    # snapshot we have.
     settings_save_ok = True
     if id_changes > 0:
         try:
             settings_store.save()
         except Exception as e:
             settings_save_ok = False
+            partial_name = backup_partial.name if backup_partial else "?"
             log.error("[migration] settings.json save failed (%s) — restoring from %s",
-                      e, backup_path.name if backup_path else "?")
-            if backup_path and backup_path.exists():
+                      e, partial_name)
+            if backup_partial and backup_partial.exists():
                 try:
-                    shutil.copy2(str(backup_path), str(settings_store.path))
+                    shutil.copy2(str(backup_partial), str(settings_store.path))
                 except Exception as e2:
                     log.error("[migration] settings restore also failed: %s", e2)
 
     # Cleanup the orphaned object_detection placeholder.
+    obj_det_pruned = False
     if obj_det.exists() and obj_det.is_dir():
         try:
             obj_det.rmdir()  # only succeeds when empty
+            obj_det_pruned = True
             log.info("[migration] removed empty placeholder dir storage/object_detection/")
         except OSError:
             pass  # not empty — leave it
 
-    summary = {
-        "cameras":  len(cams),
-        "merges":   total_merges,
-        "rewrites": total_rewrites,
-        "id_changes": id_changes,
-        "backup":   str(backup_path) if backup_path else None,
-        "save_ok":  settings_save_ok,
-        "noop":     False,
-    }
-    log.info(
-        "[migration] processed %d cameras, %d folder merges, %d event JSONs rewritten, "
-        "settings backed up to %s",
-        summary["cameras"], summary["merges"], summary["rewrites"],
-        backup_path.name if backup_path else "(no backup)",
+    # Did Pass 2 actually mutate state? Folder merges, event JSON
+    # rewrites, settings.json id changes, and the obj_det rmdir each
+    # count as a real change worth keeping a backup for. ``changed``
+    # is the single condition that drives partial-backup promotion
+    # AND the boot log shape — kept on the summary so callers and
+    # tests share one source of truth.
+    actually_changed = bool(
+        total_merges or total_rewrites or id_changes or obj_det_pruned
     )
+    retained = _promote_or_discard_partial(
+        backup_final, backup_partial,
+        actually_changed=actually_changed and settings_save_ok,
+    )
+    pruned = _prune_old_settings_backups(settings_store, keep=keep_n)
+
+    summary = {
+        "cameras":   len(cams),
+        "merges":    total_merges,
+        "rewrites":  total_rewrites,
+        "id_changes": id_changes,
+        "obj_det_pruned": obj_det_pruned,
+        "backup":    str(retained) if retained else None,
+        "backup_retained": retained is not None,
+        "pruned":    pruned,
+        "changed":   actually_changed,
+        "save_ok":   settings_save_ok,
+        "noop":      False,
+    }
+    if retained is not None:
+        log.info(
+            "[migration] processed %d cameras, %d folder merges, %d event JSONs rewritten · "
+            "backup retained=1 pruned=%d (%s)",
+            summary["cameras"], summary["merges"], summary["rewrites"],
+            pruned, retained.name,
+        )
+    else:
+        log.info(
+            "[migration] processed %d cameras, %d folder merges, %d event JSONs rewritten · "
+            "backup skipped (no changes) pruned=%d",
+            summary["cameras"], summary["merges"], summary["rewrites"], pruned,
+        )
     return summary

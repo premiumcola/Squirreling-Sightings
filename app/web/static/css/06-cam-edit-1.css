@@ -1303,9 +1303,9 @@
 }
 .erk-sim-cfg-chip{
   display:inline-flex;align-items:center;gap:6px;
-  padding:3px 8px;
+  padding:4px 9px;
   background:rgba(0,0,0,.45);
-  border-radius:6px;
+  border-radius:8px;
   font-size:10.5px;font-weight:600;
   letter-spacing:.01em;
 }
@@ -1361,7 +1361,7 @@
 .erk-sim-log-clear{
   background:transparent;border:1px solid rgba(255,255,255,.12);
   color:#9aa4b0;font-size:10.5px;font-weight:600;
-  padding:3px 9px;border-radius:6px;cursor:pointer;
+  padding:4px 10px;border-radius:8px;cursor:pointer;
 }
 .erk-sim-log-clear:hover{
   background:rgba(255,255,255,.04);color:#cbd5e1;

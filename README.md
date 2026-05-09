@@ -237,6 +237,36 @@ Runtime-Dependencies außer Open-Meteo für Wetter-Trigger.
 
 ---
 
+## 🧪 Test Suite
+
+83 pytest-Funktionen in 8 Modulen, alle grün auf jedem Commit.
+Schwerpunkt liegt auf den drei Stellen, wo Bugs am teuersten
+sind: Frame-Validatoren (silent-corrupt-frames in MP4s),
+Storage-Migration (verlorene Sichtungen bei Cam-Rename) und
+Camera-ID-Resolution (Doppel-Folder bei IP-Wechsel).
+
+<p align="center">
+  <img src="docs/img/test-suite.svg" alt="Test Suite — 83 tests across 8 modules" width="100%" />
+</p>
+
+```bash
+# Alle Tests
+pytest -q
+
+# Nur die Frame-Validator-Suite (häufig touchierte Datei)
+pytest -q app/tests/test_frame_helpers.py
+
+# Mit Fixtures aus dem Squirrel-Town-Capture
+pytest -q app/tests/test_frame_validation_fixtures.py
+```
+
+Synthetische Fixtures werden in-test generiert (kein on-disk
+Asset-Berg). Echte Korruptions-Frames aus Produktion liegen
+unter `app/tests/fixtures/frame_validation/` und dienen als
+Regression-Bar für jede Validator-Änderung.
+
+---
+
 ## 🚀 Loslegen
 
 **Voraussetzungen:** Linux- oder Windows/Docker-Host · mindestens eine

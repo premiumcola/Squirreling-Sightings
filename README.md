@@ -37,12 +37,6 @@ kleine Geschichten — mit Wetter-Kontext, Tier-Erkennung, automatisch
 entstehenden Vogel-Dossiers und saisonalen Quests, die du ohne extra Aufwand
 abschließt (oder verfehlst).
 
-<table><tr><td>
-<!-- this comment is the only "table" — used as a layout grid because
-     GitHub strips <style> tags. The user-facing rule "no tables" means
-     no Feature/Description matrices; layout-only flex via comments+rows
-     keeps the README single-page on wide screens. -->
-</td></tr></table>
 
 ### <img src="docs/img/icon-live.svg" width="24" height="24" align="absmiddle"/>  Live & Bewegung
 
@@ -346,3 +340,6 @@ Dossier) ·
 
 Screenshot-Mockups + Stock-Bilder: siehe
 [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md).
+
+Brand assets: in-house SVGs, dark-mode-only palette
+(forest green / acorn brown / lens cyan) — see `docs/img/`.

@@ -1,11 +1,15 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="TAM-spy" width="100%" />
+  <img src="docs/banner.svg" alt="Squirreling · Sightings" width="100%" />
 </p>
 
-<h1 align="center">TAM-spy</h1>
+<h1 align="center">Squirreling · Sightings</h1>
 
 <p align="center"><strong>Self-hosted, weather-aware IP-camera + AI manager
 that turns motion noise into actual stories.</strong></p>
+
+<p align="center">
+  <em>Coral TPU · weather-aware · quest-driven</em>
+</p>
 
 <p align="center">
   <em>Reolink RTSP · Coral TPU · Telegram · MQTT · Open-Meteo —
@@ -21,7 +25,7 @@ that turns motion noise into actual stories.</strong></p>
 </p>
 
 <p align="center">
-  <a href="#-was-tam-spy-macht">Was es macht</a> ·
+  <a href="#-was-squirreling-macht">Was Squirreling macht</a> ·
   <a href="#-show-dont-tell">Show, don't tell</a> ·
   <a href="#-wie-es-funktioniert">Wie es funktioniert</a> ·
   <a href="#-loslegen">Loslegen</a> ·
@@ -30,14 +34,14 @@ that turns motion noise into actual stories.</strong></p>
 
 ---
 
-## ✨ Was TAM-spy macht
+## ✨ Was Squirreling macht
 
 Eine Reolink-Kamera produziert pro Tag tausende Sekunden Bewegung. Davon ist
-fast alles Müll: Wind im Baum, Schatten, Insekten an der Linse. **TAM-spy**
-filtert das raus und macht aus den verbleibenden Augenblicken kleine
-Geschichten — mit Wetter-Kontext, Tier-Erkennung, automatisch entstehenden
-Vogel-Dossiers und saisonalen Quests, die du ohne extra Aufwand abschließt
-(oder verfehlst).
+fast alles Müll: Wind im Baum, Schatten, Insekten an der Linse. **Squirreling
+· Sightings** filtert das raus und macht aus den verbleibenden Augenblicken
+kleine Geschichten — mit Wetter-Kontext, Tier-Erkennung, automatisch
+entstehenden Vogel-Dossiers und saisonalen Quests, die du ohne extra Aufwand
+abschließt (oder verfehlst).
 
 <table><tr><td>
 <!-- this comment is the only "table" — used as a layout grid because
@@ -82,7 +86,7 @@ Mäßiger / Starker / Starkregen — dieselbe Logik in UI, Telegram und MQTT.
 ### Identität & Dossiers
 
 🐦 **Vogel-Dossiers** — wenn der iNat-Klassifizierer eine neue Art
-findet, baut TAM-spy automatisch ein persönliches Dossier auf:
+findet, baut Squirreling automatisch ein persönliches Dossier auf:
 Wikipedia-Auszug, Foto, plus bis zu drei Xeno-Canto-Aufnahmen mit
 deutschem Caption (Gesang / Ruf / Warnruf) und sichtbarer
 Recordist-Attribution + CC-Lizenz.

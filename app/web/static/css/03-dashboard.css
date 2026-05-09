@@ -99,16 +99,17 @@
 /* Live dot */
 .cv-pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 /* Expanding live capsule */
-/* Content-sized collapsed pill with a 100 px floor. The fps payload
-   is 4-7 chars ("0.1 fps" / "15 fps" / "120 fps") so a fixed 130 px
-   left visible empty space inside the pill on iPhone. max-content
-   on the custom var lets the pill hug its actual content; min-width
-   100 px keeps it a comfortable touch target when the fps string is
-   short ("— fps" placeholder). max-width pins to --lp-expanded-w so
-   the flex shape can grow up to the open-state width (230 px). The
-   .cv-lp-open rule on line 103 still flips max-width explicitly to
-   --lp-expanded-w so the open transition hits the same end state. */
-.cv-pill-live-wrap{--lp-collapsed-w:max-content;--lp-expanded-w:220px;position:relative;border-radius:999px;border:1.5px solid rgba(34,197,94,.55);background:rgba(34,197,94,.18);color:#c8f5e0;font-size:10.5px;font-weight:700;cursor:default;overflow:hidden;backdrop-filter:blur(8px);min-width:118px;width:var(--lp-collapsed-w);max-width:var(--lp-expanded-w);max-height:22px;transition:max-width .28s ease,max-height .28s ease,border-radius .28s ease;margin-left:auto}
+/* Content-sized collapsed pill — no width floor. The fps payload is
+   4-7 chars ("0.1 fps" / "15 fps" / "120 fps" / "— fps" placeholder)
+   so any fixed min-width left visible empty space inside the pill on
+   iPhone. max-content on the custom var lets the pill hug its actual
+   content; the parent .cv-tr cluster gives plenty of inset breathing
+   room and extends the touch hit area beyond the pill's own 22 px
+   height. max-width pins to --lp-expanded-w so the flex shape can
+   grow up to the open-state width (220 px). The .cv-lp-open rule
+   below still flips max-width explicitly to --lp-expanded-w so the
+   open transition hits the same end state. */
+.cv-pill-live-wrap{--lp-collapsed-w:max-content;--lp-expanded-w:220px;position:relative;border-radius:999px;border:1.5px solid rgba(34,197,94,.55);background:rgba(34,197,94,.18);color:#c8f5e0;font-size:10.5px;font-weight:700;cursor:default;overflow:hidden;backdrop-filter:blur(8px);width:var(--lp-collapsed-w);max-width:var(--lp-expanded-w);max-height:22px;transition:max-width .28s ease,max-height .28s ease,border-radius .28s ease;margin-left:auto}
 .cv-pill-live-wrap.cv-lp-open{border-radius:14px;max-width:var(--lp-expanded-w);max-height:130px}
 .cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
 /* Slimmer collapsed row — 3 px vertical padding, 10.5 px font, 1.2 line-

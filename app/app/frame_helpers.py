@@ -896,6 +896,40 @@ class CaptureStats:
             if key not in self.rejected_by_reason_examples:
                 self.rejected_by_reason_examples[key] = reason
 
+    # ── Derived breakdown ───────────────────────────────────────────────
+    # The user reads the panel and asks "how many slots in the MP4 are
+    # actually fresh content?" — the raw counters answer half of that.
+    # These properties decompose ``invalid_frames`` into:
+    #   • backfilled_slots — invalid slots filled with a copy of the
+    #     last valid frame (encoder-friendly continuity, but not
+    #     "new" imagery)
+    #   • skipped_slots    — scene-level rejects we deliberately gave
+    #     up on early (empty terrace at midnight) — these stay empty
+    #     in the MP4 sequence
+    # ``total_written`` is fresh + backfilled. The MP4's slot count is
+    # always at most ``total_written``; ffmpeg padding fills any gaps.
+    @property
+    def fresh_captures(self) -> int:
+        return int(self.captured_frames)
+
+    @property
+    def scene_skips_total(self) -> int:
+        return int(sum(self.scene_skips_by_reason.values()))
+
+    @property
+    def backfilled_slots(self) -> int:
+        # Clamp at zero — defensive against a counter race we don't
+        # currently have but might invent if the loop is rewritten.
+        return max(0, int(self.invalid_frames) - self.scene_skips_total)
+
+    @property
+    def skipped_slots(self) -> int:
+        return self.scene_skips_total
+
+    @property
+    def total_written(self) -> int:
+        return self.fresh_captures + self.backfilled_slots
+
     def flush(self):
         try:
             path = Path(self.out_dir) / "_stats.json"
@@ -910,6 +944,14 @@ class CaptureStats:
                 "scene_skips_by_reason": dict(self.scene_skips_by_reason),
                 "rejected_by_reason_examples": dict(self.rejected_by_reason_examples),
                 "backfill_cache_drops": int(self.backfill_cache_drops),
+                # Derived breakdown — denormalised here so consumers
+                # don't have to recompute. fresh+backfilled+skipped is
+                # the "how many slots in the MP4 are real content"
+                # answer the user asks every time they read the panel.
+                "fresh_captures":   self.fresh_captures,
+                "backfilled_slots": self.backfilled_slots,
+                "skipped_slots":    self.skipped_slots,
+                "total_written":    self.total_written,
                 "validator_profile": self.validator_profile,
                 "baseline_brightness": self.baseline_brightness,
                 "phase_drift_min": self.phase_drift_min,

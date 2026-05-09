@@ -212,6 +212,24 @@
 .suntltest-rej-hint{font-size:12px;color:rgba(255,255,255,0.62);line-height:1.35}
 .suntltest-rej-empty{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.04);font-size:13px;color:var(--muted)}
 
+/* ── Capture breakdown ──────────────────────────────────────────────
+   Sits between the Frames tile and the "Verworfen wegen …" section.
+   Decomposes the raw "captured / expected · Retries · Invalid" tile
+   into the user-relevant question "how many slots in the resulting
+   MP4 are real content?". Stacked rows on mobile (≤ 480 px) so the
+   labels stay legible without horizontal scrolling on iPhone. */
+.suntltest-breakdown{display:grid;gap:6px;margin:8px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04)}
+.suntltest-bkd-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;line-height:1.3;min-height:28px}
+.suntltest-bkd-label{color:var(--muted)}
+.suntltest-bkd-val{font-weight:700;font-variant-numeric:tabular-nums;min-width:28px;text-align:right}
+.suntltest-bkd-val--ok{color:#7af1c1}
+.suntltest-bkd-val--mute{color:rgba(255,255,255,.62)}
+.suntltest-bkd-val--warn{color:#fbbf24}
+@media (max-width:480px){
+  .suntltest-bkd-row{flex-direction:column;align-items:flex-start;gap:2px;min-height:44px;justify-content:center}
+  .suntltest-bkd-val{text-align:left}
+}
+
 /* ── Profile + drift pill row ───────────────────────────────────────
    Sits between the live-head and the tile grid. Tints encode the
    active validator profile (DAY = sun yellow, TWILIGHT = horizon

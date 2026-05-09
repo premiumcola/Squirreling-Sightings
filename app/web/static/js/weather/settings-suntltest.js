@@ -268,6 +268,37 @@ function _renderLive(d){
     .slice(-60)
     .map(line => `<div class="suntltest-log-line">${esc(line)}</div>`)
     .join('');
+  // "How many slots in the resulting MP4 are real content?" — derived
+  // counters answer the user's recurring question. fresh = brand-new
+  // grabs, backfilled = invalid slots filled with the most-recent
+  // valid frame for encoder continuity, skipped = scene-level rejects
+  // we deliberately gave up on. backfill_cache_drops only renders
+  // when > 0 to avoid clutter on healthy captures.
+  const fresh = parseInt(d.fresh_captures, 10) || 0;
+  const back  = parseInt(d.backfilled_slots, 10) || 0;
+  const skip  = parseInt(d.skipped_slots, 10) || 0;
+  const cacheDrops = parseInt(d.backfill_cache_drops, 10) || 0;
+  const breakdownBlock = (fresh + back + skip > 0)
+    ? `<div class="suntltest-breakdown">
+        <div class="suntltest-bkd-row">
+          <span class="suntltest-bkd-label">Frisch erfasst</span>
+          <span class="suntltest-bkd-val suntltest-bkd-val--ok">${fresh}</span>
+        </div>
+        <div class="suntltest-bkd-row">
+          <span class="suntltest-bkd-label">Aufgefüllt mit letztem gültigen Frame</span>
+          <span class="suntltest-bkd-val suntltest-bkd-val--mute">${back}</span>
+        </div>
+        <div class="suntltest-bkd-row">
+          <span class="suntltest-bkd-label">Übersprungen (Szene leer)</span>
+          <span class="suntltest-bkd-val suntltest-bkd-val--mute">${skip}</span>
+        </div>
+        ${cacheDrops > 0 ? `
+        <div class="suntltest-bkd-row" title="Backfill-Cache wurde verworfen, weil der zwischengespeicherte Frame nach mehrfacher Wiederverwendung von einer strikteren Validierung als korrupt erkannt wurde.">
+          <span class="suntltest-bkd-label">Backfill-Cache verworfen</span>
+          <span class="suntltest-bkd-val suntltest-bkd-val--warn">${cacheDrops}</span>
+        </div>` : ''}
+      </div>`
+    : '';
   wrap.className = `suntltest-live ${stateClass}`;
   wrap.innerHTML = `
     <div class="suntltest-live-head">
@@ -291,6 +322,7 @@ function _renderLive(d){
         <div class="suntltest-tile-sub">Retries ${retries} · Invalid ${invalid}</div>
       </div>
     </div>
+    ${breakdownBlock}
     <div class="suntltest-section">
       <div class="suntltest-section-title">Verworfen wegen …</div>
       ${rejectedBlock}

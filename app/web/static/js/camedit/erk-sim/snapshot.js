@@ -1,72 +1,16 @@
 // ─── camedit/erk-sim/snapshot.js ───────────────────────────────────────────
-// "Snapshot" sub-tab of the Erkennung simulation sheet. Posts to
-// /api/cameras/<id>/test-detection, animates the icon while the request
-// is in flight, then renders the snapshot + bounding boxes inline.
+// Render-only helper for the Erkennung simulation sheet. Paints a
+// single inference response into the result panel: snapshot image,
+// SVG bounding boxes, frame-age caption, detection list, decision-
+// trace log. Called per-tick by live.js; the polling lifecycle and
+// the IoU tracker live there.
 import { byId, esc } from '../../core/dom.js';
-import { showToast } from '../../core/toast.js';
 
 const _ERK_VERDICT_TXT = {
   'pass':         'würde Alarm auslösen',
   'belowthresh':  '',
   'filtered':     '',
 };
-
-// Module-scoped abort controller. A second click while the first
-// request is in flight aborts the prior fetch and starts fresh.
-// Without this, the first response could arrive after the second
-// and overwrite the panel with a stale snapshot, OR the loading
-// state never clears because both promises resolve out of order
-// (the previous symptom: "panel hangs on rapid re-clicks").
-let _erkSimAbort = null;
-
-
-export async function _onErkSimulateClick(ev){
-  const btn = ev.currentTarget;
-  const camId = byId('cameraForm')?.elements?.['id']?.value;
-  if (!camId) return;
-  const lblEl = btn.querySelector('.erk-test-btn-lbl');
-  const originalLabel = lblEl?.textContent || '';
-  btn.disabled = true;
-  btn.classList.add('is-busy');
-  if (lblEl) lblEl.textContent = ' simuliere…';
-  // Supersede any in-flight request — the controller below is the
-  // ONLY one we care about for the rest of this handler. Stale
-  // resolutions (AbortError) are swallowed silently.
-  if (_erkSimAbort){
-    try { _erkSimAbort.abort(); } catch { /* ignore */ }
-  }
-  _erkSimAbort = new AbortController();
-  const controller = _erkSimAbort;
-  try {
-    const r = await fetch(
-      `/api/cameras/${encodeURIComponent(camId)}/test-detection`,
-      { method: 'POST', signal: controller.signal },
-    );
-    let data = null;
-    try { data = await r.json(); } catch {}
-    if (!r.ok || !data?.ok){
-      const msg = (data && data.error) ? data.error : 'Fehler';
-      showToast('Test fehlgeschlagen · ' + msg, 'error');
-      return;
-    }
-    _renderErkSimResult(data);
-  } catch (e) {
-    // AbortError = a newer click superseded this request. Stay
-    // silent; the newer click owns the UI feedback now.
-    if (e?.name === 'AbortError') return;
-    showToast('Test fehlgeschlagen · Netzwerk', 'error');
-  } finally {
-    // Only reset the loading state if THIS request is still the
-    // current one — otherwise we'd flip the button enabled while
-    // the newer request is still running.
-    if (_erkSimAbort === controller){
-      _erkSimAbort = null;
-      btn.disabled = false;
-      btn.classList.remove('is-busy');
-      if (lblEl) lblEl.textContent = originalLabel;
-    }
-  }
-}
 
 export function _renderErkSimResult(data){
   const wrap = byId('erkSimResult');
@@ -158,21 +102,23 @@ export function _renderErkSimResult(data){
     logBody.textContent = header + '\n' + data.decision_trace.join('\n');
     logWrap.hidden = false;
   }
+  // First-render-only scroll-keep: only the very first tick of a
+  // live run runs this. live.js sets wrap.dataset.everShown after
+  // the first successful _renderErkSimResult; subsequent ticks see
+  // the flag already set and skip the scroll, so the user can scroll
+  // through the trace without being yanked back every second.
+  const firstShow = wrap.hidden || wrap.dataset.everShown !== '1';
   wrap.hidden = false;
-  // Keep the simulate button visible after the result lands. The
-  // panel sits BELOW the button in DOM order, so showing it doesn't
-  // move the button — but a previous run may have left the user
-  // scrolled past it. Pull the button back to the top only if it's
-  // currently outside the viewport; CSS scroll-margin-top on
-  // .erk-test-btn (06-cam-edit-1.css) leaves a small chrome gap.
-  const btn = byId('erkSimulateBtn');
-  if (btn){
-    const rect = btn.getBoundingClientRect();
-    const vh = window.innerHeight || document.documentElement.clientHeight;
-    const inView = rect.top >= 0 && rect.bottom <= vh;
-    if (!inView){
-      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-      btn.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  if (firstShow){
+    const btn = byId('erkSimulateBtn');
+    if (btn){
+      const rect = btn.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const inView = rect.top >= 0 && rect.bottom <= vh;
+      if (!inView){
+        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        btn.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+      }
     }
   }
 }

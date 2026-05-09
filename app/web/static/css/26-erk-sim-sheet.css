@@ -25,3 +25,48 @@
 #erkSimLiveBody > *{
   min-width:0;max-width:100%;
 }
+
+/* ── Live-detection toggle state ────────────────────────────────────────────
+   The simulate button doubles as a Stop button while live mode is
+   running (live.js swaps innerHTML on click). Active state paints
+   the button surface in a warm red so the "currently active, click
+   to stop" affordance is unambiguous; the .erk-live-dot inside
+   pulses in sync with the polling tick. */
+.erk-test-btn.is-live{
+  background:#7f1d1d;
+  color:#fee2e2;
+}
+.erk-test-btn.is-live:hover{
+  background:#991b1b;
+  color:#fff;
+}
+.erk-live-dot{
+  /* Inline-flex sibling of the button label — never position:fixed,
+     to avoid the iOS layout edge cases the user flagged. */
+  width:9px;height:9px;border-radius:50%;
+  background:#fca5a5;
+  flex-shrink:0;
+  box-shadow:0 0 0 0 rgba(248,113,113,.55);
+  animation:erk-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes erk-live-pulse{
+  0%,100%{ box-shadow:0 0 0 0 rgba(248,113,113,.55); transform:scale(1); }
+  50%    { box-shadow:0 0 0 6px rgba(248,113,113,0);  transform:scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce){
+  .erk-live-dot{ animation:none; }
+}
+
+/* ── Path trails painted under each confirmed track ────────────────────────
+   Sibling polylines inside the same SVG overlay as the bbox <rect>s.
+   Trails sit BEHIND the boxes (live.js inserts them with
+   `afterbegin` so SVG paints them first). Verdict colour mirrors
+   .erk-det-box so a track and its trail read as one shape; opacity
+   is dropped so the trail doesn't compete with the bbox itself. */
+.erk-track-trail{
+  fill:none;
+  opacity:.55;
+}
+.erk-track-trail.is-pass        { stroke:#22c55e; }
+.erk-track-trail.is-belowthresh { stroke:#fb923c; }
+.erk-track-trail.is-filtered    { stroke:#6b7280; opacity:.35; }

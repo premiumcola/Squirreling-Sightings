@@ -1,11 +1,12 @@
 // ─── camedit/erk-sim/index.js ──────────────────────────────────────────────
 // Public API for the Erkennung simulation sheet. Wires the
-// "Erkennung jetzt simulieren" button + the result-panel close
-// + the decision-trace "leeren" button. Single-body sheet: the
-// Video sub-tab and its tab strip got removed (commit fix).
-//   index.js → snapshot.js → ../../core/* only
+// "Erkennung jetzt simulieren" button → live-detection toggle
+// (live.js), the result-panel × button (also stops live), and the
+// decision-trace "leeren" button. Single-body sheet — Video sub-tab
+// got removed.
+//   index.js → live.js → tracker.js + snapshot.js → ../../core/* only
 import { byId } from '../../core/dom.js';
-import { _onErkSimulateClick } from './snapshot.js';
+import { _onErkSimulateClick, stopLive } from './live.js';
 
 
 export function bindErkSimulate(){
@@ -18,8 +19,15 @@ export function bindErkSimulate(){
   if (close && !close.dataset.wired){
     close.dataset.wired = '1';
     close.addEventListener('click', () => {
+      // Synchronous stop so the button label flips back the moment
+      // the panel dismisses — the self-policing tick would catch it
+      // up to 1 s later, which feels laggy.
+      stopLive();
       const wrap = byId('erkSimResult');
-      if (wrap) wrap.hidden = true;
+      if (wrap){
+        wrap.hidden = true;
+        delete wrap.dataset.everShown;
+      }
     });
   }
   // "leeren" button on the decision-trace log block — clears the

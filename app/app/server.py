@@ -175,9 +175,38 @@ def _emit_boot_inventory(base_cfg: dict, storage_root: Path):
                 ffmpeg_v = "?"
     except Exception:
         ffmpeg_v = "?"
+    # cv2 is imported lazily — the top-level server.py shed the global
+    # import in the May trim refactor (commit 0de7790) and never
+    # reinstated it. Kept local so `inventory` always logs a real
+    # OpenCV version instead of triggering a NameError.
+    try:
+        import cv2 as _cv2  # noqa: PLC0415
+        opencv_v = getattr(_cv2, "__version__", "?")
+    except Exception:
+        opencv_v = "n/a"
     log.info("[boot] python=%s · opencv=%s · ffmpeg=%s · platform=%s",
-             _plat.python_version(), getattr(cv2, "__version__", "?"),
+             _plat.python_version(), opencv_v,
              ffmpeg_v, _plat.platform(terse=True))
+    # RTSP transport line — single source of truth for "what protocol
+    # are we asking FFmpeg to use for every cv2.VideoCapture in this
+    # process". Set in docker-compose.yml as
+    # OPENCV_FFMPEG_CAPTURE_OPTIONS; the snapshot probe in
+    # routes/bootstrap.py and the camera runtime in
+    # camera_runtime/_capture.py override per-handle when needed but
+    # always to the same value. Anything other than "tcp" risks the
+    # bottom-strip H.265 corruption seen in the night-test debugging.
+    rtsp_opts = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS", "")
+    rtsp_transport = "udp"  # FFmpeg default
+    for kv in rtsp_opts.split("|") if rtsp_opts else []:
+        if kv.startswith("rtsp_transport;"):
+            rtsp_transport = kv.split(";", 1)[1] or "udp"
+            break
+    if rtsp_transport == "tcp":
+        log.info("[boot] rtsp transport: tcp (stream loss protection enabled)")
+    else:
+        log.warning("[boot] rtsp transport: %s — H.265 packet loss may corrupt frames; "
+                    "set OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp",
+                    rtsp_transport)
     # Paths + log level
     lvl_name = logging.getLevelName(console_level())
     log.info("[boot] storage_root=%s · settings=%s · log_level=%s",

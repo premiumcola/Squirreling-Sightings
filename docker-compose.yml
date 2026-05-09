@@ -26,6 +26,15 @@ services:
       - /dev/bus/usb:/dev/bus/usb
     environment:
       - TZ=Europe/Berlin
+      # Force RTSP-over-TCP for every cv2.VideoCapture handle in the
+      # process. Without this, FFmpeg defaults to UDP, drops packets,
+      # and decodes the gap into the bottom-strip / macroblock smear
+      # corruption that the new bottom_strip_anomaly validator was
+      # built around. The 5 s `stimeout` matches CAP_PROP_READ_TIMEOUT_MSEC
+      # in camera_runtime/_capture.py so the boot-time setting agrees
+      # with the per-handle runtime override. Format follows OpenCV's
+      # FFmpeg-options grammar (key;value pairs joined by `|`).
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|stimeout;5000000
 
   # Coral TPU variant — uncomment and use instead of above if you have a Coral USB TPU
   # tam-spy-coral:

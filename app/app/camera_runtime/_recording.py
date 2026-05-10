@@ -369,14 +369,57 @@ class RecordingMixin:
             "confirm_n":          int(cw_global.get("n", 3)),
             "confirm_seconds":    int(cw_global.get("seconds", 5)),
             "sample_interval_ms": int(self.cfg.get("frame_interval_ms") or 350),
-            # motion_sensitivity is stored as 0..1 in the schema; the
-            # spec wants an int 0..100 percentage so the chip can
-            # render "Sens. 50%" without a divisor on the frontend.
+            # Raw 0..1 float (same units as the schema). The frontend
+            # multiplies by 100 for display so the rest of the API
+            # surface — settings.json, /api/cameras — keeps the same
+            # representation it has used since the wizard shipped.
             "motion_pretrigger_sensitivity":
-                int(round(float(self.cfg.get("motion_sensitivity") or 0.5) * 100)),
+                float(self.cfg.get("motion_sensitivity") or 0.5),
             "post_motion_seconds":
                 int(self.cfg.get("post_motion_tail_s") or 0),
         }
+
+    def _build_achievement_snapshot(self) -> dict:
+        """Capture "what the configured settings actually produced"
+        at finalize time. Only fields we can compute cheaply here go
+        in synchronously — the post-hoc tracks.json-derived stats
+        (tracks_by_class, peak_score_by_class, confirm_hits_by_track)
+        are added by tracking_worker once it finishes its pass over
+        the clip. Missing fields are intentionally omitted; the
+        frontend renders "—" for what isn't there.
+
+        Inference status mirrors the cam-edit Erkennung status strip:
+          coral mode + low ms      → "ok"
+          coral mode + ≥ 50 ms avg → "elevated"
+          cpu fallback             → "cpu_emergency"
+        """
+        ach: dict = {}
+        # inference_avg_ms — rolling mean from the runtime's deque.
+        try:
+            ms = getattr(self, "_inference_times_ms", None)
+            if ms:
+                ach["inference_avg_ms"] = round(sum(ms) / len(ms), 1)
+        except Exception:
+            pass
+        # inference_status from detector.mode + average.
+        try:
+            det_mode = getattr(self.detector, "mode", "motion_only")
+            avg = ach.get("inference_avg_ms")
+            if det_mode == "cpu":
+                ach["inference_status"] = "cpu_emergency"
+            elif det_mode == "coral":
+                ach["inference_status"] = (
+                    "elevated" if avg is not None and avg >= 50.0 else "ok"
+                )
+            # "motion_only" / "off" → no inference, omit the field.
+        except Exception:
+            pass
+        # The very fact that we're in _finalize_motion_clip means the
+        # pre-trigger fired. Peak motion score isn't tracked in the
+        # current motion pipeline (contour-area thresholding has no
+        # 0..1 score), so we intentionally omit it.
+        ach["motion_pretrigger_fired"] = True
+        return ach
 
     def _finalize_motion_clip(self, frames: list, meta: dict, fps: float = 10.0):
         """Save MP4 clip (H.264 via ffmpeg, mp4v fallback), verify, write event JSON, send Telegram."""
@@ -499,12 +542,18 @@ class RecordingMixin:
         except Exception:
             pass
 
-        # Recording settings snapshot — captures the detection config
-        # active at clip-finalize time so each event.json carries the
-        # exact thresholds / filters / cadence it was shot under. Old
-        # events written before this addition simply lack the key, the
-        # frontend renders "Settings nicht aufgezeichnet" for them.
+        # Recording settings snapshot + achievement metrics. The first
+        # block captures the detection config active at clip-finalize
+        # time so each event.json carries the exact thresholds /
+        # filters / cadence it was shot under. The second block
+        # captures what those settings actually produced — inference
+        # cadence + motion pretrigger state. Track-derived achievement
+        # fields (tracks_by_class, peak_score_by_class,
+        # confirm_hits_by_track) are filled in later by
+        # tracking_worker once its pass over the mp4 completes; we
+        # don't synthesise them here.
         recording_settings = self._build_recording_settings_snapshot()
+        achievement = self._build_achievement_snapshot()
 
         # Write event JSON
         event = {
@@ -531,6 +580,7 @@ class RecordingMixin:
             "duration_s": duration_s,
             "file_size_bytes": file_size_bytes,
             "recording_settings": recording_settings,
+            "achievement": achievement,
         }
         if encode_error:
             event["encode_error"] = encode_error

@@ -331,64 +331,311 @@
   font-style:italic;
 }
 
-/* ── Settings chip + panel ─────────────────────────────────────────────── */
+/* Track-loss × tooltip — singleton popover, anchored above/below the
+   × marker. Mirrors the erk-sim tooltip pattern's placement clamp +
+   scroll-dismiss; the visual is dark and minimal so the class colours
+   in the underlying timeline aren't competing for attention. */
+.lbtt-end-tip{
+  position:fixed;z-index:1300;
+  padding:8px 12px;
+  background:rgba(15,23,42,.96);
+  color:#e2e8f0;
+  font-size:11px;line-height:1.4;
+  letter-spacing:.01em;
+  border-radius:10px;
+  pointer-events:none;
+  white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.5);
+}
+.lbtt-end-tip[hidden]{ display:none; }
+.lbtt-end-tip-title{
+  font-weight:700;color:#f1f5f9;
+  font-size:11.5px;
+  margin-bottom:4px;
+}
+.lbtt-end-tip-row{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  margin-bottom:2px;
+}
+.lbtt-end-tip-key{
+  color:rgba(226,232,240,.55);
+  display:inline-block;width:54px;
+  font-family:system-ui,-apple-system,sans-serif;
+  font-size:10.5px;font-weight:600;letter-spacing:.01em;
+}
+.lbtt-end-tip-val{ color:#f1f5f9; }
+.lbtt-end-tip-val.is-ok{ color:#4ade80; }
+.lbtt-end-tip-val.is-bad{ color:#f87171; }
+.lbtt-end-tip-summary{
+  margin-top:6px;padding-top:6px;
+  border-top:1px solid rgba(255,255,255,.08);
+  font-size:11px;color:rgba(226,232,240,.78);
+  font-style:italic;
+  white-space:normal;
+  max-width:240px;
+}
+
+/* ── Settings panel that mirrors cam-edit wizard ───────────────────────── */
 #lightboxSettings{
   flex-shrink:0;
-  padding:6px 14px 12px 14px;
+  padding:8px 14px 14px 14px;
   background:#000;
   z-index:5;
 }
 #lightboxSettings[hidden]{ display:none; }
-#lightboxSettings .lbset-chip{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:7px 12px 7px 14px;
-  border:0;background:rgba(255,255,255,.07);
-  color:#e2e8f0;
-  font-size:11.5px;font-weight:600;letter-spacing:.01em;
-  border-radius:999px;
-  cursor:pointer;-webkit-tap-highlight-color:transparent;
-  min-height:30px;
-  transition:background .15s;
-  max-width:100%;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-#lightboxSettings .lbset-chip:hover{ background:rgba(255,255,255,.12); }
-#lightboxSettings .lbset-chip-chevron{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:12px;height:12px;flex-shrink:0;
-  transition:transform .18s ease;
-  color:rgba(226,232,240,.62);
-}
-#lightboxSettings .lbset-chip[aria-expanded="true"] .lbset-chip-chevron{
-  transform:rotate(180deg);
-}
-#lightboxSettings .lbset-panel{
-  margin-top:8px;
-  padding:10px 12px;
-  background:rgba(255,255,255,.04);
-  border-radius:10px;
-  display:grid;
-  grid-template-columns:max-content 1fr;
-  column-gap:14px;row-gap:6px;
-  font-size:11.5px;
-  color:#e2e8f0;
-}
-#lightboxSettings .lbset-panel[hidden]{ display:none; }
-#lightboxSettings .lbset-key{
-  color:rgba(226,232,240,.62);
-  font-weight:600;letter-spacing:.01em;
-}
-#lightboxSettings .lbset-val{
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  color:#f1f5f9;
-  font-variant-numeric:tabular-nums;
-  word-break:break-word;
-}
 #lightboxSettings .lbset-missing{
   font-size:11.5px;
   color:rgba(226,232,240,.45);
   font-style:italic;
   padding:4px 0 0;
+}
+
+/* Header — clickable, chevron rotates when expanded. Mirrors the
+   cam-edit erk-flow visual but with a single line + caret. */
+#lightboxSettings .lbset-header{
+  display:flex;align-items:center;gap:8px;
+  width:100%;
+  background:transparent;border:0;
+  padding:6px 4px;
+  color:#e2e8f0;
+  font-size:12.5px;font-weight:700;letter-spacing:.01em;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  border-radius:8px;
+}
+#lightboxSettings .lbset-header:hover{ background:rgba(255,255,255,.04); }
+#lightboxSettings .lbset-header-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;flex-shrink:0;
+  color:rgba(226,232,240,.78);
+}
+#lightboxSettings .lbset-header-title{
+  flex:1 1 auto;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-align:left;
+}
+#lightboxSettings .lbset-header-chevron{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;flex-shrink:0;
+  color:rgba(226,232,240,.62);
+  transition:transform .18s ease;
+}
+#lightboxSettings .lbset-header[aria-expanded="false"] .lbset-header-chevron{
+  transform:rotate(-90deg);
+}
+
+#lightboxSettings .lbset-body{
+  display:flex;flex-direction:column;gap:6px;
+  margin-top:6px;
+}
+#lightboxSettings .lbset-body[hidden]{ display:none; }
+
+/* Per-step row mirrors the cam-edit step block: numeric circle, icon,
+   title, hint. Body is a 2-col grid Gesetzt / Erreicht. */
+#lightboxSettings .lbset-step{
+  padding:6px 8px 8px 8px;
+  background:rgba(255,255,255,.035);
+  border-radius:10px;
+}
+#lightboxSettings .lbset-step-head{
+  display:flex;align-items:center;gap:8px;
+  font-size:11.5px;
+  color:#e2e8f0;
+  margin-bottom:4px;
+}
+#lightboxSettings .lbset-step-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:50%;
+  background:rgba(255,255,255,.10);
+  color:#f1f5f9;
+  font-size:10px;font-weight:700;
+  flex-shrink:0;
+}
+#lightboxSettings .lbset-step-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:14px;flex-shrink:0;
+  color:rgba(226,232,240,.85);
+}
+#lightboxSettings .lbset-step-title{
+  font-weight:700;letter-spacing:.01em;
+}
+#lightboxSettings .lbset-step-sub{
+  color:rgba(226,232,240,.5);
+  font-size:10.5px;font-weight:500;
+  font-style:italic;
+  margin-left:auto;
+  white-space:nowrap;
+}
+#lightboxSettings .lbset-step-body{
+  display:grid;
+  grid-template-columns:max-content 1fr;
+  column-gap:12px;row-gap:3px;
+  font-size:11.5px;
+}
+#lightboxSettings .lbset-row-label{
+  color:rgba(226,232,240,.55);
+  font-weight:600;letter-spacing:.01em;
+  font-size:10.5px;
+  padding-top:1px;
+}
+#lightboxSettings .lbset-row-value{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  color:#f1f5f9;
+  font-variant-numeric:tabular-nums;
+  word-break:break-word;
+  line-height:1.45;
+}
+#lightboxSettings .lbset-row-aux{
+  color:rgba(226,232,240,.55);
+  font-weight:500;
+  margin-left:6px;
+}
+#lightboxSettings .lbset-row-muted{
+  color:rgba(226,232,240,.45);
+  font-style:italic;
+}
+
+/* Step 2 — per-class peaks. Each peak chip uses inline class colour
+   set by the JS, so the row reads at a glance which class hit which
+   peak without the user having to map colour to label. */
+#lightboxSettings .lbset-peak{
+  display:inline-block;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+}
+
+/* Step 3 — confirmation checkmarks. Green ✓ for confirmed; muted ○
+   for tracks that never hit the N-of-window window. */
+#lightboxSettings .lbset-ok{ color:#4ade80; font-weight:700; }
+#lightboxSettings .lbset-no{ color:rgba(226,232,240,.4); }
+
+/* Step 4 — inference value tone. The cam-edit "CPU-Notfall" red maps
+   to orange here so it pops against the dark surface; "elevated"
+   warns without screaming. */
+#lightboxSettings .lbset-infer{ color:#f1f5f9; }
+#lightboxSettings .lbset-infer.is-elevated{ color:#fbbf24; }
+#lightboxSettings .lbset-infer.is-emergency{ color:#f97316; font-weight:700; }
+
+/* Trailing "+" row — Nachlauf + Min Bbox. Sits below the 5-step
+   block as a compact list so the user knows these are policy not
+   wizard-editable. */
+#lightboxSettings .lbset-extras{
+  padding:6px 8px;
+  background:rgba(255,255,255,.025);
+  border-radius:10px;
+  display:flex;flex-direction:column;gap:3px;
+}
+#lightboxSettings .lbset-extras-row{
+  display:flex;align-items:baseline;gap:10px;
+  font-size:11px;
+}
+#lightboxSettings .lbset-extras-label{
+  color:rgba(226,232,240,.55);
+  font-weight:600;letter-spacing:.01em;
+  flex:0 0 auto;
+}
+#lightboxSettings .lbset-extras-value{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  color:#f1f5f9;
+  font-variant-numeric:tabular-nums;
+}
+
+/* "Aktuelle Settings dieser Kamera bearbeiten →" — full-width button
+   at the bottom of the panel. Same dark-surface treatment as the
+   action buttons in the top bar so the chrome stays monochrome. */
+#lightboxSettings .lbset-edit-btn{
+  display:block;width:100%;
+  margin-top:4px;
+  padding:10px 14px;
+  background:rgba(255,255,255,.06);
+  border:0;border-radius:10px;
+  color:#f1f5f9;
+  font-size:12px;font-weight:600;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  text-align:center;
+  min-height:44px;
+  transition:background .15s;
+}
+#lightboxSettings .lbset-edit-btn:hover{ background:rgba(255,255,255,.10); }
+
+/* ── Live confidence meter (overlaid on the video) ─────────────────────── */
+/* Bottom-left pill inside #lightboxMediaWrap. Ticks per-gate
+   confidence + bbox fractions for every track active at currentTime.
+   Hidden when nothing is active — never sits on the video as dead
+   chrome. pointer-events:none so the meter can't block a tap on the
+   prev/next buttons that sit at the same corner. */
+#lightboxConfidenceMeter{
+  position:absolute;
+  bottom:14px;left:14px;
+  width:158px;
+  z-index:5;
+  pointer-events:none;
+  background:rgba(0,0,0,.78);
+  color:#e2e8f0;
+  border-radius:6px;
+  padding:6px 8px;
+  backdrop-filter:blur(4px);
+  display:flex;flex-direction:column;gap:6px;
+}
+#lightboxConfidenceMeter[hidden]{ display:none; }
+#lightboxConfidenceMeter .lbcm-track{
+  display:flex;flex-direction:column;gap:4px;
+}
+#lightboxConfidenceMeter .lbcm-track + .lbcm-track{
+  margin-top:4px;padding-top:6px;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+#lightboxConfidenceMeter .lbcm-track-head{
+  font-size:10px;font-weight:700;letter-spacing:.02em;
+}
+#lightboxConfidenceMeter .lbcm-row{
+  display:flex;flex-direction:column;gap:1px;
+}
+#lightboxConfidenceMeter .lbcm-row-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:6px;
+}
+#lightboxConfidenceMeter .lbcm-row-label{
+  font-size:10px;color:rgba(226,232,240,.78);
+  font-weight:600;letter-spacing:.01em;
+}
+#lightboxConfidenceMeter .lbcm-row-pct{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:9px;font-weight:700;
+  color:#f1f5f9;
+  font-variant-numeric:tabular-nums;
+}
+#lightboxConfidenceMeter .lbcm-row-bar{
+  position:relative;
+  height:3px;
+  background:rgba(255,255,255,.10);
+  border-radius:1.5px;
+  margin-top:6px;     /* leave room for the threshold number above */
+}
+#lightboxConfidenceMeter .lbcm-row-fill{
+  position:absolute;
+  top:0;left:0;height:100%;
+  border-radius:1.5px;
+}
+#lightboxConfidenceMeter .lbcm-row-tick{
+  position:absolute;
+  top:-1px;bottom:-1px;
+  width:1px;background:#fff;
+  pointer-events:none;
+  transform:translateX(-0.5px);
+}
+#lightboxConfidenceMeter .lbcm-row-tick-num{
+  position:absolute;
+  top:-12px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:8px;font-weight:600;
+  color:rgba(255,255,255,.72);
+  letter-spacing:.01em;
+  transform:translateX(-50%);
+  pointer-events:none;
+}
+#lightboxConfidenceMeter .lbcm-more{
+  font-size:9.5px;color:rgba(226,232,240,.55);
+  font-style:italic;
 }
 
 /* ── Unified play cursor ───────────────────────────────────────────────── */
@@ -409,27 +656,27 @@
 #lightboxPlayCursor .lbpc-line{
   position:absolute;
   top:0;bottom:0;left:0;
-  width:1px;
+  width:2px;
   background:#fff;
-  box-shadow:0 0 6px rgba(255,255,255,.45);
+  box-shadow:0 0 4px rgba(255,255,255,.5);
   pointer-events:none;
 }
 #lightboxPlayCursor .lbpc-line::before{
   content:'';
   position:absolute;
-  top:6px;left:-3.5px;
-  width:8px;height:8px;
+  top:6px;left:-4px;
+  width:10px;height:10px;
   border-radius:50%;
   background:#fff;
-  box-shadow:0 0 6px rgba(255,255,255,.6);
+  box-shadow:0 0 4px rgba(255,255,255,.6);
 }
 /* Drag hit-area — wraps the line in a 16 px wide invisible column so
-   touch/mouse pointers landing within ±8 px of the line drive scrubbing.
+   touch/mouse pointers landing within ±7 px of the line drive scrubbing.
    touch-action:none lets us swallow the gesture before iOS turns it
    into a horizontal page swipe. cursor:ew-resize hints desktop. */
 #lightboxPlayCursor .lbpc-hit{
   position:absolute;
-  top:0;bottom:0;left:-8px;
+  top:0;bottom:0;left:-7px;
   width:16px;
   pointer-events:auto;
   cursor:ew-resize;

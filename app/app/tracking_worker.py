@@ -117,11 +117,16 @@ def _bbox_dist_px(a: dict, b: dict) -> float:
 
 class _Track:
     """Mutable track state held during a single job. Closed at the end
-    and serialised into tracks.json's `tracks` array."""
+    and serialised into tracks.json's `tracks` array. end_reason +
+    last_* diagnostics surface in the lightbox × tooltip so the user
+    sees WHY a track dropped without having to grep worker logs."""
 
     __slots__ = ("track_id", "label", "color", "samples",
                  "first_frame", "last_frame", "best_score", "best_frame_idx",
-                 "active", "missed_windows")
+                 "active", "missed_windows",
+                 "end_reason", "last_score",
+                 "last_bbox_w_px", "last_bbox_h_px",
+                 "last_bbox_frac_h", "last_bbox_frac_area")
 
     def __init__(self, track_id: str, label: str, frame_idx: int):
         self.track_id = track_id
@@ -134,6 +139,15 @@ class _Track:
         self.best_frame_idx: int = frame_idx
         self.active = True
         self.missed_windows = 0
+        # End-state diagnostics — populated by close() before
+        # serialisation. None means "track never closed cleanly" and
+        # the consumer should treat it as missing.
+        self.end_reason: str | None = None
+        self.last_score: float | None = None
+        self.last_bbox_w_px: int | None = None
+        self.last_bbox_h_px: int | None = None
+        self.last_bbox_frac_h: float | None = None
+        self.last_bbox_frac_area: float | None = None
 
     def add_sample(self, frame_idx: int, t_s: float, bbox_dict: dict,
                    score: float | None, source: str):
@@ -157,8 +171,42 @@ class _Track:
             self.best_frame_idx = frame_idx
         self.missed_windows = 0
 
+    def close(self, reason: str, frame_w: int, frame_h: int) -> None:
+        """Mark the track inactive and capture diagnostic fields from
+        the LAST detect sample (falls back to last sample of any
+        source when no detect samples exist — happens for tracks that
+        only ever got `track`-source extrapolations). `reason` is one
+        of "timeout" or "ended_at_clip" today; the worker's pipeline
+        doesn't run per-track conf_drop / class_filter / bbox_too_small
+        gates after the detector so those reasons aren't emitted from
+        here.
+        """
+        self.active = False
+        self.end_reason = reason
+        last_detect = next(
+            (s for s in reversed(self.samples) if s.get("source") == "detect"),
+            None,
+        )
+        last = last_detect or (self.samples[-1] if self.samples else None)
+        if not last:
+            return
+        if last.get("score") is not None:
+            self.last_score = float(last["score"])
+        bb = last.get("bbox") or {}
+        try:
+            bw = max(0, int(bb["x2"]) - int(bb["x1"]))
+            bh = max(0, int(bb["y2"]) - int(bb["y1"]))
+        except Exception:
+            return
+        self.last_bbox_w_px = bw
+        self.last_bbox_h_px = bh
+        if frame_h > 0:
+            self.last_bbox_frac_h = round(bh / frame_h, 4)
+        if frame_w > 0 and frame_h > 0:
+            self.last_bbox_frac_area = round((bw * bh) / (frame_w * frame_h), 5)
+
     def to_dict(self) -> dict:
-        return {
+        d = {
             "track_id": self.track_id,
             "label": self.label,
             "color": self.color,
@@ -168,6 +216,21 @@ class _Track:
             "best_frame": self.best_frame_idx,
             "samples": self.samples,
         }
+        # End-state diagnostics — additive. Omit fields that close()
+        # didn't populate (e.g. a track with zero samples). The
+        # lightbox tooltip falls back to "—" / "unknown" for missing
+        # values, never breaks on absence.
+        if self.end_reason is not None:
+            d["end_reason"] = self.end_reason
+        if self.last_score is not None:
+            d["last_score"] = round(self.last_score, 4)
+        if self.last_bbox_w_px is not None and self.last_bbox_h_px is not None:
+            d["last_bbox_size_px"] = [self.last_bbox_w_px, self.last_bbox_h_px]
+        if self.last_bbox_frac_h is not None:
+            d["last_bbox_frac_h"] = self.last_bbox_frac_h
+        if self.last_bbox_frac_area is not None:
+            d["last_bbox_frac_area"] = self.last_bbox_frac_area
+        return d
 
 
 @dataclass
@@ -190,13 +253,15 @@ def _open_video(video_path: Path):
     """Open the file and read its sampling cadence. Returns
     ``(capture, meta)``; capture is None on failure (and is released
     before returning so the caller doesn't have to). meta carries
-    ``fps``, ``frame_count``, ``duration_s``, ``sample_interval``;
-    duration / sample_interval are 0 on failure but fps / frame_count
-    are populated so the caller can log them."""
+    ``fps``, ``frame_count``, ``duration_s``, ``sample_interval``,
+    ``frame_w``, ``frame_h``. The frame dimensions feed the per-track
+    end-state diagnostics (last_bbox_frac_h / last_bbox_frac_area)."""
     import cv2
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     if frame_count <= 0 or fps <= 0:
         cap.release()
         return None, {
@@ -204,6 +269,8 @@ def _open_video(video_path: Path):
             "frame_count": frame_count,
             "duration_s": 0.0,
             "sample_interval": 0,
+            "frame_w": frame_w,
+            "frame_h": frame_h,
         }
     duration_s = frame_count / fps
     sample_interval = max(1, int(round(fps)))  # ~1 Hz
@@ -212,6 +279,8 @@ def _open_video(video_path: Path):
         "frame_count": frame_count,
         "duration_s": duration_s,
         "sample_interval": sample_interval,
+        "frame_w": frame_w,
+        "frame_h": frame_h,
     }
 
 
@@ -258,11 +327,17 @@ def _update_best_top(state: _TrackerState, det, frame_idx: int, t_s: float):
         }
 
 
-def _associate_detections(state: _TrackerState, dets, frame_idx: int, t_s: float):
+def _associate_detections(state: _TrackerState, dets, frame_idx: int, t_s: float,
+                          frame_w: int = 0, frame_h: int = 0):
     """Greedy IoU pairing + spawn + age-out for one frame. Mutates
     ``state`` in place: extends matched tracks with a new sample, spawns
     tracks for unmatched detections, ages out tracks that missed too
     many windows.
+
+    frame_w / frame_h feed each closed track's `last_bbox_frac_h` and
+    `last_bbox_frac_area` diagnostics — the worker's only writer for
+    those fields, so missing dims (0) leave the fractions unpopulated
+    and the consumer falls back gracefully.
 
     The pre-spawn snapshot (`original_count = len(state.active)`) keeps
     freshly-spawned tracks out of the age-out pass on their birth
@@ -335,7 +410,7 @@ def _associate_detections(state: _TrackerState, dets, frame_idx: int, t_s: float
             continue
         tr.missed_windows += 1
         if tr.missed_windows >= TRACK_MISS_WINDOWS:
-            tr.active = False
+            tr.close("timeout", frame_w, frame_h)
     state.closed.extend([t for t in state.active if not t.active])
     state.active = [t for t in state.active if t.active]
 
@@ -549,6 +624,8 @@ class TrackingWorker(threading.Thread):
             sample_interval = meta["sample_interval"]
             frame_count = meta["frame_count"]
             fps = meta["fps"]
+            frame_w = meta.get("frame_w", 0)
+            frame_h = meta.get("frame_h", 0)
 
             while frame_idx < frame_count:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
@@ -558,11 +635,15 @@ class TrackingWorker(threading.Thread):
                     continue
                 t_s = frame_idx / fps
                 dets = _detect_and_filter(detector, frame, allowed)
-                _associate_detections(state, dets, frame_idx, t_s)
+                _associate_detections(state, dets, frame_idx, t_s, frame_w, frame_h)
                 frame_idx += sample_interval
 
             # Flush any tracks still active at end-of-clip into closed so
             # _build_payload's serialisation comprehension picks them up.
+            # close() populates the per-track end_reason + last_* fields
+            # so the lightbox × tooltip has something to render.
+            for tr in state.active:
+                tr.close("ended_at_clip", frame_w, frame_h)
             state.closed.extend(state.active)
             state.active = []
 
@@ -580,6 +661,11 @@ class TrackingWorker(threading.Thread):
                      job.event_id, elapsed, len(payload["tracks"]),
                      state.samples_emitted, best_str)
             self._record_slow_job(job, elapsed, meta["duration_s"])
+            # Update the event JSON with the achievement aggregates now
+            # that the tracks pass is complete. Best-effort — a failed
+            # write is logged but doesn't trash the tracks.json we just
+            # produced.
+            self._update_event_achievement(job, payload)
         finally:
             cap.release()
 
@@ -591,6 +677,109 @@ class TrackingWorker(threading.Thread):
         if duration_s > 0 and elapsed > duration_s * SLOW_JOB_RATIO and elapsed > 5.0:
             log.warning("[tracking] event=%s SLOW: processing %.1fs for clip %.1fs",
                         job.event_id, elapsed, duration_s)
+
+    def _update_event_achievement(self, job: TrackingJob, payload: dict) -> None:
+        """Merge tracks-derived stats (tracks_by_class, peak_score_by_class,
+        confirm_hits_by_track) into the event JSON's achievement block.
+        Pure additive — fields already there (inference_avg_ms etc. set
+        synchronously at finalize) stay untouched. Best-effort: a missing
+        event store, missing event, or write failure is logged at INFO
+        and the tracks.json we just produced is unaffected."""
+        try:
+            from . import app_state
+        except Exception:
+            return
+        store = getattr(app_state, "store", None)
+        if store is None:
+            return
+        try:
+            ev = store.get_event(job.camera_id, job.event_id) or {}
+            if not ev:
+                return
+        except Exception as e:
+            log.info("[tracking] event=%s achievement read skipped: %s",
+                     job.event_id, e)
+            return
+        tracks = payload.get("tracks", []) or []
+        tracks_by_class: dict[str, int] = {}
+        peak_score_by_class: dict[str, float] = {}
+        confirm_hits: list[dict] = []
+        # Pull per-class N/seconds from the camera config; fall back to
+        # the wizard defaults (n=3, seconds=5) when the camera has no
+        # confirmation_window entry. The worker has no access to the
+        # confirmer's runtime state, so we re-derive "would this have
+        # confirmed" purely from the sample stream — any sliding window
+        # of `seconds` containing ≥ n detect-samples → confirmed.
+        cw_cfg: dict = {}
+        try:
+            cam_cfg = self._cam_cfg_getter(job.camera_id) if self._cam_cfg_getter else {}
+            cw_cfg = (cam_cfg.get("confirmation_window") or {}) if cam_cfg else {}
+        except Exception:
+            cw_cfg = {}
+        default_n = 3
+        default_secs = 5.0
+        global_cw = cw_cfg.get("global") or {}
+        if global_cw:
+            default_n = int(global_cw.get("n", default_n))
+            default_secs = float(global_cw.get("seconds", default_secs))
+        for tr in tracks:
+            lbl = tr.get("label") or "unknown"
+            tracks_by_class[lbl] = tracks_by_class.get(lbl, 0) + 1
+            best = float(tr.get("best_score") or 0.0)
+            if best > peak_score_by_class.get(lbl, 0.0):
+                peak_score_by_class[lbl] = best
+            # confirm_hits_by_track entry: count detect samples and
+            # check the N-of-window confirmation purely on sample
+            # timestamps. Skip 0-sample tracks defensively.
+            samples = tr.get("samples") or []
+            detect_samples = [s for s in samples if s.get("source") == "detect"]
+            hit_count = len(detect_samples)
+            span_seconds = 0.0
+            if len(samples) >= 2:
+                span_seconds = round(
+                    float(samples[-1].get("t", 0)) - float(samples[0].get("t", 0)),
+                    2,
+                )
+            cw = cw_cfg.get(lbl) or {"n": default_n, "seconds": default_secs}
+            n = int(cw.get("n", default_n))
+            secs = float(cw.get("seconds", default_secs))
+            confirmed = False
+            # Sliding-window confirmation: at any anchor i, does the
+            # detect-only window [t_i, t_i + secs] contain ≥ n samples?
+            for i, s in enumerate(detect_samples):
+                t0 = float(s.get("t", 0))
+                in_win = 1
+                for j in range(i + 1, len(detect_samples)):
+                    if float(detect_samples[j].get("t", 0)) - t0 > secs:
+                        break
+                    in_win += 1
+                if in_win >= n:
+                    confirmed = True
+                    break
+            confirm_hits.append({
+                "track_id": tr.get("track_id"),
+                "label": lbl,
+                "hit_count": hit_count,
+                "span_seconds": span_seconds,
+                "confirmed": confirmed,
+            })
+        ach = dict(ev.get("achievement") or {})
+        if tracks_by_class:
+            ach["tracks_by_class"] = tracks_by_class
+        # Round peaks to 4 decimals so the JSON stays compact and the
+        # frontend can compare against per-class thresholds cleanly.
+        if peak_score_by_class:
+            ach["peak_score_by_class"] = {
+                k: round(v, 4) for k, v in peak_score_by_class.items()
+            }
+        if confirm_hits:
+            ach["confirm_hits_by_track"] = confirm_hits
+        ev["achievement"] = ach
+        try:
+            store.update_event(job.camera_id, job.event_id, ev)
+        except Exception as e:
+            log.info("[tracking] event=%s achievement write skipped: %s",
+                     job.event_id, e)
 
 
 def _safe_relpath(p: Path, root: Path) -> str:

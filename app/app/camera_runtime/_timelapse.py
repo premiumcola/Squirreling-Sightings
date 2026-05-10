@@ -211,6 +211,12 @@ class TimelapseMixin:
                     "size_mb": size_mb,
                     "duration_s": 0.0,
                     "file_size_bytes": out_path.stat().st_size if out_path.exists() else 0,
+                    # Timelapse uses the same event shape as motion clips
+                    # so the lightbox + grid render uniformly, but the
+                    # detection-pipeline fields don't apply here — the
+                    # frontend sees `mode: "timelapse"` and shows the
+                    # scrubber-only chrome (no settings panel).
+                    "recording_settings": {"mode": "timelapse"},
                 }
                 self.store.add_event(self.camera_id, tl_event)
                 log_tl.info("[%s][timelapse] event registered: %s", self.camera_id, tl_event["event_id"])

@@ -63,9 +63,9 @@ export function _initCameraFormListeners(){
 export function _initErkSliders(form){
   if (!form) return;
   const map = [
-    ['detection_min_score',    'erkMinScoreVal',      v => Math.round(v * 100) + '%'],
-    ['label_threshold_person', 'erkPersonVal',        v => Math.round(v * 100) + '%'],
-    ['motion_sensitivity',     'erkMotionVal',        v => Math.round(v * 100) + '%'],
+    ['detection_min_score',    'erkMinScoreVal',      v => Math.round(v * 100) + ' %'],
+    ['label_threshold_person', 'erkPersonVal',        v => Math.round(v * 100) + ' %'],
+    ['motion_sensitivity',     'erkMotionVal',        v => Math.round(v * 100) + ' %'],
     ['frame_interval_ms',      'erkFrameIntervalVal', v => v + ' ms'],
     ['confirm_n',              'erkConfirmN',         v => v + ' ×'],
     ['confirm_seconds',        'erkConfirmS',         v => v + ' s'],

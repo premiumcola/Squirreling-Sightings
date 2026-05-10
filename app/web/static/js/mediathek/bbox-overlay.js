@@ -620,6 +620,7 @@ function _startRafLoop(){
     if (byId('lightboxModal')?.classList.contains('hidden')) return;
     _lbDrawDetections();
     _renderPlayCursor();
+    _renderConfidenceMeter();
     _rafHandle = requestAnimationFrame(tick);
   };
   _rafHandle = requestAnimationFrame(tick);
@@ -673,6 +674,11 @@ let _timelineDuration = 0; // seconds — captured at render so play
                            // cursor positioning doesn't have to read
                            // videoEl.duration on every tick.
 
+// Snapshot of the current item's tracks array so the × tooltip can
+// reach the full track payload by data-track-idx without re-fetching
+// tracks.json. Updated on every lbRenderTrackTimeline() call.
+let _timelineTrackIndex = [];
+
 export function lbClearTrackTimeline(){
   const host = byId('lightboxTrackTimeline');
   if (!host) return;
@@ -694,6 +700,11 @@ export function lbRenderTrackTimeline(item){
     host.innerHTML = `<div class="lbtt-empty">Keine Track-Daten — erscheinen sobald die Indexierung fertig ist.</div>`;
     return;
   }
+  // Keep a stable per-clip index map so the × tooltip can find the
+  // full track object by element data-attribute. Track sample arrays
+  // can be large (samples × bbox dicts); stuffing them onto the DOM
+  // via data-* JSON would bloat innerHTML for every render.
+  _timelineTrackIndex = tracks.tracks;
 
   // Camera-side allowed-labels filter (same as the canvas render
   // path). Only classes that pass the filter get a row; hidden-classes
@@ -760,9 +771,10 @@ export function lbRenderTrackTimeline(item){
       const endedEarly = (duration - t1) > 0.4;
       const endRight = Math.max(0, ((duration - t1) / duration) * 100);
       const tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
+      const idx = tr._num - 1;
       return `<button type="button" class="lbtt-bar" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${c}">
         <span class="lbtt-bar-num" style="color:${c}">#${tr._num}</span>
-        ${endedEarly ? `<span class="lbtt-bar-end" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
+        ${endedEarly ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
       </button>`;
     }).join('');
     return `
@@ -804,9 +816,168 @@ export function lbRenderTrackTimeline(item){
   host.querySelectorAll('.lbtt-bar').forEach(btn => {
     btn.addEventListener('click', _onTimelineBarClick);
   });
+  _wireBarEndTooltips(host);
   // Reset the cursor to currentTime in case the video has loaded
   // metadata before this render.
   _renderPlayCursor();
+}
+
+// ── Track-loss × tooltip ─────────────────────────────────────────────────
+// Singleton popover element, lifted from the erk-sim/timeline.js pattern.
+// Each × marker on the timeline carries data-track-idx so the handler
+// can fetch the full track entry from _timelineTrackIndex without
+// re-parsing tracks.json. Tooltip content explains WHY the track
+// stopped (Konfidenz drop / Klassenfilter / Bbox / Timeout), pulling
+// the comparison values from item.recording_settings.
+
+const _END_REASON_LABEL = {
+  conf_drop:       'Konfidenz unter Schwelle gefallen',
+  class_filter:    'Klasse aus Filter entfernt',
+  bbox_too_small:  'Bbox unter Mindestgröße',
+  timeout:         'Tracker verloren · keine Detektion',
+  ended_at_clip:   'Spielzeit-Ende erreicht',
+};
+
+// Per-class minimum bbox floors — mirrors detectors/coral_object.py's
+// _LABEL_MIN_BBOX so the tooltip can flag "below floor" without an
+// extra API call. Add classes here when the backend grows new
+// per-label floors.
+const _BBOX_FLOORS = {
+  person: { min_h_frac: 0.15, min_area_frac: 0.02 },
+};
+
+let _barEndTipEl = null;
+
+function _ensureBarEndTip(){
+  if (_barEndTipEl) return _barEndTipEl;
+  _barEndTipEl = document.createElement('div');
+  _barEndTipEl.className = 'lbtt-end-tip';
+  _barEndTipEl.setAttribute('role', 'tooltip');
+  _barEndTipEl.hidden = true;
+  document.body.append(_barEndTipEl);
+  // Scroll / outside-click dismiss — same lifecycle as the erk-sim
+  // tooltip util so the user's muscle memory carries over.
+  window.addEventListener('scroll', _hideBarEndTip, { passive: true });
+  document.addEventListener('click', (ev) => {
+    if (_barEndTipEl?.hidden) return;
+    if (ev.target.closest('.lbtt-bar-end')) return;
+    if (ev.target.closest('.lbtt-end-tip')) return;
+    _hideBarEndTip();
+  });
+  return _barEndTipEl;
+}
+
+function _hideBarEndTip(){
+  if (_barEndTipEl) _barEndTipEl.hidden = true;
+}
+
+function _buildBarEndTipHtml(track, trackNum, rs){
+  const lbl = OBJ_LABEL[track?.label] || track?.label || '?';
+  // span = last - first sample time, in seconds, 1-decimal.
+  const samples = track?.samples || [];
+  const span = (samples.length >= 2)
+    ? (parseFloat(samples[samples.length - 1].t) - parseFloat(samples[0].t)).toFixed(1)
+    : '0.0';
+  const reason = track?.end_reason;
+  const summary = reason
+    ? (_END_REASON_LABEL[reason] || `Grund: ${reason}`)
+    : 'Grund unbekannt — Re-Index empfohlen';
+  // Score row — compare last_score against per-class or general thresh.
+  let scoreRow = '<span class="lbtt-end-tip-key">Score:</span> <span class="lbtt-end-tip-val">—</span>';
+  const lastScore = track?.last_score;
+  if (lastScore != null){
+    let thresh = rs?.conf_thresh_general ?? null;
+    const perCls = rs?.conf_thresh_per_class || {};
+    if (Object.prototype.hasOwnProperty.call(perCls, track.label)){
+      thresh = perCls[track.label];
+    }
+    const pct = Math.round(parseFloat(lastScore) * 100);
+    const tpct = thresh != null ? Math.round(parseFloat(thresh) * 100) : null;
+    const op = tpct != null ? (pct < tpct ? '<' : '≥') : '·';
+    const tone = tpct != null && pct < tpct ? 'is-bad' : 'is-ok';
+    scoreRow = `<span class="lbtt-end-tip-key">Score:</span> <span class="lbtt-end-tip-val ${tone}">${pct} %${tpct != null ? ` ${op} ${tpct} %` : ''}</span>`;
+  }
+  // Bbox row — compare last_bbox_size + frac against the per-class floor.
+  let bboxRow = '<span class="lbtt-end-tip-key">Bbox:</span> <span class="lbtt-end-tip-val">—</span>';
+  const lbs = track?.last_bbox_size_px;
+  if (Array.isArray(lbs) && lbs.length === 2){
+    const floors = _BBOX_FLOORS[track.label];
+    let bad = false;
+    if (floors){
+      const fh = track?.last_bbox_frac_h ?? 0;
+      const fa = track?.last_bbox_frac_area ?? 0;
+      if (fh < floors.min_h_frac || fa < floors.min_area_frac) bad = true;
+    }
+    const tone = bad ? 'is-bad' : 'is-ok';
+    const tick = bad ? '✗' : '✓';
+    bboxRow = `<span class="lbtt-end-tip-key">Bbox:</span> <span class="lbtt-end-tip-val ${tone}">${lbs[0]} × ${lbs[1]} px ${tick}</span>`;
+  }
+  // Class row — green ✓ if class is in the active filter (or filter
+  // is null), red ✗ if filter is non-null and excludes the class.
+  let classRow = `<span class="lbtt-end-tip-key">Klasse:</span> <span class="lbtt-end-tip-val">${lbl}</span>`;
+  const objFilter = rs?.object_filter;
+  if (objFilter != null && Array.isArray(objFilter)){
+    const ok = objFilter.includes(track.label);
+    const tone = ok ? 'is-ok' : 'is-bad';
+    const tick = ok ? '✓' : '✗';
+    classRow = `<span class="lbtt-end-tip-key">Klasse:</span> <span class="lbtt-end-tip-val ${tone}">${lbl} ${tick}</span>`;
+  }
+  return `
+    <div class="lbtt-end-tip-title">× Track #${trackNum} verloren · ${span} s</div>
+    <div class="lbtt-end-tip-row">${scoreRow}</div>
+    <div class="lbtt-end-tip-row">${bboxRow}</div>
+    <div class="lbtt-end-tip-row">${classRow}</div>
+    <div class="lbtt-end-tip-summary">${summary}</div>`;
+}
+
+function _showBarEndTip(target){
+  const idx = parseInt(target?.dataset?.trackIdx ?? '', 10);
+  const trackNum = parseInt(target?.dataset?.trackNum ?? '', 10);
+  if (!Number.isFinite(idx) || !Number.isFinite(trackNum)) return;
+  const track = _timelineTrackIndex[idx];
+  if (!track) return;
+  const rs = lbState.item?.recording_settings || {};
+  const tip = _ensureBarEndTip();
+  tip.innerHTML = _buildBarEndTipHtml(track, trackNum, rs);
+  tip.hidden = false;
+  // Position above the × when there's vertical room, otherwise below.
+  // Clamped horizontally to the viewport so the tip never gets cropped
+  // at the iPhone-393 edge.
+  const r = target.getBoundingClientRect();
+  const tipR = tip.getBoundingClientRect();
+  const above = r.top - tipR.height - 8;
+  const top = above >= 8 ? above : r.bottom + 8;
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  let left = r.left + r.width / 2 - tipR.width / 2;
+  left = Math.max(8, Math.min(vw - tipR.width - 8, left));
+  tip.style.top = `${Math.round(top)}px`;
+  tip.style.left = `${Math.round(left)}px`;
+}
+
+function _wireBarEndTooltips(host){
+  // Idempotent: per-render flag avoids re-binding for every re-render.
+  if (host.dataset.barEndTipWired === '1') return;
+  host.dataset.barEndTipWired = '1';
+  host.addEventListener('pointerover', (ev) => {
+    const x = ev.target.closest('.lbtt-bar-end');
+    if (x) _showBarEndTip(x);
+  });
+  host.addEventListener('pointerout', (ev) => {
+    if (!host.contains(ev.relatedTarget)) _hideBarEndTip();
+  });
+  host.addEventListener('click', (ev) => {
+    const x = ev.target.closest('.lbtt-bar-end');
+    if (!x){ _hideBarEndTip(); return; }
+    // Don't bubble to the .lbtt-bar seek handler — × is its own UX.
+    ev.preventDefault(); ev.stopPropagation();
+    if (_barEndTipEl && !_barEndTipEl.hidden
+        && _barEndTipEl.dataset.activeFor === x.dataset.trackIdx){
+      _hideBarEndTip();
+      return;
+    }
+    _showBarEndTip(x);
+    if (_barEndTipEl) _barEndTipEl.dataset.activeFor = x.dataset.trackIdx;
+  });
 }
 
 function _onTimelineBadgeClick(ev){
@@ -964,65 +1135,226 @@ function _wireCursorDrag(){
   hit.addEventListener('pointercancel', _release);
 }
 
-// ── Settings chip + panel (Stage 31) ─────────────────────────────────────
-// item.recording_settings is captured by _finalize_motion_clip at the
-// time of the recording so each event carries the exact thresholds /
-// filters / cadence it was shot under. Lightbox renders a compact
-// chip with the gist + a tappable panel for the full breakdown.
-// Pre-existing events (no key) get a muted "ältere Aufnahme" line.
+// ── Live confidence meter (overlaid on the video) ────────────────────────
+// Bottom-left pill that ticks per-gate confidence for every track
+// active at videoEl.currentTime. Each row renders one of three gates
+// (Score / Bbox-Höhe / Bbox-Fläche) with a 3 px bar + a 1 px white
+// tick at the threshold and the threshold percent above the tick.
+// Driven by _interpolateTrackAt so the bars move continuously across
+// the clip; hidden entirely when no track is active.
 
-const _SETTINGS_KEY_LABELS = {
-  conf_thresh_general:           'Schwelle (allgemein)',
-  conf_thresh_per_class:         'Schwelle pro Klasse',
-  object_filter:                 'Objekt-Filter',
-  confirm_n:                     'Bestätigung Treffer',
-  confirm_seconds:               'Bestätigung Sekunden',
-  sample_interval_ms:            'Abtast-Intervall',
-  motion_pretrigger_sensitivity: 'Pretrigger-Empfindlichkeit',
-  post_motion_seconds:           'Nachlauf',
-  mode:                          'Modus',
-};
-
-function _fmtSettingsValue(key, val){
-  if (val == null) return '—';
-  if (key === 'conf_thresh_general'){
-    return `${Math.round(parseFloat(val) * 100)} %`;
-  }
-  if (key === 'conf_thresh_per_class'){
-    if (typeof val !== 'object' || Object.keys(val).length === 0) return '—';
-    return Object.entries(val)
-      .map(([k, v]) => `${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %`)
-      .join(', ');
-  }
-  if (key === 'object_filter'){
-    if (!Array.isArray(val) || val.length === 0) return 'keiner (alle Klassen)';
-    return val.map(l => OBJ_LABEL[l] || l).join(', ');
-  }
-  if (key === 'confirm_n')           return `${val} ×`;
-  if (key === 'confirm_seconds')     return `${val} s`;
-  if (key === 'sample_interval_ms')  return `${val} ms`;
-  if (key === 'motion_pretrigger_sensitivity') return `${val} %`;
-  if (key === 'post_motion_seconds'){
-    return val > 0 ? `${val} s` : 'Standard';
-  }
-  return String(val);
+function _ensureConfidenceMeter(){
+  let host = byId('lightboxConfidenceMeter');
+  if (host) return host;
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return null;
+  host = document.createElement('div');
+  host.id = 'lightboxConfidenceMeter';
+  host.hidden = true;
+  wrap.appendChild(host);
+  return host;
 }
 
-function _buildSettingsChipText(rs){
-  // "Settings · Schwelle 65 % · 3 ⁄ 5 s · Person, Katze"
-  const parts = ['Settings'];
-  if (rs.conf_thresh_general != null){
-    parts.push(`Schwelle ${Math.round(parseFloat(rs.conf_thresh_general) * 100)} %`);
+function _findActiveTracksAt(currentTime){
+  const tracks = lbState.item?._tracks?.tracks || [];
+  const out = [];
+  for (let i = 0; i < tracks.length; i++){
+    const tr = tracks[i];
+    const sample = _interpolateTrackAt(tr, currentTime);
+    if (!sample) continue;
+    out.push({ track: tr, sample, num: i + 1 });
   }
-  if (rs.confirm_n != null && rs.confirm_seconds != null){
-    parts.push(`${rs.confirm_n} ⁄ ${rs.confirm_seconds} s`);
+  return out;
+}
+
+function _buildMeterRow(label, valFrac, thresholdFrac, color){
+  // Both values are 0..1. Bar maps the value to width%; tick to
+  // (threshold * 100)%. The threshold-pct rendered above the tick is
+  // the integer percent for a stable mono-width readout.
+  const valPct = Math.min(100, Math.max(0, valFrac * 100));
+  const tickPct = Math.min(100, Math.max(0, (thresholdFrac ?? 0) * 100));
+  const tickNum = Math.round(tickPct);
+  const showPct = Math.round(valPct);
+  return `
+    <div class="lbcm-row">
+      <div class="lbcm-row-head">
+        <span class="lbcm-row-label">${label}</span>
+        <span class="lbcm-row-pct">${showPct} %</span>
+      </div>
+      <div class="lbcm-row-bar">
+        <span class="lbcm-row-fill" style="width:${valPct.toFixed(1)}%;background:${color}"></span>
+        ${thresholdFrac != null
+          ? `<span class="lbcm-row-tick" style="left:${tickPct.toFixed(1)}%"></span>
+             <span class="lbcm-row-tick-num" style="left:${tickPct.toFixed(1)}%">${tickNum}</span>`
+          : ''}
+      </div>
+    </div>`;
+}
+
+function _renderConfidenceMeter(){
+  const v = byId('lightboxVideo');
+  const host = _ensureConfidenceMeter();
+  if (!host || !v || !lbState.item){
+    if (host) host.hidden = true;
+    return;
   }
-  if (Array.isArray(rs.object_filter) && rs.object_filter.length > 0){
-    parts.push(rs.object_filter.map(l => OBJ_LABEL[l] || l).join(', '));
-  } else if (rs.object_filter == null){
-    parts.push('alle Klassen');
+  // Only paint in full-screen video mode — photo events / timelapse
+  // shouldn't see this pill at all.
+  if (!byId('lightboxModal')?.classList.contains('lb-fs-video')){
+    host.hidden = true;
+    return;
   }
-  return parts.join(' · ');
+  const t = Number.isFinite(v.currentTime) ? v.currentTime : 0;
+  const active = _findActiveTracksAt(t);
+  if (active.length === 0){
+    host.hidden = true;
+    return;
+  }
+  const rs = lbState.item.recording_settings || {};
+  const natW = v.videoWidth || 1;
+  const natH = v.videoHeight || 1;
+  const MAX_SHOW = 2;
+  const shown = active.slice(0, MAX_SHOW);
+  const overflow = active.length - shown.length;
+
+  const blocks = shown.map(({ track, sample, num }) => {
+    const lbl = OBJ_LABEL[track.label] || track.label || '?';
+    const c = colors[track.label] || colors.unknown;
+    // Score threshold: per-class override else general floor.
+    let scoreThresh = rs.conf_thresh_general ?? null;
+    const perCls = rs.conf_thresh_per_class || {};
+    if (Object.prototype.hasOwnProperty.call(perCls, track.label)){
+      scoreThresh = perCls[track.label];
+    }
+    const rows = [];
+    rows.push(_buildMeterRow('Score', sample.score || 0,
+                             scoreThresh != null ? parseFloat(scoreThresh) : null, c));
+    const floors = _BBOX_FLOORS[track.label];
+    if (floors){
+      const bb = sample.bbox || {};
+      const bbW = Math.max(0, (bb.x2 || 0) - (bb.x1 || 0));
+      const bbH = Math.max(0, (bb.y2 || 0) - (bb.y1 || 0));
+      if (floors.min_h_frac > 0){
+        rows.push(_buildMeterRow(
+          'Bbox-Höhe', bbH / natH, floors.min_h_frac, c));
+      }
+      if (floors.min_area_frac > 0){
+        const fracArea = (bbW * bbH) / (natW * natH);
+        rows.push(_buildMeterRow(
+          'Bbox-Fläche', fracArea, floors.min_area_frac, c));
+      }
+    }
+    return `
+      <div class="lbcm-track">
+        <div class="lbcm-track-head" style="color:${c}">${lbl} #${num}</div>
+        ${rows.join('')}
+      </div>`;
+  }).join('');
+  const more = overflow > 0
+    ? `<div class="lbcm-more">+${overflow} weitere</div>` : '';
+  host.innerHTML = `${blocks}${more}`;
+  host.hidden = false;
+}
+
+// ── Settings panel mirroring cam-edit wizard (Stage 32) ──────────────────
+// item.recording_settings is captured by _finalize_motion_clip at the
+// time of the recording; item.achievement is filled in synchronously
+// (inference_*, motion_pretrigger_fired) and asynchronously by the
+// tracking_worker (tracks_by_class, peak_score_by_class,
+// confirm_hits_by_track) once tracks.json is on disk.
+//
+// The lightbox panel mirrors the cam-edit Erkennung wizard exactly —
+// same numeric circles, same Tabler-flavour icons, same titles and
+// hints — and adds an "Erreicht" column showing what that setting
+// actually produced for this clip. Pre-existing events (no
+// recording_settings) get a single muted line instead.
+
+// Tabler-flavour SVGs mirror the cam-edit step icons. Tightly inlined
+// so the lightbox doesn't pull on the wizard's HTML at render time.
+const _SET_STEP_ICONS = {
+  // Step 1 · "Was suchen?" — eye + iris
+  1: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  // Step 2 · "Wie sicher?" — clock
+  2: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+  // Step 3 · "Wie oft bestätigen?" — double check
+  3: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/><polyline points="20 12 14 18" opacity=".5"/></svg>',
+  // Step 4 · "Wie schnell scannen?" — lightning
+  4: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+  // Step 5 · "Bewegungs-Vortrigger" — heartbeat
+  5: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h3l3-9 6 18 3-9h3"/></svg>',
+};
+
+// Header gear icon for the panel root.
+const _SET_HEADER_ICON =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 7.04 4.29l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.31.61.85 1.04 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
+function _fmtPct(v){
+  if (v == null || !Number.isFinite(parseFloat(v))) return '—';
+  return `${Math.round(parseFloat(v) * 100)} %`;
+}
+
+function _fmtPctRaw(v){
+  // For values already in 0..100 (e.g. integer percent) — leave as-is.
+  if (v == null || !Number.isFinite(parseFloat(v))) return '—';
+  return `${Math.round(parseFloat(v))} %`;
+}
+
+function _fmtClassList(arr){
+  if (!Array.isArray(arr) || arr.length === 0) return 'alle Klassen';
+  return arr.map(l => OBJ_LABEL[l] || l).join(', ');
+}
+
+// Build the "Erreicht" cell for step 1 — what classes actually
+// produced tracks in this clip. Reads achievement.tracks_by_class
+// (filled in by the worker after tracks.json lands).
+function _achStep1(ach){
+  const tbc = ach?.tracks_by_class;
+  if (!tbc || typeof tbc !== 'object' || Object.keys(tbc).length === 0) return '—';
+  return Object.entries(tbc)
+    .map(([k, v]) => `${OBJ_LABEL[k] || k} ${v}`)
+    .join(', ');
+}
+
+// Step 2 "Erreicht" — peak score per class with class-colour pill.
+function _achStep2(ach){
+  const peaks = ach?.peak_score_by_class;
+  if (!peaks || typeof peaks !== 'object' || Object.keys(peaks).length === 0) return '—';
+  return Object.entries(peaks).map(([k, v]) => {
+    const c = colors[k] || colors.unknown;
+    return `<span class="lbset-peak" style="color:${c}">${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %</span>`;
+  }).join(' · ');
+}
+
+// Step 3 "Erreicht" — per-track confirmation summary. Each track
+// reads "Person #1: 4×/3.2s ✓" with a green ✓ if confirmed, grey
+// circle otherwise.
+function _achStep3(ach){
+  const list = ach?.confirm_hits_by_track;
+  if (!Array.isArray(list) || list.length === 0) return '—';
+  return list.map((t, i) => {
+    const lbl = OBJ_LABEL[t.label] || t.label || '?';
+    const ok = t.confirmed ? '<span class="lbset-ok">✓</span>'
+                           : '<span class="lbset-no">○</span>';
+    return `${lbl} #${i + 1}: ${t.hit_count}× / ${(t.span_seconds || 0).toFixed(1)}s ${ok}`;
+  }).join('<br>');
+}
+
+// Step 4 "Erreicht" — inference avg with status-coloured number.
+// CPU emergency renders the value in orange (#f97316); ok / elevated
+// stay in the default panel text colour.
+function _achStep4(ach){
+  const ms = ach?.inference_avg_ms;
+  const status = ach?.inference_status;
+  if (ms == null || !Number.isFinite(parseFloat(ms))) return '—';
+  const tone = status === 'cpu_emergency' ? 'is-emergency'
+             : status === 'elevated' ? 'is-elevated' : '';
+  return `<span class="lbset-infer ${tone}">${Math.round(parseFloat(ms))} ms</span>`;
+}
+
+// Step 5 "Erreicht" — pretrigger fired flag.
+function _achStep5(ach){
+  if (ach?.motion_pretrigger_fired) return 'Pretrigger ausgelöst';
+  return '—';
 }
 
 export function lbRenderSettingsPanel(item){
@@ -1033,38 +1365,135 @@ export function lbRenderSettingsPanel(item){
     return;
   }
   const rs = item.recording_settings;
-  if (!rs || typeof rs !== 'object'){
+  if (!rs || typeof rs !== 'object' || rs.mode === 'timelapse'){
     host.innerHTML = `<div class="lbset-missing">Settings nicht aufgezeichnet · ältere Aufnahme</div>`;
     return;
   }
-  const chipText = _buildSettingsChipText(rs);
-  // Order matters — use _SETTINGS_KEY_LABELS keys to preserve a
-  // consistent layout regardless of which fields the recording
-  // happened to capture.
-  const panelRows = [];
-  for (const key of Object.keys(_SETTINGS_KEY_LABELS)){
-    if (!Object.prototype.hasOwnProperty.call(rs, key)) continue;
-    const label = _SETTINGS_KEY_LABELS[key];
-    const value = _fmtSettingsValue(key, rs[key]);
-    panelRows.push(
-      `<div class="lbset-key">${label}</div><div class="lbset-val">${value}</div>`
-    );
-  }
+  const ach = item.achievement || {};
+  const camId = item.camera_id || '';
+
+  // Pre-render per-step rows. Each step shows Gesetzt (the recording
+  // config) and Erreicht (what the clip's data actually produced),
+  // plus the wizard-mirroring numeric circle + icon + title + hint.
+  const objFilterCell = (rs.object_filter == null)
+    ? 'alle Klassen'
+    : _fmtClassList(rs.object_filter);
+
+  const conf2nd = (rs.conf_thresh_per_class && Object.keys(rs.conf_thresh_per_class).length > 0)
+    ? Object.entries(rs.conf_thresh_per_class)
+        .map(([k, v]) => `${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %`)
+        .join(', ')
+    : null;
+
+  const steps = [
+    {
+      num: 1, title: 'Was suchen?', sub: 'Klassen-Filter',
+      setVal: objFilterCell,
+      achVal: _achStep1(ach),
+    },
+    {
+      num: 2, title: 'Wie sicher?', sub: 'Konfidenz',
+      setVal: _fmtPct(rs.conf_thresh_general)
+        + (conf2nd ? ` <span class="lbset-row-aux">${conf2nd}</span>` : ''),
+      achVal: _achStep2(ach),
+    },
+    {
+      num: 3, title: 'Wie oft bestätigen?', sub: 'Anti-Fehlalarm',
+      setVal: `${rs.confirm_n ?? '—'} Treffer in ${rs.confirm_seconds ?? '—'} s`,
+      achVal: _achStep3(ach),
+    },
+    {
+      num: 4, title: 'Wie schnell scannen?', sub: 'Analyse-Intervall',
+      setVal: `${rs.sample_interval_ms ?? '—'} ms`,
+      achVal: _achStep4(ach),
+    },
+    {
+      num: 5, title: 'Bewegungs-Vortrigger', sub: 'vor der KI',
+      setVal: _fmtPct(rs.motion_pretrigger_sensitivity),
+      achVal: _achStep5(ach),
+    },
+  ];
+
+  const stepsHtml = steps.map(st => `
+    <div class="lbset-step">
+      <div class="lbset-step-head">
+        <span class="lbset-step-num">${st.num}</span>
+        <span class="lbset-step-icon">${_SET_STEP_ICONS[st.num]}</span>
+        <span class="lbset-step-title">${st.title}</span>
+        <span class="lbset-step-sub">${st.sub}</span>
+      </div>
+      <div class="lbset-step-body">
+        <span class="lbset-row-label">Gesetzt</span>
+        <span class="lbset-row-value">${st.setVal}</span>
+        <span class="lbset-row-label">Erreicht</span>
+        <span class="lbset-row-value">${st.achVal}</span>
+      </div>
+    </div>`).join('');
+
+  // Trailing "+" row — non-wizard items that still belong here so
+  // the user has the full picture in one place.
+  const nachlauf = (rs.post_motion_seconds != null && rs.post_motion_seconds > 0)
+    ? `${rs.post_motion_seconds} s`
+    : 'Standard';
+  const extrasHtml = `
+    <div class="lbset-extras">
+      <div class="lbset-extras-row">
+        <span class="lbset-extras-label">Nachlauf-Aufnahme</span>
+        <span class="lbset-extras-value">${nachlauf}</span>
+      </div>
+      <div class="lbset-extras-row">
+        <span class="lbset-extras-label">Min Bbox · Person</span>
+        <span class="lbset-extras-value lbset-row-muted">15 % h · 2 % a · fix</span>
+      </div>
+    </div>`;
+
   host.innerHTML = `
-    <button type="button" class="lbset-chip" aria-expanded="false" aria-controls="lightboxSettingsPanel" title="Settings ein-/ausklappen">
-      <span class="lbset-chip-text">${chipText}</span>
-      <span class="lbset-chip-chevron" aria-hidden="true">
+    <button type="button" class="lbset-header" aria-expanded="true" aria-controls="lightboxSettingsBody">
+      <span class="lbset-header-icon">${_SET_HEADER_ICON}</span>
+      <span class="lbset-header-title">Erkennung · gesetzt vs. erreicht</span>
+      <span class="lbset-header-chevron" aria-hidden="true">
         <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"/></svg>
       </span>
     </button>
-    <div class="lbset-panel" id="lightboxSettingsPanel" hidden>${panelRows.join('')}</div>`;
-  const chip = host.querySelector('.lbset-chip');
-  const panel = host.querySelector('.lbset-panel');
-  if (chip && panel){
-    chip.addEventListener('click', () => {
-      const open = !panel.hidden;
-      panel.hidden = open;
-      chip.setAttribute('aria-expanded', open ? 'false' : 'true');
+    <div class="lbset-body" id="lightboxSettingsBody">
+      ${stepsHtml}
+      ${extrasHtml}
+      <button type="button" class="lbset-edit-btn" data-cam="${camId}">
+        Aktuelle Settings dieser Kamera bearbeiten →
+      </button>
+    </div>`;
+
+  const header = host.querySelector('.lbset-header');
+  const body = host.querySelector('.lbset-body');
+  if (header && body){
+    header.addEventListener('click', () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  }
+  const editBtn = host.querySelector('.lbset-edit-btn');
+  if (editBtn){
+    editBtn.addEventListener('click', () => {
+      const cid = editBtn.dataset.cam;
+      if (!cid) return;
+      // Close the lightbox first so the camera-edit panel isn't
+      // hidden behind the modal, then route to the Geräte section
+      // and open the Erkennung tab inside cam-edit. The double-
+      // requestAnimationFrame is there because window.editCamera()
+      // synchronously rebuilds the form DOM — the tab click needs
+      // to land on the freshly-rendered .cam-tab-btn nodes.
+      try { window.closeLightbox?.(); } catch { /* ignore */ }
+      setTimeout(() => {
+        location.hash = '#cameras';
+        try { window.editCamera?.(cid); } catch { /* ignore */ }
+        setTimeout(() => {
+          const tabBtn = document.querySelector('.cam-tab-btn[data-tab="cam-tab-erkennung"]');
+          tabBtn?.click();
+          document.querySelector('#cam-tab-erkennung')?.scrollIntoView(
+            { behavior: 'smooth', block: 'start' });
+        }, 180);
+      }, 60);
     });
   }
 }
@@ -1103,11 +1532,12 @@ window.lbStopTrackingPlayback = lbStopTrackingPlayback;
     });
     videoEl.addEventListener('play',     () => { _startRafLoop(); _lbDrawDetections(); });
     videoEl.addEventListener('playing',  () => { _startRafLoop(); _lbDrawDetections(); });
-    videoEl.addEventListener('pause',    () => { _stopRafLoop(); _lbDrawDetections(); _renderPlayCursor(); });
-    videoEl.addEventListener('ended',    () => { _stopRafLoop(); _lbDrawDetections(); _renderPlayCursor(); });
-    videoEl.addEventListener('seeked',   () => { _lbDrawDetections(); _renderPlayCursor(); });
+    videoEl.addEventListener('pause',    () => { _stopRafLoop(); _lbDrawDetections(); _renderPlayCursor(); _renderConfidenceMeter(); });
+    videoEl.addEventListener('ended',    () => { _stopRafLoop(); _lbDrawDetections(); _renderPlayCursor(); _renderConfidenceMeter(); });
+    videoEl.addEventListener('seeked',   () => { _lbDrawDetections(); _renderPlayCursor(); _renderConfidenceMeter(); });
     videoEl.addEventListener('timeupdate', () => {
       _renderPlayCursor();
+      _renderConfidenceMeter();
       if (!_rafHandle) _lbDrawDetections();
     });
   }

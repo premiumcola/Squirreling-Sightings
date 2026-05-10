@@ -785,6 +785,16 @@ def api_test_detection(cam_id: str):
             f"[final] {len(pass_dets)} detection(s) would route through the push pipeline "
             f"(subject to gates above)"
         )
+    # One-line freshness log — operator can grep `[test-detection]` to
+    # confirm rt.frame is advancing while the live simulation polls. The
+    # main loop writes rt.frame on every successful grab (regardless of
+    # the detection branch firing), so a steady frame_age_ms ≈ interval
+    # is the healthy signature; values stuck at multi-second highs while
+    # the cam is otherwise believed live mean the RTSP feed is wedged.
+    log.info(
+        "[test-detection] cam=%s frame_age_ms=%d num_dets=%d (pass=%d)",
+        cam_id, frame_age_ms, len(out), len(pass_dets),
+    )
     return jsonify({
         "ok":             True,
         "snapshot":       snapshot,

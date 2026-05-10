@@ -142,9 +142,29 @@ function _scheduleNext(session){
   session.tickHandle = setTimeout(_tick, _TICK_MS);
 }
 
+// Per-track palette — 12 distinct hues so two simultaneous subjects
+// always paint distinguishable trails regardless of class. Indexed by
+// the IoUTracker's monotonically-increasing track id; ids 13+ wrap
+// back to the top, which is fine because the visual collision only
+// matters within a single concurrent set (the tracker drops stale
+// ids well before the next one of the same modulo arrives).
+const _TRAIL_PALETTE = [
+  '#facc15', '#fb923c', '#38bdf8', '#f87171', '#a78bfa', '#34d399',
+  '#f472b6', '#fbbf24', '#22d3ee', '#fb7185', '#c084fc', '#86efac',
+];
+function _trailColorForTrack(id){
+  const n = Math.max(0, (id | 0) - 1);
+  return _TRAIL_PALETTE[n % _TRAIL_PALETTE.length];
+}
+
 // Paint per-track polyline trails into the same SVG overlay
 // _renderErkSimResult just populated. Insert at the top of the SVG
 // so trails sit BEHIND the bboxes (SVG paints in document order).
+// Stroke is per-TRACK-id so two simultaneous subjects get visibly
+// distinct trails; the verdict drives stroke-opacity (pass=1,
+// belowthresh=.5, filtered=.25) so the alarm-vs-noise signal stays
+// readable. Both attributes are inline so the existing
+// .erk-track-trail CSS no longer fights the per-track colour.
 function _renderTrails(tracks, frame_size){
   const ovl = byId('erkSimOverlay');
   if (!ovl || tracks.length === 0) return;
@@ -154,8 +174,12 @@ function _renderTrails(tracks, frame_size){
     const path = t.path.slice(-_PATH_CAP);
     if (path.length < 2) return '';
     const points = path.map(p => `${p.cx},${p.cy}`).join(' ');
-    const cls = `erk-track-trail is-${t.last_verdict || 'pass'}`;
-    return `<polyline class="${cls}" points="${points}" fill="none" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const c = _trailColorForTrack(t.id);
+    const op = t.last_verdict === 'pass' ? 1
+             : t.last_verdict === 'belowthresh' ? 0.5
+             : t.last_verdict === 'filtered' ? 0.25
+             : 0.6;
+    return `<polyline class="erk-track-trail" points="${points}" fill="none" stroke="${c}" stroke-opacity="${op}" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>`;
   }).join('');
   if (trails) ovl.insertAdjacentHTML('afterbegin', trails);
 }

@@ -44,13 +44,14 @@
   box-shadow:0 0 0 2px var(--panel)
 }
 .cam-tab-recovery-btn.is-warn.is-pulsing{animation:cam-tab-recovery-pulse 1.4s ease-in-out 0s 4;}
-/* Below ~420 px the label would force the tab list to wrap; collapse
-   to icon + green tint only so the horizontal-scrolling tab strip
-   keeps its single-row geometry. The aria-label/title preserve
-   meaning for screen readers and tooltip surfaces. */
+/* Mobile sizing — keep the "Reconnect" label visible so the button
+   reads as more than a green dormant square. The horizontal-scrolling
+   tab strip keeps its single-row geometry because the button is
+   sticky-anchored to the right edge: tabs scroll under it, the
+   recovery affordance always stays visible. Symmetric horizontal
+   padding pairs the icon and label centred between equal gutters. */
 @media (max-width:420px){
-  .cam-tab-recovery-btn .cam-tab-recovery-label{display:none}
-  .cam-tab-recovery-btn{padding-left:10px;padding-right:10px}
+  .cam-tab-recovery-btn{padding-left:12px;padding-right:12px}
 }
 @keyframes cam-tab-recovery-pulse{
   0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}

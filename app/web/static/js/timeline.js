@@ -127,8 +127,14 @@ export function renderTimeline() {
     html += `</div></div>`;
   });
 
+  // Mobile-aware tick density: 6 labels eat the entire phone-width
+  // strip even with the .tl-container var shrinks, so phones get a
+  // sparser axis (3 labels under 480 px, 4 between 480 and 768 px).
+  // Above 768 px the desktop / tablet width takes the full set.
+  const w = (typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const N = w < 480 ? 3 : w < 768 ? 4 : 6;
   html += `<div class="tl-xaxis">`;
-  for (let k = 0; k < 6; k++) html += `<span class="tl-xlabel">${_tlFmtTs(tMin + span * k / 5, hours)}</span>`;
+  for (let k = 0; k < N; k++) html += `<span class="tl-xlabel">${_tlFmtTs(tMin + span * k / (N - 1), hours)}</span>`;
   html += `</div>`;
   container.innerHTML = html;
 

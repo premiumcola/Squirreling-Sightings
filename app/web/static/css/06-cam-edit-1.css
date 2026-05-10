@@ -427,6 +427,20 @@
   min-width:42px;text-align:right;
   font-variant-numeric:tabular-nums;
 }
+/* Left-side row label — used by step 3's Treffer / Sekunden rows once
+   they stack vertically on phones. Shown only when present so existing
+   single-slider rows (steps 1-2, per-class drilldown) keep their
+   slider+val layout untouched. Hidden in the desktop side-by-side
+   layout where the value pill ("3 ×" / "5 s") already conveys the
+   unit; only revealed below the .two-col stack breakpoint. */
+.erk-card .row-lbl{
+  font-size:11.5px;color:rgba(226,232,240,.78);
+  font-weight:600;letter-spacing:.01em;
+  min-width:60px;flex-shrink:0;display:none;
+}
+@media (max-width:420px){
+  .erk-card .row-lbl{ display:inline-block; }
+}
 
 /* Compact slider — narrower than the default range input so two side-
    by-side fit comfortably in a phone-width card. The 13 px thumb keeps
@@ -496,14 +510,21 @@
 }
 
 /* Two-column row used by step 3 — confirm_n + confirm_seconds side by
-   side. Drops to single column on phones below 380 px. */
+   side. Drops to single column at the modern-iPhone breakpoint (420 px
+   covers iPhone SE through iPhone 15 Pro Max in portrait), at which
+   point each row picks up its left-side .row-lbl ("Treffer" /
+   "Sekunden") so the user reads label → slider → value left-to-right
+   instead of cramming both pieces into a half-width cell. */
 .erk-card .two-col{
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:8px;
 }
-@media (max-width:380px){
-  .erk-card .two-col{ grid-template-columns:1fr; }
+@media (max-width:420px){
+  .erk-card .two-col{ grid-template-columns:1fr;gap:6px; }
+  /* Slightly more breathing room between thumb-at-max and the value
+     pill on the narrow stacked layout. */
+  .erk-card .two-col .row{ gap:12px; }
 }
 
 /* Compact select inside an .erk-card row — strips the inherited input
@@ -960,6 +981,10 @@
   background:#000;
   border-radius:8px;
   overflow:hidden;
+  /* Reserve the inset highlight slot so the "stream stuck" ring slides
+     in by transition rather than popping. Transparent at idle. */
+  box-shadow:inset 0 0 0 0 rgba(245,158,11,0);
+  transition:box-shadow .35s ease;
 }
 .erk-test-result-imgwrap img{
   width:100%;height:100%;object-fit:contain;display:block;
@@ -969,11 +994,19 @@
   width:100%;height:100%;
   pointer-events:none;
 }
+/* Stuck-stream signal — frame_age_ms > 5 s. Faint amber ring on the
+   wrap so the user sees the snapshot may not represent the current
+   scene; pairs with the .is-very-stale caption underneath. The
+   "kein Coral" empty-detection path doesn't toggle this class, so
+   the two failure modes stay visually distinct. */
+.erk-test-result-imgwrap.is-stuck{
+  box-shadow:inset 0 0 0 3px rgba(245,158,11,.55);
+}
 /* Frame-age caption — single muted line directly under the snapshot
    so the user sees how old the rendered frame was. Flips to a
-   warning colour when the backend reports >2000 ms staleness. Wraps
-   cleanly at iPhone width (line-height + word-break keep it inside
-   the existing snapshot card). */
+   warning colour at >2 s and a hard-warning colour at >5 s.
+   Wraps cleanly at iPhone width (line-height + word-break keep it
+   inside the existing snapshot card). */
 .erk-test-frame-age{
   margin:6px 2px 0;
   font-size:12px;
@@ -983,6 +1016,10 @@
 }
 .erk-test-frame-age.is-stale{
   color:#fbbf24;
+}
+.erk-test-frame-age.is-very-stale{
+  color:#f87171;
+  font-weight:700;
 }
 /* Bounding box stroke + label colours per verdict.
    pass = green, belowthresh = orange, filtered = grey-dashed. The
@@ -1266,8 +1303,11 @@
   border-radius:8px
 }
 @media (max-width:520px){
-  .cam-item-head-right .cam-tab-recovery-btn .cam-tab-recovery-label{display:none}
-  .cam-item-head-right .cam-tab-recovery-btn{padding:0 8px}
+  /* Header-variant on phones — keep the "Reconnect" label visible
+     (the previous icon-only collapse made the button feel like a
+     dormant square next to the chevron). Symmetric padding pairs
+     the icon-label group centred between equal gutters. */
+  .cam-item-head-right .cam-tab-recovery-btn{padding:0 11px}
 }
 /* Headlines */
 .cam-edit-inner h3,.cam-edit-inner h4{color:#edf4fb}

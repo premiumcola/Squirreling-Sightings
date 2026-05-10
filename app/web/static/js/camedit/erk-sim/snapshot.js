@@ -23,25 +23,33 @@ export function _renderErkSimResult(data){
   if (img) img.src = data.snapshot || '';
   // Frame-age caption — backend reports the age of the cached frame
   // it ran inference against. Stays muted for fresh frames; flips to
-  // a warning class when the captured frame was > 2 s old (the
-  // user-visible bug was 2-min-stale snapshots showing yesterday's
-  // datetime overlay). The element starts ``hidden`` and is shown
-  // only when the backend includes the field, so older responses
-  // are forward-compatible.
+  // an "is-stale" warning between 2-5 s and an "is-very-stale" hard-
+  // warning above 5 s, when we also paint a faint amber ring on the
+  // imgwrap to make the "stream stuck" failure mode unmistakable
+  // (distinct from the silent "kein Coral" path which renders empty
+  // detections without a freshness signal). The element starts
+  // ``hidden`` and is shown only when the backend includes the
+  // field, so older responses are forward-compatible.
   const ageEl = byId('erkSimFrameAge');
+  const wrapImg = wrap.querySelector('.erk-test-result-imgwrap');
   if (ageEl){
     const ageMs = parseInt(data.frame_age_ms, 10);
     if (Number.isFinite(ageMs)){
       const ageS = ageMs / 1000;
       const stale = ageMs > 2000;
-      ageEl.textContent = stale
-        ? `Snapshot · vor ${ageS.toFixed(1)} s aufgenommen — Stream hängt evtl.`
-        : `Snapshot · vor ${ageS.toFixed(1)} s aufgenommen`;
-      ageEl.classList.toggle('is-stale', stale);
+      const veryStale = ageMs > 5000;
+      let txt = `Letzter Frame · vor ${ageS.toFixed(1)} s`;
+      if (veryStale) txt += ' · Stream steckt fest';
+      else if (stale) txt += ' · Stream hängt evtl.';
+      ageEl.textContent = txt;
+      ageEl.classList.toggle('is-stale', stale && !veryStale);
+      ageEl.classList.toggle('is-very-stale', veryStale);
       ageEl.hidden = false;
+      if (wrapImg) wrapImg.classList.toggle('is-stuck', veryStale);
     } else {
       ageEl.textContent = '';
       ageEl.hidden = true;
+      if (wrapImg) wrapImg.classList.remove('is-stuck');
     }
   }
   // viewBox in absolute frame pixel coordinates so backend bbox values

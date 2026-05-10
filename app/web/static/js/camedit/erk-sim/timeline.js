@@ -105,6 +105,11 @@ export class LiveTimeline {
     const arr  = this._slices.get(label) || [];
     const lost = this._lost.get(label)   || [];
     const lblText = esc(OBJ_LABEL[label] || label);
+    // Per-class stroke colour from the shared palette — yellow for
+    // person, orange for cat, sky-blue for bird, etc. The `colors`
+    // map is the single source of truth across the whole UI so the
+    // strip reads consistently with the bbox stroke and the
+    // dashboard timeline.
     const colour  = colors[label] || colors.unknown;
 
     // Slice rectangles — we render every slot of the 30-slice strip
@@ -114,6 +119,15 @@ export class LiveTimeline {
     const slotByT = new Map();
     for (const sl of arr) slotByT.set(sl.t, sl);
     const slots = [];
+    // Track-id continuity: when the IoUTracker drops the previous
+    // subject and re-promotes a new one, the slot's id-set no longer
+    // shares any ids with the previous slot. We bump `runIdx` at every
+    // such break so adjacent runs paint at slightly different
+    // saturations + a thin dark inset on the left edge of the second
+    // run reads as a visual break (the user's "subject left, new one
+    // entered" cue).
+    let prevIds = null;
+    let runIdx  = 0;
     for (let i = 0; i < _N_SLICES; i++){
       const slotT = windowStart + i * _SLICE_MS;
       const slotKey = Math.floor(slotT / _SLICE_MS) * _SLICE_MS;
@@ -121,16 +135,28 @@ export class LiveTimeline {
       const left = (i / _N_SLICES) * 100;
       const width = (1 / _N_SLICES) * 100;
       if (sl){
+        const sharesId = prevIds && _setHasIntersection(prevIds, sl.ids);
+        const isRunStart = !sharesId;
+        if (isRunStart) runIdx++;
+        // Alternate opacity per run within a class — full saturation
+        // for the first run, slightly muted for the next, etc. The
+        // modulo-3 pattern keeps the spread small enough that classes
+        // still read as classes (yellow person stays yellow), while
+        // a single same-class re-entry is unambiguous.
+        const runOp = (0.82 - ((runIdx - 1) % 3) * 0.12).toFixed(2);
         const trackCount = sl.ids.size;
         const peakPct = Math.round((sl.peak || 0) * 100);
         const tt = `${trackCount} Track${trackCount === 1 ? '' : 's'} · Peak ${peakPct}%`;
+        const breakCls = isRunStart && i > 0 && prevIds ? ' erk-tl-slot-runstart' : '';
         slots.push(
-          `<span class="erk-tl-slot is-hit" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${colour}" data-tip="${esc(tt)}"></span>`
+          `<span class="erk-tl-slot is-hit${breakCls}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${colour};opacity:${runOp}" data-run="${runIdx}" data-tip="${esc(tt)}"></span>`
         );
+        prevIds = sl.ids;
       } else {
         slots.push(
           `<span class="erk-tl-slot" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span>`
         );
+        prevIds = null;
       }
     }
 
@@ -195,6 +221,18 @@ function _showTip(target){
 
 function _hideTip(){
   if (_tipEl) _tipEl.hidden = true;
+}
+
+// Set-intersection check used to decide whether two adjacent slices
+// belong to the same run. Returns true when ANY id is shared — a
+// subject staying visible into the next slice keeps the run going,
+// even if a different subject also enters mid-slice.
+function _setHasIntersection(a, b){
+  if (!a || !b || a.size === 0 || b.size === 0) return false;
+  const small = a.size <= b.size ? a : b;
+  const large = small === a ? b : a;
+  for (const id of small){ if (large.has(id)) return true; }
+  return false;
 }
 
 function _wireTooltips(host){

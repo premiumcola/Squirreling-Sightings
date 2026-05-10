@@ -60,16 +60,12 @@
 /* ── Path trails painted under each confirmed track ────────────────────────
    Sibling polylines inside the same SVG overlay as the bbox <rect>s.
    Trails sit BEHIND the boxes (live.js inserts them with
-   `afterbegin` so SVG paints them first). Verdict colour mirrors
-   .erk-det-box so a track and its trail read as one shape; opacity
-   is dropped so the trail doesn't compete with the bbox itself. */
-.erk-track-trail{
-  fill:none;
-  opacity:.55;
-}
-.erk-track-trail.is-pass        { stroke:#22c55e; }
-.erk-track-trail.is-belowthresh { stroke:#fb923c; }
-.erk-track-trail.is-filtered    { stroke:#6b7280; opacity:.35; }
+   `afterbegin` so SVG paints them first). Stroke colour is now per
+   TRACK ID (set inline by live.js from a 12-hue palette) so two
+   simultaneous subjects paint distinguishable trails; verdict drives
+   stroke-opacity (pass=1, belowthresh=.5, filtered=.25) — also
+   inline. The base rule only enforces fill:none here. */
+.erk-track-trail{ fill:none; }
 
 
 /* ── Live presence timeline (sliding 30 s, per class) ──────────────────────
@@ -131,15 +127,24 @@
   background:rgba(255,255,255,.025);
 }
 .erk-tl-slot.is-hit{
-  /* `background` is set inline per class colour. The opacity here
-     scales it down so two adjacent hits read as a continuous bar
-     while still showing the slice boundaries. */
+  /* `background` is set inline per class colour, and `opacity` is
+     also set inline by timeline.js — the per-run alternation lets
+     adjacent same-class but different-track-id runs read as
+     distinct without changing the colour itself. The fallback below
+     applies only when JS forgets to set opacity (e.g. test fixtures). */
   opacity:.78;
 }
 .erk-tl-slot.is-hit:hover,
 .erk-tl-slot.is-hit:focus{
-  opacity:1;
+  opacity:1!important;
   cursor:pointer;
+}
+/* Track-id break — first slot of a non-initial run gets a thin dark
+   inset on the left edge so the eye picks up the discontinuity even
+   when the saturation shift on its own is subtle. Pairs with the
+   inline opacity step set by timeline.js's runIdx counter. */
+.erk-tl-slot.is-hit.erk-tl-slot-runstart{
+  box-shadow:inset 1px 0 0 rgba(0,0,0,.55);
 }
 .erk-tl-lost{
   /* Track-lost marker — small × at the lost-time x position. Sits

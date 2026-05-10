@@ -1,23 +1,18 @@
-/* ── Lightbox · video full-screen layout (v3 corrections) ───────────────────
-   The .lb-fs-video class is added to #lightboxModal by openLightbox()
-   when the active media item is a video (or timelapse). Without the
-   class, #lightboxModal keeps the historical centred-modal geometry
-   the photo branch still uses.
+/* ── Lightbox · video full-screen layout (v3 round 2 corrections) ────────
+   Single-column page-level overlay split into four primary sections,
+   all snug against each other (no spacers between them):
 
-   In video full-screen mode the layout is a single flex column with
-   FOUR primary sections, all snug against each other (no spacers):
+       Top bar           — cam name + ts + Confirm / Delete / Close
+       Video region      — flex:1, flush against top bar and bottom stack
+       Bottom stack      — sidebar (play + badges) + time column
+                           (scrubber + strips + ticks + cursor)
+       Settings          — wizard-mirror panel, only when content
 
-       Top bar  (~48 px)        — cam name + ts + Confirm/Delete/Close
-       Video region (flex:1)    — flush against top bar above + scrubber below
-       Bottom stack (auto)      — scrubber + timeline + ticks, cursor parent
-       Settings (auto, hidden)  — wizard-mirror panel, only when content
-
-   The unified play cursor lives inside the bottom stack — its 1 px
-   line + 8 px head start at the top of the scrubber row and extend
-   down through every timeline row to the tick axis. It NEVER crosses
-   into the video region above or the settings panel below.
-
-   Chrome is monochrome; class colours come from data only. */
+   ONE shared time axis: the .lb-time-col holds the scrubber bar,
+   every strip, the tick row, and the play cursor. All four use the
+   --play-pct CSS variable on .lb-time-stack as their x-coordinate so
+   the scrubber thumb, "0s" tick, every bar's 0%-anchor, and the
+   cursor head sit on a single shared X for any time-point. */
 
 #lightboxModal.lb-fs-video{
   padding:0!important;
@@ -40,6 +35,7 @@
   flex-shrink:0;
   display:flex;align-items:center;justify-content:space-between;
   gap:12px;
+  /* No bottom padding — video sits flush against the top bar. */
   padding:max(8px,env(safe-area-inset-top,0)) 14px 8px 14px;
   min-height:48px;
   background:#000;
@@ -47,10 +43,6 @@
   z-index:10;
 }
 #lightboxTopBar[hidden]{ display:none; }
-/* Two-line meta — camera display name on the first line, formatted
-   German timestamp ("DD.MM.YYYY · HH:MM:SS") on the second line.
-   Mono numeric for the timestamp so day/month/year align across
-   events when the user navigates with prev/next. */
 #lightboxTopMeta{
   display:flex;flex-direction:column;
   gap:1px;
@@ -60,6 +52,7 @@
   font-size:12px;font-weight:500;letter-spacing:.01em;
   color:#f1f5f9;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  line-height:1.25;
 }
 #lightboxTopTime{
   font-family:ui-monospace,Menlo,Consolas,monospace;
@@ -67,13 +60,13 @@
   color:rgba(226,232,240,.55);
   font-variant-numeric:tabular-nums;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  line-height:1.25;
 }
 #lightboxTopActions{
   display:flex;align-items:center;gap:8px;flex-shrink:0;
 }
-/* All three action buttons share the same translucent dark surface —
-   Confirm + Delete pick up a coloured stroke from the inner SVG, X-
-   close stays neutral white. NO solid green / red fills. */
+/* Translucent buttons matching the X-close visual weight — Confirm
+   stroke green, Delete stroke red, X neutral white. NO solid fills. */
 #lightboxTopActions > button{
   position:static!important;
   top:auto!important;right:auto!important;bottom:auto!important;left:auto!important;
@@ -89,35 +82,29 @@
 #lightboxTopActions #lightboxConfirm{
   background:rgba(34,197,94,.16);color:#4ade80;
 }
-#lightboxTopActions #lightboxConfirm:hover{
-  background:rgba(34,197,94,.28);
-}
+#lightboxTopActions #lightboxConfirm:hover{ background:rgba(34,197,94,.28); }
 #lightboxTopActions #lightboxConfirm svg{ stroke:#4ade80; }
 #lightboxTopActions #lightboxDelete{
   background:rgba(239,68,68,.16);color:#f87171;
 }
-#lightboxTopActions #lightboxDelete:hover{
-  background:rgba(239,68,68,.28);
-}
+#lightboxTopActions #lightboxDelete:hover{ background:rgba(239,68,68,.28); }
 #lightboxTopActions #lightboxDelete svg{ stroke:#f87171; }
 #lightboxTopActions #lightboxClose{
   background:rgba(255,255,255,.12);color:#f1f5f9;font-size:16px;
 }
-#lightboxTopActions #lightboxClose:hover{
-  background:rgba(255,255,255,.22);
-}
+#lightboxTopActions #lightboxClose:hover{ background:rgba(255,255,255,.22); }
 @media (max-width:480px){
-  /* Mobile bumps to the iOS 44 × 44 touch floor; the inner glyph
-     scales with the larger button so it doesn't drown in white space. */
   #lightboxTopActions > button{ width:40px;height:40px;min-width:40px;min-height:40px; }
   #lightboxTopCam{ font-size:11.5px; }
   #lightboxTopTime{ font-size:9.5px; }
 }
 
 /* ── Video region ──────────────────────────────────────────────────────── */
-/* flex:1 so it absorbs the column space between the top bar and the
-   scrubber/timeline cluster below; no border-radius / margins in
-   full-screen mode so the video butts directly against neighbours. */
+/* flex:1 absorbs the column space between the top bar and the bottom
+   stack. Zero margins / padding / borders so the video begins on the
+   very next pixel after the top bar ends. min-height:0 lets it
+   shrink below its natural aspect-ratio box; no min-height pad
+   either. */
 #lightboxModal.lb-fs-video #lightboxMediaWrap{
   flex:1 1 auto!important;
   width:100%!important;
@@ -126,6 +113,7 @@
   background:#000!important;
   display:flex;align-items:center;justify-content:center;
   position:relative;
+  margin:0!important;
 }
 #lightboxModal.lb-fs-video #lightboxImg,
 #lightboxModal.lb-fs-video #lightboxVideo{
@@ -135,6 +123,7 @@
   object-fit:contain;
   background:#000!important;
   border-radius:0!important;
+  display:block;
 }
 #lightboxModal.lb-fs-video #lightboxMeta{ display:none!important; }
 #lightboxModal.lb-fs-video #lightboxMediaWrap > #lightboxConfirm,
@@ -157,173 +146,133 @@
   #lightboxModal.lb-fs-video #lightboxNext{ width:44px;height:44px; }
 }
 
-/* ── Bottom stack (scrubber + timeline + cursor) ───────────────────────── */
-/* Only the video full-screen mode applies layout to #lightboxBottomStack.
-   Photo events keep the wrapper present-but-empty so the photo-mode
-   centred geometry stays intact. The play cursor lives INSIDE this
-   wrapper, so its vertical extent is exactly the stack height —
-   scrubber row down through tick axis. */
-#lightboxModal.lb-fs-video #lightboxBottomStack{
+/* ── Bottom stack — sidebar + time column ──────────────────────────────── */
+/* The shared time-axis lives here. .lb-time-stack carries the
+   --play-pct CSS variable that drives scrubber fill, scrubber thumb,
+   and play cursor positions. All three readers use:
+       left: calc(var(--play-pct) * 100%)
+   so a single write per rAF tick paints all three. */
+#lightboxBottomStack{
   flex-shrink:0;
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-  position:relative;     /* anchors #lightboxPlayCursor */
   background:#000;
+}
+#lightboxModal.lb-fs-video #lightboxBottomStack{
+  display:block;
+}
+.lb-time-stack{
+  --play-pct:0;
+  display:flex;
+  gap:8px;
+  padding:8px 14px 10px 14px;
+  background:#000;
+}
+.lb-sidebar{
+  /* 96 px fixed — house the play button, every class badge, and a
+     spacer aligned with the tick row. Each child's height matches
+     the time-col counterpart at the same index so badge[i] aligns
+     with strip[i]. */
+  flex:0 0 96px;
+  display:flex;flex-direction:column;
+  gap:6px;
+}
+.lb-time-col{
+  flex:1 1 auto;
+  min-width:0;
+  display:flex;flex-direction:column;
+  gap:6px;
+  position:relative;     /* anchors .lb-play-cursor */
 }
 
-/* ── Scrubber row (top of bottom stack) ────────────────────────────────── */
-/* Snug against the video bottom edge — no top border, no top margin.
-   Play button is the leading control INSIDE the row, height ~32 px
-   matches the row so everything reads as one strip. */
-#lightboxScrubber{
-  flex-shrink:0;
-  display:flex;align-items:center;gap:10px;
-  padding:6px 14px;
-  background:#000;
-  z-index:6;
-  height:32px;min-height:32px;
-}
-#lightboxScrubber[hidden]{ display:none; }
-#lbScrubPlay{
-  flex-shrink:0;
-  width:24px;height:24px;min-width:24px;min-height:24px;
-  border-radius:50%;
-  border:none;background:rgba(255,255,255,.14);
+/* Sidebar — play button at the top, badges below, tick spacer at
+   the bottom. Heights line up with the time column's same-index
+   children. */
+.lb-play-btn{
+  width:32px;height:32px;min-width:32px;min-height:32px;
+  border:0;background:rgba(255,255,255,.14);
   color:#f1f5f9;
+  border-radius:50%;
   cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;
   padding:0;
   -webkit-tap-highlight-color:transparent;
   transition:background .15s;
+  align-self:flex-start;
 }
-#lbScrubPlay:hover{ background:rgba(255,255,255,.24); }
-#lbScrubPlay svg{ width:12px;height:12px; }
-#lbScrubSlider{
-  flex:1 1 auto;min-width:0;
-  -webkit-appearance:none;appearance:none;
-  height:4px;
-  background:linear-gradient(to right,#e2e8f0 var(--lb-scrub-fill,0%),rgba(255,255,255,.18) var(--lb-scrub-fill,0%));
-  border-radius:2px;
-  outline:none;cursor:pointer;
-  padding:14px 0;
-  background-clip:content-box;
+.lb-play-btn:hover{ background:rgba(255,255,255,.24); }
+.lb-play-btn svg{ width:14px;height:14px; }
+.lb-tick-spacer{
+  height:12px;
+  flex:0 0 auto;
 }
-#lbScrubSlider::-webkit-slider-thumb{
-  -webkit-appearance:none;
-  width:12px;height:12px;border-radius:50%;
-  background:#fff;border:0;
+.lbtt-empty-side{ height:32px; }
+
+/* Time column — scrubber bar + strips + tick row + play cursor. */
+.lb-scrub-bar{
+  position:relative;
+  height:32px;
+  display:flex;align-items:center;
   cursor:pointer;
-  box-shadow:0 0 0 6px rgba(255,255,255,.0);
-  transition:box-shadow .12s,transform .12s;
+  -webkit-tap-highlight-color:transparent;
 }
-#lbScrubSlider::-webkit-slider-thumb:active{
-  transform:scale(1.18);
-  box-shadow:0 0 0 6px rgba(255,255,255,.16);
+.lb-scrub-bar::before{
+  content:'';
+  position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  height:4px;
+  background:rgba(255,255,255,.18);
+  border-radius:2px;
+  pointer-events:none;
 }
-#lbScrubSlider::-moz-range-thumb{
-  width:12px;height:12px;border-radius:50%;
-  background:#fff;border:0;cursor:pointer;
+.lb-scrub-fill{
+  position:absolute;left:0;top:50%;transform:translateY(-50%);
+  height:4px;
+  width:calc(var(--play-pct,0) * 100%);
+  background:#e2e8f0;
+  border-radius:2px;
+  pointer-events:none;
 }
-#lbScrubSlider::-moz-range-track{
-  height:4px;background:rgba(255,255,255,.18);border-radius:2px;
+.lb-scrub-thumb{
+  position:absolute;
+  left:calc(var(--play-pct,0) * 100%);
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:12px;height:12px;
+  border-radius:50%;
+  background:#fff;
+  pointer-events:none;
+  z-index:3;
 }
-#lbScrubSlider::-webkit-slider-runnable-track{
-  height:4px;border-radius:2px;border:0;background:transparent;
-}
-#lbScrubTime{
-  flex-shrink:0;
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  font-size:10px;font-weight:600;
-  color:rgba(226,232,240,.72);
-  letter-spacing:.02em;
-  font-variant-numeric:tabular-nums;
-  min-width:80px;text-align:right;
-}
-@media (max-width:480px){
-  #lbScrubTime{ display:none; }
-  #lbScrubPlay{ width:28px;height:28px;min-width:28px;min-height:28px; }
-  #lbScrubPlay svg{ width:14px;height:14px; }
+.lb-scrub-hit{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  touch-action:none;
+  cursor:pointer;
 }
 
-/* ── Track timeline panel (flush under scrubber) ───────────────────────── */
-#lightboxTrackTimeline{
-  flex-shrink:0;
+/* Strip rows — fixed 48 px tall on desktop. The strip's 0 % and
+   100 % map to the time column's left edge and right edge — same
+   as the scrubber bar — so bars and ticks share x with the cursor. */
+.lbtt-strip{
   position:relative;
-  padding:8px 14px 10px 14px;
-  background:#000;
-  z-index:5;
-}
-#lightboxTrackTimeline[hidden]{ display:none; }
-#lightboxTrackTimeline .lbtt-rows{
-  display:flex;flex-direction:column;gap:6px;
-  position:relative;
-}
-#lightboxTrackTimeline .lbtt-row{
-  display:flex;align-items:center;gap:7px;
-  /* 48 px so the badge + bar + #N tag are all readable at desktop
-     density without crowding. The whole row stays tappable for the
-     toggle (44 px floor honoured by the badge's own padding). */
-  min-height:48px;
-}
-#lightboxTrackTimeline .lbtt-badge{
-  flex:0 0 auto;
-  /* Badge column is 30 px circle + 7 px gap + label (~59 px) = 96 px. */
-  width:96px;
-  display:inline-flex;align-items:center;gap:7px;
-  background:transparent;border:0;
-  padding:6px 4px 6px 0;
-  min-height:44px;
-  cursor:pointer;color:#e2e8f0;
-  font-size:13px;font-weight:500;letter-spacing:.01em;
-  text-align:left;
-  -webkit-tap-highlight-color:transparent;
-  transition:opacity .15s;
-}
-#lightboxTrackTimeline .lbtt-badge .lbtt-avatar{
-  /* Larger circle so the inner SVG (18 px) sits comfortably with
-     class-coloured tint behind it. */
-  width:30px;height:30px;border-radius:50%;
-  display:inline-flex;align-items:center;justify-content:center;
-  flex-shrink:0;
-  background:color-mix(in srgb,var(--c,#fff) 28%,#000 0);
-}
-#lightboxTrackTimeline .lbtt-badge .lbtt-avatar svg{ width:18px; height:18px; }
-#lightboxTrackTimeline .lbtt-badge .lbtt-name{
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  min-width:0;
-}
-#lightboxTrackTimeline .lbtt-badge[data-on="0"]{
-  opacity:.55;
-}
-#lightboxTrackTimeline .lbtt-badge[data-on="0"] .lbtt-name{
-  text-decoration:line-through;
-}
-#lightboxTrackTimeline .lbtt-strip{
-  flex:1 1 auto;min-width:0;
-  position:relative;
-  height:28px;       /* taller so bars at 16 px sit with breathing room */
+  height:48px;
   border-radius:8px;
   background:rgba(255,255,255,.04);
 }
-#lightboxTrackTimeline .lbtt-row[data-on="0"] .lbtt-strip{
-  opacity:.30;
-}
-#lightboxTrackTimeline .lbtt-bar{
-  position:absolute;top:6px;bottom:6px;
+.lbtt-strip[data-on="0"]{ opacity:.30; }
+.lbtt-bar{
+  position:absolute;top:14px;bottom:14px;
   border:0;padding:0;
   border-radius:5px;
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
 }
-#lightboxTrackTimeline .lbtt-bar:hover{ filter:brightness(1.15); }
-#lightboxTrackTimeline .lbtt-bar-num{
+.lbtt-bar:hover{ filter:brightness(1.15); }
+.lbtt-bar-num{
   position:absolute;top:-14px;left:0;
   font-family:ui-monospace,Menlo,Consolas,monospace;
   font-size:10px;font-weight:500;letter-spacing:.02em;
   pointer-events:none;
 }
-#lightboxTrackTimeline .lbtt-bar-end{
+.lbtt-bar-end{
   position:absolute;top:50%;transform:translate(0,-50%);
   font-size:13px;line-height:13px;font-weight:700;
   color:#ef4444;
@@ -331,15 +280,44 @@
   text-align:left;
   cursor:help;
 }
-/* Tick row sits flush below the last timeline row. Indented to the
-   strip's left edge — badge column 96 + gap 7 + 3 px nudge = 106. */
-#lightboxTrackTimeline .lbtt-ticks{
-  position:relative;
-  margin-top:6px;
-  height:12px;
-  padding-left:106px;
+
+/* Badges in the sidebar — height matches the strip (48 px) and the
+   inner circle is 30 px so the avatar reads at desktop density. */
+.lbtt-badge{
+  flex:0 0 auto;
+  width:96px;
+  height:48px;
+  display:flex;align-items:center;gap:7px;
+  background:transparent;border:0;
+  padding:0;
+  cursor:pointer;color:#e2e8f0;
+  font-size:13px;font-weight:500;letter-spacing:.01em;
+  text-align:left;
+  -webkit-tap-highlight-color:transparent;
+  transition:opacity .15s;
 }
-#lightboxTrackTimeline .lbtt-tick{
+.lbtt-badge .lbtt-avatar{
+  width:30px;height:30px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  background:color-mix(in srgb,var(--c,#fff) 28%,#000 0);
+}
+.lbtt-badge .lbtt-avatar svg{ width:18px;height:18px; }
+.lbtt-badge .lbtt-name{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  min-width:0;
+}
+.lbtt-badge[data-on="0"]{ opacity:.55; }
+.lbtt-badge[data-on="0"] .lbtt-name{ text-decoration:line-through; }
+
+/* Tick row — sits flush below the last strip. 0/33/66/100 % anchors
+   live INSIDE the time column so "0s" aligns with the scrubber's
+   leading edge and the first strip's 0 % bar position. */
+.lbtt-ticks{
+  position:relative;
+  height:12px;
+}
+.lbtt-tick{
   position:absolute;top:0;
   font-family:ui-monospace,Menlo,Consolas,monospace;
   font-size:10px;font-weight:500;
@@ -347,13 +325,54 @@
   letter-spacing:.02em;
   font-variant-numeric:tabular-nums;
 }
-#lightboxTrackTimeline .lbtt-empty{
+.lbtt-empty{
   padding:8px 4px 4px;
   font-size:11.5px;color:rgba(226,232,240,.45);
   font-style:italic;
 }
 
-/* Track-loss × tooltip (unchanged from v3 except for the larger ×). */
+/* ── Play cursor — child of .lb-time-col ───────────────────────────────── */
+/* Vertical 2 px white line + soft glow + 10 px round head. Spans the
+   full height of the time column (scrubber row → tick row) and never
+   crosses into the video region above. The 16 px hit-area sibling
+   captures pointer events for drag-to-scrub. */
+.lb-play-cursor{
+  position:absolute;
+  top:0;bottom:0;
+  left:calc(var(--play-pct,0) * 100%);
+  width:0;
+  pointer-events:none;
+  z-index:15;
+}
+.lb-play-line{
+  position:absolute;
+  top:0;bottom:0;left:0;
+  width:2px;
+  background:#fff;
+  box-shadow:0 0 4px rgba(255,255,255,.5);
+  pointer-events:none;
+  transform:translateX(-1px);  /* centre the 2 px line on the calc'd left */
+}
+.lb-play-line::before{
+  content:'';
+  position:absolute;
+  top:-4px;left:-4px;
+  width:10px;height:10px;
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 0 4px rgba(255,255,255,.6);
+}
+.lb-play-hit{
+  position:absolute;
+  top:0;bottom:0;left:-8px;
+  width:16px;
+  pointer-events:auto;
+  cursor:ew-resize;
+  touch-action:none;
+  background:transparent;
+}
+
+/* ── Track-loss × tooltip ──────────────────────────────────────────────── */
 .lbtt-end-tip{
   position:fixed;z-index:1300;
   padding:8px 12px;
@@ -395,10 +414,7 @@
   max-width:240px;
 }
 
-/* ── Live confidence meter (overlaid on the video) ─────────────────────── */
-/* Bottom-left inside #lightboxMediaWrap. Stays hidden when no track
-   is active at currentTime. pointer-events:none so the prev/next
-   buttons that sit at the same corner still register taps. */
+/* ── Live confidence meter — overlay on the video bottom-left ──────────── */
 #lightboxConfidenceMeter{
   position:absolute;
   bottom:8px;left:8px;
@@ -474,47 +490,6 @@
   font-style:italic;
 }
 
-/* ── Unified play cursor ───────────────────────────────────────────────── */
-/* Parent: #lightboxBottomStack — so the cursor spans scrubber + timeline
-   + ticks ONLY. Never crosses the video region above or the settings
-   panel below. */
-#lightboxPlayCursor{
-  position:absolute;
-  top:0;bottom:0;
-  width:0;
-  z-index:8;
-  pointer-events:none;
-  /* JS sets `style.left` in pixels, aligned to the timeline strip's
-     coordinate system (so bars and cursor agree on x positions). */
-}
-#lightboxPlayCursor[hidden]{ display:none; }
-#lightboxPlayCursor .lbpc-line{
-  position:absolute;
-  top:0;bottom:0;left:0;
-  width:2px;
-  background:#fff;
-  box-shadow:0 0 4px rgba(255,255,255,.5);
-  pointer-events:none;
-}
-#lightboxPlayCursor .lbpc-line::before{
-  content:'';
-  position:absolute;
-  top:-2px;left:-4px;
-  width:10px;height:10px;
-  border-radius:50%;
-  background:#fff;
-  box-shadow:0 0 4px rgba(255,255,255,.6);
-}
-#lightboxPlayCursor .lbpc-hit{
-  position:absolute;
-  top:0;bottom:0;left:-7px;
-  width:16px;
-  pointer-events:auto;
-  cursor:ew-resize;
-  touch-action:none;
-  background:transparent;
-}
-
 /* ── Settings panel — wizard mirror ────────────────────────────────────── */
 #lightboxSettings{
   flex-shrink:0;
@@ -538,7 +513,7 @@
   font-size:12.5px;font-weight:700;letter-spacing:.01em;
   cursor:pointer;-webkit-tap-highlight-color:transparent;
   border-radius:8px;
-  min-height:44px;     /* iOS-friendly tap target */
+  min-height:44px;
 }
 #lightboxSettings .lbset-header:hover{ background:rgba(255,255,255,.04); }
 #lightboxSettings .lbset-header-icon{
@@ -673,16 +648,18 @@
 
 /* ── Mobile adjustments ────────────────────────────────────────────────── */
 @media (max-width:480px){
-  #lightboxTrackTimeline{ padding:8px 10px 10px 10px; }
-  #lightboxTrackTimeline .lbtt-badge{
+  .lb-time-stack{ padding:8px 10px 10px 10px;gap:6px; }
+  .lb-sidebar{ flex-basis:84px; }
+  .lbtt-badge{
     width:84px;
+    height:44px;
     font-size:11px;font-weight:500;
   }
-  #lightboxTrackTimeline .lbtt-badge .lbtt-avatar{ width:26px;height:26px; }
-  #lightboxTrackTimeline .lbtt-badge .lbtt-avatar svg{ width:16px;height:16px; }
-  #lightboxTrackTimeline .lbtt-strip{ height:24px; }
-  #lightboxTrackTimeline .lbtt-bar{ top:5px;bottom:5px; }
-  #lightboxTrackTimeline .lbtt-ticks{ padding-left:91px; }
-  #lightboxTrackTimeline .lbtt-bar-num{ font-size:9.5px; }
+  .lbtt-badge .lbtt-avatar{ width:26px;height:26px; }
+  .lbtt-badge .lbtt-avatar svg{ width:16px;height:16px; }
+  .lbtt-strip{ height:44px; }
+  .lbtt-bar{ top:12px;bottom:12px; }
+  .lbtt-bar-num{ font-size:9.5px; }
+  .lb-play-btn{ width:32px;height:32px; }
   #lightboxSettings{ padding:6px 10px 12px 10px; }
 }

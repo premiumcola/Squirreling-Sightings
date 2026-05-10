@@ -619,13 +619,19 @@ function _startRafLoop(){
   _stopRafLoop();
   const tick = () => {
     _rafHandle = 0;
-    if (!lbState.item || !lbState.item._tracks) return;
     const v = byId('lightboxVideo');
     if (!v || v.paused || v.ended) return;
     if (byId('lightboxModal')?.classList.contains('hidden')) return;
-    _lbDrawDetections();
-    _renderPlayCursor();
-    _renderConfidenceMeter();
+    // --play-pct write — single source of truth for scrubber thumb,
+    // scrubber fill, and play cursor positions. Three CSS readers
+    // pick up the new value on the next paint, in lockstep.
+    _updatePlayPct();
+    // Canvas + meter only need lbState.item._tracks for content;
+    // they're cheap no-ops when tracks haven't loaded yet.
+    if (lbState.item){
+      _lbDrawDetections();
+      _renderConfidenceMeter();
+    }
     _rafHandle = requestAnimationFrame(tick);
   };
   _rafHandle = requestAnimationFrame(tick);
@@ -685,32 +691,28 @@ let _timelineDuration = 0; // seconds — captured at render so play
 let _timelineTrackIndex = [];
 
 export function lbClearTrackTimeline(){
-  const host = byId('lightboxTrackTimeline');
+  const host = byId('lightboxBottomStack');
   if (!host) return;
   host.innerHTML = '';
 }
 
+// Master renderer for the entire bottom-stack chrome — sidebar (play
+// button + class badges + tick spacer) and time column (scrubber bar
+// + per-class strips + tick row + play cursor). One column owns the
+// time-axis x-coordinates, so the scrubber thumb, every strip bar,
+// every tick label, and the play cursor all share a single left
+// origin. The shared --play-pct CSS variable on .lb-time-stack drives
+// scrubber-fill width + scrubber-thumb left + play-line left in
+// lockstep so a single rAF write paints all three.
 export function lbRenderTrackTimeline(item){
-  const host = byId('lightboxTrackTimeline');
+  const host = byId('lightboxBottomStack');
   if (!host) return;
-  // Hidden by default in the photo branch (CSS); only shown when the
-  // full-screen video chrome is on. We still render content so a mid-
-  // session reopen has the markup ready.
   if (!item){ host.innerHTML = ''; return; }
-  if (item.type === 'timelapse'){ host.innerHTML = ''; return; }
+
+  const isTimelapse = item.type === 'timelapse';
   const tracks = item._tracks;
   const haveTracks = !!(tracks
     && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
-  if (!haveTracks){
-    host.innerHTML = `<div class="lbtt-empty">Keine Track-Daten — erscheinen sobald die Indexierung fertig ist.</div>`;
-    return;
-  }
-  // Keep a stable per-clip index map so the × tooltip can find the
-  // full track object by element data-attribute. Track sample arrays
-  // can be large (samples × bbox dicts); stuffing them onto the DOM
-  // via data-* JSON would bloat innerHTML for every render.
-  _timelineTrackIndex = tracks.tracks;
-
   // Camera-side allowed-labels filter (same as the canvas render
   // path). Only classes that pass the filter get a row; hidden-classes
   // are still rendered as a row (with the badge dimmed) so the user
@@ -719,102 +721,145 @@ export function lbRenderTrackTimeline(item){
   const camId = item.camera_id || '';
   const hidden = _getHiddenClassesForCam(camId);
 
-  // Estimate duration from the tracks' max sample timestamp when the
-  // video isn't loaded yet. The actual duration takes over once
-  // loadedmetadata fires; bars rescale automatically because we
-  // re-render on every loadedmetadata in the lightbox open path.
+  // Duration — prefer videoEl.duration (real metadata) and fall back
+  // to the tracks' max sample timestamp for the rare pre-metadata
+  // render. Used for bar percentages + tick labels.
   const videoEl = byId('lightboxVideo');
   const vidDur = Number.isFinite(videoEl?.duration) && videoEl.duration > 0
     ? videoEl.duration : 0;
   let maxT = 0;
-  for (const tr of tracks.tracks){
-    for (const sm of (tr.samples || [])){
-      if (sm.t > maxT) maxT = sm.t;
+  if (haveTracks){
+    for (const tr of tracks.tracks){
+      for (const sm of (tr.samples || [])){
+        if (sm.t > maxT) maxT = sm.t;
+      }
     }
   }
   const duration = vidDur || maxT || 1;
   _timelineDuration = duration;
 
-  // Group tracks by label, deterministic OBJ_LABEL order so layout is
-  // stable across re-opens. Per-clip counter (#1, #2…) reflects the
-  // order tracks appear in the sidecar.
+  // Per-clip stable index map for the × tooltip handler.
+  _timelineTrackIndex = haveTracks ? tracks.tracks : [];
+
+  // Group tracks → per-class buckets, ordered by OBJ_LABEL so the
+  // strip stack stays stable across re-opens.
   const byLabel = new Map();
   let perClipNum = 0;
-  for (const tr of tracks.tracks){
-    perClipNum++;
-    const lbl = tr.label || 'unknown';
-    if (allowed !== null && !allowed.has(lbl)) continue;
-    if (!byLabel.has(lbl)) byLabel.set(lbl, []);
-    byLabel.get(lbl).push({ ...tr, _num: perClipNum });
+  if (haveTracks){
+    for (const tr of tracks.tracks){
+      perClipNum++;
+      const lbl = tr.label || 'unknown';
+      if (allowed !== null && !allowed.has(lbl)) continue;
+      if (!byLabel.has(lbl)) byLabel.set(lbl, []);
+      byLabel.get(lbl).push({ ...tr, _num: perClipNum });
+    }
   }
-  const orderedLabels = Object.keys(OBJ_LABEL)
-    .filter(l => byLabel.has(l));
-  // Catch-all for unknown classes the OBJ_LABEL map doesn't know.
+  const orderedLabels = Object.keys(OBJ_LABEL).filter(l => byLabel.has(l));
   for (const l of byLabel.keys()){
     if (!orderedLabels.includes(l)) orderedLabels.push(l);
   }
 
-  if (orderedLabels.length === 0){
-    host.innerHTML = `<div class="lbtt-empty">Alle Klassen vom Filter ausgeschlossen.</div>`;
-    return;
-  }
+  // Build sidebar + time-col items as parallel arrays so vertical
+  // alignment between badge[i] and strip[i] is preserved by the flex
+  // column natural order.
+  const sidebarParts = [];
+  const timeColParts = [];
 
-  const rowsHtml = orderedLabels.map(lbl => {
-    const c = colors[lbl] || colors.unknown;
-    const labelText = OBJ_LABEL[lbl] || lbl;
-    const rawSvg = OBJ_SVG[lbl] || OBJ_SVG.alarm || '';
-    const avatarSvg = rawSvg.replace('width="16" height="16"', 'width="14" height="14"');
-    const isOn = !hidden.has(lbl);
-    const trs = byLabel.get(lbl) || [];
-    const barsHtml = trs.map(tr => {
-      const samples = tr.samples || [];
-      if (!samples.length) return '';
-      const t0 = samples[0].t;
-      const t1 = samples[samples.length - 1].t;
-      const left = Math.max(0, (t0 / duration) * 100);
-      const width = Math.max(0.5, ((t1 - t0) / duration) * 100);
-      const endedEarly = (duration - t1) > 0.4;
-      const endRight = Math.max(0, ((duration - t1) / duration) * 100);
-      const tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
-      const idx = tr._num - 1;
-      return `<button type="button" class="lbtt-bar" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${c}">
-        <span class="lbtt-bar-num" style="color:${c}">#${tr._num}</span>
-        ${endedEarly ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
-      </button>`;
-    }).join('');
-    return `
-      <div class="lbtt-row" data-on="${isOn ? '1' : '0'}">
+  // Scrubber row — always present. Play button lives in the sidebar
+  // (NOT inside the scrubber bar). Scrubber bar is full-width in the
+  // time column so its leading 0 % aligns with every strip's 0 %.
+  sidebarParts.push(`
+    <button type="button" id="lbScrubPlay" class="lb-play-btn" aria-label="Play / Pause">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l13 7-13 7z"/></svg>
+    </button>`);
+  timeColParts.push(`
+    <div class="lb-scrub-bar" id="lbScrubBar">
+      <div class="lb-scrub-fill"></div>
+      <div class="lb-scrub-thumb"></div>
+      <div class="lb-scrub-hit"></div>
+    </div>`);
+
+  // Per-class strips + matching badges. Skip entirely for timelapse
+  // (no tracking sidecar) and for motion clips that have no tracks
+  // yet (the auto-reindex banner handles the "tracking wird
+  // generiert…" state inside the video region).
+  if (!isTimelapse && haveTracks && orderedLabels.length > 0){
+    for (const lbl of orderedLabels){
+      const c = colors[lbl] || colors.unknown;
+      const labelText = OBJ_LABEL[lbl] || lbl;
+      const rawSvg = OBJ_SVG[lbl] || OBJ_SVG.alarm || '';
+      const avatarSvg = rawSvg.replace('width="16" height="16"', 'width="18" height="18"');
+      const isOn = !hidden.has(lbl);
+      const trs = byLabel.get(lbl) || [];
+      const barsHtml = trs.map(tr => {
+        const samples = tr.samples || [];
+        if (!samples.length) return '';
+        const t0 = samples[0].t;
+        const t1 = samples[samples.length - 1].t;
+        const left = Math.max(0, (t0 / duration) * 100);
+        const width = Math.max(0.5, ((t1 - t0) / duration) * 100);
+        const endedEarly = (duration - t1) > 0.4;
+        const endRight = Math.max(0, ((duration - t1) / duration) * 100);
+        const tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
+        const idx = tr._num - 1;
+        return `<button type="button" class="lbtt-bar" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${c}">
+          <span class="lbtt-bar-num" style="color:${c}">#${tr._num}</span>
+          ${endedEarly ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
+        </button>`;
+      }).join('');
+      sidebarParts.push(`
         <button type="button" class="lbtt-badge" data-label="${lbl}" data-on="${isOn ? '1' : '0'}" aria-label="Klasse ein/aus" title="Klasse ein/aus">
           <span class="lbtt-avatar" style="--c:${c}">${avatarSvg}</span>
           <span class="lbtt-name">${labelText}</span>
-        </button>
-        <div class="lbtt-strip" data-label="${lbl}">${barsHtml}</div>
-      </div>`;
-  }).join('');
+        </button>`);
+      timeColParts.push(`
+        <div class="lbtt-strip" data-on="${isOn ? '1' : '0'}" data-label="${lbl}">${barsHtml}</div>`);
+    }
+  } else if (!isTimelapse && !haveTracks){
+    // No-tracks state for motion events — keep the layout structure
+    // so the cursor + scrubber still align, just show a one-liner.
+    sidebarParts.push(`<div class="lbtt-empty-side"></div>`);
+    timeColParts.push(`<div class="lbtt-empty">Keine Track-Daten — erscheinen sobald die Indexierung fertig ist.</div>`);
+  }
 
-  // Tick row — 4 evenly-spaced labels in mono "0s / 10s / 20s / 30s",
-  // scaled to the actual clip duration. We position them absolutely
-  // inside the strip area so they line up with the rows above.
-  const ticksHtml = (() => {
+  // Tick row — always present for motion clips (gives the user a 0
+  // / 11 / 22 / 33 s scale). Timelapse skips it since it doesn't
+  // carry detection time semantics.
+  let ticksHtml = '';
+  if (!isTimelapse){
     const N = 4;
     let parts = '';
     for (let i = 0; i < N; i++){
       const tSec = (duration * i) / (N - 1);
       const pct = (i / (N - 1)) * 100;
-      parts += `<span class="lbtt-tick" style="left:calc(${pct.toFixed(2)}% - ${i === 0 ? 0 : i === N - 1 ? 24 : 12}px)">${tSec.toFixed(0)}s</span>`;
+      const nudge = i === 0 ? 0 : i === N - 1 ? 24 : 12;
+      parts += `<span class="lbtt-tick" style="left:calc(${pct.toFixed(2)}% - ${nudge}px)">${tSec.toFixed(0)}s</span>`;
     }
-    return parts;
-  })();
+    ticksHtml = parts;
+    sidebarParts.push(`<div class="lb-tick-spacer"></div>`);
+    timeColParts.push(`<div class="lbtt-ticks">${ticksHtml}</div>`);
+  }
 
-  // Note: the play cursor is no longer rendered inside the timeline
-  // panel — the unified #lightboxPlayCursor in #lightboxBottomStack
-  // sweeps top-to-bottom across the whole video stack and is owned
-  // by _renderPlayCursor() / _wireCursorDrag() below.
+  // Play cursor — always present in the time column. Its left is a
+  // CSS calc against --play-pct so the position updates automatically
+  // when the rAF loop writes the variable. The 16 px hit-area sibling
+  // captures pointer events for drag-to-scrub.
+  timeColParts.push(`
+    <div class="lb-play-cursor" aria-hidden="true">
+      <div class="lb-play-line"></div>
+      <div class="lb-play-hit"></div>
+    </div>`);
+
   host.innerHTML = `
-    <div class="lbtt-rows">${rowsHtml}</div>
-    <div class="lbtt-ticks">${ticksHtml}</div>`;
+    <div class="lb-time-stack" style="--play-pct:0">
+      <div class="lb-sidebar">${sidebarParts.join('')}</div>
+      <div class="lb-time-col">${timeColParts.join('')}</div>
+    </div>`;
 
-  // Wire the badge clicks (toggle hidden) + bar clicks (seek video).
+  // Wire badge / bar clicks + bar-end tooltip + scrubber + play btn
+  // + cursor drag. Listeners bind to freshly-rendered elements so
+  // we don't need an idempotency flag here — innerHTML replaced any
+  // previous bindings.
   host.querySelectorAll('.lbtt-badge').forEach(btn => {
     btn.addEventListener('click', _onTimelineBadgeClick);
   });
@@ -822,9 +867,13 @@ export function lbRenderTrackTimeline(item){
     btn.addEventListener('click', _onTimelineBarClick);
   });
   _wireBarEndTooltips(host);
-  // Reset the cursor to currentTime in case the video has loaded
-  // metadata before this render.
-  _renderPlayCursor();
+  _wirePlayButton();
+  _wireScrubBar();
+  _wirePlayCursorDrag();
+  // Snap the initial --play-pct from current videoEl state so the
+  // first paint already has the cursor / scrubber in the right
+  // place, even before the rAF loop kicks in.
+  _updatePlayPct();
 }
 
 // ── Track-loss × tooltip ─────────────────────────────────────────────────
@@ -1016,128 +1065,118 @@ function _onTimelineBarClick(ev){
   if (v.paused) v.play().catch(() => {});
 }
 
-// ── Unified play cursor + drag-to-scrub ──────────────────────────────────
-// Single 1 px white line in #lightboxPlayCursor (sibling of scrubber +
-// media wrap + timeline inside #lightboxBottomStack). Position is
-// anchored to the timeline strip's coordinate system so bars and
-// cursor agree on x for the same time-point. The 16 px wide invisible
-// hit-area sibling drives drag-to-scrub via Pointer Events; tap-to-
-// seek on a timeline bar still works because bars sit outside the
-// 16 px column at a higher z than the cursor's pointer-events:none
-// line.
+// ── Time-axis sync (--play-pct CSS variable) ─────────────────────────────
+// Single CSS variable on .lb-time-stack drives THREE readers in
+// lockstep: the scrubber bar's fill width, the scrubber thumb's left,
+// and the play cursor's left. One rAF write paints all three so the
+// scrubber thumb and the vertical cursor can never drift apart.
 
-let _cursorDragWired = false;
-let _cursorDragWasPlaying = false;
+let _dragWasPlaying = false;
 
-function _renderPlayCursor(){
-  const cursor = byId('lightboxPlayCursor');
-  if (!cursor || cursor.hidden) return;
-  const stack = byId('lightboxBottomStack');
+function _updatePlayPct(){
+  const stack = document.querySelector('.lb-time-stack');
+  if (!stack) return;
   const v = byId('lightboxVideo');
-  if (!stack || !v) return;
-  const dur = _timelineDuration > 0 ? _timelineDuration
-    : (Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
+  if (!v) return;
+  const dur = Number.isFinite(v.duration) && v.duration > 0
+    ? v.duration : 0;
   if (dur <= 0){
-    // Without duration we can't position the cursor meaningfully —
-    // hide it entirely so the user doesn't see a stray vertical line
-    // while the video is still loading metadata.
-    cursor.style.opacity = '0';
+    stack.style.setProperty('--play-pct', '0');
     return;
   }
   const cur = Number.isFinite(v.currentTime) ? v.currentTime : 0;
   const pct = Math.min(1, Math.max(0, cur / dur));
-  // Anchor to the timeline strip's coordinate system: read the first
-  // strip's left edge + width relative to the stack so the cursor
-  // aligns with the bars (which use the same percentage axis). Falls
-  // back to a stack-relative span when the timeline isn't rendered
-  // yet (e.g. tracks-loading state, timelapse with no panel).
-  const tlHost = byId('lightboxTrackTimeline');
-  const stackRect = stack.getBoundingClientRect();
-  let stripLeftPx = 0;
-  let stripWidthPx = stackRect.width;
-  if (tlHost && !tlHost.hidden){
-    const firstStrip = tlHost.querySelector('.lbtt-strip');
-    if (firstStrip){
-      const stripRect = firstStrip.getBoundingClientRect();
-      stripLeftPx = stripRect.left - stackRect.left;
-      stripWidthPx = stripRect.width;
-    }
-  }
-  if (stripWidthPx <= 0){
-    cursor.style.opacity = '0';
-    return;
-  }
-  const xPx = stripLeftPx + pct * stripWidthPx;
-  cursor.style.left = `${xPx.toFixed(1)}px`;
-  cursor.style.opacity = '1';
-  _wireCursorDrag();
+  stack.style.setProperty('--play-pct', pct.toFixed(5));
 }
 
-// Drag-to-scrub handlers on the cursor's hit area. Wired once per
-// session — the listeners stay attached even when the cursor is
-// hidden (idempotent, no-op when there's no active video).
-function _wireCursorDrag(){
-  if (_cursorDragWired) return;
-  const cursor = byId('lightboxPlayCursor');
-  if (!cursor) return;
-  const hit = cursor.querySelector('.lbpc-hit');
-  if (!hit) return;
-  _cursorDragWired = true;
+// Translate a viewport clientX into a video currentTime via the time
+// column's bounding rect — used by both the scrubber-bar drag and the
+// play-line drag so they share a single time mapping. Returns null
+// when the column isn't laid out (e.g. modal hidden, no duration).
+function _clientXToTime(clientX){
+  const col = document.querySelector('.lb-time-col');
+  const v = byId('lightboxVideo');
+  if (!col || !v) return null;
+  const dur = Number.isFinite(v.duration) && v.duration > 0
+    ? v.duration : 0;
+  if (dur <= 0) return null;
+  const r = col.getBoundingClientRect();
+  if (r.width <= 0) return null;
+  const pct = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  return pct * dur;
+}
 
-  const _xToTime = (clientX) => {
-    const stack = byId('lightboxBottomStack');
-    const tlHost = byId('lightboxTrackTimeline');
-    const v = byId('lightboxVideo');
-    if (!stack || !v) return null;
-    const dur = Number.isFinite(v.duration) && v.duration > 0
-      ? v.duration : 0;
-    if (dur <= 0) return null;
-    const stackRect = stack.getBoundingClientRect();
-    let stripLeftPx = 0;
-    let stripWidthPx = stackRect.width;
-    if (tlHost && !tlHost.hidden){
-      const firstStrip = tlHost.querySelector('.lbtt-strip');
-      if (firstStrip){
-        const stripRect = firstStrip.getBoundingClientRect();
-        stripLeftPx = stripRect.left - stackRect.left;
-        stripWidthPx = stripRect.width;
-      }
-    }
-    if (stripWidthPx <= 0) return null;
-    const xLocal = clientX - stackRect.left - stripLeftPx;
-    const pct = Math.min(1, Math.max(0, xLocal / stripWidthPx));
-    return pct * dur;
-  };
-
+// Shared drag-to-scrub handler attached to either the scrubber bar's
+// hit area or the play cursor's hit area. Pointer capture keeps the
+// drag alive when the user's pointer leaves the original element.
+function _attachDragHandlers(hit){
+  if (!hit || hit.dataset.dragWired === '1') return;
+  hit.dataset.dragWired = '1';
   hit.addEventListener('pointerdown', (ev) => {
     const v = byId('lightboxVideo');
     if (!v || !v.src) return;
     ev.preventDefault();
     try { hit.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
-    _cursorDragWasPlaying = !v.paused && !v.ended;
-    if (_cursorDragWasPlaying) v.pause();
-    const t = _xToTime(ev.clientX);
-    if (t != null){ v.currentTime = t; }
+    _dragWasPlaying = !v.paused && !v.ended;
+    if (_dragWasPlaying) v.pause();
+    const t = _clientXToTime(ev.clientX);
+    if (t != null){ v.currentTime = t; _updatePlayPct(); }
   });
   hit.addEventListener('pointermove', (ev) => {
     if (!hit.hasPointerCapture(ev.pointerId)) return;
     const v = byId('lightboxVideo');
     if (!v) return;
-    const t = _xToTime(ev.clientX);
-    if (t != null){ v.currentTime = t; }
+    const t = _clientXToTime(ev.clientX);
+    if (t != null){ v.currentTime = t; _updatePlayPct(); }
   });
   const _release = (ev) => {
     if (hit.hasPointerCapture(ev.pointerId)){
       try { hit.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
     }
-    if (_cursorDragWasPlaying){
+    if (_dragWasPlaying){
       const v = byId('lightboxVideo');
       v?.play().catch(() => {});
     }
-    _cursorDragWasPlaying = false;
+    _dragWasPlaying = false;
   };
   hit.addEventListener('pointerup', _release);
   hit.addEventListener('pointercancel', _release);
+}
+
+function _wirePlayButton(){
+  const btn = byId('lbScrubPlay');
+  if (!btn || btn.dataset.playWired === '1') return;
+  btn.dataset.playWired = '1';
+  btn.addEventListener('click', () => {
+    const v = byId('lightboxVideo');
+    if (!v || !v.src) return;
+    if (v.paused || v.ended) v.play().catch(() => {});
+    else v.pause();
+  });
+}
+
+function _wireScrubBar(){
+  const hit = document.querySelector('#lbScrubBar .lb-scrub-hit');
+  _attachDragHandlers(hit);
+}
+
+function _wirePlayCursorDrag(){
+  const hit = document.querySelector('.lb-play-cursor .lb-play-hit');
+  _attachDragHandlers(hit);
+}
+
+// Sync the play button's glyph with the video's play state. The
+// button is freshly rendered on every lbRenderTrackTimeline() call,
+// so we re-paint when the video transitions between play/pause.
+function _refreshPlayButtonGlyph(){
+  const btn = byId('lbScrubPlay');
+  const v = byId('lightboxVideo');
+  if (!btn || !v) return;
+  const playing = !v.paused && !v.ended;
+  btn.innerHTML = playing
+    ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l13 7-13 7z"/></svg>';
+  btn.title = playing ? 'Pause' : 'Play';
 }
 
 // ── Live confidence meter (overlaid on the video) ────────────────────────
@@ -1540,15 +1579,19 @@ window.lbStopTrackingPlayback = lbStopTrackingPlayback;
       // the meter only surfaces once the user starts playback.
       if (lbState.item) lbRenderTrackTimeline(lbState.item);
       _lbDrawDetections();
+      _updatePlayPct();
       _renderConfidenceMeter();
     });
-    videoEl.addEventListener('play',     () => { _startRafLoop(); _lbDrawDetections(); });
-    videoEl.addEventListener('playing',  () => { _startRafLoop(); _lbDrawDetections(); });
-    videoEl.addEventListener('pause',    () => { _stopRafLoop(); _lbDrawDetections(); _renderPlayCursor(); _renderConfidenceMeter(); });
-    videoEl.addEventListener('ended',    () => { _stopRafLoop(); _lbDrawDetections(); _renderPlayCursor(); _renderConfidenceMeter(); });
-    videoEl.addEventListener('seeked',   () => { _lbDrawDetections(); _renderPlayCursor(); _renderConfidenceMeter(); });
+    videoEl.addEventListener('play',     () => { _startRafLoop(); _lbDrawDetections(); _refreshPlayButtonGlyph(); });
+    videoEl.addEventListener('playing',  () => { _startRafLoop(); _lbDrawDetections(); _refreshPlayButtonGlyph(); });
+    videoEl.addEventListener('pause',    () => { _stopRafLoop(); _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); _refreshPlayButtonGlyph(); });
+    videoEl.addEventListener('ended',    () => { _stopRafLoop(); _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); _refreshPlayButtonGlyph(); });
+    videoEl.addEventListener('seeked',   () => { _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); });
     videoEl.addEventListener('timeupdate', () => {
-      _renderPlayCursor();
+      // Belt + braces — if the rAF loop is throttled (background tab,
+      // power-save), `timeupdate` (~4 Hz native) still keeps the bar
+      // moving. Inside an active rAF loop this is a redundant write.
+      _updatePlayPct();
       _renderConfidenceMeter();
       if (!_rafHandle) _lbDrawDetections();
     });
@@ -1557,19 +1600,12 @@ window.lbStopTrackingPlayback = lbStopTrackingPlayback;
   const _scheduleRedraw = () => {
     if (!byId('lightboxModal') || byId('lightboxModal').classList.contains('hidden')) return;
     cancelAnimationFrame(_raf);
-    _raf = requestAnimationFrame(() => { _lbDrawDetections(); _renderPlayCursor(); });
+    _raf = requestAnimationFrame(() => { _lbDrawDetections(); _updatePlayPct(); });
   };
   window.addEventListener('resize', _scheduleRedraw);
   const _wrap = byId('lightboxMediaWrap');
   if (_wrap && 'ResizeObserver' in window){
     const obs = new ResizeObserver(_scheduleRedraw);
     obs.observe(_wrap);
-  }
-  // Same observer on the timeline host so the cursor stays anchored
-  // when the bottom panel reflows (orientation change, soft keyboard).
-  const _tlHost = byId('lightboxTrackTimeline');
-  if (_tlHost && 'ResizeObserver' in window){
-    const obs = new ResizeObserver(() => _renderPlayCursor());
-    obs.observe(_tlHost);
   }
 })();

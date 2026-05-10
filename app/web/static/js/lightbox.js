@@ -24,7 +24,8 @@ import { showToast } from './core/toast.js';
 import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from './core/icons.js';
 import { lbState } from './mediathek/state.js';
 import {
-  lbLoadTracksForItem, lbStopTrackingPlayback, lbClearTrackTimeline,
+  lbLoadTracksForItem, lbStopTrackingPlayback,
+  lbRenderTrackTimeline, lbClearTrackTimeline,
   lbRenderSettingsPanel,
 } from './mediathek/bbox-overlay.js';
 import { _iosNativeVideoOpen } from './mediathek/ios-video.js';
@@ -113,79 +114,10 @@ function _isFullscreenVideoItem(item){
   return !!(item.video_relpath || item.video_url);
 }
 
-let _scrubInitialized = false;
-let _scrubUserDragging = false;
-
-function _fmtClipTime(s){
-  if (!Number.isFinite(s) || s < 0) s = 0;
-  const m = Math.floor(s / 60);
-  const ss = Math.floor(s % 60);
-  return `${m}:${String(ss).padStart(2, '0')}`;
-}
-
-// Wire the scrubber once — play/pause toggle, slider drag = seek,
-// video timeupdate = slider + time-label refresh. Idempotent.
-function _ensureScrubberWired(){
-  if (_scrubInitialized) return;
-  _scrubInitialized = true;
-  const video = byId('lightboxVideo');
-  const slider = byId('lbScrubSlider');
-  const playBtn = byId('lbScrubPlay');
-  const timeEl = byId('lbScrubTime');
-  if (!video || !slider || !playBtn || !timeEl) return;
-
-  const _updatePlayBtn = () => {
-    const playing = !video.paused && !video.ended;
-    // Play / pause glyphs — single-coloured triangles / bars, no class
-    // colour (chrome is monochrome per design spec).
-    playBtn.innerHTML = playing
-      ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
-      : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l13 7-13 7z"/></svg>';
-    playBtn.title = playing ? 'Pause' : 'Play';
-    playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-  };
-  _updatePlayBtn();
-
-  playBtn.addEventListener('click', () => {
-    if (!video.src) return;
-    if (video.paused || video.ended) video.play().catch(() => {});
-    else video.pause();
-  });
-  video.addEventListener('play', _updatePlayBtn);
-  video.addEventListener('pause', _updatePlayBtn);
-  video.addEventListener('ended', _updatePlayBtn);
-
-  const _refreshScrub = () => {
-    const dur = Number.isFinite(video.duration) ? video.duration : 0;
-    const cur = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-    const pct = dur > 0 ? (cur / dur) * 100 : 0;
-    if (!_scrubUserDragging){
-      slider.value = String(Math.round((pct / 100) * 1000));
-    }
-    slider.style.setProperty('--lb-scrub-fill', `${pct.toFixed(2)}%`);
-    timeEl.textContent = `${_fmtClipTime(cur)} / ${_fmtClipTime(dur)}`;
-  };
-  video.addEventListener('timeupdate', _refreshScrub);
-  video.addEventListener('loadedmetadata', _refreshScrub);
-  video.addEventListener('seeked', _refreshScrub);
-  video.addEventListener('durationchange', _refreshScrub);
-
-  // Drag = seek. While the pointer is down we hold the cursor in user
-  // control so timeupdate doesn't fight the drag; pointerup hands it
-  // back. Touch and mouse share the same handlers via Pointer Events.
-  const _seekFromSlider = () => {
-    const dur = Number.isFinite(video.duration) ? video.duration : 0;
-    if (dur <= 0) return;
-    const pct = parseInt(slider.value, 10) / 1000;
-    video.currentTime = Math.min(dur, Math.max(0, pct * dur));
-    slider.style.setProperty('--lb-scrub-fill', `${(pct * 100).toFixed(2)}%`);
-  };
-  slider.addEventListener('pointerdown', () => { _scrubUserDragging = true; });
-  slider.addEventListener('pointerup',   () => { _scrubUserDragging = false; _seekFromSlider(); });
-  slider.addEventListener('pointercancel', () => { _scrubUserDragging = false; });
-  slider.addEventListener('input', _seekFromSlider);
-  slider.addEventListener('change', _seekFromSlider);
-}
+// Scrubber + play-button + cursor wiring lives in
+// mediathek/bbox-overlay.js now — that module owns the bottom-stack
+// rendering, so co-locating the handlers there keeps the element-id
+// lookups + DOM bindings in one place.
 
 // Move the action buttons (Confirm, Delete, Close) into the top bar in
 // the order [Confirm, Delete, Close] so X is the rightmost item.
@@ -227,29 +159,14 @@ function _setupVideoChrome(item){
   if (camEl) camEl.textContent = item?.camera_name || item?.camera_id || '';
   if (tsEl)  tsEl.textContent  = _fmtVideoTimeDE(item?.time || '');
   byId('lightboxTopBar').hidden = false;
-  byId('lightboxScrubber').hidden = false;
-  // Reveal the unified play cursor in the bottom stack — JS positions
-  // it on every timeupdate / RAF tick.
-  const cursorEl = byId('lightboxPlayCursor');
-  if (cursorEl){ cursorEl.hidden = false; cursorEl.style.opacity = '0'; }
   // Move the action buttons into the top bar.
   _relocateActionsTo('lightboxTopActions');
-  // Reset scrubber visuals (fresh open / item nav both reset to 0:00).
-  const slider = byId('lbScrubSlider');
-  const timeEl = byId('lbScrubTime');
-  if (slider){ slider.value = '0'; slider.style.setProperty('--lb-scrub-fill', '0%'); }
-  if (timeEl) timeEl.textContent = '0:00 / 0:00';
-  _ensureScrubberWired();
-  // Track timeline panel — only motion-event videos render rows;
-  // timelapse items don't have tracks.json sidecars.
-  const tlHost = byId('lightboxTrackTimeline');
-  if (tlHost){
-    tlHost.hidden = false;
-    if (item?.type === 'timelapse'){
-      tlHost.hidden = true;
-      lbClearTrackTimeline();
-    }
-  }
+  // bbox-overlay.js owns the entire bottom-stack rendering (sidebar
+  // play button + class badges + tick spacer; time column scrubber
+  // bar + class strips + tick row + play cursor). Call it here so
+  // the chrome populates even before tracks.json lands; tracks-fetch
+  // will re-render when the worker responds.
+  lbRenderTrackTimeline(item);
   // Settings panel — bbox-overlay.js owns the rendering; we just
   // toggle visibility based on whether the item carries the new
   // recording_settings object (or for timelapses, hide).
@@ -269,10 +186,6 @@ function _teardownVideoChrome(){
   if (!modal) return;
   modal.classList.remove('lb-fs-video');
   byId('lightboxTopBar').hidden = true;
-  byId('lightboxScrubber').hidden = true;
-  byId('lightboxTrackTimeline').hidden = true;
-  const cursorEl = byId('lightboxPlayCursor');
-  if (cursorEl){ cursorEl.hidden = true; cursorEl.style.opacity = '0'; }
   const setHost = byId('lightboxSettings');
   if (setHost){ setHost.hidden = true; setHost.innerHTML = ''; }
   lbClearTrackTimeline();

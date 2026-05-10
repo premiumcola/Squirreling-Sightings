@@ -29,12 +29,27 @@
     </div>
   </div>
 
-  <!-- Lightbox modal for media viewer -->
+  <!-- Lightbox modal for media viewer.
+       Photo events use the centred-modal geometry (default classes).
+       Video events get the .lb-fs-video class added by openLightbox,
+       which switches #lightboxModal to a 100 vw / 100 dvh page-level
+       overlay with a top bar (cam name + actions) above the media,
+       a custom scrubber row + per-class track timeline below it, and
+       the existing prev/next round buttons pinned to the video edges.
+       Timelapse videos render the same shell but the timeline panel
+       stays empty (no tracks.json sidecar). -->
   <div id="lightboxModal" class="modal hidden" style="padding:0;align-items:center;justify-content:center">
     <div id="lightboxInner" style="position:relative;width:min(94vw,1400px);display:flex;flex-direction:column;align-items:center">
+      <div id="lightboxTopBar" hidden>
+        <div id="lightboxTopMeta">
+          <span id="lightboxTopCam"></span>
+          <span id="lightboxTopTime"></span>
+        </div>
+        <div id="lightboxTopActions"></div>
+      </div>
       <div id="lightboxMediaWrap" style="position:relative;width:100%;border-radius:18px;overflow:hidden;background:#080510;min-height:240px">
         <img id="lightboxImg" src="" alt="Event" style="width:100%;max-height:80vh;object-fit:contain;background:#081119;display:block;transition:transform .18s ease-in,opacity .18s ease-in" />
-        <video id="lightboxVideo" style="display:none;width:100%;max-height:80vh;object-fit:contain;background:#080510;outline:none;border-radius:18px" controls playsinline preload="metadata"></video>
+        <video id="lightboxVideo" style="display:none;width:100%;max-height:80vh;object-fit:contain;background:#080510;outline:none;border-radius:18px" playsinline preload="metadata"></video>
         <canvas id="lightboxDetections" style="position:absolute;inset:0;pointer-events:none;z-index:3"></canvas>
         <button id="lightboxClose" type="button">✕</button>
         <button id="lightboxPrev" type="button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="15,18 9,12 15,6"/></svg></button>
@@ -43,6 +58,12 @@
         <button id="lightboxConfirm" type="button"></button>
         <button id="lightboxDelete" type="button"></button>
       </div>
+      <div id="lightboxScrubber" hidden>
+        <button type="button" id="lbScrubPlay" aria-label="Play / Pause"></button>
+        <input type="range" id="lbScrubSlider" min="0" max="1000" value="0" step="1" aria-label="Position" />
+        <span id="lbScrubTime">0:00 / 0:00</span>
+      </div>
+      <div id="lightboxTrackTimeline" hidden></div>
       <div id="lightboxMeta" style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center"></div>
     </div>
   </div>

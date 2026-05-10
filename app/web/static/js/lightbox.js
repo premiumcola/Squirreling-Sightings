@@ -23,7 +23,9 @@ import { j } from './core/api.js';
 import { showToast } from './core/toast.js';
 import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from './core/icons.js';
 import { lbState } from './mediathek/state.js';
-import { lbLoadTracksForItem, lbStopTrackingPlayback } from './mediathek/bbox-overlay.js';
+import {
+  lbLoadTracksForItem, lbStopTrackingPlayback, lbClearTrackTimeline,
+} from './mediathek/bbox-overlay.js';
 import { _iosNativeVideoOpen } from './mediathek/ios-video.js';
 import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
@@ -90,6 +92,159 @@ export function _lbResetToPhoto(){
   if (errEl) errEl.style.display = 'none';
   const confirmBtn = byId('lightboxConfirm');
   if (confirmBtn) confirmBtn.style.display = '';
+}
+
+// ── Full-screen video chrome (Stage 30) ─────────────────────────────────────
+// openLightbox routes video items (motion clips + timelapses) through a
+// dedicated full-screen layout: top bar with cam / ts / actions, video
+// region, bottom panel with custom scrubber + per-class track timeline.
+// The chrome is a class-toggle on #lightboxModal; the action buttons
+// are physically relocated into the top bar so they sit naturally in a
+// flex row instead of needing a parallel set of absolute-positioned
+// rules.
+
+// Returns true for any item whose lightbox should render in full-screen
+// video mode — motion clips with video_relpath / video_url AND
+// timelapses (which always have a video).
+function _isFullscreenVideoItem(item){
+  if (!item) return false;
+  if (item.type === 'timelapse') return true;
+  return !!(item.video_relpath || item.video_url);
+}
+
+let _scrubInitialized = false;
+let _scrubUserDragging = false;
+
+function _fmtClipTime(s){
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  return `${m}:${String(ss).padStart(2, '0')}`;
+}
+
+// Wire the scrubber once — play/pause toggle, slider drag = seek,
+// video timeupdate = slider + time-label refresh. Idempotent.
+function _ensureScrubberWired(){
+  if (_scrubInitialized) return;
+  _scrubInitialized = true;
+  const video = byId('lightboxVideo');
+  const slider = byId('lbScrubSlider');
+  const playBtn = byId('lbScrubPlay');
+  const timeEl = byId('lbScrubTime');
+  if (!video || !slider || !playBtn || !timeEl) return;
+
+  const _updatePlayBtn = () => {
+    const playing = !video.paused && !video.ended;
+    // Play / pause glyphs — single-coloured triangles / bars, no class
+    // colour (chrome is monochrome per design spec).
+    playBtn.innerHTML = playing
+      ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l13 7-13 7z"/></svg>';
+    playBtn.title = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  };
+  _updatePlayBtn();
+
+  playBtn.addEventListener('click', () => {
+    if (!video.src) return;
+    if (video.paused || video.ended) video.play().catch(() => {});
+    else video.pause();
+  });
+  video.addEventListener('play', _updatePlayBtn);
+  video.addEventListener('pause', _updatePlayBtn);
+  video.addEventListener('ended', _updatePlayBtn);
+
+  const _refreshScrub = () => {
+    const dur = Number.isFinite(video.duration) ? video.duration : 0;
+    const cur = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    const pct = dur > 0 ? (cur / dur) * 100 : 0;
+    if (!_scrubUserDragging){
+      slider.value = String(Math.round((pct / 100) * 1000));
+    }
+    slider.style.setProperty('--lb-scrub-fill', `${pct.toFixed(2)}%`);
+    timeEl.textContent = `${_fmtClipTime(cur)} / ${_fmtClipTime(dur)}`;
+  };
+  video.addEventListener('timeupdate', _refreshScrub);
+  video.addEventListener('loadedmetadata', _refreshScrub);
+  video.addEventListener('seeked', _refreshScrub);
+  video.addEventListener('durationchange', _refreshScrub);
+
+  // Drag = seek. While the pointer is down we hold the cursor in user
+  // control so timeupdate doesn't fight the drag; pointerup hands it
+  // back. Touch and mouse share the same handlers via Pointer Events.
+  const _seekFromSlider = () => {
+    const dur = Number.isFinite(video.duration) ? video.duration : 0;
+    if (dur <= 0) return;
+    const pct = parseInt(slider.value, 10) / 1000;
+    video.currentTime = Math.min(dur, Math.max(0, pct * dur));
+    slider.style.setProperty('--lb-scrub-fill', `${(pct * 100).toFixed(2)}%`);
+  };
+  slider.addEventListener('pointerdown', () => { _scrubUserDragging = true; });
+  slider.addEventListener('pointerup',   () => { _scrubUserDragging = false; _seekFromSlider(); });
+  slider.addEventListener('pointercancel', () => { _scrubUserDragging = false; });
+  slider.addEventListener('input', _seekFromSlider);
+  slider.addEventListener('change', _seekFromSlider);
+}
+
+// Move the action buttons (Confirm, Delete, Close) into the top bar in
+// the order [Confirm, Delete, Close] so X is the rightmost item.
+// Photo events get the buttons restored back to their original parent
+// (the media wrap) by _teardownVideoChrome.
+function _relocateActionsTo(parentId){
+  const parent = byId(parentId);
+  if (!parent) return;
+  ['lightboxConfirm', 'lightboxDelete', 'lightboxClose'].forEach(id => {
+    const el = byId(id);
+    if (el && el.parentNode !== parent) parent.appendChild(el);
+  });
+}
+
+// Apply the full-screen video chrome for `item`. Idempotent — calling
+// it twice in a row leaves the DOM in the same state.
+function _setupVideoChrome(item){
+  const modal = byId('lightboxModal');
+  if (!modal) return;
+  modal.classList.add('lb-fs-video');
+  // Top bar text
+  const camEl = byId('lightboxTopCam');
+  const tsEl  = byId('lightboxTopTime');
+  if (camEl) camEl.textContent = item?.camera_id || '';
+  if (tsEl)  tsEl.textContent  = item?.time || '';
+  byId('lightboxTopBar').hidden = false;
+  byId('lightboxScrubber').hidden = false;
+  // Move the action buttons into the top bar.
+  _relocateActionsTo('lightboxTopActions');
+  // Reset scrubber visuals (fresh open / item nav both reset to 0:00).
+  const slider = byId('lbScrubSlider');
+  const timeEl = byId('lbScrubTime');
+  if (slider){ slider.value = '0'; slider.style.setProperty('--lb-scrub-fill', '0%'); }
+  if (timeEl) timeEl.textContent = '0:00 / 0:00';
+  _ensureScrubberWired();
+  // Track timeline panel — only motion-event videos render rows;
+  // timelapse items don't have tracks.json sidecars.
+  const tlHost = byId('lightboxTrackTimeline');
+  if (tlHost){
+    tlHost.hidden = false;
+    if (item?.type === 'timelapse'){
+      tlHost.hidden = true;
+      lbClearTrackTimeline();
+    }
+  }
+}
+
+// Reverse _setupVideoChrome — called when navigating to a photo or
+// closing the lightbox entirely.
+function _teardownVideoChrome(){
+  const modal = byId('lightboxModal');
+  if (!modal) return;
+  modal.classList.remove('lb-fs-video');
+  byId('lightboxTopBar').hidden = true;
+  byId('lightboxScrubber').hidden = true;
+  byId('lightboxTrackTimeline').hidden = true;
+  lbClearTrackTimeline();
+  // Buttons return to the media wrap so the photo branch's existing
+  // absolute-positioned CSS rules apply.
+  _relocateActionsTo('lightboxMediaWrap');
 }
 
 // Show an error banner inside the lightbox media wrap (e.g. "Video
@@ -227,6 +382,15 @@ export function openLightbox(item){
   const imgSrc = lbState.item.snapshot_relpath ? `/media/${lbState.item.snapshot_relpath}` : (lbState.item.snapshot_url || '');
   const hasVideoLabel = (lbState.item.labels || []).some(l => ['motion','car','person','cat','bird','dog','squirrel'].includes(l));
   const pendingMsg = lbState.item.status === 'recording' ? 'Video wird aufgenommen…' : lbState.item.status === 'processing' ? 'Video wird verarbeitet…' : null;
+  // Apply the per-item chrome BEFORE setting the video src so the
+  // top bar / scrubber are present when the first timeupdate fires.
+  // Photo branch tears the chrome back down so the centred-modal
+  // layout returns intact.
+  if (_isFullscreenVideoItem(lbState.item)){
+    _setupVideoChrome(lbState.item);
+  } else {
+    _teardownVideoChrome();
+  }
   if (pendingMsg){
     _lbShowError(pendingMsg);
   } else if (vidSrc){
@@ -235,9 +399,9 @@ export function openLightbox(item){
     videoEl.style.display = 'block'; videoEl.src = vidSrc; videoEl.muted = true; videoEl.loop = true;
     videoEl.load(); videoEl.play().catch(() => {});
     // Fire-and-forget: fetch the tracks.json sidecar in parallel with
-    // the first paint. The chip lights up + the RAF loop draws boxes
-    // as soon as the JSON resolves; any 404 or malformed payload
-    // silently falls through to the legacy single-bbox path.
+    // the first paint. The track timeline panel + per-class toggles
+    // light up as soon as the JSON resolves; any 404 or malformed
+    // payload silently falls through to the auto-reindex flow.
     lbLoadTracksForItem(lbState.item);
   } else if (!imgSrc && (hasVideoLabel || lbState.item.encode_error)){
     _lbShowError('Video nicht verfügbar');
@@ -250,7 +414,13 @@ export function openLightbox(item){
     <span class="badge">${esc(lbState.item.time || '')}</span>
     ${vidSrc ? '<span class="badge">🎬 Video</span>' : ''}
     ${confirmedBadge}`;
-  _renderLbLabels();
+  // Bubble-row tagging UI — kept for photo events (no tracks UI),
+  // hidden in video full-screen mode where the timeline rows replace
+  // the per-class affordance. The CSS rule on .lb-fs-video already
+  // hides #lightboxLabels at the layout layer, but we still skip the
+  // expensive _renderLbLabels DOM build to save work.
+  if (!_isFullscreenVideoItem(lbState.item)) _renderLbLabels();
+  else byId('lightboxLabels').innerHTML = '';
   // Edge dim only at the GLOBAL boundaries — page edges navigate through.
   byId('lightboxPrev').style.opacity = lbState.index > 0 ? '1' : '0.2';
   byId('lightboxNext').style.opacity = lbState.index < ((state._allMedia || []).length - 1) ? '1' : '0.2';
@@ -297,6 +467,9 @@ export function openTLPlayer(item){
   }
   lbState.deletePending = false;
   _lbClearDetections();
+  // Timelapse uses the same full-screen video shell as motion clips,
+  // but the timeline panel stays empty (no tracks.json sidecar).
+  _setupVideoChrome(lbState.item);
   const imgEl = byId('lightboxImg'); imgEl.style.display = 'none';
   const videoEl = byId('lightboxVideo');
   const videoSrc = (item.video_relpath ? '/media/' + item.video_relpath : '') || item.video_url || item.url || (item.relpath ? '/media/' + item.relpath : '');
@@ -325,10 +498,13 @@ export function closeLightbox(){
   }
   byId('lightboxModal').classList.add('hidden');
   document.body.style.overflow = '';
-  // Halt the Phase-2 tracking-playback RAF loop + hide the chip.
-  // Done before clearing lbState.item so the loop's null-check sees a
-  // consistent "lightbox closed" state on its next tick.
+  // Halt the Phase-2 tracking-playback RAF loop. Done before clearing
+  // lbState.item so the loop's null-check sees a consistent "lightbox
+  // closed" state on its next tick.
   lbStopTrackingPlayback();
+  // Drop the full-screen video chrome so the next photo open returns
+  // to the centred-modal layout without a flash of misplaced controls.
+  _teardownVideoChrome();
   lbState.item = null; lbState.index = -1;
   const videoEl = byId('lightboxVideo');
   if (videoEl){ videoEl.pause(); videoEl.src = ''; videoEl.style.display = 'none'; }

@@ -17,8 +17,16 @@
 #lightboxModal.lb-fs-video{
   padding:0!important;
   background:#0a0a0d!important;
+  /* Override the .modal base (display:grid; place-items:center) so the
+     inner doesn't get vertically centered inside a grid cell and
+     leave dead space above the top bar. Flex column with start-aligned
+     children means the top bar sits at y=0 of the viewport. */
+  display:flex!important;
+  flex-direction:column!important;
   align-items:stretch!important;
-  justify-content:stretch!important;
+  justify-content:flex-start!important;
+  place-items:stretch!important;
+  inset:0!important;
   z-index:1200;
 }
 #lightboxModal.lb-fs-video #lightboxInner{
@@ -28,6 +36,13 @@
   display:flex!important;
   flex-direction:column!important;
   align-items:stretch!important;
+  /* Defensive: a leftover mobile @media rule sets justify-content:
+     center on #lightboxInner, which on borderline viewports (tablets,
+     narrow desktops) would vertically centre the column and push the
+     video down. Pin to flex-start. */
+  justify-content:flex-start!important;
+  padding:0!important;
+  margin:0!important;
 }
 
 /* ── Top bar ───────────────────────────────────────────────────────────── */
@@ -121,9 +136,16 @@
   height:100%!important;
   max-height:none!important;
   object-fit:contain;
+  /* Anchor the video frame to the TOP of its container so any
+     vertical letterbox sits at the bottom (next to the scrubber)
+     rather than above the frame — the user's "video starts way too
+     far down" complaint when the container is taller than the
+     video's natural aspect-fit height. */
+  object-position:center top;
   background:#000!important;
   border-radius:0!important;
   display:block;
+  margin:0!important;
 }
 #lightboxModal.lb-fs-video #lightboxMeta{ display:none!important; }
 #lightboxModal.lb-fs-video #lightboxMediaWrap > #lightboxConfirm,
@@ -335,23 +357,24 @@
 /* Vertical 2 px white line + soft glow + 10 px round head. Spans the
    full height of the time column (scrubber row → tick row) and never
    crosses into the video region above. The 16 px hit-area sibling
-   captures pointer events for drag-to-scrub. */
+   captures pointer events for drag-to-scrub. z-index intentionally
+   high so the line draws above every strip / badge content. */
 .lb-play-cursor{
   position:absolute;
   top:0;bottom:0;
   left:calc(var(--play-pct,0) * 100%);
   width:0;
   pointer-events:none;
-  z-index:15;
+  z-index:100;
 }
 .lb-play-line{
   position:absolute;
-  top:0;bottom:0;left:0;
+  top:0;bottom:0;left:-1px;
   width:2px;
   background:#fff;
-  box-shadow:0 0 4px rgba(255,255,255,.5);
+  box-shadow:0 0 4px rgba(255,255,255,.55);
   pointer-events:none;
-  transform:translateX(-1px);  /* centre the 2 px line on the calc'd left */
+  z-index:1;
 }
 .lb-play-line::before{
   content:'';
@@ -361,6 +384,7 @@
   border-radius:50%;
   background:#fff;
   box-shadow:0 0 4px rgba(255,255,255,.6);
+  z-index:2;
 }
 .lb-play-hit{
   position:absolute;
@@ -370,7 +394,14 @@
   cursor:ew-resize;
   touch-action:none;
   background:transparent;
+  z-index:1;
 }
+/* Defensive — every strip in the time column should stay BELOW the
+   cursor so the line draws on top regardless of stacking-context
+   gotchas (position:relative on the strip creates its own context). */
+.lb-time-col > .lbtt-strip{ z-index:1; }
+.lb-time-col > .lb-scrub-bar{ z-index:2; }
+.lb-time-col > .lbtt-ticks{ z-index:1; }
 
 /* ── Track-loss × tooltip ──────────────────────────────────────────────── */
 .lbtt-end-tip{

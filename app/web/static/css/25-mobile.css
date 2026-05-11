@@ -406,8 +406,32 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      The shared .log-level-select flex:1 used to give both equal
      halves, which wasted the level select and clipped the subsystem
      one. */
-  #logs #logLevelFilter{flex:0 0 auto;min-width:0}
-  #logs #logSubsystemFilter{flex:1 1 0;min-width:0}
+  /* min-width:max-content stops iOS from squeezing the select below
+     "INFO ⌄" / "Alle ⌄" intrinsic width — the previous min-width:0
+     let the native chevron wrap to a second line, making these two
+     dropdowns visibly taller than the Refresh button alongside them.
+     white-space:nowrap reinforces the no-wrap behaviour for the
+     option text itself. */
+  #logs #logLevelFilter{flex:0 0 auto;min-width:max-content;white-space:nowrap}
+  #logs #logSubsystemFilter{flex:1 1 0;min-width:max-content;white-space:nowrap}
+}
+
+/* (a) Mobile camera-name in the timeline sidebox previously used
+   word-break:break-word and would split "Terrasse'" mid-word as
+   "Terrass e'". Force a single-line + ellipsis path so we get a
+   clean "Garten 'Dach …" truncation instead. Desktop keeps the
+   wrap-to-second-line behaviour (15 px font, wide enough sidebox). */
+@media(max-width:768px){
+  .tl-cam-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
+}
+
+/* (c) Mediathek filter pill row at the bottom edge of the screen —
+   the leftmost pill (Timelapse) was kissing the viewport border on
+   iPhones with a left safe-area inset. Pad the row by max(8 px,
+   safe-area-inset-left) so no pill touches the screen edge, scoped
+   to mobile so desktop layout is unchanged. */
+@media(max-width:768px){
+  .media-filter-bar{padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
 }
 
 /* ── Cam-card stream containment ──────────────────────────────────────────

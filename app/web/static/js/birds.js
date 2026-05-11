@@ -161,9 +161,12 @@ function _eventThumbHtml(ev){
   if (!url){
     return `<div class="bird-event-thumb bird-event-thumb--missing"><span>${time}</span></div>`;
   }
+  // onerror: drop the <img> entirely if the snapshot 404s so a
+  // broken-image icon doesn't leak into the dossier thumb row. Same
+  // defensive pattern the mediathek-grid card uses (orchestration.js).
   return `<a class="bird-event-thumb" href="#"
     onclick="event.preventDefault(); window.openLightbox && window.openLightbox(${esc(JSON.stringify(ev))})">
-    <img src="${esc(url)}" alt="" loading="lazy"/>
+    <img src="${esc(url)}" alt="" loading="lazy" onerror="this.remove()"/>
     <span>${time}</span>
   </a>`;
 }

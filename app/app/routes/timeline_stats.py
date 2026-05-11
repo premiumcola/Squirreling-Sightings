@@ -49,15 +49,32 @@ def api_timeline():
         pts = []
         for e in reversed(ev):
             snap_rel = e.get("snapshot_relpath")
+            snap_url = e.get("snapshot_url")
+            # Verify the snapshot file is actually reachable before
+            # exposing its URL. Orphaned events would otherwise produce
+            # a broken <img> in the activity-cloud tooltip. The DOT
+            # itself stays — a detection still happened at that point,
+            # just no preview survives — so we null the URL instead of
+            # dropping the point. Two paths get checked:
+            #   * snapshot_relpath (canonical) — direct storage probe.
+            #   * snapshot_url starting with /media/ — derive the
+            #     storage path from the URL and probe that.
+            # Either branch resolving keeps the URL; neither resolving
+            # nulls it. media_only=True on list_events is the first
+            # filter; this is the belt-and-braces second pass.
             if snap_rel and not (storage_root / snap_rel).exists():
-                continue
+                snap_url = None
+            elif (not snap_rel) and snap_url and snap_url.startswith("/media/"):
+                derived = storage_root / snap_url[len("/media/"):]
+                if not derived.exists():
+                    snap_url = None
             pts.append({
                 "event_id": e["event_id"],
                 "time": e["time"],
                 "labels": e.get("labels", []),
                 "top_label": e.get("top_label"),
                 "alarm_level": e.get("alarm_level", "info"),
-                "snapshot_url": e.get("snapshot_url"),
+                "snapshot_url": snap_url,
                 "y": idx,
             })
             merged.append({"camera_id": cid, **pts[-1]})

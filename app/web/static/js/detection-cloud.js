@@ -494,8 +494,17 @@ function _showTooltipFor(p, clientX, clientY) {
   const SS = String(dt.getSeconds()).padStart(2,'0');
   const DD = String(dt.getDate()).padStart(2,'0');
   const MO = String(dt.getMonth()+1).padStart(2,'0');
+  // A snapshot_url that 404s (cleaned-up event, drifted relpath, …)
+  // would otherwise leak a broken-image icon into the tooltip. The
+  // onerror handler hides the <img> entirely so the body text alone
+  // carries the tooltip; onload sets data-loaded='1' for quick DOM
+  // inspection when debugging missing thumbs. The placeholder
+  // background-colour from .stat-dc-tip-thumb keeps layout stable
+  // during the lazy-load roundtrip.
   const thumb = p.snapshot_url
-    ? `<img class="stat-dc-tip-thumb" src="${esc(p.snapshot_url)}" alt="" loading="lazy">`
+    ? `<img class="stat-dc-tip-thumb" src="${esc(p.snapshot_url)}" alt="" loading="lazy"`
+      + ` onerror="this.style.display='none';this.removeAttribute('src')"`
+      + ` onload="this.dataset.loaded='1'">`
     : '';
   tip.innerHTML = `
     ${thumb}

@@ -365,15 +365,13 @@ ${isActive ? `
     <div class="cv-tr">
       <div class="cv-tr-row">
         <div class="cv-pill-live-wrap cv-live-active">
-          <div class="cv-live-collapsed">
-            <div class="cv-pdot"></div>
-            <span>Live</span>
-            ${previewFps ? `<span class="cv-live-fps">${previewFps} fps</span>` : ''}
-            <svg class="cv-live-arrow" width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="rgba(200,245,224,.85)" stroke-width="1.8" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg>
-          </div>
-          <div class="cv-live-expanded">
-            <div class="cv-live-exp-header">
-              <div class="cv-pdot"></div>
+          <span class="cv-pdot"></span>
+          <span class="cv-live-label">Live</span>
+          ${previewFps ? `<span class="cv-live-fps">${previewFps} fps</span>` : ''}
+          <svg class="cv-live-arrow" width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="rgba(200,245,224,.85)" stroke-width="1.8" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg>
+          <div class="cv-live-detail">
+            <div class="cv-live-detail-header">
+              <span class="cv-pdot"></span>
               <span>Livestream aktiv</span>
             </div>
             <div class="cv-lp-row"><span>Stream-Modus</span><strong class="cv-stream-mode ${hdOn ? 'cv-mode-hd' : (streamMode === 'live' ? 'cv-mode-live' : 'cv-mode-base')}">${hdOn ? '● HD-Stream' : (streamMode === 'live' ? '● Live' : '○ Vorschau')}</strong></div>
@@ -413,11 +411,12 @@ ${isActive ? `
   // touch-outside handler closes any open pill when the user taps
   // somewhere else on the page.
   byId('cameraCards').querySelectorAll('.cv-pill-live-wrap').forEach(el => {
-    const collapsed = el.querySelector('.cv-live-collapsed');
-    requestAnimationFrame(() => {
-      const w = Math.ceil(collapsed.getBoundingClientRect().width);
-      if (w > 0) el.style.setProperty('--lp-collapsed-w', w + 'px');
-    });
+    // Open/close on hover (desktop) and tap (mobile). The pill flips
+    // between collapsed (display:flex row) and expanded (the detail
+    // panel inside) via the .cv-lp-open class — see 03-dashboard.css.
+    // No JS-measured CSS variables: the rewrite drops --lp-collapsed-w
+    // because the CSS no longer references it, and the JS-injected
+    // width was contributing to the prior iOS stretch bug.
     let _t = null;
     el.addEventListener('mouseenter', () => { clearTimeout(_t); el.classList.add('cv-lp-open'); });
     el.addEventListener('mouseleave', () => { _t = setTimeout(() => el.classList.remove('cv-lp-open'), 120); });

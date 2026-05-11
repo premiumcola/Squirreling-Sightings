@@ -88,15 +88,13 @@
 .cv-group-pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.55);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;width:fit-content}
 .cv-name-row{display:flex;align-items:center;gap:8px;min-width:0}
 .cv-tr-row{display:flex;gap:6px;align-items:center}
-.cv-tr-row .cv-pill-live-wrap{margin-left:0}
 
 /* ── Top-right pill container ─────────────────────────────────────────────── */
 /* Live pill anchored to the upper-right corner of the video frame.
-   Stays close to the corner regardless of whether the title-wrap
-   shows a location row — the pill is tall enough that aligning it
-   with the title row would crowd the camera name. The 10 px inset
-   keeps it clear of the rounded video corner without intruding
-   into the actual stream content. */
+   align-items:flex-end keeps each child column right-aligned without
+   needing margin-left:auto on the pill itself (the previous design
+   used inline-flex + margin-left:auto on iOS, which triggers a
+   Safari stretch bug). */
 .cv-tr{position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
 
 /* Base pill */
@@ -104,84 +102,88 @@
 
 /* Live dot */
 .cv-pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-/* Expanding live capsule */
-/* Content-sized collapsed pill — no width floor. The fps payload is
-   4-7 chars ("0.1 fps" / "15 fps" / "120 fps" / "— fps" placeholder)
-   so any fixed min-width left visible empty space inside the pill on
-   iPhone. max-content on the custom var lets the pill hug its actual
-   content; the parent .cv-tr cluster gives plenty of inset breathing
-   room and extends the touch hit area beyond the pill's own 22 px
-   height. max-width pins to --lp-expanded-w so the flex shape can
-   grow up to the open-state width (220 px). The .cv-lp-open rule
-   below still flips max-width explicitly to --lp-expanded-w so the
-   open transition hits the same end state. */
-/* Two width regimes:
-   • Collapsed (no .cv-lp-open) — width:fit-content forces the wrap to
-     its intrinsic content size on every browser, fixing the iOS green
-     tail. width:auto wasn't resolving to content-size when the wrap
-     is nested in a flex column (.cv-tr) with align-items:flex-end +
-     align-self:auto — Safari stretched it to the available row width.
-   • Open (.cv-lp-open) — explicit width:var(--lp-expanded-w) so the
-     popover grows to the full 220 px even though the open-state body
-     declares max-height:0 → 110 px transitions. fit-content would
-     keep the open pill content-sized, which is too narrow for the
-     "Livestream aktiv" detail rows. */
-.cv-pill-live-wrap{--lp-collapsed-w:max-content;--lp-expanded-w:220px;display:inline-flex;align-items:center;position:relative;border-radius:999px;border:1.5px solid rgba(34,197,94,.55);background:rgba(34,197,94,.18);color:#c8f5e0;font-size:10.5px;font-weight:700;cursor:default;overflow:hidden;backdrop-filter:blur(8px);width:fit-content;max-width:var(--lp-expanded-w);max-height:22px;transition:max-width .28s ease,max-height .28s ease,border-radius .28s ease;margin-left:auto}
-/* Expanded popover — opaque blurred panel so the user reads it as a
-   layer above the camera image instead of a chunk eaten out of it.
-   The default rgba(34,197,94,.18) wash from the collapsed state is
-   too transparent for an open popover; .92 + 12 px blur makes the
-   detail rows pop. */
-.cv-pill-live-wrap.cv-lp-open{border-radius:14px;width:var(--lp-expanded-w);max-width:var(--lp-expanded-w);max-height:130px;background:rgba(15,30,20,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:rgba(34,197,94,.7)}
-.cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
-/* Slimmer collapsed row — 3 px vertical padding, 10.5 px font, 1.2 line-
-   height. The 22 px max-height on the wrap clips any overflow but the
-   inner padding has been tightened so nothing visually clips. */
-/* Collapsed row spacing — gap defaults to 6 px (dot → "Live"). The
-   "Live" → fps and fps → arrow gaps are bumped to 8 px via per-child
-   margins so the pill hugs its content (no margin-left:auto on the
-   arrow — that pushed it to a free-floating right edge and caused
-   the workshop-tile clip). Width is driven entirely by content; the
-   wrap's width:max-content + no min-width means the pill sizes to
-   exactly what it shows. */
-.cv-live-collapsed{display:flex;align-items:center;gap:6px;padding:3px 10px;white-space:nowrap;font-size:10.5px;line-height:1.2;min-height:0;box-sizing:border-box;opacity:1;transform:translateY(0);transition:opacity .18s ease,transform .28s ease}
-.cv-live-collapsed .cv-live-arrow{margin-left:2px;flex-shrink:0;opacity:.55}
-/* FPS suffix inside the live pill — same colour family as the
-   "Live" word so the whole pill reads as one cohesive shape. The
-   slight opacity drop + lighter font-weight differentiates it from
-   "Live" without making it look orphaned in a separate style group
-   (the previous rgba(134,239,172,.55) treatment looked half-styled
-   and detached from the green background). */
-.cv-live-collapsed .cv-live-fps{
+
+/* ── Live pill · GROUND-UP REWRITE ────────────────────────────────────────
+   Three prior fixes failed because the wrap contained TWO children
+   (.cv-live-collapsed + .cv-live-expanded) and the expanded child's
+   wider intrinsic content forced fit-content on the wrap to resolve
+   to ~200 px even when collapsed. Layout-detail children that are
+   max-height:0 are visually invisible but STILL contribute to the
+   flex sizing algorithm. The expanded panel's "Auflösung ·
+   1920×1080" rows have a natural ~180 px content width — that's
+   the green tail the user saw on iOS.
+   This rewrite drops the inner wrappers, drops the CSS variables,
+   drops every width/max-width/min-width, and switches the expanded
+   panel from max-height:0 to display:none so it doesn't participate
+   in collapsed-state sizing at all. */
+.cv-pill-live-wrap{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:3px 8px 3px 6px;
+  border-radius:999px;
+  border:1.5px solid rgba(34,197,94,.55);
+  background:rgba(34,197,94,.18);
   color:#c8f5e0;
-  opacity:.78;
-  font-size:10px;
-  font-weight:600;
-  /* Spacing between "Live" and the fps number is implemented as
-     padding-left (inside the fps span's box) rather than margin-left
-     or relying on the parent's `gap`. Padding can't be eaten by an
-     iOS Safari flex-gap quirk and isn't margin-collapsed against
-     siblings; on every browser the 8 px of inner left-padding shows
-     up reliably as visible whitespace before the "3.8 fps" text. */
-  padding-left:8px;
+  font-size:10.5px;
+  font-weight:700;
+  line-height:1;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background .18s,border-color .18s,padding .18s,border-radius .18s;
+  /* explicitly NO width, NO max-width, NO min-width — flex hugs */
 }
-.cv-pill-live-wrap.cv-lp-open .cv-live-collapsed{opacity:0;transform:translateY(-4px);pointer-events:none;max-height:0;padding:0;overflow:hidden}
-.cv-live-expanded{padding:0 12px;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease,padding .3s ease;width:100%;min-width:0}
-.cv-pill-live-wrap.cv-lp-open .cv-live-expanded{max-height:110px;opacity:1;padding:6px 10px 7px}
-/* Tighter popover header — was 10 px top + 8 px bottom + 6 px margin =
-   24 px before the dot. Now 8 px above the title and 8 px below the
-   border, eliminating the empty band the user saw at the top of the
-   expanded popover. */
-.cv-live-exp-header{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#c8f5e0;padding:0 0 4px 0;border-bottom:1px solid rgba(34,197,94,.2);margin:0 0 5px}
-/* Belt-and-braces — strip any inherited top margin from the popover's
-   first child so a future content tweak can't reintroduce the empty
-   band above the dot. */
-.cv-pill-live-wrap.cv-lp-open .cv-live-expanded > *:first-child{margin-top:0}
+.cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
+
+/* Collapsed-state children. parent gap:6 + .cv-live-fps margin-left:2
+   = 8 px between "Live" and the fps number, matching the spec. */
+.cv-live-label{flex-shrink:0}
+.cv-live-fps{margin-left:2px;opacity:.78;font-size:10px;font-weight:600;flex-shrink:0}
+.cv-live-arrow{opacity:.55;flex-shrink:0}
+
+/* Detail panel — hidden until the wrap opens. display:none keeps the
+   panel out of fit-content size calculation entirely (the third-attempt
+   fix used max-height:0 which still let the panel's intrinsic width
+   leak into the wrap's sizing on iOS). */
+.cv-live-detail{display:none}
+
+.cv-pill-live-wrap.cv-lp-open{
+  flex-direction:column;
+  align-items:stretch;
+  gap:4px;
+  padding:8px 12px;
+  border-radius:14px;
+  background:rgba(15,30,20,.92);
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
+  border-color:rgba(34,197,94,.7);
+  white-space:normal;
+}
+/* When open, hide the collapsed-row children and show the detail panel.
+   The wrap's width derives from the detail panel's natural content
+   width — no hard 220 px cap, since the detail's rows are nowrap and
+   pack tighter than the previous fixed clamp. */
+.cv-pill-live-wrap.cv-lp-open > .cv-pdot,
+.cv-pill-live-wrap.cv-lp-open > .cv-live-label,
+.cv-pill-live-wrap.cv-lp-open > .cv-live-fps,
+.cv-pill-live-wrap.cv-lp-open > .cv-live-arrow{display:none}
+.cv-pill-live-wrap.cv-lp-open > .cv-live-detail{display:flex;flex-direction:column;gap:4px}
+
+/* Header row inside the detail panel — same dot pulse + "Livestream
+   aktiv" title the third-attempt design had, just under the new class
+   names so the rewrite is self-contained. */
+.cv-live-detail-header{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#c8f5e0;padding-bottom:4px;border-bottom:1px solid rgba(34,197,94,.2);margin-bottom:1px}
+
 .cv-pill-live-wrap.cv-live-active .cv-pdot{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}
 .cv-pill-live-wrap.cv-live-off .cv-pdot{background:rgba(255,255,255,.3);animation:none}
-.cv-lp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:3px;font-size:10px;padding:0 6px}
-.cv-lp-row:last-child{margin-bottom:0}
-.cv-lp-row span{color:rgba(220,252,231,.75);line-height:1.3}
+
+/* Detail-row layout — label + value side-by-side with a comfortable
+   gap. No padding-left/right so the row aligns with the wrap's
+   padding edge. */
+.cv-lp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:10px;line-height:1.3}
+.cv-lp-row span{color:rgba(220,252,231,.75)}
 /* Sub-labels under the row spans were dropped from the dashboard
    template — keep the rule in case a future caller re-adds them. */
 .cv-lp-row small{font-size:9px;color:rgba(220,252,231,.5);display:block}

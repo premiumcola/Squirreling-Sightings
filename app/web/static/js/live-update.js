@@ -58,7 +58,12 @@ export function startLiveUpdate() {
             const isActive = c.status === 'active';
             livePill.classList.toggle('cv-live-active', isActive);
             livePill.classList.toggle('cv-live-off', !isActive);
-            const hdr = livePill.querySelector('.cv-live-exp-header span');
+            // Renamed from .cv-live-exp-header during the ground-up
+            // rewrite of the pill — see 03-dashboard.css for the new
+            // structure. The inner span carrying "Livestream aktiv /
+            // inaktiv" is the second span (after the dot) under the
+            // detail header.
+            const hdr = livePill.querySelector('.cv-live-detail-header span:last-child');
             if (hdr) hdr.textContent = 'Livestream ' + (isActive ? 'aktiv' : 'inaktiv');
             const cached = (state.cameras || []).find(x => x.id === c.id);
             if (cached) {

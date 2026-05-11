@@ -19,8 +19,14 @@ export function _updateShapeDrawingBar(){
   bar.hidden = n === 0;
   const count = byId('shapeDrawingCount');
   if (count){
-    if (n < 3) count.textContent = `${n} Punkt${n === 1 ? '' : 'e'} gesetzt · Mindestens 3 für ein Polygon`;
-    else count.textContent = `${n} Punkte gesetzt · Übernehmen möglich`;
+    // Prefix the current mode so the user always knows what they're
+    // about to commit — drawing in zone mode reads "Zone · 3 Punkte
+    // gesetzt …", drawing in mask mode reads "Maske · 3 Punkte …".
+    const modeLbl = shapeState.mode === 'mask' ? 'Maske' : 'Zone';
+    const tail = n < 3
+      ? `${n} Punkt${n === 1 ? '' : 'e'} gesetzt · Mindestens 3 für ein Polygon`
+      : `${n} Punkte gesetzt · Übernehmen möglich`;
+    count.textContent = `${modeLbl} · ${tail}`;
   }
   const save = byId('saveShapeBtn');
   if (save) save.disabled = n < 3;

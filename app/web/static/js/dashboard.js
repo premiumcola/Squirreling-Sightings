@@ -312,14 +312,16 @@ export function _refreshLivePillForCard(camId){
   if (resEl) resEl.textContent = hdOn ? 'Main-Stream' : (c.preview_resolution || c.resolution || '—');
 }
 
-// Tile click → live-view modal. openLiveView lives in chrome/live-view.js
-// since stage 11 — direct import keeps the dispatch synchronous.
-import { openLiveView } from './chrome/live-view.js';
-export function _cvCardClick(e, camId){
-  const cam = (state.cameras || []).find(c => c.id === camId);
-  if (!cam) return;
-  openLiveView(camId, cam.name || camId);
-}
+// cm-52: the tile body is inert — the article-level onclick was
+// dropped (task 2 of the dashboard restructure). Each tile carries
+// three explicit buttons: HD (inline with title), FS (top-right),
+// SIM (bottom-right). The legacy openLiveView modal stays available
+// as window.openLiveView for any external caller; the dashboard
+// itself no longer reaches for it.
+//
+// `_cvEnterFullscreen(camId)` and `_cvOpenSim(camId)` are exposed on
+// window from the FS and SIM modules; this file just renders the
+// buttons that call them.
 
 // Camera-tile grid renderer. Builds every visible cv-card from
 // state.cameras. The template string carries inline onclick handlers
@@ -344,7 +346,7 @@ export function renderDashboard(){
     const acc = SURVEIL_ACC[mode];
     const label = SURVEIL_LABEL[mode];
     const sch = c.schedule || {};
-    return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}" onclick="_cvCardClick(event,'${esc(c.id)}')">
+    return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
     <div class="cv-img-wrap">
       <div class="cv-loading-placeholder">${isActive ? _makeConnectingPlaceholder() : _makeOfflinePlaceholder()}</div>
@@ -358,12 +360,18 @@ export function renderDashboard(){
       <div class="cv-name-row">
         <span class="cv-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
         <div class="cv-name">${esc(c.name)}</div>
+        ${c.rtsp_url ? `<button class="cv-hd-badge${hdOn ? ' active' : ''}" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau" aria-label="HD-Vorschau ein/aus">HD</button>` : ''}
       </div>
       ${c.location ? `<div class="cv-loc">${esc(c.location)}</div>` : ''}
     </div>
 ${isActive ? `
     <div class="cv-tr">
       <div class="cv-tr-row">
+        ${c.rtsp_url ? `<button class="cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvEnterFullscreen && window._cvEnterFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>
+          </svg>
+        </button>` : ''}
         <div class="cv-pill-live-wrap cv-live-active">
           <span class="cv-pdot"></span>
           <span class="cv-live-label">Live</span>
@@ -383,7 +391,13 @@ ${isActive ? `
       </div>
       ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
     </div>
-    ${c.rtsp_url ? `<button class="cv-hd-badge${hdOn ? ' active' : ''}" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau">HD</button>` : ''}
+    ${c.rtsp_url ? `<button class="cv-sim-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+      <span>Simulieren</span>
+    </button>` : ''}
 ` : ''}
     <div class="cv-surveil" data-mode="${mode}" style="--surveil-acc:${acc}">
       <div class="cv-surveil-head">
@@ -467,10 +481,9 @@ export async function reloadCamera(camId){
 
 // ── Legacy global bridges ──────────────────────────────────────────────────
 // Inline onclick handlers inside renderDashboard's template strings
-// reach these via window. Each name was on window before stage 3b via
-// the implicit-script bridge; keeping them explicit so the migration
-// stays safe.
-window._cvCardClick           = _cvCardClick;
+// reach these via window. `_cvCardClick` was retired in cm-52 (tile
+// body became inert); the FS + SIM handlers attach lazily from
+// dedicated modules.
 window.toggleCardHd           = toggleCardHd;
 window._refreshLivePillForCard = _refreshLivePillForCard;
 window.reloadCamera           = reloadCamera;

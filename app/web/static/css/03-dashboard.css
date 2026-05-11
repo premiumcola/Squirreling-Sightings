@@ -80,8 +80,11 @@
   .cv-card:hover .cv-grad-bot{opacity:1}
 }.cv-live-dot{position:absolute;bottom:10px;left:10px;width:10px;height:10px;border-radius:50%;z-index:3}.cv-live-green{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}.cv-live-amber{background:#f59e0b;animation:cv-pulse-amber 2s ease-in-out infinite}.cv-live-red{background:#ef4444}@keyframes cv-pulse-green{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}50%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}@keyframes cv-pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
 
-/* Title — top left */
-.cv-title-wrap{position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:3px;max-width:60%}
+/* Title — top left. Now hosts an inline HD button to the right of
+   the name, so leave a bit more breathing room (was 60%, now 70%) —
+   the HD button is flex-shrink:0 and the .cv-name truncates inside
+   .cv-name-row when there's no room. */
+.cv-title-wrap{position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:3px;max-width:70%}
 .cv-name{color:#fff;font-weight:700;font-size:15px;text-shadow:0 1px 6px rgba(0,0,0,.8);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .cv-title-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;line-height:1;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))}
 .cv-loc{color:rgba(255,255,255,.7);font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
@@ -189,28 +192,117 @@
 .cv-lp-row small{font-size:9px;color:rgba(220,252,231,.5);display:block}
 .cv-lp-row strong{color:#fff;font-weight:700;white-space:nowrap}
 /* HD badge — primary control next to the Live pill. */
-/* HD toggle — flat dark surface that matches .cv-cog so they read as
-   one button family. Bottom-right of the tile, just left of the cog,
-   stable position regardless of the live-pill expansion state. */
+/* HD toggle — INLINE inside .cv-name-row, immediately right of the
+   .cv-name span. The name truncates with ellipsis when the tile is
+   narrow; the HD button has flex-shrink:0 so it stays the same size
+   and never compresses the title. Visual matches the cog + new FS
+   button so the three controls read as one family. */
 .cv-hd-badge{
-  position:absolute;
-  right:50px;bottom:8px;
-  height:34px;min-width:38px;
-  padding:0 10px;
-  border-radius:11px;
-  background:#1c1c20;
-  color:rgba(255,255,255,.7);
+  flex-shrink:0;
+  height:28px;min-width:36px;
+  padding:0 9px;
+  border-radius:9px;
+  background:rgba(0,0,0,.45);
+  color:rgba(255,255,255,.85);
   font-size:11px;font-weight:700;letter-spacing:.05em;
   border:0;outline:0;
   display:inline-flex;align-items:center;justify-content:center;
   cursor:pointer;
-  z-index:6;
   -webkit-tap-highlight-color:transparent;
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
   transition:background .15s,color .15s,transform .12s;
 }
-.cv-hd-badge:hover{background:#26262a;color:#fff}
-.cv-hd-badge.active{background:rgba(59,130,246,.22);color:#bfdbfe}
+.cv-hd-badge:hover{background:rgba(0,0,0,.65);color:#fff}
+.cv-hd-badge.active{background:rgba(59,130,246,.42);color:#fff;font-weight:800}
 .cv-hd-badge:active{transform:scale(.94)}
+
+/* FS button — top-right corner of the tile, sits LEFT of the
+   LivePill in .cv-tr-row so the live indicator stays the rightmost
+   element and the FS affordance reads as the "expand" cue. Same
+   round / blur / hit-area treatment as HD + SIM so the three new
+   controls share one visual language. */
+.cv-fs-btn{
+  flex-shrink:0;
+  width:32px;height:32px;
+  border-radius:9px;
+  border:0;outline:0;
+  background:rgba(0,0,0,.45);
+  color:rgba(255,255,255,.85);
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+  transition:background .15s,color .15s,transform .12s;
+}
+.cv-fs-btn:hover{background:rgba(0,0,0,.65);color:#fff}
+.cv-fs-btn:active{transform:scale(.94)}
+
+/* SIM button — bottom-right of the tile, where the old HD badge used
+   to sit (50 px from the right edge, leaving room for the cog).
+   Carries an icon + "Simulieren" label so the affordance reads at a
+   glance — this is the most-discoverable action on the tile, the
+   primary entry to the new MediaView live-detect surface. */
+.cv-sim-btn{
+  position:absolute;
+  right:50px;bottom:8px;
+  height:32px;
+  padding:0 12px;
+  border-radius:9px;
+  border:0;outline:0;
+  background:rgba(0,0,0,.45);
+  color:rgba(255,255,255,.85);
+  font-size:11.5px;font-weight:600;letter-spacing:.02em;
+  display:inline-flex;align-items:center;gap:6px;
+  cursor:pointer;
+  z-index:6;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+  transition:background .15s,color .15s,transform .12s;
+}
+.cv-sim-btn:hover{background:rgba(0,0,0,.65);color:#fff}
+.cv-sim-btn:active{transform:scale(.94)}
+.cv-sim-btn svg{flex-shrink:0}
+
+/* Tile body must NOT show a click-pointer anymore — the article-level
+   onclick is gone (cm-52 task 2). Buttons inside the tile keep their
+   own cursor:pointer from the rules above. */
+.cv-card{cursor:default}
+
+/* Native fullscreen on the tile — .cv-img-wrap is the FS target. While
+   in :fullscreen the wrap fills the viewport and the chrome buttons
+   anchored to .cv-frame (HD inline / FS top-right / SIM bottom-right
+   / cog / LivePill / surveil stack) live OUTSIDE the wrap and so
+   simply don't render in the FS layer. .fake-fullscreen handles the
+   iOS-Safari fallback case where requestFullscreen rejects on a
+   <div>; same layout, viewport-covering positioning. */
+.cv-img-wrap:fullscreen,
+.cv-img-wrap:-webkit-full-screen,
+.cv-img-wrap.fake-fullscreen{
+  background:#000;
+}
+.cv-img-wrap:fullscreen .cv-img,
+.cv-img-wrap:-webkit-full-screen .cv-img,
+.cv-img-wrap.fake-fullscreen .cv-img{
+  object-fit:contain;
+}
+.cv-img-wrap.fake-fullscreen{
+  position:fixed;inset:0;
+  width:100vw;height:100vh;height:100dvh;
+  z-index:1000;
+}
+
+/* Mobile touch targets — push the three new buttons up to 44 × 44
+   so the iPhone-393 user can reliably hit them without missing. */
+@media (max-width:768px){
+  .cv-hd-badge{height:44px;min-width:44px;padding:0 12px;font-size:12px}
+  .cv-fs-btn{width:44px;height:44px}
+  .cv-fs-btn svg{width:18px;height:18px}
+  .cv-sim-btn{height:44px;padding:0 14px;font-size:12px}
+  .cv-sim-btn svg{width:16px;height:16px}
+}
 
 /* ── Bottom-left surveillance stack ────────────────────────────────────────
    Replaces the old Motion + Objekte pills (cv-br) and the alarm pill
@@ -222,8 +314,11 @@
   display:flex;flex-direction:column;gap:5px;
   align-items:flex-start;
   z-index:3;
-  /* leave room for HD-badge (50 + ~38) + cog (34) + gap on the right */
-  max-width:calc(100% - 100px);
+  /* leave room on the right for SIM (~120 + right offset 50) + cog
+     (34 + right offset 8) → ~180 px buffer. Was 100 px when the
+     bottom-right slot held the compact HD badge; the SIM label is
+     wider so we need more clearance. */
+  max-width:calc(100% - 180px);
   pointer-events:none;
 }
 .cv-surveil > *{pointer-events:auto}

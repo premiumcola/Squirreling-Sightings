@@ -240,13 +240,17 @@ def test_compute_miss_grace_samples():
 
 
 def test_module_constants_match_defaults():
-    """The schema doc says 0.0 = 'use module default' for spawn/floor/grace.
-    Pin the constants so a refactor can't silently drift them."""
+    """The schema doc says 0.0 = 'use module default' for spawn/floor/
+    grace/iou. Pin the constants so a refactor can't silently drift
+    them. 2026-05: IoU lowered 0.30 → 0.20 and miss-grace 4 → 6 after
+    garden-cam testing showed one-walking-person breaking into 3-4
+    fresh track ids; track #9 of the migration plan captures the
+    rationale in tracker_core.py's comment."""
     assert TRACK_FLOOR_SCORE == 0.20
     assert TRACK_SPAWN_SCORE == 0.50
-    assert IOU_MATCH_THRESHOLD == 0.30
-    assert TRACK_MISS_WINDOWS == 4
-    assert MISS_GRACE_DEFAULT_SECONDS == 4.0
+    assert IOU_MATCH_THRESHOLD == 0.20
+    assert TRACK_MISS_WINDOWS == 6
+    assert MISS_GRACE_DEFAULT_SECONDS == 6.0
 
 
 # ── Predicted-sample emission during miss-grace ────────────────────────────

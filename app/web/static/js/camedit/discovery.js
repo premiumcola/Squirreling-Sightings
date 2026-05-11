@@ -587,6 +587,7 @@ byId('cameraForm').onsubmit=async(e)=>{
     track_spawn_min_score: parseFloat(f['track_spawn_min_score']?.value || 0),
     track_continue_min_score: parseFloat(f['track_continue_min_score']?.value || 0),
     track_miss_grace_seconds: parseFloat(f['track_miss_grace_seconds']?.value || 0),
+    track_iou_match_threshold: parseFloat(f['track_iou_match_threshold']?.value || 0),
     // Reolink-only HTTP-CGI port for the standalone image-mode test
     // panel; 0 means "fall back to 80". Persisted unchanged via the
     // additive settings store; runtime ignores it on non-Reolink cams.

@@ -187,10 +187,20 @@ CAMERA_SCHEMA: dict = {
     #                                but more samples for a richer
     #                                lightbox replay. No UI; power-user
     #                                tuning via settings.json.
+    #   track_iou_match_threshold  — minimum predicted-bbox vs detection
+    #                                IoU for a track to be CONTINUED
+    #                                across frames. Lower = more
+    #                                generous (one walking subject
+    #                                stays one track even when the
+    #                                detector wobbles); higher = stricter
+    #                                (less likely to collapse two real
+    #                                subjects together). 0.0 = use
+    #                                tracker_core.IOU_MATCH_THRESHOLD.
     "track_spawn_min_score":      (float, 0.0),
     "track_continue_min_score":   (float, 0.0),
     "track_miss_grace_seconds":   (float, 0.0),
     "track_postclip_precision":   (str,   "standard"),
+    "track_iou_match_threshold":  (float, 0.0),
     # ── Reolink-only · HTTP CGI port for image-mode override ─────────────
     # Most Reolink cams listen on plain HTTP/80, but the user may have
     # remapped that to e.g. 8000 when port-forwarding. Treated as 80 if

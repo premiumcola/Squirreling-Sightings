@@ -403,7 +403,7 @@ class TrackingWorker(threading.Thread):
         try:
             detector = self._ensure_detector()
             allowed = _resolve_object_filter(self._cam_cfg_getter, job.camera_id)
-            spawn_score, floor_score, _grace_s = _resolve_track_thresholds(
+            spawn_score, floor_score, _grace_s, iou_thresh = _resolve_track_thresholds(
                 self._cam_cfg_getter, job.camera_id,
             )
             state = _TrackerState()
@@ -427,6 +427,7 @@ class TrackingWorker(threading.Thread):
                     state, dets, frame_idx, t_s,
                     frame_w=frame_w, frame_h=frame_h,
                     spawn_score=spawn_score,
+                    iou_threshold=iou_thresh,
                 )
                 frame_idx += sample_interval
 

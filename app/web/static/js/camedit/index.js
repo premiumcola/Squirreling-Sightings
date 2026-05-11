@@ -75,6 +75,59 @@ import {
 // Tiny helper used by the export-config buttons in the App-Section.
 const download = (url) => window.open(url, '_blank');
 
+// ── Tracking presets ────────────────────────────────────────────────────────
+// Three one-click presets fill the four tracker fields (Spawn-Schwelle,
+// Fortsetzungs-Schwelle, Gnadenfrist, IoU-Schwelle). Values are chosen
+// to bracket the module defaults so a power user can pick the right
+// trade-off without reading the docs:
+//   "Vorsichtig" — stricter, more likely to spawn fresh ids on dips.
+//   "Ausgewogen" — module defaults (post 2026-05 retune); good for
+//                  garden-cams with one or two subjects walking past.
+//   "Robust"     — looser, holds onto subjects across longer occlusions.
+// Pressing a preset writes into the input fields but does NOT auto-save;
+// the user still has to press the form's existing Speichern.
+const _TRACK_PRESETS = {
+  careful:  { spawn: 0.55, cont: 0.30, grace: 4,  iou: 0.30 },
+  balanced: { spawn: 0.50, cont: 0.20, grace: 6,  iou: 0.20 },
+  robust:   { spawn: 0.45, cont: 0.15, grace: 10, iou: 0.15 },
+};
+
+function _wireTrackingPresets(formEl){
+  if (!formEl || formEl.dataset.tpresetsWired === '1') return;
+  formEl.dataset.tpresetsWired = '1';
+  const buttons = formEl.querySelectorAll('.erk-track-preset');
+  if (!buttons.length) return;
+  buttons.forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const preset = _TRACK_PRESETS[btn.dataset.preset];
+      if (!preset) return;
+      const f = formEl.elements;
+      const fields = {
+        track_spawn_min_score: preset.spawn,
+        track_continue_min_score: preset.cont,
+        track_miss_grace_seconds: preset.grace,
+        track_iou_match_threshold: preset.iou,
+      };
+      Object.entries(fields).forEach(([name, value]) => {
+        const inp = f[name];
+        if (inp){
+          inp.value = value;
+          // Fire input event so any listeners (e.g. dirty-state
+          // tracking, autosave shimmers) update.
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+      // Visual feedback — flash the chosen preset, reset after 1 s
+      // so the user sees confirmation without a permanent active
+      // state (Speichern is what commits).
+      buttons.forEach(b => { b.dataset.flash = '0'; });
+      btn.dataset.flash = '1';
+      setTimeout(() => { btn.dataset.flash = '0'; }, 900);
+    });
+  });
+}
+
 export function renderShell(){
   // Hero title is now a static "TAM-spy" lockup with the squirrel-on-
   // hyphen ornament — no longer driven by config.app.{name,tagline,
@@ -392,6 +445,13 @@ function editCamera(camId){
   if(f['track_miss_grace_seconds']){
     f['track_miss_grace_seconds'].value = parseFloat(c.track_miss_grace_seconds) || 0;
   }
+  if(f['track_iou_match_threshold']){
+    f['track_iou_match_threshold'].value = parseFloat(c.track_iou_match_threshold) || 0;
+  }
+  // Wire the three "Vorlage anwenden" preset buttons. Each preset
+  // fills all four tracker inputs in one click; the form's existing
+  // Speichern still has to be pressed to persist the change.
+  _wireTrackingPresets(formEl);
   // Confirmation-window step 3 sliders — confirm_n/confirm_seconds carry
   // the new global entry. Existing per-class entries (cw[person] etc.)
   // stay in storage untouched; Phase 2 surfaces them via a "Pro Klasse

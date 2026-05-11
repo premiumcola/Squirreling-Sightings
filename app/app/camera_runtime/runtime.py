@@ -179,7 +179,7 @@ class CameraRuntime(
         # / continue / grace defaults flow from the camera config; an
         # unconfigured camera reads the module defaults. State lives
         # the whole session so a track ID survives short low-conf dips.
-        _t_spawn, _t_floor, _t_grace = resolve_track_thresholds(
+        _t_spawn, _t_floor, _t_grace, _t_iou = resolve_track_thresholds(
             lambda _cid: self.cfg, self.camera_id,
         )
         self._tracker = LiveTracker(
@@ -187,11 +187,12 @@ class CameraRuntime(
             spawn_default=_t_spawn,
             floor=_t_floor,
             grace_seconds=_t_grace,
+            iou_threshold=_t_iou,
         )
         from ._consts import log as _log
         _log.info(
-            "[%s] live tracker: spawn=%.2f floor=%.2f grace=%.1fs",
-            self.camera_id, _t_spawn, _t_floor, _t_grace,
+            "[%s] live tracker: spawn=%.2f floor=%.2f grace=%.1fs iou=%.2f",
+            self.camera_id, _t_spawn, _t_floor, _t_grace, _t_iou,
         )
         self.bird_classifier = BirdSpeciesClassifier(proc.get("bird_species", {}))
         # Second-stage wildlife classifier — maps ImageNet top-1 to our

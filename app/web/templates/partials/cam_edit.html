@@ -409,6 +409,12 @@
                   </div>
                   <div class="erk-card">
                     <span class="field-help" style="margin-bottom:6px">Hält erkannte Objekte über kurze Konfidenz-Einbrüche hinweg auf demselben Track. 0,00 = System-Default verwenden.</span>
+                    <div class="erk-track-presets" role="group" aria-label="Tracking-Vorlagen">
+                      <span class="erk-track-presets-lbl">Vorlage anwenden:</span>
+                      <button type="button" class="erk-track-preset" data-preset="careful">Vorsichtig</button>
+                      <button type="button" class="erk-track-preset" data-preset="balanced">Ausgewogen</button>
+                      <button type="button" class="erk-track-preset" data-preset="robust">Robust</button>
+                    </div>
                     <div class="erk-track-grid">
                       <label class="erk-track-cell">
                         <span class="erk-track-lbl">Spawn-Schwelle</span>
@@ -422,8 +428,13 @@
                       </label>
                       <label class="erk-track-cell">
                         <span class="erk-track-lbl">Gnadenfrist (Sek.)</span>
-                        <input type="number" name="track_miss_grace_seconds" min="0" max="30" step="0.5" value="0" inputmode="decimal" placeholder="4,0" />
+                        <input type="number" name="track_miss_grace_seconds" min="0" max="30" step="0.5" value="0" inputmode="decimal" placeholder="6,0" />
                         <span class="erk-track-sub">Wie lange darf ein Track ohne Treffer überleben</span>
+                      </label>
+                      <label class="erk-track-cell">
+                        <span class="erk-track-lbl">IoU-Schwelle</span>
+                        <input type="number" name="track_iou_match_threshold" min="0" max="0.95" step="0.05" value="0" inputmode="decimal" placeholder="0,20" />
+                        <span class="erk-track-sub">Wie ähnlich die Box-Lage frame-übergreifend sein muss, damit ein Track fortgesetzt wird statt neu zu spawnen. Niedriger = großzügiger.</span>
                       </label>
                     </div>
                   </div>

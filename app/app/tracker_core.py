@@ -29,7 +29,14 @@ log = logging.getLogger(__name__)
 # Track-association tuning. The live runtime and the post-clip worker
 # both read these defaults; per-camera overrides flow through
 # ``resolve_track_thresholds`` below.
-IOU_MATCH_THRESHOLD = 0.30
+# 2026-05: lowered 0.30 → 0.20 after garden-cam testing — one walking
+# person was breaking into 3-4 fresh track ids inside the first 10 s
+# of a clip because the detector's bbox wobbled enough to drop IoU
+# below 0.30 frame-over-frame. 0.20 keeps the same identity through
+# normal detector jitter without merging two distinct subjects (the
+# class label gate + the 0.20 floor on overlapping objects still
+# keeps adjacent-but-different tracks apart).
+IOU_MATCH_THRESHOLD = 0.20
 # Two-tier detection floor.
 #   TRACK_FLOOR_SCORE — the raw model floor we ask the detector for.
 #     Everything between FLOOR and SPAWN is "tentative": it may
@@ -38,12 +45,15 @@ IOU_MATCH_THRESHOLD = 0.30
 TRACK_FLOOR_SCORE = 0.20
 TRACK_SPAWN_SCORE = 0.50
 # Default miss-grace expressed in sampling windows. The post-clip
-# worker samples at 1 Hz, so 4 windows ≈ 4 wall-clock seconds. The
+# worker samples at 1 Hz, so 6 windows ≈ 6 wall-clock seconds. The
 # live runtime computes its sample count from
 # ``compute_miss_grace_samples(seconds, fps)`` so the SAME wall-clock
-# intent (default 4 s) maps to the right sample count at any cadence.
-TRACK_MISS_WINDOWS = 4
-MISS_GRACE_DEFAULT_SECONDS = 4.0
+# intent (default 6 s) maps to the right sample count at any cadence.
+# 2026-05: bumped 4 → 6. Six seconds is plenty for a person walking
+# behind a small foreground obstruction (tree trunk, fence post) and
+# noticeably reduces fresh-spawn after the typical short occlusion.
+TRACK_MISS_WINDOWS = 6
+MISS_GRACE_DEFAULT_SECONDS = 6.0
 # Sub-pixel jitter cutoff for `source="track"` samples (the post-clip
 # worker only — the live path emits no synthetic track samples today).
 SAMPLE_BBOX_DELTA_PX = 2
@@ -97,22 +107,25 @@ def compute_miss_grace_samples(seconds: float, fps: float) -> int:
 
 
 # ── Per-camera threshold resolver ───────────────────────────────────────────
-def resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float, float]:
-    """Pull the camera's spawn / continue / miss-grace overrides.
+def resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float, float, float]:
+    """Pull the camera's spawn / continue / miss-grace / IoU overrides.
 
-    Returns ``(spawn_score, floor_score, miss_grace_seconds)``. A
-    camera that hasn't customised these fields (or has them set to
-    0.0, the schema's "use module default" sentinel) falls back to
-    the module-level defaults so an unconfigured install behaves
-    identically to before the per-camera fields existed.
+    Returns ``(spawn_score, floor_score, miss_grace_seconds,
+    iou_threshold)``. A camera that hasn't customised these fields
+    (or has them set to 0.0, the schema's "use module default"
+    sentinel) falls back to the module-level defaults so an
+    unconfigured install behaves identically to before the per-camera
+    fields existed.
 
     Floor is clamped up to spawn — letting `floor > spawn` would
     allow tentative samples to spawn tracks, defeating the two-tier
-    design.
+    design. IoU is clamped to [0.0, 0.95] so a typo or extreme value
+    can't break the matcher entirely.
     """
     spawn = TRACK_SPAWN_SCORE
     floor = TRACK_FLOOR_SCORE
     grace_s = MISS_GRACE_DEFAULT_SECONDS
+    iou_t = IOU_MATCH_THRESHOLD
     try:
         cfg = cam_cfg_getter(camera_id) or {}
     except Exception:
@@ -135,9 +148,15 @@ def resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float, f
             grace_s = g
     except (TypeError, ValueError):
         pass
+    try:
+        i = float(cfg.get("track_iou_match_threshold") or 0.0)
+        if i > 0.0:
+            iou_t = max(0.0, min(0.95, i))
+    except (TypeError, ValueError):
+        pass
     if floor > spawn:
         floor = spawn
-    return spawn, floor, grace_s
+    return spawn, floor, grace_s, iou_t
 
 
 # ── Track + state ───────────────────────────────────────────────────────────
@@ -341,6 +360,7 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
                          spawn_score: float = TRACK_SPAWN_SCORE,
                          spawn_for: Callable[[str], float] | None = None,
                          miss_grace_samples: int = TRACK_MISS_WINDOWS,
+                         iou_threshold: float = IOU_MATCH_THRESHOLD,
                          ) -> list[tuple[int, Track]]:
     """Two-tier greedy IoU pairing + spawn + age-out for one frame.
 
@@ -404,7 +424,7 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
                 if ti in taken_tracks:
                     continue
                 iou_v = iou(predicted[ti], d.bbox)
-                if iou_v >= IOU_MATCH_THRESHOLD:
+                if iou_v >= iou_threshold:
                     candidates.append((di, ti, iou_v))
         candidates.sort(key=lambda p: p[2], reverse=True)
         taken_dets_local: set[int] = set()
@@ -519,28 +539,35 @@ class LiveTracker:
 
     __slots__ = (
         "camera_id", "state", "_frame_idx",
-        "spawn_default", "floor", "grace_seconds",
+        "spawn_default", "floor", "grace_seconds", "iou_threshold",
     )
 
     def __init__(self, camera_id: str, *,
                  spawn_default: float = TRACK_SPAWN_SCORE,
                  floor: float = TRACK_FLOOR_SCORE,
-                 grace_seconds: float = MISS_GRACE_DEFAULT_SECONDS):
+                 grace_seconds: float = MISS_GRACE_DEFAULT_SECONDS,
+                 iou_threshold: float = IOU_MATCH_THRESHOLD):
         self.camera_id = camera_id
         self.state = TrackerState()
         self._frame_idx = 0
         self.spawn_default = float(spawn_default)
         self.floor = float(floor)
         self.grace_seconds = float(grace_seconds)
+        self.iou_threshold = float(iou_threshold)
 
     def configure(self, *, spawn_default: float, floor: float,
-                  grace_seconds: float) -> None:
+                  grace_seconds: float,
+                  iou_threshold: float | None = None) -> None:
         """Replace the per-camera thresholds. Called on settings reload
-        so a tweaked spawn / continue / grace value takes effect without
-        rebuilding the runtime."""
+        so a tweaked spawn / continue / grace / iou value takes effect
+        without rebuilding the runtime. ``iou_threshold`` defaults to
+        the module constant when omitted so older callers that pass
+        only the three legacy fields keep working."""
         self.spawn_default = float(spawn_default)
         self.floor = float(floor)
         self.grace_seconds = float(grace_seconds)
+        if iou_threshold is not None:
+            self.iou_threshold = float(iou_threshold)
 
     def step(self, detections, *, t_s: float, fps: float,
              spawn_for: Callable[[str], float] | None = None) -> list:
@@ -566,6 +593,7 @@ class LiveTracker:
             spawn_score=self.spawn_default,
             spawn_for=spawn_for,
             miss_grace_samples=grace,
+            iou_threshold=self.iou_threshold,
         )
         # Return the detection objects (not the (di, track) tuples) in
         # input order so downstream pipeline stages see a clean list.

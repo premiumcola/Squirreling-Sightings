@@ -34,6 +34,31 @@
 .shape-row-dot--mask{background:#ff6b6b}
 .shape-row-label{flex:1;font-size:13px;font-weight:600;color:var(--text)}
 .shape-row-count{font-size:11px;color:var(--muted);font-weight:500}
+
+/* ── Shape-mode segmented toggle (zone vs mask) ──────────────────────────
+   Sits above the canvas inside the Zonen tab. Active option fills with
+   its canvas accent (#4ba3ff for zone, #ff6b6b for mask) so the
+   visual link to the polygon colour is immediate. Inactive option is
+   a muted dark chip on a frame surface — no thin borders, no dark-on-
+   dark text. The wrapping segmented control is 100 % wide on every
+   viewport so the two pills always read as one row. */
+.shape-mode-row{margin:0 0 14px}
+.shape-mode-toggle{display:flex;gap:4px;background:rgba(255,255,255,.04);border-radius:12px;padding:4px;width:100%}
+.shape-mode-pill{flex:1 1 0;display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 14px;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:13px;font-weight:700;letter-spacing:.01em;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent}
+.shape-mode-pill:hover{color:var(--text)}
+.shape-mode-pill:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shape-mode-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:background .15s}
+.shape-mode-pill--zone .shape-mode-dot{background:#4ba3ff}
+.shape-mode-pill--mask .shape-mode-dot{background:#ff6b6b}
+.shape-mode-pill.is-active.shape-mode-pill--zone{background:#4ba3ff;color:#0a1320;box-shadow:0 1px 4px rgba(75,163,255,.35)}
+.shape-mode-pill.is-active.shape-mode-pill--mask{background:#ff6b6b;color:#220a0a;box-shadow:0 1px 4px rgba(255,107,107,.35)}
+.shape-mode-pill.is-active .shape-mode-dot{background:rgba(255,255,255,.92)}
+.shape-mode-hint{margin:8px 4px 0;font-size:12px;color:var(--muted);line-height:1.4}
+@media(max-width:768px){
+  .shape-mode-pill{font-size:12.5px;padding:8px 10px;gap:6px}
+  .shape-mode-pill span:last-child{white-space:nowrap}
+}
+
 .shape-row-del{width:28px;height:28px;border:none;border-radius:8px;background:rgba(239,68,68,.1);color:#f87171;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s}
 .shape-row-del:hover{background:rgba(239,68,68,.22);color:#fecaca}
 .shape-clear-row{margin-top:10px;display:flex;justify-content:flex-end}

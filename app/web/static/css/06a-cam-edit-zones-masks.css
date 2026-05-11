@@ -55,8 +55,21 @@
 .shape-mode-pill.is-active .shape-mode-dot{background:rgba(255,255,255,.92)}
 .shape-mode-hint{margin:8px 4px 0;font-size:12px;color:var(--muted);line-height:1.4}
 @media(max-width:768px){
-  .shape-mode-pill{font-size:12.5px;padding:8px 10px;gap:6px}
-  .shape-mode-pill span:last-child{white-space:nowrap}
+  /* Tighten the inline padding so "Erkennungs-Zone" + "Ausschluss-
+     Maske" both fit at iPhone-SE width (375 px) without truncation.
+     min-width:0 lets the flex children shrink past their intrinsic
+     content size; combined with overflow:hidden + text-overflow:
+     ellipsis on the label span it gives a clean degradation
+     (longer label collapses to "Erkennungs-Z…") instead of pushing
+     the pill row beyond its parent. */
+  .shape-mode-pill{font-size:12.5px;padding:8px 10px;gap:6px;min-width:0}
+  .shape-mode-pill span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+}
+@media(max-width:420px){
+  /* Very narrow phones (iPhone SE) — one font-size step smaller and a
+     slightly tighter gap so both labels always read in full. The dot
+     stays full-size because it carries the colour signal. */
+  .shape-mode-pill{font-size:12px;gap:5px;padding:8px 8px}
 }
 
 .shape-row-del{width:28px;height:28px;border:none;border-radius:8px;background:rgba(239,68,68,.1);color:#f87171;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s}

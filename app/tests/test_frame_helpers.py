@@ -232,6 +232,78 @@ class TestNewCorruptionPatternsReject:
             )
 
 
+class TestLocalMacroblockAnomaly:
+    """Direct tests for ``is_local_macroblock_anomaly``. The detector
+    has a dual gate (chroma spread + Laplacian-energy local outlier);
+    these synthetics pin both halves so a future refactor that drops
+    one accidentally regresses with a clear failure. The chroma-only
+    impl (pre-fix) was rejecting 90/90 frames of a real twilight
+    bird-feeder scene that contained a single yellow lamp — the warm-
+    lamp fixture below reproduces that pattern synthetically."""
+
+    def _warm_lamp_frame(self) -> np.ndarray:
+        """Daytime frame with a smooth radial warm-orange blob in the
+        middle. Per-tile channel-mean spread peaks well above the
+        chroma cutoff (the blob's center reaches BGR ≈ (40, 180, 240),
+        spread ≈ 200), but the blob is smooth — its Laplacian energy
+        stays comparable to the surrounding scene, so the energy gate
+        rejects the cluster. Mirrors the real warm-lamp false-positive
+        cluster: ~57 tiles, spread up to 185, energy median 22 vs
+        frame median 53."""
+        img = _daytime_frame(seed=11).copy()
+        h, w = img.shape[:2]
+        cy, cx = h // 2, w // 2
+        yy, xx = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
+        r = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2).astype(np.float32)
+        falloff = np.clip(1.0 - r / 80.0, 0.0, 1.0)
+        target = np.array([40.0, 180.0, 240.0], dtype=np.float32)
+        for c in range(3):
+            img[:, :, c] = np.clip(
+                img[:, :, c].astype(np.float32) * (1.0 - falloff)
+                + falloff * target[c],
+                0, 255,
+            ).astype(np.uint8)
+        return img
+
+    def _slice_loss_patch_frame(self) -> np.ndarray:
+        """Daytime frame with a 3×4-tile (48×64 px) patch of synthetic
+        H.264 slice-loss corruption: each 16×16 block locked to a
+        saturated DC value with per-pixel heavy noise on top. Both
+        chroma spread AND Laplacian energy are high vs the surrounding
+        scene — the detector MUST flag this."""
+        rng = _rng(12)
+        img = _daytime_frame(seed=12).copy()
+        y0, x0, ph, pw = 96, 192, 48, 64
+        for by in range(0, ph, 16):
+            for bx in range(0, pw, 16):
+                dc = np.clip(np.array([30, 60, 220]) + rng.integers(-30, 31, size=3),
+                             0, 255)
+                img[y0 + by:y0 + by + 16, x0 + bx:x0 + bx + 16] = dc.astype(np.uint8)
+                blk = img[y0 + by:y0 + by + 16, x0 + bx:x0 + bx + 16].astype(np.int16)
+                blk = np.clip(blk + rng.integers(-80, 81, size=blk.shape),
+                              0, 255).astype(np.uint8)
+                img[y0 + by:y0 + by + 16, x0 + bx:x0 + bx + 16] = blk
+        return img
+
+    def test_smooth_warm_blob_passes(self):
+        from app.frame_helpers._macroblock import is_local_macroblock_anomaly
+        ok, reason = is_local_macroblock_anomaly(self._warm_lamp_frame())
+        assert not ok, f"smooth warm-light blob wrongly flagged as corruption: {reason}"
+
+    def test_warm_blob_passes_full_validator(self):
+        """End-to-end: a warm artificial light must not push a daytime
+        garden frame off the validator. Catches regressions where the
+        macroblock fix gets reverted at the detector level."""
+        ok, reason = is_valid_frame(self._warm_lamp_frame())
+        assert ok, f"daytime warm-lamp frame wrongly rejected: {reason}"
+
+    def test_noisy_slice_loss_patch_rejects(self):
+        from app.frame_helpers._macroblock import is_local_macroblock_anomaly
+        ok, reason = is_local_macroblock_anomaly(self._slice_loss_patch_frame())
+        assert ok, "synthetic slice-loss corruption patch was not detected"
+        assert "macroblock_anomaly" in reason
+
+
 class TestDeadAreaScore:
     def test_real_frame_low_score(self):
         score, _, total = dead_area_score(_daytime_frame())

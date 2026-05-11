@@ -41,6 +41,18 @@ _MB_TILE = 16
 # corruption patches sit at 90+ with peaks above 180. The 85 cutoff
 # leaves a comfortable margin on both sides.
 _MB_CHROMA_SPREAD_MIN = 85.0
+# A flagged tile must ALSO have high-frequency Laplacian energy
+# relative to its surroundings — real H.264 slice-loss produces
+# garbage colour + checkerboard texture (a local energy outlier).
+# Smooth saturated regions (warm artificial lights, sunset-sky
+# gradients, large painted surfaces) match the chroma signature but
+# have low-to-normal Laplacian energy and must NOT trigger. Without
+# this gate a twilight bird-feeder scene with a single yellow lamp
+# was rejecting 90/90 frames — the lamp's ~57-tile chroma cluster
+# peaked at spread=185 (corruption-grade) but its energy median was
+# 22, less than half the frame's natural median of 53.
+_MB_LAPLACIAN_LOCAL_RATIO = 4.0
+_MB_LAPLACIAN_LOCAL_WIN = 5
 _MB_MIN_CLUSTER = 3
 _MB_BBOX_FILL_MIN = 0.5
 
@@ -76,17 +88,37 @@ def _macroblock_tile_features(img: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 def _flagged_macroblock_grid(img: np.ndarray) -> np.ndarray:
     """Return a bool grid (H/_MB_TILE × W/_MB_TILE) marking tiles
-    whose channel-mean spread exceeds ``_MB_CHROMA_SPREAD_MIN`` —
-    the corruption signature is a single-channel-dominant patch
-    against a low-chroma-variance natural scene. The cluster gate
-    (``_largest_cluster_bbox`` + the bbox-fill rule in
-    ``is_local_macroblock_anomaly``) filters out isolated saturated
-    objects (a red door, a green-painted gate) that legitimately
-    occupy a single tile."""
-    _, spread = _macroblock_tile_features(img)
+    that match BOTH corruption fingerprints:
+      (a) channel-mean spread > ``_MB_CHROMA_SPREAD_MIN`` — saturated
+          single-channel-dominant patch against a low-chroma natural
+          scene.
+      (b) Laplacian energy > ``_MB_LAPLACIAN_LOCAL_RATIO`` × the
+          per-tile median across a 5×5 neighbourhood — a local
+          high-frequency outlier.
+    Smooth saturated regions (warm lamps, sunset-sky gradients) pass
+    (a) but fail (b); textured natural detail (foliage, branches)
+    passes (b) but fails (a). The cluster gate downstream still
+    filters lone saturated *and* textured tiles (an unusual reflective
+    object). Pre-refactor the impl only checked (a) and rejected
+    every frame of a twilight scene that happened to contain a warm
+    light source."""
+    energy, spread = _macroblock_tile_features(img)
     if spread.size == 0:
         return np.zeros((0, 0), dtype=bool)
-    return spread > _MB_CHROMA_SPREAD_MIN
+    chroma_hit = spread > _MB_CHROMA_SPREAD_MIN
+    if not bool(chroma_hit.any()):
+        return chroma_hit
+    pad = _MB_LAPLACIAN_LOCAL_WIN // 2
+    padded = np.pad(energy, pad, mode="edge")
+    windows = np.lib.stride_tricks.sliding_window_view(
+        padded, (_MB_LAPLACIAN_LOCAL_WIN, _MB_LAPLACIAN_LOCAL_WIN),
+    )
+    local_median = np.median(windows, axis=(-1, -2))
+    # Floor the divisor at 1.0 so a near-zero local median (a perfectly
+    # flat scene patch) doesn't make every chroma-hit tile pass the
+    # ratio trivially — tiles with energy <= 4 stay non-corrupt.
+    energy_hit = energy > _MB_LAPLACIAN_LOCAL_RATIO * np.maximum(local_median, 1.0)
+    return chroma_hit & energy_hit
 
 
 def _largest_cluster_bbox(grid: np.ndarray) -> tuple[int, int, int, int, int] | None:

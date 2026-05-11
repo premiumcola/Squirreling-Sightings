@@ -5,6 +5,13 @@
           <span class="section-subtitle">Erkannte Gartenwildtiere · Entdeckungstagebuch</span>
         </div>
         <div id="questsPinboard" class="quests-pinboard"></div>
+        <!-- Upcoming-quests preview — quests whose next window opens
+             within the next 60 days. Read-only (no progress bar). -->
+        <div id="questsUpcoming" class="quests-upcoming"></div>
+        <!-- Quests archive — closed-window-incomplete + catalog-removed
+             entries with progress > 0. Hidden entirely when empty;
+             collapsible header when populated. -->
+        <div id="questsArchive" class="quests-archive"></div>
         <!-- Animal sightings section head — uses the same h4 + subtitle
              pattern as the Quests pinboard above and the Vogel-Dossiers
              below so the three sub-sections share one typographic scale.

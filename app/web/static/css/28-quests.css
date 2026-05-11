@@ -131,3 +131,87 @@
   .quest-card{padding:10px 12px}
   .quest-icon{width:32px;height:32px;font-size:22px}
 }
+
+/* ── "Demnächst" preview section ─────────────────────────────────────────
+   Same grid + card layout as the active pinboard, just no progress bar
+   and a quieter surface tone. Cards carry the opens-in / runs-until
+   subtitle in their top-right corner so the user reads it at a glance. */
+.quests-upcoming{margin-top:18px}
+.quests-upcoming:empty{display:none}
+.quest-card--upcoming{
+  background:linear-gradient(155deg,rgba(255,255,255,.04) 0%,rgba(0,0,0,.16) 100%);
+}
+.quest-card--upcoming .quest-card-head{align-items:center}
+.quest-upcoming-when{
+  font-size:11px;font-weight:600;
+  color:rgba(226,232,240,.72);
+  white-space:nowrap;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.05);
+}
+
+/* ── Quests archive (collapsible) ────────────────────────────────────────
+   Hidden until populated. Header is a 44 px-min tap target with a
+   chevron that rotates on open. No thin border lines — depth via the
+   slightly recessed surface tone shared with .quest-card--archived. */
+.quests-archive{margin-top:18px}
+.quests-archive:empty{display:none}
+.quests-archive-header{
+  display:flex;align-items:center;gap:10px;
+  width:100%;
+  min-height:44px;
+  padding:10px 14px;
+  border:0;
+  border-radius:12px;
+  background:rgba(255,255,255,.03);
+  color:var(--text);
+  font:inherit;
+  cursor:pointer;
+  text-align:left;
+  transition:background .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.quests-archive-header:hover{background:rgba(255,255,255,.06)}
+.quests-archive-title{font-size:14px;font-weight:700;flex:1}
+.quests-archive-count{
+  font-size:11px;font-weight:700;
+  padding:2px 9px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  color:rgba(255,255,255,.8);
+}
+.quests-archive-chev{
+  flex-shrink:0;
+  color:rgba(255,255,255,.55);
+  transition:transform .2s;
+}
+.quests-archive-header.is-open .quests-archive-chev{transform:rotate(180deg)}
+.quests-archive-body{padding-top:10px}
+.quest-card--archived{
+  background:linear-gradient(155deg,rgba(255,255,255,.03) 0%,rgba(0,0,0,.10) 100%);
+  opacity:.78;
+}
+.quest-card--archived .quest-card-head{align-items:center}
+.quest-archive-final{
+  font-size:13px;font-weight:700;
+  color:rgba(226,232,240,.6);
+  font-variant-numeric:tabular-nums;
+}
+.quest-archive-meta{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-top:6px;
+  padding-left:46px;
+}
+.quest-archive-age{font-size:11px;color:rgba(255,255,255,.5)}
+.quest-archive-reason{
+  font-size:11px;font-weight:600;
+  padding:2px 8px;
+  border-radius:999px;
+  background:rgba(245,158,11,.14);
+  color:#fbbf24;
+}
+@media(max-width:768px){
+  .quest-archive-meta{padding-left:0}
+  .quest-upcoming-when{font-size:10.5px}
+}

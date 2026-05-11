@@ -51,6 +51,7 @@ import {
 import {
   drawShapes, loadMaskSnapshot,
   _renderShapeList, _updateShapeDrawingBar,
+  restoreShapeMode,
 } from '../shape-editor/index.js';
 import { _bindCamProbeDeviceInfo } from './discovery.js';
 import {
@@ -432,9 +433,13 @@ function editCamera(camId){
   setWhitelistState(c.whitelist_names||[]); _updateWhitelistHidden();
   shapeState.camera=camId; shapeState.zones=JSON.parse(JSON.stringify(c.zones||[])); shapeState.masks=JSON.parse(JSON.stringify(c.masks||[])); shapeState.points=[]; shapeState.pulse=null;
   f['zones_json'].value=JSON.stringify(shapeState.zones); f['masks_json'].value=JSON.stringify(shapeState.masks);
-  // Keep the editor's auxiliary UI (polygon list + drawing bar) in
-  // sync with shapeState whenever a camera is opened.
-  _renderShapeList(); _updateShapeDrawingBar();
+  // Reapply the persisted zone/mask mode so reopening the tab feels
+  // consistent. Reads localStorage `tamspy.shapeMode`; defaults to
+  // 'zone' on first visit. Implicitly calls drawShapes() +
+  // _updateShapeDrawingBar() so we don't double-fire below.
+  restoreShapeMode();
+  // Keep the polygon list in sync with the loaded shapes.
+  _renderShapeList();
   byId('deleteCameraBtn').dataset.camId=camId;
   loadMaskSnapshot(camId); drawShapes();
   // Slide down inside the clicked camera card.

@@ -18,6 +18,7 @@ import {
 import { drawShapes } from './canvas.js';
 import { saveShapesIntoForm, _nextPolyName } from './persistence.js';
 import { _renderShapeList, _updateShapeDrawingBar } from './ui.js';
+import { bindShapeModeToggle } from './mode-toggle.js';
 
 
 function _commitInProgressPolygon(){
@@ -38,6 +39,10 @@ function _commitInProgressPolygon(){
 (function _initShapeEditor(){
   const canvas = byId('maskCanvas');
   if (!canvas) return;
+  // Wire the zone/mask segmented toggle that lives above the canvas
+  // in the Zonen tab. Idempotent — the binder guards with a dataset
+  // flag so a re-init of this IIFE doesn't double-attach handlers.
+  bindShapeModeToggle();
 
   let drag = null;          // {kind, polyIdx, ptIdx} while dragging a vertex
   let downPt = null;        // pointer at mousedown — distinguishes click vs drag

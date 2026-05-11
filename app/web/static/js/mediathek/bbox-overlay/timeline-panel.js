@@ -129,13 +129,56 @@ export function lbRenderTrackTimeline(item){
         const t1 = samples[samples.length - 1].t;
         const left = Math.max(0, (t0 / duration) * 100);
         const width = Math.max(0.5, ((t1 - t0) / duration) * 100);
-        const endedEarly = (duration - t1) > 0.4;
+        // Find the last DETECT sample — anything after it forms the
+        // predicted tail. Tolerant to old tracks.json without a
+        // `source` field: missing/undefined is treated as detect so
+        // pre-2026-05 clips keep rendering as solid bars.
+        let lastDetectIdx = -1;
+        for (let i = samples.length - 1; i >= 0; i--){
+          const src = samples[i].source;
+          if (src === undefined || src === null || src === 'detect' || src === 'track'){
+            lastDetectIdx = i;
+            break;
+          }
+        }
+        const hasPredictedTail = lastDetectIdx >= 0 && lastDetectIdx < samples.length - 1;
+        const tDetectEnd = hasPredictedTail ? samples[lastDetectIdx].t : t1;
+        const predictedSpan = hasPredictedTail ? Math.max(0, t1 - tDetectEnd) : 0;
+        // Two segments (when there's a predicted tail) share the
+        // bar's solid colour as the base, with a striped overlay
+        // covering only the predicted region. The percentages are
+        // relative to the bar itself, not the strip, so width:100%
+        // on the bar maps to the full track span [t0, t1].
+        const totalSpan = Math.max(0.0001, t1 - t0);
+        const detectFrac = hasPredictedTail
+          ? Math.max(0, Math.min(1, (tDetectEnd - t0) / totalSpan))
+          : 1;
+        const predLeftPct = (detectFrac * 100).toFixed(2);
+        const predWidthPct = ((1 - detectFrac) * 100).toFixed(2);
+        // × marker only when end_reason === "timeout" AND the bar
+        // (predicted tail included) still ends >0.4 s before the
+        // clip's end. Tracks that re-acquired (last sample is
+        // detect) or that closed because the clip simply ended
+        // (end_reason === "ended_at_clip") get no marker. Older
+        // tracks.json without end_reason fall back to the legacy
+        // duration-gap rule so those clips don't lose the cue.
+        const endReason = tr.end_reason;
+        const endedEarlyGap = (duration - t1) > 0.4;
+        let showEndX;
+        if (endReason === 'timeout') showEndX = endedEarlyGap;
+        else if (endReason === undefined || endReason === null) showEndX = endedEarlyGap;
+        else showEndX = false;
         const endRight = Math.max(0, ((duration - t1) / duration) * 100);
-        const tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
+        let tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
+        if (predictedSpan > 0.05) tt += ` · ${predictedSpan.toFixed(1)} s prädiziert`;
         const idx = tr._num - 1;
-        return `<button type="button" class="lbtt-bar" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${c}">
+        const predictedOverlay = hasPredictedTail
+          ? `<span class="lbtt-bar-predicted" style="left:${predLeftPct}%;width:${predWidthPct}%"></span>`
+          : '';
+        return `<button type="button" class="lbtt-bar${hasPredictedTail ? ' lbtt-bar-has-pred' : ''}" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${c}">
+          ${predictedOverlay}
           <span class="lbtt-bar-num" style="color:${c}">#${tr._num}</span>
-          ${endedEarly ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
+          ${showEndX ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
         </button>`;
       }).join('');
       sidebarParts.push(`

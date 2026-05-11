@@ -307,6 +307,30 @@
   -webkit-tap-highlight-color:transparent;
 }
 .lbtt-bar:hover{ filter:brightness(1.15); }
+/* Predicted tail overlay — sits on top of the solid class colour
+   and renders ~6 px 45° dark stripes so the eye reads it as
+   "uncertain, still tracking but not seeing detections." The base
+   bar background still shows through where the gradient is
+   transparent, keeping the class identity readable. */
+.lbtt-bar-predicted{
+  position:absolute;top:0;bottom:0;
+  border-radius:0 5px 5px 0;
+  pointer-events:none;
+  background-image:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0)    0 4px,
+    rgba(0,0,0,.55)  4px 8px
+  );
+  /* Slightly desaturated overall so the predicted region also
+     reads quieter from a few feet away — paired with the stripe
+     pattern this is enough to communicate "lower confidence". */
+  opacity:.85;
+}
+.lbtt-bar-has-pred .lbtt-bar-num{
+  /* When there's a predicted tail, the #N still anchors at the
+     bar's left edge — keep it readable above the solid section. */
+  z-index:1;
+}
 .lbtt-bar-num{
   position:absolute;top:-14px;left:0;
   font-family:ui-monospace,Menlo,Consolas,monospace;

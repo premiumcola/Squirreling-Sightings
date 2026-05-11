@@ -51,6 +51,7 @@ import {
   lbRenderTrackTimeline,
   lbStopTrackingPlayback,
 } from '../mediathek/bbox-overlay/index.js';
+import { openLiveDetect } from './live-detect.js';
 
 // ── Public surface ─────────────────────────────────────────────────────────
 // Verbatim back-compat exports — every name the old bbox-overlay
@@ -101,20 +102,17 @@ export function openMediaView(config){
     return render(config.item);
   }
   if (mode === 'live-detect'){
-    // The canonical live-detect surface today is camedit/erk-sim/*
-    // (test-detection polling, bbox SVG, tracker trails, decision-
-    // trace fold). The dashboard SIM button reaches that flow via
-    // window._cvOpenSim(camId) in dashboard.js. Migrating the full
-    // ~1000-line erk-sim machinery into this shell is a follow-up
-    // refactor — capped under the cm-52 task #4 glue budget. Keep
-    // this branch as a single landing target so the future shell
-    // implementation has a stable mounting point.
-    const camId = config.item?.camera_id;
-    if (camId && typeof window !== 'undefined'
-        && typeof window._cvOpenSim === 'function'){
-      return window._cvOpenSim(camId);
-    }
-    throw new Error('openMediaView(live-detect): no live-detect handler available');
+    // Live-detect mounts the same recorded-mode chrome (lb-fs-video
+    // top bar, 16:9 wrap, panel-tabs strip, fine-analysis fold) but
+    // swaps the data path: an <img> backed by 1 Hz test-detection
+    // snapshots + an SVG bbox overlay + a live-ticking trace fold.
+    // Full implementation lives in ./live-detect.js so the shell's
+    // index stays a thin entry point.
+    const item = config.item || {};
+    return openLiveDetect({
+      camId:      item.camera_id,
+      cameraName: item.camera_name || item.cam_name,
+    });
   }
   throw new Error(`openMediaView: mode '${mode}' not yet migrated`);
 }

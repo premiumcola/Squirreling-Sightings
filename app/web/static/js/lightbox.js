@@ -478,6 +478,11 @@ export function closeLightbox(){
   // lbState.item so the loop's null-check sees a consistent "lightbox
   // closed" state on its next tick.
   lbStopTrackingPlayback();
+  // Stop the MediaView live-detect polling loop if it was the path
+  // that opened this modal. No-op when nothing is live; cleared via
+  // the window bridge so this file doesn't have to import the
+  // live-detect module directly.
+  try { window.closeLiveDetect?.(); } catch { /* ignore */ }
   // Drop the full-screen video chrome so the next photo open returns
   // to the centred-modal layout without a flash of misplaced controls.
   _teardownVideoChrome();

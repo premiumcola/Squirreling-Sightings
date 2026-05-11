@@ -247,3 +247,101 @@ def test_module_constants_match_defaults():
     assert IOU_MATCH_THRESHOLD == 0.30
     assert TRACK_MISS_WINDOWS == 4
     assert MISS_GRACE_DEFAULT_SECONDS == 4.0
+
+
+# ── Predicted-sample emission during miss-grace ────────────────────────────
+def test_predicted_sample_emitted_during_miss_grace():
+    """During the miss-grace window the tracker MUST emit one
+    ``source="predicted"`` sample per miss frame so the swimlane can
+    render the continuation as a dashed tail. The IoU matcher was
+    already using predicted positions internally; this just stops
+    hiding them from downstream consumers."""
+    state = _new_state()
+    # Two detect frames so predicted_bbox has a velocity signal.
+    associate_detections(
+        state, [FakeDet("person", 0.80, (100, 100, 200, 200))],
+        frame_idx=0, t_s=0.0, miss_grace_samples=4,
+    )
+    associate_detections(
+        state, [FakeDet("person", 0.80, (110, 100, 210, 200))],
+        frame_idx=1, t_s=1.0, miss_grace_samples=4,
+    )
+    tr = state.active[0]
+    n_before = len(tr.samples)
+    assert n_before == 2 and all(s["source"] == "detect" for s in tr.samples)
+
+    # Two empty frames — should emit two predicted samples without
+    # closing the track (grace=4).
+    associate_detections(state, [], frame_idx=2, t_s=2.0, miss_grace_samples=4)
+    associate_detections(state, [], frame_idx=3, t_s=3.0, miss_grace_samples=4)
+    assert len(state.active) == 1, "track aged out too early"
+    samples = state.active[0].samples
+    assert len(samples) == n_before + 2
+    assert samples[-1]["source"] == "predicted"
+    assert samples[-2]["source"] == "predicted"
+    # Predicted score scales the last detect score (0.80) by 0.7 with
+    # a 0.05 floor; expect ≈ 0.56.
+    assert 0.55 <= samples[-1]["score"] <= 0.57
+    # And the predicted bbox advances with the velocity signal.
+    assert samples[-1]["bbox"]["x1"] != samples[-2]["bbox"]["x1"]
+
+
+def test_predicted_samples_do_not_block_aging():
+    """Adding predicted samples must NOT reset missed_windows — the
+    track still has to close after exactly ``miss_grace_samples``
+    consecutive misses. Without the carve-out in add_sample the
+    counter would reset on every predicted sample and the grace would
+    never trigger."""
+    state = _new_state()
+    associate_detections(
+        state, [FakeDet("cat", 0.80, (50, 50, 150, 150))],
+        frame_idx=0, t_s=0.0, miss_grace_samples=3,
+    )
+    # 3 empty frames in a row → closes on the third miss.
+    for f in range(1, 4):
+        associate_detections(
+            state, [], frame_idx=f, t_s=float(f), miss_grace_samples=3,
+        )
+    assert len(state.active) == 0
+    assert len(state.closed) == 1
+    closed = state.closed[0]
+    assert closed.end_reason == "timeout"
+    # The closed track carries the predicted samples plus the one
+    # detect: 1 detect + 3 predicted = 4 samples.
+    assert len(closed.samples) == 4
+    assert closed.samples[0]["source"] == "detect"
+    assert all(s["source"] == "predicted" for s in closed.samples[1:])
+    # close() prefers the LAST detect for diagnostic fields so the
+    # operator sees the bbox size at the last confirmed observation,
+    # not at the timed-out prediction.
+    assert closed.last_score == 0.80
+
+
+def test_reacquisition_after_predicted_clears_miss_counter():
+    """When a real detection comes in DURING the predicted tail, the
+    track must keep its id and the miss counter reset so it can
+    survive a fresh miss-grace window without prematurely closing."""
+    state = _new_state()
+    # Two detects to seed velocity.
+    associate_detections(
+        state, [FakeDet("person", 0.80, (100, 100, 200, 200))],
+        frame_idx=0, t_s=0.0, miss_grace_samples=4,
+    )
+    associate_detections(
+        state, [FakeDet("person", 0.80, (110, 100, 210, 200))],
+        frame_idx=1, t_s=1.0, miss_grace_samples=4,
+    )
+    track_id_before = state.active[0].track_id
+    # Two empty frames → predicted samples.
+    associate_detections(state, [], frame_idx=2, t_s=2.0, miss_grace_samples=4)
+    associate_detections(state, [], frame_idx=3, t_s=3.0, miss_grace_samples=4)
+    # A detection lands near the predicted position — same track id
+    # should pick it up.
+    associate_detections(
+        state, [FakeDet("person", 0.85, (130, 100, 230, 200))],
+        frame_idx=4, t_s=4.0, miss_grace_samples=4,
+    )
+    assert len(state.active) == 1
+    assert state.active[0].track_id == track_id_before
+    assert state.active[0].samples[-1]["source"] == "detect"
+    assert state.active[0].missed_windows == 0

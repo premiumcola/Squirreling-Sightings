@@ -186,6 +186,10 @@ class Track:
         # Squelch micro-jitter samples — only emit when the bbox moved
         # by ≥ SAMPLE_BBOX_DELTA_PX pixels at the centroid OR this is a
         # detection sample (always kept so score history is preserved).
+        # `predicted` samples are NEVER squelched — every miss-grace
+        # tick should be visible in the bar so the swimlane's dashed
+        # tail renders without gaps even when the predicted position
+        # barely moved.
         if source == "track" and self.samples:
             last = self.samples[-1]["bbox"]
             if bbox_centroid_dist(last, bbox_dict) < SAMPLE_BBOX_DELTA_PX:
@@ -201,7 +205,13 @@ class Track:
         if score is not None and score > self.best_score:
             self.best_score = float(score)
             self.best_frame_idx = frame_idx
-        self.missed_windows = 0
+        # Reset the miss counter ONLY on positive evidence — a real
+        # `detect` or a `track`-source interpolation between detect
+        # frames. `predicted` samples are emitted EXACTLY during the
+        # miss-grace window; resetting on them would prevent the
+        # track from ever timing out.
+        if source != "predicted":
+            self.missed_windows = 0
 
     def close(self, reason: str, frame_w: int, frame_h: int) -> None:
         """Mark the track inactive and capture diagnostic fields from
@@ -456,10 +466,31 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
     # ``miss_grace_samples`` misses they close. Restricted to indices
     # < original_count so newly-spawned tracks (appended above) skip
     # this pass and get their first miss-check on the NEXT frame.
+    # Each miss also emits ONE ``source="predicted"`` sample at the
+    # already-computed predicted bbox — the IoU matcher already uses
+    # the prediction internally; this just stops hiding it from the
+    # downstream consumers. The Mediathek swimlane renders these as
+    # the dashed tail of the track bar so the operator sees that
+    # tracking is still alive across short occlusions instead of a
+    # hard gap. Scoring is conservative: the last detect score
+    # scaled to 0.7 (floor 0.05) — a coarse "still tracking, lower
+    # confidence" signal that doesn't invent fresh evidence.
     grace = max(1, int(miss_grace_samples))
     for ti, tr in enumerate(state.active[:original_count]):
         if ti in taken_tracks:
             continue
+        px1, py1, px2, py2 = predicted[ti]
+        bbox_dict = {"x1": int(px1), "y1": int(py1),
+                     "x2": int(px2), "y2": int(py2)}
+        last_detect_score = next(
+            (s.get("score") for s in reversed(tr.samples)
+             if s.get("source") == "detect" and s.get("score") is not None),
+            None,
+        )
+        pred_score = (max(0.05, float(last_detect_score) * 0.7)
+                      if last_detect_score is not None else 0.05)
+        tr.add_sample(frame_idx, t_s, bbox_dict, pred_score, "predicted")
+        state.samples_emitted += 1
         tr.missed_windows += 1
         if tr.missed_windows >= grace:
             tr.close("timeout", frame_w, frame_h)

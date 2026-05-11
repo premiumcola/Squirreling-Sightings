@@ -557,6 +557,40 @@
   font-size:10px;color:rgba(226,232,240,.55);
   font-style:italic;
 }
+/* Older clips have no recording_settings — Score tick is hidden and
+   this subtitle explains why. Same graceful-fallback pattern the
+   settings-panel uses. */
+#lightboxConfidenceMeter .lbcm-missing{
+  font-size:9.5px;color:rgba(226,232,240,.45);
+  font-style:italic;
+  margin:0 0 4px;
+  letter-spacing:.02em;
+}
+/* Legend strip — sits below the last gauge row. The glyphs (▍ ▪)
+   mirror the visual language of the gauge bar (vertical tick + filled
+   block) so the operator can read it at a glance without
+   second-guessing. */
+#lightboxConfidenceMeter .lbcm-legend{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin:4px 0 0;
+  font-size:9.5px;
+  color:rgba(226,232,240,.55);
+  letter-spacing:.02em;
+}
+#lightboxConfidenceMeter .lbcm-legend-item{
+  display:inline-flex;align-items:center;gap:3px;
+}
+#lightboxConfidenceMeter .lbcm-legend-tick{
+  color:rgba(255,255,255,.85);
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:11px;line-height:1;
+}
+#lightboxConfidenceMeter .lbcm-legend-fill{
+  color:rgba(226,232,240,.85);
+  font-size:11px;line-height:1;
+}
 
 /* ── Settings panel — wizard mirror ────────────────────────────────────── */
 #lightboxSettings{

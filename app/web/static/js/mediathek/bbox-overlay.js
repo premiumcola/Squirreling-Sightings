@@ -47,6 +47,12 @@ const _REINDEX_INITIAL_WAIT_MS = 5000;
 const _REINDEX_RETRY_INTERVAL_MS = 4000;
 const _REINDEX_MAX_RETRIES = 3;
 
+// Mirrors tracking_worker.TRACK_SPAWN_SCORE — a sample below this
+// floor is tentative (extends an existing track but couldn't spawn
+// one on its own). The overlay paints it dashed so the operator can
+// see why the same track id is carrying mixed-confidence frames.
+const _TRACK_SPAWN_SCORE = 0.50;
+
 // ?lbdebug=1 surfaces the same diagnostics that go to console.warn in
 // a small bottom-right corner overlay. Off by default; resolved once
 // at module load so navigation inside the SPA can't flip it mid-session.
@@ -590,13 +596,22 @@ function _drawTrackBox(ctx, sample, color, offX, offY, scale){
   const w = x2 - x1, h = y2 - y1;
   if (w <= 0 || h <= 0) return;
   const c = color || '#22c55e';
+  // Two-tier visual: confirmed (≥ spawn) keeps the solid 2 px stroke;
+  // tentative (< spawn) uses a dashed stroke + a "↓" prefix on the
+  // score label so the operator sees the SAME track id continuing
+  // through low-confidence frames without confusing it with a fresh
+  // detection.
+  const tentative = sample.score != null && sample.score < _TRACK_SPAWN_SCORE;
   ctx.strokeStyle = c;
   ctx.lineWidth = 2;
+  ctx.setLineDash(tentative ? [5, 4] : []);
   ctx.strokeRect(x1, y1, w, h);
+  ctx.setLineDash([]);
   const lblName = OBJ_LABEL[sample.label] || sample.label || '';
   if (!lblName) return;
   const pct = sample.score != null ? Math.round(sample.score * 100) : null;
-  const text = pct != null ? `${lblName} · ${pct}%` : lblName;
+  const scoreText = pct != null ? `${tentative ? '↓ ' : ''}${pct}%` : '';
+  const text = scoreText ? `${lblName} · ${scoreText}` : lblName;
   const padX = 6, pillH = 18;
   const tw = ctx.measureText(text).width;
   const pillY = Math.max(0, y1 - pillH - 2);

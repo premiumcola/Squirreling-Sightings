@@ -144,6 +144,62 @@ def generate_missing_thumbnails(*, storage_root: Path) -> None:
     threading.Thread(target=_do, daemon=True).start()
 
 
+def check_tracks_schema_version(*, storage_root: Path) -> None:
+    """Boot scan: count existing tracks.json sidecars whose schema
+    version is older than the current ``TRACKS_SCHEMA``. The intent is
+    purely diagnostic — we log a single line so the operator knows to
+    hit ``/api/tracking/reindex-all`` once after a schema bump. We do
+    NOT auto-reindex: a large archive could spawn thousands of jobs
+    and saturate the worker for an hour.
+    """
+    def _do():
+        try:
+            # Local import keeps this helper independent of worker
+            # construction order at boot.
+            from .tracking_worker import TRACKS_SCHEMA
+            events_root = storage_root / "motion_detection"
+            if not events_root.exists():
+                return
+            stale = 0
+            current = 0
+            # Group stale by the schema we saw so the log line shows
+            # the user exactly which migration step the archive is on.
+            by_old: dict = {}
+            for cam_dir in events_root.iterdir():
+                if not cam_dir.is_dir():
+                    continue
+                for tp in cam_dir.rglob("*.tracks.json"):
+                    try:
+                        payload = _json.loads(tp.read_text(encoding="utf-8"))
+                    except Exception:
+                        continue
+                    schema = payload.get("schema")
+                    if schema == TRACKS_SCHEMA:
+                        current += 1
+                    else:
+                        stale += 1
+                        by_old[schema] = by_old.get(schema, 0) + 1
+            if stale:
+                versions = ", ".join(
+                    f"v{k}={v}" for k, v in sorted(
+                        by_old.items(),
+                        key=lambda kv: (kv[0] is None, kv[0]),
+                    )
+                )
+                log.info(
+                    "[tracking] schema=%d (was=%d old sidecars detected: %s, "
+                    "run /api/tracking/reindex-all to refresh)",
+                    TRACKS_SCHEMA, stale, versions,
+                )
+            elif current:
+                log.debug("[tracking] schema=%d (%d sidecars current)",
+                          TRACKS_SCHEMA, current)
+        except Exception as e:
+            log.warning("[tracking] schema scan failed: %s", e)
+
+    threading.Thread(target=_do, daemon=True).start()
+
+
 def migrate_timelapse_to_eventstore(*, storage_root: Path, settings, store, base_cfg: dict) -> None:
     """Register existing timelapse sidecars as unified EventStore entries.
     Walks storage/timelapse/<cam>/*.json; for each sidecar that has no matching

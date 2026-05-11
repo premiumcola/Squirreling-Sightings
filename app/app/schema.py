@@ -161,6 +161,21 @@ CAMERA_SCHEMA: dict = {
     # 0 disables cooldown entirely for that class. Affects only push
     # notifications — recording / archiving is never gated by this.
     "notification_cooldown": (dict, {}),
+    # ── Tracking-worker per-camera overrides (sidecar generator only;
+    # live alerting is untouched). 0.0 means "use the module default"
+    # from tracking_worker.TRACK_SPAWN_SCORE / TRACK_FLOOR_SCORE.
+    #
+    #   track_spawn_min_score    — minimum confidence to START a new
+    #                              tracks.json track on this camera.
+    #   track_continue_min_score — raw detector floor; samples between
+    #                              this value and spawn_min_score are
+    #                              "tentative" and may only EXTEND an
+    #                              existing IoU-matched track.
+    #
+    # No UI yet — power-user tuning via settings.json based on what
+    # the Erkennungswolke shows for a given camera's noise floor.
+    "track_spawn_min_score":    (float, 0.0),
+    "track_continue_min_score": (float, 0.0),
 }
 
 # ── Section schemas (for update_section; all fields optional) ──────────────────

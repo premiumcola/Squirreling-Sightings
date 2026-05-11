@@ -860,6 +860,10 @@ _migrations.generate_missing_thumbnails(storage_root=storage_root)
 _migrations.migrate_timelapse_to_eventstore(
     storage_root=storage_root, settings=settings, store=store, base_cfg=base_cfg,
 )
+# Diagnostic only — logs a single line when older-schema tracks.json
+# sidecars are present so the operator knows to hit
+# /api/tracking/reindex-all. Never reindexes automatically.
+_migrations.check_tracks_schema_version(storage_root=storage_root)
 
 
 # All HTTP routes live under app/app/routes/ — see register_blueprints

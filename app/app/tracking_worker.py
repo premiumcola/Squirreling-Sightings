@@ -47,7 +47,17 @@ log = logging.getLogger(__name__)
 #        sidecar only carries tracks the camera would have notified on.
 #        None means "no filter, all classes accepted" (distinct from an
 #        empty list).
-TRACKS_SCHEMA = 2
+#   v3 — ByteTrack-style two-tier association. The worker now pulls
+#        detections at the raw model floor (TRACK_FLOOR_SCORE = 0.20)
+#        and treats anything < TRACK_SPAWN_SCORE (0.50) as a tentative
+#        sample that can only EXTEND an existing track via IoU — never
+#        spawn. Combined with linear-velocity bbox prediction and a
+#        wider miss window (TRACK_MISS_WINDOWS bumped from 2 to 4),
+#        this keeps a single moving subject on ONE track id across
+#        short low-confidence dips. Sample dicts gain no new fields;
+#        the score history already lets the lightbox distinguish
+#        confirmed vs. tentative frames.
+TRACKS_SCHEMA = 3
 
 # Detection-job timing target. A 30-second clip should finish in
 # under ~10 s on CPU; anything slower triggers a one-line WARN so the
@@ -56,7 +66,21 @@ SLOW_JOB_RATIO = 1.0 / 3.0  # processing time / clip duration
 
 # Track-association tuning.
 IOU_MATCH_THRESHOLD = 0.30
-TRACK_MISS_WINDOWS = 2          # how many sample windows a track may go un-matched
+# Two-tier detection floor — see TRACKS_SCHEMA v3 doc above.
+#   TRACK_FLOOR_SCORE — the raw model floor we ask the detector for.
+#     Everything between FLOOR and SPAWN is "tentative": it may
+#     continue an existing IoU match, never starts a new track.
+#   TRACK_SPAWN_SCORE — minimum confidence to spawn a NEW track.
+# Per-camera overrides land via `track_continue_min_score` and
+# `track_spawn_min_score` (camera schema); 0.0 means "use the module
+# default".
+TRACK_FLOOR_SCORE = 0.20
+TRACK_SPAWN_SCORE = 0.50
+# Bumped from 2 to 4 in v3: with the tentative-continuation phase
+# there's a real chance of recovering a low-conf frame *after* one
+# miss, so the wider grace window pays for itself by keeping the
+# track id stable across short occlusions / partial bbox dropouts.
+TRACK_MISS_WINDOWS = 4          # how many sample windows a track may go un-matched
 SAMPLE_BBOX_DELTA_PX = 2        # skip samples whose bbox didn't move by ≥ this many px
 
 
@@ -300,16 +324,99 @@ def _resolve_object_filter(cam_cfg_getter, camera_id):
     return None
 
 
-def _detect_and_filter(detector, frame, allowed):
-    """One sample's detector pass with the per-frame label filter. Empty
-    list when the detector is unavailable (worker stays alive but writes
-    a tracks.json with no tracks)."""
+def _detect_and_filter(detector, frame, allowed, *, floor_score: float):
+    """One sample's detector pass at the worker's low confidence floor.
+    Uses ``detect_frame_raw`` so we receive every candidate ≥
+    ``floor_score`` BEFORE the live pipeline's per-label thresholds /
+    size floors trim the list — those gates would otherwise prevent
+    the tentative-continuation tier in v3 from seeing anything below
+    the spawn threshold. The allowed-label filter (the camera's
+    object_filter) IS still applied here so tentative detections of
+    forbidden classes don't leak through to track association.
+    Empty list when the detector is unavailable (worker stays alive
+    but writes a tracks.json with no tracks)."""
     if not detector.available:
         return []
-    dets = detector.detect_frame(frame)
+    dets = detector.detect_frame_raw(frame, threshold=float(floor_score))
     if allowed is not None:
         dets = [d for d in dets if d.label in allowed]
     return dets
+
+
+def _resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float]:
+    """Pull the camera's spawn / continue thresholds.
+
+    Returns ``(spawn_score, floor_score)``. A camera that hasn't
+    customised these fields (or has them set to 0.0, the schema's
+    "use module default" sentinel) falls back to the module-level
+    ``TRACK_SPAWN_SCORE`` / ``TRACK_FLOOR_SCORE`` so the worker
+    behaves identically to today on an unconfigured install.
+    """
+    spawn = TRACK_SPAWN_SCORE
+    floor = TRACK_FLOOR_SCORE
+    try:
+        cfg = cam_cfg_getter(camera_id) or {}
+    except Exception:
+        cfg = {}
+    try:
+        s = float(cfg.get("track_spawn_min_score") or 0.0)
+        if s > 0.0:
+            spawn = s
+    except (TypeError, ValueError):
+        pass
+    try:
+        f = float(cfg.get("track_continue_min_score") or 0.0)
+        if f > 0.0:
+            floor = f
+    except (TypeError, ValueError):
+        pass
+    # Refuse a configuration where spawn dips below floor — that would
+    # let "tentative" samples spawn tracks, defeating the whole point
+    # of the two-tier design. Clamp floor up to spawn.
+    if floor > spawn:
+        floor = spawn
+    return spawn, floor
+
+
+def _predicted_bbox(track: "_Track", frame_idx: int) -> tuple[int, int, int, int]:
+    """Linear-velocity bbox prediction for IoU matching at ``frame_idx``.
+
+    Uses the last two *detect-source* samples to estimate centroid
+    velocity (dx/df, dy/df) and projects the centroid forward to the
+    current frame index, keeping the most recent bbox size. With
+    fewer than two detect samples we have no velocity signal, so we
+    fall back to the literal last sample bbox — same behaviour as
+    pre-v3.
+
+    Linear is intentional: at ~1 Hz sampling and the IoU threshold
+    of 0.30, the prediction only needs to bring the bbox within
+    ~70 % overlap of the next detection. Full Kalman buys nothing
+    at this cadence."""
+    detect_samples = [s for s in track.samples if s.get("source") == "detect"]
+    if not track.samples:
+        return (0, 0, 0, 0)
+    if len(detect_samples) < 2:
+        last = track.samples[-1]["bbox"]
+        return (int(last["x1"]), int(last["y1"]),
+                int(last["x2"]), int(last["y2"]))
+    s_prev = detect_samples[-2]
+    s_last = detect_samples[-1]
+    bb_prev = s_prev["bbox"]
+    bb_last = s_last["bbox"]
+    cx_prev = (bb_prev["x1"] + bb_prev["x2"]) / 2.0
+    cy_prev = (bb_prev["y1"] + bb_prev["y2"]) / 2.0
+    cx_last = (bb_last["x1"] + bb_last["x2"]) / 2.0
+    cy_last = (bb_last["y1"] + bb_last["y2"]) / 2.0
+    df = max(1, int(s_last["f"]) - int(s_prev["f"]))
+    dx = (cx_last - cx_prev) / df
+    dy = (cy_last - cy_prev) / df
+    elapsed = max(0, frame_idx - int(s_last["f"]))
+    p_cx = cx_last + dx * elapsed
+    p_cy = cy_last + dy * elapsed
+    half_w = (bb_last["x2"] - bb_last["x1"]) / 2.0
+    half_h = (bb_last["y2"] - bb_last["y1"]) / 2.0
+    return (int(p_cx - half_w), int(p_cy - half_h),
+            int(p_cx + half_w), int(p_cy + half_h))
 
 
 def _update_best_top(state: _TrackerState, det, frame_idx: int, t_s: float):
@@ -328,11 +435,24 @@ def _update_best_top(state: _TrackerState, det, frame_idx: int, t_s: float):
 
 
 def _associate_detections(state: _TrackerState, dets, frame_idx: int, t_s: float,
-                          frame_w: int = 0, frame_h: int = 0):
-    """Greedy IoU pairing + spawn + age-out for one frame. Mutates
-    ``state`` in place: extends matched tracks with a new sample, spawns
-    tracks for unmatched detections, ages out tracks that missed too
-    many windows.
+                          frame_w: int = 0, frame_h: int = 0,
+                          spawn_score: float = TRACK_SPAWN_SCORE):
+    """Two-tier greedy IoU pairing + spawn + age-out for one frame.
+
+    Mutates ``state`` in place. v3 rules:
+
+    * Phase 1 — *confirmed* detections (score ≥ ``spawn_score``) are
+      matched to active tracks of the same label by descending IoU.
+      Targets use the track's predicted bbox (linear velocity from
+      the last two detect samples) so a fast-moving subject still
+      lands inside an existing patch.
+    * Phase 2 — *tentative* detections (FLOOR ≤ score < spawn) may
+      ONLY extend a still-unmatched active track via the same IoU
+      rule. The sample is recorded with ``source="detect"`` (it IS
+      a real detector hit, just below the spawn floor); the lightbox
+      branches on score to draw it differently.
+    * Phase 3 — unmatched confirmed detections spawn fresh tracks.
+      Unmatched tentative detections are dropped entirely.
 
     frame_w / frame_h feed each closed track's `last_bbox_frac_h` and
     `last_bbox_frac_area` diagnostics — the worker's only writer for
@@ -343,41 +463,66 @@ def _associate_detections(state: _TrackerState, dets, frame_idx: int, t_s: float
     freshly-spawned tracks out of the age-out pass on their birth
     frame — without it they'd immediately get missed_windows += 1 and
     halve the intended TRACK_MISS_WINDOWS grace period."""
-    # Match each detection to the best-IoU active track of the
-    # same label. Greedy assignment per frame — for typical
-    # 1-3 detections this is correct and orders-of-magnitude
-    # cheaper than Hungarian.
-    taken_tracks: set[int] = set()
-    taken_dets: set[int] = set()
-    pairings: list[tuple[int, int, float]] = []
+    confirmed: list[tuple[int, "Detection"]] = []   # noqa: F821
+    tentative: list[tuple[int, "Detection"]] = []   # noqa: F821
     for di, d in enumerate(dets):
-        for ti, tr in enumerate(state.active):
-            if not tr.active or tr.label != d.label:
+        (confirmed if float(d.score) >= spawn_score else tentative).append((di, d))
+
+    # Predict each active track's bbox at the current frame — used as
+    # the IoU target for BOTH phases. Computed once per track, indexed
+    # by track index so phase 2 reuses the cache without re-walking
+    # the sample list.
+    predicted: list[tuple[int, int, int, int]] = [
+        _predicted_bbox(tr, frame_idx) for tr in state.active
+    ]
+
+    taken_tracks: set[int] = set()
+
+    def _pair_pass(pool):
+        """Greedy IoU pairing for one tier; yields (di, ti, det).
+        Mutates ``taken_tracks`` so phase 2 sees phase 1's claims."""
+        candidates: list[tuple[int, int, float]] = []
+        for di, d in pool:
+            for ti, tr in enumerate(state.active):
+                if not tr.active or tr.label != d.label or not tr.samples:
+                    continue
+                if ti in taken_tracks:
+                    continue
+                iou_v = _iou(predicted[ti], d.bbox)
+                if iou_v >= IOU_MATCH_THRESHOLD:
+                    candidates.append((di, ti, iou_v))
+        candidates.sort(key=lambda p: p[2], reverse=True)
+        taken_dets_local: set[int] = set()
+        out = []
+        for di, ti, _iou_v in candidates:
+            if di in taken_dets_local or ti in taken_tracks:
                 continue
-            # Compare against the track's most recent bbox.
-            if not tr.samples:
-                continue
-            last = tr.samples[-1]["bbox"]
-            last_t = (last["x1"], last["y1"], last["x2"], last["y2"])
-            iou = _iou(last_t, d.bbox)
-            if iou >= IOU_MATCH_THRESHOLD:
-                pairings.append((di, ti, iou))
-    # Sort by descending IoU so the best matches consume their
-    # partners first.
-    pairings.sort(key=lambda p: p[2], reverse=True)
-    for di, ti, _iou_v in pairings:
-        if di in taken_dets or ti in taken_tracks:
-            continue
-        taken_dets.add(di)
-        taken_tracks.add(ti)
-        tr = state.active[ti]
-        d = dets[di]
-        bbox_dict = {"x1": int(d.bbox[0]), "y1": int(d.bbox[1]),
-                     "x2": int(d.bbox[2]), "y2": int(d.bbox[3])}
-        tr.add_sample(frame_idx, t_s, bbox_dict,
-                      float(d.score), "detect")
-        state.samples_emitted += 1
-        _update_best_top(state, d, frame_idx, t_s)
+            taken_dets_local.add(di)
+            taken_tracks.add(ti)
+            out.append((di, ti))
+        return out, taken_dets_local
+
+    def _record_match(di_ti_pairs, pool_by_di):
+        for di, ti in di_ti_pairs:
+            d = pool_by_di[di]
+            tr = state.active[ti]
+            bbox_dict = {"x1": int(d.bbox[0]), "y1": int(d.bbox[1]),
+                         "x2": int(d.bbox[2]), "y2": int(d.bbox[3])}
+            tr.add_sample(frame_idx, t_s, bbox_dict,
+                          float(d.score), "detect")
+            state.samples_emitted += 1
+            _update_best_top(state, d, frame_idx, t_s)
+
+    # Phase 1 — confirmed dets fight for tracks first.
+    confirmed_by_di = {di: d for di, d in confirmed}
+    pairs1, taken_confirmed = _pair_pass(confirmed)
+    _record_match(pairs1, confirmed_by_di)
+
+    # Phase 2 — tentative dets extend whatever's still unmatched.
+    tentative_by_di = {di: d for di, d in tentative}
+    pairs2, _taken_tentative = _pair_pass(tentative)
+    _record_match(pairs2, tentative_by_di)
+
     # Snapshot the pre-spawn track count so the age-out loop
     # below can skip tracks that are about to be created on
     # this same frame. Without this, a freshly spawned track
@@ -386,9 +531,11 @@ def _associate_detections(state: _TrackerState, dets, frame_idx: int, t_s: float
     # += 1 on the same frame as its birth — halving the
     # intended TRACK_MISS_WINDOWS grace period.
     original_count = len(state.active)
-    # Unmatched detections → start fresh tracks.
-    for di, d in enumerate(dets):
-        if di in taken_dets:
+    # Phase 3 — unmatched confirmed dets → new tracks. Unmatched
+    # tentative dets are intentionally dropped (no spawn) so a flicker
+    # of low-conf noise can't seed a new track id.
+    for di, d in confirmed:
+        if di in taken_confirmed:
             continue
         tid = _short_id()
         tr = _Track(tid, d.label, frame_idx)
@@ -619,6 +766,9 @@ class TrackingWorker(threading.Thread):
         try:
             detector = self._ensure_detector()
             allowed = _resolve_object_filter(self._cam_cfg_getter, job.camera_id)
+            spawn_score, floor_score = _resolve_track_thresholds(
+                self._cam_cfg_getter, job.camera_id,
+            )
             state = _TrackerState()
             frame_idx = 0
             sample_interval = meta["sample_interval"]
@@ -634,8 +784,11 @@ class TrackingWorker(threading.Thread):
                     frame_idx += sample_interval
                     continue
                 t_s = frame_idx / fps
-                dets = _detect_and_filter(detector, frame, allowed)
-                _associate_detections(state, dets, frame_idx, t_s, frame_w, frame_h)
+                dets = _detect_and_filter(detector, frame, allowed,
+                                          floor_score=floor_score)
+                _associate_detections(state, dets, frame_idx, t_s,
+                                      frame_w, frame_h,
+                                      spawn_score=spawn_score)
                 frame_idx += sample_interval
 
             # Flush any tracks still active at end-of-clip into closed so

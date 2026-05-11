@@ -520,13 +520,26 @@ document.addEventListener('keydown', (e) => {
     }
     return;
   }
+  // Suppress lightbox shortcuts whenever the user is typing in a form
+  // field — Escape and the seek/nav keys must not steal focus from
+  // an active text input embedded in a panel (e.g. the future
+  // Detections-tab class filter chip). Mirrors the input-focus guard
+  // the drilldown branch above already uses.
+  const _tgt = e.target;
+  const _editable = _tgt && (_tgt.tagName === 'INPUT' || _tgt.tagName === 'TEXTAREA'
+                             || _tgt.tagName === 'SELECT' || _tgt.isContentEditable);
+  if (_editable) return;
   const _v = byId('lightboxVideo');
   const _videoActive = !!(_v && _v.style.display !== 'none' && _v.src);
+  // Seek step — was 10 s; tightened to 5 s to match the mediaview
+  // task #6 spec. Five-second granularity reads more naturally for
+  // 10-30 s motion clips, where 10 s would overshoot interesting
+  // segments in two presses.
   if (e.key === 'ArrowLeft'){
     e.preventDefault();
     if (_videoActive){
-      _v.currentTime = Math.max(0, (_v.currentTime || 0) - 10);
-      _lbShowSeekOverlay('−10s');
+      _v.currentTime = Math.max(0, (_v.currentTime || 0) - 5);
+      _lbShowSeekOverlay('−5s');
     } else {
       const nav = _lbNavList(); const i = nav.findIndex(x => x.event_id === lbState.item?.event_id);
       if (i > 0) openLightbox(nav[i - 1]);
@@ -536,9 +549,9 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (_videoActive){
       const dur = _v.duration || 0;
-      const next = (_v.currentTime || 0) + 10;
+      const next = (_v.currentTime || 0) + 5;
       _v.currentTime = dur > 0 ? Math.min(dur, next) : next;
-      _lbShowSeekOverlay('+10s');
+      _lbShowSeekOverlay('+5s');
     } else {
       const nav = _lbNavList(); const i = nav.findIndex(x => x.event_id === lbState.item?.event_id);
       if (i >= 0 && i < nav.length - 1) openLightbox(nav[i + 1]);

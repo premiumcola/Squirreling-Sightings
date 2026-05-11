@@ -765,3 +765,118 @@
   .lb-play-btn{ width:32px;height:32px; }
   #lightboxSettings{ padding:6px 10px 12px 10px; }
 }
+
+/* ── MediaView shell — dark panel tabs + fine-analysis fold ──────────────── */
+/* Styles for the new MediaView shell components. The components are
+   wired in mediaview/panel-tabs.js and mediaview/fine-analysis-fold.js
+   but they aren't mounted into the active lightbox yet — that happens
+   when the shell composition lands. Shipping the styles here keeps the
+   visual language ready and lets a future commit drop the DOM in
+   without a CSS round-trip. */
+.mv-tabs-root{
+  background:#0a0e1a;
+  border-radius:10px;
+  overflow:hidden;
+}
+.mv-tabs-strip{
+  display:flex;
+  gap:4px;
+  padding:6px 8px 0 8px;
+  background:#0a0e1a;
+  flex-wrap:wrap;
+}
+.mv-tab{
+  background:transparent;
+  border:0;
+  padding:7px 12px;
+  border-radius:8px 8px 0 0;
+  font-size:12px;
+  font-weight:500;
+  letter-spacing:.01em;
+  color:rgba(255,255,255,.55);
+  cursor:pointer;
+  min-height:36px;
+  -webkit-tap-highlight-color:transparent;
+  transition:background .15s, color .15s;
+}
+.mv-tab:hover{ color:rgba(255,255,255,.85); }
+.mv-tab[data-active="1"]{
+  background:rgba(255,255,255,.10);
+  color:#fff;
+}
+.mv-tabs-content{
+  background:#0a0e1a;
+  padding:10px 14px 14px 14px;
+  color:#e2e8f0;
+  font-size:12.5px;
+  line-height:1.5;
+  min-height:60px;
+}
+@media (max-width:480px){
+  .mv-tab{ min-height:44px;padding:9px 12px; }
+}
+
+.mv-fafold-root{
+  background:#0a0e1a;
+  border-top:1px solid rgba(255,255,255,.04);
+  border-radius:0 0 10px 10px;
+}
+.mv-fafold-header{
+  display:flex;align-items:center;gap:8px;
+  width:100%;
+  background:transparent;
+  border:0;
+  padding:9px 14px;
+  cursor:pointer;
+  color:rgba(226,232,240,.75);
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:.01em;
+  text-align:left;
+  -webkit-tap-highlight-color:transparent;
+  min-height:36px;
+}
+.mv-fafold-header:hover{ color:rgba(226,232,240,.95); }
+.mv-fafold-chevron{
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:transform .15s;
+  color:rgba(226,232,240,.55);
+}
+.mv-fafold-root[data-open="1"] .mv-fafold-chevron{ transform:rotate(180deg); }
+.mv-fafold-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  color:rgba(165,243,252,.85);
+}
+.mv-fafold-title{ font-weight:600;color:#e2e8f0; }
+.mv-fafold-sub{
+  font-size:9.5px;
+  color:rgba(226,232,240,.40);
+  margin-left:auto;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  letter-spacing:.02em;
+}
+.mv-fafold-body{
+  background:#050810;
+  padding:10px 14px 12px 14px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:10.5px;
+  line-height:1.7;
+  color:rgba(226,232,240,.70);
+  border-radius:0 0 10px 10px;
+  max-height:240px;
+  overflow-y:auto;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.mv-fafold-line[data-kind="pass"]{ color:var(--color-text-success,#4ade80); }
+.mv-fafold-line[data-kind="reject"]{ color:var(--warning,#f59e0b); }
+.mv-fafold-line[data-kind="no-detection"]{ color:var(--danger,#ef4444); }
+.mv-fafold-line[data-kind="info"]{ color:rgba(226,232,240,.70); }
+.mv-fafold-empty{
+  font-style:italic;
+  color:rgba(226,232,240,.45);
+}
+@media (max-width:480px){
+  .mv-fafold-header{ min-height:44px; }
+  .mv-fafold-sub{ display:none; }
+}

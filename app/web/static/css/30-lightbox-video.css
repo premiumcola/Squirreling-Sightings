@@ -878,9 +878,41 @@
   font-size:12.5px;
   line-height:1.5;
   min-height:60px;
+  /* Internal-scroll the tab body so a tall Aufnahme-Settings list
+     never pushes the playbar off-screen. The dvh budget accounts
+     for the rest of #lightboxBottomStack — scrubber row (~50 px) +
+     per-class strips + ticks (~20 px) + tab strip (~44 px) +
+     fine-analysis-fold header (~40 px) + safe-area inset. 38 dvh
+     leaves ample room for the playbar above on a typical desktop
+     viewport; narrow-screen override below tightens it further. */
+  max-height:38dvh;
+  overflow-y:auto;
+  /* Touch scrolling on iOS — overscroll-behavior contains the
+     swipe so the underlying modal / page doesn't rubber-band when
+     the user pulls past the top/bottom of the panel content;
+     -webkit-overflow-scrolling:touch keeps momentum smooth on
+     older iOS. */
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.18) transparent;
+}
+.mv-tabs-content::-webkit-scrollbar{ width:6px;height:6px; }
+.mv-tabs-content::-webkit-scrollbar-track{ background:transparent; }
+.mv-tabs-content::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.18);
+  border-radius:3px;
+}
+.mv-tabs-content::-webkit-scrollbar-thumb:hover{
+  background:rgba(255,255,255,.30);
 }
 @media (max-width:480px){
   .mv-tab{ min-height:44px;padding:9px 12px; }
+  /* Narrow-screen budget is tighter — the playbar plus the tab
+     strip alone already eat into the viewport. 32 dvh leaves the
+     iPhone-393 user a usable strip of playbar visible above the
+     scrolling panel. */
+  .mv-tabs-content{ max-height:32dvh; }
 }
 
 .mv-fafold-root{
@@ -930,10 +962,34 @@
   line-height:1.7;
   color:rgba(226,232,240,.70);
   border-radius:0 0 10px 10px;
-  max-height:240px;
+  /* Independent scroll region so a long trace log doesn't push the
+     page around when expanded. Same dvh-based budget rule as the
+     tabs content above, just a bit smaller since this is the
+     secondary view (panel content takes precedence). */
+  max-height:30dvh;
   overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.18) transparent;
   white-space:pre-wrap;
   word-break:break-word;
+}
+.mv-fafold-body::-webkit-scrollbar{ width:6px;height:6px; }
+.mv-fafold-body::-webkit-scrollbar-track{ background:transparent; }
+.mv-fafold-body::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.18);
+  border-radius:3px;
+}
+.mv-fafold-body::-webkit-scrollbar-thumb:hover{
+  background:rgba(255,255,255,.30);
+}
+@media (max-width:480px){
+  /* On phones the fold competes harder for vertical space — keep
+     the budget aligned with the tabs content above so an open
+     fold + open tab together stay within reach without scrolling
+     the page chrome. */
+  .mv-fafold-body{ max-height:26dvh; }
 }
 .mv-fafold-line[data-kind="pass"]{ color:var(--color-text-success,#4ade80); }
 .mv-fafold-line[data-kind="reject"]{ color:var(--warning,#f59e0b); }

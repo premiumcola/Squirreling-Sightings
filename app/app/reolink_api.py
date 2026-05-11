@@ -31,6 +31,19 @@ def _base_url(host: str) -> str:
     return f"http://{host}/api.cgi"
 
 
+def _make_url(host: str, port: int | None = None, *, https: bool = False) -> str:
+    """Build the api.cgi URL with optional explicit port and scheme. The
+    plain ``_base_url`` helper above is kept for legacy callers (sun-
+    timelapse override, GetDevInfo probe) that always hit port 80; this
+    variant is used by the standalone image-mode endpoint where the
+    operator may have remapped Reolink's HTTP port."""
+    scheme = "https" if https else "http"
+    default_port = 443 if https else 80
+    if port and int(port) != default_port:
+        return f"{scheme}://{host}:{int(port)}/api.cgi"
+    return f"{scheme}://{host}/api.cgi"
+
+
 def login(host: str, username: str, password: str, timeout: float = 5.0) -> str | None:
     """POST cmd=Login and return the session token, or None on failure."""
     if not host or not username:
@@ -242,6 +255,171 @@ def get_device_info(host: str, token: str, timeout: float = 5.0) -> dict | None:
         log.warning("[reolink] get_device_info parse error host=%s: %s body=%s",
                     host, e, r.text[:200])
         return None
+
+
+def _login_with_port(
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    *,
+    https: bool = False,
+    timeout: float = 4.0,
+) -> str | None:
+    """Variant of ``login`` that accepts an explicit port + scheme.
+    Used by ``set_image_mode`` for the standalone Verbindungs-Test
+    panel where the camera may listen on a non-default port. Returns
+    the session token or None on any failure."""
+    if not host or not user:
+        log.warning("[reolink] image-mode login skipped · host=%r user=%r",
+                    host, user or "")
+        return None
+    body = [{
+        "cmd":    "Login",
+        "action": 0,
+        "param":  {"User": {"userName": user, "password": password or ""}},
+    }]
+    try:
+        r = _session.post(
+            _make_url(host, port, https=https),
+            params={"cmd": "Login"},
+            json=body,
+            timeout=timeout,
+        )
+    except Exception as e:
+        log.warning("[reolink] image-mode login network error host=%s: %s",
+                    host, e)
+        return None
+    if r.status_code != 200:
+        log.warning("[reolink] image-mode login HTTP %s host=%s",
+                    r.status_code, host)
+        return None
+    try:
+        payload = r.json()
+        first = payload[0] if isinstance(payload, list) and payload else {}
+        tok = ((first.get("value") or {}).get("Token") or {}).get("name")
+        return tok or None
+    except Exception as e:
+        log.warning("[reolink] image-mode login parse error host=%s: %s",
+                    host, e)
+        return None
+
+
+# Wire-mapping for the high-level image-mode call. Public so the route
+# layer can echo the underlying values back to the UI on demand without
+# duplicating the dict.
+IMAGE_MODE_MAP: dict[str, tuple[str, str]] = {
+    "auto":  ("Auto",         "Auto"),
+    "color": ("Color",        "Off"),
+    "bw":    ("Black&White",  "Auto"),
+}
+
+
+def set_image_mode(
+    host: str,
+    port: int,
+    user: str,
+    password: str,
+    mode: str,
+    *,
+    https: bool = False,
+    timeout: float = 4.0,
+) -> dict:
+    """Force the day/night image mode on a Reolink cam in one short call.
+
+    ``mode`` ∈ {"auto", "color", "bw"} maps to:
+      ``auto``  → SetIsp dayNight=Auto         + IrLights state=Auto
+      ``color`` → SetIsp dayNight=Color        + IrLights state=Off
+      ``bw``    → SetIsp dayNight=Black&White  + IrLights state=Auto
+
+    Both commands ship in a single ``/api.cgi?token=...`` POST (Reolink
+    accepts array bodies). On a "command not supported" response (rspCode
+    -10) the call retries the SetIsp half with a v1-schema variant that
+    newer firmware accepts.
+
+    Returns ``{"ok": bool, "rc": <int|str>, "detail": str}``. Always
+    logs ONE INFO line per call; never logs the password.
+    """
+    mode_norm = (mode or "").strip().lower()
+    if mode_norm not in IMAGE_MODE_MAP:
+        log.warning("[reolink] set_image_mode invalid mode=%r host=%s",
+                    mode, host)
+        return {"ok": False, "rc": "bad-mode",
+                "detail": "mode muss auto/color/bw sein"}
+    day_night, ir_state = IMAGE_MODE_MAP[mode_norm]
+    token = _login_with_port(host, port, user, password,
+                             https=https, timeout=timeout)
+    if not token:
+        log.info("[reolink] %s set_image_mode → %s (rc=login-failed)",
+                 host, mode_norm)
+        return {"ok": False, "rc": "login-failed",
+                "detail": "Login fehlgeschlagen — Host/Port/User prüfen"}
+
+    def _send_pair(isp_param: dict) -> tuple[bool, object, str]:
+        body = [
+            {"cmd": "SetIsp",      "action": 0, "param": isp_param},
+            {"cmd": "SetIrLights", "action": 0,
+             "param": {"IrLights": {"state": ir_state}}},
+        ]
+        try:
+            r = _session.post(
+                _make_url(host, port, https=https),
+                params={"cmd": "", "token": token},
+                json=body,
+                timeout=timeout,
+            )
+        except Exception as e:
+            return (False, "network", str(e))
+        if r.status_code != 200:
+            return (False, r.status_code, (r.text or "")[:200])
+        try:
+            payload = r.json()
+        except Exception:
+            return (False, "parse", (r.text or "")[:200])
+        if not isinstance(payload, list) or not payload:
+            return (False, "shape", str(payload)[:200])
+        # Walk the array — every command must succeed individually.
+        for entry in payload:
+            value = entry.get("value") if isinstance(entry.get("value"), dict) else None
+            err = entry.get("error") if isinstance(entry.get("error"), dict) else None
+            rc = None
+            if value and "rspCode" in value:
+                rc = value.get("rspCode")
+            elif err and "rspCode" in err:
+                rc = err.get("rspCode")
+            outer = entry.get("code")
+            if rc in (0, 200) or (outer == 0 and err is None):
+                continue
+            return (False, rc if rc is not None else (outer if outer is not None else "unknown"),
+                    (err or {}).get("detail", "") if err else "")
+        return (True, 0, "")
+
+    # v0 SetIsp schema — the shape used by set_daynight() above. Works
+    # on RLC-810A / CX810 / CX410 in our test rig.
+    ok, rc, detail = _send_pair({"Isp": {"channel": 0, "dayNight": day_night}})
+    if not ok and rc == -10:
+        # v1 retry — newer RLC-1224A firmware rejects v0 with rspCode
+        # -10 ("command not supported"); the v1 wire shape moves
+        # ``channel`` up one level. Same logical payload, different
+        # envelope.
+        ok, rc, detail = _send_pair({"channel": 0, "Isp": {"dayNight": day_night}})
+
+    # Best-effort token release — failure here does NOT flip the
+    # operation result.
+    try:
+        _session.post(
+            _make_url(host, port, https=https),
+            params={"cmd": "Logout", "token": token},
+            json=[{"cmd": "Logout", "action": 0, "param": {}}],
+            timeout=timeout,
+        )
+    except Exception:
+        pass
+
+    log.info("[reolink] %s set_image_mode → %s (rc=%s)", host, mode_norm, rc)
+    if not ok and not detail and isinstance(rc, int):
+        detail = _REOLINK_RSPCODE_HINTS.get(rc, "")
+    return {"ok": ok, "rc": rc, "detail": detail or ("ok" if ok else "")}
 
 
 def logout(host: str, token: str, timeout: float = 5.0) -> None:

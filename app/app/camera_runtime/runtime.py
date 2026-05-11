@@ -228,6 +228,17 @@ class CameraRuntime(
         self._tl_threads: dict = {}  # profile_name → Thread
         # ── Connection health / diagnostics ──────────────────────────────────
         self.frame_ts: float = 0.0          # epoch of last frame written to self.frame
+        # Exponential moving average of the wall-clock interval between
+        # two successive frame_ts writes (milliseconds). 0.0 until the
+        # second frame lands. Drives the decoder-backlog heuristic in
+        # the test-detection endpoint — when this drifts well below the
+        # configured frame_interval_ms, the decoder is likely draining
+        # a buffered burst at us faster than the camera actually
+        # produces frames, so a "vor 0.2 s" freshness label would lie.
+        # α = 0.1 → ~30-frame effective window; resets on a >30 s gap
+        # (i.e. across a reconnect) so the EMA doesn't capture the
+        # pre-reconnect gap as a "fast burst".
+        self._frame_interval_ema_ms: float = 0.0
         self._reconnect_count: int = 0      # how many times capture was reopened
         # Sliding-window log of reconnect timestamps. We never bound the
         # capacity hard because the prune-on-read step keeps only entries

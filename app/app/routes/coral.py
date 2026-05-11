@@ -877,6 +877,25 @@ def api_test_detection(cam_id: str):
         cam_id, final_outcome, waited_s, retries,
         frame_age_ms, len(out), len(pass_dets),
     )
+    # ── Decoder-backlog heuristic ────────────────────────────────────
+    # The runtime tracks an EMA of the wall-clock interval between
+    # successive frame_ts writes. If that average is well below the
+    # camera's CONFIGURED frame_interval_ms (≤ 0.4×) the decoder is
+    # almost certainly draining a buffered burst at us faster than the
+    # camera actually emits frames — i.e. "vor 0.2 s" would be true
+    # for "when we decoded it" but lying about "when the camera shot
+    # it". 0.4 chosen so a normally-cadenced stream (e.g. 350 ms config
+    # with a slightly fast 280 ms EMA) doesn't false-positive but a
+    # genuine 5–10× burst does. interval_ms taken from the saved cam
+    # config so the threshold tracks user intent, not autodetected
+    # fps that may be skewed by the same backlog.
+    interval_ms = int(cam.get("frame_interval_ms", 350) or 350)
+    ema_ms = float(getattr(rt, "_frame_interval_ema_ms", 0.0) or 0.0)
+    backlog = (
+        ema_ms > 0
+        and interval_ms > 0
+        and ema_ms < 0.4 * interval_ms
+    )
     return jsonify({
         "ok":             True,
         "snapshot":       snapshot,
@@ -884,4 +903,6 @@ def api_test_detection(cam_id: str):
         "frame_age_ms":   frame_age_ms,
         "detections":     out,
         "decision_trace": trace,
+        "frame_interval_avg_ms":     int(round(ema_ms)) if ema_ms > 0 else 0,
+        "decoder_backlog_suspected": bool(backlog),
     })

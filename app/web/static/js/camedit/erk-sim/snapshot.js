@@ -98,8 +98,18 @@ export function _renderErkSimResult(data){
       let txt = `Letzter Frame · vor ${ageS.toFixed(1)} s`;
       if (veryStale) txt += ' · Stream steckt fest';
       else if (stale) txt += ' · Stream hängt evtl.';
+      // Honest backlog signal — runtime sees frames arriving much
+      // faster than the camera's configured cadence, which means we
+      // *received* it 0.2 s ago but it was *shot* much earlier. The
+      // bug image 5 in the user's report: clock showed 19:38:33,
+      // panel said "vor 0.2 s". Reuse the existing is-stale colour
+      // ramp via the same modifier so we don't add new CSS.
+      if (data.decoder_backlog_suspected){
+        txt += ' · ⚠ Decoder-Backlog';
+      }
       ageEl.textContent = txt;
-      ageEl.classList.toggle('is-stale', stale && !veryStale);
+      ageEl.classList.toggle('is-stale',
+        (stale && !veryStale) || (!stale && !veryStale && !!data.decoder_backlog_suspected));
       ageEl.classList.toggle('is-very-stale', veryStale);
       ageEl.hidden = false;
       if (wrapImg) wrapImg.classList.toggle('is-stuck', veryStale);

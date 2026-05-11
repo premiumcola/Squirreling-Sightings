@@ -111,10 +111,33 @@ class MainLoopMixin:
                 continue
             try:
                 frame = self._grab_frame()
-                # Always store raw frame so status → "active" and snapshots work
+                # Always store raw frame so status → "active" and snapshots work.
+                # Also update the inter-frame EMA so the test-detection
+                # endpoint can spot a decoder backlog (frames arriving
+                # faster than the camera's configured cadence = bursting
+                # a buffer, not real-time). EMA is wall-clock so it
+                # tracks decode arrivals, not capture timing.
+                _now_grab = time.time()
                 with self.lock:
+                    prev_ts = self.frame_ts
                     self.frame = frame
-                    self.frame_ts = time.time()
+                    self.frame_ts = _now_grab
+                    if prev_ts > 0:
+                        delta_ms = (_now_grab - prev_ts) * 1000.0
+                        # Filter spurious "reconnect gap" deltas: any
+                        # interval > 30 s reflects an outage, not a
+                        # capture cadence, and would yank the EMA up
+                        # for thousands of subsequent frames if we let
+                        # it in. Treat it as a reset.
+                        if delta_ms > 30_000:
+                            self._frame_interval_ema_ms = 0.0
+                        elif self._frame_interval_ema_ms <= 0:
+                            self._frame_interval_ema_ms = delta_ms
+                        else:
+                            self._frame_interval_ema_ms = (
+                                0.9 * self._frame_interval_ema_ms
+                                + 0.1 * delta_ms
+                            )
                 # First decoded frame after an open() — log latency so the
                 # operator can confirm a reconnect actually recovered the
                 # stream. Only fires once per open cycle.

@@ -95,8 +95,12 @@ function _achStep5(ach){
   return '—';
 }
 
-export function lbRenderSettingsPanel(item){
-  const host = byId('lightboxSettings');
+export function lbRenderSettingsPanel(item, hostOverride){
+  // hostOverride lets the mediaview tabs container render the
+  // settings panel inside a tab body instead of the global
+  // #lightboxSettings element. Default behaviour (no override) keeps
+  // the legacy callsite working bit-for-bit.
+  const host = hostOverride || byId('lightboxSettings');
   if (!host) return;
   if (!item || item.type === 'timelapse'){
     host.innerHTML = '';

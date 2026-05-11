@@ -26,9 +26,9 @@ import { lbState } from './mediathek/state.js';
 import {
   lbLoadTracksForItem, lbStopTrackingPlayback,
   lbRenderTrackTimeline, lbClearTrackTimeline,
-  lbRenderSettingsPanel,
 } from './mediathek/bbox-overlay/index.js';
 import { openMediaView } from './mediaview/index.js';
+import { mountRecordedPanels } from './mediaview/panels/orchestration.js';
 import { _iosNativeVideoOpen } from './mediathek/ios-video.js';
 import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
@@ -176,7 +176,12 @@ function _setupVideoChrome(item){
     setHost.hidden = (item?.type === 'timelapse');
   }
   if (item?.type !== 'timelapse'){
-    lbRenderSettingsPanel(item);
+    // mediaview-shell mount: wraps the legacy settings renderer in a
+    // dark tab strip ("Aufnahme-Settings" · "Nach-Erkennung" + Wetter
+    // when present) and adds the fine-analysis fold below. The
+    // settings tab still calls lbRenderSettingsPanel under the hood,
+    // just into the tab's body host instead of #lightboxSettings.
+    mountRecordedPanels(item);
   }
 }
 

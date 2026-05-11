@@ -12,11 +12,18 @@
 // silently stops the loop — no hard coupling to editCamera() or the
 // panel-close handler.
 import { byId } from '../../core/dom.js';
-import { _renderErkSimResult } from './snapshot.js';
+import { _renderErkSimError, _renderErkSimResult } from './snapshot.js';
 import { IoUTracker } from './tracker.js';
 import { LiveTimeline } from './timeline.js';
 
-const _TICK_MS  = 1000;   // 1 Hz polling — kept simple, no UI control
+// Floor/ceiling for the adaptive polling cadence. Fast healthy ticks
+// stay at 1 Hz (the floor); a backend that takes ~3 s to deliver a
+// validated frame backs us off to 0.25 Hz so requests don't pile up.
+// The 1.2× multiplier on the previous cycle gives the loop a bit of
+// headroom over the measured rate without latching to a slow value.
+const _TICK_MIN_MS = 1000;
+const _TICK_MAX_MS = 4000;
+const _TICK_FACTOR = 1.2;
 const _PATH_CAP = 12;     // points painted per trail; tracker stores up to 60
 
 let _session = null;      // null when idle; one object per active live run
@@ -98,6 +105,11 @@ async function _tick(){
   session.abort = new AbortController();
   const controller = session.abort;
 
+  // performance.now is monotonic and immune to wall-clock jumps; we
+  // only care about elapsed milliseconds, so it's the right basis for
+  // the adaptive cadence below.
+  const cycleStart = performance.now();
+
   try {
     const r = await fetch(
       `/api/cameras/${encodeURIComponent(session.camId)}/test-detection`,
@@ -106,10 +118,20 @@ async function _tick(){
     if (_session !== session) return;  // superseded by a stop click
     let data = null;
     try { data = await r.json(); } catch { /* keep null */ }
+    // Structured 503: backend says it can't honour the freshness
+    // contract right now. Surface a precise banner so the user knows
+    // we're not faking a real-time picture, and skip the bbox/trail
+    // painting entirely — there's no valid frame to draw on.
+    if (r.status === 503 && data && data.code){
+      _renderErkSimError(data);
+      if (wrap) wrap.dataset.everShown = '1';
+      _scheduleNext(session, performance.now() - cycleStart);
+      return;
+    }
     if (!r.ok || !data?.ok){
-      // Transient backend failure — keep polling. The user gets visual
-      // feedback only via the absence of fresh boxes.
-      _scheduleNext(session);
+      // Other transient backend failure — keep polling silently. The
+      // user gets visual feedback only via the absence of fresh boxes.
+      _scheduleNext(session, performance.now() - cycleStart);
       return;
     }
 
@@ -134,12 +156,17 @@ async function _tick(){
     // network error — keep polling, intentionally silent (a toast on
     // every tick would be noise).
   }
-  _scheduleNext(session);
+  _scheduleNext(session, performance.now() - cycleStart);
 }
 
-function _scheduleNext(session){
+function _scheduleNext(session, lastCycleMs){
   if (_session !== session) return;
-  session.tickHandle = setTimeout(_tick, _TICK_MS);
+  // Clamp the next delay to [floor, ceiling]. Slow cycles back off
+  // automatically; fast cycles stay at the floor so a healthy stream
+  // still polls at 1 Hz.
+  const projected = Math.round((Number.isFinite(lastCycleMs) ? lastCycleMs : _TICK_MIN_MS) * _TICK_FACTOR);
+  const delay = Math.min(_TICK_MAX_MS, Math.max(_TICK_MIN_MS, projected));
+  session.tickHandle = setTimeout(_tick, delay);
 }
 
 // Per-track palette — 12 distinct hues so two simultaneous subjects

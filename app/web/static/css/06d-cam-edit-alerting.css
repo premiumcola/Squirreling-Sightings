@@ -439,6 +439,38 @@
 .erk-test-result-imgwrap.is-stuck{
   box-shadow:inset 0 0 0 3px rgba(245,158,11,.55);
 }
+/* Stale/corrupt/no_frame banner — replaces the IMG within the same
+   wrapper so the surface tone, rounded corners, and 16:9 aspect stay
+   identical. The banner sits absolute over the (now src-less) IMG;
+   centred icon + message, no thin borders, depth from the amber
+   tint inherited from the same warm palette used by .is-very-stale.
+   Hidden by default; live.js flips [hidden] on a 503 response. */
+.erk-test-result-error{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;padding:18px;
+  background:linear-gradient(180deg,rgba(120,53,15,.55),rgba(120,53,15,.85));
+  color:#fde68a;text-align:center;
+  pointer-events:none;
+  border-radius:inherit;
+}
+.erk-test-result-error[hidden]{ display:none; }
+.erk-test-result-error-ico{
+  font-size:28px;line-height:1;
+  /* Subtle pulse so the operator notices a state change without
+     anything actually moving on iOS at the same rate as the polling. */
+  animation:erk-error-pulse 1.6s ease-in-out infinite;
+}
+.erk-test-result-error-msg{
+  font-size:14px;font-weight:600;line-height:1.4;max-width:36ch;
+}
+@media (prefers-reduced-motion: reduce){
+  .erk-test-result-error-ico{ animation:none; }
+}
+@keyframes erk-error-pulse{
+  0%,100%{ opacity:.7; }
+  50%{ opacity:1; }
+}
 /* Frame-age caption — single muted line directly under the snapshot
    so the user sees how old the rendered frame was. Flips to a
    warning colour at >2 s and a hard-warning colour at >5 s.

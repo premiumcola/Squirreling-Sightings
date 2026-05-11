@@ -13,6 +13,59 @@ const _ERK_VERDICT_TXT = {
   'filtered':     '',
 };
 
+// Distinct, honest messages per backend-error code. The 503 path from
+// /api/cameras/<id>/test-detection sets `code` to exactly one of these
+// keys; everything else falls back to the camera-side default.
+const _ERK_ERR_MSG = {
+  'stale':    'Stream-Puffer hinkt zurück · warte auf frischen Frame',
+  'corrupt':  'Stream liefert korrupte Frames · warte auf sauberes Bild',
+  'no_frame': 'Kamera liefert noch keine Frames',
+};
+
+// Render the error banner in place of the snapshot. Hides the IMG,
+// clears the bbox overlay, hides the freshness label (it's meaningless
+// without a frame), shows a distinct banner with an honest message.
+// Called by live.js when the backend returns 503 with a structured
+// error code; the polling loop keeps running so the banner replaces
+// itself with a real frame as soon as the stream recovers.
+export function _renderErkSimError(data){
+  const wrap = byId('erkSimResult');
+  if (!wrap) return;
+  const img    = byId('erkSimImg');
+  const ovl    = byId('erkSimOverlay');
+  const banner = byId('erkSimError');
+  const msg    = byId('erkSimErrorMsg');
+  const ageEl  = byId('erkSimFrameAge');
+  const wrapImg = wrap.querySelector('.erk-test-result-imgwrap');
+  // Hide the (potentially stale) previous frame + any previously
+  // painted boxes — explicit "no picture" rather than a misleading
+  // last-good still.
+  if (img) img.removeAttribute('src');
+  if (ovl) ovl.innerHTML = '';
+  // Suppress the freshness label — "vor X.X s" is meaningless when
+  // we never got a usable frame. Drop both stale modifiers too so a
+  // recovered tick starts from a clean slate.
+  if (ageEl){
+    ageEl.textContent = '';
+    ageEl.hidden = true;
+    ageEl.classList.remove('is-stale', 'is-very-stale');
+  }
+  if (wrapImg) wrapImg.classList.remove('is-stuck');
+  if (banner && msg){
+    const code = String(data?.code || '');
+    msg.textContent = _ERK_ERR_MSG[code] || data?.error || 'Stream-Problem · warte auf frischen Frame';
+    banner.hidden = false;
+  }
+  wrap.hidden = false;
+  wrap.dataset.everShown = '1';
+}
+
+// Hide the error banner when a subsequent tick succeeds. Idempotent.
+function _hideErkSimError(){
+  const banner = byId('erkSimError');
+  if (banner) banner.hidden = true;
+}
+
 export function _renderErkSimResult(data){
   const wrap = byId('erkSimResult');
   if (!wrap) return;
@@ -20,6 +73,10 @@ export function _renderErkSimResult(data){
   const ovl  = byId('erkSimOverlay');
   const list = byId('erkSimList');
   const ttl  = byId('erkSimTitle');
+  // A success render always clears any error banner left by a prior
+  // tick — otherwise the banner would stick around on top of a fresh
+  // good frame.
+  _hideErkSimError();
   if (img) img.src = data.snapshot || '';
   // Frame-age caption — backend reports the age of the cached frame
   // it ran inference against. Stays muted for fresh frames; flips to

@@ -454,6 +454,15 @@
                     <div class="erk-test-result-imgwrap">
                       <img id="erkSimImg" alt="Simulations-Snapshot" />
                       <svg id="erkSimOverlay" preserveAspectRatio="none"></svg>
+                      <!-- Replaces the image when the backend rejects
+                           the snapshot (stale / corrupt / no_frame) so
+                           we never paint inference boxes on a broken
+                           frame. Live.js toggles `hidden` based on the
+                           503 response code. -->
+                      <div class="erk-test-result-error" id="erkSimError" hidden>
+                        <span class="erk-test-result-error-ico" aria-hidden="true">⚠</span>
+                        <span class="erk-test-result-error-msg" id="erkSimErrorMsg"></span>
+                      </div>
                     </div>
                     <!-- Frame-age caption: surfaces how old the captured
                          frame was so the user is never confused about

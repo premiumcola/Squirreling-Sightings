@@ -264,6 +264,13 @@ export function startPreviewRefresh(){
 // stream_hd.mjpg endpoint, then asks the live-pill to repaint so the
 // "Stream-Modus" line reflects the new state without waiting for the
 // next 3 s status poll.
+//
+// Also arms (or clears) the 10-min idle timer for that camera —
+// cm-52 task #5c keeps HD from running indefinitely when the user
+// walks away from the tab. Toggling OFF clears the timer; toggling
+// ON arms a fresh 10-min countdown. Manual interaction with the tile
+// (click on any of HD/FS/SIM/cog, hover on desktop) resets the
+// countdown via the grid-level pointerdown listener installed below.
 export function toggleCardHd(camId, btn){
   const card = btn.closest('.cv-card');
   const img = card?.querySelector('.cv-img');
@@ -273,13 +280,103 @@ export function toggleCardHd(camId, btn){
     btn.classList.remove('active');
     img.dataset.hdMode = '0';
     img.src = `/api/camera/${encodeURIComponent(camId)}/snapshot.jpg?t=${Date.now()}`;
+    _clearHdIdleTimer(camId);
   } else {
     _hdCards.add(camId);
     btn.classList.add('active');
     img.dataset.hdMode = '1';
     img.src = `/api/camera/${encodeURIComponent(camId)}/stream_hd.mjpg`;
+    _armHdIdleTimer(camId);
   }
   _refreshLivePillForCard(camId);
+}
+
+// ── HD idle timeout (cm-52 task #5c) ────────────────────────────────────
+// Per-tile setTimeout that flips HD → SD after _HD_IDLE_TIMEOUT_MS of
+// no interaction. Quiet — just the stream switches and the HD button
+// visual de-activates. Tab-visibility suspends/resumes the countdown
+// so a backgrounded tab doesn't burn through the timer in silence.
+const _HD_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+const _hdIdleTimers = new Map();  // camId → { handle, deadline, paused, remaining }
+
+function _armHdIdleTimer(camId){
+  _clearHdIdleTimer(camId);
+  if (document.hidden){
+    // Tab not in focus — track the deadline but don't burn the
+    // timeout while hidden. visibilitychange will resume.
+    _hdIdleTimers.set(camId, {
+      handle: 0, deadline: 0,
+      paused: true, remaining: _HD_IDLE_TIMEOUT_MS,
+    });
+    return;
+  }
+  const deadline = Date.now() + _HD_IDLE_TIMEOUT_MS;
+  const handle = setTimeout(() => _onHdIdleTimeout(camId), _HD_IDLE_TIMEOUT_MS);
+  _hdIdleTimers.set(camId, {
+    handle, deadline,
+    paused: false, remaining: _HD_IDLE_TIMEOUT_MS,
+  });
+}
+
+function _clearHdIdleTimer(camId){
+  const entry = _hdIdleTimers.get(camId);
+  if (!entry) return;
+  if (entry.handle) clearTimeout(entry.handle);
+  _hdIdleTimers.delete(camId);
+}
+
+function _onHdIdleTimeout(camId){
+  _hdIdleTimers.delete(camId);
+  if (!_hdCards.has(camId)) return;
+  const card = byId('cameraCards')?.querySelector(`[data-camid="${CSS.escape(camId)}"]`);
+  const hdBtn = card?.querySelector('.cv-hd-badge');
+  if (hdBtn) toggleCardHd(camId, hdBtn);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden){
+    _hdIdleTimers.forEach((entry) => {
+      if (!entry.paused && entry.handle){
+        clearTimeout(entry.handle);
+        entry.remaining = Math.max(0, entry.deadline - Date.now());
+        entry.paused = true;
+        entry.handle = 0;
+      }
+    });
+  } else {
+    _hdIdleTimers.forEach((entry, camId) => {
+      if (!entry.paused) return;
+      entry.deadline = Date.now() + entry.remaining;
+      entry.handle = setTimeout(() => _onHdIdleTimeout(camId), entry.remaining);
+      entry.paused = false;
+    });
+  }
+});
+
+// Grid-level pointerdown listener — installed once. Resets the HD idle
+// timer on any user-initiated press inside an HD-active tile (HD/FS/
+// SIM/cog buttons, or even a tap on the inert tile body). Re-armed
+// listener survives renderDashboard's innerHTML rebuilds because it's
+// bound to the parent #cameraCards element.
+let _hdIdleWired = false;
+function _wireHdIdleReset(){
+  if (_hdIdleWired) return;
+  const grid = byId('cameraCards');
+  if (!grid) return;
+  const reset = (e) => {
+    const card = e.target.closest('.cv-card[data-camid]');
+    if (!card) return;
+    const camId = card.dataset.camid;
+    if (_hdCards.has(camId)) _armHdIdleTimer(camId);
+  };
+  grid.addEventListener('pointerdown', reset, { passive: true });
+  if (window.matchMedia && window.matchMedia('(hover:hover)').matches){
+    // Desktop hover resets too — match the prompt's "any interaction"
+    // intent. Touch devices skip this so a stray hover-emulation
+    // event on iOS doesn't fight with the pointerdown reset.
+    grid.addEventListener('pointerenter', reset, { passive: true, capture: true });
+  }
+  _hdIdleWired = true;
 }
 
 // Re-paint the expanded LivePill row values for one card based on
@@ -539,6 +636,11 @@ ${isActive ? `
   // listeners per render; innerHTML wipes prior listeners). The
   // touch-outside handler closes any open pill when the user taps
   // somewhere else on the page.
+  // One-shot wiring of the HD idle-timer reset listener (cm-52
+  // task #5c). The listener attaches to the parent grid element so
+  // it survives the innerHTML rebuild above; the wired-flag inside
+  // the helper prevents double-binding across re-renders.
+  _wireHdIdleReset();
   byId('cameraCards').querySelectorAll('.cv-pill-live-wrap').forEach(el => {
     // Open/close on hover (desktop) and tap (mobile). The pill flips
     // between collapsed (display:flex row) and expanded (the detail

@@ -209,7 +209,13 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      a 375 px card. The .cv-tr cluster's 10 px inset and the 22 px row
      height keep the touch target comfortable without a min-width. */
   .cv-pill-live-wrap{--lp-collapsed-w:max-content;--lp-expanded-w:min(210px,calc(100vw - 32px));font-size:10px;max-height:20px}
-  .cv-pill-live-wrap.cv-lp-open{max-height:124px}
+  /* Clamp the open popover on mobile so it doesn't dominate the
+     camera tile. 96 px wraps the first ~3 detail rows (Stream-Modus
+     + Preview-FPS + Auflösung) with the remaining rows scrolling
+     inside .cv-live-expanded — overflow:hidden on the wrap stops
+     them spilling into the tile. */
+  .cv-pill-live-wrap.cv-lp-open{max-height:96px}
+  .cv-pill-live-wrap.cv-lp-open .cv-live-expanded{max-height:80px;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .cv-live-collapsed{padding:2px 8px;font-size:10px}
   .cv-pill-tl{font-size:10px;padding:2px 7px}
 }

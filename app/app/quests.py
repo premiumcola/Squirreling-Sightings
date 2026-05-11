@@ -152,8 +152,9 @@ def _resolve_window(name: str, now: datetime) -> tuple[datetime | None, datetime
     """
     year = now.year
     if name == "december":
-        return (datetime(year, 12, 1, 0, 0, 0),
-                datetime(year, 12, 31, 23, 59, 59))
+        if now.month != 12:
+            return (None, None)
+        return (datetime(year, 12, 1, 0, 0, 0), now)
     if name == "april_rolling_week":
         if now.month != 4:
             return (None, None)
@@ -204,6 +205,37 @@ def _next_window_close(name: str, opens_at: datetime) -> datetime | None:
         return datetime(opens_at.year, 12, 31, 23, 59, 59)
     if name == "april_rolling_week":
         return datetime(opens_at.year, 4, 30, 23, 59, 59)
+    return None
+
+
+def _window_logical_end(name: str, stored_from: datetime | None) -> datetime | None:
+    """Return the LOGICAL end of a window given the stored start. This
+    is the date AFTER which a stored quest is considered "from a past
+    period" and eligible for archiving — distinct from the (start, now)
+    snapshot the evaluator persists.
+
+      december               → Dec 31 of the stored year
+      april_rolling_week     → April 30 of the stored year
+      year_to_date           → Dec 31 of the stored year
+      current_calendar_month → last day of the stored month
+      current_rolling_week   → None (always rolling, never logically closes)
+    """
+    if stored_from is None:
+        return None
+    year = stored_from.year
+    if name == "december":
+        return datetime(year, 12, 31, 23, 59, 59)
+    if name == "april_rolling_week":
+        return datetime(year, 4, 30, 23, 59, 59)
+    if name == "year_to_date":
+        return datetime(year, 12, 31, 23, 59, 59)
+    if name == "current_calendar_month":
+        # last day of month: jump to next month's day 1 minus 1 second
+        if stored_from.month == 12:
+            next_first = datetime(year + 1, 1, 1, 0, 0, 0)
+        else:
+            next_first = datetime(year, stored_from.month + 1, 1, 0, 0, 0)
+        return next_first - timedelta(seconds=1)
     return None
 
 
@@ -411,11 +443,144 @@ def evaluate_quests(store, achievements_data: dict,
     return data, newly_completed
 
 
-def reevaluate_and_save(now: datetime | None = None) -> dict:
-    """One-call helper: load achievements, evaluate, save, return summary.
+# ── Archive ────────────────────────────────────────────────────────────────
+def archive_closed_quests(achievements_data: dict,
+                          now: datetime | None = None,
+                          ) -> tuple[dict, list[dict]]:
+    """Move window-closed quests with progress > 0 to ``quests_archive``;
+    drop window-closed quests with progress == 0 silently.
 
-    Used by the hourly background job and the manual reevaluate API.
-    Lives here so both call sites share the lock + telegram-notify wiring.
+    Rules (applied to every quest in ``data["quests"]``):
+      * ``completed_at`` set → leave alone (the 30-day pinboard rule in
+        the frontend handles eventual disappearance).
+      * Catalog entry no longer exists (id base not in QUESTS):
+          - progress > 0 → archive, reason ``catalog_removed``
+          - progress == 0 → drop
+      * Window's `to` field is in the past AND quest not completed:
+          - progress > 0 → archive, reason ``window_closed_incomplete``
+          - progress == 0 → drop
+
+    Returns ``(updated_data, archived_summaries)`` where each summary is
+    ``{id, title, progress, target, window, archived_reason}`` — the
+    caller (reevaluate_and_save) logs them.
+    """
+    now = now or datetime.now()
+    data = dict(achievements_data) if achievements_data else {}
+    quests = dict(data.get("quests") or {})
+    archive = dict(data.get("quests_archive") or {})
+    archived_summaries: list[dict] = []
+    catalogue = {q["id"]: q for q in QUESTS}
+
+    for qid, q in list(quests.items()):
+        if q.get("completed_at"):
+            continue
+        # Strip the year suffix (`wintervorrat_2026` → `wintervorrat`)
+        # so we can compare to the catalogue's base ids.
+        base_id = qid.rsplit("_", 1)[0]
+        try:
+            int(qid.rsplit("_", 1)[-1])
+        except ValueError:
+            base_id = qid  # no year suffix — use whole id
+        progress = int(q.get("progress") or 0)
+        reason: str | None = None
+
+        if base_id not in catalogue:
+            reason = "catalog_removed"
+        else:
+            # A window is considered logically closed when `now` is past
+            # the END-of-period date (Dec 31 / last-of-month / etc.).
+            # The stored {from, to} pair is just a snapshot — the `to`
+            # field always equals the eval timestamp and would
+            # incorrectly mark every window as closed-on-next-tick.
+            window_name = catalogue[base_id]["window"]
+            stored_from_str = (q.get("window") or {}).get("from")
+            try:
+                stored_from = datetime.fromisoformat(stored_from_str) \
+                    if stored_from_str else None
+            except ValueError:
+                stored_from = None
+            logical_end = _window_logical_end(window_name, stored_from)
+            if logical_end is not None and now > logical_end:
+                reason = "window_closed_incomplete"
+
+        if reason is None:
+            continue
+
+        # Pop from active quests in either case.
+        quests.pop(qid, None)
+        if progress > 0:
+            entry = {
+                **q,
+                "archived_at": now.isoformat(timespec="seconds"),
+                "archived_reason": reason,
+            }
+            archive[qid] = entry
+            archived_summaries.append({
+                "id": qid,
+                "title": q.get("title"),
+                "progress": progress,
+                "target": q.get("target"),
+                "window": q.get("window"),
+                "archived_reason": reason,
+            })
+            log.info(
+                "[quests] archived %s (%d/%s) reason=%s window=%s..%s",
+                qid, progress, q.get("target"), reason,
+                (q.get("window") or {}).get("from"),
+                window_to,
+            )
+        else:
+            log.debug("[quests] dropped %s (progress=0, reason=%s)", qid, reason)
+
+    data["quests"] = quests
+    data["quests_archive"] = archive
+    return data, archived_summaries
+
+
+# ── Upcoming-quests preview ────────────────────────────────────────────────
+def preview_upcoming_quests(now: datetime | None = None,
+                            horizon_days: int = 60,
+                            ) -> list[dict]:
+    """Walk QUESTS and return the entries whose NEXT window opens within
+    ``horizon_days``. Skips quests whose current window is already active
+    (those are on the active pinboard, not the preview). Result is
+    sorted soonest-first."""
+    now = now or datetime.now()
+    horizon = now + timedelta(days=int(horizon_days))
+    out: list[dict] = []
+    for q in QUESTS:
+        # Quests whose window resolves to a concrete (start, end) at
+        # `now` are already active — skip from the preview.
+        start_now, _end_now = _resolve_window(q["window"], now)
+        if start_now is not None:
+            continue
+        opens_at = _next_window_start(q["window"], now)
+        if opens_at is None or opens_at > horizon:
+            continue
+        closes_at = _next_window_close(q["window"], opens_at)
+        out.append({
+            "id": q["id"],
+            "title": q["title"],
+            "icon": q["icon"],
+            "description": q["description"],
+            "opens_at": opens_at.isoformat(timespec="seconds"),
+            "closes_at": closes_at.isoformat(timespec="seconds") if closes_at else None,
+            "opens_in_days": max(0, (opens_at - now).days),
+        })
+    out.sort(key=lambda x: x["opens_at"])
+    return out
+
+
+def reevaluate_and_save(now: datetime | None = None,
+                        *, is_rollover: bool = False) -> dict:
+    """One-call helper: load achievements, evaluate, archive, save,
+    return summary. Used by the hourly background job, the daily
+    rollover timer, the inline post-event hook, and the manual
+    /api/achievements/quests/reevaluate API.
+
+    ``is_rollover`` triggers an extra INFO line summarising the
+    archive churn at week/month boundary so the operator sees the
+    rotation in `docker logs`.
     """
     from . import app_state
     from .routes.sichtungen import (
@@ -449,8 +614,15 @@ def reevaluate_and_save(now: datetime | None = None) -> dict:
             now=now,
             notify=_notify,
         )
+        # Archive any closed-window or catalog-removed entries the eval
+        # just produced. archive_closed_quests is idempotent — running
+        # twice yields the same dict.
+        updated, archived = archive_closed_quests(updated, now=now)
         _save_achievements(updated)
-    log.info("[quests] re-evaluated %d quests, %d newly completed: %s",
-             len(updated.get("quests") or {}), len(newly), newly)
+    log.info("[quests] re-evaluated %d quests, %d newly completed, %d archived: %s",
+             len(updated.get("quests") or {}), len(newly), len(archived), newly)
+    if is_rollover:
+        log.info("[quests] rollover: archived=%d new_active=%d",
+                 len(archived), len(updated.get("quests") or {}))
     return {"ok": True, "evaluated": len(updated.get("quests") or {}),
-            "newly_completed": newly}
+            "newly_completed": newly, "archived": [a["id"] for a in archived]}

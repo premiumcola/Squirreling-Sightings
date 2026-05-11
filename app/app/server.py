@@ -49,6 +49,7 @@ from .lifecycle import (  # noqa: E402
     _startup_media_scan,
 )
 from .maintenance import (  # noqa: E402
+    _run_daily_quest_rollover_check,
     _heartbeat_emit,
     _run_daily_cleanup,
     _run_hourly_quest_eval,
@@ -391,6 +392,7 @@ _run_daily_cleanup()
 
 
 _run_hourly_quest_eval()
+_run_daily_quest_rollover_check()
 
 
 

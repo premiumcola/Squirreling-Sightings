@@ -126,10 +126,16 @@ def _save_achievements(data: dict):
 def api_achievements_get():
     with _ach_lock:
         data = _load_achievements()
-    # Surface the quests block alongside the species map. Existing
-    # clients ignore unknown keys, so this is additive — pinned at
-    # top-level so the JS doesn't need a second roundtrip.
-    return jsonify({"achievements": data, "quests": data.get("quests") or {}})
+    # Surface every quest-related block alongside the species map so the
+    # frontend gets active + archive + upcoming-preview in one roundtrip.
+    # Existing clients ignore unknown keys — purely additive.
+    from ..quests import preview_upcoming_quests
+    return jsonify({
+        "achievements": data,
+        "quests": data.get("quests") or {},
+        "quests_archive": data.get("quests_archive") or {},
+        "upcoming": preview_upcoming_quests(),
+    })
 
 
 @bp.post('/api/achievements/quests/reevaluate')

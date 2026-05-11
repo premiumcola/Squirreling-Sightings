@@ -50,6 +50,52 @@ def _run_hourly_quest_eval():
     t.start()
 
 
+def _seconds_until_rollover_check() -> float:
+    """Seconds from now until the next 00:05 local-time tick. The
+    rollover timer fires once per day at that offset (5 min past
+    midnight) so the date has fully advanced before we check whether
+    today is Monday / day-of-month-1."""
+    import time as _time
+    now = _time.localtime()
+    # Build a struct_time for tomorrow at 00:05.
+    tomorrow_secs = _time.mktime(now) + 86400
+    target = _time.localtime(tomorrow_secs)
+    target_t = _time.struct_time((
+        target.tm_year, target.tm_mon, target.tm_mday,
+        0, 5, 0,
+        target.tm_wday, target.tm_yday, target.tm_isdst,
+    ))
+    target_secs = _time.mktime(target_t)
+    return max(60.0, target_secs - _time.mktime(now))
+
+
+def _run_daily_quest_rollover_check():
+    """Daily wake-up that checks whether today is a week-start
+    (Monday) or month-start (day-of-month == 1). When either is
+    true we run a full re-evaluation with ``is_rollover=True`` so the
+    archive sweep + rollover log line happen at that boundary. On
+    every other day this is a 1-line check and re-arm — cheap.
+
+    Runs in addition to the hourly job; the hourly catches drift
+    BETWEEN rollovers, the daily handles the rollover itself."""
+    import threading as _thr
+    from datetime import datetime as _dt
+    try:
+        today = _dt.now()
+        is_week_start = today.weekday() == 0          # Monday
+        is_month_start = today.day == 1
+        if is_week_start or is_month_start:
+            from .quests import reevaluate_and_save
+            reevaluate_and_save(is_rollover=True)
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            "[quests] daily rollover check failed: %s", e,
+        )
+    t = _thr.Timer(_seconds_until_rollover_check(), _run_daily_quest_rollover_check)
+    t.daemon = True
+    t.start()
+
+
 def _heartbeat_emit():
     """Single periodic [heartbeat] line that summarises every subsystem in
     one row. Reuses values already exposed elsewhere (rt.status(), the

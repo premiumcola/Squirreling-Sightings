@@ -144,11 +144,18 @@
   font-size:10.5px;color:rgba(255,255,255,.5);
   margin-top:3px;display:block;
 }
+/* Inline value pill ("3 ×" / "5 s" / "55 %" / "350 ms") sits at the
+   right edge of the .row alongside the slider. flex-shrink:0
+   guarantees it never compresses below its intrinsic content size
+   on iOS Safari — the previous min-width:42px alone was enough on
+   desktop, but a tight viewport could shrink it onto the slider
+   track when align-items:center stacked the children visually. */
 .erk-card .val{
   font-family:ui-monospace,"SF Mono",Menlo,monospace;
   font-size:10.5px;color:#cbd5e1;
-  min-width:42px;text-align:right;
+  min-width:48px;text-align:right;
   font-variant-numeric:tabular-nums;
+  flex-shrink:0;
 }
 /* Left-side row label — used by step 3's Treffer / Sekunden rows once
    they stack vertically on phones. Shown only when present so existing
@@ -206,19 +213,27 @@
   background:transparent;
   box-shadow:none;
 }
+/* Thumb colour aligned with the global input[type=range] rule in
+   01-base.css — var(--text) (off-white) instead of the previous
+   #7faec9 (cool blue) so every slider in the app reads the same
+   neutral on iOS. Sizes stay smaller than the global default
+   (13 px thumb vs 18 px) because step-3 packs two sliders into a
+   single card; the bigger global thumb would crowd the layout. */
 .erk-card input[type="range"]::-webkit-slider-thumb{
   -webkit-appearance:none;appearance:none;
   width:13px;height:13px;border-radius:50%;
-  background:#7faec9;border:0;cursor:pointer;
+  background:var(--text);border:0;cursor:pointer;
   margin-top:-5px;
-  transition:background .15s,transform .15s;
+  box-shadow:0 1px 4px rgba(0,0,0,.4);
+  transition:transform .15s;
 }
 .erk-card input[type="range"]::-webkit-slider-thumb:active{
-  background:#a4c5da;transform:scale(1.18);
+  transform:scale(1.18);
 }
 .erk-card input[type="range"]::-moz-range-thumb{
   width:13px;height:13px;border-radius:50%;
-  background:#7faec9;border:0;cursor:pointer;
+  background:var(--text);border:0;cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.4);
 }
 .erk-card input[type="range"]::-moz-range-track{
   height:3px;background:rgba(255,255,255,.14);border-radius:2px;

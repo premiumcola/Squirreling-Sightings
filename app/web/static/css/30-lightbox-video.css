@@ -135,8 +135,18 @@
 #lightboxModal.lb-fs-video #lightboxMediaWrap{
   flex:none!important;
   width:100%!important;
+  /* Clamp BOTH dimensions so ultrawide (21:9, 32:9) viewports keep
+     the wrap at a true 16:9 rectangle CENTRED horizontally instead
+     of stretching to a flat 3:1-ish letterbox. max-width is derived
+     from the same dvh budget the bottom stack reserves (320 px for
+     the scrubber + 2-3 swimlanes + ticks + tabs strip + tab body +
+     fold header); on standard 16:9 viewports the dvh cap rarely
+     kicks in. On vertical iPad / mobile portrait, the @media
+     override below restores width:100% so the wrap fills the
+     narrower screen. */
+  max-width:calc((100dvh - 320px) * 16 / 9);
   aspect-ratio:16/9;
-  max-height:calc(100dvh - 280px);
+  max-height:calc(100dvh - 320px);
   height:auto!important;
   min-height:0!important;
   background:#000!important;
@@ -145,7 +155,18 @@
   align-items:initial!important;
   justify-content:initial!important;
   position:relative;
-  margin:0!important;
+  margin:0 auto!important;
+}
+@media (max-width:768px){
+  /* Portrait phones / narrow tablets — the dvh-based max-width
+     can pinch the wrap inside a thin centred column even though
+     the screen is plenty narrow already. Restore width:100% so
+     the video uses the full horizontal real estate, and let the
+     bottom stack scroll if its content overflows (the tab
+     content already scrolls internally per the earlier fix). */
+  #lightboxModal.lb-fs-video #lightboxMediaWrap{
+    max-width:100%!important;
+  }
 }
 #lightboxModal.lb-fs-video #lightboxImg,
 #lightboxModal.lb-fs-video #lightboxVideo{

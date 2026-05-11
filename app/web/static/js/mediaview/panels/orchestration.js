@@ -77,24 +77,81 @@ function _renderRescanTab(host, item){
   });
 }
 
+// Field-label / unit lookup for weather-sighting api_snapshot rows.
+// Mirrors weather/sightings.js' WEATHER_FIELD_LABEL_DE / _UNIT_DE so
+// the tab reads the same as the legacy ws-lb-rows block did. Kept
+// inline (no shared module yet) because the rest of weather/* is in
+// a different load order and importing it here would add a dependency
+// cycle for one short dict.
+const _WS_FIELD_LBL = {
+  temperature_2m: 'Temperatur',
+  humidity_2m: 'Luftfeuchte',
+  precipitation: 'Niederschlag',
+  rain: 'Regen',
+  snowfall: 'Schnee',
+  cloud_cover: 'Bewölkung',
+  wind_speed_10m: 'Wind',
+  wind_gusts_10m: 'Wind-Böen',
+  pressure_msl: 'Luftdruck',
+  weather_code: 'Wettercode',
+  apparent_temperature: 'Gefühlt',
+  visibility: 'Sicht',
+};
+const _WS_FIELD_UNIT = {
+  temperature_2m: '°C',
+  humidity_2m: '%',
+  precipitation: 'mm',
+  rain: 'mm',
+  snowfall: 'cm',
+  cloud_cover: '%',
+  wind_speed_10m: 'km/h',
+  wind_gusts_10m: 'km/h',
+  pressure_msl: 'hPa',
+  apparent_temperature: '°C',
+  visibility: 'm',
+};
+
 function _renderWeatherTab(host, item){
+  // Two shapes are supported:
+  //   item.weather      → simple {temperature_c, cloud_cover_pct, …}
+  //                       (motion-clip / future generic timelapse)
+  //   item.api_snapshot → Open-Meteo raw snapshot dict (weather sighting)
+  // The sighting variant also carries item.sun_snapshot for sunsets /
+  // fog clips so the operator sees the altitude/azimuth alongside.
   const w = item?.weather;
-  if (!w || typeof w !== 'object'){
+  const snap = item?.api_snapshot;
+  const sun = item?.sun_snapshot;
+  if ((!w || typeof w !== 'object') && (!snap || typeof snap !== 'object')){
     host.innerHTML = `<div class="mv-rescan-empty">Keine Wetterdaten für diese Aufnahme.</div>`;
     return;
   }
-  const rows = [
-    ['Temperatur',  w.temperature_c, '°C'],
-    ['Bewölkung',   w.cloud_cover_pct, '%'],
-    ['Niederschlag', w.precip_mm, ' mm'],
-    ['Wind',        w.wind_kmh, ' km/h'],
-    ['Luftfeuchte', w.humidity_pct, '%'],
-    ['Bedingung',   w.condition, ''],
-  ].filter(([, v]) => v != null && v !== '');
+  let rows = [];
+  if (w && typeof w === 'object'){
+    rows = [
+      ['Temperatur',  w.temperature_c, '°C'],
+      ['Bewölkung',   w.cloud_cover_pct, '%'],
+      ['Niederschlag', w.precip_mm, ' mm'],
+      ['Wind',        w.wind_kmh, ' km/h'],
+      ['Luftfeuchte', w.humidity_pct, '%'],
+      ['Bedingung',   w.condition, ''],
+    ];
+  } else if (snap){
+    rows = Object.entries(snap)
+      .filter(([k, v]) => v !== null && v !== undefined && k !== 'time')
+      .map(([k, v]) => [_WS_FIELD_LBL[k] || k, v, _WS_FIELD_UNIT[k] || '']);
+  }
+  rows = rows.filter(([, v]) => v != null && v !== '');
+  const sunRows = (sun && typeof sun === 'object')
+    ? Object.entries(sun)
+        .filter(([, v]) => v !== null && v !== undefined)
+        .map(([k, v]) => [k === 'altitude' ? 'Sonne · Höhe' : 'Sonne · Azimut',
+                          Number(v).toFixed(1), '°'])
+    : [];
+  const allRows = [...rows, ...sunRows];
   host.innerHTML = `
     <div class="mv-weather">
-      ${rows.map(([k, v, unit]) =>
-        `<div class="mv-weather-row"><span class="mv-weather-key">${k}</span><span class="mv-weather-val">${v}${unit}</span></div>`,
+      ${allRows.map(([k, v, unit]) =>
+        `<div class="mv-weather-row"><span class="mv-weather-key">${k}</span><span class="mv-weather-val">${v}${unit ? ' ' + unit : ''}</span></div>`,
       ).join('')}
     </div>`;
 }
@@ -130,9 +187,13 @@ export function mountRecordedPanels(item){
     label: 'Nach-Erkennung',
     render: (h) => _renderRescanTab(h, item) });
   // Weather tab — mounted whenever the item carries a weather
-  // snapshot. Motion clips usually don't; timelapses produced by
-  // the weather service do.
-  if (item.weather && typeof item.weather === 'object'){
+  // snapshot. Two shapes are accepted: item.weather (normalised
+  // pairs) and item.api_snapshot (raw Open-Meteo dict, used by
+  // weather sightings via openTLPlayer). Motion clips usually
+  // carry neither; timelapses + weather sightings do.
+  const hasWeather = !!((item.weather && typeof item.weather === 'object')
+                         || (item.api_snapshot && typeof item.api_snapshot === 'object'));
+  if (hasWeather){
     tabs.push({ id: 'weather',
       label: 'Wetter',
       render: (h) => _renderWeatherTab(h, item) });
@@ -142,7 +203,7 @@ export function mountRecordedPanels(item){
   // otherwise Nach-Erkennung. Motion clips keep Aufnahme-Settings
   // as the entry point.
   let initialId;
-  if (isTimelapse && item.weather) initialId = 'weather';
+  if (isTimelapse && hasWeather) initialId = 'weather';
   else if (isTimelapse) initialId = 'rescan';
   else initialId = 'settings';
   renderPanelTabs(tabsHost, tabs, { initialId });

@@ -226,7 +226,7 @@ function _renderWeatherGrid(){
       </div>`;
   }).join('');
   grid.querySelectorAll('.ws-card').forEach(card => {
-    card.addEventListener('click', () => openWeatherLightbox(parseInt(card.dataset.idx, 10)));
+    card.addEventListener('click', () => _openSightingInLightbox(parseInt(card.dataset.idx, 10)));
   });
   _renderWeatherPagination(items.length, pageSize);
   // Score badges fire a toast with the metric explanation on tap —
@@ -297,6 +297,49 @@ window.addEventListener('resize', () => {
 }, { passive: true });
 
 let _wsLbIdx = -1;
+
+// Open a weather sighting in the main motion-clip lightbox shell
+// (scrubber, ticks, panel-tab strip with Wetter + Nach-Erkennung +
+// fine-analysis fold, Space / ← → keyboard, …) instead of the
+// legacy wsLightbox modal. The sighting payload is reshaped into
+// the timelapse item shape openTLPlayer expects; api_snapshot +
+// sun_snapshot ride along so the Wetter tab renders the same rows
+// the old static block did. Legacy openWeatherLightbox stays as
+// the fallback if openTLPlayer is unavailable (e.g. lightbox.js
+// failed to load).
+function _openSightingInLightbox(idx){
+  const items = state.weather.itemsFiltered || state.weather.items || [];
+  if (idx < 0 || idx >= items.length){ return; }
+  const s = items[idx];
+  const open = typeof window !== 'undefined' && window.openTLPlayer;
+  if (typeof open !== 'function'){
+    openWeatherLightbox(idx);
+    return;
+  }
+  const synth = {
+    type: 'timelapse',
+    event_id: s.id,
+    camera_id: s.cam_id,
+    camera_name: s.cam_name,
+    // openTLPlayer reads video_url / video_relpath / url / relpath in
+    // that order; the sighting clip is served through a dedicated
+    // weather endpoint so a plain video_url drops it in unchanged.
+    video_url: `/api/weather/sightings/${encodeURIComponent(s.id)}/clip`,
+    // Tag the source so the Wetter tab renders sighting rows; the
+    // existing api_snapshot key already carries the Open-Meteo dict.
+    api_snapshot: s.api_snapshot,
+    sun_snapshot: s.sun_snapshot,
+    event_type: s.event_type,
+    started_at: s.started_at,
+    duration_s: s.duration_s,
+    // Periodlabel + window_key drive the meta-bar badges in
+    // openTLPlayer. Synthesised from the sighting's metadata so the
+    // header reads like an ordinary timelapse.
+    profile: s.event_type || 'weather',
+    window_key: s.started_at,
+  };
+  open(synth);
+}
 
 function openWeatherLightbox(idx){
   // Cards carry an absolute index into the filtered list (the slice

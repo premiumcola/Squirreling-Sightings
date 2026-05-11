@@ -198,6 +198,10 @@
   gap:8px;
   padding:8px 14px 10px 14px;
   background:#000;
+  /* Anchors the stack-level .lb-play-cursor so the playhead line can
+     visually cut through both the sidebar (badges) and the time
+     column (strips) at the same vertical axis. */
+  position:relative;
 }
 .lb-sidebar{
   /* 96 px fixed — house the play button, every class badge, and a
@@ -213,7 +217,11 @@
   min-width:0;
   display:flex;flex-direction:column;
   gap:6px;
-  position:relative;     /* anchors .lb-play-cursor */
+  /* position:relative kept so strips inside form their own z-index
+     stacking context (the older `defensive z-index on every sibling`
+     comment below); the play cursor moved up to .lb-time-stack so
+     it can visually span sidebar + time column. */
+  position:relative;
 }
 
 /* Sidebar — play button at the top, badges below, tick spacer at
@@ -364,25 +372,37 @@
   font-style:italic;
 }
 
-/* ── Play cursor — child of .lb-time-col ───────────────────────────────── */
+/* ── Play cursor — child of .lb-time-stack (since the playhead refactor) ── */
 /* SINGLE HEAD: the scrubber thumb is the visual head. The play
    cursor is just a vertical 2 px white line + soft glow that starts
-   directly under the thumb (top:22 px = scrubber row mid 16 + thumb
-   radius 6) and runs down through every strip to the tick row
-   bottom. No dot pseudo-element — that would be a second head
-   stacked on the thumb's exact x.
+   directly under the thumb and runs down through every strip to the
+   tick row bottom. Sits at the stack level so the line visually
+   spans BOTH the sidebar (class badges) and the time column
+   (strips) — the prompt's "ONE playhead line cutting every row at
+   the same x." A full row-by-row restructure (icon+label INSIDE each
+   row, no sidebar separation) is a follow-up — leaving the existing
+   layout in place keeps the lightbox stable while still giving the
+   continuous visual playhead today.
 
    z-index:100 so the line draws above every strip / badge content;
    defensive z-index on every sibling inside .lb-time-col guards
    against stacking-context gotchas. */
 .lb-play-cursor{
   position:absolute;
-  /* Skip the scrubber row's first 22 px — the thumb (12 px circle
-     centred at y=16) ends at y=22. The line picks up from there
-     and the thumb visually serves as the line's head. */
-  top:22px;
-  bottom:0;
-  left:calc(var(--play-pct,0) * 100%);
+  /* top = stack padding-top (8) + scrubber-thumb radius offset (14)
+     so the line picks up exactly where the thumb's bottom edge
+     finishes. The thumb is 12 px tall centred on the 32 px scrubber
+     row mid (16), so its bottom is at 22 px inside the time-col.
+     Stack padding adds another 8 → 30 from the padding-box top. */
+  top:30px;
+  bottom:10px;       /* match stack padding-bottom (10) */
+  /* X = sidebar offset (96 fixed + 8 gap = 104) within the time-col
+     coord system, expanded to the stack's padding-box. Stack has
+     14 px left padding + 96 sidebar + 8 gap before the time-col
+     starts, so left:0 (padding-box) maps to that 0 px offset.
+     The bars region width = padding-box width - 14 (left pad) - 96
+     - 8 (gap) - 14 (right pad) = padding-box width - 132. */
+  left:calc(118px + var(--play-pct,0) * (100% - 132px));
   width:0;
   pointer-events:none;
   z-index:100;

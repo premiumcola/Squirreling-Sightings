@@ -171,20 +171,26 @@ export function lbRenderTrackTimeline(item){
     timeColParts.push(`<div class="lbtt-ticks">${ticksHtml}</div>`);
   }
 
-  // Play cursor — always present in the time column. Its left is a
-  // CSS calc against --play-pct so the position updates automatically
-  // when the rAF loop writes the variable. The 16 px hit-area sibling
-  // captures pointer events for drag-to-scrub.
-  timeColParts.push(`
+  // Play cursor — promoted to a STACK-level sibling (was: inside the
+  // time column) so its 2 px line visually cuts through every row at
+  // the same x — sidebar badges AND time-col strips. The CSS picks
+  // up the same --play-pct variable on the stack so a single rAF
+  // write still paints scrubber-fill width + scrubber-thumb left +
+  // playhead-cursor left in lockstep. The 16 px hit-area sibling
+  // still captures pointer events for drag-to-scrub; its mapping
+  // through .lb-time-col's bounding rect (in time-axis.js) is
+  // unchanged.
+  const playCursor = `
     <div class="lb-play-cursor" aria-hidden="true">
       <div class="lb-play-line"></div>
       <div class="lb-play-hit"></div>
-    </div>`);
+    </div>`;
 
   host.innerHTML = `
     <div class="lb-time-stack" style="--play-pct:0">
       <div class="lb-sidebar">${sidebarParts.join('')}</div>
       <div class="lb-time-col">${timeColParts.join('')}</div>
+      ${playCursor}
     </div>`;
 
   // Wire badge / bar clicks + bar-end tooltip + scrubber + play btn

@@ -237,6 +237,7 @@
    panel from max-height:0 to display:none so it doesn't participate
    in collapsed-state sizing at all. */
 .cv-pill-live-wrap{
+  position:relative;
   display:inline-flex;
   align-items:center;
   gap:6px;
@@ -255,6 +256,10 @@
   transition:background .18s,border-color .18s,padding .18s,border-radius .18s;
   /* explicitly NO width, NO max-width, NO min-width — flex hugs */
 }
+/* iOS 44 × 44 touch hitbox — same pattern as .cv-chrome-btn / channel
+   pill. inset:-7px 0 grows the hit area vertically without disturbing
+   the inline-flex sizing horizontally. */
+.cv-pill-live-wrap::before{content:"";position:absolute;inset:-7px 0;pointer-events:auto}
 .cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
 
 /* Collapsed-state children. parent gap:6 + .cv-live-fps margin-left:2
@@ -385,6 +390,10 @@
 }
 .cv-pill-channel-wrap .cv-channel-label{flex-shrink:0}
 .cv-pill-channel-wrap .cv-live-arrow{opacity:.55;flex-shrink:0}
+/* iOS 44 × 44 touch hitbox via a transparent ::before — keeps the
+   visual pill at its natural 30 px height while the actual tap target
+   grows vertically. Same pattern as .cv-chrome-btn::before. */
+.cv-pill-channel-wrap::before{content:"";position:absolute;inset:-7px 0;pointer-events:auto}
 /* Hidden until the pill opens — same display:none gate the Live-pill
    uses so the panel's intrinsic content width never leaks into the
    collapsed pill's flex sizing. */

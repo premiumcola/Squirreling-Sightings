@@ -89,7 +89,11 @@
 .cv-chrome-top-right{position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
 .cv-chrome-bottom-left{position:absolute;left:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);display:flex;align-items:center;gap:6px;z-index:3;pointer-events:none}
 .cv-chrome-bottom-left > *{pointer-events:auto}
-.cv-chrome-bottom-right{position:absolute;right:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);display:flex;align-items:center;gap:6px;z-index:6}
+/* pq924 — align-items:flex-end so the channel cluster's BOTTOM row
+   (TG/MQTT badges) lines up with the Sim / Cog pills next to it,
+   and the schedule label peeks above. Previously align-items:center
+   would have floated Sim/Cog up to the cluster's vertical centre. */
+.cv-chrome-bottom-right{position:absolute;right:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);display:flex;align-items:flex-end;gap:6px;z-index:6}
 
 /* ── Unified chrome button (vh367 base; full audit lands in tw284)
    30 px height by default · radius 8 · dark transparent bg · single
@@ -132,8 +136,29 @@
 .cv-class-pill{width:30px;color:var(--icon-tint, #fff)}
 .cv-class-pill[data-state="muted"]{color:rgba(255,255,255,.5)}
 .cv-class-pill svg{width:18px;height:18px;display:block}
-/* Schedule pill — tabular nums keep the time digits aligned. */
-.cv-schedule-pill{font-feature-settings:"tnum" 1;font-size:11px;letter-spacing:.01em}
+/* pq924 — channel cluster: muted schedule label STACKED above the
+   TG/MQTT badge row in the bottom-right cluster. The label is text
+   metadata (smaller font, lower opacity, smaller padding) so it
+   reads as a property of the icon below rather than a peer chrome
+   pill. Tabular nums keep the time digits aligned. The cluster's
+   empty-when-no-channel suppression happens in dashboard.js
+   (_hasChannel check); when at least one channel is enabled, the
+   cluster renders and the label appears if a schedule window is
+   actually configured. */
+.cv-channel-cluster{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.cv-channel-row{display:flex;align-items:center;gap:6px}
+.cv-channel-schedule{
+  font-size:10px;font-weight:500;letter-spacing:.02em;
+  color:rgba(255,255,255,.62);
+  background:rgba(0,0,0,.55);
+  padding:2px 7px;border-radius:5px;
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1;
+  pointer-events:none;
+  -webkit-backdrop-filter:blur(6px);
+  backdrop-filter:blur(6px);
+}
 .cv-name{color:#fff;font-weight:700;font-size:15px;text-shadow:0 1px 6px rgba(0,0,0,.8);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:50%}
 .cv-title-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;line-height:1;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))}
 .cv-loc{color:rgba(255,255,255,.7);font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.8)}

@@ -693,6 +693,21 @@ function _channelTooltip(c, kind){
   return `${label} · dauerhaft aktiv`;
 }
 
+// pq924 — schedule window label that sits ABOVE the TG/MQTT channel
+// badges as a subtle metadata line. Same data the bottom-left
+// schedule pill used to surface (c.schedule_notify takes precedence
+// over the legacy c.schedule when enabled). Returns '' when there
+// is no timed window to render. Explicit 00:00↔00:00 (the encoding
+// the schema uses for "always-on") collapses to '24 h aktiv'.
+function _scheduleLabel(c){
+  const sch = (c.schedule_notify && c.schedule_notify.enabled)
+    ? c.schedule_notify
+    : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
+  if (!sch || !sch.from || !sch.to) return '';
+  if (sch.from === sch.to) return '24 h aktiv';
+  return `${sch.from} – ${sch.to}`;
+}
+
 
 // Camera-tile grid renderer. Builds every visible cv-card from
 // state.cameras. The template string carries inline onclick handlers
@@ -713,11 +728,13 @@ export function renderDashboard(){
     const fps = c.frame_interval_ms ? Math.round(1000 / c.frame_interval_ms) : null;
     const previewFps = (c.preview_fps || 0) > 0 ? c.preview_fps : null;
     const streamMode = c.stream_mode || 'baseline';
-    // zg531 — class filter pills + schedule pill in the bottom-left
-    // chrome cluster. One pill per class in object_filter; class_severity
-    // === "off" renders muted (opacity .38, no tint). Schedule pill only
-    // when the legacy c.schedule is enabled with from/to.
-    const _sch = c.schedule || {};
+    // pq924 — bottom-LEFT now carries ONLY the class-filter pills.
+    // The schedule pill that used to live here collided with the
+    // camera's burnt-in HUD clock at the bottom of the frame, so the
+    // schedule window moved into a muted label above the TG/MQTT
+    // channel cluster in the bottom-right (see _channelCluster below
+    // + _scheduleLabel helper). class_severity === "off" renders the
+    // pill muted (opacity .38, no tint).
     const _clsSev = c.class_severity || {};
     const _classPills = (c.object_filter || []).map(cls => {
       const muted = _clsSev[cls] === 'off';
@@ -729,11 +746,7 @@ export function renderDashboard(){
         + ` aria-label="${esc(lbl)}${muted ? ' — stumm' : ''}">`
         + `${_chromeClassSvg(cls)}</div>`;
     }).join('');
-    const _schedulePill = (_sch.enabled && _sch.from && _sch.to)
-      ? `<div class="cv-chrome-btn cv-schedule-pill has-text" title="Aktivitätszeit">${esc(_sch.from)}–${esc(_sch.to)}</div>`
-      : '';
-    // xq583 — Telegram + MQTT channel badges moved to bottom-LEFT
-    // (after class/schedule pills). When the camera is currently
+    // Telegram + MQTT channel badges. When the camera is currently
     // armed within its alarm schedule, the pill grows with a duration
     // text suffix ("noch 6h 12m" / "aktiv"). State-dot colour reflects
     // armed × in-schedule semantics (see _channelState).
@@ -749,6 +762,19 @@ export function renderDashboard(){
       : '';
     const _mqttBadge = c.mqtt_enabled
       ? `<div class="${_chanCls} cv-mqtt-badge" data-state="${_chanState}" title="${esc(_channelTooltip(c, 'mqtt'))}" aria-label="MQTT-Kanal">${_CHROME_MQTT_SVG}${_chanText}${_stateDot(_chanState)}</div>`
+      : '';
+    // pq924 — channel cluster (schedule label + TG/MQTT badges).
+    // Schedule label is a muted text line ABOVE the badges, semantically
+    // attached to the notification icon below it (the schedule defines
+    // WHEN those channels fire). Renders only when at least one channel
+    // is enabled — silent cameras don't need a schedule string.
+    const _scheduleLbl = _scheduleLabel(c);
+    const _hasChannel = c.telegram_enabled || c.mqtt_enabled;
+    const _channelCluster = _hasChannel
+      ? `<div class="cv-channel-cluster">`
+        + (_scheduleLbl ? `<span class="cv-channel-schedule">${esc(_scheduleLbl)}</span>` : '')
+        + `<div class="cv-channel-row">${_tgBadge}${_mqttBadge}</div>`
+        + `</div>`
       : '';
     return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
@@ -802,8 +828,9 @@ ${isActive ? `
         ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
       </div>
 ` : ''}
-      <div class="cv-chrome-bottom-left">${_classPills}${_schedulePill}${_tgBadge}${_mqttBadge}</div>
+      <div class="cv-chrome-bottom-left">${_classPills}</div>
       <div class="cv-chrome-bottom-right">
+        ${_channelCluster}
         ${c.rtsp_url && isActive ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>
       </div>

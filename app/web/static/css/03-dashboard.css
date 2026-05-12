@@ -296,10 +296,19 @@
 .cv-img-wrap:fullscreen .cv-img,
 .cv-img-wrap:-webkit-full-screen .cv-img,
 .cv-img-wrap.fake-fullscreen .cv-img{
+  /* Earlier we used width:auto;height:auto + max-*:100% so the
+     intrinsic image size combined with the wrap's flex centring
+     produced a letterbox. That works for 16:9 displays but breaks on
+     21:9 / 32:9 monitors when the MJPEG stream reports an unusual
+     intrinsic size — the browser falls back to "auto" sizing in a
+     way that bypasses object-fit and the image renders cropped.
+     Forcing both dimensions to 100% + !important guarantees object-
+     fit:contain controls the visible rect regardless of intrinsic
+     dimensions; the wrap background paints the gutters. */
   position:static;
   inset:auto;
-  width:auto;
-  height:auto;
+  width:100% !important;
+  height:100% !important;
   max-width:100%;
   max-height:100%;
   object-fit:contain;

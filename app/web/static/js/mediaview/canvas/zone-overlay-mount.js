@@ -116,10 +116,21 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
  * Live-toggle either the zone or mask layer's visibility without
  * unmounting the ResizeObserver. Called by the overlay-toggles bar
  * when the user flips a pill.
+ *
+ * bm491 — explicit clearRect before redrawing so the canvas never
+ * carries a stale polygon when the user clicks the same toggle a
+ * second time. renderZoneLayer's own clearRect should already cover
+ * this; the belt-and-suspenders clear here makes the round-trip
+ * bulletproof against any future refactor of the layer renderer.
  */
 export function setZoneOverlayVisibility({ showZones, showMasks }){
   if (typeof showZones === 'boolean') _visibility.showZones = showZones;
   if (typeof showMasks === 'boolean') _visibility.showMasks = showMasks;
+  const c = document.getElementById(_ZONE_CANVAS_ID);
+  if (c){
+    const ctx = c.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, c.width, c.height);
+  }
   if (_redrawFn) _redrawFn();
 }
 window._setZoneOverlayVisibility = setZoneOverlayVisibility;

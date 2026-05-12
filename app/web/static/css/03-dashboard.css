@@ -282,11 +282,28 @@
 .cv-img-wrap:-webkit-full-screen,
 .cv-img-wrap.fake-fullscreen{
   background:#000;
+  /* Flex-centre the image so 16:9 sources letterbox cleanly on
+     21:9 / 32:9 monitors. The .cv-img child has to escape its
+     normal position:absolute;inset:0 (which forces it to the
+     wrap's full rectangle and defeats flex alignment) — the
+     overrides below switch it back to position:static + max
+     constraints so object-fit:contain produces black gutters
+     on the WRAP background, not on the image element. */
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 .cv-img-wrap:fullscreen .cv-img,
 .cv-img-wrap:-webkit-full-screen .cv-img,
 .cv-img-wrap.fake-fullscreen .cv-img{
+  position:static;
+  inset:auto;
+  width:auto;
+  height:auto;
+  max-width:100%;
+  max-height:100%;
   object-fit:contain;
+  background:transparent;
 }
 .cv-img-wrap.fake-fullscreen{
   position:fixed;inset:0;

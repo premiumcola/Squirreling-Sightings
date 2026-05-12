@@ -787,9 +787,26 @@ export function renderDashboard(){
       <img class="cv-img cam-snap" src="${snapUrl}" alt="${esc(c.name)}" data-hd-mode="${hdOn ? '1' : '0'}"
         onload="_cvImgLoaded(this)"
         onerror="_camImgRetry(this)" />
-      <div class="cv-grad-top"></div>
-${isActive ? `      <div class="cv-grad-bot"></div>` : ''}
-      <div class="cv-chrome-top-left">
+      <div class="cv-grad-bot"></div>
+${isActive ? `
+      <div class="cv-chrome-top-right">
+        <div class="cv-tr-row">
+          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-hd-badge has-text${hdOn ? ' active' : ''}" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau" aria-label="HD-Vorschau ein/aus">HD</button>` : ''}
+          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvToggleFullscreen && window._cvToggleFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild">
+            <svg class="fs-icon-expand" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 14v7h7"/><path d="M21 10V3h-7"/>
+              <path d="M3 21l8-8"/><path d="M21 3l-8 8"/>
+            </svg>
+            <svg class="fs-icon-minimize" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 3v7H3"/><path d="M14 21v-7h7"/>
+              <path d="M10 10L3 3"/><path d="M14 14l7 7"/>
+            </svg>
+          </button>` : ''}
+        </div>
+        ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
+      </div>
+` : ''}
+      <div class="cv-chrome-bottom-left">
         <div class="cv-name-row">
           <span class="cv-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
           <div class="cv-name">${esc(c.name)}</div>
@@ -815,26 +832,8 @@ ${isActive ? `
         ${c.location ? `<div class="cv-loc">${esc(c.location)}</div>` : ''}
       </div>
 ${isActive ? `
-      <div class="cv-chrome-top-right">
-        <div class="cv-tr-row">
-          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-hd-badge has-text${hdOn ? ' active' : ''}" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau" aria-label="HD-Vorschau ein/aus">HD</button>` : ''}
-          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvToggleFullscreen && window._cvToggleFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild">
-            <svg class="fs-icon-expand" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 14v7h7"/><path d="M21 10V3h-7"/>
-              <path d="M3 21l8-8"/><path d="M21 3l-8 8"/>
-            </svg>
-            <svg class="fs-icon-minimize" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M10 3v7H3"/><path d="M14 21v-7h7"/>
-              <path d="M10 10L3 3"/><path d="M14 14l7 7"/>
-            </svg>
-          </button>` : ''}
-        </div>
-        ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
-      </div>
-` : ''}
-${isActive ? `
-      <div class="cv-chrome-bottom-left">${_classPills ? `<div class="cv-class-cluster">${_classPills}</div>` : ''}</div>
       <div class="cv-chrome-bottom-right">
+        ${_classPills ? `<div class="cv-class-cluster">${_classPills}</div>` : ''}
         ${_channelCluster}
         ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>

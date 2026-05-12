@@ -136,10 +136,18 @@ class TestCameraSlug:
         assert camera_slug(None, "reolink_cx810_terrasse_181") == \
             "reolinkcx810terrasse181"
 
-    def test_empty_camera_id_returns_unknown(self):
+    def test_empty_camera_id_returns_sha_fallback(self):
         s = _FakeSettings([])
-        # No display name, no camera_id — last-resort sentinel.
-        assert camera_slug(s, "") == "unknown"
+        # No display name, no camera_id — historic behaviour was the
+        # literal sentinel "unknown", which was filesystem-safe but
+        # made two pathological cameras collide on disk. Task xb293
+        # replaced it with a deterministic ``cam<6hex>`` so two
+        # different pathological inputs produce distinct slugs while
+        # the same input is still deterministic across calls.
+        out = camera_slug(s, "")
+        assert out.startswith("cam")
+        assert len(out) == 9
+        assert not out.endswith("_")
 
     def test_distinct_slugs_for_slug_collision_first_letters(self):
         """Two cameras whose display names share their leading
@@ -197,3 +205,53 @@ class TestMakeOutputName:
             b = tb.make_output_name("2026-05-12", "day", 0, 60,
                                     cam_slug="gartenterrasse")
             assert a != b
+
+
+class TestCameraSlugNeverEmpty:
+    """``camera_slug`` must never return "" — the upstream filename
+    concatenation appends ``"_" + slug`` so an empty slug produces a
+    trailing-underscore filename like ``2026-05-12_sunrise_.mp4``
+    (task xb293). The fallback path uses a SHA1-derived ``"cam<hex>"``
+    so two pathological cameras never collide."""
+
+    def test_empty_name_and_empty_camera_id(self):
+        out = camera_slug(None, "")
+        assert out, "slug must not be empty"
+        assert not out.endswith("_")
+        assert not out.startswith("_")
+        assert out.startswith("cam")
+        assert len(out) == 9  # "cam" + 6 hex chars
+
+    def test_pathological_all_symbols_name_and_id(self):
+        # Both sanitise to "" — fall through to the SHA1 fallback
+        # instead of returning raw camera_id (which would smuggle
+        # "???" into a filename).
+        s = _FakeSettings(cameras=[{"id": "???", "name": "—@@!"}])
+        out = camera_slug(s, "???")
+        assert out
+        assert not out.endswith("_")
+        assert out.startswith("cam")
+
+    def test_deterministic_for_same_input(self):
+        # Two calls with the same pathological input produce the
+        # same fallback slug so a rescan storm doesn't fragment the
+        # user's files into multiple "cam<hex>" buckets.
+        a = camera_slug(None, "")
+        b = camera_slug(None, "")
+        assert a == b
+
+    def test_distinct_pathological_inputs_distinct_slugs(self):
+        # Two different pathological inputs hash to different slugs
+        # so two pathological cameras don't collide on disk.
+        a = camera_slug(None, "")
+        b = camera_slug(None, "@@@")
+        assert a != b
+
+    def test_normal_name_still_wins(self):
+        # The fallback path must NOT fire when the regular sanitise
+        # produces a real slug from the camera's display name.
+        s = _FakeSettings(cameras=[
+            {"id": "cam1", "name": "Garten 'Dach Terrasse'"},
+        ])
+        out = camera_slug(s, "cam1")
+        assert out == "gartendachterrasse"

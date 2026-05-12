@@ -26,6 +26,7 @@ Examples (IPs from RFC 5737/3849 documentation ranges)::
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 
@@ -126,7 +127,14 @@ def camera_slug(settings, camera_id: str) -> str:
     slug = _sanitise(camera_id or "")
     if slug:
         return slug
-    return camera_id or "unknown"
+    # Pathological — both name and camera_id sanitise to empty (the
+    # caller passed "" / None / all-symbols). Return a deterministic
+    # "cam<hex>" so the filename concatenation upstream never produces
+    # a trailing underscore (the bug task xb293 guards against) and
+    # two different pathological cameras never collide.
+    seed = (name or "") + "|" + (camera_id or "")
+    digest = hashlib.sha1(seed.encode("utf-8", errors="ignore")).hexdigest()
+    return f"cam{digest[:6]}"
 
 
 def build_camera_id(manufacturer: str, model: str, name: str, ip: str) -> str:

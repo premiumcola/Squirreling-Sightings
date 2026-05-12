@@ -77,6 +77,29 @@
   }
 }
 
+/* ── Sticky video + scrollable panel · landscape (fm824) ──────────────────
+   On TALL landscape viewports the cm-44 rule above doesn't engage,
+   yet the bottom panel (log / tab strip / fine-analysis fold) can
+   still extend past 100dvh because users have lots of detection
+   history to scroll through. Pattern A: pin the media wrap at the
+   top of the inner column (sticky, top: 0, max-height: 60dvh) and
+   let the rest of the column scroll inside #lightboxInner. Video
+   stays visible while the user reads the panel below it. Portrait
+   keeps its existing layout — phone viewports don't need this. */
+@media (orientation: landscape){
+  #lightboxModal.lb-fs-video #lightboxInner{
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+  }
+  #lightboxModal.lb-fs-video #lightboxMediaWrap{
+    position:sticky;
+    top:0;
+    max-height:60dvh;
+    z-index:5;
+  }
+}
+
 /* ── Top bar ───────────────────────────────────────────────────────────── */
 #lightboxTopBar{
   flex-shrink:0;

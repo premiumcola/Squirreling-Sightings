@@ -57,21 +57,41 @@
   min-height:52px;
   background:#000;
   color:#e2e8f0;
-  z-index:10;
+  /* z-index above the prev/next chevrons (which carry z-index:10 in
+     06a-cam-edit-zones-masks.css) so they can't visually bleed into
+     the top-bar geometry on narrow iPhone screens. */
+  z-index:12;
+  position:relative;
 }
 #lightboxTopBar[hidden]{ display:none; }
 #lightboxTopMeta{
   display:flex;flex-direction:column;
   gap:2px;
   min-width:0;flex:1 1 auto;overflow:hidden;
+  /* Defensive — keep the title left-aligned regardless of any
+     parent direction / text-align inherited from an outer modal
+     skin. Without these, iPhone Safari was clipping FIRST chars
+     instead of last (camera names showing "uirrel Town 'Nut Bar'"
+     instead of "Squirrel Town 'Nu…") because the parent flex axis
+     placed content right-anchored at narrow widths. */
+  text-align:left;
+  direction:ltr;
 }
 #lightboxTopCam{
+  display:block;
+  width:100%;
+  text-align:left;
+  direction:ltr;
   font-size:14px;font-weight:500;letter-spacing:.01em;
   color:#f1f5f9;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   line-height:1.25;
 }
 #lightboxTopTime{
+  display:block;
+  width:100%;
+  text-align:left;
+  direction:ltr;
   font-family:ui-monospace,Menlo,Consolas,monospace;
   font-size:12px;font-weight:500;
   color:rgba(226,232,240,.55);

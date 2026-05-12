@@ -27,31 +27,50 @@ html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@me
    hero. Keeping them in flow forced icon shifts between states. */
 .sidebar{padding:8px;position:sticky;top:8px;height:max-content;flex-shrink:0;width:260px;transition:width .35s cubic-bezier(0.4,0,0.2,1);overflow:hidden}
 .sidebar.collapsed{width:52px}
-/* Use display:none, not opacity:0 — opacity leaves the label width in
-   the flex layout, which pushed the icon to the left edge of the row
-   and made the icon "jump" horizontally as the sidebar
-   width-transitioned open. Removing the labels from layout entirely
-   in collapsed mode keeps the icon's x-position rock-stable across
-   the open/close animation. The mobile breakpoint (04-coral-1.css)
-   never adds .collapsed, so mobile labels stay visible. */
-.sidebar.collapsed .nav-label,.sidebar.collapsed .nav-chev{display:none}
+/* nw273 — in collapsed mode the icon's grid column already pins its
+   x-position; the label column just animates from 0 width to its
+   natural width without affecting the icon. max-width + padding 0
+   collapses the label out of layout via the standard transition
+   (rather than a hard display:none) so the open/close animation reads
+   as "the label slides out to the right of the icon" instead of
+   "everything reflows at the end of the slide". .nav-chev is the
+   Einstellungen submenu chevron — same treatment for consistency. */
+.sidebar.collapsed .nav-label{max-width:0;padding-left:0;opacity:0}
+.sidebar.collapsed .nav-chev{opacity:0}
 /* Sidebar brand block — redundant with the hero header, dropped
    from the sidebar entirely so the first nav item sits at the
    very top in both states. */
 .sidebar .brand{display:none}
 .logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:#14314c;flex-shrink:0}
 .nav{display:grid;gap:2px}
-.nav a{padding:8px;border-radius:20px;background:transparent;display:flex;align-items:center;justify-content:flex-start;gap:10px;white-space:nowrap;min-height:auto;color:#cbd5e1;transition:background .15s ease,color .15s ease;-webkit-tap-highlight-color:transparent;border:none;width:100%;font:inherit;text-align:left;cursor:pointer}
+/* nw273 — grid layout, fixed icon column. The icon column is locked
+   at 36 px wide regardless of the sidebar's expansion state, so the
+   icon x-position is identical whether the rail is collapsed (52 px),
+   hover-expanded (260 px), or fully expanded on tablet. The previous
+   flex setup re-centred the icon inside the 36 px content area when
+   collapsed, then flipped to flex-start with `padding:8px` on hover,
+   and even though the math came out equal in theory, sub-pixel
+   rounding and the simultaneous halo-size shrink (32→20) made the
+   icon visibly tic to the right during the open transition. With a
+   dedicated 36 px grid column the icon centre is pinned and only the
+   label column changes width. */
+.nav a{padding:4px 0;border-radius:20px;background:transparent;display:grid;grid-template-columns:36px 1fr;align-items:center;gap:0;white-space:nowrap;min-height:auto;color:#cbd5e1;transition:background .15s ease,color .15s ease;-webkit-tap-highlight-color:transparent;border:none;width:100%;font:inherit;text-align:left;cursor:pointer}
 @media (max-width:768px){.nav a{min-height:44px}}
 .nav a:hover{background:rgba(255,255,255,.05)}
 .nav a.nav-active{background:rgba(255,255,255,.10);color:#fff}
-.nav-icon{flex-shrink:0;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center}
+/* Icon column — fixed 36 × 32 hit area, content centred. Halo paints
+   ON .nav-icon via the .sidebar.collapsed override further down; the
+   base rule keeps the bare-icon centre at the same x as the haloed
+   one (36 px column / 2 = 18, irrespective of inner halo size). */
+.nav-icon{justify-self:center;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;transition:background .15s ease}
 .nav-icon svg{width:20px;height:20px;display:block;transition:stroke .15s ease}
-/* Labels + chevrons fade slightly faster than the .sidebar width
-   transition so the text disappears before the box finishes
-   closing — keeps the impression of "the right side slides in" and
-   never of "letters get squashed by the moving edge". */
-.nav-label,.nav-chev{opacity:1;transition:opacity .18s ease}
+/* Labels fade slightly faster than the .sidebar width transition so
+   the text disappears before the box finishes closing — keeps the
+   impression of "the right side slides in" and never of "letters get
+   squashed by the moving edge". The leading 10 px gap belongs on the
+   label so the icon column can stay a clean 36 px box. */
+.nav-label{opacity:1;padding-left:10px;overflow:hidden;text-overflow:ellipsis;transition:opacity .18s ease,max-width .25s ease,padding .18s ease;max-width:200px}
+.nav-chev{opacity:1;transition:opacity .18s ease}
 /* Section labels (Kameras / Medien / System) are hidden in BOTH
    states — visual grouping comes from .nav-divider lines, not
    from text headers. Keeping them in flow shifted icons between
@@ -84,35 +103,17 @@ html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@me
 .nav a.nav-logs-item:hover .nav-icon svg{stroke:#4ade80}
 .sidebar.collapsed .nav a.nav-logs-item{margin-top:0}
 
-/* ── Collapsed sidebar · centered icons + soft halo ──────────────────
-   In the 52 px collapsed rail every icon must be geometrically
-   centred in its row, in every nav variant. Two rules drive the
-   centring:
-     • .nav-label / .nav-chev are display:none (above) so the flex
-       layout has only the icon to place.
-     • the anchor uses justify-content:center with no horizontal
-       padding — the icon halo (32×32) sits exactly in the middle
-       of the 36 px nav-row content area (52 px sidebar minus 2×8 px
-       sidebar padding).
-   The active/hover tint paints onto .nav-icon as a soft rounded
-   square — no border, no outline, no box-shadow ring. Hover uses
-   roughly half the active alpha so the two states read as the same
-   shape at different intensities. The expanded sidebar (and the
-   :hover re-expand handled by 04-coral-1.css) keep their full-width
-   pill behaviour via the .sidebar.collapsed:hover overrides below. */
-.sidebar.collapsed .nav-icon{
-  width:32px;height:32px;border-radius:10px;
-  transition:background .15s ease;
-}
-.sidebar.collapsed .nav a{padding:4px 0;gap:0;justify-content:center;background:transparent}
-.sidebar.collapsed .nav a:hover{background:transparent}
+/* ── Collapsed sidebar · halo tint follows the icon ────────────────────
+   nw273 — the icon halo now lives on .nav-icon at all times (set in
+   the base rule above), so the collapsed-state machinery only has to
+   paint the active/hover tint onto it. Anchor geometry no longer
+   changes between collapsed and expanded — the grid column does the
+   work. Variant rules below mirror the base shape for each tinted
+   nav item (achievements/weather/logs). */
 .sidebar.collapsed:not(:hover) .nav a:hover .nav-icon{background:rgba(255,255,255,.08)}
+.sidebar.collapsed .nav a:hover{background:transparent}
 .sidebar.collapsed .nav a.nav-active{background:transparent;color:#fff}
 .sidebar.collapsed:not(:hover) .nav a.nav-active .nav-icon{background:rgba(255,255,255,.16)}
-/* Variant colour overrides — same rule shape, variant-specific tint.
-   Scoped with :not(:hover) so the icon tint only paints when the rail
-   is truly closed; in the hover-expanded state the row-wide pill below
-   takes over and the icon stays transparent. */
 .sidebar.collapsed .nav a.nav-achievements-item:hover{background:transparent}
 .sidebar.collapsed:not(:hover) .nav a.nav-achievements-item:hover .nav-icon{background:rgba(251,191,36,.10)}
 .sidebar.collapsed .nav a.nav-achievements-item.nav-active{background:transparent}
@@ -126,25 +127,15 @@ html{scroll-padding-top:0}.section,.panel.section,[id]{scroll-margin-top:8px}@me
 .sidebar.collapsed .nav a.nav-logs-item.nav-active{background:transparent}
 .sidebar.collapsed:not(:hover) .nav a.nav-logs-item.nav-active .nav-icon{background:rgba(0,255,65,.16)}
 /* When the user hovers the rail (04-coral-1.css re-expands it back to
-   260 px), restore the full-pill behaviour: revert the icon halo, the
-   anchor centring, and reapply the original variant tints to the row
-   background. Without these the halo would shrink to 20×20 with no
-   bg, and the row would still be centred — which would make the labels
-   render at the right edge during the open animation. */
-.sidebar.collapsed:hover .nav-icon{
-  width:20px;height:20px;border-radius:0;background:transparent;
-}
-.sidebar.collapsed:hover .nav a{padding:8px;gap:10px;justify-content:flex-start}
-/* Hover-only chevron reveal on the collapsed sidebar — touch users
-   never trigger this state and don't need the chevron (the sidebar
-   tap target itself is the toggle). Gated behind hover-capable
-   pointers so iOS stays clean. */
-@media (hover: hover) and (pointer: fine){
-  .sidebar.collapsed:hover .nav-label,
-  .sidebar.collapsed:hover .nav-chev{display:inline}
-}
+   260 px), the labels animate back in via the max-width transition on
+   .nav-label above. Halo tint stays on the icon; the row-wide pill
+   takes over for the active/hover background. */
+.sidebar.collapsed:hover .nav-label{max-width:200px;padding-left:10px;opacity:1}
+.sidebar.collapsed:hover .nav-chev{opacity:1}
 .sidebar.collapsed:hover .nav a:hover{background:rgba(255,255,255,.05)}
 .sidebar.collapsed:hover .nav a.nav-active{background:rgba(255,255,255,.10)}
+.sidebar.collapsed:hover .nav a:hover .nav-icon,
+.sidebar.collapsed:hover .nav a.nav-active .nav-icon{background:transparent}
 .sidebar.collapsed:hover .nav a.nav-achievements-item:hover{background:rgba(251,191,36,.09)}
 .sidebar.collapsed:hover .nav a.nav-achievements-item.nav-active{background:rgba(251,191,36,.13)}
 .sidebar.collapsed:hover .nav a.nav-weather-item:hover{background:rgba(127,174,201,.09)}

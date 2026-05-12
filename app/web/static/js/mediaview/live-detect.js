@@ -1,58 +1,56 @@
 // ─── mediaview/live-detect.js ──────────────────────────────────────────────
 // Live-detect mount for the MediaView shell — reuses the recorded
-// lightboxModal chrome (lb-fs-video class, top bar, action buttons)
-// but swaps the data path: an <img> shows test-detection snapshots
-// at ≥1 Hz, an SVG overlay paints bboxes scaled into the snapshot's
-// coord space, the Detections panel lists the per-class verdicts,
-// and the fine-analysis fold ticks each response's decision trace
-// (open by default in live mode so the user sees inference happen).
+// lightbox chrome end-to-end (Close-X relocated to the top bar,
+// 16:9 wrap, scrubber + class-coloured swimlanes via
+// lbRenderTrackTimeline, panel-tabs strip, fine-analysis fold) and
+// adds the live-specific pieces: an MJPEG-frame <img> sourced from
+// the 1 Hz test-detection snapshot, an SVG bbox overlay, an
+// overlay-toggles row above the playbar, and an LIVE pill pinned to
+// the right edge of the scrubber.
 //
-// Polling pattern + adaptive cadence mirror camedit/erk-sim/live.js
-// per the cm-52 follow-up prompt; this module does NOT call into the
-// erk-sim machinery (the prompt's "keep mediaview self-contained"
-// rule). The escape-valve in that prompt also permits shipping
-// bbox + detail-pill + fine-analysis-fold without the scrolling
-// swimlane — those rows are a focused follow-up and stay out of
-// scope here.
+// Per-track data flows through synthetic _tracks payloads that mimic
+// the tracks.json shape the recorded swimlane already renders. The
+// live tracker's response does NOT expose per-track ids yet — we
+// fall back to per-label grouping (one synthetic Track per label,
+// detections accumulating as samples) per the cm-52 follow-up
+// prompt's graceful-degradation rule.
 //
 // Lifecycle:
 //   openLiveDetect({camId, cameraName})  — mount + start polling.
-//   closeLiveDetect()                    — abort in-flight + stop.
+//   closeLiveDetect()                    — abort + stop + teardown.
 // closeLightbox() in lightbox.js fires closeLiveDetect via the
-// window bridge below so any modal-close path tears the session
-// down without leaks.
+// window bridge so any modal-close path tears the session down.
 import { byId, esc } from '../core/dom.js';
-import { OBJ_LABEL, colors } from '../core/icons.js';
+import { state } from '../core/state.js';
+import { OBJ_LABEL, OBJ_SVG, colors, objIconSvg } from '../core/icons.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { renderPanelTabs } from './panel-tabs.js';
+import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
+import { _setupVideoChrome } from '../lightbox.js';
 
-// Adaptive cadence — fast healthy ticks stay at 1 Hz; a backend
-// taking ~3 s to deliver a validated frame backs us off to 0.25 Hz
-// so requests don't pile up.
 const _TICK_MIN_MS = 1000;
 const _TICK_MAX_MS = 4000;
 const _TICK_FACTOR = 1.2;
-// Hard cap on trace lines kept in memory — older lines scroll off
-// the top of the fold body. 80 lines × ~8-12 lines per tick gives
-// ~7-10 seconds of context at 1 Hz, plenty for a debug pass.
+// 60 s sliding window for the swimlane. Detections older than this
+// age out of the visible strip.
+const _LIVE_WINDOW_MS = 60_000;
 const _TRACE_CAP = 80;
 
 let _session = null;
 let _traceLines = [];
+let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
+let _overlays = { bboxes: true, trails: true, zones: false, masks: false, confirmer: true };
+let _selectedLabel = null;  // for detail-pill pin
 
 export function openLiveDetect({ camId, cameraName }){
   if (!camId) return;
-  // Defensive: tear down any prior session before opening a new one
-  // (user clicked SIM twice rapidly, or jumped between tiles).
   closeLiveDetect();
-  _setupLiveChrome(camId, cameraName);
-  _session = {
-    camId,
-    abort: null,
-    tickHandle: null,
-    fold: null,
-  };
+  _session = { camId, cameraName, abort: null, tickHandle: null, fold: null };
   _traceLines = [];
+  _detBuffer = [];
+  _selectedLabel = null;
+  _overlays = { bboxes: true, trails: true, zones: false, masks: false, confirmer: true };
+  _setupLiveChrome(camId, cameraName);
   _mountPanels();
   _tick();
   document.body.style.overflow = 'hidden';
@@ -62,57 +60,67 @@ export function closeLiveDetect(){
   const session = _session;
   _session = null;
   _traceLines = [];
+  _detBuffer = [];
+  _selectedLabel = null;
   if (!session) return;
   try { session.abort?.abort(); } catch { /* ignore */ }
   if (session.tickHandle) clearTimeout(session.tickHandle);
-  // Remove the live-detect chrome markers and the SVG overlay so the
-  // next lightbox open starts from a clean state. Modal hide is the
-  // job of closeLightbox / the close button — don't fight with it.
   const modal = byId('lightboxModal');
   if (modal) modal.classList.remove('lb-live-detect');
   const overlay = byId('lightboxLiveOverlay');
   if (overlay) overlay.remove();
+  const toggleRow = byId('mvLiveToggles');
+  if (toggleRow) toggleRow.remove();
+  const livePill = byId('mvLiveScrubPill');
+  if (livePill) livePill.remove();
 }
 
 function _setupLiveChrome(camId, cameraName){
+  // Synthesise a timelapse-shaped item so _setupVideoChrome takes
+  // its full chrome path (top bar + action relocation + scrubber +
+  // panels). The 'live-detect' type tag lets downstream renderers
+  // (this file's _renderLivePlaybar override) recognise the mode.
+  const liveItem = {
+    type:        'live-detect',
+    event_id:    `live-${camId}`,
+    camera_id:   camId,
+    camera_name: cameraName || camId,
+    time:        '',
+    weather:     null,
+    api_snapshot: null,
+    _tracks:     { tracks: [] },
+  };
+  // _setupVideoChrome mounts lb-fs-video + relocates Close/Confirm/
+  // Delete to the top-bar action cluster + calls lbRenderTrackTimeline
+  // + mountRecordedPanels. We replace the panels mount below since
+  // live-detect needs a Detections-only tab strip + the live
+  // overlay-toggles row above the playbar.
+  _setupVideoChrome(liveItem);
   const modal = byId('lightboxModal');
-  if (!modal) return;
-  modal.classList.add('lb-fs-video');
-  modal.classList.add('lb-live-detect');
-  // Top bar — cam name + a "● Live" marker in place of the recorded
-  // timestamp slot. The same #lightboxTopBar element the recorded
-  // path uses, so the modal's existing layout applies.
-  const camEl = byId('lightboxTopCam');
+  if (modal){
+    modal.classList.add('lb-live-detect');
+    modal.classList.remove('hidden');
+  }
+  // Live mode title-bar marker — replaces the recorded timestamp.
   const tsEl = byId('lightboxTopTime');
-  if (camEl) camEl.textContent = cameraName || camId;
   if (tsEl) tsEl.textContent = '● Live';
-  const topBar = byId('lightboxTopBar');
-  if (topBar) topBar.hidden = false;
-  // Show the <img>, hide the <video>. The polling tick writes the
-  // first snapshot data-URL into src on the first response.
+  // Show <img>, hide <video> + recorded action buttons that don't
+  // make sense for a live snapshot.
   const imgEl = byId('lightboxImg');
   const videoEl = byId('lightboxVideo');
-  if (videoEl){
-    videoEl.pause();
-    videoEl.src = '';
-    videoEl.style.display = 'none';
-  }
-  if (imgEl){
-    imgEl.style.display = 'block';
-    imgEl.src = '';
-  }
-  // Confirm / Delete don't make sense for a live snapshot — hide
-  // them. closeLightbox restores display when the next recorded
-  // event opens via _lbResetToPhoto.
+  if (videoEl){ videoEl.pause(); videoEl.src = ''; videoEl.style.display = 'none'; }
+  if (imgEl){ imgEl.style.display = 'block'; imgEl.src = ''; }
   const confirmBtn = byId('lightboxConfirm');
   if (confirmBtn) confirmBtn.style.display = 'none';
   const delBtn = byId('lightboxDelete');
   if (delBtn) delBtn.style.display = 'none';
-  modal.classList.remove('hidden');
-  _ensureOverlay();
+  _ensureBboxOverlay();
+  _ensureZoneMaskOverlay();
+  _mountOverlayToggles();
+  _pinScrubberRight();
 }
 
-function _ensureOverlay(){
+function _ensureBboxOverlay(){
   let svg = byId('lightboxLiveOverlay');
   if (svg) return svg;
   const wrap = byId('lightboxMediaWrap');
@@ -123,6 +131,71 @@ function _ensureOverlay(){
   svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5';
   wrap.appendChild(svg);
   return svg;
+}
+
+function _ensureZoneMaskOverlay(){
+  let svg = byId('lightboxLiveZoneMask');
+  if (svg) return svg;
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return null;
+  svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'lightboxLiveZoneMask';
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
+  wrap.appendChild(svg);
+  return svg;
+}
+
+const _TOGGLES = [
+  { id: 'bboxes',    label: 'Bboxes' },
+  { id: 'trails',    label: 'Trails' },
+  { id: 'zones',     label: 'Zonen' },
+  { id: 'masks',     label: 'Masken' },
+  { id: 'confirmer', label: 'Confirmer' },
+];
+
+function _mountOverlayToggles(){
+  const inner = byId('lightboxInner');
+  const stack = byId('lightboxBottomStack');
+  if (!inner || !stack) return;
+  let row = byId('mvLiveToggles');
+  if (!row){
+    row = document.createElement('div');
+    row.id = 'mvLiveToggles';
+    row.className = 'mv-live-toggles';
+    inner.insertBefore(row, stack);
+  }
+  row.innerHTML = _TOGGLES.map(t => (
+    `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-on="${_overlays[t.id] ? '1' : '0'}">${t.label}</button>`
+  )).join('') + '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
+  row.querySelectorAll('.mv-live-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.tog;
+      _overlays[id] = !_overlays[id];
+      btn.dataset.on = _overlays[id] ? '1' : '0';
+      _renderBboxOverlay();
+      _renderZoneMaskOverlay();
+    });
+  });
+}
+
+function _pinScrubberRight(){
+  // Live mode has no recorded clip → no seek; pin the playhead to
+  // the right edge by writing --play-pct=1 and adding an "LIVE" pill
+  // overlay anchored to the scrubber row. lbRenderTrackTimeline
+  // rebuilds the stack on each call so this re-pins after each refresh.
+  const stack = document.querySelector('.lb-time-stack');
+  if (stack) stack.style.setProperty('--play-pct', '1');
+  const stackHost = byId('lightboxBottomStack');
+  if (!stackHost) return;
+  let pill = byId('mvLiveScrubPill');
+  if (!pill){
+    pill = document.createElement('span');
+    pill.id = 'mvLiveScrubPill';
+    pill.className = 'mv-live-scrub-pill';
+    pill.textContent = '● LIVE';
+    stackHost.appendChild(pill);
+  }
 }
 
 function _mountPanels(){
@@ -136,10 +209,6 @@ function _mountPanels(){
     </div>`;
   const tabsHost = host.querySelector('.mv-recorded-tabs');
   const faHost = host.querySelector('.mv-recorded-fafold');
-  // Live-detect tab strip — just "Detections" today. Aufnahme-Settings
-  // is suppressed (no recording_settings exists for a live frame),
-  // Wetter is suppressed (no api_snapshot rides along), Nach-Erkennung
-  // is suppressed (the worker indexes archived clips, not live).
   const tabs = [{
     id: 'detections',
     label: 'Detections',
@@ -148,9 +217,6 @@ function _mountPanels(){
     },
   }];
   renderPanelTabs(tabsHost, tabs, { initialId: 'detections' });
-  // Fine-analysis fold OPEN by default in live mode so the trace
-  // ticks visibly. The user can still close it; the choice persists
-  // (the new '0' explicit-closed sentinel in fine-analysis-fold.js).
   const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: true });
   if (_session) _session.fold = fold;
 }
@@ -173,8 +239,6 @@ async function _tick(){
     if (data?.ok) _renderFrame(data);
   } catch (err) {
     if (err?.name === 'AbortError') return;
-    // Transient network errors stay silent — the absence of fresh
-    // boxes is the user's signal that something's off.
   }
   _scheduleNext(session, performance.now() - cycleStart);
 }
@@ -189,72 +253,249 @@ function _scheduleNext(session, lastCycleMs){
 }
 
 function _renderFrame(data){
-  // Snapshot — base64 data-URL the backend already downscaled to
-  // 960 px wide so iOS Safari paints incrementally without choking.
   const imgEl = byId('lightboxImg');
   if (imgEl && data.snapshot) imgEl.src = data.snapshot;
-  // SVG bboxes — viewBox lives in the snapshot's coord space so
-  // the overlay scales with the wrap regardless of resolution.
-  const svg = _ensureOverlay();
-  if (svg && data.frame_size){
-    const { w, h } = data.frame_size;
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    svg.innerHTML = (data.detections || []).map(d => {
-      const c = colors[d.label] || colors.unknown;
-      const op = d.verdict === 'pass' ? 1
-               : d.verdict === 'belowthresh' ? 0.55
-               : 0.30;
-      const [x, y, bw, bh] = d.bbox;
-      const txt = `${OBJ_LABEL[d.label] || d.label} · ${Math.round((d.score || 0) * 100)} %`;
-      return `<g opacity="${op}">
-        <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${c}" stroke-width="3" vector-effect="non-scaling-stroke"/>
-        <text x="${x + 4}" y="${y + 20}" fill="${c}" font-size="14" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${esc(txt)}</text>
-      </g>`;
-    }).join('');
+  // Frame state for the bbox + zone/mask overlays.
+  _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
+  _session.lastDetections = data.detections || [];
+  // Buffer detections for the swimlane window (one entry per detection
+  // per tick; per-track id would be ideal here but the live tracker
+  // doesn't expose ids — group by label instead).
+  const now = Date.now();
+  for (const d of (data.detections || [])){
+    _detBuffer.push({ ms: now, label: d.label, score: d.score, bbox: d.bbox, verdict: d.verdict });
   }
-  // Detections panel — current per-class verdicts.
+  // Drop entries older than the window.
+  const cutoff = now - _LIVE_WINDOW_MS;
+  _detBuffer = _detBuffer.filter(e => e.ms >= cutoff);
+  _renderBboxOverlay();
+  _renderZoneMaskOverlay();
+  _renderDetectionsPanel(data);
+  _renderLiveSwimlane();
+  _appendTrace(data.decision_trace || []);
+}
+
+function _renderBboxOverlay(){
+  const svg = _ensureBboxOverlay();
+  if (!svg || !_session) return;
+  svg.style.display = _overlays.bboxes ? 'block' : 'none';
+  if (!_overlays.bboxes){ svg.innerHTML = ''; return; }
+  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+  svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
+  svg.innerHTML = (_session.lastDetections || []).map(d => {
+    const c = colors[d.label] || colors.unknown;
+    const op = d.verdict === 'pass' ? 1 : d.verdict === 'belowthresh' ? 0.55 : 0.30;
+    const [x, y, bw, bh] = d.bbox;
+    const txt = `${OBJ_LABEL[d.label] || d.label} · ${Math.round((d.score || 0) * 100)} %`;
+    const stroke = (_selectedLabel === d.label) ? 5 : 3;
+    return `<g opacity="${op}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">
+      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${c}" stroke-width="${stroke}" vector-effect="non-scaling-stroke"/>
+      <text x="${x + 4}" y="${y + 20}" fill="${c}" font-size="14" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${esc(txt)}</text>
+    </g>`;
+  }).join('');
+  // Click handler — toggle detail-pill selection.
+  svg.style.pointerEvents = 'auto';
+  svg.querySelectorAll('[data-label]').forEach(g => {
+    g.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const lbl = g.dataset.label;
+      _selectedLabel = (_selectedLabel === lbl) ? null : lbl;
+      _renderBboxOverlay();
+      _renderDetailPill();
+    });
+  });
+}
+
+function _renderZoneMaskOverlay(){
+  const svg = _ensureZoneMaskOverlay();
+  if (!svg || !_session) return;
+  const showZones = _overlays.zones;
+  const showMasks = _overlays.masks;
+  if (!showZones && !showMasks){ svg.innerHTML = ''; svg.style.display = 'none'; return; }
+  svg.style.display = 'block';
+  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+  svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
+  const cam = (state.cameras || []).find(c => c.id === _session.camId) || {};
+  const parts = [];
+  // Zones — green outlined polygons. Masks — red outlined polygons.
+  // Both rendered as read-only overlays; editing lives in cam-edit.
+  if (showZones){
+    for (const z of (cam.zones || [])){
+      const pts = (z.points || z.poly || []).map(p => `${p.x || p[0]},${p.y || p[1]}`).join(' ');
+      if (pts){
+        parts.push(`<polygon points="${pts}" fill="rgba(34,197,94,0.10)" stroke="#22c55e" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+      }
+    }
+  }
+  if (showMasks){
+    for (const m of (cam.masks || [])){
+      const pts = (m.points || m.poly || []).map(p => `${p.x || p[0]},${p.y || p[1]}`).join(' ');
+      if (pts){
+        parts.push(`<polygon points="${pts}" fill="rgba(239,68,68,0.18)" stroke="#ef4444" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+      }
+    }
+  }
+  svg.innerHTML = parts.join('');
+}
+
+function _renderDetectionsPanel(data){
   const detHost = byId('mvLdDetections');
-  if (detHost){
-    const dets = data.detections || [];
-    if (!dets.length){
-      detHost.innerHTML = `<div class="mv-ld-empty">Keine Objekte erkannt</div>`;
-    } else {
-      detHost.innerHTML = dets.map(d => {
-        const c = colors[d.label] || colors.unknown;
-        const lblText = OBJ_LABEL[d.label] || d.label;
-        const tone = d.verdict === 'pass' ? 'ok'
-                   : d.verdict === 'belowthresh' ? 'warn'
-                   : 'mute';
-        const verdictText = d.verdict === 'pass' ? 'PASS'
-                          : d.verdict === 'belowthresh' ? 'unter Schwelle'
-                          : d.verdict === 'filtered' ? 'gefiltert'
-                          : '—';
-        return `<div class="mv-ld-row" data-tone="${tone}">
-          <span class="mv-ld-row-bar" style="background:${c}"></span>
-          <span class="mv-ld-row-label">${esc(lblText)}</span>
-          <span class="mv-ld-row-score">${Math.round((d.score || 0) * 100)} %</span>
-          <span class="mv-ld-row-verdict">${esc(verdictText)}</span>
-        </div>`;
-      }).join('');
-    }
+  if (!detHost) return;
+  const dets = data.detections || [];
+  if (!dets.length){
+    detHost.innerHTML = `<div class="mv-ld-empty">Keine Objekte erkannt</div>`;
+    return;
   }
-  // Trace lines — append + cap. Auto-scroll respects user intent:
-  // we only auto-scroll when the body was already at the bottom
-  // before this tick, so a user scrolled up to read older lines
-  // doesn't get yanked back. Classic log-viewer pattern.
-  if (Array.isArray(data.decision_trace) && _session?.fold){
-    for (const line of data.decision_trace){
-      _traceLines.push({ kind: _classifyTrace(line), text: line });
-    }
-    while (_traceLines.length > _TRACE_CAP) _traceLines.shift();
-    const body = document.querySelector('#lightboxSettings .mv-fafold-body');
-    const wasAtBottom = body
-      ? (body.scrollHeight - body.scrollTop - body.clientHeight) < 24
-      : true;
-    _session.fold.setLines(_traceLines);
-    if (body && wasAtBottom){
-      body.scrollTop = body.scrollHeight;
-    }
+  detHost.innerHTML = dets.map(d => {
+    const c = colors[d.label] || colors.unknown;
+    const lblText = OBJ_LABEL[d.label] || d.label;
+    const tone = d.verdict === 'pass' ? 'ok' : d.verdict === 'belowthresh' ? 'warn' : 'mute';
+    const verdictText = d.verdict === 'pass' ? 'PASS'
+                      : d.verdict === 'belowthresh' ? 'unter Schwelle'
+                      : d.verdict === 'filtered' ? 'gefiltert' : '—';
+    return `<div class="mv-ld-row" data-tone="${tone}" data-label="${esc(d.label)}">
+      <span class="mv-ld-row-bar" style="background:${c}"></span>
+      <span class="mv-ld-row-label">${esc(lblText)}</span>
+      <span class="mv-ld-row-score">${Math.round((d.score || 0) * 100)} %</span>
+      <span class="mv-ld-row-verdict">${esc(verdictText)}</span>
+    </div>`;
+  }).join('');
+  detHost.querySelectorAll('.mv-ld-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const lbl = row.dataset.label;
+      _selectedLabel = (_selectedLabel === lbl) ? null : lbl;
+      _renderBboxOverlay();
+      _renderDetailPill();
+    });
+  });
+}
+
+function _renderLiveSwimlane(){
+  // Build a synthetic _tracks payload from the 60 s buffer (one
+  // synthetic track per label) and ask the recorded swimlane to
+  // render it. Sample timestamps are shifted into [0, 60] so the
+  // existing rendering treats the window as a 60-second "clip".
+  if (!_session) return;
+  const now = Date.now();
+  const windowStart = now - _LIVE_WINDOW_MS;
+  const byLabel = new Map();
+  for (const e of _detBuffer){
+    if (e.ms < windowStart) continue;
+    const t = (e.ms - windowStart) / 1000;
+    if (!byLabel.has(e.label)) byLabel.set(e.label, []);
+    byLabel.get(e.label).push({
+      f: byLabel.get(e.label).length,
+      t,
+      bbox: { x1: e.bbox?.[0] || 0, y1: e.bbox?.[1] || 0,
+              x2: (e.bbox?.[0] || 0) + (e.bbox?.[2] || 0),
+              y2: (e.bbox?.[1] || 0) + (e.bbox?.[3] || 0) },
+      score: e.score,
+      source: 'detect',
+    });
+  }
+  const tracks = [];
+  for (const [label, samples] of byLabel.entries()){
+    tracks.push({
+      track_id: `live-${label}`,
+      label,
+      color: colors[label] || '#94a3b8',
+      first_frame: 0,
+      last_frame: samples.length - 1,
+      best_score: Math.max(0, ...samples.map(s => s.score || 0)),
+      best_frame: 0,
+      samples,
+    });
+  }
+  const liveItem = {
+    type: 'live-detect',
+    event_id: `live-${_session.camId}`,
+    camera_id: _session.camId,
+    _tracks: { tracks, filter_applied: null, duration_s: _LIVE_WINDOW_MS / 1000 },
+  };
+  lbRenderTrackTimeline(liveItem);
+  _pinScrubberRight();
+}
+
+function _renderDetailPill(){
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return;
+  let pill = byId('mvLiveDetailPill');
+  if (!_selectedLabel){
+    if (pill) pill.remove();
+    return;
+  }
+  if (!pill){
+    pill = document.createElement('div');
+    pill.id = 'mvLiveDetailPill';
+    pill.className = 'mv-live-detail-pill';
+    wrap.appendChild(pill);
+  }
+  const c = colors[_selectedLabel] || colors.unknown;
+  const lblText = OBJ_LABEL[_selectedLabel] || _selectedLabel;
+  // Find the live detection for this label (most recent).
+  const det = (_session?.lastDetections || []).find(d => d.label === _selectedLabel);
+  if (!det){
+    pill.innerHTML = `<div class="mv-live-detail-head" style="color:${c}">${esc(lblText)}</div>
+      <div class="mv-live-detail-empty">Aktuell nicht im Bild</div>`;
+    return;
+  }
+  const cam = (state.cameras || []).find(x => x.id === _session.camId) || {};
+  const perCls = cam.label_thresholds || {};
+  const generalThresh = Number(cam.detection_min_score) || 0.55;
+  const scoreThresh = perCls[_selectedLabel] != null
+    ? Number(perCls[_selectedLabel]) : generalThresh;
+  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+  const bh = det.bbox?.[3] || 0;
+  const bw = det.bbox?.[2] || 0;
+  const fracH = fs.h > 0 ? bh / fs.h : 0;
+  const fracArea = (fs.w * fs.h) > 0 ? (bw * bh) / (fs.w * fs.h) : 0;
+  const score = det.score || 0;
+  const scorePct = Math.round(score * 100);
+  const threshPct = Math.round(scoreThresh * 100);
+  const heightPct = Math.round(fracH * 100);
+  const areaPct = Math.round(fracArea * 100);
+  const scoreColor = score >= scoreThresh ? c : '#f59e0b';
+  pill.innerHTML = `
+    <div class="mv-live-detail-head" style="color:${c}">${esc(lblText)}</div>
+    <div class="mv-live-detail-gauge">
+      <div class="mv-live-detail-row">
+        <span class="mv-live-detail-key">Score</span>
+        <span class="mv-live-detail-val">${scorePct} %</span>
+      </div>
+      <div class="mv-live-detail-bar">
+        <span class="mv-live-detail-fill" style="width:${scorePct}%;background:${scoreColor}"></span>
+        <span class="mv-live-detail-tick" style="left:${threshPct}%"></span>
+      </div>
+      <div class="mv-live-detail-row">
+        <span class="mv-live-detail-key">Höhe</span>
+        <span class="mv-live-detail-val">${heightPct} %</span>
+      </div>
+      <div class="mv-live-detail-bar">
+        <span class="mv-live-detail-fill" style="width:${heightPct}%;background:${c}"></span>
+      </div>
+      <div class="mv-live-detail-row">
+        <span class="mv-live-detail-key">Fläche</span>
+        <span class="mv-live-detail-val">${areaPct} %</span>
+      </div>
+      <div class="mv-live-detail-bar">
+        <span class="mv-live-detail-fill" style="width:${areaPct}%;background:${c}"></span>
+      </div>
+    </div>`;
+}
+
+function _appendTrace(lines){
+  if (!Array.isArray(lines) || !_session?.fold) return;
+  for (const line of lines){
+    _traceLines.push({ kind: _classifyTrace(line), text: line });
+  }
+  while (_traceLines.length > _TRACE_CAP) _traceLines.shift();
+  const body = document.querySelector('#lightboxSettings .mv-fafold-body');
+  const wasAtBottom = body
+    ? (body.scrollHeight - body.scrollTop - body.clientHeight) < 24
+    : true;
+  _session.fold.setLines(_traceLines);
+  if (body && wasAtBottom){
+    body.scrollTop = body.scrollHeight;
   }
 }
 
@@ -265,5 +506,12 @@ function _classifyTrace(line){
   if (line.indexOf('no detection survived') !== -1) return 'no-detection';
   return 'info';
 }
+
+// Suppress the OBJ_SVG / objIconSvg "imported but unused" warnings —
+// kept around in case a future refactor lifts the detail-pill into
+// the shared detail-pill.js module which uses these for the
+// per-class icon glyph above the gauges. Cheaper than re-importing
+// when that lands.
+void OBJ_SVG; void objIconSvg;
 
 window.closeLiveDetect = closeLiveDetect;

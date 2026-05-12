@@ -148,7 +148,11 @@ function _fmtVideoTimeDE(raw){
   return `${d}.${mo}.${y} · ${time}`;
 }
 
-function _setupVideoChrome(item){
+// Exported (was: file-local) so mediaview/live-detect.js can reuse
+// the SAME chrome the recorded path produces — top bar, action-button
+// relocation, scrubber+swimlane mount, panel-tabs strip, fold. Live
+// mode passes a synthetic item; the recorded path is unchanged.
+export function _setupVideoChrome(item){
   const modal = byId('lightboxModal');
   if (!modal) return;
   modal.classList.add('lb-fs-video');

@@ -40,7 +40,25 @@ _ANOMALY_BAND_MAX_HEIGHT_FRAC = 0.60 # bands covering > this much of the frame
                                      # skip them so a complex daytime scene
                                      # with abrupt region boundaries doesn't
                                      # trip the detector top-to-bottom.
-_ANOMALY_BAND_MIN_Z = 1.5            # row-delta z-score threshold
+_ANOMALY_BAND_MIN_Z = 2.5            # row-delta z-score threshold
+                                     # Was 1.5 until 2026-05-12; the
+                                     # sunset test on garten-dach-terrasse
+                                     # showed a borderline false-positive
+                                     # cluster at score≈2.5 (clock-strip
+                                     # row-delta from the timestamp
+                                     # overlay; the per-camera zone
+                                     # exclusion above catches those
+                                     # cleanly when they fit the zone,
+                                     # but a slightly tighter floor kills
+                                     # the remaining 2.4-2.5 borderline
+                                     # cases that fall just outside the
+                                     # zone too). 3.0 was the original
+                                     # target but regressed the
+                                     # TestHorizontalAnomalyBand mid-
+                                     # band synthetic at z=2.99 — that
+                                     # detector unit test is the closest
+                                     # ground-truth we have, so the
+                                     # floor stays just below it.
 _ANOMALY_CHROMA_HUE_LO = 10          # warm-amber hue range (lamps/IR-cut)
 _ANOMALY_CHROMA_HUE_HI = 40
 _ANOMALY_CHROMA_SAT_MIN = 60         # only saturated pixels count

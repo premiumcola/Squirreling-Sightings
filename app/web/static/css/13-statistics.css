@@ -169,3 +169,68 @@
   .stat-dc-live.is-on .stat-dc-live-dot{animation:none}
   .stat-dc-dot.is-fresh{animation:none;opacity:.9}
 }
+
+/* ── iPhone-narrow layout for the mini-timeline + Erkennungswolke ─────── */
+/* (a) Mini-timeline: the camera-chip column (.tl-cam-sidebox) and the
+       per-class lane stack (.tl-lanes-wrap) sit side-by-side on
+       tablet+, but on iPhone width the chip's 140 px width plus its
+       gap eats too much of the screen and the first lane label
+       overlaps the chip. Stack vertically below 480 px: chip on top
+       (full width), lanes below.
+   (b) Slider rows: bump the gap between "Min. Konfidenz" and
+       "Zeitraum" from 12 px to 16 px so the two thumbs don't sit
+       in each other's vertical hit zone. */
+@media (max-width:480px){
+  .tl-cam-block{
+    flex-direction:column;
+    align-items:stretch;
+    gap:8px;
+  }
+  .tl-cam-sidebox{
+    width:100%;
+    align-self:stretch;
+    flex-direction:row;
+    justify-content:flex-start;
+    gap:10px;
+    text-align:left;
+    min-height:44px;
+    padding:8px 12px;
+  }
+  .tl-cam-name{
+    font-size:14px;
+    text-align:left;
+  }
+  /* Lanes carry their own min-width:0 already; just make sure the
+     X-axis tick padding tracks the new (zero) sidebox indent so
+     "letzte 12 h" doesn't sit off-screen. */
+  .tl-xaxis{
+    padding-left:calc(var(--tl-label-w) + 14px);
+  }
+  .stat-dc-sliders{gap:16px}
+}
+
+/* ── Touch-friendly slider thumb for the Erkennungswolke sliders ────── */
+/* Globals in 01-base.css set 18 × 18 px thumbs; iPhone touch needs a
+   larger visible thumb plus an enlarged hit area. Scoped to the
+   stat-dc + tl ranges via direct selector so the chrome dock /
+   cam-edit sliders aren't enlarged unnecessarily. */
+@media (hover:none) and (pointer:coarse){
+  .stat-dc-slider input[type=range],
+  #tlRangeSlider{
+    /* Tall track keeps the touch zone vertically generous without
+       changing the visual track height (the ::track rule keeps
+       4 px). 44 px outer = the iOS minimum touch target. */
+    height:44px;
+  }
+  .stat-dc-slider input[type=range]::-webkit-slider-thumb,
+  #tlRangeSlider::-webkit-slider-thumb{
+    width:24px;height:24px;
+    margin-top:-10px;
+    box-shadow:0 1px 6px rgba(0,0,0,.55);
+  }
+  .stat-dc-slider input[type=range]::-moz-range-thumb,
+  #tlRangeSlider::-moz-range-thumb{
+    width:24px;height:24px;
+    box-shadow:0 1px 6px rgba(0,0,0,.55);
+  }
+}

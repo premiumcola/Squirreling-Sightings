@@ -47,6 +47,58 @@ from ._consts import (
 )
 
 
+def _flatten_poly_points(poly, samples_per_curve: int = 12) -> list:
+    """Return the polygon as a flat list of {x,y} points, sampling any
+    curved segments via quadratic-bezier interpolation.
+
+    `samples_per_curve` is the number of intermediate points between a
+    segment's two endpoints; the endpoints themselves are always
+    included once each. Three accepted input shapes mirror the JS-side
+    _polyPoints + _polyCurves:
+      - Bare list of points: returned as-is (legacy pre-label format).
+      - Dict with no "curves" key (or all-null curves): "points" is
+        returned unchanged.
+      - Dict with curves: each segment i appends points[i] then, if
+        curves[i] is a {x,y} control point, `samples_per_curve` bezier
+        samples between points[i] and points[(i+1) % N]. Bezier formula
+        per axis: B(t) = (1-t)^2 * p0 + 2(1-t)t * cp + t^2 * p1.
+        Polygon close-back to points[0] is implicit — callers feed the
+        result to cv2.fillPoly / cv2.pointPolygonTest which close
+        automatically.
+    """
+    if isinstance(poly, list):
+        return poly
+    if not isinstance(poly, dict):
+        return []
+    pts = poly.get("points") or []
+    if not isinstance(pts, list) or len(pts) < 2:
+        return pts if isinstance(pts, list) else []
+    curves = poly.get("curves")
+    if not isinstance(curves, list) or all(c is None for c in curves):
+        return pts
+    out: list = []
+    n = len(pts)
+    for i in range(n):
+        p0 = pts[i]
+        p1 = pts[(i + 1) % n]
+        out.append({"x": int(p0.get("x", 0)), "y": int(p0.get("y", 0))})
+        cp = curves[i] if i < len(curves) else None
+        if isinstance(cp, dict) and "x" in cp and "y" in cp:
+            p0x = float(p0.get("x", 0))
+            p0y = float(p0.get("y", 0))
+            p1x = float(p1.get("x", 0))
+            p1y = float(p1.get("y", 0))
+            cpx = float(cp["x"])
+            cpy = float(cp["y"])
+            for k in range(1, samples_per_curve + 1):
+                t = k / (samples_per_curve + 1)
+                u = 1.0 - t
+                bx = u * u * p0x + 2.0 * u * t * cpx + t * t * p1x
+                by = u * u * p0y + 2.0 * u * t * cpy + t * t * p1y
+                out.append({"x": int(bx), "y": int(by)})
+    return out
+
+
 class ZonesMixin:
     """Inclusion/exclusion polygon helpers and detection filters.
 
@@ -91,7 +143,7 @@ class ZonesMixin:
         for poly in cam_masks:
             if isinstance(poly, dict) and poly.get("labels"):
                 continue
-            pts_list = poly.get("points", poly) if isinstance(poly, dict) else poly
+            pts_list = _flatten_poly_points(poly)
             if not isinstance(pts_list, list) or len(pts_list) < 3:
                 continue
             src_w = int(poly.get("source_w") or w) if isinstance(poly, dict) else w
@@ -104,6 +156,10 @@ class ZonesMixin:
             cv2.fillPoly(mask, [pts], 0)
         self._mask_image = mask
         if log_summary:
+            # Vertex count for the operator log reflects the AUTHORED
+            # geometry (raw points the user clicked), not the sampled
+            # bezier polyline — "12 vertices" is more meaningful than
+            # "60 vertices" when the user drew 12 corners with curves.
             total_verts = 0
             for p in cam_masks:
                 pts_list = p.get("points", p) if isinstance(p, dict) else p
@@ -125,7 +181,7 @@ class ZonesMixin:
         cfg_list = self.cfg.get(polys_field) or []
         out: list = []
         for poly in cfg_list:
-            pts = poly.get("points", poly) if isinstance(poly, dict) else poly
+            pts = _flatten_poly_points(poly)
             if not isinstance(pts, list) or len(pts) < 3:
                 continue
             labels = (poly.get("labels") if isinstance(poly, dict) else None) or []
@@ -199,7 +255,7 @@ class ZonesMixin:
                         continue
                     if d.label not in m.get("labels", []):
                         continue
-                    pts = m.get("points") or []
+                    pts = _flatten_poly_points(m)
                     src_w = int(m.get("source_w") or 1280)
                     src_h = int(m.get("source_h") or 720)
                     if self._point_in_poly(cx, cy, pts, w_f, h_f, src_w, src_h):
@@ -254,7 +310,7 @@ class ZonesMixin:
         # mask path above. Polygons without source_w/h fall back to
         # the canvas dimensions (no scale).
         for poly in global_zones:
-            pts_list = poly.get("points", poly) if isinstance(poly, dict) else poly
+            pts_list = _flatten_poly_points(poly)
             if not isinstance(pts_list, list) or len(pts_list) < 3:
                 continue
             src_w = int(poly.get("source_w") or w) if isinstance(poly, dict) else w
@@ -267,6 +323,9 @@ class ZonesMixin:
             cv2.fillPoly(zone, [pts], 255)  # white = active zone
         self._zone_image = zone
         if log_summary:
+            # Authored vertex count (raw points the user clicked), not
+            # the flattened bezier polyline — same rationale as the
+            # mask-image log above.
             total_verts = 0
             for p in cam_zones:
                 pts_list = p.get("points", p) if isinstance(p, dict) else p
@@ -311,6 +370,8 @@ class ZonesMixin:
         for z in cam_zones:
             if not isinstance(z, dict):
                 continue
+            # Validate against the raw points (curves can't exist without
+            # 2+ points anyway — this guards against malformed polygons).
             pts = z.get("points") or []
             if not isinstance(pts, list) or len(pts) < 3:
                 continue
@@ -336,7 +397,7 @@ class ZonesMixin:
             for z in label_zones:
                 z_sw = int(z.get("source_w") or 1280)
                 z_sh = int(z.get("source_h") or 720)
-                if self._point_in_poly(cx, cy, z.get("points") or [], w_f, h_f, z_sw, z_sh):
+                if self._point_in_poly(cx, cy, _flatten_poly_points(z), w_f, h_f, z_sw, z_sh):
                     matched_zone = z
                     break
             if matched_zone is None and global_applies and zone_resized[cy, cx] > 0:
@@ -346,7 +407,7 @@ class ZonesMixin:
                 for z in global_polys:
                     z_sw = int(z.get("source_w") or 1280)
                     z_sh = int(z.get("source_h") or 720)
-                    if self._point_in_poly(cx, cy, z.get("points") or [], w_f, h_f, z_sw, z_sh):
+                    if self._point_in_poly(cx, cy, _flatten_poly_points(z), w_f, h_f, z_sw, z_sh):
                         matched_zone = z
                         break
             if matched_zone is not None:

@@ -54,7 +54,7 @@ export function openLiveDetect({ camId, cameraName }){
   _traceLines = [];
   _detBuffer = [];
   _selectedLabel = null;
-  _overlays = { bboxes: true, trails: true, zones: false, masks: false };
+  _overlays = { bboxes: true, trails: true, zones: true, masks: true };
   _setupLiveChrome(camId, cameraName);
   _mountPanels();
   _tick();
@@ -164,9 +164,17 @@ function _setupLiveChrome(camId, cameraName){
   const delBtn = byId('lightboxDelete');
   if (delBtn) delBtn.style.display = 'none';
   _ensureBboxOverlay();
+  _ensureTrailsOverlay();
   _ensureZoneMaskOverlay();
   _mountOverlayToggles();
   _pinScrubberRight();
+  // dn487 — paint zones + masks BEFORE the first detection tick
+  // arrives. _renderZoneMaskOverlay falls back to {w:1920, h:1080}
+  // when _session.lastFrameSize isn't set yet; the first tick
+  // (~1 s later) repaints with the real frame_size so polygon
+  // positions converge. Without this paint-before-tick the user
+  // sees a 1 s window of no zone visuals after opening Simulieren.
+  _renderZoneMaskOverlay();
 }
 
 function _ensureBboxOverlay(){

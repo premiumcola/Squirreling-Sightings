@@ -549,15 +549,16 @@ export function openTLPlayer(item){
     <span class="badge">Timelapse · ${esc(period)}</span>
     <span class="badge">${esc(item.window_key || item.day || '')}</span>
     ${sizeBadge}`;
-  // Render the scrubber + axis row stack so Space/keyboard/drag-to-
-  // scrub all work. lbLoadTracksForItem will populate tracks once a
-  // sidecar exists; meanwhile the empty placeholder row carries the
-  // Nach-Erkennung button.
+  // _setupVideoChrome already calls lbRenderTrackTimeline +
+  // mountRecordedPanels for us — calling them again here would
+  // double-mount and produced the duplicated "0s ... 1s" playbar +
+  // the two empty red-bordered placeholder cards in the
+  // weather/sunrise lightbox bug. lbLoadTracksForItem still has to
+  // fire so the swimlane fills in when a sidecar exists for this
+  // timelapse (post Nach-Erkennung worker run).
   const setHost = byId('lightboxSettings');
   if (setHost) setHost.hidden = false;
-  lbRenderTrackTimeline(lbState.item);
   lbLoadTracksForItem(lbState.item);
-  mountRecordedPanels(lbState.item);
   const total = navItems.length;
   byId('lightboxPrev').style.opacity = lbState.index > 0 ? '1' : '0.2';
   byId('lightboxNext').style.opacity = lbState.index < total - 1 ? '1' : '0.2';

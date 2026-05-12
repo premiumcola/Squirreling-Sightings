@@ -684,18 +684,27 @@ function _channelDurationText(c, state){
 
 // Channel pill — expandable Live-pill clone for the Telegram / MQTT
 // notification channels. Collapsed: [pulsing dot] [label] [chevron].
-// Open: same dark detail-panel pattern as the Live-pill, with rows
-// populated below (B3 — Alarmfenster / Status / Kanal-Mix). The dot's
-// pulse cadence and colour come from the kind + state attributes;
-// every visual variant lives in 03-dashboard.css under .cv-tg-wrap /
-// .cv-mqtt-wrap. The wrap shares the .cv-lp-open click pattern with
-// .cv-pill-live-wrap so the same wiring loop handles both.
+// Open: detail panel with three rows — Alarmfenster (schedule
+// window), Status (aktiv/wartet/stumm with countdown), Kanal-Mix
+// (which channels fire on alarm). Per-kind colour + pulse cadence
+// come from CSS data-state selectors; click handling is shared with
+// the Live-pill via _wirePillOpenClose.
 function _channelPill(c, kind, state){
   const label = kind === 'mqtt' ? 'MQTT' : 'Telegram';
   const headerLabel = kind === 'mqtt' ? 'MQTT-Kanal' : 'Telegram-Kanal';
   const headerSuffix = state === 'on' ? 'aktiv'
     : state === 'idle' ? 'wartet'
     : 'stumm';
+  const schLbl = _scheduleLabel(c) || 'Dauerhaft aktiv';
+  const statusText = state === 'on'
+    ? (_channelDurationText(c, state) || 'Aktiv')
+    : state === 'idle'
+      ? _channelWaitText(c)
+      : 'Kamera nicht scharf';
+  const modes = [];
+  if (c.telegram_enabled) modes.push('Telegram');
+  if (c.mqtt_enabled) modes.push('MQTT');
+  const modeText = modes.join(' + ') || '—';
   return `<div class="cv-pill-channel-wrap cv-${kind}-wrap" data-state="${state}" aria-label="${esc(headerLabel)}">
     <span class="cv-pdot"></span>
     <span class="cv-channel-label">${esc(label)}</span>
@@ -705,8 +714,32 @@ function _channelPill(c, kind, state){
         <span class="cv-pdot"></span>
         <span>${esc(headerLabel + ' ' + headerSuffix)}</span>
       </div>
+      <div class="cv-lp-row"><span>Alarmfenster</span><strong>${esc(schLbl)}</strong></div>
+      <div class="cv-lp-row"><span>Status</span><strong>${esc(statusText)}</strong></div>
+      <div class="cv-lp-row"><span>Kanal-Mix</span><strong>${esc(modeText)}</strong></div>
     </div>
   </div>`;
+}
+
+// Time-until-next-window helper for the channel pill's idle state.
+// "idle" means the camera is armed but currently outside its alarm
+// schedule, so we surface when the next window opens. If today's
+// from-time is still ahead → "Wartet bis HH:MM"; if it's already past
+// → "Wartet bis morgen HH:MM". Falls back to "Wartet" if no schedule
+// is configured (shouldn't happen — _channelState only returns 'idle'
+// when there IS a schedule — but defensive nonetheless).
+function _channelWaitText(c){
+  const sch = (c.schedule_notify && c.schedule_notify.enabled)
+    ? c.schedule_notify
+    : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
+  if (!sch || !sch.from) return 'Wartet';
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const [fh, fm] = sch.from.split(':').map(Number);
+  const fromMins = fh * 60 + fm;
+  return fromMins > nowMins
+    ? `Wartet bis ${sch.from}`
+    : `Wartet bis morgen ${sch.from}`;
 }
 
 // pq924 — schedule window label that sits ABOVE the TG/MQTT channel
@@ -744,13 +777,10 @@ export function renderDashboard(){
     const fps = c.frame_interval_ms ? Math.round(1000 / c.frame_interval_ms) : null;
     const previewFps = (c.preview_fps || 0) > 0 ? c.preview_fps : null;
     const streamMode = c.stream_mode || 'baseline';
-    // pq924 — bottom-LEFT now carries ONLY the class-filter pills.
-    // The schedule pill that used to live here collided with the
-    // camera's burnt-in HUD clock at the bottom of the frame, so the
-    // schedule window moved into a muted label above the TG/MQTT
-    // channel cluster in the bottom-right (see _channelCluster below
-    // + _scheduleLabel helper). class_severity === "off" renders the
-    // pill muted (opacity .38, no tint).
+    // Class-filter pills (object_filter list). class_severity === "off"
+    // renders the pill muted (opacity .38, no tint). After B3, these
+    // sit in the bottom-right cluster alongside the new Telegram /
+    // MQTT pills and the Simulieren / cog buttons.
     const _clsSev = c.class_severity || {};
     const _classPills = (c.object_filter || []).map(cls => {
       const muted = _clsSev[cls] === 'off';
@@ -763,25 +793,13 @@ export function renderDashboard(){
         + `${_chromeClassSvg(cls)}</div>`;
     }).join('');
     // Telegram + MQTT channel pills. Both render as expandable
-    // Live-pill clones (see _channelPill above) — dot + label +
-    // chevron, click to expand. Dot's pulse cadence + colour come
-    // from the kind + state attributes in CSS.
+    // Live-pill clones (see _channelPill) — pulsing dot + label +
+    // chevron, click to expand. The schedule window that used to
+    // float above as a separate label now lives inside the pill's
+    // detail panel (B3 — see Alarmfenster row in _channelPill).
     const _chanState = _channelState(c);
     const _tgBadge = c.telegram_enabled ? _channelPill(c, 'tg', _chanState) : '';
     const _mqttBadge = c.mqtt_enabled ? _channelPill(c, 'mqtt', _chanState) : '';
-    // pq924 — channel cluster (schedule label + TG/MQTT badges).
-    // Schedule label is a muted text line ABOVE the badges, semantically
-    // attached to the notification icon below it (the schedule defines
-    // WHEN those channels fire). Renders only when at least one channel
-    // is enabled — silent cameras don't need a schedule string.
-    const _scheduleLbl = _scheduleLabel(c);
-    const _hasChannel = c.telegram_enabled || c.mqtt_enabled;
-    const _channelCluster = _hasChannel
-      ? `<div class="cv-channel-cluster">`
-        + (_scheduleLbl ? `<span class="cv-channel-schedule">${esc(_scheduleLbl)}</span>` : '')
-        + `<div class="cv-channel-row">${_tgBadge}${_mqttBadge}</div>`
-        + `</div>`
-      : '';
     return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
     <div class="cv-img-wrap">
@@ -836,7 +854,8 @@ ${isActive ? `
 ${isActive ? `
       <div class="cv-chrome-bottom-right">
         ${_classPills ? `<div class="cv-class-cluster">${_classPills}</div>` : ''}
-        ${_channelCluster}
+        ${_tgBadge}
+        ${_mqttBadge}
         ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>
       </div>

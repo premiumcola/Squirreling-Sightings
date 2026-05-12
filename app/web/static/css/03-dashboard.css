@@ -183,34 +183,11 @@
    pair below since those two also read as "notification channels"
    as a single group. */
 .cv-class-cluster{display:flex;align-items:center;gap:2px}
-/* pq924 — channel cluster: muted schedule label STACKED above the
-   TG/MQTT badge row in the bottom-right cluster. The label is text
-   metadata (smaller font, lower opacity, smaller padding) so it
-   reads as a property of the icon below rather than a peer chrome
-   pill. Tabular nums keep the time digits aligned. The cluster's
-   empty-when-no-channel suppression happens in dashboard.js
-   (_hasChannel check); when at least one channel is enabled, the
-   cluster renders and the label appears if a schedule window is
-   actually configured. */
-.cv-channel-cluster{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
-/* TG + MQTT pill pair. After B2 these are full .cv-pill-channel-wrap
-   pills (wider than the old 30 × 30 badges), so the gap bumps from
-   2 px (button-tight) to 6 px (pill-comfortable). The cluster
-   wrapper itself is being retired in B3 — only the pills will
-   remain in bottom-right after that. */
-.cv-channel-row{display:flex;align-items:center;gap:6px}
-.cv-channel-schedule{
-  font-size:10px;font-weight:500;letter-spacing:.02em;
-  color:rgba(255,255,255,.62);
-  background:rgba(0,0,0,.55);
-  padding:2px 7px;border-radius:5px;
-  white-space:nowrap;
-  font-variant-numeric:tabular-nums;
-  font-feature-settings:"tnum" 1;
-  pointer-events:none;
-  -webkit-backdrop-filter:blur(6px);
-  backdrop-filter:blur(6px);
-}
+/* B3 retired .cv-channel-cluster / .cv-channel-schedule / .cv-channel-
+   row — the schedule window now lives inside the Telegram + MQTT pill
+   detail panels (see .cv-pill-channel-wrap), and the pills themselves
+   sit directly in .cv-chrome-bottom-right (gap inherited from that
+   container). */
 .cv-name{color:#fff;font-weight:700;font-size:15px;text-shadow:0 1px 6px rgba(0,0,0,.8);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:50%}
 .cv-title-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;line-height:1;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))}
 .cv-loc{color:rgba(255,255,255,.7);font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.8)}

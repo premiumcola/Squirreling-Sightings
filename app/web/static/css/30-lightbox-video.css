@@ -971,6 +971,28 @@
   .mv-tab{ min-height:44px;padding:9px 12px; }
 }
 
+/* wv612 — verdict legend under the toggle row. Renders only when a
+   non-pass bbox is visible on the canvas; live-detect.js mounts /
+   removes the element on each tick. Single-line, muted, doesn't
+   compete with the chrome above. */
+.mv-live-verdict-legend{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:4px 14px 8px 14px;
+  background:#0a0e1a;
+  font-size:10px;
+  color:rgba(226,232,240,.45);
+  letter-spacing:.02em;
+}
+.mv-vl-key{display:inline-flex;align-items:center;gap:5px}
+.mv-vl-sw{
+  width:18px;height:0;
+  border-top-width:2px;border-top-style:solid;
+  flex-shrink:0;
+}
+.mv-vl-sw--pass{border-top-color:#86efac}
+.mv-vl-sw--below{border-top-color:rgba(253,224,71,.7)}
+.mv-vl-sw--filtered{border-top-color:#94a3b8;border-top-style:dashed}
+
 .mv-fafold-root{
   background:#0a0e1a;
   border-top:1px solid rgba(255,255,255,.04);

@@ -220,6 +220,33 @@ function _ensureZoneMaskOverlay(){
   return svg;
 }
 
+// wv612 — single-line legend that appears under the toggle row only
+// while there's at least one suppressed bbox currently on screen.
+// The user sees WHY a detection didn't trigger directly on the
+// canvas (dashed stroke, muted color, suffix label); the legend
+// translates the visual language. Auto-hides when every visible
+// bbox is in the pass state so the row stays quiet in the common
+// case. Mount lives next to the overlay toggle row.
+function _updateVerdictLegend(visible){
+  const toggleRow = byId('mvLiveToggles');
+  if (!toggleRow) return;
+  let legend = byId('mvLiveVerdictLegend');
+  if (!visible){
+    if (legend) legend.remove();
+    return;
+  }
+  if (!legend){
+    legend = document.createElement('div');
+    legend.id = 'mvLiveVerdictLegend';
+    legend.className = 'mv-live-verdict-legend';
+    legend.innerHTML = ''
+      + '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--pass"></span>solid: gepasst</span>'
+      + '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--below"></span>schwach: unter Schwelle</span>'
+      + '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--filtered"></span>dashed grau: gefiltert</span>';
+    toggleRow.insertAdjacentElement('afterend', legend);
+  }
+}
+
 // vh729 — one-shot diagnostic. Prints the state of every visual
 // layer the user can't see when Simulieren looks black. Gated by
 // _session._diagLogged so the line fires exactly once per open.
@@ -512,17 +539,44 @@ function _renderBboxOverlay(){
     const zIndex = window.getComputedStyle(svg).zIndex;
     console.warn(`[sim-bbox] dets=${(_session.lastDetections || []).length} viewBox=${fs.w}x${fs.h} svgRect=${Math.round(rect.width)}x${Math.round(rect.height)} zIndex=${zIndex}`);
   }
-  svg.innerHTML = (_session.lastDetections || []).map(d => {
-    const c = colors[d.label] || colors.unknown;
-    const op = d.verdict === 'pass' ? 1 : d.verdict === 'belowthresh' ? 0.55 : 0.30;
+  // wv612 — verdict-aware rendering. Backend's test-detection
+  // endpoint already tags each detection with a verdict — pass /
+  // belowthresh / filtered (class not in object_filter). Render each
+  // state with a visually distinct style so the user can SEE which
+  // detections passed the gates and which were rejected:
+  //   pass         → solid stroke, full opacity, "label · NN %"
+  //   belowthresh  → solid stroke at 0.55 opacity, "label · unter Schwelle"
+  //   filtered     → grey-toned dashed stroke at 0.45 opacity,
+  //                  "label · gefiltert" (class-disabled by filter)
+  // A small legend below the toggle row only renders while at least
+  // one non-pass bbox is currently on screen.
+  const dets = _session.lastDetections || [];
+  let _hasSuppressed = false;
+  svg.innerHTML = dets.map(d => {
+    const baseC = colors[d.label] || colors.unknown;
+    const isPass = d.verdict === 'pass';
+    const isBelow = d.verdict === 'belowthresh';
+    const isFiltered = !isPass && !isBelow;            // 'filtered' or absent
+    if (!isPass) _hasSuppressed = true;
+    const c = isFiltered ? '#94a3b8' : baseC;          // slate-grey for class-filtered
+    const op = isPass ? 1 : isBelow ? 0.55 : 0.45;
+    const dash = isFiltered ? '12 8' : isBelow ? '6 6' : 'none';
     const [x, y, bw, bh] = d.bbox;
-    const txt = `${OBJ_LABEL[d.label] || d.label} · ${Math.round((d.score || 0) * 100)} %`;
+    const lbl = OBJ_LABEL[d.label] || d.label;
+    const suffix = isPass
+      ? `${Math.round((d.score || 0) * 100)} %`
+      : isBelow
+        ? 'unter Schwelle'
+        : 'gefiltert';
+    const txt = `${lbl} · ${suffix}`;
     const stroke = (_selectedLabel === d.label) ? 5 : 3;
+    const dashAttr = dash === 'none' ? '' : ` stroke-dasharray="${dash}"`;
     return `<g opacity="${op}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">
-      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${c}" stroke-width="${stroke}" vector-effect="non-scaling-stroke"/>
+      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${c}" stroke-width="${stroke}" vector-effect="non-scaling-stroke"${dashAttr}/>
       <text x="${x + 4}" y="${y + 20}" fill="${c}" font-size="14" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${esc(txt)}</text>
     </g>`;
   }).join('');
+  _updateVerdictLegend(_hasSuppressed);
   // Click handler — toggle detail-pill selection.
   svg.style.pointerEvents = 'auto';
   svg.querySelectorAll('[data-label]').forEach(g => {

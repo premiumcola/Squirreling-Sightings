@@ -285,9 +285,24 @@
 
 /* Channel badges — Telegram blue + MQTT amber tint via parent's
    ``color``. State-dot in the top-right corner reads the channel's
-   armed × in-schedule state computed in dashboard.js#_channelState. */
-.cv-tg-badge{width:30px;color:#5eb6ff}
-.cv-mqtt-badge{width:30px;color:#d6a06b}
+   armed × in-schedule state computed in dashboard.js#_channelState.
+   xq583 — when the camera is currently armed within its alarm
+   schedule, the badge picks up .has-text and grows to fit a
+   "noch Xh Ym" / "aktiv" suffix; icon-only badges keep the 30 × 30
+   chrome-pill footprint. */
+.cv-tg-badge{color:#5eb6ff}
+.cv-tg-badge:not(.has-text){width:30px}
+.cv-mqtt-badge{color:#d6a06b}
+.cv-mqtt-badge:not(.has-text){width:30px}
+.cv-chan-dur{
+  font-size:11px;font-weight:600;line-height:1;
+  color:rgba(255,255,255,.85);
+  font-variant-numeric:tabular-nums;
+  font-feature-settings:"tnum" 1;
+  white-space:nowrap;
+}
+.cv-tg-badge.has-text,
+.cv-mqtt-badge.has-text{gap:6px;padding:0 10px}
 .cv-state-dot{
   position:absolute;top:4px;right:4px;
   width:6px;height:6px;border-radius:50%;
@@ -345,13 +360,14 @@
   z-index:1000;
 }
 
-/* Mobile touch targets — push the three new buttons up to 44 × 44
-   so the iPhone-393 user can reliably hit them without missing. */
+/* Mobile touch targets — chrome-btn::before already extends the
+   touch hitbox to 44 × 44 via inset:-7px, so the visual chrome stays
+   at the canonical 30 px height even on mobile. xq583: previous
+   override bumped FS to 44 × 44 (and HD/SIM to height 44), but the
+   user's spec is "all chrome pills 30 × 30 — same as the cog" — the
+   visible footprint must match across the tile. */
 @media (max-width:768px){
-  .cv-hd-badge{height:44px;min-width:44px;padding:0 12px;font-size:12px}
-  .cv-fs-btn{width:44px;height:44px}
-  .cv-fs-btn svg{width:18px;height:18px}
-  .cv-sim-btn{height:44px;padding:0 14px;font-size:12px}
+  .cv-hd-badge{padding:0 9px;font-size:11px}
   .cv-sim-btn svg{width:16px;height:16px}
 }
 
@@ -497,25 +513,16 @@
 @keyframes cv-runner-stride{0%,100%{transform:translateY(0) translateX(0)}30%{transform:translateY(-1.5px) translateX(1.5px)}70%{transform:translateY(0) translateX(-.5px)}}
 
 /* ── Settings cog (bottom-right of each tile) ────────────────────────────
-   Replaces the old hover-revealed .cv-actions panel. Flat dark surface
-   in the same #1c1c20 tone as the mobile bottom-dock so the dashboard
-   chrome reads as one family. */
+   xq583 — composes from .cv-chrome-btn (30 × 30, dark transparent
+   bg, blur). Earlier this file had a second .cv-cog block here that
+   re-defined width/height/bg/border-radius — the user's spec is
+   "FS == cog == 30 × 30 chrome pill", so the override was the source
+   of the size mismatch the user noticed. Now the cog is just a
+   chrome-btn with a slightly smaller icon glyph. */
 @media (hover: hover) and (pointer: fine){
   .cv-card:hover .cv-grad-bot{opacity:1}
 }
-.cv-cog{
-  width:34px;height:34px;border-radius:11px;
-  background:#1c1c20;
-  color:rgba(255,255,255,.7);
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;
-  border:0;outline:0;
-  -webkit-tap-highlight-color:transparent;
-  transition:background .15s,color .15s,transform .12s;
-}
-.cv-cog:hover{background:#26262a;color:#fff}
-.cv-cog:active{transform:scale(.94)}
-.cv-cog svg{width:18px;height:18px}
+.cv-cog svg{width:16px;height:16px}
 
 /* Legacy badge (used in camera settings list, not in grid) */
 .badge{padding:7px 10px;border-radius:999px;background:var(--surface);font-size:12px}

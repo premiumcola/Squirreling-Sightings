@@ -654,6 +654,45 @@ function _channelState(c){
   return 'on';  // no schedule defined → always on
 }
 
+// xq583 — duration suffix for the channel badges when the camera is
+// currently armed within its alarm schedule. Returns a short German
+// label that sits next to the icon inside the same pill:
+//   "noch 6h 12m"  → schedule has an end window, time-to-end > 0
+//   "aktiv"        → armed without a schedule window
+//   ""             → state !== 'on' → no suffix (icon-only badge)
+function _channelDurationText(c, state){
+  if (state !== 'on') return '';
+  const sch = (c.schedule_notify && c.schedule_notify.enabled)
+    ? c.schedule_notify
+    : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
+  if (!sch || !sch.from || !sch.to) return 'aktiv';
+  const now = new Date();
+  const m = now.getHours() * 60 + now.getMinutes();
+  const [th, tm] = sch.to.split(':').map(Number);
+  let mins = (th * 60 + tm) - m;
+  if (mins <= 0) mins += 24 * 60;       // schedule wraps past midnight
+  const h = Math.floor(mins / 60);
+  const min = mins % 60;
+  if (h === 0) return `noch ${min}m`;
+  if (min === 0) return `noch ${h}h`;
+  return `noch ${h}h ${min}m`;
+}
+
+// xq583 — human-readable tooltip backing the channel badges. Plain
+// `title` attr (consistent with the other chrome buttons) so the
+// browser handles hover/long-press for free.
+function _channelTooltip(c, kind){
+  const sch = (c.schedule_notify && c.schedule_notify.enabled)
+    ? c.schedule_notify
+    : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
+  const label = kind === 'mqtt' ? 'MQTT-Kanal' : 'Telegram-Kanal';
+  if (!c.armed) return `${label} — Kamera nicht scharf`;
+  if (sch && sch.from && sch.to){
+    return `${label} · Alarmfenster ${sch.from}–${sch.to}`;
+  }
+  return `${label} · dauerhaft aktiv`;
+}
+
 
 // Camera-tile grid renderer. Builds every visible cv-card from
 // state.cameras. The template string carries inline onclick handlers
@@ -693,18 +732,23 @@ export function renderDashboard(){
     const _schedulePill = (_sch.enabled && _sch.from && _sch.to)
       ? `<div class="cv-chrome-btn cv-schedule-pill has-text" title="Aktivitätszeit">${esc(_sch.from)}–${esc(_sch.to)}</div>`
       : '';
-    // tw284 — Telegram + MQTT channel badges in bottom-right. Each
-    // renders only when the camera has the channel enabled. State-dot
-    // colour reflects armed × in-schedule semantics (see _channelState).
+    // xq583 — Telegram + MQTT channel badges moved to bottom-LEFT
+    // (after class/schedule pills). When the camera is currently
+    // armed within its alarm schedule, the pill grows with a duration
+    // text suffix ("noch 6h 12m" / "aktiv"). State-dot colour reflects
+    // armed × in-schedule semantics (see _channelState).
     const _chanState = _channelState(c);
     const _stateDot = (state) => state === 'idle'
       ? ''
       : `<span class="cv-state-dot" data-state="${state}" aria-hidden="true"></span>`;
+    const _chanDur = _channelDurationText(c, _chanState);
+    const _chanText = _chanDur ? `<span class="cv-chan-dur">${esc(_chanDur)}</span>` : '';
+    const _chanCls = _chanDur ? 'cv-chrome-btn has-text' : 'cv-chrome-btn';
     const _tgBadge = c.telegram_enabled
-      ? `<div class="cv-chrome-btn cv-tg-badge" data-state="${_chanState}" title="Telegram-Kanal" aria-label="Telegram-Kanal">${_CHROME_TG_SVG}${_stateDot(_chanState)}</div>`
+      ? `<div class="${_chanCls} cv-tg-badge" data-state="${_chanState}" title="${esc(_channelTooltip(c, 'tg'))}" aria-label="Telegram-Kanal">${_CHROME_TG_SVG}${_chanText}${_stateDot(_chanState)}</div>`
       : '';
     const _mqttBadge = c.mqtt_enabled
-      ? `<div class="cv-chrome-btn cv-mqtt-badge" data-state="${_chanState}" title="MQTT-Kanal" aria-label="MQTT-Kanal">${_CHROME_MQTT_SVG}${_stateDot(_chanState)}</div>`
+      ? `<div class="${_chanCls} cv-mqtt-badge" data-state="${_chanState}" title="${esc(_channelTooltip(c, 'mqtt'))}" aria-label="MQTT-Kanal">${_CHROME_MQTT_SVG}${_chanText}${_stateDot(_chanState)}</div>`
       : '';
     return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
@@ -758,10 +802,8 @@ ${isActive ? `
         ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
       </div>
 ` : ''}
-      <div class="cv-chrome-bottom-left">${_classPills}${_schedulePill}</div>
+      <div class="cv-chrome-bottom-left">${_classPills}${_schedulePill}${_tgBadge}${_mqttBadge}</div>
       <div class="cv-chrome-bottom-right">
-        ${_tgBadge}
-        ${_mqttBadge}
         ${c.rtsp_url && isActive ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>
       </div>

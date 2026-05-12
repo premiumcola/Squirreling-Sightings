@@ -296,18 +296,42 @@ export function toggleCardHd(camId, btn){
 // no interaction. Quiet — just the stream switches and the HD button
 // visual de-activates. Tab-visibility suspends/resumes the countdown
 // so a backgrounded tab doesn't burn through the timer in silence.
-const _HD_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+// jt719 — HD auto-revert. The previous 10-min timer was effectively
+// "never" for the kind of peek-at-HD-and-walk-away pattern users
+// actually hit. 120 s is the new default: long enough for an active
+// inspection, short enough that a forgotten HD stream stops eating
+// CPU + bandwidth quickly. Any interaction with the tile resets the
+// countdown; the visual ring under the badge shrinks from full to
+// zero over the same duration so the user sees the timer instead of
+// being surprised when HD flips back to SD.
+const _HD_IDLE_TIMEOUT_MS = 120 * 1000;
 const _hdIdleTimers = new Map();  // camId → { handle, deadline, paused, remaining }
+
+function _refreshHdRing(camId){
+  // Restart the CSS countdown animation on the HD badge by toggling
+  // the data attr — CSS animation restarts whenever the attribute
+  // value changes. Stamp the deadline epoch so two consecutive
+  // _armHdIdleTimer calls (e.g. on rapid pointerenter events) both
+  // trigger a fresh animation start.
+  const card = byId('cameraCards')?.querySelector(`[data-camid="${CSS.escape(camId)}"]`);
+  const hdBtn = card?.querySelector('.cv-hd-badge');
+  if (!hdBtn) return;
+  hdBtn.style.setProperty('--hd-dur', (_HD_IDLE_TIMEOUT_MS / 1000) + 's');
+  hdBtn.removeAttribute('data-hd-running');
+  // Force reflow so the next attribute set restarts the animation.
+  void hdBtn.offsetWidth;
+  hdBtn.setAttribute('data-hd-running', String(Date.now()));
+}
 
 function _armHdIdleTimer(camId){
   _clearHdIdleTimer(camId);
+  _refreshHdRing(camId);
   if (document.hidden){
-    // Tab not in focus — track the deadline but don't burn the
-    // timeout while hidden. visibilitychange will resume.
-    _hdIdleTimers.set(camId, {
-      handle: 0, deadline: 0,
-      paused: true, remaining: _HD_IDLE_TIMEOUT_MS,
-    });
+    // jt719 — was "pause until tab visible". New spec: revert
+    // immediately. Backgrounding the tab is a strong "I'm done
+    // looking at this" signal; carrying HD across an unbounded
+    // hidden period wastes bandwidth for no user benefit.
+    _onHdIdleTimeout(camId);
     return;
   }
   const deadline = Date.now() + _HD_IDLE_TIMEOUT_MS;
@@ -334,22 +358,15 @@ function _onHdIdleTimeout(camId){
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden){
-    _hdIdleTimers.forEach((entry) => {
-      if (!entry.paused && entry.handle){
-        clearTimeout(entry.handle);
-        entry.remaining = Math.max(0, entry.deadline - Date.now());
-        entry.paused = true;
-        entry.handle = 0;
-      }
-    });
-  } else {
-    _hdIdleTimers.forEach((entry, camId) => {
-      if (!entry.paused) return;
-      entry.deadline = Date.now() + entry.remaining;
-      entry.handle = setTimeout(() => _onHdIdleTimeout(camId), entry.remaining);
-      entry.paused = false;
-    });
+  if (!document.hidden) return;
+  // jt719 — backgrounded tab → revert every active HD session.
+  // Spec: "When the tab becomes visible again, resume on sub
+  // unless the user explicitly re-clicks HD." Auto-revert handles
+  // the "resume on sub" part by switching the stream now; the
+  // re-click requirement falls out for free because nothing
+  // re-arms automatically.
+  for (const camId of Array.from(_hdCards)){
+    _onHdIdleTimeout(camId);
   }
 });
 
@@ -479,16 +496,17 @@ export function _cvEnterFullscreen(camId){
 // button visual flip back. Used by both fullscreenchange + the
 // fake-fullscreen click/Esc handlers above.
 function _runHdDropOnFsExit(){
+  // jt719 — was "drop HD only if the user turned it on DURING
+  // fullscreen". New spec: always drop HD on FS exit. Leaving FS
+  // is a strong "done with this view" signal; the user can re-
+  // click HD if they really want it back on the dashboard tile.
   const grid = byId('cameraCards');
   if (!grid) return;
   grid.querySelectorAll('.cv-card[data-camid]').forEach(card => {
     const camId = card.dataset.camid;
-    const hasHdNow = _hdCards.has(camId);
-    const hadHdAtEntry = _hdAtFsEntry.has(camId);
-    if (hasHdNow && !hadHdAtEntry){
-      const hdBtn = card.querySelector('.cv-hd-badge');
-      if (hdBtn) toggleCardHd(camId, hdBtn);
-    }
+    if (!_hdCards.has(camId)) return;
+    const hdBtn = card.querySelector('.cv-hd-badge');
+    if (hdBtn) toggleCardHd(camId, hdBtn);
   });
   _hdAtFsEntry.clear();
 }

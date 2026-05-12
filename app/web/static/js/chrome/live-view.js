@@ -278,6 +278,18 @@ export function _setLiveViewStream(hd){
 export function closeLiveView(){
   const modal = byId('liveViewModal');
   if (!modal) return;
+  // jt719 — revert any active HD session for this camera when the
+  // user closes the live-view modal. Walks the dashboard tile to
+  // flip the HD button via the canonical toggleCardHd so the
+  // _hdCards set, the tile's data attr, and the badge visual stay
+  // in lockstep. Silent — the badge just de-activates.
+  if (_liveViewCamId && _hdCards.has(_liveViewCamId)){
+    const card = document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"]`);
+    const hdBtn = card?.querySelector('.cv-hd-badge');
+    if (hdBtn && typeof window.toggleCardHd === 'function'){
+      window.toggleCardHd(_liveViewCamId, hdBtn);
+    }
+  }
   _stopLvDetectPolling();
   _teardownHls();
   const video = byId('liveViewVideo');

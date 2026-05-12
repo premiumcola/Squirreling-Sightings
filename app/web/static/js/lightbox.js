@@ -200,7 +200,7 @@ export function _setupVideoChrome(item){
   // localStorage but the bbox-overlay show/hide wiring lands in a
   // follow-up — for now those pills act as bookmarks for the user's
   // preference.
-  mountWeatherToggleBar(item, (id, on, _all) => {
+  const _toggleHandle = mountWeatherToggleBar(item, (id, on, _all) => {
     if (id === 'zones' || id === 'masks'){
       window._setZoneOverlayVisibility?.({
         showZones: id === 'zones' ? on : undefined,
@@ -208,6 +208,18 @@ export function _setupVideoChrome(item){
       });
     }
   });
+  // Sync the zone-overlay's initial visibility to whatever the
+  // toggle bar resolved (persisted localStorage state if present,
+  // otherwise _TOGGLES defaults). Without this the mount helper's
+  // own initial showZones=true could diverge from a remembered
+  // "user turned zones off last time" preference.
+  const _initial = _toggleHandle?.getState?.() || {};
+  if ('zones' in _initial || 'masks' in _initial){
+    window._setZoneOverlayVisibility?.({
+      showZones: !!_initial.zones,
+      showMasks: !!_initial.masks,
+    });
+  }
 }
 
 // Reverse _setupVideoChrome — called when navigating to a photo or

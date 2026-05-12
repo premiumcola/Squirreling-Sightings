@@ -34,7 +34,7 @@ const _TOGGLES = {
                desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
   trails:    { label: 'Trails',    default: true,
                desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
-  zones:     { label: 'Zonen',     default: false,
+  zones:     { label: 'Zonen',     default: true,
                desc: 'Erkennungs-Zonen (grün) anzeigen' },
   masks:     { label: 'Masken',    default: false,
                desc: 'Ausschluss-Masken (rot) anzeigen' },

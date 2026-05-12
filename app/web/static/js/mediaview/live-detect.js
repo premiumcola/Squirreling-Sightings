@@ -29,6 +29,7 @@ import {
   ZONE_STROKE as _ZS, ZONE_FILL as _ZF,
   MASK_STROKE as _MS, MASK_FILL as _MF, LINE_W as _LW,
 } from '../core/zone-tokens.js';
+import { fittedRect } from '../core/video-fit.js';
 import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { _setupVideoChrome } from '../lightbox.js';
 
@@ -393,6 +394,7 @@ function _renderBboxOverlay(){
   if (!_overlays.bboxes){ svg.innerHTML = ''; return; }
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
+  _positionSvgOverImage(svg);
   svg.innerHTML = (_session.lastDetections || []).map(d => {
     const c = colors[d.label] || colors.unknown;
     const op = d.verdict === 'pass' ? 1 : d.verdict === 'belowthresh' ? 0.55 : 0.30;
@@ -417,6 +419,38 @@ function _renderBboxOverlay(){
   });
 }
 
+// Position an overlay SVG to cover the IMAGE's visible rect, not the
+// whole #lightboxMediaWrap. The image uses object-fit:contain so its
+// on-screen rect is letterboxed inside the wrap; without this
+// correction every overlay SVG (bboxes / zones / masks) covers the
+// wrap and preserveAspectRatio:meet letterboxes the content inside
+// the WRAP bounds — polygons land tiny in the corner on 32:9
+// monitors and miss the actual pixels. fittedRect is the canonical
+// "where does the media really sit inside this element" helper;
+// same math drives the canvas zone overlay in the Mediathek +
+// Wetter-TL paths.
+function _positionSvgOverImage(svg){
+  const imgEl = byId('lightboxImg');
+  const wrap = byId('lightboxMediaWrap');
+  if (!imgEl || !wrap) return;
+  const wrapBox = wrap.getBoundingClientRect();
+  const imgBox = imgEl.getBoundingClientRect();
+  if (wrapBox.width <= 0 || imgBox.width <= 0) return;
+  const fit = fittedRect(imgEl);
+  // fit is relative to the img's content box; the img's content box
+  // top-left = imgBox.top/left - wrapBox.top/left.
+  const dx = (imgBox.left - wrapBox.left) + fit.x;
+  const dy = (imgBox.top  - wrapBox.top)  + fit.y;
+  svg.style.left = `${dx}px`;
+  svg.style.top  = `${dy}px`;
+  svg.style.width  = `${fit.w}px`;
+  svg.style.height = `${fit.h}px`;
+  svg.style.right  = 'auto';
+  svg.style.bottom = 'auto';
+  svg.style.inset  = 'auto';
+}
+
+
 function _renderZoneMaskOverlay(){
   const svg = _ensureZoneMaskOverlay();
   if (!svg || !_session) return;
@@ -426,6 +460,7 @@ function _renderZoneMaskOverlay(){
   svg.style.display = 'block';
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
+  _positionSvgOverImage(svg);
   const cam = (state.cameras || []).find(c => c.id === _session.camId) || {};
   // Stroke / fill colours pulled from core/zone-tokens.js so the
   // visual matches the cam-edit polygon editor + every other

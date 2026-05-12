@@ -243,11 +243,19 @@ export function lbRenderTrackTimeline(item){
   // still captures pointer events for drag-to-scrub; its mapping
   // through .lb-time-col's bounding rect (in time-axis.js) is
   // unchanged.
-  const playCursor = `
-    <div class="lb-play-cursor" aria-hidden="true">
-      <div class="lb-play-line"></div>
-      <div class="lb-play-hit"></div>
-    </div>`;
+  //
+  // Suppressed entirely when the swimlane has no tracks — without it
+  // the cursor would draw straight through the centred "Nach-
+  // Erkennung starten" empty-state button (timelapse) or the
+  // "Keine Track-Daten" placeholder text (motion). There's no
+  // playback to anchor anyway when nothing has been indexed yet;
+  // the next render (after rescan completes) brings the cursor back.
+  const playCursor = haveTracks
+    ? `<div class="lb-play-cursor" aria-hidden="true">
+         <div class="lb-play-line"></div>
+         <div class="lb-play-hit"></div>
+       </div>`
+    : '';
 
   host.innerHTML = `
     <div class="lb-time-stack" style="--play-pct:0">

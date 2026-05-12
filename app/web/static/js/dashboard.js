@@ -784,7 +784,7 @@ export function renderDashboard(){
         onload="_cvImgLoaded(this)"
         onerror="_camImgRetry(this)" />
       <div class="cv-grad-top"></div>
-      <div class="cv-grad-bot"></div>
+${isActive ? `      <div class="cv-grad-bot"></div>` : ''}
       <div class="cv-chrome-top-left">
         <div class="cv-name-row">
           <span class="cv-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
@@ -828,12 +828,14 @@ ${isActive ? `
         ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
       </div>
 ` : ''}
+${isActive ? `
       <div class="cv-chrome-bottom-left">${_classPills ? `<div class="cv-class-cluster">${_classPills}</div>` : ''}</div>
       <div class="cv-chrome-bottom-right">
         ${_channelCluster}
-        ${c.rtsp_url && isActive ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
+        ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>
       </div>
+` : ''}
     </div>
   </div>
 </article>`;

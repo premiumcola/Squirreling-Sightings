@@ -724,48 +724,62 @@ def api_test_detection(cam_id: str):
             "reason":  reason,
         })
     out.sort(key=lambda r: r["score"], reverse=True)
-    # ── Downscale the snapshot to ≤960 px wide ────────────────────────
-    # Inference already ran on the full-resolution frame (above). What
-    # the frontend renders inside the panel is only the JPEG that lives
-    # in the base64 data URL — a 1920×1080 snapshot at 1 Hz turns iOS
-    # Safari into molasses without any actual stream problem. Bbox
-    # coordinates land in the same coordinate space as the encoded
-    # JPEG (frame_size), so the SVG viewBox lines up regardless of
-    # the source resolution. Quality 65 + JPEG-OPTIMIZE gives a
-    # progressive render that iOS paints incrementally.
+    # ``?no_snapshot=1`` — Simulieren v2 (kr493): frontend drives the
+    # video via the continuous MJPEG stream and only needs the bbox
+    # payload + frame dimensions here. Skipping the resize + base64
+    # encode cuts the response from ~106 kB to ~1 kB AND eliminates
+    # the cv2.imencode + base64 cost (which on a 1080p frame is the
+    # dominant time budget after Coral inference itself). Bbox coords
+    # stay in SOURCE pixel space so the SVG viewBox math still lines
+    # up against the live MJPEG.
     src_h, src_w = frame.shape[:2]
-    target_w = 960
-    if src_w > target_w:
-        snap_scale = target_w / float(src_w)
-        snap_w = target_w
-        snap_h = max(2, int(round(src_h * snap_scale)) // 2 * 2)
-        snap_frame = cv2.resize(frame, (snap_w, snap_h), interpolation=cv2.INTER_AREA)
-    else:
-        snap_scale = 1.0
-        snap_w, snap_h = src_w, src_h
-        snap_frame = frame
-    # Rewrite bbox coords into the downscaled space when we actually
-    # resized. Skip the multiplication entirely on the no-op path so
-    # rounding never nudges an integer bbox off the source frame.
-    if snap_scale != 1.0:
-        for d in out:
-            x, y, w_box, h_box = d["bbox"]
-            d["bbox"] = [
-                int(round(x * snap_scale)),
-                int(round(y * snap_scale)),
-                int(round(w_box * snap_scale)),
-                int(round(h_box * snap_scale)),
-            ]
-    try:
-        import base64
-        ok, jpg = cv2.imencode(".jpg", snap_frame, [
-            int(cv2.IMWRITE_JPEG_QUALITY), 65,
-            int(cv2.IMWRITE_JPEG_OPTIMIZE), 1,
-        ])
-        snapshot = f"data:image/jpeg;base64,{base64.b64encode(jpg.tobytes()).decode()}" if ok else None
-    except Exception as e:
-        log.warning("[test-detection] %s encode failed: %s", cam_id, e)
-        snapshot = None
+    skip_snapshot = (request.args.get("no_snapshot") or "").strip() in ("1", "true", "yes")
+    snap_scale = 1.0
+    snap_w, snap_h = src_w, src_h
+    snapshot = None
+    if not skip_snapshot:
+        # ── Downscale the snapshot to ≤960 px wide ────────────────────
+        # Inference already ran on the full-resolution frame (above).
+        # What the frontend renders inside the panel is only the JPEG
+        # that lives in the base64 data URL — a 1920×1080 snapshot at
+        # 1 Hz turns iOS Safari into molasses without any actual stream
+        # problem. Bbox coordinates land in the same coordinate space
+        # as the encoded JPEG (frame_size), so the SVG viewBox lines
+        # up regardless of the source resolution. Quality 65 +
+        # JPEG-OPTIMIZE gives a progressive render that iOS paints
+        # incrementally.
+        target_w = 960
+        if src_w > target_w:
+            snap_scale = target_w / float(src_w)
+            snap_w = target_w
+            snap_h = max(2, int(round(src_h * snap_scale)) // 2 * 2)
+            snap_frame = cv2.resize(frame, (snap_w, snap_h),
+                                    interpolation=cv2.INTER_AREA)
+        else:
+            snap_frame = frame
+        # Rewrite bbox coords into the downscaled space when we
+        # actually resized. Skip the multiplication entirely on the
+        # no-op path so rounding never nudges an integer bbox off the
+        # source frame.
+        if snap_scale != 1.0:
+            for d in out:
+                x, y, w_box, h_box = d["bbox"]
+                d["bbox"] = [
+                    int(round(x * snap_scale)),
+                    int(round(y * snap_scale)),
+                    int(round(w_box * snap_scale)),
+                    int(round(h_box * snap_scale)),
+                ]
+        try:
+            import base64
+            ok, jpg = cv2.imencode(".jpg", snap_frame, [
+                int(cv2.IMWRITE_JPEG_QUALITY), 65,
+                int(cv2.IMWRITE_JPEG_OPTIMIZE), 1,
+            ])
+            snapshot = f"data:image/jpeg;base64,{base64.b64encode(jpg.tobytes()).decode()}" if ok else None
+        except Exception as e:
+            log.warning("[test-detection] %s encode failed: %s", cam_id, e)
+            snapshot = None
     # Frontend uses these dims to size the SVG viewBox; must match the
     # bbox + snapshot coordinate space, not the source resolution.
     w, h = snap_w, snap_h

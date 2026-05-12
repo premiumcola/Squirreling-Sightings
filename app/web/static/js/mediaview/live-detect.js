@@ -109,26 +109,20 @@ function _setupLiveChrome(camId, cameraName){
   // Live mode title-bar marker — replaces the recorded timestamp.
   const tsEl = byId('lightboxTopTime');
   if (tsEl) tsEl.textContent = '● Live';
-  // Hide both <img> and <video> until the first snapshot lands —
-  // otherwise an empty src on #lightboxImg renders the browser's
-  // broken-image icon while we wait for the first 1 Hz tick to
-  // return. _renderFrame flips display:block on the next snapshot
-  // assignment (img.onload handler installed once below).
+  // kr493 — Simulieren v2 continuous-stream redesign. The video is
+  // now the SAME MJPEG sub-stream the dashboard tile + Live modal
+  // use (stream.mjpg, ~15-25 fps), and the polling tick fetches
+  // ONLY the detection payload (no_snapshot=1, ~1 kB response). The
+  // bbox/trail overlays update at the detector's natural rate
+  // (~1-2 fps) while the video itself stays smooth — no more
+  // "5 seconds per real second" felt lag.
   const imgEl = byId('lightboxImg');
   const videoEl = byId('lightboxVideo');
   if (videoEl){ videoEl.pause(); videoEl.src = ''; videoEl.style.display = 'none'; }
   if (imgEl){
-    imgEl.style.display = 'none';
-    imgEl.src = '';
-    if (!imgEl._liveOnloadInstalled){
-      imgEl.addEventListener('load', () => {
-        // Only reveal once the src is a real (non-empty) URL — the
-        // initial reset above sets src='' which still fires `load`
-        // on some browsers via the cache.
-        if (imgEl.getAttribute('src')) imgEl.style.display = 'block';
-      });
-      imgEl._liveOnloadInstalled = true;
-    }
+    const mjpegUrl = `/api/camera/${encodeURIComponent(camId)}/stream.mjpg`;
+    imgEl.src = mjpegUrl;
+    imgEl.style.display = 'block';
   }
   const confirmBtn = byId('lightboxConfirm');
   if (confirmBtn) confirmBtn.style.display = 'none';
@@ -342,7 +336,7 @@ async function _tick(){
   const cycleStart = performance.now();
   try {
     const r = await fetch(
-      `/api/cameras/${encodeURIComponent(session.camId)}/test-detection`,
+      `/api/cameras/${encodeURIComponent(session.camId)}/test-detection?no_snapshot=1`,
       { method: 'POST', signal: controller.signal },
     );
     if (_session !== session) return;
@@ -365,8 +359,12 @@ function _scheduleNext(session, lastCycleMs){
 }
 
 function _renderFrame(data){
-  const imgEl = byId('lightboxImg');
-  if (imgEl && data.snapshot) imgEl.src = data.snapshot;
+  // kr493 — Simulieren v2 no longer paints data.snapshot into
+  // #lightboxImg. The img element streams the continuous MJPEG
+  // (set in _setupLiveChrome on mount); this tick only updates
+  // the detection overlays + state. data.snapshot is still emitted
+  // by the backend when ?no_snapshot is unset (other callers rely
+  // on it) — Simulieren just ignores it.
   // Frame state for the bbox + zone/mask overlays.
   _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
   _session.lastDetections = data.detections || [];

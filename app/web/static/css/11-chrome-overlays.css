@@ -114,29 +114,27 @@
 .lvm-wrap:fullscreen,
 .lvm-wrap:-webkit-full-screen,
 .lvm-wrap.fake-fullscreen{
+  position:relative !important;
+  width:100vw !important;
+  height:100vh !important;
   background:#000;
-  display:flex;
-  align-items:center;
-  justify-content:center;
 }
 .lvm-wrap.fake-fullscreen{
   position:fixed !important;
   inset:0 !important;
   z-index:9999 !important;
-  width:100vw !important;
-  height:100dvh !important;
   margin:0 !important;
-  max-width:none !important;
-  max-height:none !important;
 }
 .lvm-wrap:fullscreen .lvm-img,
 .lvm-wrap:-webkit-full-screen .lvm-img,
 .lvm-wrap.fake-fullscreen .lvm-img{
+  position:absolute !important;
+  top:0; right:0; bottom:0; left:0;
+  margin:auto !important;
   width:auto !important;
   height:auto !important;
   max-width:100% !important;
   max-height:100% !important;
   object-fit:contain;
-  background:transparent;
 }
 

@@ -13,10 +13,15 @@ import { state, STAT_MEDIA_DRILLDOWN } from './core/state.js';
 import { byId, esc } from './core/dom.js';
 import { j } from './core/api.js';
 import { colors, OBJ_LABEL, OBJ_SVG, getCameraIcon } from './core/icons.js';
+import { CLASS_COLORS } from './core/class-colors.js';
 
+// Re-export of the canonical class colours plus the timeline-only
+// ``timelapse`` lane key (not a real class). Single source of truth
+// lives in core/class-colors.js; keeping CAT_COLORS as a named
+// re-export means every existing consumer of timeline.js's CAT_COLORS
+// keeps working unchanged.
 export const CAT_COLORS = {
-  alle: '#8888aa', motion: '#cbd5e1', person: '#facc15', cat: '#fb923c',
-  bird: '#38bdf8', car: '#f87171', dog: '#7c2d12', squirrel: '#7c4a1f',
+  ...CLASS_COLORS,
   timelapse: '#a855f7',
 };
 // Lane order top-down; lanes auto-filter by content presence (any lane

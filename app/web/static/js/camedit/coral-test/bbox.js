@@ -7,10 +7,8 @@
 // Per-label fill / stroke colour map. Mirrors the live alert pill
 // palette so cascade-mode bboxes match the lightbox overlay across the
 // rest of the UI.
-export const _CORAL_LABEL_COLORS = {
-  person:'#6e6eff',cat:'#a06eff',bird:'#54d662',dog:'#00b0ff',
-  car:'#f87171',fox:'#ff7a1a',squirrel:'#7c4a1f',hedgehog:'#a67c52',
-};
+import { CLASS_COLORS as _CORAL_LABEL_COLORS } from '../../core/class-colors.js';
+export { _CORAL_LABEL_COLORS };
 
 export function _coralLabelColor(lbl){
   return _CORAL_LABEL_COLORS[String(lbl||'').toLowerCase()]||'#ffb400';

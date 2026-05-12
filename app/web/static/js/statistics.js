@@ -9,13 +9,16 @@ import { state, STAT_MEDIA_DRILLDOWN } from './core/state.js';
 import { j } from './core/api.js';
 import { CAT_COLORS } from './timeline.js';
 import { colors, OBJ_LABEL, OBJ_SVG, objIconSvg, getCameraIcon, getCameraColor } from './core/icons.js';
+// Was a separate hex map that drifted from every other module's palette
+// (person was #ff6b6b here, #facc15 in timeline / icons). Now consumes
+// the canonical core/class-colors.js so a palette change propagates.
+import { CLASS_COLORS as _STAT_LABEL_COLORS } from './core/class-colors.js';
 // Erkennungswolke is rendered into its own mount node inside the
 // Statistik section. Importing here keeps its IntersectionObserver
 // lifecycle in lockstep with the rest of the panel.
 import { initDetectionCloud } from './detection-cloud.js';
 
 const _STAT_LABEL_ICONS  = { motion: '👁', person: '🧍', cat: '🐈', bird: '🐦', car: '🚗', dog: '🐕', fox: '🦊', hedgehog: '🦔', squirrel: '🐿️', horse: '🐴' };
-const _STAT_LABEL_COLORS = { motion: '#36a2ff', person: '#ff6b6b', cat: '#9b8cff', bird: '#62d26f', car: '#00c2ff', dog: '#7c2d12', fox: '#ff7a1a', hedgehog: '#a67c52', squirrel: '#c8651a' };
 // Section title icons — monochrome, currentColor, ~14 px stroke style.
 const _STAT_TITLE_SVG = {
   camera: `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5h2.5l1-1.5h5l1 1.5H14a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><circle cx="8" cy="9" r="2.7"/></svg>`,

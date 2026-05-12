@@ -1,16 +1,15 @@
 // ─── core/icons.js ─────────────────────────────────────────────────────────
-// Class colour palette, German label dictionary, and inline SVG icon
-// library shared across the dashboard, mediathek, lightbox, timeline,
-// camera-edit and weather modules. Defining these here gives every
-// callsite a single import and lets icon designers tune the palette
-// without grep-and-replace across the codebase.
+// German label dictionary + inline SVG icon library shared across the
+// dashboard, mediathek, lightbox, timeline, camera-edit and weather
+// modules. The per-class colour palette lives in core/class-colors.js
+// (the single source of truth) — `colors` here re-exports those plus
+// a handful of non-class chrome entries (alarm, unknown, coral, etc.).
+import { CLASS_COLORS } from './class-colors.js';
 
 export const colors = {
-  person:       '#facc15',
-  cat:          '#fb923c',
-  bird:         '#38bdf8',
-  car:          '#f87171',
-  motion:       '#cbd5e1',
+  ...CLASS_COLORS,
+  // Non-class extensions kept local — chrome tones, event-state tints,
+  // legacy keys outside the canonical class set.
   alarm:        '#ef4444',
   unknown:      '#4a6477',
   timelapse:    '#a855f7',
@@ -18,8 +17,6 @@ export const colors = {
   coral:        '#f472b6',
   object:       '#f472b6',
   notification: '#5bc8f5',
-  dog:          '#7c2d12',
-  squirrel:     '#7c4a1f',
 };
 
 export const OBJ_LABEL = {

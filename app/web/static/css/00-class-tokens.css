@@ -1,0 +1,18 @@
+/* ── Class-colour design tokens ─────────────────────────────────────────
+   CSS mirror of core/class-colors.js. Loaded first by css_builder so
+   every other partial can reference --class-person etc. without an
+   import-order dance. Keep both files in lockstep — the JS module is
+   the source of truth for runtime colour lookups; this file is for
+   stylesheets that need the same palette without an inline style. */
+:root {
+  --class-person:   #facc15;
+  --class-cat:      #fb923c;
+  --class-dog:      #a855f7;
+  --class-bird:     #62d26f;
+  --class-squirrel: #c8651a;
+  --class-fox:      #ff7a1a;
+  --class-hedgehog: #a67c52;
+  --class-car:      #00c2ff;
+  --class-motion:   #cbd5e1;
+  --class-alle:     #8888aa;
+}

@@ -21,7 +21,11 @@ from pathlib import Path
 # override anything they need to. Domain partials in the middle can be in any
 # order — CSS specificity, not source order, decides the cascade for them.
 LOAD_ORDER = [
-    # Zone + mask design tokens — load FIRST so every later partial
+    # Class-colour tokens — load FIRST so every later partial can
+    # reference --class-person / --class-cat etc. Mirrors
+    # core/class-colors.js.
+    "00-class-tokens.css",
+    # Zone + mask design tokens — load early so every later partial
     # can reference the --zone-stroke / --mask-stroke custom properties.
     "00-zone-tokens.css",
     "01-base.css",

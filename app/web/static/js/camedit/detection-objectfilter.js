@@ -6,14 +6,18 @@
 // doesn't change.
 import { byId } from '../core/dom.js';
 import { objIconSvg } from '../core/icons.js';
+import { classColor } from '../core/class-colors.js';
 
+// German `label` field stays local (locale, not colour) but the `cb`
+// hex now pulls from class-colors.js so a palette change in one place
+// propagates everywhere.
 const _CAM_OBJ_OPTIONS = [
-  { k: 'person',   label: 'Person',       cb: '#a855f7' },
-  { k: 'cat',      label: 'Katze',        cb: '#ec4899' },
-  { k: 'bird',     label: 'Vogel',        cb: '#06b6d4' },
-  { k: 'car',      label: 'Auto',         cb: '#f59e0b' },
-  { k: 'dog',      label: 'Hund',         cb: '#7c2d12' },
-  { k: 'squirrel', label: 'Eichhörnchen', cb: '#7c4a1f' },
+  { k: 'person',   label: 'Person',       cb: classColor('person') },
+  { k: 'cat',      label: 'Katze',        cb: classColor('cat') },
+  { k: 'bird',     label: 'Vogel',        cb: classColor('bird') },
+  { k: 'car',      label: 'Auto',         cb: classColor('car') },
+  { k: 'dog',      label: 'Hund',         cb: classColor('dog') },
+  { k: 'squirrel', label: 'Eichhörnchen', cb: classColor('squirrel') },
 ];
 
 let _camObjectFilterState = [];

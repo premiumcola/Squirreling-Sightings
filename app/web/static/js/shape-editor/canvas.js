@@ -5,6 +5,9 @@
 // dependency graph one-way).
 import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
+import {
+  ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL,
+} from '../core/zone-tokens.js';
 import { _polyPoints, _polyLabels } from './geometry.js';
 
 // Labels available for per-polygon scoping. Mirrors KNOWN_OBJECT_LABELS
@@ -126,8 +129,17 @@ export function drawShapes(){
   // (when not ready, the gray placeholder already drawn by
   //  _maskCanvasFallback stays in the background)
   const pulseId = shapeState.pulse;
-  (shapeState.zones || []).forEach((p, i) => drawPoly(ctx, p, 'rgba(75,163,255,1)', 0.17, pulseId === `zone:${i}`, 'zone', i));
-  (shapeState.masks || []).forEach((p, i) => drawPoly(ctx, p, 'rgba(255,107,107,1)', 0.18, pulseId === `mask:${i}`, 'mask', i));
+  // Zones land in green (Erkennungs-Zone), masks in red
+  // (Ausschluss-Maske) — same colours every viewing context uses
+  // via core/zone-tokens.js + 00-zone-tokens.css. The ZONE_FILL /
+  // MASK_FILL tokens already carry the 0.18 alpha; drawPoly takes
+  // a separate fillAlpha for the existing alpha-replace hook so
+  // both fill colours line up at 0.18 on the canvas regardless
+  // of caller-side overrides.
+  (shapeState.zones || []).forEach((p, i) =>
+    drawPoly(ctx, p, ZONE_STROKE, 0.18, pulseId === `zone:${i}`, 'zone', i));
+  (shapeState.masks || []).forEach((p, i) =>
+    drawPoly(ctx, p, MASK_STROKE, 0.18, pulseId === `mask:${i}`, 'mask', i));
   if (shapeState.points.length){
     ctx.beginPath();
     ctx.moveTo(shapeState.points[0].x, shapeState.points[0].y);
@@ -138,8 +150,8 @@ export function drawShapes(){
     // stay neutral white so they remain visible against both blue
     // and red strokes.
     const previewColor = shapeState.mode === 'mask'
-      ? 'rgba(255,107,107,1)'
-      : 'rgba(75,163,255,1)';
+      ? MASK_STROKE
+      : ZONE_STROKE;
     ctx.strokeStyle = previewColor;
     ctx.lineWidth = 2;
     ctx.setLineDash([7, 6]);

@@ -21,7 +21,7 @@ const STORAGE_KEY = 'tamspy.shapeMode';
 // camera_runtime/_zones.py — zones whitelist detections to their
 // interior; masks suppress detections inside them.
 const _MODE_HINTS = {
-  zone: 'Erkennungen werden nur innerhalb der blauen Polygone gezählt.',
+  zone: 'Erkennungen werden nur innerhalb der GRÜNEN Polygone gezählt.',
   mask: 'Erkennungen innerhalb der roten Polygone werden unterdrückt.',
 };
 

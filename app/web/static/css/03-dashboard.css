@@ -118,15 +118,49 @@
   -webkit-tap-highlight-color:transparent;
   -webkit-backdrop-filter:blur(8px);
   backdrop-filter:blur(8px);
-  transition:background .12s,transform .08s;
+  transition:background .14s cubic-bezier(.4,0,.2,1),
+             color .14s cubic-bezier(.4,0,.2,1),
+             transform .08s cubic-bezier(.4,0,.2,1);
 }
-.cv-chrome-btn:hover{background:rgba(0,0,0,.78)}
-.cv-chrome-btn:active{transform:scale(.96)}
+/* bk417 — markant black-on-white hover + solid-black active. The
+   previous tweak (bg .65 → .78, scale .96) was too timid against a
+   dark video. The invert pattern gives clear tactile feedback when
+   the user reaches for a control: pill flips to near-white with a
+   black icon on hover, then snaps to solid black with white icon
+   plus a slight squish on press. Hover is gated behind
+   @media (hover: hover) so iOS taps don't leave the inverted state
+   stuck after release — touch devices see the active snap directly
+   on each tap. */
+@media (hover: hover){
+  .cv-chrome-btn:hover{background:rgba(255,255,255,.92);color:#000}
+}
+.cv-chrome-btn:active{
+  background:#000;
+  color:#fff;
+  transform:scale(.94);
+}
 .cv-chrome-btn:focus{outline:none}
-.cv-chrome-btn:focus-visible{box-shadow:inset 0 0 0 2px rgba(255,255,255,.5)}
+.cv-chrome-btn:focus-visible{box-shadow:inset 0 0 0 2px rgba(255,255,255,.85)}
 .cv-chrome-btn[data-state="muted"]{opacity:.38}
 .cv-chrome-btn.has-text{padding:0 12px}
 .cv-chrome-btn::before{content:"";position:absolute;inset:-7px;border-radius:14px;pointer-events:auto}
+/* Class-tinted variants keep their icon tint when the bg inverts —
+   flipping to white with an unchanged tinted icon reads cleanly,
+   and on solid-black the tint still sits well. The base rule
+   above sets color: #000 on hover for non-tinted buttons; we
+   override for the tinted family so their --icon-tint (class pill)
+   or hardcoded blue/amber (TG / MQTT) colour stays. The TG / MQTT
+   rules use `color: revert-layer` so the badge's own color rule
+   (cv-tg-badge → #5eb6ff, cv-mqtt-badge → #d6a06b) wins back over
+   the cv-chrome-btn :hover override. */
+@media (hover: hover){
+  .cv-class-pill:hover{background:#fff;color:var(--icon-tint, #000)}
+  .cv-tg-badge:hover{background:#fff;color:#5eb6ff}
+  .cv-mqtt-badge:hover{background:#fff;color:#d6a06b}
+}
+.cv-class-pill:active{background:#000;color:var(--icon-tint, #fff)}
+.cv-tg-badge:active{background:#000;color:#5eb6ff}
+.cv-mqtt-badge:active{background:#000;color:#d6a06b}
 
 /* zg531 — class filter pill. ``color: var(--icon-tint)`` is set per
    instance to var(--class-<cls>); the SVG strokes inherit via

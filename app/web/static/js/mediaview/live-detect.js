@@ -25,6 +25,10 @@ import { state } from '../core/state.js';
 import { OBJ_LABEL, OBJ_SVG, colors, objIconSvg } from '../core/icons.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { renderPanelTabs } from './panel-tabs.js';
+import {
+  ZONE_STROKE as _ZS, ZONE_FILL as _ZF,
+  MASK_STROKE as _MS, MASK_FILL as _MF, LINE_W as _LW,
+} from '../core/zone-tokens.js';
 import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { _setupVideoChrome } from '../lightbox.js';
 
@@ -316,14 +320,17 @@ function _renderZoneMaskOverlay(){
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   const cam = (state.cameras || []).find(c => c.id === _session.camId) || {};
+  // Stroke / fill colours pulled from core/zone-tokens.js so the
+  // visual matches the cam-edit polygon editor + every other
+  // read-only overlay context exactly (cm-43). SVG viewBox is
+  // already in source coordinates, so a non-scaling-stroke keeps
+  // the LINE_W constant regardless of the rendered size.
   const parts = [];
-  // Zones — green outlined polygons. Masks — red outlined polygons.
-  // Both rendered as read-only overlays; editing lives in cam-edit.
   if (showZones){
     for (const z of (cam.zones || [])){
       const pts = (z.points || z.poly || []).map(p => `${p.x || p[0]},${p.y || p[1]}`).join(' ');
       if (pts){
-        parts.push(`<polygon points="${pts}" fill="rgba(34,197,94,0.10)" stroke="#22c55e" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+        parts.push(`<polygon points="${pts}" fill="${_ZF}" stroke="${_ZS}" stroke-width="${_LW}" vector-effect="non-scaling-stroke"/>`);
       }
     }
   }
@@ -331,7 +338,7 @@ function _renderZoneMaskOverlay(){
     for (const m of (cam.masks || [])){
       const pts = (m.points || m.poly || []).map(p => `${p.x || p[0]},${p.y || p[1]}`).join(' ');
       if (pts){
-        parts.push(`<polygon points="${pts}" fill="rgba(239,68,68,0.18)" stroke="#ef4444" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+        parts.push(`<polygon points="${pts}" fill="${_MF}" stroke="${_MS}" stroke-width="${_LW}" vector-effect="non-scaling-stroke"/>`);
       }
     }
   }

@@ -29,6 +29,9 @@ import {
 } from './mediathek/bbox-overlay/index.js';
 import { openMediaView } from './mediaview/index.js';
 import { mountRecordedPanels } from './mediaview/panels/orchestration.js';
+import {
+  mountZoneOverlayForLightbox, unmountZoneOverlayForLightbox,
+} from './mediaview/canvas/zone-overlay-mount.js';
 import { _iosNativeVideoOpen } from './mediathek/ios-video.js';
 import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
@@ -182,6 +185,13 @@ export function _setupVideoChrome(item){
   const setHost = byId('lightboxSettings');
   if (setHost) setHost.hidden = false;
   mountRecordedPanels(item);
+  // Read-only zone + mask overlay — green inclusion polygons + red
+  // exclusion polygons, sourced from the camera's settings. Timelapse
+  // playback hides masks (sped-up overview gets visually cluttered);
+  // motion clips show both. ResizeObserver inside the helper keeps
+  // the polygons aligned with the video element through every
+  // layout change (fullscreen enter/exit, address-bar collapse).
+  mountZoneOverlayForLightbox(item, { hideMasks: item?.type === 'timelapse' });
 }
 
 // Reverse _setupVideoChrome — called when navigating to a photo or
@@ -570,6 +580,9 @@ export function closeLightbox(){
   // the window bridge so this file doesn't have to import the
   // live-detect module directly.
   try { window.closeLiveDetect?.(); } catch { /* ignore */ }
+  // Tear down the zone/mask overlay + its ResizeObserver. The
+  // helper is idempotent; the next open re-mounts cleanly.
+  try { unmountZoneOverlayForLightbox(); } catch { /* ignore */ }
   // Drop the full-screen video chrome so the next photo open returns
   // to the centred-modal layout without a flash of misplaced controls.
   _teardownVideoChrome();

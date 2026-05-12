@@ -69,23 +69,26 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   ctx.closePath();
   ctx.fillStyle = color.replace('1)', `${fillAlpha})`);
   ctx.strokeStyle = color;
-  ctx.lineWidth = emphasised ? 5 : 3;
+  // kr592 — slimmer stroke proportional to the smaller vertex handles
+  // below. Emphasised (selected) 3 px, normal 2 px.
+  ctx.lineWidth = emphasised ? 3 : 2;
   ctx.fill();
   ctx.stroke();
   // Vertex handles — filled circles in the polygon colour with a white
-  // border. The currently-hovered vertex gets a larger radius so the
-  // user sees what they're about to grab. The DRAW position is clamped
-  // to keep the full circle inside the canvas; the underlying coordinate
-  // is left alone, so hit-testing still uses the real point.
+  // border. kr592 — radius shrunk from 10/13 to 6/8 (12 / 16 px
+  // diameter) so the visual handle no longer eats 10 px around each
+  // vertex. Drawing position is now the ACTUAL point coordinate
+  // (no clamping); circles at the canvas edge render half-clipped by
+  // the canvas pixel buffer, which is what the user wants — visual
+  // feedback that the point sits on the boundary. Hit-test radius
+  // (12 px in geometry.js#_SHAPE_HIT_PX) is decoupled from the
+  // visual radius so iPhone taps remain comfortable.
   const hov = shapeState.hoverVertex;
   const isHov = (j) => hov && hov.kind === kind && hov.polyIdx === idx && hov.ptIdx === j;
-  const cw = ctx.canvas.width, chh = ctx.canvas.height;
   for (let j = 0; j < pts.length; j++){
-    const r = isHov(j) ? 13 : 10;
-    const dx = Math.max(r, Math.min(cw - r, pts[j].x));
-    const dy = Math.max(r, Math.min(chh - r, pts[j].y));
+    const r = isHov(j) ? 8 : 6;
     ctx.beginPath();
-    ctx.arc(dx, dy, r, 0, Math.PI * 2);
+    ctx.arc(pts[j].x, pts[j].y, r, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = '#ffffff';

@@ -46,6 +46,53 @@ byId('weatherRescanBtn')?.addEventListener('click', async () => {
   }
 });
 
+// ── Retention / auto-cleanup save handler ─────────────────────────────────
+// Mirrors the Mediathek mediaSettingsForm submit in chrome/storage-stats.js
+// — POSTs the slider + toggle into ``weather`` so the same /api/settings/app
+// endpoint persists both panels' retention preferences. Backend cleanup
+// sweep that consumes these values lands in a follow-up commit; for now
+// the slider just persists the user's intent additively.
+byId('weatherMaintForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target.elements;
+  const payload = { weather: {
+    retention_days:        Number(f['retention_days'].value || 90),
+    auto_cleanup_enabled:  !!(f['auto_cleanup_enabled']?.checked),
+  }};
+  try {
+    await fetch('/api/settings/app', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    showToast('Wetter-Aufbewahrung gespeichert.', 'success');
+  } catch (err){
+    showToast('Speichern fehlgeschlagen: ' + (err.message || err), 'error');
+  }
+});
+
+// ── Bootstrap initial values from current settings ────────────────────────
+// On first load, paint the slider / toggle with whatever the server already
+// persisted (defaults to 90 d / auto-cleanup ON the very first time). Same
+// approach as camedit/index.js for the mediathek slider — best-effort,
+// silent on failure.
+(async function _initWeatherMaintFromSettings(){
+  try {
+    const r = await fetch('/api/bootstrap');
+    if (!r.ok) return;
+    const data = await r.json();
+    const w = (data && data.app && data.app.weather) || {};
+    const days = Number(w.retention_days || 90);
+    const auto = w.auto_cleanup_enabled !== false;
+    const sl = byId('ws_retention_days');
+    if (sl){ sl.value = days; }
+    const lbl = byId('ws_retention_days_val');
+    if (lbl){ lbl.textContent = days + ' Tage'; }
+    const tog = byId('ws_auto_cleanup');
+    if (tog){ tog.checked = auto; }
+  } catch { /* silent */ }
+})();
+
 byId('weatherThumbRegenBtn')?.addEventListener('click', async () => {
   const btn = byId('weatherThumbRegenBtn');
   if (btn.disabled) return;

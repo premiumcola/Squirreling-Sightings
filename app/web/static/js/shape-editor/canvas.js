@@ -8,7 +8,7 @@ import { shapeState } from '../core/state.js';
 import {
   ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL,
 } from '../core/zone-tokens.js';
-import { _polyPoints, _polyLabels } from './geometry.js';
+import { _polyPoints, _polyLabels, _polyCurves } from './geometry.js';
 
 // Labels available for per-polygon scoping. Mirrors KNOWN_OBJECT_LABELS
 // in schema.py — keep in sync if a new class joins the detector.
@@ -63,9 +63,23 @@ function scaleForCanvas(el, img){
 function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   const pts = _polyPoints(poly);
   if (!pts.length) return;
+  // C2 — segment-aware path. For each segment i (0..N-1, last wrapping
+  // to pts[0]), curves[i] supplies an optional quadratic-bezier
+  // control point. If present, the segment renders as a curve bending
+  // toward the control point; otherwise it falls back to a straight
+  // lineTo — matches the legacy behaviour for every existing zone.
+  const curves = _polyCurves(poly);
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
-  pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+  for (let i = 0; i < pts.length; i++){
+    const pNext = pts[(i + 1) % pts.length];
+    const cp = curves[i];
+    if (cp && typeof cp === 'object' && Number.isFinite(cp.x) && Number.isFinite(cp.y)){
+      ctx.quadraticCurveTo(cp.x, cp.y, pNext.x, pNext.y);
+    } else {
+      ctx.lineTo(pNext.x, pNext.y);
+    }
+  }
   ctx.closePath();
   ctx.fillStyle = color.replace('1)', `${fillAlpha})`);
   ctx.strokeStyle = color;

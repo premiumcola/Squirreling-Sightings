@@ -14,6 +14,17 @@ export function _polyLabels(p){
   if (!p || typeof p !== 'object') return [];
   return Array.isArray(p.labels) ? p.labels.slice() : [];
 }
+// C2 — per-segment curve control points. curves[i] is the quadratic
+// bezier control point for the segment from points[i] to
+// points[(i+1) % N], or null/undefined for a straight segment.
+// Legacy polygons (no curves key) → empty array → every segment is
+// drawn straight. The schema lives only in storage/settings.json under
+// the polygon's "curves" key; nothing on disk changes for polygons
+// the user hasn't bent.
+export function _polyCurves(p){
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return [];
+  return Array.isArray(p.curves) ? p.curves : [];
+}
 
 // Hit-test radius for vertex-grab and close-polygon detection. Shrunk
 // from 12 to 9 after C1 — handles got smaller (radius 5 / 7), so the

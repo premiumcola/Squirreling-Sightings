@@ -221,10 +221,27 @@ class SettingsStore:
         so the HTTP handler can detect a rename (manufacturer / model / name
         / rtsp_url change → build_camera_id rebuilds → migration renames
         folders + the cam id in settings.json) and rebind the live runtime
-        accordingly."""
+        accordingly.
+
+        ja847 — for UPDATES the validated payload is merged directly onto
+        the stored cam dict. The previous implementation funnelled the
+        payload through ``default_camera()`` first, which rebuilt a fresh
+        dict with only the keys it explicitly knew about — any field not
+        listed there (icon, future-added fields, schema fields added
+        without a default-builder line) silently fell on the floor every
+        time the user pressed Speichern. The "tracking presets don't
+        stick" fix from bw916 was a localised patch for four of those
+        fields; the same bug pattern affected the whole Erkennung +
+        Alerting + Allgemein tabs whenever the frontend sent a field
+        default_camera didn't list. validate_and_coerce already
+        preserves every key in ``camera`` (it only type-checks
+        schema-known fields and copies unknown keys through unchanged),
+        so handing it straight to existing.update is the
+        non-destructive merge the user asked for. ``default_camera``
+        still seeds NEW cameras with the full default skeleton.
+        """
         camera = validate_and_coerce(camera, CAMERA_SCHEMA)
-        merged = default_camera(camera)
-        in_id = merged["id"]
+        in_id = camera.get("id", "")
         existing = self.get_camera(in_id)
         id_relevant_changed = False
         if existing:
@@ -233,13 +250,25 @@ class SettingsStore:
             # migration after the save. Unrelated edits (resolution, motion
             # sensitivity, …) skip the analysis pass entirely.
             for key in ("manufacturer", "model", "name", "rtsp_url"):
-                if existing.get(key) != merged.get(key):
+                if key in camera and existing.get(key) != camera.get(key):
                     id_relevant_changed = True
                     break
-            existing.update(merged)
+            # Non-destructive merge — every key the frontend sent lands
+            # on the stored dict at its new value; keys the frontend
+            # didn't send stay at their existing value (Python dict.update
+            # semantics). Nested dicts (schedule, label_thresholds, …)
+            # are still replaced wholesale because the frontend re-sends
+            # the entire nested object on every save; partial nested
+            # updates would need explicit deep-merge per section.
+            existing.update(camera)
         else:
+            merged = default_camera(camera)
             self.data.setdefault("cameras", []).append(merged)
             id_relevant_changed = True
+        # Resolve the "post-merge canonical record" reference used by the
+        # migration + return-id lookup further below. For updates we
+        # already mutated existing in place; for inserts we just appended.
+        merged = existing if existing else self.data["cameras"][-1]
         self.data.setdefault("ui", {})["wizard_completed"] = True
         # Migrate FIRST (it persists if the id needs to change), then write
         # one final save so any unrelated field updates also land. The

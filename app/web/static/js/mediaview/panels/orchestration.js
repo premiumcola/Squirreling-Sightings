@@ -141,11 +141,34 @@ function _renderWeatherTab(host, item){
       .map(([k, v]) => [_WS_FIELD_LBL[k] || k, v, _WS_FIELD_UNIT[k] || '']);
   }
   rows = rows.filter(([, v]) => v != null && v !== '');
+  // Sun-snapshot label map — matches the keys the weather service
+  // actually emits. _clip.py writes the bare `altitude`/`azimuth`
+  // pair (the moment-of-clip snapshot); _sun_tl.py writes the
+  // *_at_start / *_at_end pair (the sun position bracketing the
+  // sun-timelapse window). Pre-fix, anything that wasn't literally
+  // 'altitude' got the "Sonne · Azimut" label — so a sun-timelapse
+  // showed FOUR rows all labelled "Sonne · Azimut" with different
+  // values. Unknown keys fall back to a humanised version of the
+  // key so a future field addition still reads sensibly.
+  const _SUN_LBL = {
+    altitude:          'Sonne · Höhe',
+    azimuth:           'Sonne · Azimut',
+    altitude_at_start: 'Sonne · Höhe (Start)',
+    altitude_at_end:   'Sonne · Höhe (Ende)',
+    azimuth_at_start:  'Sonne · Azimut (Start)',
+    azimuth_at_end:    'Sonne · Azimut (Ende)',
+    noon_altitude:     'Sonne mittags · Höhe',
+    sunrise_azimuth:   'Sonnenaufgang · Azimut',
+    sunset_azimuth:    'Sonnenuntergang · Azimut',
+  };
   const sunRows = (sun && typeof sun === 'object')
     ? Object.entries(sun)
         .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => [k === 'altitude' ? 'Sonne · Höhe' : 'Sonne · Azimut',
-                          Number(v).toFixed(1), '°'])
+        .map(([k, v]) => {
+          const label = _SUN_LBL[k]
+            || ('Sonne · ' + k.replaceAll('_', ' '));
+          return [label, Number(v).toFixed(1), '°'];
+        })
     : [];
   const allRows = [...rows, ...sunRows];
   host.innerHTML = `

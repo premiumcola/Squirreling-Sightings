@@ -559,6 +559,28 @@ export function _cvOpenSim(camId){
 }
 window._cvOpenSim = _cvOpenSim;
 
+// zg531 — currentColor SVG glyphs for the bottom-left class pills.
+// Separate from core/icons.js OBJ_SVG (which carries hard-coded hexes
+// for the lightbox / mediathek bbox legend) so the chrome pills can
+// inherit colour from the parent's ``color: var(--class-X)``. Each
+// glyph is a 24-vb / 16-render Tabler-ish silhouette so it reads at
+// a glance even on a 30 px pill.
+const _CHROME_CLASS_SVG = {
+  person:   `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>`,
+  cat:      `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4l2 5"/><path d="M19 4l-2 5"/><circle cx="12" cy="14" r="7"/><circle cx="9.5" cy="13.2" r=".8" fill="currentColor"/><circle cx="14.5" cy="13.2" r=".8" fill="currentColor"/><path d="M10 17q2 1.5 4 0"/></svg>`,
+  dog:      `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l2.5 4"/><path d="M17 4l-2.5 4"/><circle cx="12" cy="14" r="6.5"/><circle cx="12" cy="13.5" r=".9" fill="currentColor"/><path d="M10 17q2 1.5 4 0"/></svg>`,
+  bird:     `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6c-3.5-1-7 1-8 5l-2 7l5-3c3 2 7 0 8-4"/><circle cx="15.5" cy="6" r=".9" fill="currentColor"/></svg>`,
+  squirrel: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="17" rx="3.5" ry="2.6"/><circle cx="8" cy="10" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="16" cy="10" r="1.6"/><circle cx="6.4" cy="13" r="1.3"/></svg>`,
+  fox:      `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="17" rx="3.5" ry="2.6"/><circle cx="8" cy="10" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="16" cy="10" r="1.6"/><circle cx="6.4" cy="13" r="1.3"/></svg>`,
+  hedgehog: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="17" rx="3.5" ry="2.6"/><circle cx="8" cy="10" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="16" cy="10" r="1.6"/><circle cx="6.4" cy="13" r="1.3"/></svg>`,
+  car:      `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 16h14v-3l-2-4h-10l-2 4v3z"/><circle cx="8" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/><path d="M5 13h14"/></svg>`,
+};
+
+function _chromeClassSvg(cls){
+  return _CHROME_CLASS_SVG[cls] || _CHROME_CLASS_SVG.person;
+}
+
+
 // Camera-tile grid renderer. Builds every visible cv-card from
 // state.cameras. The template string carries inline onclick handlers
 // (_cvCardClick / toggleCardHd / editCamera / _camImgRetry); each name
@@ -578,6 +600,25 @@ export function renderDashboard(){
     const fps = c.frame_interval_ms ? Math.round(1000 / c.frame_interval_ms) : null;
     const previewFps = (c.preview_fps || 0) > 0 ? c.preview_fps : null;
     const streamMode = c.stream_mode || 'baseline';
+    // zg531 — class filter pills + schedule pill in the bottom-left
+    // chrome cluster. One pill per class in object_filter; class_severity
+    // === "off" renders muted (opacity .38, no tint). Schedule pill only
+    // when the legacy c.schedule is enabled with from/to.
+    const _sch = c.schedule || {};
+    const _clsSev = c.class_severity || {};
+    const _classPills = (c.object_filter || []).map(cls => {
+      const muted = _clsSev[cls] === 'off';
+      const lbl = OBJ_LABEL[cls] || cls;
+      return `<div class="cv-chrome-btn cv-class-pill" data-cls="${esc(cls)}"`
+        + (muted ? ' data-state="muted"' : '')
+        + ` style="--icon-tint:var(--class-${esc(cls)})"`
+        + ` title="${esc(lbl)}${muted ? ' — stumm' : ''}"`
+        + ` aria-label="${esc(lbl)}${muted ? ' — stumm' : ''}">`
+        + `${_chromeClassSvg(cls)}</div>`;
+    }).join('');
+    const _schedulePill = (_sch.enabled && _sch.from && _sch.to)
+      ? `<div class="cv-chrome-btn cv-schedule-pill has-text" title="Aktivitätszeit">${esc(_sch.from)}–${esc(_sch.to)}</div>`
+      : '';
     return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
     <div class="cv-img-wrap">
@@ -630,7 +671,7 @@ ${isActive ? `
         ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
       </div>
 ` : ''}
-      <div class="cv-chrome-bottom-left"></div>
+      <div class="cv-chrome-bottom-left">${_classPills}${_schedulePill}</div>
       <div class="cv-chrome-bottom-right">
         ${c.rtsp_url && isActive ? `<button class="cv-sim-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

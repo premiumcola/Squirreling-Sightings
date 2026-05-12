@@ -74,6 +74,10 @@ export function closeLiveDetect(){
   if (modal) modal.classList.remove('lb-live-detect');
   const overlay = byId('lightboxLiveOverlay');
   if (overlay) overlay.remove();
+  const trails = byId('lightboxLiveTrails');
+  if (trails) trails.remove();
+  const zoneMask = byId('lightboxLiveZoneMask');
+  if (zoneMask) zoneMask.remove();
   const toggleRow = byId('mvLiveToggles');
   if (toggleRow) toggleRow.remove();
   const livePill = byId('mvLiveScrubPill');
@@ -142,6 +146,7 @@ function _setupLiveChrome(camId, cameraName){
     if (!imgEl._zoneRefreshInstalled){
       const refresh = () => {
         _renderBboxOverlay();
+        _renderTrailsOverlay();
         _renderZoneMaskOverlay();
       };
       imgEl.addEventListener('load', refresh);
@@ -171,6 +176,23 @@ function _ensureBboxOverlay(){
   if (!wrap) return null;
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveOverlay';
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  // Stacking order (wp146): zones+masks z-index 4 (deepest),
+  // trails 5, bboxes 6 (top). Bboxes win the visual so the
+  // user always sees the live frame's verdict over the
+  // historical motion path.
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
+  wrap.appendChild(svg);
+  return svg;
+}
+
+function _ensureTrailsOverlay(){
+  let svg = byId('lightboxLiveTrails');
+  if (svg) return svg;
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return null;
+  svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'lightboxLiveTrails';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5';
   wrap.appendChild(svg);
@@ -409,6 +431,7 @@ function _renderFrame(data){
   const cutoff = now - _LIVE_WINDOW_MS;
   _detBuffer = _detBuffer.filter(e => e.ms >= cutoff);
   _renderBboxOverlay();
+  _renderTrailsOverlay();
   _renderZoneMaskOverlay();
   _renderDetectionsPanel(data);
   _renderLiveSwimlane();
@@ -499,6 +522,62 @@ function _positionSvgOverImage(svg){
   svg.style.inset  = 'auto';
 }
 
+
+// wp146 — Trails layer. Connects per-label bbox centroids from the
+// 60 s _detBuffer window into a fading polyline. Per-segment
+// stroke-opacity drops linearly from 1.0 (now) to 0.0 (60 s ago)
+// so the user sees motion freshness at a glance. Colour comes from
+// core/icons.js#colors (which spreads the canonical CLASS_COLORS
+// from class-colors.js, set up in yx748).
+function _renderTrailsOverlay(){
+  const svg = _ensureTrailsOverlay();
+  if (!svg || !_session) return;
+  svg.style.display = _overlays.trails ? 'block' : 'none';
+  if (!_overlays.trails){ svg.innerHTML = ''; return; }
+  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+  svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
+  _positionSvgOverImage(svg);
+  const rect = svg.getBoundingClientRect();
+  // Same 0×0 guard as the bbox layer — wait for the image to size
+  // before paint so the polylines don't land in a sub-pixel corner.
+  if (rect.width <= 0 || rect.height <= 0){ svg.innerHTML = ''; return; }
+  // Group buffered detections by label so each label gets its own
+  // contiguous trail. Pre-sort by ms inside each group; the
+  // detBuffer is push-order but a polling-cadence change could
+  // technically interleave entries from one to the next.
+  const byLabel = new Map();
+  for (const e of _detBuffer){
+    if (!byLabel.has(e.label)) byLabel.set(e.label, []);
+    byLabel.get(e.label).push(e);
+  }
+  const now = Date.now();
+  const parts = [];
+  for (const [label, entries] of byLabel){
+    if (entries.length < 2) continue;
+    entries.sort((a, b) => a.ms - b.ms);
+    const c = colors[label] || colors.unknown;
+    // One <line> per consecutive pair so each segment can carry
+    // its own stroke-opacity. ~60 entries × few labels = ~200
+    // elements at the top end — cheap.
+    for (let i = 1; i < entries.length; i++){
+      const a = entries[i - 1];
+      const b = entries[i];
+      const ax = a.bbox[0] + a.bbox[2] / 2;
+      const ay = a.bbox[1] + a.bbox[3] / 2;
+      const bx = b.bbox[0] + b.bbox[2] / 2;
+      const by = b.bbox[1] + b.bbox[3] / 2;
+      const midAge = now - (a.ms + b.ms) / 2;
+      const op = Math.max(0, Math.min(1, 1 - midAge / _LIVE_WINDOW_MS));
+      if (op <= 0) continue;
+      parts.push(
+        `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" `
+        + `stroke="${c}" stroke-width="3" stroke-opacity="${op.toFixed(2)}" `
+        + `stroke-linecap="round" vector-effect="non-scaling-stroke"/>`,
+      );
+    }
+  }
+  svg.innerHTML = parts.join('');
+}
 
 function _renderZoneMaskOverlay(){
   const svg = _ensureZoneMaskOverlay();

@@ -521,7 +521,15 @@ class SunTimelapseMixin:
             # show "right on time" without a warning pill.
             test_session.phase_drift_min = drift_min
         interval_s = max(1, int(pcfg.get("interval_s", 3) or 3))
-        target_fps = max(1, int(pcfg.get("fps", 25) or 25))
+        # Default fps lowered 25 → 10 (cm-37): two real sunrise mp4s
+        # on 2026-05-12 measured unique_fps ≈ 7.7-8.8 at declared 25
+        # fps (43 % duplicates), so the existing default was forcing
+        # the encoder to pad with dups for half the runtime. 10 fps
+        # matches what the validator + capture pipeline actually
+        # delivers. Existing users with an explicit ``fps`` set in
+        # settings keep their value — only the FALLBACK when the key
+        # is missing changes.
+        target_fps = max(1, int(pcfg.get("fps", 10) or 10))
         cam_name = self._cam_name(cam_id)
         # Per-phase subdir so on-disk layout makes the kind obvious. The
         # legacy single "sun_timelapse/" directory is still walked at
@@ -993,7 +1001,18 @@ class SunTimelapseMixin:
             else:
                 target_seconds = max(8, n_written // target_fps) if target_fps else 24
                 target_seconds = min(target_seconds, 60)  # cap at 60s safety
-            written = tb._write_video(images, mp4_path, target_seconds, target_fps)
+            # QA context — drives the post-build sidecar (cm-37). The
+            # frames_dir lets the sidecar embed _stats.json; settings_store
+            # enables fps auto-adjust per (cam_id, profile_name).
+            qa_ctx = {
+                "camera_id":               cam_id,
+                "profile_name":            phase,
+                "validator_profile_used":  getattr(active_profile, "name", None),
+                "frames_dir":              frames_dir,
+                "settings_store":          self.settings_store,
+            }
+            written = tb._write_video(images, mp4_path, target_seconds, target_fps,
+                                      qa_ctx=qa_ctx)
             if not written or not mp4_path.exists():
                 log.warning("[%s] Encode failed for %s %s", log_tag, cam_name, phase)
                 if test_session is not None:
@@ -1139,7 +1158,9 @@ class SunTimelapseMixin:
 
         pcfg_user = (((cam.get("weather") or {}).get("sun_timelapse") or {}).get(phase) or {})
         interval_s = max(1, int(pcfg_user.get("interval_s", 3) or 3))
-        target_fps = max(1, int(pcfg_user.get("fps", 25) or 25))
+        # Default fps lowered 25 → 10 (cm-37) — see the matching
+        # comment a few hundred lines up. Existing user value wins.
+        target_fps = max(1, int(pcfg_user.get("fps", 10) or 10))
         # Carry the daynight_override block forward so the test
         # exercises the same Color/Auto flip the real schedule does.
         pcfg = {

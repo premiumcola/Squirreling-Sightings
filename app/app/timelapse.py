@@ -310,7 +310,8 @@ class TimelapseBuilder:
             log.debug("timelapse: thumbnail write failed: %s", e)
 
     def _write_video(self, images: list, out_path: Path,
-                     target_duration_s: int, target_fps: int) -> str | None:
+                     target_duration_s: int, target_fps: int,
+                     qa_ctx: dict | None = None) -> str | None:
         """Subsample images, deduplicate, validate each frame, skip corrupt ones, write to out_path.
         Uses ffmpeg (H.264, small files, iOS-safe) with OpenCV mp4v as fallback.
         Two-pass: Pass 1 validates + deduplicates (no frame data kept in memory),
@@ -537,6 +538,31 @@ class TimelapseBuilder:
 
         # ── Thumbnail from middle valid frame ─────────────────────────────────
         self._write_thumbnail(valid_paths[n // 2], out_path)
+
+        # ── Quality-analysis sidecar (cm-36 / timelapse-quality pass) ────────
+        # Decodes the just-written mp4 frame-by-frame, computes pHash
+        # duplicate ratio + freeze clusters, embeds any matching
+        # capture-side _stats.json, grades the build, and writes
+        # <mp4>.qa.json. Best-effort — a sidecar write failure
+        # logs WARN but doesn't fail the build. Camera id is derived
+        # from the output path; the caller can pass settings_store +
+        # frames_dir + profile_name through the kwargs the public
+        # build_* methods accept (cm-37 / qa hooks).
+        try:
+            from .timelapse_qa import write_qa_sidecar
+            ctx = qa_ctx or {}
+            write_qa_sidecar(
+                out_path,
+                declared_fps=float(target_fps),
+                target_duration_s=float(target_duration_s),
+                frames_dir=ctx.get("frames_dir"),
+                camera_id=ctx.get("camera_id"),
+                profile_name=ctx.get("profile_name"),
+                validator_profile_used=ctx.get("validator_profile_used"),
+                settings_store=ctx.get("settings_store"),
+            )
+        except Exception as e:
+            log.debug("[timelapse] QA sidecar pass swallowed: %s", e)
         return path
 
     # ── Naming helpers ────────────────────────────────────────────────────────
@@ -572,7 +598,8 @@ class TimelapseBuilder:
 
     def build_profile(self, camera_id: str, profile_name: str, day: str,
                       target_duration_s: int = 60, target_fps: int = 30,
-                      force: bool = False, cam_slug: str = "") -> str | None:
+                      force: bool = False, cam_slug: str = "",
+                      qa_ctx: dict | None = None) -> str | None:
         """Build timelapse for a specific profile (new per-profile path structure).
 
         ``cam_slug`` is appended to the output filename stem so two
@@ -580,6 +607,13 @@ class TimelapseBuilder:
         collide on the user's drive. Empty string leaves the legacy
         ``{day}_{profile}.mp4`` filename intact for backward
         compatibility with callers that haven't been updated.
+
+        ``qa_ctx`` carries optional context (camera_id, profile_name,
+        validator_profile_used, settings_store, frames_dir) for the
+        post-build QA sidecar. Auto-populated below from the args
+        we already have; callers can override by passing a richer
+        dict (e.g. adding ``settings_store`` to enable fps auto-
+        adjust).
         """
         frames_dir = self.root / "timelapse_frames" / camera_id / profile_name / day
         if not frames_dir.exists():
@@ -593,7 +627,12 @@ class TimelapseBuilder:
         out_path = out_dir / f"{stem}.mp4"
         if out_path.exists() and not force:
             return str(out_path)
-        return self._write_video(images, out_path, target_duration_s, target_fps)
+        ctx = dict(qa_ctx or {})
+        ctx.setdefault("camera_id", camera_id)
+        ctx.setdefault("profile_name", profile_name)
+        ctx.setdefault("frames_dir", frames_dir)
+        return self._write_video(images, out_path, target_duration_s, target_fps,
+                                 qa_ctx=ctx)
 
     # ── Legacy (flat date directory) ─────────────────────────────────────────
 
@@ -603,7 +642,8 @@ class TimelapseBuilder:
                      period: str = "day",
                      force: bool = False,
                      images_override: list | None = None,
-                     cam_slug: str = "") -> str | None:
+                     cam_slug: str = "",
+                     qa_ctx: dict | None = None) -> str | None:
         """Build from legacy flat ``timelapse_frames/<cam>/<day>/``
         directory. ``cam_slug`` appended to the stem for unique
         cross-camera download filenames; see :func:`make_output_name`.
@@ -625,10 +665,17 @@ class TimelapseBuilder:
         out_path = out_dir / f"{stem}.mp4"
         if out_path.exists() and not force:
             return str(out_path)
-        return self._write_video(images, out_path, target_duration_s, target_fps)
+        ctx = dict(qa_ctx or {})
+        ctx.setdefault("camera_id", camera_id)
+        ctx.setdefault("profile_name", period)
+        if images_override is None:
+            ctx.setdefault("frames_dir", self._timelapse_frames_dir(camera_id) / day)
+        return self._write_video(images, out_path, target_duration_s, target_fps,
+                                 qa_ctx=ctx)
 
     def build_for_day(self, camera_id: str, day: str, fps: int = 25,
-                      force: bool = False, cam_slug: str = "") -> str | None:
+                      force: bool = False, cam_slug: str = "",
+                      qa_ctx: dict | None = None) -> str | None:
         """Backward-compatible wrapper. Tries timelapse_frames first,
         falls back to event snapshots. ``cam_slug`` flows through to
         both build paths so neither variant collides on cross-camera
@@ -638,7 +685,8 @@ class TimelapseBuilder:
                                  target_fps=fps,
                                  period="day",
                                  force=force,
-                                 cam_slug=cam_slug)
+                                 cam_slug=cam_slug,
+                                 qa_ctx=qa_ctx)
         if path:
             return path
 
@@ -652,7 +700,10 @@ class TimelapseBuilder:
         out_path = out_dir / f"{stem}.mp4"
         if out_path.exists() and not force:
             return str(out_path)
-        return self._write_video(images, out_path, 60, fps)
+        ctx = dict(qa_ctx or {})
+        ctx.setdefault("camera_id", camera_id)
+        ctx.setdefault("profile_name", "day")
+        return self._write_video(images, out_path, 60, fps, qa_ctx=ctx)
 
     def build_yesterday_if_missing(self, camera_id: str, fps: int = 25,
                                    cam_slug: str = ""):

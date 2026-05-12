@@ -391,7 +391,14 @@ class EventTimelapseMixin:
             tb = TimelapseBuilder(self._sightings_dir().parent.parent)
             images = sorted(frames_dir.glob("*.jpg"))
             target_seconds = max(15, min(45, n_written // fps))
-            written = tb._write_video(images, mp4_path, target_seconds, fps)
+            qa_ctx = {
+                "camera_id":               cam_id,
+                "profile_name":            trigger,
+                "frames_dir":              frames_dir,
+                "settings_store":          self.settings_store,
+            }
+            written = tb._write_video(images, mp4_path, target_seconds, fps,
+                                      qa_ctx=qa_ctx)
             if not written or not mp4_path.exists():
                 log.warning("[weather] Encode failed: %s %s", cam_name, trigger)
                 self._cleanup_sun_scratch(frames_dir)

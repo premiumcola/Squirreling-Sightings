@@ -106,6 +106,9 @@ def api_camera_timelapse(cam_id):
     # display-name → camera_id → "unknown"; never raises.
     from ..camera_id import camera_slug
     cam_slug = camera_slug(app_state.store, cam_id)
+    # QA context — passes settings_store through so the post-build
+    # sidecar can run fps auto-adjust on the rolling history.
+    qa_ctx = {"settings_store": app_state.store}
     path = timelapse_builder.build_period(
         cam_id, day,
         target_duration_s=target_s,
@@ -113,6 +116,7 @@ def api_camera_timelapse(cam_id):
         period=period,
         force=force,
         cam_slug=cam_slug,
+        qa_ctx=qa_ctx,
     )
     if not path:
         frames_dir = storage_root / "timelapse_frames" / cam_id / day
@@ -124,7 +128,8 @@ def api_camera_timelapse(cam_id):
         def _bg_build():
             timelapse_builder.build_period(cam_id, day, target_duration_s=target_s,
                                            target_fps=target_fps, period=period,
-                                           force=True, cam_slug=cam_slug)
+                                           force=True, cam_slug=cam_slug,
+                                           qa_ctx=qa_ctx)
         _thr.Thread(target=_bg_build, daemon=True).start()
         return jsonify({"ok": False, "error": "building", "day": day, "retry_after": 15}), 202
     rel = Path(path).relative_to(storage_root)
@@ -243,6 +248,7 @@ def api_camera_timelapse_rolling(cam_id):
         force=True,
         images_override=images,
         cam_slug=cam_slug,
+        qa_ctx={"settings_store": app_state.store},
     )
     if not path:
         return jsonify({"ok": False, "error": "build_failed"}), 500

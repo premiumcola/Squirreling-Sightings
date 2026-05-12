@@ -136,7 +136,17 @@ class TimelapseMixin:
                                         cam_slug=cam_slug)
         out_path = out_dir / f"{stem}.mp4"
         _t0 = time.monotonic()
-        path = builder._write_video(images, out_path, target_s, target_fps)
+        # QA sidecar context — embed capture _stats.json from this
+        # window's frames_dir + enable fps auto-adjust per
+        # (camera_id, profile_name). See timelapse_qa.py.
+        qa_ctx = {
+            "camera_id":              self.camera_id,
+            "profile_name":           profile_name,
+            "frames_dir":             frames_dir,
+            "settings_store":         getattr(_app_state, "store", None),
+        }
+        path = builder._write_video(images, out_path, target_s, target_fps,
+                                    qa_ctx=qa_ctx)
         elapsed = time.monotonic() - _t0
 
         if path:

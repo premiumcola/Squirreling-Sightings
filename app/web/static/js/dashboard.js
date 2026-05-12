@@ -160,13 +160,18 @@ function _placeholderShell(accent, centerHtml, bracketKeyframe){
   </div>`;
 }
 
-// Structured camera SVGs — separate strokes/opacities per layer so the
-// icon doesn't fall apart visually at small sizes.
-const _CAM_OFF_SVG = `<svg viewBox="0 0 48 48" width="72" height="72" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block">
-  <rect x="8" y="14" width="24" height="20" rx="2.5" stroke="rgba(255,255,255,0.35)" stroke-width="2"/>
-  <path d="M32 20 L40 14 V34 L32 28 Z" stroke="rgba(255,255,255,0.35)" stroke-width="2"/>
-  <circle cx="20" cy="24" r="4.5" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
-  <line x1="4" y1="4" x2="44" y2="44" stroke="rgba(239,68,68,0.55)" stroke-width="2.5"/>
+// Flat-design camera SVGs — filled silhouettes with tonal-shift depth.
+// No hairline strokes (would alias under transform:scale at small
+// tiles); each layer is a filled shape so the icon stays crisp at
+// 52–72 px renders. Lens uses dark-mass + light-iris for "flat depth"
+// instead of a stroked outline. The red slash is a 6 px-wide
+// parallelogram, not a stroke, so it doesn't thin under animation.
+const _CAM_OFF_SVG = `<svg viewBox="0 0 48 48" width="72" height="72" aria-hidden="true" style="display:block">
+  <rect x="8" y="14" width="24" height="20" rx="3" fill="rgba(255,255,255,0.32)"/>
+  <path d="M32 20 L40 14 V34 L32 28 Z" fill="rgba(255,255,255,0.22)"/>
+  <circle cx="20" cy="24" r="5" fill="rgba(0,0,0,0.5)"/>
+  <circle cx="20" cy="24" r="2" fill="rgba(255,255,255,0.55)"/>
+  <polygon points="7,3 3,7 41,45 45,41" fill="rgba(239,68,68,0.95)"/>
 </svg>`;
 const _CAM_SM_SVG = `<svg viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="rgba(59,130,246,0.5)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block">
   <rect x="8" y="14" width="24" height="20" rx="2.5"/>

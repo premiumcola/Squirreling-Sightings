@@ -15,9 +15,12 @@ export function _polyLabels(p){
   return Array.isArray(p.labels) ? p.labels.slice() : [];
 }
 
-// Hit-test radius for vertex-grab and close-polygon detection. 12px is
-// generous on mouse, comfortable on touch.
-export const _SHAPE_HIT_PX = 12;
+// Hit-test radius for vertex-grab and close-polygon detection. Shrunk
+// from 12 to 9 after C1 — handles got smaller (radius 5 / 7), so the
+// hit-test no longer needs to eat clicks well past the visible disc.
+// Still touch-friendly: 9 source-resolution units typically resolve to
+// ~25 CSS pixels at the mobile display size.
+export const _SHAPE_HIT_PX = 9;
 
 export function _hitVertex(pt){
   const test = (arr, kind) => {

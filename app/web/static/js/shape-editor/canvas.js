@@ -75,24 +75,22 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   ctx.fill();
   ctx.stroke();
   // Vertex handles — filled circles in the polygon colour with a white
-  // border. kr592 — radius shrunk from 10/13 to 6/8 (12 / 16 px
-  // diameter) so the visual handle no longer eats 10 px around each
-  // vertex. Drawing position is now the ACTUAL point coordinate
-  // (no clamping); circles at the canvas edge render half-clipped by
-  // the canvas pixel buffer, which is what the user wants — visual
-  // feedback that the point sits on the boundary. Hit-test radius
-  // (12 px in geometry.js#_SHAPE_HIT_PX) is decoupled from the
-  // visual radius so iPhone taps remain comfortable.
+  // border. C1 — radius 5 (default) / 7 (hover), stroke 1.5 px. Drawing
+  // position is the ACTUAL point coordinate (no clamping); circles at
+  // the canvas edge render half-clipped by the canvas pixel buffer,
+  // which is the intended visual signal "point is on the edge". Hit-
+  // test radius (geometry.js#_SHAPE_HIT_PX = 9) is decoupled from the
+  // visual radius so touch taps stay comfortable.
   const hov = shapeState.hoverVertex;
   const isHov = (j) => hov && hov.kind === kind && hov.polyIdx === idx && hov.ptIdx === j;
   for (let j = 0; j < pts.length; j++){
-    const r = isHov(j) ? 8 : 6;
+    const r = isHov(j) ? 7 : 5;
     ctx.beginPath();
     ctx.arc(pts[j].x, pts[j].y, r, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
   if (poly && poly.label){
@@ -166,14 +164,15 @@ export function drawShapes(){
     // drawShapes is called by the rAF loop in _ensureShapePulseRaf
     // while we're in that state.
     const closable = shapeState.points.length >= 3;
-    const cw = canvas.width, chh = canvas.height;
-    const clamp = (v, r, max) => Math.max(r, Math.min(max - r, v));
+    // C1 — in-progress vertex handles draw at the literal coordinate;
+    // a point dropped right on the canvas edge renders as a half-disc
+    // clipped by the pixel buffer (the intended "point is on the edge"
+    // signal). The closing-point pulse ring BELOW is still clamped —
+    // it's an affordance hint, not a coordinate.
     shapeState.points.forEach((p) => {
-      const r = 10;
-      const dx = clamp(p.x, r, cw);
-      const dy = clamp(p.y, r, chh);
+      const r = 5;
       ctx.beginPath();
-      ctx.arc(dx, dy, r, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.strokeStyle = '#1f2937';
@@ -186,6 +185,8 @@ export function drawShapes(){
       const phase = 0.5 - 0.5 * Math.cos(t * Math.PI * 2);
       const ringR = 16 + phase * 8;
       const alpha = 0.7 - phase * 0.5;
+      const cw = canvas.width, chh = canvas.height;
+      const clamp = (v, r, max) => Math.max(r, Math.min(max - r, v));
       const cx = clamp(first.x, 24, cw);
       const cy = clamp(first.y, 24, chh);
       ctx.beginPath();

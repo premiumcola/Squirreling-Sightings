@@ -1,12 +1,21 @@
 // ─── chrome/live-view.js ───────────────────────────────────────────────────
-// Stage 11 of the legacy.js → ES modules refactor — the per-camera
-// fullscreen MJPEG modal triggered from the dashboard tile or the
-// "Live öffnen" button. HD/SD toggle, fullscreen handoff, and the
-// shared _hdCards state with the dashboard tile.
+// Per-camera live-view modal. Default path uses a native <video>
+// element fed HLS (hls.js on Chrome / Firefox / Edge, native on
+// Safari + iOS) so the browser's built-in controls give the user
+// Play / Pause / Volume / Picture-in-Picture / true iOS fullscreen
+// for free. The legacy <img>+MJPEG path stays alongside as a
+// fallback for the rare browser that can't do HLS at all (and for
+// cameras where the per-cam streaming.hls_enabled is false).
+//
+// HD/SD toggle is irrelevant once HLS is engaged (one stream per
+// camera) — the HD button hides itself in that mode and only
+// surfaces when the MJPEG fallback drives the modal.
 import { byId } from '../core/dom.js';
 import { _hdCards } from '../dashboard.js';
 
 let _liveViewCamId = null;
+let _hlsInstance = null;
+let _liveViewUsingHls = false;
 
 // _liveViewHd is exposed on window because the template reads
 // `!_liveViewHd` inline in the HD-toggle button's onclick. We keep
@@ -19,30 +28,99 @@ export function openLiveView(camId, camName){
   _liveViewCamId = camId;
   window._liveViewHd = _hdCards.has(camId); // inherit shared HD state
   byId('liveViewTitle').textContent = camName || camId;
-  _setLiveViewStream(window._liveViewHd);
+  _attachLiveStream();
   const imgEl = byId('liveViewImg');
-  // Image click no longer toggles fullscreen — the dedicated FS button owns that.
-  // True iOS-native fullscreen (the YouTube experience the user referenced)
-  // requires a <video> element fed by HLS or DASH. Our streams are MJPEG via
-  // <img>, which iOS Safari refuses to fullscreen. requestFullscreen on the
-  // wrap div does work on desktop and Chrome/Firefox-iOS; on Safari iPhone
-  // it falls back to .fake-fullscreen CSS so the modal still covers the
-  // chrome. A future HLS pipeline (server-side transmux of RTSP→HLS) is
-  // the only path to real native fullscreen on iPhone Safari.
+  // Image click is intentionally NOT a fullscreen toggle — only the
+  // FS button on the modal owns that. (HLS path uses the native
+  // <video> controls' own fullscreen icon, which is the YouTube-
+  // style native player on iPhone.)
   if (imgEl) imgEl.onclick = null;
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 }
 
+// Internal — wire either HLS (preferred) or MJPEG into the modal's
+// two media elements. Tears down any previous HLS instance first
+// so re-opening the modal on a different camera doesn't leak the
+// old session.
+function _attachLiveStream(){
+  if (!_liveViewCamId) return;
+  const video = byId('liveViewVideo');
+  const img = byId('liveViewImg');
+  const hdBtn = byId('liveViewHdBtn');
+  _teardownHls();
+  if (video){ video.pause(); video.removeAttribute('src'); video.load?.(); }
+  if (img) img.src = '';
+  const hlsUrl = `/api/camera/${encodeURIComponent(_liveViewCamId)}/live.m3u8`;
+  const Hls = window.Hls;
+  // Path 1 — hls.js (Chrome / Firefox / Edge / Chromium on desktop).
+  if (video && Hls && typeof Hls.isSupported === 'function' && Hls.isSupported()){
+    try {
+      _hlsInstance = new Hls({ lowLatencyMode: true });
+      _hlsInstance.loadSource(hlsUrl);
+      _hlsInstance.attachMedia(video);
+      _hlsInstance.on(Hls.Events.ERROR, (_evt, data) => {
+        // Fatal error → fall back to MJPEG. Non-fatal errors are
+        // recoverable; hls.js handles them internally.
+        if (data && data.fatal){
+          _teardownHls();
+          _attachMjpegFallback();
+        }
+      });
+      video.style.display = 'block';
+      if (img) img.style.display = 'none';
+      _liveViewUsingHls = true;
+      if (hdBtn) hdBtn.style.display = 'none';
+      return;
+    } catch { _teardownHls(); }
+  }
+  // Path 2 — Safari / iOS native HLS (no hls.js needed). canPlayType
+  // returns 'maybe' or 'probably' when supported.
+  if (video && video.canPlayType('application/vnd.apple.mpegurl')){
+    video.src = hlsUrl;
+    video.style.display = 'block';
+    if (img) img.style.display = 'none';
+    _liveViewUsingHls = true;
+    if (hdBtn) hdBtn.style.display = 'none';
+    return;
+  }
+  // Path 3 — MJPEG fallback. Shows the HD toggle so the user retains
+  // the legacy SD ↔ HD switch.
+  _attachMjpegFallback();
+}
+
+function _attachMjpegFallback(){
+  _liveViewUsingHls = false;
+  const video = byId('liveViewVideo');
+  const img = byId('liveViewImg');
+  const hdBtn = byId('liveViewHdBtn');
+  if (video){ video.style.display = 'none'; }
+  if (img){ img.style.display = 'block'; }
+  if (hdBtn) hdBtn.style.display = '';
+  _setLiveViewStream(window._liveViewHd);
+}
+
+function _teardownHls(){
+  if (_hlsInstance){
+    try { _hlsInstance.destroy(); } catch { /* ignore */ }
+    _hlsInstance = null;
+  }
+  _liveViewUsingHls = false;
+}
+
 export function _setLiveViewStream(hd){
+  // MJPEG-fallback HD/SD switch. No-op when HLS owns the modal —
+  // the HD button is hidden in that case, but a stray external
+  // window._setLiveViewStream call still shouldn't bleed past the
+  // fallback path.
   window._liveViewHd = hd;
+  if (_liveViewUsingHls) return;
   const img = byId('liveViewImg');
   if (!img || !_liveViewCamId) return;
   img.src = ''; // disconnect current stream first
   const url = hd ? `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream_hd.mjpg`
                  : `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream.mjpg`;
   img.src = url;
-  // Shared state: keep the card's HD badge + img in sync.
   if (hd) _hdCards.add(_liveViewCamId);
   else _hdCards.delete(_liveViewCamId);
   const cardBadge = document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-hd-badge`);
@@ -76,6 +154,13 @@ export function _setLiveViewStream(hd){
 export function closeLiveView(){
   const modal = byId('liveViewModal');
   if (!modal) return;
+  _teardownHls();
+  const video = byId('liveViewVideo');
+  if (video){
+    video.pause();
+    video.removeAttribute('src');
+    video.load?.();
+  }
   const img = byId('liveViewImg');
   if (img) img.src = ''; // disconnect MJPEG stream → remove_viewer
   if (document.fullscreenElement || document.webkitFullscreenElement){

@@ -32,6 +32,13 @@
           src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
           crossorigin="anonymous"></script>
+  <!-- HLS playback library. Loaded eagerly (defer = parsed after HTML)
+       so Hls.isSupported() in chrome/live-view.js can synchronously
+       check support on first openLiveView. iOS Safari plays HLS
+       natively via <video src=…m3u8> and ignores this script. -->
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"
+          crossorigin="anonymous"></script>
   <link rel="stylesheet" href="/static/app.css?v={{ static_v('app.css') }}" />
 </head>
 <body>

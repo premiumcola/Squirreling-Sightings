@@ -44,7 +44,7 @@ const _TRACE_CAP = 80;
 let _session = null;
 let _traceLines = [];
 let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
-let _overlays = { bboxes: true, trails: true, zones: false, masks: false };
+let _overlays = { bboxes: true, trails: true, zones: true, masks: true };
 let _selectedLabel = null;  // for detail-pill pin
 
 export function openLiveDetect({ camId, cameraName }){
@@ -123,6 +123,26 @@ function _setupLiveChrome(camId, cameraName){
     const mjpegUrl = `/api/camera/${encodeURIComponent(camId)}/stream.mjpg`;
     imgEl.src = mjpegUrl;
     imgEl.style.display = 'block';
+    // ph817 — zones + masks + bboxes must redraw whenever the
+    // image's rendered size changes (first MJPEG frame arriving,
+    // window resize, FS enter/exit, address-bar collapse on iOS).
+    // The polling tick at 1 Hz repaints on its own cadence; this
+    // listener bridges the gap so the overlays sit on the right
+    // pixels the moment a frame paints, not 1 s later.
+    if (!imgEl._zoneRefreshInstalled){
+      const refresh = () => {
+        _renderBboxOverlay();
+        _renderZoneMaskOverlay();
+      };
+      imgEl.addEventListener('load', refresh);
+      try {
+        const obs = new ResizeObserver(refresh);
+        obs.observe(imgEl);
+        // Stash so a future re-mount can disconnect if needed.
+        imgEl._zoneResizeObs = obs;
+      } catch { /* older browsers — load listener still helps */ }
+      imgEl._zoneRefreshInstalled = true;
+    }
   }
   const confirmBtn = byId('lightboxConfirm');
   if (confirmBtn) confirmBtn.style.display = 'none';

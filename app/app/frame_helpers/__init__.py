@@ -48,6 +48,7 @@ from ._stats import (
 from ._validator import (
     grab_valid_frame,
     is_valid_frame,
+    reason_family,
 )
 
 __all__ = [
@@ -72,4 +73,5 @@ __all__ = [
     "perceptual_hash",
     "pick_profile_from_baseline",
     "read_capture_stats",
+    "reason_family",
 ]

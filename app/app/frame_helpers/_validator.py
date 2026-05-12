@@ -9,6 +9,7 @@ rejects."""
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 import cv2
@@ -380,3 +381,28 @@ def _normalise_rejection_reason(reason: str | None) -> str:
     head = reason.split("|", 1)[0]
     head = head.split("(", 1)[0]
     return head.strip() or "unknown"
+
+
+# Folder-name family suffix that older reject-sink versions appended:
+# `horizontal_anomaly_band_y68_h4`, `bottom_strip_bright_y90_h3`. The
+# regex strips it so a legacy folder name collapses to the same family
+# as the new one. Conservative — only the trailing `_yNN_hNN` pair.
+_BAND_LOC_SUFFIX_RE = re.compile(r"_y\d+_h\d+$")
+
+
+def reason_family(reason: str | None) -> str:
+    """Top-level family name for a reject reason.
+
+    Strips the parameter tail ``(...)`` and any legacy band-location
+    suffix ``_yNN_hNN`` that an older reject sink may have appended to
+    the folder name. All parameter variants of one reason head collapse
+    into a single bucket — used by the test-mode reject sink to pick
+    its subfolder name, and by ``scripts.flatten_rejected`` to migrate
+    pre-flatten run directories onto the new layout.
+
+    Accepts either a full reason like
+    ``horizontal_anomaly_band(y=68%,h=4%,score=2.5)`` or an already-
+    sanitised folder name like ``horizontal_anomaly_band_y68_h4`` —
+    both collapse to ``horizontal_anomaly_band``."""
+    head = _normalise_rejection_reason(reason)
+    return _BAND_LOC_SUFFIX_RE.sub("", head)

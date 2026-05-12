@@ -26,6 +26,7 @@ from app.frame_helpers import (  # noqa: E402
     is_horizontal_anomaly_band,
     is_valid_frame,
     pick_profile_from_baseline,
+    reason_family,
 )
 
 
@@ -727,3 +728,50 @@ def test_real_clean_fixture_passes(path):
     for prof in (TWILIGHT_PROFILE, NIGHT_PROFILE):
         ok, reason = is_valid_frame(img, profile=prof)
         assert ok, f"real clean fixture {path.name} rejected under {prof.name}: {reason}"
+
+
+class TestReasonFamily:
+    """``reason_family`` collapses parameter variants of one reject
+    head into a single bucket name. Two callers depend on it: the
+    test-mode reject sink (subfolder per family, no parameter
+    explosion) and the ``flatten_rejected`` migration script (rewrite
+    legacy ``_yNN_hNN``-suffixed folder names onto the new layout).
+    Both forms — the raw reason string with parens, and the legacy
+    sanitised folder name — must collapse to the same family."""
+
+    def test_strips_paren_tail(self):
+        assert reason_family(
+            "horizontal_anomaly_band(y=68%,h=4%,score=2.5)"
+        ) == "horizontal_anomaly_band"
+
+    def test_strips_legacy_yh_suffix(self):
+        assert reason_family("horizontal_anomaly_band_y68_h4") == "horizontal_anomaly_band"
+        assert reason_family("bottom_strip_bright_y92_h2") == "bottom_strip_bright"
+
+    def test_bare_head_unchanged(self):
+        assert reason_family("dead_area") == "dead_area"
+        assert reason_family("flat_gray_full_frame") == "flat_gray_full_frame"
+
+    def test_paren_then_yh_does_not_double_strip(self):
+        # The raw reason carries (y=…) — once parens go, no _yNN_hNN
+        # remains, so the regex doesn't bite a second time.
+        assert reason_family(
+            "bottom_strip_bright(y=90%,h=3%,score=4.0)"
+        ) == "bottom_strip_bright"
+
+    def test_dead_area_param_variant_collapses(self):
+        # dead_area(7/16=44%) → "dead_area" — the slash/equals/% chars
+        # are inside the parens and never make it past the strip.
+        assert reason_family("dead_area(7/16=44%)") == "dead_area"
+
+    def test_empty_and_none_safe(self):
+        assert reason_family(None) == "unknown"
+        assert reason_family("") == "unknown"
+
+    def test_pipe_separated_budget_suffix_drops(self):
+        # ``grab_valid_frame`` appends "|budget_exceeded(…)" to the
+        # last reason when the wall-clock cap fires. The family must
+        # still be the original head.
+        assert reason_family(
+            "horizontal_anomaly_band(y=68%,h=4%,score=2.5)|budget_exceeded(5.0s)"
+        ) == "horizontal_anomaly_band"

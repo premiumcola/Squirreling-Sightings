@@ -107,6 +107,59 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
+  // C3 — segment midpoint handles. Hollow ring on straight segments
+  // ("drag me to bend"); filled disc + dashed leader on curved
+  // segments ("drag to reshape, dbl-click to straighten"). Skipped
+  // while a new polygon is being placed so the user can drop points
+  // without the editor competing visually. _hitMidpoint mirrors the
+  // midpoint formula so click targeting stays aligned.
+  if (!shapeState.points || shapeState.points.length === 0){
+    for (let i = 0; i < pts.length; i++){
+      const p0 = pts[i];
+      const p1 = pts[(i + 1) % pts.length];
+      const cp = curves[i];
+      if (cp && Number.isFinite(cp.x) && Number.isFinite(cp.y)){
+        const mx = 0.25 * p0.x + 0.5 * cp.x + 0.25 * p1.x;
+        const my = 0.25 * p0.y + 0.5 * cp.y + 0.25 * p1.y;
+        // Dashed leader from segment midpoint to control point so the
+        // user sees what's pulling the curve.
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = color.replace('1)', '0.5)');
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.lineTo(cp.x, cp.y);
+        ctx.stroke();
+        ctx.restore();
+        // Filled disc at the segment midpoint.
+        ctx.beginPath();
+        ctx.arc(mx, my, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // Small marker at the control point itself.
+        ctx.beginPath();
+        ctx.arc(cp.x, cp.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      } else {
+        const mx = (p0.x + p1.x) / 2;
+        const my = (p0.y + p1.y) / 2;
+        // Hollow ring — visually quieter than the curved-segment disc
+        // so the user reads it as "tap to add a bend, not a vertex".
+        ctx.beginPath();
+        ctx.arc(mx, my, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+  }
   if (poly && poly.label){
     const minX = Math.min(...pts.map(p => p.x));
     const minY = Math.min(...pts.map(p => p.y));

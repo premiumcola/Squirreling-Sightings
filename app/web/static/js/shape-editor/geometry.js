@@ -47,6 +47,40 @@ export function _hitVertex(pt){
   return test(shapeState.zones || [], 'zone') || test(shapeState.masks || [], 'mask');
 }
 
+// C3 — hit-test against every segment's visual midpoint. Straight
+// segment midpoint = average of endpoints; curved segment midpoint =
+// quadratic-bezier at t=0.5 → 0.25*p0 + 0.5*cp + 0.25*p1. Vertex
+// hit-test takes priority over midpoint hit-test in pointer.js so
+// vertices "win" when handles overlap (vertex sits visually on top).
+export function _hitMidpoint(pt){
+  const test = (arr, kind) => {
+    for (let i = arr.length - 1; i >= 0; i--){
+      const pts = _polyPoints(arr[i]);
+      if (pts.length < 2) continue;
+      const curves = _polyCurves(arr[i]);
+      for (let s = 0; s < pts.length; s++){
+        const p0 = pts[s];
+        const p1 = pts[(s + 1) % pts.length];
+        const cp = curves[s];
+        let mx, my;
+        if (cp && Number.isFinite(cp.x) && Number.isFinite(cp.y)){
+          mx = 0.25 * p0.x + 0.5 * cp.x + 0.25 * p1.x;
+          my = 0.25 * p0.y + 0.5 * cp.y + 0.25 * p1.y;
+        } else {
+          mx = (p0.x + p1.x) / 2;
+          my = (p0.y + p1.y) / 2;
+        }
+        const dx = mx - pt.x, dy = my - pt.y;
+        if (dx * dx + dy * dy <= _SHAPE_HIT_PX * _SHAPE_HIT_PX){
+          return { kind, polyIdx: i, segIdx: s };
+        }
+      }
+    }
+    return null;
+  };
+  return test(shapeState.zones || [], 'zone') || test(shapeState.masks || [], 'mask');
+}
+
 export function _isClosingPoint(pt){
   if (!shapeState.points || shapeState.points.length < 3) return false;
   const first = shapeState.points[0];

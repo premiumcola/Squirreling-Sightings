@@ -13,7 +13,7 @@ import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import {
-  _hitVertex, _isClosingPoint, _findPolygonAt, _polyPoints, canvasPoint,
+  _hitVertex, _hitMidpoint, _isClosingPoint, _findPolygonAt, _polyPoints, canvasPoint,
 } from './geometry.js';
 import { drawShapes } from './canvas.js';
 import { saveShapesIntoForm, _nextPolyName } from './persistence.js';
@@ -59,8 +59,13 @@ function _commitInProgressPolygon(){
   // flag so a re-init of this IIFE doesn't double-attach handlers.
   bindShapeModeToggle();
 
-  let drag = null;          // {kind, polyIdx, ptIdx} while dragging a vertex
+  // drag.mode = 'vertex' (legacy ptIdx-based vertex drag) or 'midpoint'
+  // (segIdx-based bend-handle drag, added in C3). Vertices win over
+  // midpoints when both could be hit (vertices render on top).
+  let drag = null;
   let downPt = null;        // pointer at mousedown — distinguishes click vs drag
+
+  const _drawingInProgress = () => Array.isArray(shapeState.points) && shapeState.points.length > 0;
 
   const onDown = (evt) => {
     if (!shapeState.camera) return;
@@ -68,9 +73,19 @@ function _commitInProgressPolygon(){
     const pt = canvasPoint(evt);
     const hit = _hitVertex(pt);
     if (hit){
-      drag = hit;
+      drag = { ...hit, mode: 'vertex' };
       downPt = pt;
       return;
+    }
+    // Midpoint handles only respond while the user isn't placing a new
+    // polygon — during drawing, every click drops the next vertex.
+    if (!_drawingInProgress()){
+      const mid = _hitMidpoint(pt);
+      if (mid){
+        drag = { ...mid, mode: 'midpoint' };
+        downPt = pt;
+        return;
+      }
     }
     // No vertex grabbed → record the down position so the corresponding
     // up-event knows whether the user actually clicked or just brushed
@@ -87,6 +102,16 @@ function _commitInProgressPolygon(){
       if (evt.cancelable) evt.preventDefault();
       const arr = drag.kind === 'zone' ? shapeState.zones : shapeState.masks;
       const poly = arr[drag.polyIdx];
+      if (drag.mode === 'midpoint'){
+        const pts = _polyPoints(poly);
+        if (!pts.length) return;
+        if (!Array.isArray(poly.curves)){
+          poly.curves = new Array(pts.length).fill(null);
+        }
+        poly.curves[drag.segIdx] = { x: Math.round(pt.x), y: Math.round(pt.y) };
+        drawShapes();
+        return;
+      }
       const pts = _polyPoints(poly);
       if (!pts || !pts[drag.ptIdx]) return;
       pts[drag.ptIdx].x = Math.round(pt.x);
@@ -96,14 +121,32 @@ function _commitInProgressPolygon(){
     }
     // Plain hover: track which vertex (if any) is under the cursor so
     // drawShapes can highlight it and the canvas cursor updates.
+    // Vertex hover wins over midpoint hover — vertices render on top.
     const hover = _hitVertex(pt);
-    const closing = !hover && _isClosingPoint(pt);
-    const sig = hover ? `${hover.kind}:${hover.polyIdx}:${hover.ptIdx}` : (closing ? 'close' : '');
+    const mid = !hover && !_drawingInProgress() ? _hitMidpoint(pt) : null;
+    const closing = !hover && !mid && _isClosingPoint(pt);
+    const sig = hover ? `${hover.kind}:${hover.polyIdx}:${hover.ptIdx}`
+      : mid ? `m:${mid.kind}:${mid.polyIdx}:${mid.segIdx}`
+      : (closing ? 'close' : '');
     if (sig !== shapeState.hoverSig){
       shapeState.hoverVertex = hover;
       shapeState.hoverClosing = closing;
       shapeState.hoverSig = sig;
-      canvas.style.cursor = (hover ? 'move' : (closing ? 'pointer' : 'crosshair'));
+      // Curved-segment midpoint cursor signals "drag to reshape" via
+      // 'move'; straight-segment midpoint uses 'grab' to hint "drag to
+      // bend". Vertex hover keeps 'move'.
+      let cursor;
+      if (hover){
+        cursor = 'move';
+      } else if (mid){
+        const arr = mid.kind === 'zone' ? shapeState.zones : shapeState.masks;
+        const poly = arr[mid.polyIdx];
+        const isCurved = poly && Array.isArray(poly.curves) && poly.curves[mid.segIdx];
+        cursor = isCurved ? 'move' : 'grab';
+      } else {
+        cursor = closing ? 'pointer' : 'crosshair';
+      }
+      canvas.style.cursor = cursor;
       drawShapes();
     }
   };
@@ -158,9 +201,30 @@ function _commitInProgressPolygon(){
     _updateShapeDrawingBar();
   };
 
+  // C3 — dblclick on a curved segment's midpoint straightens it (clears
+  // poly.curves[segIdx]). When the entire curves array is back to all-
+  // null, the key is deleted from the polygon so settings.json diffs
+  // for previously-straight legacy polygons stay clean.
+  const onDblClick = (evt) => {
+    if (!shapeState.camera) return;
+    if (_drawingInProgress()) return;
+    const pt = canvasPoint(evt);
+    const hit = _hitMidpoint(pt);
+    if (!hit) return;
+    const arr = hit.kind === 'zone' ? shapeState.zones : shapeState.masks;
+    const poly = arr[hit.polyIdx];
+    if (!poly || !Array.isArray(poly.curves) || !poly.curves[hit.segIdx]) return;
+    poly.curves[hit.segIdx] = null;
+    if (poly.curves.every(c => c == null)) delete poly.curves;
+    saveShapesIntoForm();
+    drawShapes();
+    if (evt.cancelable) evt.preventDefault();
+  };
+
   canvas.addEventListener('mousedown', onDown);
   canvas.addEventListener('mousemove', onMove);
   canvas.addEventListener('mouseup',   onUp);
+  canvas.addEventListener('dblclick',  onDblClick);
   canvas.addEventListener('mouseleave', () => {
     drag = null;
     downPt = null;

@@ -220,6 +220,35 @@ function _ensureZoneMaskOverlay(){
   return svg;
 }
 
+// vh729 — one-shot diagnostic. Prints the state of every visual
+// layer the user can't see when Simulieren looks black. Gated by
+// _session._diagLogged so the line fires exactly once per open.
+// One console.warn per line so the lines stay readable in DevTools
+// instead of folding into a single multi-line entry that's harder
+// to copy-paste.
+function _logSimDiag(){
+  if (!_session || _session._diagLogged) return;
+  _session._diagLogged = true;
+  const imgEl = byId('lightboxImg');
+  const wrap = byId('lightboxMediaWrap');
+  const bboxSvg = byId('lightboxLiveOverlay');
+  const zoneSvg = byId('lightboxLiveZoneMask');
+  const _rect = el => {
+    if (!el) return '0x0';
+    const r = el.getBoundingClientRect();
+    return `${Math.round(r.width)}x${Math.round(r.height)}`;
+  };
+  const _z = el => el ? window.getComputedStyle(el).zIndex : 'n/a';
+  const _disp = el => el ? window.getComputedStyle(el).display : 'n/a';
+  const _vb = el => el ? (el.getAttribute('viewBox') || 'n/a') : 'n/a';
+  const imgSrc = imgEl ? (imgEl.src || '<empty>') : '<missing>';
+  console.warn(`[sim-diag] imgEl: src=${imgSrc} display=${_disp(imgEl)} rect=${_rect(imgEl)}`);
+  console.warn(`[sim-diag] bboxSvg: viewBox=${_vb(bboxSvg)} rect=${_rect(bboxSvg)} display=${_disp(bboxSvg)} z-index=${_z(bboxSvg)}`);
+  console.warn(`[sim-diag] zoneSvg: viewBox=${_vb(zoneSvg)} rect=${_rect(zoneSvg)} display=${_disp(zoneSvg)} z-index=${_z(zoneSvg)}`);
+  console.warn(`[sim-diag] wrap: rect=${_rect(wrap)}`);
+  console.warn(`[sim-diag] _session.lastDetections.length=${(_session.lastDetections || []).length}`);
+}
+
 const _TOGGLES = [
   { id: 'bboxes',    label: 'Bboxes',
     desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
@@ -428,6 +457,14 @@ function _renderFrame(data){
   // Frame state for the bbox + zone/mask overlays.
   _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
   _session.lastDetections = data.detections || [];
+  // vh729 — one-shot diagnostic. Fires once per Simulieren open
+  // (right after the first tick lands real data) and prints the
+  // state of every visual layer the user can't see when the
+  // modal looks black. Single source of truth that answers
+  // "which surface is broken" without needing DevTools.
+  // console.warn is the lint-allowed escape hatch
+  // (eslint no-console: { allow: ['warn', 'error'] }).
+  _logSimDiag();
   // Buffer detections for the swimlane window (one entry per detection
   // per tick; per-track id would be ideal here but the live tracker
   // doesn't expose ids — group by label instead).

@@ -7,9 +7,17 @@ import { byId } from '../core/dom.js';
 
 function _fsToggle(wrapEl, targetEl){
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  // jh742 — iOS fallback uses .fake-fullscreen with no real FS API
+  // engaged, so document.fullscreenElement is null even when the
+  // wrap is visibly fullscreened. Detect that case explicitly so a
+  // second click on the FS button exits instead of re-entering.
+  const fakeFs = wrapEl.classList.contains('fake-fullscreen');
   if (fsEl){
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } else if (fakeFs){
+    wrapEl.classList.remove('fake-fullscreen');
+    wrapEl.classList.remove('is-fs');
   } else {
     const req = targetEl.requestFullscreen || targetEl.webkitRequestFullscreen || targetEl.mozRequestFullScreen;
     if (req) req.call(targetEl).catch(() => {

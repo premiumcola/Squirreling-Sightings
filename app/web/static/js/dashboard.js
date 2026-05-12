@@ -533,6 +533,37 @@ document.addEventListener('webkitfullscreenchange', _onFullscreenChange);
 
 window._cvEnterFullscreen = _cvEnterFullscreen;
 
+// jh742 — second click on the FS button must exit FS. The previous
+// wiring only ever called _cvEnterFullscreen, so the icon flipped to
+// the minimize-pattern (driven by .is-fs on the wrap) but clicking
+// it did nothing. _cvToggleFullscreen branches: if the wrap is in
+// real or fake fullscreen, exit; otherwise enter via the existing
+// helper. The fake-fullscreen exit path mirrors the dismiss/escape
+// handlers that _cvEnterFullscreen installs on iOS so HD drops and
+// classes are cleaned up the same way.
+function _cvToggleFullscreen(camId){
+  const card = byId('cameraCards')?.querySelector(`[data-camid="${CSS.escape(camId)}"]`);
+  const wrap = card?.querySelector('.cv-img-wrap');
+  if (!wrap) return;
+  const inFs = wrap.classList.contains('is-fs')
+            || document.fullscreenElement === wrap
+            || document.webkitFullscreenElement === wrap;
+  if (inFs){
+    if (wrap.classList.contains('fake-fullscreen')){
+      wrap.classList.remove('fake-fullscreen');
+      wrap.classList.remove('is-fs');
+      _runHdDropOnFsExit();
+    } else if (document.exitFullscreen){
+      document.exitFullscreen().catch(() => {});
+    } else if (document.webkitExitFullscreen){
+      document.webkitExitFullscreen();
+    }
+    return;
+  }
+  _cvEnterFullscreen(camId);
+}
+window._cvToggleFullscreen = _cvToggleFullscreen;
+
 // ── SIM button — open MediaView in live-detect mode for this camera ─────
 // Routes to the unified MediaView shell so the user sees the SAME
 // chrome as a recorded clip (lb-fs-video top bar, 16:9 wrap, panel-
@@ -713,7 +744,7 @@ ${isActive ? `
       <div class="cv-chrome-top-right">
         <div class="cv-tr-row">
           ${c.rtsp_url ? `<button class="cv-chrome-btn cv-hd-badge has-text${hdOn ? ' active' : ''}" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau" aria-label="HD-Vorschau ein/aus">HD</button>` : ''}
-          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvEnterFullscreen && window._cvEnterFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild">
+          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvToggleFullscreen && window._cvToggleFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild">
             <svg class="fs-icon-expand" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 14v7h7"/><path d="M21 10V3h-7"/>
               <path d="M3 21l8-8"/><path d="M21 3l-8 8"/>

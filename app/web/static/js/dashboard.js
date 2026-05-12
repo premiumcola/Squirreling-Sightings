@@ -730,16 +730,21 @@ ${isActive ? `
   // the helper prevents double-binding across re-renders.
   _wireHdIdleReset();
   byId('cameraCards').querySelectorAll('.cv-pill-live-wrap').forEach(el => {
-    // Open/close on hover (desktop) and tap (mobile). The pill flips
-    // between collapsed (display:flex row) and expanded (the detail
-    // panel inside) via the .cv-lp-open class — see 03-dashboard.css.
-    // No JS-measured CSS variables: the rewrite drops --lp-collapsed-w
-    // because the CSS no longer references it, and the JS-injected
-    // width was contributing to the prior iOS stretch bug.
+    // Open/close on CLICK (desktop) and tap (mobile) — never on
+    // hover. The pill flips between collapsed row and expanded
+    // detail panel via .cv-lp-open. ng542: the previous mouseenter
+    // trigger caused the pill to widen every time the user moved
+    // their cursor over it, which displaced neighbouring chrome
+    // buttons in the same cluster — the "breathing" regression the
+    // user reported. Click-only matches what touch already did and
+    // keeps every chrome button rock-stable under pointer hover.
     let _t = null;
-    el.addEventListener('mouseenter', () => { clearTimeout(_t); el.classList.add('cv-lp-open'); });
-    el.addEventListener('mouseleave', () => { _t = setTimeout(() => el.classList.remove('cv-lp-open'), 120); });
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      el.classList.toggle('cv-lp-open');
+    });
     el.addEventListener('touchstart', e => { e.stopPropagation(); clearTimeout(_t); const open = el.classList.toggle('cv-lp-open'); if (!open) clearTimeout(_t); }, { passive: true });
+    document.addEventListener('click', e => { if (!el.contains(e.target)) el.classList.remove('cv-lp-open'); });
     document.addEventListener('touchstart', e => { if (!el.contains(e.target)) { clearTimeout(_t); el.classList.remove('cv-lp-open'); } }, { passive: true });
   });
 }

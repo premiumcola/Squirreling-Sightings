@@ -151,12 +151,56 @@ function _ensureZoneMaskOverlay(){
 }
 
 const _TOGGLES = [
-  { id: 'bboxes',    label: 'Bboxes' },
-  { id: 'trails',    label: 'Trails' },
-  { id: 'zones',     label: 'Zonen' },
-  { id: 'masks',     label: 'Masken' },
-  { id: 'confirmer', label: 'Confirmer' },
+  { id: 'bboxes',    label: 'Bboxes',
+    desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
+  { id: 'trails',    label: 'Trails',
+    desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
+  { id: 'zones',     label: 'Zonen',
+    desc: 'Erkennungs-Zonen (grün) anzeigen' },
+  { id: 'masks',     label: 'Masken',
+    desc: 'Ausschluss-Masken (rot) anzeigen' },
+  { id: 'confirmer', label: 'Confirmer',
+    desc: 'Bestätigungs-Fenster der Tracking-Pipeline anzeigen' },
 ];
+
+// Shared tooltip popover state — one element, reused. Created lazily
+// on the first hover / long-press. Same dark surface the rest of
+// the lightbox uses, no new colours.
+let _toggleTipEl = null;
+let _toggleTipHoverTimer = 0;
+let _toggleTipLongPressTimer = 0;
+
+function _ensureToggleTip(){
+  if (_toggleTipEl) return _toggleTipEl;
+  _toggleTipEl = document.createElement('div');
+  _toggleTipEl.className = 'mv-live-toggle-tip';
+  _toggleTipEl.setAttribute('role', 'tooltip');
+  _toggleTipEl.hidden = true;
+  document.body.appendChild(_toggleTipEl);
+  return _toggleTipEl;
+}
+
+function _showToggleTip(target, text){
+  const tip = _ensureToggleTip();
+  tip.textContent = text;
+  tip.hidden = false;
+  // Position above the pill when there's room, below otherwise.
+  const r = target.getBoundingClientRect();
+  const tipR = tip.getBoundingClientRect();
+  const above = r.top - tipR.height - 10;
+  const top = above >= 8 ? above : r.bottom + 10;
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  let left = r.left + r.width / 2 - tipR.width / 2;
+  left = Math.max(8, Math.min(vw - tipR.width - 8, left));
+  tip.style.top = `${Math.round(top)}px`;
+  tip.style.left = `${Math.round(left)}px`;
+}
+
+function _hideToggleTip(){
+  if (_toggleTipEl) _toggleTipEl.hidden = true;
+  clearTimeout(_toggleTipHoverTimer);
+  clearTimeout(_toggleTipLongPressTimer);
+}
 
 function _mountOverlayToggles(){
   const inner = byId('lightboxInner');
@@ -169,18 +213,68 @@ function _mountOverlayToggles(){
     row.className = 'mv-live-toggles';
     inner.insertBefore(row, stack);
   }
+  // ``title`` carries the desktop-native tooltip fallback for
+  // platforms where the custom hover bubble doesn't engage (the
+  // browser will show its own bubble after ~700 ms). Touch devices
+  // never trigger ``title`` — they get the long-press popover
+  // below instead.
   row.innerHTML = _TOGGLES.map(t => (
-    `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-on="${_overlays[t.id] ? '1' : '0'}">${t.label}</button>`
+    `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-desc="${esc(t.desc)}" data-on="${_overlays[t.id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${t.label}</button>`
   )).join('') + '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
   row.querySelectorAll('.mv-live-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (ev) => {
+      // Suppress click after a long-press touch: the long-press
+      // already opened the tooltip, the user didn't intend to
+      // toggle. Detect via a flag set by touchstart below.
+      if (btn._suppressClick){
+        btn._suppressClick = false;
+        ev.preventDefault();
+        return;
+      }
       const id = btn.dataset.tog;
       _overlays[id] = !_overlays[id];
       btn.dataset.on = _overlays[id] ? '1' : '0';
+      _hideToggleTip();
       _renderBboxOverlay();
       _renderZoneMaskOverlay();
     });
+    // Desktop hover — 300 ms before the tooltip appears.
+    btn.addEventListener('pointerenter', (ev) => {
+      if (ev.pointerType !== 'mouse') return;
+      clearTimeout(_toggleTipHoverTimer);
+      _toggleTipHoverTimer = setTimeout(
+        () => _showToggleTip(btn, btn.dataset.desc || ''),
+        300,
+      );
+    });
+    btn.addEventListener('pointerleave', _hideToggleTip);
+    // Touch long-press — ≥ 500 ms. Short-press still toggles via
+    // the click handler above (touchend → click in the standard
+    // event cycle); long-press shows the tooltip and suppresses
+    // the synthetic click via the _suppressClick flag.
+    btn.addEventListener('touchstart', () => {
+      clearTimeout(_toggleTipLongPressTimer);
+      _toggleTipLongPressTimer = setTimeout(() => {
+        btn._suppressClick = true;
+        _showToggleTip(btn, btn.dataset.desc || '');
+      }, 500);
+    }, { passive: true });
+    btn.addEventListener('touchend', () => {
+      clearTimeout(_toggleTipLongPressTimer);
+      // Don't hide instantly — the user may want to read the
+      // tooltip after lifting their finger. Auto-dismiss on the
+      // next document touchstart.
+    }, { passive: true });
+    btn.addEventListener('touchcancel', () => {
+      clearTimeout(_toggleTipLongPressTimer);
+    });
   });
+  // Outside-tap dismiss for the touch path.
+  document.addEventListener('touchstart', (ev) => {
+    if (!_toggleTipEl || _toggleTipEl.hidden) return;
+    if (ev.target.closest && ev.target.closest('.mv-live-toggle')) return;
+    _hideToggleTip();
+  }, { passive: true });
 }
 
 function _pinScrubberRight(){

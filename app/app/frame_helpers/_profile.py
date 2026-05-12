@@ -164,6 +164,17 @@ class FrameValidatorProfile:
     # Colorbar — same shape regardless of time of day.
     colorbar_per_row_std: float = _COLORBAR_PER_ROW_STD
     colorbar_between_row_std: float = _COLORBAR_BETWEEN_ROW_STD
+    # Bright-outlier-dark-scene detector — catches saturated tile
+    # corruption patches in night/twilight frames that every other
+    # detector misses (no chroma, no high-frequency texture, just
+    # a 255-grey patch). Active only when the overall frame mean
+    # is BELOW ``bright_outlier_frame_mean_max`` — a value of 0.0
+    # disables the detector entirely so DAY_PROFILE can leave it
+    # off (bright daytime scenes legitimately produce 255 from
+    # sun / snow / lamps).
+    bright_outlier_max_tile_floor: float = 240.0
+    bright_outlier_dev_floor: float = 100.0
+    bright_outlier_frame_mean_max: float = 0.0
 
 
 DAY_PROFILE = FrameValidatorProfile(name="day")
@@ -172,12 +183,22 @@ TWILIGHT_PROFILE = FrameValidatorProfile(
     flat_gray_std_floor=1.2,
     tile_dead_fraction=0.55,
     grey_midband_total_std=8.0,
+    # Twilight scenes mean-brighten 50-110; a 255-tile against a 50
+    # baseline at mean 80 is the real-world failure mode the user
+    # measured on sunrise mp4s. Frame_mean_max=100 keeps the detector
+    # active up to mid-twilight without false-positives on the bright
+    # half of dawn.
+    bright_outlier_frame_mean_max=100.0,
 )
 NIGHT_PROFILE = FrameValidatorProfile(
     name="night",
     flat_gray_std_floor=0.8,
     tile_dead_fraction=0.85,
     grey_midband_total_std=5.0,
+    # Same detector active at night — IR-illuminated scenes mean
+    # 20-60, a saturated outlier patch in that regime is always
+    # corruption.
+    bright_outlier_frame_mean_max=100.0,
 )
 
 

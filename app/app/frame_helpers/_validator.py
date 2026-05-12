@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 from ._anomaly_bands import is_horizontal_anomaly_band
+from ._bright_outlier import is_bright_outlier_dark_scene
 from ._colorbar import is_colorbar
 from ._decode import _MIN_FRAME_H, _MIN_FRAME_W, _decode
 from ._grey import dead_area_score, is_flat_gray_full_frame, is_grey_frame
@@ -163,6 +164,18 @@ def is_valid_frame(img, profile: FrameValidatorProfile = DAY_PROFILE) -> tuple[b
     if mb_ok:
         return False, mb_reason
 
+    # Bright-outlier-dark-scene — catches the saturated 255-grey
+    # corruption patch that every detector above misses: no chroma
+    # for the magenta + macroblock gates to bite, no row-delta for
+    # the horizontal band, mostly-untouched-frame for dead_area to
+    # ignore. Active only in NIGHT / TWILIGHT (profile sets
+    # ``bright_outlier_frame_mean_max`` > 0 there); DAY_PROFILE
+    # leaves it disabled because a sunlit daytime scene legitimately
+    # hits 255 from sun, snow, lamps.
+    bo_ok, bo_reason = is_bright_outlier_dark_scene(img, profile)
+    if bo_ok:
+        return False, bo_reason
+
     # Split-frame heuristic — catches the half-corrupt cluster where
     # exactly one half is dead grey and the other half is real
     # imagery. dead_area_score lands near 0.5 in that case, just under
@@ -224,6 +237,7 @@ _TRANSIENT_REASONS: frozenset[str] = frozenset({
     "split_left_dead", "split_right_dead",
     "split_top_dead", "split_bottom_dead",
     "grey_toned",
+    "bright_outlier_dark_scene",
     # H.265 horizontal-band corruption (encoder/decoder hickup) —
     # the next frame is usually clean, so retrying within the
     # wall-clock budget genuinely helps. ``horizontal_anomaly_band``

@@ -609,3 +609,121 @@ class TestFlatGrayFullFrame:
         ok, reason = is_valid_frame(img, profile=NIGHT_PROFILE)
         assert not ok
         assert "flat_gray_full_frame" in reason
+
+
+class TestBrightOutlierDarkScene:
+    """Bright-outlier-dark-scene — a saturated tile against an
+    otherwise dark scene. Two real sunrise mp4s on 2026-05-12 had 14
+    of 118 frames hit this corruption mode; every other detector
+    waved them through because chroma_spread ≈ 0, saturation ≈ 0,
+    dead_area_score sat below threshold, and the 255-tile didn't
+    carry enough row-delta to trip the horizontal-anomaly gate.
+
+    Profile gating:
+      DAY_PROFILE    → detector disabled (sun / snow / lamps
+                       legitimately produce 255).
+      TWILIGHT/NIGHT → detector active.
+    """
+
+    def _dark_scene_with_bright_patch(self, seed: int = 17) -> np.ndarray:
+        """Mimic the real failure mode: a dark IR/twilight scene
+        (mean ~50, illuminator gradient + silhouette) with one
+        rectangular patch saturated at 255. Built on top of
+        ``_ir_night_frame`` so dead_area + grey_toned + flat_gray
+        don't false-positive before the bright_outlier detector
+        gets a chance to fire."""
+        img = _ir_night_frame(seed=seed).astype(np.int16)
+        h, w = img.shape[:2]
+        ty, tx = 1, 5
+        tile_h, tile_w = h // 5, w // 8
+        y0, y1 = ty * tile_h, (ty + 1) * tile_h
+        x0, x1 = tx * tile_w, (tx + 1) * tile_w
+        img[y0:y1, x0:x1] = 255
+        return np.clip(img, 0, 255).astype(np.uint8)
+
+    def _dark_scene_no_patch(self, seed: int = 18) -> np.ndarray:
+        """A clean IR/twilight reference — no bright patch. Reuses
+        the same builder the night-frames-pass test trusts so this
+        case is verified to pass dead_area + flat_gray + grey_toned
+        on its own."""
+        return _ir_night_frame(seed=seed)
+
+    def test_corrupt_dark_scene_rejects_at_night(self):
+        img = self._dark_scene_with_bright_patch()
+        ok, reason = is_valid_frame(img, profile=NIGHT_PROFILE)
+        assert not ok, f"bright-patch frame slipped through at NIGHT: {reason}"
+        assert "bright_outlier_dark_scene" in reason
+
+    def test_corrupt_dark_scene_rejects_at_twilight(self):
+        img = self._dark_scene_with_bright_patch()
+        ok, reason = is_valid_frame(img, profile=TWILIGHT_PROFILE)
+        assert not ok, f"bright-patch frame slipped through at TWILIGHT: {reason}"
+        assert "bright_outlier_dark_scene" in reason
+
+    def test_corrupt_dark_scene_passes_under_day(self):
+        """DAY_PROFILE has ``bright_outlier_frame_mean_max=0``, which
+        disables the detector. The bright_outlier check itself MUST
+        NOT fire under DAY — bright daytime scenes legitimately
+        produce 255 from sun, snow, lamps."""
+        from app.frame_helpers._bright_outlier import is_bright_outlier_dark_scene
+        img = self._dark_scene_with_bright_patch()
+        ok, reason = is_bright_outlier_dark_scene(img, DAY_PROFILE)
+        assert not ok, f"bright_outlier wrongly fired under DAY: {reason}"
+
+    def test_clean_dark_scene_passes_night(self):
+        img = self._dark_scene_no_patch()
+        ok, reason = is_valid_frame(img, profile=NIGHT_PROFILE)
+        assert ok, f"clean dark scene wrongly rejected: {reason}"
+
+    def test_clean_dark_scene_passes_twilight(self):
+        img = self._dark_scene_no_patch()
+        ok, reason = is_valid_frame(img, profile=TWILIGHT_PROFILE)
+        assert ok, f"clean dark scene wrongly rejected: {reason}"
+
+
+# ── On-disk fixture loader (testdata/sunrise_2026-05-12) ───────────
+# Picks up the real captures described in the prompt when the user
+# populates the directory. Empty otherwise — pytest handles an empty
+# parametrize by emitting a single SKIPPED placeholder.
+_FIXTURE_DIR = (Path(__file__).parent.parent.parent
+                / "testdata" / "sunrise_2026-05-12")
+
+
+def _load_corrupt_fixtures():
+    if not _FIXTURE_DIR.exists():
+        return []
+    return sorted(_FIXTURE_DIR.glob("f001[0-9].jpg")) \
+         + sorted(_FIXTURE_DIR.glob("f002[0-3].jpg"))
+
+
+def _load_clean_fixtures():
+    if not _FIXTURE_DIR.exists():
+        return []
+    return [p for p in (_FIXTURE_DIR / "f0040.jpg", _FIXTURE_DIR / "f0080.jpg")
+            if p.exists()]
+
+
+@pytest.mark.parametrize("path", _load_corrupt_fixtures(),
+                         ids=lambda p: p.name)
+def test_real_corrupt_fixture_rejects(path):
+    """Each real corrupt fixture must reject under TWILIGHT with the
+    ``bright_outlier_dark_scene`` head."""
+    import cv2
+    img = cv2.imread(str(path))
+    assert img is not None, f"failed to read {path}"
+    ok, reason = is_valid_frame(img, profile=TWILIGHT_PROFILE)
+    assert not ok, f"real corrupt fixture {path.name} passed: {reason}"
+    assert "bright_outlier_dark_scene" in reason, \
+        f"real corrupt fixture {path.name} rejected under wrong head: {reason}"
+
+
+@pytest.mark.parametrize("path", _load_clean_fixtures(),
+                         ids=lambda p: p.name)
+def test_real_clean_fixture_passes(path):
+    """Each real clean dark fixture passes under TWILIGHT + NIGHT."""
+    import cv2
+    img = cv2.imread(str(path))
+    assert img is not None, f"failed to read {path}"
+    for prof in (TWILIGHT_PROFILE, NIGHT_PROFILE):
+        ok, reason = is_valid_frame(img, profile=prof)
+        assert ok, f"real clean fixture {path.name} rejected under {prof.name}: {reason}"

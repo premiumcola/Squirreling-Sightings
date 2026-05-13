@@ -10,15 +10,24 @@
 .cam-grid-n{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:900px){.cam-grid-2,.cam-grid-4,.cam-grid-n{grid-template-columns:minmax(0,1fr)}}
 
-/* Card = just the video frame */
-.cv-card{border-radius:18px;overflow:hidden;cursor:pointer;background:#0a0a0a;transition:transform .18s,box-shadow .18s;position:relative;min-width:0;contain:paint}
+/* Card = just the video frame. --cv-overlay-inset (8 px) is the
+   one-and-only chrome gap from each tile edge to its nearest chrome
+   element. v17 redesign moves the variable from .cv-frame onto
+   .cv-card itself so every overlay-inset consumer (top-left through
+   bottom-right) reads the same value. */
+.cv-card{
+  border-radius:18px;overflow:hidden;cursor:pointer;
+  background:#0a0a0a;transition:transform .18s,box-shadow .18s;
+  position:relative;min-width:0;contain:paint;
+  --cv-overlay-inset:8px;
+}
 .cv-card:hover{transform:scale(1.012);box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:1}
 /* Frame aspect-ratio is per-card via the --cv-aspect var. JS sets
    the var to the stream's reported width/height once the snapshot
    has decoded — until then we use 16/9 so the placeholder doesn't
    look squashed during connect. With object-fit:contain (below)
    the full frame is always visible; cropping is never used. */
-.cv-frame{position:relative;aspect-ratio:var(--cv-aspect, 16/9);overflow:hidden;contain:paint;transform:translateZ(0);--cv-overlay-inset:10px}
+.cv-frame{position:relative;aspect-ratio:var(--cv-aspect, 16/9);overflow:hidden;contain:paint;transform:translateZ(0)}
 .cv-img-wrap{position:relative;width:100%;height:100%}.cv-img{width:100%;height:100%;object-fit:contain;display:block;background:#0a0a0a;opacity:0;transition:opacity .4s;position:absolute;inset:0}.cv-img.loaded{opacity:1}.cv-loading-placeholder{position:absolute;inset:0;height:100%;background:#0a0a0a}@keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── Monitoring-style camera placeholders (offline / connecting) ────────── */
@@ -88,39 +97,80 @@
   .cv-card:hover .cv-grad-bot{opacity:1}
 }.cv-live-dot{position:absolute;bottom:10px;left:10px;width:10px;height:10px;border-radius:50%;z-index:3}.cv-live-green{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}.cv-live-amber{background:#f59e0b;animation:cv-pulse-amber 2s ease-in-out infinite}.cv-live-red{background:#ef4444}@keyframes cv-pulse-green{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}50%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}@keyframes cv-pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
 
-/* Tile chrome containers — task fb537 v3 restructure. Every chrome
-   element now lives INSIDE .cv-img-wrap (the FS root) so requestFull-
-   screen on the wrap carries the entire chrome layer with it. Four
-   absolute-positioned flex rows, one per corner. The wrap is
-   position:relative so these anchor correctly. */
-.cv-chrome-top-right{position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:3}
-/* Bottom-left now hosts the identity stack (icon + name + Live-pill on
-   row 1, location on row 2). Anchored to the bottom edge so the open
-   Live-pill grows UPWARD without clipping past the tile bottom.
-   max-width:60% leaves room for the bottom-right cluster on the same
-   row. */
-.cv-chrome-bottom-left{position:absolute;left:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:60%;z-index:3;pointer-events:none}
+/* v17 four-zone tile chrome — strict 8 px inset to every tile edge.
+   Each zone is absolute-positioned inside .cv-img-wrap (the FS root)
+   so requestFullscreen carries the chrome with it. Pointer-events:
+   none on the wrappers + auto on direct children stops the gradient
+   overlay from swallowing video taps while keeping the chrome
+   interactive. */
+.cv-chrome-top-left{
+  position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);
+  display:flex;align-items:center;gap:4px;
+  max-width:calc(50% - 110px);
+  z-index:4;pointer-events:none;
+}
+.cv-chrome-top-left > *{pointer-events:auto}
+.cv-chrome-top-right{
+  position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);
+  display:flex;align-items:center;gap:4px;
+  z-index:4;
+}
+/* Bottom-left v17 — stacked: TG/MQTT cluster row on top, class-icon
+   row below it. align-items:flex-start so each row hugs the left edge.
+   max-width keeps the cluster out of the centred ~220 px timestamp
+   strip and the bottom-right Sim/Cog block. */
+.cv-chrome-bottom-left{
+  position:absolute;left:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);
+  display:flex;flex-direction:column;align-items:flex-start;gap:20px;
+  max-width:calc(50% - 110px);
+  z-index:3;pointer-events:none;
+}
 .cv-chrome-bottom-left > *{pointer-events:auto}
-/* pq924 — align-items:flex-end so the channel cluster's BOTTOM row
-   (TG/MQTT badges) lines up with the Sim / Cog pills next to it,
-   and the schedule label peeks above. Previously align-items:center
-   would have floated Sim/Cog up to the cluster's vertical centre. */
-.cv-chrome-bottom-right{position:absolute;right:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);display:flex;align-items:flex-end;gap:6px;z-index:6}
+.cv-channel-row{display:flex;align-items:center;gap:14px}
+.cv-chrome-bottom-right{
+  position:absolute;right:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);
+  display:flex;align-items:center;gap:4px;
+  max-width:calc(50% - 110px);
+  z-index:6;
+}
 
-/* ── Unified chrome button (vh367 base; full audit lands in tw284)
-   30 px height by default · radius 8 · dark transparent bg · single
-   focus-visible ring spec for the whole chrome family. Per-instance
-   colour tints (class pill icon, channel badge icon) come via
+/* Top-left identity stack — 32 × 32 icon on the left, two stacked
+   rows (camera name + Live-pill) on the right. The icon vertically
+   centres against the stack thanks to align-items:center on the
+   parent. */
+.cv-cam-title-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;height:32px;flex-shrink:0;
+  color:#fff;
+  filter:drop-shadow(0 1px 4px rgba(0,0,0,.6));
+}
+.cv-cam-title-icon svg{width:100%;height:100%;display:block}
+.cv-tl-stack{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  min-width:0;
+}
+.cv-tl-stack .cv-name{
+  font-size:20px;font-weight:500;line-height:1.1;
+  color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.8);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;
+}
+.cv-tl-stack .cv-pill-live-wrap{align-self:flex-start}
+
+/* ── Unified chrome button (v17 — 36 × 36 corner family)
+   36 px height by default · radius 10 · solid dark transparent bg
+   · single focus-visible ring spec. The button stays dark in BOTH
+   palette modes (data-bg light / dark) so the corners read as a
+   consistent control family regardless of the underlying snapshot.
+   Per-instance tints (class pill icon, channel badge) come via
    inline ``--icon-tint``; padding variants via .has-text modifier.
-   ::before extends the touch target to 44 × 44 px so the visual pill
-   stays 30 px while the hitbox satisfies the iOS guideline. */
+   ::before extends the tap target to 44 × 44 px. */
 .cv-chrome-btn{
   position:relative;
-  height:30px;
-  min-width:30px;
-  border-radius:8px;
+  height:36px;
+  min-width:36px;
+  border-radius:10px;
   border:0;outline:0;
-  background:rgba(0,0,0,.65);
+  background:rgba(10,10,10,.85);
   color:#fff;
   display:inline-flex;align-items:center;justify-content:center;
   gap:7px;
@@ -130,6 +180,7 @@
   -webkit-tap-highlight-color:transparent;
   -webkit-backdrop-filter:blur(8px);
   backdrop-filter:blur(8px);
+  box-shadow:0 0 0 1px rgba(255,255,255,.18);
   transition:background .14s cubic-bezier(.4,0,.2,1),
              color .14s cubic-bezier(.4,0,.2,1),
              transform .08s cubic-bezier(.4,0,.2,1);
@@ -188,34 +239,7 @@
    detail panels (see .cv-pill-channel-wrap), and the pills themselves
    sit directly in .cv-chrome-bottom-right (gap inherited from that
    container). */
-.cv-name{color:#fff;font-weight:700;font-size:15px;text-shadow:0 1px 6px rgba(0,0,0,.8);line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:50%}
-.cv-title-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;line-height:1;filter:drop-shadow(0 1px 4px rgba(0,0,0,.6))}
-.cv-loc{color:rgba(255,255,255,.7);font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
 .cv-group-pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.55);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;width:fit-content}
-/* gh418 — icon-to-name gap 6 px, then a wider 14 px gap before the
-   Live pill via margin-left:8 px (6 base + 8 = 14). Keeps the three
-   groups visually separated while the name truncates with ellipsis
-   (cv-name max-width:50%) before it could push the Live pill into
-   the top-right cluster. flex-shrink:0 on the pill protects its
-   natural width. align-items:flex-start so the row keeps its layout
-   when the pill expands vertically on open. */
-/* Bottom-left identity row: icon + name + Live-pill on one line.
-   align-items:flex-end so when the Live-pill expands vertically its
-   bottom edge stays pinned to the row's baseline and the panel grows
-   UPWARD (the tile's bottom is the clipping edge). icon and name keep
-   align-self:flex-end so they don't drift upward when the row's
-   intrinsic height balloons to fit the open detail panel. */
-.cv-name-row{display:flex;align-items:flex-end;gap:6px;min-width:0}
-.cv-name-row .cv-title-icon,
-.cv-name-row .cv-name{align-self:flex-end}
-.cv-name-row .cv-pill-live-wrap{margin-left:8px;flex-shrink:0;align-self:flex-end}
-.cv-tr-row{display:flex;gap:6px;align-items:center}
-
-/* Live + FS pills now live inside .cv-chrome-top-right (above).
-   .cv-tr-row remains the inner horizontal row holding the pill set
-   so existing internal styling (cv-pill / cv-fs-btn / etc.) sees
-   the same container shape it always did — only the outer wrapper
-   class changed name in task fb537. */
 
 /* Base pill */
 .cv-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.02em;position:relative;cursor:default;backdrop-filter:blur(8px);min-height:0;line-height:1.2;box-sizing:border-box}
@@ -319,12 +343,11 @@
    shared base — letter-spacing for HD, the active blue tint, the
    FS-icon swap, channel-badge colour tints, and the state-dot dots. */
 
-/* HD pill — text variant, kept narrower than the default has-text
-   padding so the 2-character label sits tight. The .active state
-   tints the bg in the Reolink HD blue. */
-.cv-hd-badge{padding:0 9px;font-weight:700;letter-spacing:.05em;font-size:11px;flex-shrink:0}
-.cv-hd-badge.active{background:rgba(59,130,246,.42);color:#fff;font-weight:800}
-.cv-hd-badge.active:hover{background:rgba(59,130,246,.5)}
+/* HD pill — corner-family 36 × 36 button (v17). Letter-spacing keeps
+   the 2-character label legible; .active tints the bg Reolink-blue. */
+.cv-hd-badge{width:36px;min-width:36px;padding:0;font-weight:700;letter-spacing:.04em;font-size:12px;flex-shrink:0}
+.cv-hd-badge.active{background:rgba(59,130,246,.7);color:#fff;font-weight:800}
+.cv-hd-badge.active:hover{background:rgba(59,130,246,.8)}
 /* jt719 — HD auto-revert countdown bar. A 2 px line under the badge
    shrinks from full width to zero over var(--hd-dur) (default 120 s,
    set by JS) so the user can SEE the timer instead of being
@@ -343,24 +366,23 @@
 }
 @keyframes cv-hd-countdown{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 
-/* FS button — mr637 — slightly wider (38 × 30) than the other
-   icon-only pills so the diagonal expand arrows get visible
-   breathing room and the button reads as the primary FS
-   affordance. Same height as HD / Settings (30 px) so the row
-   lines up vertically. mx918 ships both expand / minimize SVGs
-   inline; CSS picks based on .cv-img-wrap.is-fs ancestor. */
-.cv-fs-btn{flex-shrink:0;width:38px;min-width:38px;height:30px;padding:0}
-.cv-fs-btn svg{width:18px;height:18px}
+/* FS button — corner family 36 × 36 (v17). Inline expand / minimize
+   spans wrap the SVGs so CSS swaps them by .cv-img-wrap.is-fs
+   without touching the inline structure. */
+.cv-fs-btn{flex-shrink:0;width:36px;min-width:36px;padding:0}
+.cv-fs-btn svg{width:18px;height:18px;display:block}
 .cv-fs-btn .fs-icon-expand,
-.cv-fs-btn .fs-icon-minimize{display:block}
+.cv-fs-btn .fs-icon-minimize{display:inline-flex;line-height:0}
 .cv-fs-btn .fs-icon-minimize{display:none}
 .cv-img-wrap.is-fs .cv-fs-btn .fs-icon-expand{display:none}
-.cv-img-wrap.is-fs .cv-fs-btn .fs-icon-minimize{display:block}
+.cv-img-wrap.is-fs .cv-fs-btn .fs-icon-minimize{display:inline-flex}
 
-/* SIM + cog — chrome-btn handles size + bg + transitions. SIM is
-   .has-text so the "Simulieren" label fits; cog is icon-only. */
+/* SIM + cog — 36 px corner family. SIM is .has-text (~120 px wide);
+   cog is icon-only at the canonical 36 × 36. */
+.cv-sim-btn{height:36px;width:auto;min-width:auto}
 .cv-sim-btn svg{flex-shrink:0}
-.cv-cog{width:30px}
+.cv-sim-btn.has-text{padding:0 14px}
+.cv-cog{width:36px}
 
 /* ── Channel pills (Telegram + MQTT) ─────────────────────────────────
    Expandable Live-pill clones. Collapsed: [pulsing coloured dot]

@@ -16,7 +16,7 @@
 import { state } from './core/state.js';
 import { byId, esc } from './core/dom.js';
 import { j } from './core/api.js';
-import { getCameraIcon, OBJ_LABEL, objIconSvg } from './core/icons.js';
+import { getCameraIcon, OBJ_LABEL } from './core/icons.js';
 
 // ── Dead-camera-id snapshot poll suppression ───────────────────────────────
 // After a camera rename (manuf/model edit triggers storage_migration to
@@ -642,6 +642,14 @@ function _chromeClassSvg(cls){
 // retired in B2.
 const _CHROME_COG_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
 const _CHROME_SIM_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+// Expand icon — two diagonal arrows ↗ + ↙ pointing AWAY from centre.
+// Path template (origin-centred, see E1 spec) translated into a
+// 0 0 24 24 viewBox by adding 12 to every coord.
+const _CHROME_EXPAND_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4 L20 4 L20 9"/><path d="M20 4 L12 12"/><path d="M9 20 L4 20 L4 15"/><path d="M4 20 L12 12"/></svg>`;
+// Minimize icon — mirror of expand. Arrows ↘ + ↖ point TOWARD the
+// centre with their arrowheads near (12,12) instead of at the
+// outer corners.
+const _CHROME_MINIMIZE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12 L20 12 L20 17"/><path d="M20 12 L12 4"/><path d="M9 12 L4 12 L4 7"/><path d="M4 12 L12 20"/></svg>`;
 
 // Derive the state-dot colour for a notification channel pill.
 //   "on"    → currently armed AND in schedule window         → green dot
@@ -773,7 +781,6 @@ export function renderDashboard(){
       ? `/api/camera/${esc(c.id)}/stream_hd.mjpg`
       : `/api/camera/${esc(c.id)}/snapshot.jpg?t=${Date.now()}`;
     const isActive = c.status === 'active';
-    const tlOn = !!(c.timelapse && c.timelapse.enabled);
     const fps = c.frame_interval_ms ? Math.round(1000 / c.frame_interval_ms) : null;
     const previewFps = (c.preview_fps || 0) > 0 ? c.preview_fps : null;
     const streamMode = c.stream_mode || 'baseline';
@@ -800,42 +807,15 @@ export function renderDashboard(){
     const _chanState = _channelState(c);
     const _tgBadge = c.telegram_enabled ? _channelPill(c, 'tg', _chanState) : '';
     const _mqttBadge = c.mqtt_enabled ? _channelPill(c, 'mqtt', _chanState) : '';
-    return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
-  <div class="cv-frame">
-    <div class="cv-img-wrap">
-      <div class="cv-loading-placeholder">${isActive ? _makeConnectingPlaceholder() : _makeOfflinePlaceholder()}</div>
-      <img class="cv-img cam-snap" src="${snapUrl}" alt="${esc(c.name)}" data-hd-mode="${hdOn ? '1' : '0'}"
-        onload="_cvImgLoaded(this)"
-        onerror="_camImgRetry(this)" />
-      <div class="cv-grad-bot"></div>
-${isActive ? `
-      <div class="cv-chrome-top-right">
-        <div class="cv-tr-row">
-          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-hd-badge has-text${hdOn ? ' active' : ''}" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau" aria-label="HD-Vorschau ein/aus">HD</button>` : ''}
-          ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvToggleFullscreen && window._cvToggleFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild">
-            <svg class="fs-icon-expand" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 14v7h7"/><path d="M21 10V3h-7"/>
-              <path d="M3 21l8-8"/><path d="M21 3l-8 8"/>
-            </svg>
-            <svg class="fs-icon-minimize" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M10 3v7H3"/><path d="M14 21v-7h7"/>
-              <path d="M10 10L3 3"/><path d="M14 14l7 7"/>
-            </svg>
-          </button>` : ''}
-        </div>
-        ${tlOn ? `<div class="cv-pill cv-pill-tl" title="Timelapse aktiv">${objIconSvg('timelapse', 14)}Timelapse</div>` : ''}
-      </div>
-` : ''}
-      <div class="cv-chrome-bottom-left">
-        <div class="cv-name-row">
-          <span class="cv-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
-          <div class="cv-name">${esc(c.name)}</div>
-${isActive ? `
-          <div class="cv-pill-live-wrap cv-live-active">
+    // Live-pill collapsed body — extracted as a local so the v17
+    // top-left zone can stack it under the camera name without
+    // duplicating the detail-panel template. Hidden entirely while
+    // the camera isn't active (E1 spec: only icon + name remain).
+    const _livePill = isActive ? `<div class="cv-pill-live-wrap cv-live-active">
             <span class="cv-pdot"></span>
             <span class="cv-live-label">Live</span>
             ${previewFps ? `<span class="cv-live-fps">${previewFps} fps</span>` : ''}
-            <svg class="cv-live-arrow" width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="rgba(200,245,224,.85)" stroke-width="1.8" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg>
+            <svg class="cv-live-arrow" width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg>
             <div class="cv-live-detail">
               <div class="cv-live-detail-header">
                 <span class="cv-pdot"></span>
@@ -846,16 +826,32 @@ ${isActive ? `
               <div class="cv-lp-row"><span>Auflösung</span><strong class="cv-lp-res-val">${hdOn ? esc(c.main_resolution || c.preview_resolution || c.resolution || '—') : esc(c.preview_resolution || c.resolution || '—')}</strong></div>
               <div class="cv-lp-row"><span>Analyse-Framerate</span><strong>${fps != null ? fps + ' fps' : '—'}</strong></div>
             </div>
-          </div>
-` : ''}
+          </div>` : '';
+    return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}" data-bg="dark">
+  <div class="cv-frame">
+    <div class="cv-img-wrap">
+      <div class="cv-loading-placeholder">${isActive ? _makeConnectingPlaceholder() : _makeOfflinePlaceholder()}</div>
+      <img class="cv-img cam-snap" src="${snapUrl}" alt="${esc(c.name)}" data-hd-mode="${hdOn ? '1' : '0'}"
+        onload="_cvImgLoaded(this)"
+        onerror="_camImgRetry(this)" />
+      <div class="cv-grad-bot"></div>
+      <div class="cv-chrome-top-left">
+        <span class="cv-cam-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
+        <div class="cv-tl-stack">
+          <div class="cv-name">${esc(c.name)}</div>
+          ${_livePill}
         </div>
-        ${c.location ? `<div class="cv-loc">${esc(c.location)}</div>` : ''}
       </div>
 ${isActive ? `
-      <div class="cv-chrome-bottom-right">
+      <div class="cv-chrome-top-right">
+        ${c.rtsp_url ? `<button class="cv-chrome-btn cv-hd-badge has-text${hdOn ? ' active' : ''}" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();toggleCardHd('${esc(c.id)}',this)" title="HD-Vorschau" aria-label="HD-Vorschau ein/aus">HD</button>` : ''}
+        ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvToggleFullscreen && window._cvToggleFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild"><span class="fs-icon-expand">${_CHROME_EXPAND_SVG}</span><span class="fs-icon-minimize">${_CHROME_MINIMIZE_SVG}</span></button>` : ''}
+      </div>
+      <div class="cv-chrome-bottom-left">
+        ${(_tgBadge || _mqttBadge) ? `<div class="cv-channel-row">${_tgBadge}${_mqttBadge}</div>` : ''}
         ${_classPills ? `<div class="cv-class-cluster">${_classPills}</div>` : ''}
-        ${_tgBadge}
-        ${_mqttBadge}
+      </div>
+      <div class="cv-chrome-bottom-right">
         ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>
       </div>

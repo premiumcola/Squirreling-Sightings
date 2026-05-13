@@ -209,8 +209,8 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      so the pill reads as a quieter overlay on a 375 px card. */
   .cv-pill-live-wrap{font-size:10px}
   .cv-pill-live-wrap.cv-lp-open{max-width:calc(100vw - 32px)}
-  .cv-pill-channel-wrap{font-size:10px}
-  .cv-pill-channel-wrap.cv-lp-open{max-width:calc(100vw - 32px)}
+  .cv-channel-cluster .cv-channel-sched{font-size:10px}
+  .cv-channel-cluster .cv-channel-status{font-size:11px}
   .cv-pill-tl{font-size:10px;padding:2px 7px}
 }
 

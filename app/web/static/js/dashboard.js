@@ -712,6 +712,15 @@ const _CHROME_EXPAND_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill
 // centre with their arrowheads near (12,12) instead of at the
 // outer corners.
 const _CHROME_MINIMIZE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12 L20 12 L20 17"/><path d="M20 12 L12 4"/><path d="M9 12 L4 12 L4 7"/><path d="M4 12 L12 20"/></svg>`;
+// E3 · Paper-plane glyph for the Telegram cluster — currentColor so
+// the .cv-tg-cluster's `color: var(--tg-fg)` tints it through.
+// Stroke-only so the data-bg palette flip carries the colour into
+// both light + dark snapshot modes.
+const _CHROME_TG_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 L11 13"/><path d="M22 2 L15 22 L11 13 L2 9 Z"/></svg>`;
+// E3 · Antenna-broadcast glyph for the MQTT cluster — five concentric
+// arcs emanating from a centre dot. Reads distinctly from the
+// Telegram paper-plane at the same 22 × 22 chrome size.
+const _CHROME_MQTT_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M8.5 8.5 a 5 5 0 0 0 0 7"/><path d="M15.5 8.5 a 5 5 0 0 1 0 7"/><path d="M5.6 5.6 a 9 9 0 0 0 0 12.8"/><path d="M18.4 5.6 a 9 9 0 0 1 0 12.8"/></svg>`;
 
 // Derive the state-dot colour for a notification channel pill.
 //   "on"    → currently armed AND in schedule window         → green dot
@@ -752,42 +761,35 @@ function _channelDurationText(c, state){
   return `noch ${h}h ${min}m`;
 }
 
-// Channel pill — expandable Live-pill clone for the Telegram / MQTT
-// notification channels. Collapsed: [pulsing dot] [label] [chevron].
-// Open: detail panel with three rows — Alarmfenster (schedule
-// window), Status (aktiv/wartet/stumm with countdown), Kanal-Mix
-// (which channels fire on alarm). Per-kind colour + pulse cadence
-// come from CSS data-state selectors; click handling is shared with
-// the Live-pill via _wirePillOpenClose.
-function _channelPill(c, kind, state){
-  const label = kind === 'mqtt' ? 'MQTT' : 'Telegram';
+// E3 · Channel cluster — horizontal 3-column unit. Replaces the
+// earlier expandable pill clone. Column 1: paper-plane / antenna
+// icon (22 px, currentColor). Column 2: two stacked text rows
+// (schedule window mono · status duration). Column 3: active-dot
+// SVG with a pulsing ring while state === 'on'. The cluster is
+// not a button — no click handling, no detail panel. State-driven
+// visibility comes from the data-state attribute consumed by the
+// CSS in 03-dashboard.css.
+function _channelCluster(c, kind, state){
   const headerLabel = kind === 'mqtt' ? 'MQTT-Kanal' : 'Telegram-Kanal';
-  const headerSuffix = state === 'on' ? 'aktiv'
-    : state === 'idle' ? 'wartet'
-    : 'stumm';
+  const icon = kind === 'mqtt' ? _CHROME_MQTT_SVG : _CHROME_TG_SVG;
   const schLbl = _scheduleLabel(c) || 'Dauerhaft aktiv';
   const statusText = state === 'on'
-    ? (_channelDurationText(c, state) || 'Aktiv')
+    ? (_channelDurationText(c, state) || 'aktiv')
     : state === 'idle'
       ? _channelWaitText(c)
       : 'Kamera nicht scharf';
-  const modes = [];
-  if (c.telegram_enabled) modes.push('Telegram');
-  if (c.mqtt_enabled) modes.push('MQTT');
-  const modeText = modes.join(' + ') || '—';
-  return `<div class="cv-pill-channel-wrap cv-${kind}-wrap" data-state="${state}" aria-label="${esc(headerLabel)}">
-    <span class="cv-pdot"></span>
-    <span class="cv-channel-label">${esc(label)}</span>
-    <svg class="cv-live-arrow" width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>
-    <div class="cv-channel-detail">
-      <div class="cv-channel-detail-header">
-        <span class="cv-pdot"></span>
-        <span>${esc(headerLabel + ' ' + headerSuffix)}</span>
-      </div>
-      <div class="cv-lp-row"><span>Alarmfenster</span><strong>${esc(schLbl)}</strong></div>
-      <div class="cv-lp-row"><span>Status</span><strong>${esc(statusText)}</strong></div>
-      <div class="cv-lp-row"><span>Kanal-Mix</span><strong>${esc(modeText)}</strong></div>
+  return `<div class="cv-channel-cluster cv-${kind}-cluster" data-state="${state}" aria-label="${esc(headerLabel)}">
+    <span class="cv-channel-icon" aria-hidden="true">${icon}</span>
+    <div class="cv-channel-text">
+      <span class="cv-channel-sched">${esc(schLbl)}</span>
+      <span class="cv-channel-status">${esc(statusText)}</span>
     </div>
+    <span class="cv-channel-dot" aria-hidden="true">
+      <svg width="20" height="20" viewBox="-10 -10 20 20" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+        <circle class="cv-channel-dot-ring" r="8" stroke="currentColor" fill="none" opacity="0"/>
+        <circle r="4.5" fill="currentColor" stroke="none"/>
+      </svg>
+    </span>
   </div>`;
 }
 
@@ -867,8 +869,8 @@ export function renderDashboard(){
     // float above as a separate label now lives inside the pill's
     // detail panel (B3 — see Alarmfenster row in _channelPill).
     const _chanState = _channelState(c);
-    const _tgBadge = c.telegram_enabled ? _channelPill(c, 'tg', _chanState) : '';
-    const _mqttBadge = c.mqtt_enabled ? _channelPill(c, 'mqtt', _chanState) : '';
+    const _tgBadge = c.telegram_enabled ? _channelCluster(c, 'tg', _chanState) : '';
+    const _mqttBadge = c.mqtt_enabled ? _channelCluster(c, 'mqtt', _chanState) : '';
     // Live-pill collapsed body — extracted as a local so the v17
     // top-left zone can stack it under the camera name without
     // duplicating the detail-panel template. Hidden entirely while
@@ -945,7 +947,7 @@ ${isActive ? `
 // Telegram collapses first"). A document-level outside-click handler
 // closes every open pill when the user taps elsewhere; same
 // wire-once guard.
-const _PILL_SELECTOR = '.cv-pill-live-wrap, .cv-pill-channel-wrap';
+const _PILL_SELECTOR = '.cv-pill-live-wrap';
 let _pillWired = false;
 function _wirePillOpenClose(){
   if (_pillWired) return;

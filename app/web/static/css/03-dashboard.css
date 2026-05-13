@@ -426,94 +426,60 @@
 .cv-sim-btn.has-text{padding:0 14px}
 .cv-cog{width:36px}
 
-/* ── Channel pills (Telegram + MQTT) ─────────────────────────────────
-   Expandable Live-pill clones. Collapsed: [pulsing coloured dot]
-   [label] [chevron]. Open: same display:none → display:flex panel
-   swap as .cv-pill-live-wrap.cv-lp-open, but in Telegram-blue / MQTT-
-   violet tints. Click handling is shared (see _wirePillOpenClose in
-   dashboard.js — both wraps match the same .cv-lp-open class). The
-   base structure mirrors the Live-pill; per-kind colour comes from
-   .cv-tg-wrap / .cv-mqtt-wrap below. */
-.cv-pill-channel-wrap{
-  position:relative;
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:3px 8px 3px 6px;
-  border-radius:999px;
-  border:1.5px solid rgba(255,255,255,.18);
-  background:rgba(0,0,0,.45);
-  font-size:10.5px;
-  font-weight:700;
-  line-height:1;
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
-  cursor:pointer;
-  white-space:nowrap;
-  transition:background .18s,border-color .18s,padding .18s,border-radius .18s;
+/* ── E3 · Channel clusters (Telegram + MQTT) ─────────────────────────
+   3-column horizontal unit per cluster: paper-plane icon · 2 stacked
+   text rows (schedule mono + status) · active-dot SVG. The cluster
+   is NOT clickable — its info is always on display, no expand
+   affordance. Per-kind colour comes from the cv-tg-cluster / cv-mqtt-
+   cluster modifiers below, which read the palette variables on .cv-
+   card so the colour flips with data-bg. */
+.cv-channel-cluster{
+  display:inline-flex;align-items:center;gap:10px;
+  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
 }
-.cv-pill-channel-wrap .cv-channel-label{flex-shrink:0}
-.cv-pill-channel-wrap .cv-live-arrow{opacity:.55;flex-shrink:0}
-/* iOS 44 × 44 touch hitbox via a transparent ::before — keeps the
-   visual pill at its natural 30 px height while the actual tap target
-   grows vertically. Same pattern as .cv-chrome-btn::before. */
-.cv-pill-channel-wrap::before{content:"";position:absolute;inset:-7px 0;pointer-events:auto}
-/* Hidden until the pill opens — same display:none gate the Live-pill
-   uses so the panel's intrinsic content width never leaks into the
-   collapsed pill's flex sizing. */
-.cv-channel-detail{display:none}
-.cv-pill-channel-wrap.cv-lp-open{
-  flex-direction:column;
-  align-items:stretch;
-  gap:4px;
-  padding:8px 12px;
-  border-radius:14px;
-  white-space:normal;
+.cv-channel-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;flex-shrink:0;
 }
-.cv-pill-channel-wrap.cv-lp-open > .cv-pdot,
-.cv-pill-channel-wrap.cv-lp-open > .cv-channel-label,
-.cv-pill-channel-wrap.cv-lp-open > .cv-live-arrow{display:none}
-.cv-pill-channel-wrap.cv-lp-open > .cv-channel-detail{display:flex;flex-direction:column;gap:4px}
-.cv-channel-detail-header{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:1px}
+.cv-channel-icon svg{width:100%;height:100%;display:block}
+.cv-channel-text{
+  display:flex;flex-direction:column;gap:2px;line-height:1.2;
+  color:var(--overlay-fg);
+}
+.cv-channel-sched{
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-size:11px;font-weight:600;letter-spacing:.01em;
+}
+.cv-channel-status{
+  font-size:12px;font-weight:600;
+}
+.cv-channel-dot{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;flex-shrink:0;margin-left:4px;
+}
+.cv-channel-dot svg{display:block}
 
-/* Telegram variant — brand blue #229ED9. Active dot pulses; idle dot
-   fades to .4 with no pulse; muted dot greys out. The dot's pulse
-   keyframe (cv-pulse-tg) is at the bottom of this file next to the
-   green Live-pill pulse. */
-.cv-tg-wrap{
-  border-color:rgba(34,158,217,.55);
-  background:rgba(34,158,217,.16);
-  color:#cbe9f9;
-}
-.cv-tg-wrap.cv-lp-open{
-  background:rgba(8,40,60,.92);
-  border-color:rgba(34,158,217,.7);
-}
-.cv-tg-wrap .cv-channel-detail-header{color:#cbe9f9;border-bottom-color:rgba(34,158,217,.25)}
-.cv-tg-wrap[data-state="on"] .cv-pdot{background:#229ED9;animation:cv-pulse-tg 2s ease-in-out infinite}
-.cv-tg-wrap[data-state="idle"] .cv-pdot{background:#229ED9;opacity:.4;animation:none}
-.cv-tg-wrap[data-state="muted"] .cv-pdot{background:rgba(255,255,255,.3);animation:none}
-.cv-tg-wrap[data-state="muted"]{opacity:.6}
+/* Telegram cluster — color via --tg-fg, dot via --tg-active. */
+.cv-tg-cluster .cv-channel-icon{color:var(--tg-fg)}
+.cv-tg-cluster .cv-channel-dot{color:var(--tg-active)}
+/* MQTT cluster — magenta family via --mqtt-fg / --mqtt-active. */
+.cv-mqtt-cluster .cv-channel-icon{color:var(--mqtt-fg)}
+.cv-mqtt-cluster .cv-channel-dot{color:var(--mqtt-active)}
 
-/* MQTT variant — violet #a78bfa to keep it visually distinct from the
-   Telegram blue (and the Live-pill green). Same state matrix. */
-.cv-mqtt-wrap{
-  border-color:rgba(167,139,250,.55);
-  background:rgba(167,139,250,.16);
-  color:#e2dafa;
+/* Active dot ring — pulses 1.6 s while state === 'on'. Static
+   (no ring opacity) while idle. Amber + static in muted state. */
+.cv-channel-cluster[data-state="on"] .cv-channel-dot-ring{
+  animation:cv-channel-dot-pulse 1.6s ease-in-out infinite;
 }
-.cv-mqtt-wrap.cv-lp-open{
-  background:rgba(28,18,55,.92);
-  border-color:rgba(167,139,250,.7);
-}
-.cv-mqtt-wrap .cv-channel-detail-header{color:#e2dafa;border-bottom-color:rgba(167,139,250,.25)}
-.cv-mqtt-wrap[data-state="on"] .cv-pdot{background:#a78bfa;animation:cv-pulse-mqtt 2s ease-in-out infinite}
-.cv-mqtt-wrap[data-state="idle"] .cv-pdot{background:#a78bfa;opacity:.4;animation:none}
-.cv-mqtt-wrap[data-state="muted"] .cv-pdot{background:rgba(255,255,255,.3);animation:none}
-.cv-mqtt-wrap[data-state="muted"]{opacity:.6}
+.cv-channel-cluster[data-state="idle"] .cv-channel-dot-ring{opacity:0}
+.cv-channel-cluster[data-state="muted"]{opacity:.7}
+.cv-channel-cluster[data-state="muted"] .cv-channel-dot{color:#f59e0b}
+.cv-channel-cluster[data-state="muted"] .cv-channel-dot-ring{opacity:0}
 
-@keyframes cv-pulse-tg{0%,100%{box-shadow:0 0 0 0 rgba(34,158,217,.55)}50%{box-shadow:0 0 0 6px rgba(34,158,217,0)}}
-@keyframes cv-pulse-mqtt{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,.55)}50%{box-shadow:0 0 0 6px rgba(167,139,250,0)}}
+@keyframes cv-channel-dot-pulse{
+  0%   { r:4.5; opacity:.45 }
+  100% { r:10;  opacity:0   }
+}
 
 /* Tile body must NOT show a click-pointer anymore — the article-level
    onclick is gone (cm-52 task 2). Buttons inside the tile keep their

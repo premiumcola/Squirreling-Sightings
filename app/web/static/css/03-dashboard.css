@@ -14,12 +14,52 @@
    one-and-only chrome gap from each tile edge to its nearest chrome
    element. v17 redesign moves the variable from .cv-frame onto
    .cv-card itself so every overlay-inset consumer (top-left through
-   bottom-right) reads the same value. */
+   bottom-right) reads the same value.
+
+   E2 · adaptive palette. Variables defined on .cv-card flip between
+   data-bg="dark" (default — bright glyphs on a dark snapshot) and
+   data-bg="light" (dark glyphs on a daylight snapshot). JS sampler in
+   dashboard.js sets the attribute every 2 s based on the snapshot's
+   average Rec.709 luminance with a 5 % hysteresis. Buttons stay dark
+   in both modes — only their elevation shadow flips. */
 .cv-card{
   border-radius:18px;overflow:hidden;cursor:pointer;
   background:#0a0a0a;transition:transform .18s,box-shadow .18s;
   position:relative;min-width:0;contain:paint;
   --cv-overlay-inset:8px;
+  --overlay-fg:        #fff;
+  --overlay-fg-soft:   #cbd5e1;
+  --overlay-halo:      rgba(255,255,255,.55);
+  --overlay-halo-blur: 1.4px;
+  --overlay-elev:      rgba(255,255,255,.32);
+  --overlay-elev-blur: 2px;
+  --overlay-elev-y:    0px;
+  --live-pill-bg:      rgba(34,197,94,.22);
+  --live-pill-bd:      rgba(34,197,94,.55);
+  --live-pill-fg:      #86efac;
+  --live-pill-fps:     #9ca3af;
+  --tg-fg:             #5DB7E8;
+  --tg-active:         #229ED9;
+  --mqtt-fg:           #d6b4ff;
+  --mqtt-active:       #a78bfa;
+  --class-stroke-w:    2.4px;
+}
+.cv-card[data-bg="light"]{
+  --overlay-fg:        #0f0f0f;
+  --overlay-fg-soft:   #1a1a1a;
+  --overlay-halo:      rgba(0,0,0,.6);
+  --overlay-halo-blur: 0.8px;
+  --overlay-elev:      rgba(0,0,0,.28);
+  --overlay-elev-blur: 1.2px;
+  --overlay-elev-y:    1px;
+  --live-pill-bg:      #15803d;
+  --live-pill-bd:      transparent;
+  --live-pill-fg:      #fff;
+  --live-pill-fps:     rgba(255,255,255,.9);
+  --tg-fg:             #0E6BA8;
+  --tg-active:         #0E6BA8;
+  --mqtt-fg:           #5b35a8;
+  --mqtt-active:       #5b35a8;
 }
 .cv-card:hover{transform:scale(1.012);box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:1}
 /* Frame aspect-ratio is per-card via the --cv-aspect var. JS sets
@@ -141,8 +181,8 @@
 .cv-cam-title-icon{
   display:inline-flex;align-items:center;justify-content:center;
   width:32px;height:32px;flex-shrink:0;
-  color:#fff;
-  filter:drop-shadow(0 1px 4px rgba(0,0,0,.6));
+  color:var(--overlay-fg);
+  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
 }
 .cv-cam-title-icon svg{width:100%;height:100%;display:block}
 .cv-tl-stack{
@@ -151,7 +191,8 @@
 }
 .cv-tl-stack .cv-name{
   font-size:20px;font-weight:500;line-height:1.1;
-  color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.8);
+  color:var(--overlay-fg);
+  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;
 }
 .cv-tl-stack .cv-pill-live-wrap{align-self:flex-start}
@@ -180,7 +221,8 @@
   -webkit-tap-highlight-color:transparent;
   -webkit-backdrop-filter:blur(8px);
   backdrop-filter:blur(8px);
-  box-shadow:0 0 0 1px rgba(255,255,255,.18);
+  box-shadow:0 0 0 1px rgba(255,255,255,.18),
+             0 var(--overlay-elev-y, 0px) var(--overlay-elev-blur, 2px) var(--overlay-elev, rgba(255,255,255,.32));
   transition:background .14s cubic-bezier(.4,0,.2,1),
              color .14s cubic-bezier(.4,0,.2,1),
              transform .08s cubic-bezier(.4,0,.2,1);
@@ -267,9 +309,9 @@
   gap:6px;
   padding:3px 8px 3px 6px;
   border-radius:999px;
-  border:1.5px solid rgba(34,197,94,.55);
-  background:rgba(34,197,94,.18);
-  color:#c8f5e0;
+  border:1.5px solid var(--live-pill-bd);
+  background:var(--live-pill-bg);
+  color:var(--live-pill-fg);
   font-size:10.5px;
   font-weight:700;
   line-height:1;

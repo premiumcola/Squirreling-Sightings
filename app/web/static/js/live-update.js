@@ -10,7 +10,7 @@ import { byId } from './core/dom.js';
 import { j } from './core/api.js';
 import {
   renderDashboard, showCameraReloadAnimation,
-  startPreviewRefresh, _refreshLivePillForCard,
+  startPreviewRefresh, startBgLuminanceMonitor, _refreshLivePillForCard,
   _resetFailedSnapshotIds,
 } from './dashboard.js';
 import { renderTimeline } from './timeline.js';
@@ -139,6 +139,7 @@ export async function loadAll() {
   const wizBtn = byId('openWizardBtn');
   if (wizBtn) wizBtn.classList.toggle('hidden', !!state.bootstrap?.wizard_completed || !state.bootstrap?.needs_wizard);
   startPreviewRefresh();
+  startBgLuminanceMonitor();
   if (typeof window.updateMediaSectionTitle === 'function') window.updateMediaSectionTitle();
 }
 

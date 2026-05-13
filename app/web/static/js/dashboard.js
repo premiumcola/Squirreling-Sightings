@@ -233,6 +233,68 @@ export function _restorePlaceholder(card){
   }
 }
 
+// ── E2 · adaptive overlay palette via bg-luminance sampling ────────────
+// Every ~2 s each visible tile's snapshot is downsampled to a tiny
+// offscreen canvas and its average Rec.709 luminance fed through a
+// hysteresis filter (5 % min gap) to set data-bg="light" / "dark" on
+// the card. CSS variables on .cv-card flip text/icon palette + halo
+// direction so overlay glyphs stay legible whether the camera is
+// pointed at a daylight snapshot or a night scene. Buttons keep their
+// dark fill in both modes — only their elevation shadow flips.
+const _BG_LUM_LIGHT_ENTER = 0.55;   // dark → light if Y above
+const _BG_LUM_DARK_ENTER  = 0.50;   // light → dark if Y below
+let _bgLumCanvas = null;
+let _bgLumCtx = null;
+let _bgLumInterval = null;
+
+function _ensureBgLumCanvas(){
+  if (_bgLumCanvas) return;
+  _bgLumCanvas = document.createElement('canvas');
+  _bgLumCanvas.width = 24;
+  _bgLumCanvas.height = 16;
+  _bgLumCtx = _bgLumCanvas.getContext('2d', { willReadFrequently: true });
+}
+
+function _sampleTileBgLuminance(card){
+  const img = card.querySelector('.cv-img');
+  if (!img || !img.classList.contains('loaded')) return;
+  if (!img.naturalWidth || !img.naturalHeight) return;
+  _ensureBgLumCanvas();
+  try {
+    _bgLumCtx.drawImage(img, 0, 0, _bgLumCanvas.width, _bgLumCanvas.height);
+    const data = _bgLumCtx.getImageData(0, 0, _bgLumCanvas.width, _bgLumCanvas.height).data;
+    let sum = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4){
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      sum += (0.2126 * r + 0.7152 * g + 0.0722 * b);
+      n++;
+    }
+    if (!n) return;
+    const Y = sum / (n * 255);
+    const current = card.dataset.bg || 'dark';
+    let next = current;
+    if (current === 'dark' && Y > _BG_LUM_LIGHT_ENTER) next = 'light';
+    else if (current === 'light' && Y < _BG_LUM_DARK_ENTER) next = 'dark';
+    if (next !== current) card.dataset.bg = next;
+  } catch {
+    // Canvas can taint on cross-origin pixels — same-origin snapshots
+    // shouldn't trigger this in practice; swallow defensively so a
+    // single bad frame doesn't kill the loop.
+  }
+}
+
+export function startBgLuminanceMonitor(){
+  if (_bgLumInterval) clearInterval(_bgLumInterval);
+  _bgLumInterval = setInterval(() => {
+    if (document.hidden) return;
+    const grid = byId('cameraCards');
+    if (!grid) return;
+    grid.querySelectorAll('.cv-card[data-camid]').forEach(card => {
+      _sampleTileBgLuminance(card);
+    });
+  }, 2000);
+}
+
 // ── Stage 3b — dashboard rendering + live state ────────────────────────────
 // HD-stream toggle state. _hdCards holds camera ids whose tile is
 // currently showing the high-bitrate stream_hd.mjpg endpoint instead of

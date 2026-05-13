@@ -26,6 +26,11 @@ import { _renderAlertStatusStrip } from './alerting.js';
 
 let _liveUpdateInterval = null;
 const _prevCamStatuses = new Map();
+// E4 · per-card tracking of the most recent flash timestamps per class.
+// Detection identity is (camId, class, age_s) — a class re-flashes only
+// when the backend's age_s value drops back below the threshold from
+// a fresh event, which is the same heuristic recent_detections uses.
+const _lastFlashedAge = new Map(); // camId → Map(label → lastSeenAge)
 
 export function startLiveUpdate() {
   if (_liveUpdateInterval) clearInterval(_liveUpdateInterval);
@@ -90,6 +95,28 @@ export function startLiveUpdate() {
             const cls = tgt.dataset.cls;
             tgt.classList.toggle('is-hot', !!cls && recentSet.has(cls));
           });
+          // E4 · Detection-flash on the class-icon glyphs in the
+          // bottom-left cluster. Match recent_detections fresher
+          // than 2 s against the class pills (data-cls attribute) and
+          // re-arm the .cv-class-pill--flash animation on each new
+          // event. _lastFlashedAge protects against re-flashing the
+          // same detection on subsequent polls.
+          const detSeen = _lastFlashedAge.get(c.id) || new Map();
+          (c.recent_detections || []).forEach(det => {
+            if (!det || !det.label || typeof det.age_s !== 'number') return;
+            if (det.age_s >= 2) return;
+            const prev = detSeen.get(det.label);
+            if (prev != null && det.age_s >= prev) return;
+            detSeen.set(det.label, det.age_s);
+            const pill = card.querySelector(`.cv-class-pill[data-cls="${CSS.escape(det.label)}"]`);
+            if (!pill) return;
+            pill.style.setProperty('--flash-color', `var(--class-${det.label})`);
+            pill.classList.remove('cv-class-pill--flash');
+            void pill.offsetWidth;
+            pill.classList.add('cv-class-pill--flash');
+            setTimeout(() => pill.classList.remove('cv-class-pill--flash'), 720);
+          });
+          _lastFlashedAge.set(c.id, detSeen);
         }
       });
       if (needsRedraw) {

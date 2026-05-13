@@ -856,12 +856,11 @@ export function renderDashboard(){
     const _classPills = (c.object_filter || []).map(cls => {
       const muted = _clsSev[cls] === 'off';
       const lbl = OBJ_LABEL[cls] || cls;
-      return `<div class="cv-chrome-btn cv-class-pill" data-cls="${esc(cls)}"`
+      return `<span class="cv-class-pill" data-cls="${esc(cls)}"`
         + (muted ? ' data-state="muted"' : '')
-        + ` style="--icon-tint:var(--class-${esc(cls)})"`
-        + ` title="${esc(lbl)}${muted ? ' — stumm' : ''}"`
-        + ` aria-label="${esc(lbl)}${muted ? ' — stumm' : ''}">`
-        + `${_chromeClassSvg(cls)}</div>`;
+        + ` style="color:var(--class-${esc(cls)})"`
+        + ` title="${esc(lbl)}${muted ? ' — stumm' : ''}">`
+        + `${_chromeClassSvg(cls)}</span>`;
     }).join('');
     // Telegram + MQTT channel pills. Both render as expandable
     // Live-pill clones (see _channelPill) — pulsing dot + label +

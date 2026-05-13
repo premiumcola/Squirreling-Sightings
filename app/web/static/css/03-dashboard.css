@@ -249,38 +249,34 @@
 .cv-chrome-btn[data-state="muted"]{opacity:.38}
 .cv-chrome-btn.has-text{padding:0 12px}
 .cv-chrome-btn::before{content:"";position:absolute;inset:-7px;border-radius:14px;pointer-events:auto}
-/* Class-tinted variant keeps its icon tint when the bg inverts —
-   flipping to white with an unchanged tinted icon reads cleanly,
-   and on solid-black the tint still sits well. (TG / MQTT badge
-   overrides retired in B2 — channels are full pills now.) */
-@media (hover: hover){
-  .cv-class-pill:hover{background:#fff;color:var(--icon-tint, #000)}
+/* E4 · Class icons as status glyphs. No background, no border, no
+   button affordance — just a coloured glyph that drop-shadows
+   against the snapshot. Hover / active states retired since the
+   pills are no longer interactive. Stroke-width comes from
+   --class-stroke-w on .cv-card so palette + size stays consistent. */
+.cv-class-pill{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;
+  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
 }
-.cv-class-pill:active{background:#000;color:var(--icon-tint, #fff)}
+.cv-class-pill[data-state="muted"]{opacity:.38}
+.cv-class-pill svg{
+  width:22px;height:22px;display:block;
+  stroke-width:var(--class-stroke-w);
+}
+.cv-class-cluster{display:flex;align-items:center;gap:12px}
 
-/* zg531 — class filter pill. ``color: var(--icon-tint)`` is set per
-   instance to var(--class-<cls>); the SVG strokes inherit via
-   currentColor so each pill's glyph renders in its class colour
-   against the uniform dark chrome bg. Muted state drops the tint
-   to a soft grey so the visual reads as "configured but off".
-   Telegram + MQTT no longer ride this base — they're full
-   .cv-pill-channel-wrap pills now (see further down). */
-.cv-class-pill{width:30px;color:var(--icon-tint, #fff)}
-.cv-class-pill[data-state="muted"]{color:rgba(255,255,255,.5)}
-.cv-class-pill svg{width:18px;height:18px;display:block}
-/* gp538 — class filter pills sit ~2 px apart so the colored class
-   icons read as one tightly-packed status row rather than five
-   separate buttons. The wrapper's own 6 px cluster-default gap
-   still separates this group from any neighbour (schedule pill /
-   channel cluster). Same tight gap applied to the TG/MQTT badge
-   pair below since those two also read as "notification channels"
-   as a single group. */
-.cv-class-cluster{display:flex;align-items:center;gap:2px}
-/* B3 retired .cv-channel-cluster / .cv-channel-schedule / .cv-channel-
-   row — the schedule window now lives inside the Telegram + MQTT pill
-   detail panels (see .cv-pill-channel-wrap), and the pills themselves
-   sit directly in .cv-chrome-bottom-right (gap inherited from that
-   container). */
+/* Detection flash — 700 ms scale + drop-shadow pulse when a new
+   recent_detection matching this class's label lands in /api/cameras.
+   --flash-color is set inline by the JS hook in live-update.js so
+   each class's flash colour matches its own --class-<cls> palette
+   token. */
+.cv-class-pill--flash{animation:cv-class-flash 700ms ease-out}
+@keyframes cv-class-flash{
+  0%   { transform:scale(1);    filter:drop-shadow(0 0 0 transparent); }
+  40%  { transform:scale(1.25); filter:drop-shadow(0 0 4px var(--flash-color, #fff)); }
+  100% { transform:scale(1);    filter:drop-shadow(0 0 0 transparent); }
+}
 .cv-group-pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.55);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;width:fit-content}
 
 /* Base pill */

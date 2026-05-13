@@ -113,12 +113,12 @@ function _renderStatistik(monthData, dayData){
       const frac = x.cnt / camTotal;
       const len = frac * C;
       const dash = `${len.toFixed(2)} ${(C - len).toFixed(2)}`;
-      const seg = `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${getCameraColor(x.c.name || x.c.id)}" stroke-width="22" stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 80 80)"/>`;
+      const seg = `<circle cx="80" cy="80" r="${R}" fill="none" stroke="${getCameraColor(x.c)}" stroke-width="22" stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 80 80)"/>`;
       offset += len;
       return seg;
     }).join('');
     const legend = camsWithEvents.map(x => {
-      const color = getCameraColor(x.c.name || x.c.id);
+      const color = getCameraColor(x.c);
       const pct = Math.round(x.cnt / camTotal * 100);
       const rowCls = STAT_MEDIA_DRILLDOWN ? 'stat-donut-row stat-drillable' : 'stat-donut-row';
       const rowClick = STAT_MEDIA_DRILLDOWN ? `onclick="_statOpenMedia('${esc(x.c.id)}','')"` : '';

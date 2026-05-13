@@ -51,16 +51,22 @@
                  connection-troubleshooting fields live in the next tab. -->
             <div class="cam-tab-panel active" id="cam-tab-allgemein">
               <div style="display:grid;gap:8px">
-                <!-- Anzeigename row carries the icon-emoji slot inline as
-                     a 56 px leading column so the previous standalone
-                     "Icon (Emoji)" row collapses into a single, dense
-                     identity row. The hidden-input semantics are
-                     unchanged (name="icon"), so the form-submit path
-                     still picks up the emoji. -->
+                <!-- tx412 — identity row now carries a colour picker
+                     instead of the old icon-emoji slot. The icon is
+                     auto-derived at render time via getCameraIcon(name)
+                     and never goes through an <input>; the emoji slot
+                     was the source of the "raw <svg…> as input value"
+                     bug we hit after the filled-icon swap. Color
+                     defaults to the auto-tone from getCameraColor(name)
+                     and the "Auto" button resets to that value while
+                     flagging the field so the form-submit path strips
+                     it back to "" — keeping the JSON tidy when the
+                     user picks the auto colour. -->
                 <div class="cam-name-row">
-                  <div class="field-wrap cam-icon-slot">
-                    <input name="icon" placeholder="🔧" maxlength="4" autocomplete="off" />
-                    <span class="field-label cam-icon-microlabel">Icon</span>
+                  <div class="field-wrap cam-color-slot">
+                    <input type="color" name="color" id="camColor" autocomplete="off" />
+                    <span class="field-label">Farbe</span>
+                    <button type="button" id="camColorReset" class="cam-color-reset" title="Auf Auto-Tone zurücksetzen">Auto</button>
                   </div>
                   <div class="field-wrap">
                     <input name="name" placeholder="Werkstatt" required />

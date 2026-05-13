@@ -126,6 +126,16 @@ export function getCameraIcon(name){
   return _CAM_ICON_SVG[_resolveCamIconKey(name)] || _CAM_ICON_SVG.camera;
 }
 
-export function getCameraColor(name){
-  return _CAM_ICON_TONES[_resolveCamIconKey(name)] || '#a8a8a8';
+// tx412 — polymorphic on (string|camera object). Passing the whole
+// camera object honours a user-set `color` override (set via the
+// Color-Picker in cam-edit's Allgemein tab). Passing just the name
+// preserves the legacy contract: derive a default tone from the
+// keyword regex on the display name. Existing callers (discovery
+// previews + the few cam-name-only paths) keep working unchanged.
+export function getCameraColor(nameOrCamera){
+  if (nameOrCamera && typeof nameOrCamera === 'object'){
+    if (nameOrCamera.color) return nameOrCamera.color;
+    return _CAM_ICON_TONES[_resolveCamIconKey(nameOrCamera.name)] || '#a8a8a8';
+  }
+  return _CAM_ICON_TONES[_resolveCamIconKey(nameOrCamera)] || '#a8a8a8';
 }

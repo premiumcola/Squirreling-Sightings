@@ -21,7 +21,7 @@ import { state, shapeState } from '../core/state.js';
 import { byId, esc } from '../core/dom.js';
 import { j } from '../core/api.js';
 import { showToast, showConfirm } from '../core/toast.js';
-import { getCameraIcon } from '../core/icons.js';
+import { getCameraIcon, getCameraColor } from '../core/icons.js';
 import { loadAll } from '../live-update.js';
 import { reloadCamera } from '../dashboard.js';
 import {
@@ -308,7 +308,31 @@ function editCamera(camId){
   f['name'].value=c.name||'';
   if(f['manufacturer']) f['manufacturer'].value = c.manufacturer || '';
   if(f['model']) f['model'].value = c.model || '';
-  if(f['icon']) f['icon'].value=c.icon||getCameraIcon(c.name||c.id);
+  // tx412 — the icon-emoji <input> was retired. Icon now derives at
+  // render time from getCameraIcon(name). The guard stays in case
+  // an external template still mounts an icon field somewhere, but
+  // setting its value would re-introduce the "<svg…> as input
+  // value" bug and so is silently dropped.
+  // Colour picker — defaults to the user's override, falls back to
+  // the auto-tone keyed on the display name. The Auto button next
+  // to the input resets to that auto-tone and flags the field so
+  // the submit path writes "" rather than the matching hex (keeps
+  // settings.json from re-storing the derivable default).
+  if(f['color']){
+    const _autoTone = getCameraColor({ name: c.name || c.id });
+    f['color'].value = c.color || _autoTone;
+    f['color'].dataset.auto = c.color ? '0' : '1';
+    f['color'].oninput = () => { f['color'].dataset.auto = '0'; };
+  }
+  const _resetBtn = byId('camColorReset');
+  if(_resetBtn){
+    _resetBtn.onclick = () => {
+      if(!f['color']) return;
+      const _autoTone = getCameraColor({ name: f['name']?.value || c.name || c.id });
+      f['color'].value = _autoTone;
+      f['color'].dataset.auto = '1';
+    };
+  }
   // Live preview of the canonical id derived from manufacturer/model/name/IP.
   _bindCamIdPreviewListeners();
   // Reolink GetDevInfo rescan button — wires once per session.

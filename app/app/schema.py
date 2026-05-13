@@ -220,6 +220,14 @@ CAMERA_SCHEMA: dict = {
     # unset/zero. Only consumed by /api/cameras/<id>/reolink/image-mode;
     # the RTSP capture path is unaffected.
     "reolink_http_port":          (int,   0),
+    # ── User-facing identity colour override ─────────────────────────────
+    # tx412 — optional per-camera hex colour ("#b48b6a"). When set this
+    # beats the auto-tone the frontend's getCameraColor() derives from
+    # the camera name via _CAM_ICON_TONES. Empty string = no override
+    # (frontend falls back to the auto-tone). The frontend Color-Picker
+    # in cam-edit's Allgemein tab writes here; the "Auto" button clears
+    # it back to "".
+    "color":                      (str,   ""),
 }
 
 # ── Section schemas (for update_section; all fields optional) ──────────────────

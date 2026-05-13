@@ -11,7 +11,7 @@ import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { j } from "../core/api.js";
 import { showToast, showConfirm } from "../core/toast.js";
-import { getCameraIcon } from "../core/icons.js";
+import { getCameraColor } from "../core/icons.js";
 import { loadAll } from "../live-update.js";
 import { RTSP_PATH_OPTS, _rtspEnc, _unmaskUrlsForSubmit } from "./rtsp.js";
 import { getWhitelistState } from "./whitelist.js";
@@ -503,10 +503,22 @@ byId('cameraForm').onsubmit=async(e)=>{
   // .value into the payload, otherwise we'd persist dot-masked URLs.
   _unmaskUrlsForSubmit(e.target);
   const existingCam=(state.cameras||[]).find(x=>x.id===f['id'].value);
+  // tx412 — `icon` is no longer written into the payload. The frontend
+  // derives it at render time via getCameraIcon(name); persisting the
+  // SVG string on save was the source of the "<svg…> in input field"
+  // bug after the filled-icon swap.
+  // `color` carries the user's per-camera override; matches against
+  // the name-derived auto-tone collapse to "" so settings.json stays
+  // free of redundant derivables.
+  const _autoColor=getCameraColor({name:f['name'].value});
+  const _colorRaw=f['color']?.value||'';
+  const _colorPayload=(!_colorRaw
+    || _colorRaw.toLowerCase()===_autoColor.toLowerCase()
+    || f['color']?.dataset.auto==='1') ? '' : _colorRaw;
   const payload={id:f['id'].value,name:f['name'].value,
     manufacturer:f['manufacturer']?.value||'',
     model:f['model']?.value||'',
-    icon:f['icon']?.value||getCameraIcon(f['name'].value),
+    color:_colorPayload,
     rtsp_url:f['rtsp_url'].value,snapshot_url:f['snapshot_url'].value,
     username:f['rtsp_user']?.value||'',password:f['rtsp_pass']?.value||'',
     object_filter:f['object_filter'].value.split(',').map(x=>x.trim()).filter(Boolean),

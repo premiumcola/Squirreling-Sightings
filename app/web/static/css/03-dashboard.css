@@ -239,8 +239,12 @@
   -webkit-tap-highlight-color:transparent;
   -webkit-backdrop-filter:blur(8px);
   backdrop-filter:blur(8px);
-  box-shadow:0 0 0 1px rgba(255,255,255,.18),
-             0 var(--overlay-elev-y, 0px) var(--overlay-elev-blur, 2px) var(--overlay-elev, rgba(255,255,255,.32));
+  /* Elevation via drop-shadow filter only — no 1 px ring-border
+     box-shadow. The dark fill + soft downward shadow + faint upward
+     light glow is enough to separate the button from any snapshot
+     underneath without re-introducing a hard hairline. */
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.45))
+         drop-shadow(0 0 1.5px rgba(255,255,255,.25));
   transition:background .14s cubic-bezier(.4,0,.2,1),
              color .14s cubic-bezier(.4,0,.2,1),
              transform .08s cubic-bezier(.4,0,.2,1);

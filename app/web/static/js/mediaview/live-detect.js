@@ -41,6 +41,11 @@ const _TICK_FACTOR = 1.2;
 const _LIVE_WINDOW_MS = 60_000;
 const _TRACE_CAP = 80;
 
+// hp651 — debug-only one-liner inside the toggle click handler.
+// Off by default; flip to true in the source file when chasing a
+// toggle regression so a single console.warn fires on each click.
+const _DEBUG_TOGGLE = false;
+
 let _session = null;
 let _traceLines = [];
 let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
@@ -115,6 +120,17 @@ function _setupLiveChrome(camId, cameraName){
   // live-detect needs a Detections-only tab strip + the live
   // overlay-toggles row above the playbar.
   _setupVideoChrome(liveItem);
+  // hp651 — kill the recorded path's canvas zone overlay
+  // (lightboxZoneOverlay, z-index 4). _setupVideoChrome always calls
+  // mountZoneOverlayForLightbox; if the user reaches Simulieren via
+  // an already-open lightbox session (img.src still pointing at a
+  // previous clip), the canvas mounts AND lives at the same z-index
+  // as our SVG, painting a second copy of every polygon that the
+  // Zonen/Masken toggle below can't reach. Tearing it down here
+  // keeps live-detect's SVG (lightboxLiveZoneMask) as the single
+  // owner of zone + mask rendering for the lifetime of the
+  // simulation.
+  try { window._unmountZoneOverlayForLightbox?.(); } catch { /* not mounted */ }
   const modal = byId('lightboxModal');
   if (modal){
     modal.classList.add('lb-live-detect');
@@ -358,8 +374,12 @@ function _mountOverlayToggles(){
       const id = btn.dataset.tog;
       _overlays[id] = !_overlays[id];
       btn.dataset.on = _overlays[id] ? '1' : '0';
+      if (_DEBUG_TOGGLE){
+        console.warn(`[sim-toggle] ${id} → ${_overlays[id] ? 'ON' : 'OFF'}`);
+      }
       _hideToggleTip();
       _renderBboxOverlay();
+      _renderTrailsOverlay();
       _renderZoneMaskOverlay();
     });
     // Desktop hover — 300 ms before the tooltip appears.

@@ -11,3 +11,12 @@
 .ie-blue{background:#2563eb}.ie-green{background:#16a34a}.ie-gray{background:#333333}
 .ie-btn:hover{filter:brightness(1.12)}
 
+/* tx412 — timeline camera-row icon. The sidebox carries an inline
+   ``--cam-color`` set by timeline.js from getCameraColor(cam). The
+   .tl-cam-icon's color binds to that var so the SVG (fill=
+   "currentColor") renders in the camera's identity tint. The size
+   override (24 × 24) bumps the cam-ico baseline (20 px) to a
+   prominent above-the-name glyph in the column-layout sidebox. */
+.tl-cam-icon{color:var(--cam-color, #94a3b8)}
+.tl-cam-icon .cam-ico{width:24px;height:24px}
+

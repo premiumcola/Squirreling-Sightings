@@ -12,7 +12,7 @@
 import { state, STAT_MEDIA_DRILLDOWN } from './core/state.js';
 import { byId, esc } from './core/dom.js';
 import { j } from './core/api.js';
-import { colors, OBJ_LABEL, OBJ_SVG, getCameraIcon } from './core/icons.js';
+import { colors, OBJ_LABEL, OBJ_SVG, getCameraIcon, getCameraColor } from './core/icons.js';
 import { CLASS_COLORS } from './core/class-colors.js';
 
 // Re-export of the canonical class colours plus the timeline-only
@@ -109,10 +109,16 @@ export function renderTimeline() {
     const cam = (state.config?.cameras || []).find(c => c.id === tr.camera_id) || {};
     const camName = cam.name || tr.camera_id;
     const camIcon = getCameraIcon(camName);
+    // tx412 — per-camera identity colour. --cam-color sits on the
+    // sidebox so the icon (fill="currentColor") + the camera-name
+    // tint pick it up. Falls back to the slate-grey default in CSS
+    // when the cam has no override and the regex auto-tone is
+    // already #a8a8a8 (generic).
+    const camColor = getCameraColor(cam.id ? cam : camName);
     html += `<div class="tl-cam-block${ti > 0 ? ' tl-cam-block--notfirst' : ''}">`;
     const sbCls = STAT_MEDIA_DRILLDOWN ? 'tl-cam-sidebox stat-drillable' : 'tl-cam-sidebox';
     const sbClick = STAT_MEDIA_DRILLDOWN ? `onclick="_statOpenMedia('${esc(tr.camera_id)}','')"` : '';
-    html += `<div class="${sbCls}" ${sbClick}><div class="tl-cam-icon">${camIcon}</div><div class="tl-cam-name">${esc(camName)}</div></div>`;
+    html += `<div class="${sbCls}" style="--cam-color:${camColor}" ${sbClick}><div class="tl-cam-icon">${camIcon}</div><div class="tl-cam-name">${esc(camName)}</div></div>`;
     html += `<div class="tl-lanes-wrap">`;
     for (let k = 1; k < 5; k++) html += `<div class="tl-vgrid" style="left:calc(var(--tl-label-w) + (100% - var(--tl-label-w))*${k}/5)"></div>`;
     lanes.forEach(({ label, groups }) => {

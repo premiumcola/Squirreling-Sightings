@@ -214,27 +214,29 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
   .cv-pill-tl{font-size:10px;padding:2px 7px}
 }
 
-/* ── Tile bottom chrome row — narrow-viewport safety net ────────────────
-   After B1 + B3, the bottom-right cluster can carry class pills + TG +
-   MQTT + Sim + Cog on the same row. On a 375 px tile the natural width
-   exceeds the corner-anchored slot; .cv-sim-btn drops its "Simulieren"
-   label (icon-only) to claw back ~70 px, and flex-wrap-reverse lets the
-   row stack upward if a particular cam still has more chrome than fits
-   (e.g. all 5 class filters + both channel pills). The wrap-reverse
-   direction means the FIRST row in DOM order sits at the bottom; extra
-   rows stack on top — matches the corner-anchored geometry. */
+/* ── E6 · Mobile v17 — tile chrome compaction ────────────────────────
+   Title icon + name shrink one notch; class icons + buttons follow.
+   Sim button drops its label so the bottom-right cluster fits in the
+   reserved (50% - 110 px) slot on a 375 px tile. Tap target stays
+   44 × 44 via the chrome-btn::before halo regardless of the visual
+   shrink. */
 @media (max-width:768px){
-  .cv-chrome-bottom-right{
-    flex-wrap:wrap-reverse;
-    justify-content:flex-end;
-    max-width:65%;
-    row-gap:6px;
-  }
+  .cv-cam-title-icon{width:26px;height:26px}
+  .cv-tl-stack .cv-name{font-size:16px;max-width:160px}
+  .cv-class-cluster{gap:10px}
+  .cv-class-pill,
+  .cv-class-pill svg{width:20px;height:20px}
+  .cv-chrome-btn{height:32px;min-width:32px}
+  .cv-hd-badge{width:32px;min-width:32px}
+  .cv-fs-btn{width:32px;min-width:32px}
+  .cv-cog{width:32px}
   .cv-sim-btn span{display:none}
-  .cv-sim-btn{padding:0;width:30px;gap:0}
-  /* Also let the bottom-LEFT name-row wrap so an open Live-pill drops
-     to its own line when it can't sit beside a long camera name. */
-  .cv-name-row{flex-wrap:wrap;row-gap:4px}
+  .cv-sim-btn{padding:0;width:32px;min-width:32px;gap:0}
+  /* Telegram cluster — let the status row truncate with ellipsis
+     when the cluster shares a narrow row with MQTT on a 375 px tile. */
+  .cv-channel-cluster .cv-channel-status{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;
+  }
 }
 
 /* ── Statistik · timeline tap-tooltip ─────────────────────────────────── */

@@ -303,7 +303,7 @@
   display:inline-flex;
   align-items:center;
   gap:6px;
-  padding:3px 8px 3px 6px;
+  padding:3px 8px;
   border-radius:999px;
   border:1.5px solid var(--live-pill-bd);
   background:var(--live-pill-bg);
@@ -324,11 +324,13 @@
 .cv-pill-live-wrap::before{content:"";position:absolute;inset:-7px 0;pointer-events:auto}
 .cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
 
-/* Collapsed-state children. parent gap:6 + .cv-live-fps margin-left:2
-   = 8 px between "Live" and the fps number, matching the spec. */
+/* E6 · Collapsed-state spacing. Parent gap:6 gives the baseline
+   right-side gap (fps→chevron). margin-left:6 on .cv-live-fps stacks
+   on top so the Live↔fps gap reads as 12 px while the fps↔chevron
+   stays at the tighter 6 px the spec calls for. */
 .cv-live-label{flex-shrink:0}
-.cv-live-fps{margin-left:2px;opacity:.78;font-size:10px;font-weight:600;flex-shrink:0}
-.cv-live-arrow{opacity:.55;flex-shrink:0}
+.cv-live-fps{margin-left:6px;color:var(--live-pill-fps);font-size:10px;font-weight:600;flex-shrink:0}
+.cv-live-arrow{opacity:.7;flex-shrink:0}
 
 /* Detail panel — hidden until the wrap opens. display:none keeps the
    panel out of fit-content size calculation entirely (the third-attempt

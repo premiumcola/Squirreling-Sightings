@@ -16,46 +16,64 @@
    .cv-card itself so every overlay-inset consumer (top-left through
    bottom-right) reads the same value.
 
-   E2 · adaptive palette. Variables defined on .cv-card flip between
-   data-bg="dark" (default — bright glyphs on a dark snapshot) and
-   data-bg="light" (dark glyphs on a daylight snapshot). JS sampler in
-   dashboard.js sets the attribute every 2 s based on the snapshot's
-   average Rec.709 luminance with a 5 % hysteresis. Buttons stay dark
-   in both modes — only their elevation shadow flips. */
+   E2 (re-rev) · per-region adaptive palette. The card no longer
+   carries data-bg or the --overlay-fg / --overlay-halo family —
+   those now live on .cv-overlay-region descendants (identity,
+   telegram, classicons) and flip independently from each other.
+   That keeps overlay glyphs legible when one half of the snapshot
+   is daylight-bright and the other is shadow-dark (workshop sky
+   over interior dark, etc.). Buttons stay dark in both modes —
+   their elevation comes from a static filter:drop-shadow, not the
+   region palette. */
 .cv-card{
   border-radius:18px;overflow:hidden;cursor:pointer;
   background:#0a0a0a;transition:transform .18s,box-shadow .18s;
   position:relative;min-width:0;contain:paint;
   --cv-overlay-inset:8px;
+  --class-stroke-w:    2.4px;
+}
+
+/* Per-region overlay palette. Each .cv-overlay-region carries its
+   own data-bg="dark"|"light" attribute, sampled every 2 s from the
+   underlying snapshot region by the JS sampler in dashboard.js.
+   Default = dark (bright glyphs + halo on a dark snapshot); the
+   [data-bg="light"] override flips to dark glyphs on a daylight
+   snapshot. Per-region modifiers (identity / telegram) layer
+   their own variables on top so the live-pill + channel-cluster
+   palettes stay in sync with their region. */
+.cv-overlay-region{
   --overlay-fg:        #fff;
   --overlay-fg-soft:   #cbd5e1;
   --overlay-halo:      rgba(255,255,255,.55);
   --overlay-halo-blur: 1.4px;
-  --overlay-elev:      rgba(255,255,255,.32);
-  --overlay-elev-blur: 2px;
-  --overlay-elev-y:    0px;
-  --live-pill-bg:      rgba(34,197,94,.22);
-  --live-pill-bd:      rgba(34,197,94,.55);
-  --live-pill-fg:      #86efac;
-  --live-pill-fps:     #9ca3af;
-  --tg-fg:             #5DB7E8;
-  --tg-active:         #229ED9;
-  --mqtt-fg:           #d6b4ff;
-  --mqtt-active:       #a78bfa;
-  --class-stroke-w:    2.4px;
 }
-.cv-card[data-bg="light"]{
+.cv-overlay-region[data-bg="light"]{
   --overlay-fg:        #0f0f0f;
   --overlay-fg-soft:   #1a1a1a;
   --overlay-halo:      rgba(0,0,0,.6);
   --overlay-halo-blur: 0.8px;
-  --overlay-elev:      rgba(0,0,0,.28);
-  --overlay-elev-blur: 1.2px;
-  --overlay-elev-y:    1px;
+}
+/* Identity region — owns the live-pill palette. */
+.cv-overlay-region[data-region="identity"]{
+  --live-pill-bg:      rgba(34,197,94,.22);
+  --live-pill-bd:      rgba(34,197,94,.55);
+  --live-pill-fg:      #86efac;
+  --live-pill-fps:     #9ca3af;
+}
+.cv-overlay-region[data-region="identity"][data-bg="light"]{
   --live-pill-bg:      #15803d;
   --live-pill-bd:      transparent;
   --live-pill-fg:      #fff;
   --live-pill-fps:     rgba(255,255,255,.9);
+}
+/* Telegram region — owns the channel-cluster icon + dot palette. */
+.cv-overlay-region[data-region="telegram"]{
+  --tg-fg:             #5DB7E8;
+  --tg-active:         #229ED9;
+  --mqtt-fg:           #d6b4ff;
+  --mqtt-active:       #a78bfa;
+}
+.cv-overlay-region[data-region="telegram"][data-bg="light"]{
   --tg-fg:             #0E6BA8;
   --tg-active:         #0E6BA8;
   --mqtt-fg:           #5b35a8;

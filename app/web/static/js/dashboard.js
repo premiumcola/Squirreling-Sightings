@@ -233,53 +233,81 @@ export function _restorePlaceholder(card){
   }
 }
 
-// ── E2 · adaptive overlay palette via bg-luminance sampling ────────────
-// Every ~2 s each visible tile's snapshot is downsampled to a tiny
-// offscreen canvas and its average Rec.709 luminance fed through a
-// hysteresis filter (5 % min gap) to set data-bg="light" / "dark" on
-// the card. CSS variables on .cv-card flip text/icon palette + halo
-// direction so overlay glyphs stay legible whether the camera is
-// pointed at a daylight snapshot or a night scene. Buttons keep their
-// dark fill in both modes — only their elevation shadow flips.
+// ── E2 · adaptive overlay palette via per-region luminance sampling ────
+// Every ~2 s each visible tile's snapshot is sub-sampled at three
+// distinct regions — identity (top-left), telegram (mid-bottom-left),
+// classicons (bottom-strip) — and each region's mean Rec.709 luminance
+// is fed through a hysteresis filter (5 % min gap) that flips
+// data-bg="light" / "dark" on the corresponding .cv-overlay-region
+// element. CSS variables scoped to each region then flip text/icon
+// palette + halo direction so overlays stay legible even when the
+// snapshot has strong vertical luminance gradients (bright sky over
+// dark interior, etc.). Buttons stay dark in both modes — they live
+// outside the regions and read a static drop-shadow filter.
 const _BG_LUM_LIGHT_ENTER = 0.55;   // dark → light if Y above
 const _BG_LUM_DARK_ENTER  = 0.50;   // light → dark if Y below
+const _OVERLAY_REGIONS = [
+  // top-left identity (icon · name · live-pill)
+  { region: 'identity',   x: 0.00, y: 0.00, w: 0.40, h: 0.22 },
+  // mid-bottom-left telegram/MQTT cluster row
+  { region: 'telegram',   x: 0.00, y: 0.62, w: 0.38, h: 0.26 },
+  // bottom-strip class-icon row
+  { region: 'classicons', x: 0.00, y: 0.86, w: 0.38, h: 0.14 },
+];
 let _bgLumCanvas = null;
 let _bgLumCtx = null;
 let _bgLumInterval = null;
 
 function _ensureBgLumCanvas(){
   if (_bgLumCanvas) return;
+  // 8×8 destination is plenty for an averaging sampler — each region
+  // gets the same small target so the four bytes per pixel stay
+  // dominated by the source-region's content, not by canvas resize
+  // artefacts.
   _bgLumCanvas = document.createElement('canvas');
-  _bgLumCanvas.width = 24;
-  _bgLumCanvas.height = 16;
+  _bgLumCanvas.width = 8;
+  _bgLumCanvas.height = 8;
   _bgLumCtx = _bgLumCanvas.getContext('2d', { willReadFrequently: true });
 }
 
-function _sampleTileBgLuminance(card){
+function _sampleTileOverlayLuminance(card){
   const img = card.querySelector('.cv-img');
   if (!img || !img.classList.contains('loaded')) return;
-  if (!img.naturalWidth || !img.naturalHeight) return;
+  const W = img.naturalWidth, H = img.naturalHeight;
+  if (!W || !H) return;
   _ensureBgLumCanvas();
-  try {
-    _bgLumCtx.drawImage(img, 0, 0, _bgLumCanvas.width, _bgLumCanvas.height);
-    const data = _bgLumCtx.getImageData(0, 0, _bgLumCanvas.width, _bgLumCanvas.height).data;
-    let sum = 0, n = 0;
-    for (let i = 0; i < data.length; i += 4){
-      const r = data[i], g = data[i + 1], b = data[i + 2];
-      sum += (0.2126 * r + 0.7152 * g + 0.0722 * b);
-      n++;
+  for (const spec of _OVERLAY_REGIONS){
+    const target = card.querySelector(
+      `.cv-overlay-region[data-region="${spec.region}"]`,
+    );
+    if (!target) continue;
+    const sx = Math.floor(W * spec.x);
+    const sy = Math.floor(H * spec.y);
+    const sw = Math.max(1, Math.floor(W * spec.w));
+    const sh = Math.max(1, Math.floor(H * spec.h));
+    try {
+      _bgLumCtx.clearRect(0, 0, 8, 8);
+      _bgLumCtx.drawImage(img, sx, sy, sw, sh, 0, 0, 8, 8);
+      const data = _bgLumCtx.getImageData(0, 0, 8, 8).data;
+      let sum = 0, n = 0;
+      for (let i = 0; i < data.length; i += 4){
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        sum += (0.2126 * r + 0.7152 * g + 0.0722 * b);
+        n++;
+      }
+      if (!n) continue;
+      const Y = sum / (n * 255);
+      const current = target.dataset.bg || 'dark';
+      let next = current;
+      if (current === 'dark'  && Y > _BG_LUM_LIGHT_ENTER) next = 'light';
+      else if (current === 'light' && Y < _BG_LUM_DARK_ENTER) next = 'dark';
+      if (next !== current) target.dataset.bg = next;
+    } catch {
+      // Canvas can taint on cross-origin pixels — same-origin
+      // snapshots shouldn't trigger this in practice. Swallow so a
+      // single bad frame on one region doesn't kill the loop for
+      // the rest of the tile.
     }
-    if (!n) return;
-    const Y = sum / (n * 255);
-    const current = card.dataset.bg || 'dark';
-    let next = current;
-    if (current === 'dark' && Y > _BG_LUM_LIGHT_ENTER) next = 'light';
-    else if (current === 'light' && Y < _BG_LUM_DARK_ENTER) next = 'dark';
-    if (next !== current) card.dataset.bg = next;
-  } catch {
-    // Canvas can taint on cross-origin pixels — same-origin snapshots
-    // shouldn't trigger this in practice; swallow defensively so a
-    // single bad frame doesn't kill the loop.
   }
 }
 
@@ -290,7 +318,7 @@ export function startBgLuminanceMonitor(){
     const grid = byId('cameraCards');
     if (!grid) return;
     grid.querySelectorAll('.cv-card[data-camid]').forEach(card => {
-      _sampleTileBgLuminance(card);
+      _sampleTileOverlayLuminance(card);
     });
   }, 2000);
 }
@@ -893,7 +921,7 @@ export function renderDashboard(){
               <div class="cv-lp-row"><span>Analyse-Framerate</span><strong>${fps != null ? fps + ' fps' : '—'}</strong></div>
             </div>
           </div>` : '';
-    return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}" data-bg="dark">
+    return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
     <div class="cv-img-wrap">
       <div class="cv-loading-placeholder">${isActive ? _makeConnectingPlaceholder() : _makeOfflinePlaceholder()}</div>
@@ -901,7 +929,7 @@ export function renderDashboard(){
         onload="_cvImgLoaded(this)"
         onerror="_camImgRetry(this)" />
       <div class="cv-grad-bot"></div>
-      <div class="cv-chrome-top-left">
+      <div class="cv-chrome-top-left cv-overlay-region" data-region="identity" data-bg="dark">
         <span class="cv-cam-title-icon" aria-hidden="true">${getCameraIcon(c.name)}</span>
         <div class="cv-tl-stack">
           <div class="cv-name">${esc(c.name)}</div>
@@ -914,8 +942,8 @@ ${isActive ? `
         ${c.rtsp_url ? `<button class="cv-chrome-btn cv-fs-btn" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvToggleFullscreen && window._cvToggleFullscreen('${esc(c.id)}')" title="Vollbild" aria-label="Vollbild"><span class="fs-icon-expand">${_CHROME_EXPAND_SVG}</span><span class="fs-icon-minimize">${_CHROME_MINIMIZE_SVG}</span></button>` : ''}
       </div>
       <div class="cv-chrome-bottom-left">
-        ${(_tgBadge || _mqttBadge) ? `<div class="cv-channel-row">${_tgBadge}${_mqttBadge}</div>` : ''}
-        ${_classPills ? `<div class="cv-class-cluster">${_classPills}</div>` : ''}
+        ${(_tgBadge || _mqttBadge) ? `<div class="cv-channel-row cv-overlay-region" data-region="telegram" data-bg="dark">${_tgBadge}${_mqttBadge}</div>` : ''}
+        ${_classPills ? `<div class="cv-class-cluster cv-overlay-region" data-region="classicons" data-bg="dark">${_classPills}</div>` : ''}
       </div>
       <div class="cv-chrome-bottom-right">
         ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}

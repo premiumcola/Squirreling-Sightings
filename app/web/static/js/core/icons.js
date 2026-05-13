@@ -81,25 +81,47 @@ export function objIconSvg(label, size = 18) {
 // deterministic order.
 export const TL_LABELS = ['person', 'cat', 'bird', 'car', 'dog', 'squirrel', 'motion', 'alarm'];
 
-// Camera name → emoji (used as the row icon in the camera settings
-// list and as the donut-slice fallback colour key). Matches typical
-// German use (Werkstatt = workshop, Garten = garden, etc.).
-export function getCameraIcon(name) {
+// E5 · Camera name → SVG keyword routing. Replaces the earlier emoji
+// glyphs so the icon inherits currentColor and flips with the
+// data-bg overlay palette on the dashboard tile. The lookup is a
+// keyword regex on the camera's display name; new keys can be added
+// without touching consumers. The return value is an HTML string
+// carrying an <svg> element with width/height=20 + viewBox 0 0 24 24,
+// stroke="currentColor", round caps/joins — bit-for-bit consistent
+// with the _CHROME_CLASS_SVG family in dashboard.js so the data-bg
+// palette flip carries through.
+const _CAM_ICON_SVG = {
+  wrench: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.77 3.77z"/></svg>`,
+  squirrel: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="11" r="3"/><path d="M5.5 8.8 L 6 6.5 L 7.5 8"/><path d="M4 11 L 3 12 L 4 13"/><path d="M9 12 q4 1 4 5 v2 h-6 q-1 -3 0 -5"/><circle cx="5.5" cy="15" r="1.3"/><path d="M13 17 q6 0 7 -5 q0.5 -5 -3.5 -6 q-2.5 0 -2.5 2"/><circle cx="7" cy="10.6" r="0.5" fill="currentColor"/></svg>`,
+  leaf: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21c.5-5 2-10 7-13 4-2.5 8-2.5 9-2 .5 1 .5 5-2 9 -3 5-8 6.5-13 7z"/><path d="M5 21l10-10"/></svg>`,
+  bird: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6c-3.5-1-7 1-8 5l-2 7l5-3c3 2 7 0 8-4"/><circle cx="15.5" cy="6" r=".9" fill="currentColor"/></svg>`,
+  door: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><path d="M3 21h18"/><circle cx="14" cy="13" r=".9" fill="currentColor"/></svg>`,
+  car: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 16h14v-3l-2-4h-10l-2 4v3z"/><circle cx="8" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/></svg>`,
+  water: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 C 7 9 5 13 5 16 a 7 7 0 0 0 14 0 c 0 -3 -2 -7 -7 -13 z"/></svg>`,
+  camera: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-3h5L16 7"/><circle cx="12" cy="13" r="3.5"/></svg>`,
+};
+
+const _CAM_ICON_TONES = {
+  wrench: '#9aa5b3', squirrel: '#b48b6a', bird: '#7faec9', leaf: '#8aa97a',
+  door:   '#a37b53', car:      '#c47878', water:'#6fa3bd', camera:'#a8a8a8',
+};
+
+function _resolveCamIconKey(name){
   const n = (name || '').toLowerCase();
-  if (/werkstatt|garage|keller|labor/.test(n)) return '🔧';
-  if (/eingang|tor|tür|door/.test(n))         return '🚪';
-  if (/garten|garden|außen|outdoor/.test(n))  return '🌿';
-  if (/eichhörnchen|squirrel|tier|animal|natur/.test(n)) return '🐿️';
-  if (/vogel|bird|futter|feeder/.test(n))     return '🐦';
-  if (/parkplatz|auto|car/.test(n))            return '🚗';
-  if (/pool|wasser|water/.test(n))             return '💧';
-  return '📷';
+  if (/werkstatt|garage|keller|labor/.test(n))               return 'wrench';
+  if (/eingang|tor|tür|door/.test(n))                        return 'door';
+  if (/garten|garden|außen|outdoor/.test(n))                 return 'leaf';
+  if (/eichhörnchen|squirrel|tier|animal|natur/.test(n))     return 'squirrel';
+  if (/vogel|bird|futter|feeder/.test(n))                    return 'bird';
+  if (/parkplatz|auto|car/.test(n))                          return 'car';
+  if (/pool|wasser|water/.test(n))                           return 'water';
+  return 'camera';
 }
 
-const _CAM_ICON_COLORS = {
-  '🔧': '#9aa5b3', '🐿️': '#b48b6a', '🐦': '#7faec9', '🌿': '#8aa97a',
-  '🚪': '#a37b53', '🚗': '#c47878', '💧': '#6fa3bd', '📷': '#a8a8a8',
-};
-export function getCameraColor(name) {
-  return _CAM_ICON_COLORS[getCameraIcon(name)] || '#a8a8a8';
+export function getCameraIcon(name){
+  return _CAM_ICON_SVG[_resolveCamIconKey(name)] || _CAM_ICON_SVG.camera;
+}
+
+export function getCameraColor(name){
+  return _CAM_ICON_TONES[_resolveCamIconKey(name)] || '#a8a8a8';
 }

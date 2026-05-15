@@ -263,6 +263,93 @@
 .suntltest-rej-hint{font-size:12px;color:rgba(255,255,255,0.62);line-height:1.35}
 .suntltest-rej-empty{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.04);font-size:13px;color:var(--muted)}
 
+/* G3 · per-slot heatmap bar. One row, flex children = cells. No
+   gap (cells touch) so dense windows (562 cells for 75 min × 8 s)
+   read as a continuous density strip. Cell width is governed by
+   flex:1; min-width:2 px on mobile, 6 px on desktop. The colour
+   legend matches the counter chips below + the post-run diff
+   panel's "Was schief lief" line. */
+.suntltest-heatmap{
+  display:flex;flex-wrap:nowrap;
+  height:14px;
+  border-radius:4px;
+  overflow:hidden;
+  background:rgba(255,255,255,.04);
+}
+.suntltest-cell{
+  flex:1 1 0;min-width:2px;
+  background:rgba(255,255,255,.06);
+  transition:background 120ms ease;
+}
+.suntltest-cell[data-outcome="empty"]      { background:rgba(255,255,255,.06); }
+.suntltest-cell[data-outcome="fresh"]      { background:#34d399; }
+.suntltest-cell[data-outcome="retry_ok"]   { background:#34d399;
+  /* Inset 1 px ring marks the retry-recovered slot — visible on
+     desktop (6 px cells); on mobile the cells are too narrow for
+     the ring to show, but the colour still indicates "captured ok". */
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
+}
+.suntltest-cell[data-outcome="cached"]     { background:#fbbf24; }
+.suntltest-cell[data-outcome="rejected"]   { background:#f43f5e; }
+.suntltest-cell[data-outcome="backfilled"] { background:#6366f1; }
+.suntltest-cell[data-outcome="skipped"]    { background:#475569; }
+@media (min-width:768px){
+  .suntltest-heatmap{ height:18px; }
+  .suntltest-cell{ min-width:6px; }
+}
+
+/* G3 · counter chip row + meta line. Same colour legend as the
+   heatmap so the user connects the dots; tabular-num so the row
+   doesn't shift as values increment. .suntltest-counter-progress
+   sits left-aligned, chips and meta wrap below at narrow widths. */
+.suntltest-counter-row{
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px;
+  font-size:12.5px;
+}
+.suntltest-counter-progress{
+  font-weight:600;color:var(--text);
+  font-variant-numeric:tabular-nums;
+  padding-right:6px;
+}
+.suntltest-counter-progress b{font-weight:800}
+.suntltest-counter-chip{
+  display:inline-flex;align-items:center;
+  padding:3px 9px;border-radius:8px;
+  font-weight:700;font-variant-numeric:tabular-nums;
+  font-size:11.5px;
+  background:rgba(255,255,255,.06);
+  color:var(--muted);
+}
+.suntltest-counter-chip[data-outcome="fresh"]      { background:rgba(52,211,153,.18); color:#86efac; }
+.suntltest-counter-chip[data-outcome="cached"]     { background:rgba(251,191,36,.18); color:#fcd34d; }
+.suntltest-counter-chip[data-outcome="rejected"]   { background:rgba(244,63,94,.18);  color:#fda4af; }
+.suntltest-counter-chip[data-outcome="backfilled"] { background:rgba(99,102,241,.20); color:#a5b4fc; }
+.suntltest-counter-chip[data-outcome="skipped"]    { background:rgba(71,85,105,.30);  color:#cbd5e1; }
+.suntltest-counter-meta{
+  display:flex;flex-wrap:wrap;gap:14px;
+  font-size:11.5px;color:var(--muted);
+}
+.suntltest-counter-meta b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* G3 · current-action / ETA line. Single row, no panel chrome —
+   reads as a status line under the counters. */
+.suntltest-action{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
+  padding:6px 0;
+  font-size:13px;color:var(--text);
+}
+.suntltest-action-ico{color:#7faec9;font-weight:700}
+.suntltest-action-text b{font-weight:800;color:#fff}
+.suntltest-action-eta{
+  margin-left:auto;
+  font-size:11.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+.suntltest-action-eta b{color:var(--text);font-weight:700}
+@media (max-width:540px){
+  .suntltest-action-eta{margin-left:0;width:100%}
+}
+
 /* ── Capture breakdown ──────────────────────────────────────────────
    Sits between the Frames tile and the "Verworfen wegen …" section.
    Decomposes the raw "captured / expected · Retries · Invalid" tile

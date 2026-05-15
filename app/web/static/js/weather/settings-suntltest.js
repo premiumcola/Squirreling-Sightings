@@ -258,11 +258,15 @@ async function _startTest(){
   // Synchronous reset BEFORE the network round-trip so the user
   // never sees the previous run's MP4 card or live tile while the
   // new run is starting. Polling will repaint these from the live
-  // status response within ~2 s.
+  // status response within ~1.5 s.
   const wrap = byId('suntltestResult');
   if (wrap) { wrap.hidden = true; wrap.innerHTML = ''; }
   const live = byId('suntltestLive');
   if (live) { live.hidden = true; live.innerHTML = ''; }
+  // G3 · clear the per-slot cache so the previous session's cells
+  // don't bleed into this run. _lastEventTs back to 0 so the first
+  // poll re-fetches the whole event list.
+  _resetEventCache();
 
   const btn = byId('suntltestStart');
   if (!_selCam) { showToast('Keine Wetter-Kamera ausgewählt.', 'error'); return; }
@@ -313,10 +317,24 @@ async function _cancelTest(){
   }
 }
 
+// G3 · per-slot event cache. Keyed by slot index so the heatmap can
+// render `expected_frames` cells where each cell looks up its event
+// (if any) in O(1). _lastEventTs feeds the ?since=<float> query so
+// the poll ships the delta only.
+let _eventBySlot = new Map();
+
+function _resetEventCache(){
+  _eventBySlot = new Map();
+  _lastEventTs = 0;
+  _eventCache = [];
+}
+
 function _startPolling(){
   stopSunTlTestPolling();
   _pollOnce();
-  _pollTimer = setInterval(_pollOnce, 2000);
+  // G3 · bumped 2 s → 1.5 s once the heatmap is live. With ?since=
+  // delta polling the response stays small even on long sessions.
+  _pollTimer = setInterval(_pollOnce, 1500);
 }
 
 export function stopSunTlTestPolling(){
@@ -326,10 +344,27 @@ export function stopSunTlTestPolling(){
 async function _pollOnce(){
   let d = null;
   try {
-    const r = await fetch('/api/weather/sun-tl/test/status');
+    // G3 · ship the timestamp of the last event we've seen so the
+    // backend's ?since=<float> filter returns only NEW slot_events.
+    // The whole-history fallback is the unset default if _lastEventTs
+    // is still 0 (fresh session).
+    const url = _lastEventTs > 0
+      ? `/api/weather/sun-tl/test/status?since=${encodeURIComponent(_lastEventTs)}`
+      : `/api/weather/sun-tl/test/status`;
+    const r = await fetch(url);
     d = await r.json();
   } catch (_err) {
     return;
+  }
+  // Merge any new slot_events into the per-slot cache. The status
+  // payload's slot_events is ALWAYS the post-since delta, never the
+  // whole list, so we accumulate forward.
+  if (d && Array.isArray(d.slot_events)){
+    for (const e of d.slot_events){
+      if (!e || typeof e.slot !== 'number') continue;
+      _eventBySlot.set(e.slot, e);
+      if (e.ts > _lastEventTs) _lastEventTs = e.ts;
+    }
   }
   _renderLive(d);
   if (d && (d.finished || !d.running)) {
@@ -339,48 +374,112 @@ async function _pollOnce(){
   }
 }
 
+// G3 · density-style per-slot heatmap. One cell per expected slot,
+// coloured by the resolved outcome from the slot_events ring buffer
+// the backend ships (G2). Cell width is governed by CSS flex; on a
+// 75-min × 8-s window (562 cells) iPhone width collapses cells to
+// ~2 px each (purely density visual). Desktop wider cells get a
+// title-tooltip with the per-slot detail. Cap at 800 cells —
+// extreme runs beyond that bound aren't realistic for sun-tl.
+function _renderHeatmap(d){
+  const expected = Math.max(0, Math.min(800, parseInt(d.expected_frames, 10) || 0));
+  if (expected === 0) return '';
+  const cells = [];
+  for (let i = 0; i < expected; i++){
+    const ev = _eventBySlot.get(i);
+    if (!ev){
+      cells.push(`<div class="suntltest-cell" data-outcome="empty" data-slot="${i}"></div>`);
+      continue;
+    }
+    const reason = ev.reason ? ` · ${ev.reason}` : '';
+    const age = (typeof ev.age_ms === 'number') ? ` · ${ev.age_ms} ms` : '';
+    const title = `Slot ${ev.slot} · ${ev.outcome}${reason}${age}`;
+    cells.push(
+      `<div class="suntltest-cell" data-outcome="${esc(ev.outcome)}" data-slot="${ev.slot}" title="${esc(title)}"></div>`,
+    );
+  }
+  return `<div class="suntltest-heatmap" aria-label="Slot-Heatmap (${expected} Slots)">${cells.join('')}</div>`;
+}
+
+// G3 · counter chips coloured to match the heatmap legend. Each chip
+// renders even when its count is 0 so the user can see the full set
+// at a glance; counts are tabular-num so the row doesn't shift as
+// values increment. Frame-age average is derived from the slot_events
+// cache (age_ms field on fresh / cached / retry_ok outcomes).
+function _renderCounterRow(d){
+  const expected = parseInt(d.expected_frames, 10) || 0;
+  const fresh = parseInt(d.fresh_captures, 10) || 0;
+  const back  = parseInt(d.backfilled_slots, 10) || 0;
+  const skip  = parseInt(d.skipped_slots, 10) || 0;
+  const rej   = Math.max(0, (parseInt(d.invalid_frames, 10) || 0) - back - skip);
+  const cached = parseInt(d.api_cached_grabs_total, 10) || 0;
+  const currentSlot = Math.min(expected, _eventBySlot.size);
+  // Average frame-age across the events we've seen that carry one.
+  let ageSum = 0, ageCount = 0;
+  for (const ev of _eventBySlot.values()){
+    if (typeof ev.age_ms === 'number'){ ageSum += ev.age_ms; ageCount++; }
+  }
+  const ageStr = ageCount > 0 ? `${Math.round(ageSum / ageCount)} ms` : '—';
+  const profileStr = d.validator_profile ? d.validator_profile : '—';
+  return `
+    <div class="suntltest-counter-row">
+      <span class="suntltest-counter-progress">Slot <b>${currentSlot}</b> / ${expected}</span>
+      <span class="suntltest-counter-chip" data-outcome="fresh">fresh ${fresh}</span>
+      <span class="suntltest-counter-chip" data-outcome="cached">cached ${cached}</span>
+      <span class="suntltest-counter-chip" data-outcome="rejected">rejected ${rej}</span>
+      <span class="suntltest-counter-chip" data-outcome="backfilled">backfilled ${back}</span>
+      <span class="suntltest-counter-chip" data-outcome="skipped">skipped ${skip}</span>
+    </div>
+    <div class="suntltest-counter-meta">
+      <span>Frame-Alter ⌀ <b>${ageStr}</b></span>
+      <span>Validator: <b>${esc(profileStr)}</b></span>
+    </div>`;
+}
+
+// G3 · current-action row + ETA. During capture: "Slot N wird
+// erfasst — ETA HH:MM (M min S s verbleiben)". Between capture-end
+// and finished=true: "Encoding … (ffmpeg)". Hidden after finished
+// (the result diff panel takes over).
+function _renderActionRow(d){
+  if (d.finished) return '';
+  const elapsed = Math.max(0, parseInt(d.elapsed_s, 10) || 0);
+  const target = Math.max(1, parseInt(d.target_s, 10) || 1);
+  const expected = parseInt(d.expected_frames, 10) || 0;
+  if (elapsed >= target){
+    return `
+      <div class="suntltest-action">
+        <span class="suntltest-action-ico">▶</span>
+        <span class="suntltest-action-text">Aktuell: <b>Encoding …</b> (ffmpeg)</span>
+      </div>`;
+  }
+  const remaining = Math.max(0, target - elapsed);
+  const remMin = Math.floor(remaining / 60);
+  const remSec = remaining % 60;
+  const remStr = remMin > 0 ? `${remMin} min ${remSec} s` : `${remSec} s`;
+  const etaTs = new Date(Date.now() + remaining * 1000);
+  const etaStr = etaTs.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const currentSlot = Math.min(expected, _eventBySlot.size + 1);
+  return `
+    <div class="suntltest-action">
+      <span class="suntltest-action-ico">▶</span>
+      <span class="suntltest-action-text">Aktuell: Slot <b>${currentSlot}</b> wird erfasst …</span>
+      <span class="suntltest-action-eta">ETA <b>${esc(etaStr)}</b> · noch ${esc(remStr)}</span>
+    </div>`;
+}
+
 function _renderLive(d){
   const wrap = byId('suntltestLive'); if (!wrap) return;
   if (!d || !d.cam_id) { wrap.hidden = true; wrap.innerHTML = ''; return; }
   wrap.hidden = false;
-  const elapsed = Math.max(0, parseInt(d.elapsed_s, 10) || 0);
-  const target = Math.max(1, parseInt(d.target_s, 10) || 1);
-  const pct = Math.min(100, Math.round((elapsed / target) * 100));
-  const captured = parseInt(d.captured_frames, 10) || 0;
-  const expected = parseInt(d.expected_frames, 10) || 0;
-  const invalid = parseInt(d.invalid_frames, 10) || 0;
-  const retries = parseInt(d.retry_recoveries, 10) || 0;
-  const dnBadge = _dnBadge(d.daynight_color_set);
+  // G3 · live view rebuilt around a per-slot heatmap. The old card-
+  // in-card tile grid + per-reason reject list moves out (the
+  // post-run diff panel surfaces the same data in a tighter form).
+  // Row 1 heatmap, row 2 counter chips, row 3 action/ETA, row 4 log
+  // tail — flat layout, no nested boxes.
   const phaseLabel = d.phase === 'sunrise' ? '🌄 Sonnenaufgang' : '🌇 Sonnenuntergang';
   const camName = (state.cameras || []).find(c => c.id === d.cam_id)?.name || d.cam_id;
   const stateClass = d.finished ? 'is-done' : (d.running ? 'is-running' : 'is-idle');
-  const rejected = d.rejected_by_reason || {};
-  const examples = d.rejected_by_reason_examples || {};
-  const rejectedRows = Object.entries(rejected)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => {
-      const ex = examples[k] || '';
-      // Detail tail = the part inside the FIRST observed reason's
-      // parens, e.g. "40/40=100%" from "dead_area(40/40=100%)".
-      let detail = '';
-      if (ex && ex.includes('(') && ex.endsWith(')')){
-        detail = ex.slice(ex.indexOf('(') + 1, -1);
-      }
-      const hint = _rejectHintDe(k);
-      return `
-      <div class="suntltest-rej-row">
-        <div class="suntltest-rej-row-head">
-          <span class="suntltest-rej-key">${esc(k)}</span>
-          <span class="suntltest-rej-val">${v}</span>
-        </div>
-        ${detail ? `<div class="suntltest-rej-detail">${esc(detail)}</div>` : ''}
-        ${hint ? `<div class="suntltest-rej-hint">${esc(hint)}</div>` : ''}
-      </div>`;
-    }).join('');
-  const rejectedBlock = rejectedRows
-    ? `<div class="suntltest-rej-list">${rejectedRows}</div>`
-    : `<div class="suntltest-rej-empty">— keine Rejects bisher —</div>`;
-  // Profile + drift pills above the existing tile grid.
+  // Profile + drift pills.
   const profileBadge = _profileBadge(d.validator_profile, d.baseline_brightness);
   const driftBadge   = _driftBadge(d.phase_drift_warning, d.phase_drift_min);
   const pillRow = (profileBadge || driftBadge)
@@ -390,37 +489,6 @@ function _renderLive(d){
     .slice(-60)
     .map(line => `<div class="suntltest-log-line">${esc(line)}</div>`)
     .join('');
-  // "How many slots in the resulting MP4 are real content?" — derived
-  // counters answer the user's recurring question. fresh = brand-new
-  // grabs, backfilled = invalid slots filled with the most-recent
-  // valid frame for encoder continuity, skipped = scene-level rejects
-  // we deliberately gave up on. backfill_cache_drops only renders
-  // when > 0 to avoid clutter on healthy captures.
-  const fresh = parseInt(d.fresh_captures, 10) || 0;
-  const back  = parseInt(d.backfilled_slots, 10) || 0;
-  const skip  = parseInt(d.skipped_slots, 10) || 0;
-  const cacheDrops = parseInt(d.backfill_cache_drops, 10) || 0;
-  const breakdownBlock = (fresh + back + skip > 0)
-    ? `<div class="suntltest-breakdown">
-        <div class="suntltest-bkd-row">
-          <span class="suntltest-bkd-label">Frisch erfasst</span>
-          <span class="suntltest-bkd-val suntltest-bkd-val--ok">${fresh}</span>
-        </div>
-        <div class="suntltest-bkd-row">
-          <span class="suntltest-bkd-label">Aufgefüllt mit letztem gültigen Frame</span>
-          <span class="suntltest-bkd-val suntltest-bkd-val--mute">${back}</span>
-        </div>
-        <div class="suntltest-bkd-row">
-          <span class="suntltest-bkd-label">Übersprungen (Szene leer)</span>
-          <span class="suntltest-bkd-val suntltest-bkd-val--mute">${skip}</span>
-        </div>
-        ${cacheDrops > 0 ? `
-        <div class="suntltest-bkd-row" title="Backfill-Cache wurde verworfen, weil der zwischengespeicherte Frame nach mehrfacher Wiederverwendung von einer strikteren Validierung als korrupt erkannt wurde.">
-          <span class="suntltest-bkd-label">Backfill-Cache verworfen</span>
-          <span class="suntltest-bkd-val suntltest-bkd-val--warn">${cacheDrops}</span>
-        </div>` : ''}
-      </div>`
-    : '';
   wrap.className = `suntltest-live ${stateClass}`;
   wrap.innerHTML = `
     <div class="suntltest-live-head">
@@ -428,27 +496,9 @@ function _renderLive(d){
       <div class="suntltest-live-status">${d.finished ? '✅ fertig' : (d.running ? '⏺ läuft' : '⏸ pausiert')}</div>
     </div>
     ${pillRow}
-    <div class="suntltest-live-grid">
-      <div class="suntltest-tile">
-        <div class="suntltest-tile-label">Tag/Nacht-Override</div>
-        <div class="suntltest-tile-val">${dnBadge}</div>
-      </div>
-      <div class="suntltest-tile">
-        <div class="suntltest-tile-label">Zeit</div>
-        <div class="suntltest-tile-val"><b>${elapsed}</b> / ${target} s</div>
-        <div class="suntltest-progress"><span style="width:${pct}%"></span></div>
-      </div>
-      <div class="suntltest-tile">
-        <div class="suntltest-tile-label">Frames</div>
-        <div class="suntltest-tile-val"><b>${captured}</b> / ${expected}</div>
-        <div class="suntltest-tile-sub">Retries ${retries} · Invalid ${invalid}</div>
-      </div>
-    </div>
-    ${breakdownBlock}
-    <div class="suntltest-section">
-      <div class="suntltest-section-title">Verworfen wegen …</div>
-      ${rejectedBlock}
-    </div>
+    ${_renderHeatmap(d)}
+    ${_renderCounterRow(d)}
+    ${_renderActionRow(d)}
     <div class="suntltest-section">
       <div class="suntltest-section-title">Log-Tail</div>
       <div class="suntltest-log-box" id="suntltestLog">${logBlock || '<div class="suntltest-log-line muted">— kein Log —</div>'}</div>

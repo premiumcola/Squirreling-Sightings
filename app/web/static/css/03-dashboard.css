@@ -550,21 +550,18 @@
   width:18px;height:18px;flex-shrink:0;
 }
 .cv-channel-icon svg{width:100%;height:100%;display:block}
-.cv-channel-text{
-  display:flex;flex-direction:column;gap:1px;line-height:1.15;
-  color:var(--overlay-fg);
-}
-.cv-channel-sched{
-  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
-  font-size:10px;font-weight:600;letter-spacing:.01em;
-  /* A4 · lighter complementary outline so the sched/status rows
-     read on a daylight grass / cloudy-sky frame where the pill
-     tint alone isn't enough contrast. The shadow var flips tone
-     via the same data-bg sampler that drives --overlay-fg. */
-  text-shadow:var(--overlay-text-shadow);
-}
-.cv-channel-status{
+/* B3 · single-line label. The earlier .cv-channel-text two-row
+   stack (sched · status) folded into one phrase ("aktiv bis HH:MM",
+   "aktiv ab HH:MM", or just "aktiv"), so the cluster height halves.
+   Same complementary text-shadow as A4 keeps the line readable on a
+   daylight frame; --overlay-fg already resolves to real white /
+   near-black via the data-bg sampler. */
+.cv-channel-label{
   font-size:11px;font-weight:600;
+  color:var(--overlay-fg);
+  line-height:1.2;
+  letter-spacing:.01em;
+  white-space:nowrap;
   text-shadow:var(--overlay-text-shadow);
 }
 /* Span-based dot — SVG with animated r-attribute didn't render
@@ -629,12 +626,20 @@
 
 /* Active dot ring — pulses 1.6 s via transform:scale while
    state === 'on'. Static (no ring opacity) while idle. Amber +
-   static in muted state. */
+   static in muted state.
+
+   B3 · idle + muted now grey the ENTIRE pill so the inactive state
+   reads at a glance. Idle dot neutralises to slate-grey (the
+   channel colour would still feel "live"); muted keeps its amber
+   dot because that flags an operator action ("disarmed"), distinct
+   from a passive schedule wait. */
 .cv-channel-cluster[data-state="on"] .cv-channel-dot-ring{
   animation:cv-channel-pulse 1.6s ease-out infinite;
 }
+.cv-channel-cluster[data-state="idle"]{opacity:.55}
+.cv-channel-cluster[data-state="idle"] .cv-channel-dot{color:#94a3b8}
 .cv-channel-cluster[data-state="idle"] .cv-channel-dot-ring{opacity:0}
-.cv-channel-cluster[data-state="muted"]{opacity:.7}
+.cv-channel-cluster[data-state="muted"]{opacity:.55}
 .cv-channel-cluster[data-state="muted"] .cv-channel-dot{color:#f59e0b}
 .cv-channel-cluster[data-state="muted"] .cv-channel-dot-ring{opacity:0}
 

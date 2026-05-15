@@ -768,94 +768,48 @@ function _channelState(c){
   return 'on';  // no schedule defined → always on
 }
 
-// xq583 — duration suffix for the channel badges when the camera is
-// currently armed within its alarm schedule. Returns a short German
-// label that sits next to the icon inside the same pill:
-//   "noch 6h 12m"  → schedule has an end window, time-to-end > 0
-//   "aktiv"        → armed without a schedule window
-//   ""             → state !== 'on' → no suffix (icon-only badge)
-function _channelDurationText(c, state){
-  if (state !== 'on') return '';
+// B3 · Channel cluster label resolver. Returns the single line shown
+// inside the TG/MQTT badge — the two-row "sched · status" composition
+// is gone, the schedule window is implied by the wording instead.
+//   always-on (no schedule or 00:00↔00:00)        → "aktiv"
+//   schedule active, state === 'on'               → "aktiv bis HH:MM"
+//   schedule armed but outside window, 'idle'     → "aktiv ab HH:MM"
+//   camera disarmed (state === 'muted')           → "Kamera nicht scharf"
+// schedule_notify takes precedence over the legacy plain schedule.
+function _channelClusterLabel(c, state){
+  if (state === 'muted') return 'Kamera nicht scharf';
   const sch = (c.schedule_notify && c.schedule_notify.enabled)
     ? c.schedule_notify
     : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
-  if (!sch || !sch.from || !sch.to) return 'aktiv';
-  const now = new Date();
-  const m = now.getHours() * 60 + now.getMinutes();
-  const [th, tm] = sch.to.split(':').map(Number);
-  let mins = (th * 60 + tm) - m;
-  if (mins <= 0) mins += 24 * 60;       // schedule wraps past midnight
-  const h = Math.floor(mins / 60);
-  const min = mins % 60;
-  if (h === 0) return `noch ${min}m`;
-  if (min === 0) return `noch ${h}h`;
-  return `noch ${h}h ${min}m`;
+  // No schedule, or the always-on sentinel: a single word carries
+  // the whole meaning. Idle should never reach this branch (no
+  // schedule = no idle state) but defaulting to "aktiv" is the
+  // benign choice if it does.
+  if (!sch || !sch.from || !sch.to || sch.from === sch.to) return 'aktiv';
+  if (state === 'on')   return `aktiv bis ${sch.to}`;
+  if (state === 'idle') return `aktiv ab ${sch.from}`;
+  return 'aktiv';
 }
 
-// E3 · Channel cluster — horizontal 3-column unit. Replaces the
-// earlier expandable pill clone. Column 1: paper-plane / antenna
-// icon (22 px, currentColor). Column 2: two stacked text rows
-// (schedule window mono · status duration). Column 3: active-dot
-// SVG with a pulsing ring while state === 'on'. The cluster is
-// not a button — no click handling, no detail panel. State-driven
-// visibility comes from the data-state attribute consumed by the
-// CSS in 03-dashboard.css.
+// E3 · Channel cluster — horizontal 3-column unit. Column 1: paper-
+// plane / antenna icon (currentColor). Column 2: single-line label
+// (B3 — was a 2-row "sched · status" stack before; the new wording
+// folds schedule + state into one phrase, so the pill height halves).
+// Column 3: active-dot SVG with a pulsing ring while state === 'on'.
+// The cluster is NOT clickable. State-driven visibility comes from
+// the data-state attribute consumed by the CSS in 03-dashboard.css.
 function _channelCluster(c, kind, state){
   const headerLabel = kind === 'mqtt' ? 'MQTT-Kanal' : 'Telegram-Kanal';
   const icon = kind === 'mqtt' ? _CHROME_MQTT_SVG : _CHROME_TG_SVG;
-  const schLbl = _scheduleLabel(c) || 'Dauerhaft aktiv';
-  const statusText = state === 'on'
-    ? (_channelDurationText(c, state) || 'aktiv')
-    : state === 'idle'
-      ? _channelWaitText(c)
-      : 'Kamera nicht scharf';
+  const label = _channelClusterLabel(c, state);
   return `<div class="cv-channel-cluster cv-${kind}-cluster" data-state="${state}" aria-label="${esc(headerLabel)}">
     <span class="cv-channel-icon" aria-hidden="true">${icon}</span>
-    <div class="cv-channel-text">
-      <span class="cv-channel-sched">${esc(schLbl)}</span>
-      <span class="cv-channel-status">${esc(statusText)}</span>
-    </div>
+    <span class="cv-channel-label">${esc(label)}</span>
     <span class="cv-channel-dot" aria-hidden="true">
       <span class="cv-channel-dot-fill"></span>
       <span class="cv-channel-dot-ring"></span>
     </span>
   </div>`;
-}
-
-// Time-until-next-window helper for the channel pill's idle state.
-// "idle" means the camera is armed but currently outside its alarm
-// schedule, so we surface when the next window opens. If today's
-// from-time is still ahead → "Wartet bis HH:MM"; if it's already past
-// → "Wartet bis morgen HH:MM". Falls back to "Wartet" if no schedule
-// is configured (shouldn't happen — _channelState only returns 'idle'
-// when there IS a schedule — but defensive nonetheless).
-function _channelWaitText(c){
-  const sch = (c.schedule_notify && c.schedule_notify.enabled)
-    ? c.schedule_notify
-    : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
-  if (!sch || !sch.from) return 'Wartet';
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const [fh, fm] = sch.from.split(':').map(Number);
-  const fromMins = fh * 60 + fm;
-  return fromMins > nowMins
-    ? `Wartet bis ${sch.from}`
-    : `Wartet bis morgen ${sch.from}`;
-}
-
-// pq924 — schedule window label that sits ABOVE the TG/MQTT channel
-// badges as a subtle metadata line. Same data the bottom-left
-// schedule pill used to surface (c.schedule_notify takes precedence
-// over the legacy c.schedule when enabled). Returns '' when there
-// is no timed window to render. Explicit 00:00↔00:00 (the encoding
-// the schema uses for "always-on") collapses to '24 h aktiv'.
-function _scheduleLabel(c){
-  const sch = (c.schedule_notify && c.schedule_notify.enabled)
-    ? c.schedule_notify
-    : ((c.schedule && c.schedule.enabled) ? c.schedule : null);
-  if (!sch || !sch.from || !sch.to) return '';
-  if (sch.from === sch.to) return '24 h aktiv';
-  return `${sch.from} – ${sch.to}`;
 }
 
 

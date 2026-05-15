@@ -209,16 +209,16 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      so the pill reads as a quieter overlay on a 375 px card. */
   .cv-pill-live-wrap{font-size:10px}
   .cv-pill-live-wrap.cv-lp-open{max-width:calc(100vw - 32px)}
-  /* A3 mobile · the desktop badge already shrank to sched=10 /
-     status=11; mobile drops one more notch so two clusters can
-     coexist on a 375 px row without forcing the class-pill row
-     beneath them to wrap. Channel-row gap matches. */
+  /* B3 mobile · the cluster is now a single-line badge ("aktiv",
+     "aktiv bis HH:MM", "aktiv ab HH:MM", or "Kamera nicht scharf");
+     the legacy sched/status font-size overrides no longer apply.
+     Drop the badge font 11 → 10 on mobile so two clusters coexist
+     on a 375 px tile without crowding the class-pill row beneath. */
   .cv-channel-row{gap:8px}
   .cv-channel-cluster{padding:2px 7px 2px 5px;gap:6px}
   .cv-channel-cluster .cv-channel-icon{width:16px;height:16px}
   .cv-channel-cluster .cv-channel-dot{width:14px;height:14px;margin-left:1px}
-  .cv-channel-cluster .cv-channel-sched{font-size:9px}
-  .cv-channel-cluster .cv-channel-status{font-size:10px}
+  .cv-channel-cluster .cv-channel-label{font-size:10px}
   .cv-pill-tl{font-size:10px;padding:2px 7px}
 }
 
@@ -243,10 +243,12 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
   .cv-cog{width:32px}
   .cv-sim-btn span{display:none}
   .cv-sim-btn{padding:0;width:32px;min-width:32px;gap:0}
-  /* Telegram cluster — let the status row truncate with ellipsis
-     when the cluster shares a narrow row with MQTT on a 375 px tile. */
-  .cv-channel-cluster .cv-channel-status{
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;
+  /* Telegram cluster — let the single-line label truncate with
+     ellipsis when the cluster shares a narrow row with MQTT on a
+     375 px tile. B3: was .cv-channel-status before the two-row
+     stack collapsed into one .cv-channel-label. */
+  .cv-channel-cluster .cv-channel-label{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;
   }
 }
 

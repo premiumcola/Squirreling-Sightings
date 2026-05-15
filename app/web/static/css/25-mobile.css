@@ -229,7 +229,10 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    44 × 44 via the chrome-btn::before halo regardless of the visual
    shrink. */
 @media (max-width:768px){
-  .cv-cam-title-icon{width:26px;height:26px}
+  /* B2 · mobile title icon proportional to the desktop 38 px bump —
+     30 px gives the glyph more presence on a 375 px card without
+     pushing the name into the live pill. */
+  .cv-cam-title-icon{width:30px;height:30px}
   .cv-tl-stack .cv-name{font-size:16px;max-width:160px}
   .cv-class-cluster{gap:10px}
   .cv-class-pill,

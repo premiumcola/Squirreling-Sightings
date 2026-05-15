@@ -59,6 +59,16 @@
     0 1px 0 rgba(0,0,0,.92),
     0 -1px 0 rgba(0,0,0,.92),
     0 0 5px rgba(0,0,0,.65);
+  /* A4 · lighter-weight cousin for the channel-cluster sched/status
+     rows (10-11 px text). Same shape as the title shadow but lower
+     opacity on the soft falloff — too heavy and the small font
+     blurs; just enough to guarantee readability on a daylight
+     frame where the pill tint alone isn't sufficient. */
+  --overlay-text-shadow:
+    1px 0 0 rgba(0,0,0,.72),
+    -1px 0 0 rgba(0,0,0,.72),
+    0 1px 0 rgba(0,0,0,.72),
+    0 -1px 0 rgba(0,0,0,.72);
 }
 .cv-overlay-region[data-bg="light"]{
   --overlay-fg:        #0f0f0f;
@@ -75,6 +85,11 @@
     0 1px 0 rgba(255,255,255,.95),
     0 -1px 0 rgba(255,255,255,.95),
     0 0 5px rgba(255,255,255,.7);
+  --overlay-text-shadow:
+    1px 0 0 rgba(255,255,255,.85),
+    -1px 0 0 rgba(255,255,255,.85),
+    0 1px 0 rgba(255,255,255,.85),
+    0 -1px 0 rgba(255,255,255,.85);
 }
 /* Identity region — owns the live-pill palette. */
 .cv-overlay-region[data-region="identity"]{
@@ -524,9 +539,15 @@
 .cv-channel-sched{
   font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   font-size:10px;font-weight:600;letter-spacing:.01em;
+  /* A4 · lighter complementary outline so the sched/status rows
+     read on a daylight grass / cloudy-sky frame where the pill
+     tint alone isn't enough contrast. The shadow var flips tone
+     via the same data-bg sampler that drives --overlay-fg. */
+  text-shadow:var(--overlay-text-shadow);
 }
 .cv-channel-status{
   font-size:11px;font-weight:600;
+  text-shadow:var(--overlay-text-shadow);
 }
 /* Span-based dot — SVG with animated r-attribute didn't render
    uniformly across Firefox + iOS Safari, so the active-dot pulse
@@ -562,25 +583,30 @@
    selector. The light-mode overrides under .cv-overlay-region
    [data-bg="light"] deepen both tints so the pill still reads
    against a daylight snapshot. */
+/* A4 · pill tint deepened (.18 → .28 on dark-bg, .22 → .34 on
+   light-bg) so the badge has a clearer footprint against a bright
+   outdoor frame. Border stays subtle — the iOS rule discourages
+   thick hairlines; the new background contrast is doing the work
+   instead. */
 .cv-tg-cluster{
-  --channel-pill-bg:rgba(34,158,217,.18);
-  --channel-pill-bd:rgba(34,158,217,.45);
+  --channel-pill-bg:rgba(34,158,217,.28);
+  --channel-pill-bd:rgba(34,158,217,.5);
 }
 .cv-tg-cluster .cv-channel-icon{color:var(--tg-fg)}
 .cv-tg-cluster .cv-channel-dot{color:var(--tg-active)}
 .cv-mqtt-cluster{
-  --channel-pill-bg:rgba(192,72,191,.18);
-  --channel-pill-bd:rgba(192,72,191,.45);
+  --channel-pill-bg:rgba(192,72,191,.28);
+  --channel-pill-bd:rgba(192,72,191,.5);
 }
 .cv-mqtt-cluster .cv-channel-icon{color:var(--mqtt-fg)}
 .cv-mqtt-cluster .cv-channel-dot{color:var(--mqtt-active)}
 .cv-overlay-region[data-bg="light"] .cv-tg-cluster{
-  --channel-pill-bg:rgba(14,107,168,.22);
-  --channel-pill-bd:rgba(14,107,168,.55);
+  --channel-pill-bg:rgba(14,107,168,.34);
+  --channel-pill-bd:rgba(14,107,168,.6);
 }
 .cv-overlay-region[data-bg="light"] .cv-mqtt-cluster{
-  --channel-pill-bg:rgba(140,52,140,.22);
-  --channel-pill-bd:rgba(140,52,140,.55);
+  --channel-pill-bg:rgba(140,52,140,.34);
+  --channel-pill-bd:rgba(140,52,140,.6);
 }
 
 /* Active dot ring — pulses 1.6 s via transform:scale while

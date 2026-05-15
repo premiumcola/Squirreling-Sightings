@@ -216,7 +216,15 @@
    interactive. */
 .cv-chrome-top-left{
   position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);
-  display:flex;align-items:center;gap:4px;
+  /* J2 · align-items was `center` before — when the user tapped the
+     Live pill its detail panel (.cv-live-detail) expanded the stack
+     downward and the camera icon re-centred against the now-taller
+     stack, visibly sliding 30-40 px down with it ("Logo rutscht mit
+     runter"). flex-start pins the icon to the top of the row; the
+     stack grows downward only. The .cv-cam-title-icon margin-top
+     below nudges it to line up with .cv-name's optical baseline
+     instead of the absolute top edge. */
+  display:flex;align-items:flex-start;gap:4px;
   /* D1 · the previous `calc(50% - 110px)` reserved a 220 px middle
      strip for nothing (the timestamp strip lives at the BOTTOM, not
      top), so a 375 px card capped the title at ~78 px and chopped
@@ -273,6 +281,14 @@
 .cv-cam-title-icon{
   display:inline-flex;align-items:center;justify-content:center;
   width:42px;height:42px;flex-shrink:0;
+  /* J2 · with the parent's align-items now flex-start (so the icon
+     stays put when the Live-pill detail panel expands the stack
+     downward), the icon's top edge meets the row's top edge. A
+     small 2 px nudge brings its optical centre roughly level with
+     the cv-name's first-line baseline, restoring the previous
+     visually-aligned "icon · name" look without re-introducing the
+     center-anchored slide on pill expand. */
+  margin-top:2px;
   /* tx412 — per-camera identity colour tints the icon. The
      --cam-color custom property is set inline on this span from
      getCameraColor(cam); fallback to --overlay-fg keeps the legacy

@@ -235,8 +235,12 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      max-width drops: the parent .cv-chrome-top-left now caps the
      row to (100% - 140px), which on a 375 px card leaves ~235 px
      for icon + name — enough to read "Squirrel Town 'Nut Bar'"
-     without ellipsis. */
-  .cv-cam-title-icon{width:34px;height:34px}
+     without ellipsis.
+     J2 · margin-top trims from desktop's 2 px to 1 px because the
+     mobile name is font-size:16 px (line-height:1.1 ≈ 18 px) and
+     the icon is 34 px instead of 42 px; the original 2 px offset
+     overshoots the smaller name's optical baseline. */
+  .cv-cam-title-icon{width:34px;height:34px;margin-top:1px}
   .cv-tl-stack .cv-name{font-size:16px;max-width:100%}
   .cv-class-cluster{gap:10px}
   .cv-class-pill,

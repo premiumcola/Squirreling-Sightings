@@ -46,12 +46,35 @@
   --overlay-fg-soft:   #cbd5e1;
   --overlay-halo:      rgba(255,255,255,.55);
   --overlay-halo-blur: 1.4px;
+  /* Complementary title shadow. White text gets a heavy BLACK stack
+     so the camera name still reads on a near-white sky / daylight
+     grass frame where the same-tone halo above would wash out. A
+     1 px tight ring (4 offsets at 0-blur) sharpens the glyph edge;
+     a 5 px soft falloff catches the broader bloom. .cv-name swaps
+     filter:drop-shadow for this var so the multi-layer effect lands
+     crisply on text. */
+  --overlay-title-shadow:
+    1px 0 0 rgba(0,0,0,.92),
+    -1px 0 0 rgba(0,0,0,.92),
+    0 1px 0 rgba(0,0,0,.92),
+    0 -1px 0 rgba(0,0,0,.92),
+    0 0 5px rgba(0,0,0,.65);
 }
 .cv-overlay-region[data-bg="light"]{
   --overlay-fg:        #0f0f0f;
   --overlay-fg-soft:   #1a1a1a;
   --overlay-halo:      rgba(0,0,0,.6);
   --overlay-halo-blur: 0.8px;
+  /* Light-snapshot mirror: dark text needs a WHITE halo to survive
+     a momentarily-dark patch (shaded corner of an otherwise-bright
+     frame). Same tight ring + soft falloff shape, complementary
+     tone. */
+  --overlay-title-shadow:
+    1px 0 0 rgba(255,255,255,.95),
+    -1px 0 0 rgba(255,255,255,.95),
+    0 1px 0 rgba(255,255,255,.95),
+    0 -1px 0 rgba(255,255,255,.95),
+    0 0 5px rgba(255,255,255,.7);
 }
 /* Identity region — owns the live-pill palette. */
 .cv-overlay-region[data-region="identity"]{
@@ -216,7 +239,13 @@
 .cv-tl-stack .cv-name{
   font-size:20px;font-weight:500;line-height:1.1;
   color:var(--overlay-fg);
-  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
+  /* A2 · complementary text-shadow replaces the legacy single-halo
+     drop-shadow filter. text-shadow paints the outline glyph-by-
+     glyph so the title stays sharp on any frame regardless of where
+     the per-region brightness sampler lands; the data-bg light/dark
+     flip picks black-on-white vs white-on-black via the
+     --overlay-title-shadow var (defined alongside --overlay-fg). */
+  text-shadow:var(--overlay-title-shadow);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;
 }
 .cv-tl-stack .cv-pill-live-wrap{align-self:flex-start}

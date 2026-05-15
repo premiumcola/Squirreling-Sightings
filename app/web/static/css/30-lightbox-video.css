@@ -477,6 +477,25 @@
   font-size:11.5px;color:rgba(226,232,240,.45);
   font-style:italic;
 }
+/* K3 · "Indexierung fertig · keine Spuren bestätigt" state for a
+   motion clip whose tracks.json arrived but carried tracks=[].
+   Stacked text — primary line + a muted sub-line carrying the
+   spawn-confidence floor (e.g. "kurze Sichtungen unter 50 % werden
+   gefiltert"). The .lbtt-empty parent already sets italic + muted
+   color; .lbtt-empty-done un-italicises the primary text and the
+   sub-line gets its own slightly smaller / dimmer tone. */
+.lbtt-empty-done{
+  display:flex;flex-direction:column;gap:2px;
+  font-style:normal;
+}
+.lbtt-empty-done .lbtt-empty-text{
+  font-size:11.5px;color:rgba(226,232,240,.65);
+  letter-spacing:.01em;
+}
+.lbtt-empty-done .lbtt-empty-sub{
+  font-size:10.5px;color:rgba(226,232,240,.4);
+  letter-spacing:.01em;font-style:italic;
+}
 /* Timelapse empty-state — places the placeholder text + the inline
    Nach-Erkennung button on one row so the user sees BOTH the
    "no tracks yet" status and the affordance to fix it without

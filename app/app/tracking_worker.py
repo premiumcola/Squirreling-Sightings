@@ -40,6 +40,7 @@ from pathlib import Path
 # keeps resolving.
 from .tracker_core import (
     IOU_MATCH_THRESHOLD,
+    MISS_GRACE_DEFAULT_SECONDS,
     SAMPLE_BBOX_DELTA_PX,
     TRACK_FLOOR_SCORE,
     TRACK_MISS_WINDOWS,
@@ -78,7 +79,17 @@ log = logging.getLogger(__name__)
 #        short low-confidence dips. Sample dicts gain no new fields;
 #        the score history already lets the lightbox distinguish
 #        confirmed vs. tentative frames.
-TRACKS_SCHEMA = 3
+#   v4 — K3 · adds top-level "gates" block recording the per-camera
+#        TRACK_SPAWN_SCORE / TRACK_FLOOR_SCORE / miss-grace values
+#        the worker actually applied. The Mediathek timeline panel
+#        renders these inline when an indexed clip ends up with
+#        tracks=[] so the user sees "Indexierung fertig · keine
+#        Spuren bestätigt — kurze Sichtungen unter X % werden
+#        gefiltert" instead of the ambiguous "Keine Track-Daten —
+#        erscheinen sobald die Indexierung fertig ist" (which read
+#        as "still running" when the indexer had in fact finished
+#        and found nothing trackable).
+TRACKS_SCHEMA = 4
 
 # Detection-job timing target. A 30-second clip should finish in
 # under ~10 s on CPU; anything slower triggers a one-line WARN so the
@@ -187,10 +198,22 @@ def _detect_and_filter(detector, frame, allowed, *, floor_score: float):
 
 def _build_payload(state: _TrackerState, fps: float, frame_count: int,
                    duration_s: float, allowed, video_path: Path,
-                   storage_root: Path) -> dict:
+                   storage_root: Path,
+                   *, spawn_score: float = TRACK_SPAWN_SCORE,
+                   floor_score: float = TRACK_FLOOR_SCORE,
+                   grace_s: float = MISS_GRACE_DEFAULT_SECONDS) -> dict:
     """Assemble the tracks.json payload. The track-serialisation block
     iterates state.closed; the caller is responsible for flushing any
-    still-active tracks into closed before this runs."""
+    still-active tracks into closed before this runs.
+
+    K3 · the ``gates`` block surfaces the thresholds the worker
+    actually applied for this clip. The Mediathek timeline panel
+    renders these inline when an indexed clip ends up with tracks=[]
+    so the user sees the WHY (e.g. "kurze Sichtungen unter 50 %
+    werden gefiltert") rather than the ambiguous "Keine Track-
+    Daten — erscheinen sobald die Indexierung fertig ist". Per-
+    camera overrides are honoured via the same _resolve_track
+    _thresholds() helper the live association loop uses."""
     return {
         "schema": TRACKS_SCHEMA,
         "video_path": _safe_relpath(video_path, storage_root),
@@ -202,6 +225,18 @@ def _build_payload(state: _TrackerState, fps: float, frame_count: int,
         # write time. None = no filter (all classes accepted),
         # list = exactly these classes were considered.
         "filter_applied": sorted(allowed) if allowed is not None else None,
+        # K3 (schema=4) · gate values the worker actually applied.
+        # min_confidence is the spawn floor — detections below this
+        # can only EXTEND an existing track via IoU, never spawn a
+        # new one. raw_floor is the detector's per-frame threshold
+        # (anything below isn't even returned for association).
+        # miss_grace_s is the wall-clock window for a missed track
+        # to recover before being closed.
+        "gates": {
+            "min_confidence": round(float(spawn_score), 3),
+            "raw_floor":      round(float(floor_score), 3),
+            "miss_grace_s":   round(float(grace_s), 2),
+        },
         "tracks": [t.to_dict() for t in state.closed],
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
@@ -403,7 +438,7 @@ class TrackingWorker(threading.Thread):
         try:
             detector = self._ensure_detector()
             allowed = _resolve_object_filter(self._cam_cfg_getter, job.camera_id)
-            spawn_score, floor_score, _grace_s, iou_thresh = _resolve_track_thresholds(
+            spawn_score, floor_score, grace_s, iou_thresh = _resolve_track_thresholds(
                 self._cam_cfg_getter, job.camera_id,
             )
             state = _TrackerState()
@@ -443,6 +478,9 @@ class TrackingWorker(threading.Thread):
             payload = _build_payload(
                 state, fps, frame_count, meta["duration_s"],
                 allowed, job.video_path, self._storage_root,
+                spawn_score=spawn_score,
+                floor_score=floor_score,
+                grace_s=grace_s,
             )
             tracks_path = tracks_path_for(job.video_path)
             _write_payload_atomic(tracks_path, payload)

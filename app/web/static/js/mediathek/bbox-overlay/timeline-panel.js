@@ -214,7 +214,34 @@ export function lbRenderTrackTimeline(item){
           </button>
         </div>`);
     } else {
-      timeColParts.push(`<div class="lbtt-empty">Keine Track-Daten — erscheinen sobald die Indexierung fertig ist.</div>`);
+      // K3 · split the no-tracks branch on whether the indexer has
+      // FINISHED for this clip. A sidecar that exists but has an
+      // empty tracks array (carries built_at OR schema>=3) tells us
+      // the worker ran but found nothing trackable — different
+      // message than "the indexer hasn't started yet". The gates
+      // block (schema 4+) lets us surface the spawn-confidence floor
+      // inline so the user knows WHY a short low-confidence sighting
+      // didn't survive (e.g. "kurze Sichtungen unter 50 % werden
+      // gefiltert"). Legacy clips without the gates field gracefully
+      // fall back to a shorter message.
+      const indexerRan = !!(tracks && (tracks.built_at || tracks.schema));
+      if (indexerRan){
+        const gates = (tracks && tracks.gates) || null;
+        const minPct = gates && typeof gates.min_confidence === 'number'
+          ? Math.round(gates.min_confidence * 100)
+          : null;
+        const tail = minPct != null
+          ? `<span class="lbtt-empty-sub">kurze Sichtungen unter ${minPct} % werden gefiltert</span>`
+          : '';
+        timeColParts.push(
+          `<div class="lbtt-empty lbtt-empty-done">`
+          + `<span class="lbtt-empty-text">Indexierung fertig · keine Spuren bestätigt</span>`
+          + tail
+          + `</div>`,
+        );
+      } else {
+        timeColParts.push(`<div class="lbtt-empty">Keine Track-Daten — erscheinen sobald die Indexierung fertig ist.</div>`);
+      }
     }
   }
 

@@ -618,6 +618,17 @@ def api_test_detection(cam_id: str):
     saw_fresh_candidate = False
     retries = 0
     final_outcome = "no_frame"
+    # H1 · track the most recent validator rejection reason across the
+    # 2.5 s wait loop. When outcome ends up "corrupt" we surface this
+    # in BOTH the log line and the JSON response so the user can see
+    # WHICH gate (horizontal_anomaly_band / dead_area / pink_artifact
+    # …) flagged every candidate frame, without flipping the log
+    # level to DEBUG. This is the single-line answer that splits
+    # Stage ① (RTSP/decoder corruption — pink_artifact dominates) from
+    # a validator-too-strict regression (e.g. horizontal_anomaly_band
+    # spam on a Reolink in IR-cut transition).
+    last_validator_reason: str = ""
+    active_profile = None
     while _time.monotonic() < deadline:
         with rt.lock:
             candidate = rt.frame.copy() if rt.frame is not None else None
@@ -643,12 +654,19 @@ def api_test_detection(cam_id: str):
         corrupt_strip = has_corrupt_strip(candidate)
         if not ok_valid or corrupt_strip:
             final_outcome = "corrupt"
-            # Log the precise rejection reason at DEBUG so an operator
-            # can grep "[test-detection]" to see why a particular cam
-            # repeatedly fails the validator — without flooding INFO.
-            log.debug(
-                "[test-detection] %s rejected candidate · valid=%s reason=%r strip=%s",
-                cam_id, ok_valid, _vreason, corrupt_strip,
+            last_validator_reason = (
+                _vreason if not ok_valid
+                else "has_corrupt_strip"
+            )
+            # Promote to INFO when running — DEBUG hid the WHY-was-it-
+            # rejected detail behind a log-level the operator wouldn't
+            # touch mid-test. INFO is the minimum that lets the diag
+            # panel + docker logs answer "Stage 1 corruption or
+            # validator too strict?" in one read.
+            log.info(
+                "[test-detection] %s rejected candidate · valid=%s "
+                "reason=%r strip=%s",
+                cam_id, ok_valid, last_validator_reason, corrupt_strip,
             )
             _time.sleep(0.05)
             continue
@@ -677,17 +695,31 @@ def api_test_detection(cam_id: str):
         # WARNING: no usable frame is a stream-side regression worth
         # the higher log level. Same key set as the success log line
         # below so an operator's grep matches both shapes.
+        # H1 · last_validator_reason carries the gate that flagged the
+        # most-recent rejected frame — single source for the stage-1
+        # diagnostic. Empty string on "no_frame" / "stale" branches
+        # because no frame ever reached the validator in those cases.
         log.warning(
             "[test-detection] cam=%s outcome=%s waited=%.2fs retries=%d "
             "frame_age_ms=%d frame_src=- raw=0 pass=0 belowthresh=0 "
-            "filtered=0 inference_ms=0 top_raw=[]",
+            "filtered=0 inference_ms=0 top_raw=[] "
+            "validator_reason=%r profile=%s",
             cam_id, code, waited_s, retries, frame_age_ms_attempt,
+            last_validator_reason or "-",
+            (active_profile.name if active_profile else "-"),
         )
         return jsonify({
             "ok":           False,
             "error":        msg,
             "code":         code,
             "frame_age_ms": frame_age_ms_attempt,
+            # H1 · expose the validator reason so the in-modal Diagnose
+            # panel can render "frames rejected by horizontal_anomaly
+            # _band" instead of just "corrupt frames".
+            "validator_reason": last_validator_reason or None,
+            "validator_profile": (
+                active_profile.name if active_profile else None
+            ),
         }), 503
     frame_age_ms = int((_time.time() - frame_ts_accepted) * 1000)
     # rt.frame is written by camera_runtime/_main_loop on every successful
@@ -924,14 +956,23 @@ def api_test_detection(cam_id: str):
         f"({lab},{pct}%)" for lab, pct in top_raw_pairs
     ) + "]"
     log_fn = log.info if (final_outcome == "ok" and len(raw) > 0) else log.warning
+    # H1 · object_filter + global_floor surfaced in the log so the
+    # Stage 3 case (raw>0 but filter eats everything → pass=0
+    # filtered=raw) is identifiable from the same line. The filter
+    # is a set; format as a sorted list for grep stability. An empty
+    # filter prints as "[]" and means "all classes accepted".
+    _obj_filter_str = "[" + ",".join(sorted(obj_filter)) + "]"
     log_fn(
         "[test-detection] cam=%s outcome=%s waited=%.2fs retries=%d "
         "frame_age_ms=%d frame_src=%s raw=%d pass=%d belowthresh=%d "
-        "filtered=%d inference_ms=%d top_raw=%s",
+        "filtered=%d inference_ms=%d top_raw=%s "
+        "obj_filter=%s min_score=%.2f profile=%s",
         cam_id, final_outcome, waited_s, retries,
         frame_age_ms, frame_src_label,
         len(raw), len(pass_dets), belowthresh_n, filtered_n,
         inference_ms, top_raw_str,
+        _obj_filter_str, float(global_floor),
+        (active_profile.name if active_profile else "-"),
     )
     # ── Decoder-backlog heuristic ────────────────────────────────────
     # The runtime tracks an EMA of the wall-clock interval between
@@ -977,6 +1018,20 @@ def api_test_detection(cam_id: str):
             "global":    round(float(global_floor), 3),
             "per_class": dict(per_class) if per_class else {},
         },
+        # H1 · Stage 3 visibility — surface the object_filter the
+        # endpoint actually applies so the in-modal Diagnose panel can
+        # render "Filter aktiv: [person, cat]" or "(keine Klassen-
+        # filter — alle passieren)" and the user spots a stale empty-
+        # filter regression without DevTools.
+        "object_filter": sorted(obj_filter) if obj_filter else [],
+        # H1 · validator profile + (when validation rejected during
+        # the wait loop) the last rejection reason. On the success
+        # path this is empty; on a corrupt-outcome 503 it carries
+        # the single most-informative diagnostic.
+        "validator_profile": (
+            active_profile.name if active_profile else None
+        ),
+        "validator_reason": last_validator_reason or None,
     }
     return jsonify({
         "ok":             True,

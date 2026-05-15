@@ -662,6 +662,19 @@ function _renderDiagPanel(diag){
         return `<span class="mv-ld-diag-top-item">${esc(String(t.label))} ${pct}%</span>`;
       }).join('')
     : `<span class="mv-ld-diag-top-empty">Coral lieferte keine Detektion für diesen Frame</span>`;
+  // H1 · object_filter + validator_profile surfaced as two extra rows.
+  // Stage 3 (filter eats everything) is now one glance away in the
+  // panel — an empty filter renders as "(alle Klassen)" so the user
+  // can tell the difference between "no filter configured" and "all
+  // dets filtered out" (where the gate counts will show pass=0
+  // filtered=N).
+  const objFilter = Array.isArray(diag.object_filter) ? diag.object_filter : [];
+  const objFilterStr = objFilter.length
+    ? objFilter.map(c => esc(String(c))).join(' · ')
+    : '(alle Klassen)';
+  const profStr = diag.validator_profile
+    ? esc(String(diag.validator_profile))
+    : '—';
   body.innerHTML = `
     <div class="mv-ld-diag-row">
       <span class="mv-ld-diag-key">Quelle</span>
@@ -681,6 +694,14 @@ function _renderDiagPanel(diag){
     <div class="mv-ld-diag-row mv-ld-diag-top">
       <span class="mv-ld-diag-key">Top 3 raw</span>
       <div class="mv-ld-diag-top-list">${topRows}</div>
+    </div>
+    <div class="mv-ld-diag-row">
+      <span class="mv-ld-diag-key">Filter</span>
+      <span class="mv-ld-diag-val">${objFilterStr}</span>
+    </div>
+    <div class="mv-ld-diag-row">
+      <span class="mv-ld-diag-key">Profil</span>
+      <span class="mv-ld-diag-val">${profStr}</span>
     </div>
     <div class="mv-ld-diag-row">
       <span class="mv-ld-diag-key">Schwellen</span>

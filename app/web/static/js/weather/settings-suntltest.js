@@ -23,29 +23,60 @@ import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { showToast } from "../core/toast.js";
 
+// G1 · System-wide capture-pipeline constants. Match
+//   weather_service/_sun_tl.py (target_fps fixed at 15) and
+//   settings/migrations.py (interval_s floor 8 s).
+// The configurator below derives capture-budget + max video-length
+// chips from these so an invalid (window, target) combination
+// never makes it into the start payload.
+const FPS = 15;
+const INTERVAL_S = 8;
+
+// Window options spanning smoke tests (5/10 min) through the
+// production-equivalent 75 min lock. Internal seconds map below.
 const _DURATIONS = [
-  { s: 60,   label: "1 min" },
-  { s: 120,  label: "2 min" },
   { s: 300,  label: "5 min" },
+  { s: 600,  label: "10 min" },
+  { s: 900,  label: "15 min" },
+  { s: 1200, label: "20 min" },
   { s: 1800, label: "30 min" },
-  { s: 2400, label: "40 min" },
+  { s: 2700, label: "45 min" },
+  { s: 3600, label: "1 h" },
+  { s: 4500, label: "75 min" },
 ];
 
-// Final MP4 length picker — mirrors the regular weather sun-timelapse
-// length options so the test reproduces the same encode behaviour.
+// Final MP4 length picker — chips greyed out when the window doesn't
+// produce enough frames for the chosen target × 15 fps.
 const _TARGET_LENGTHS = [
+  { s: 5,  label: "5 s" },
   { s: 10, label: "10 s" },
   { s: 15, label: "15 s" },
   { s: 20, label: "20 s" },
   { s: 30, label: "30 s" },
+  { s: 37, label: "37 s" },
 ];
+
+// Pure helpers — single source of truth for the math the backend
+// will run. Keep these aligned with _sun_tl.py · _run_sun_capture
+// _inner if either side ever changes.
+function _captureBudget(windowS){
+  return Math.floor(windowS / INTERVAL_S);
+}
+function _maxTargetS(windowS){
+  return Math.floor(_captureBudget(windowS) / FPS);
+}
+function _isTargetValid(windowS, targetS){
+  return targetS <= _maxTargetS(windowS);
+}
 
 // Local UI state — survives re-renders within a single tab visit.
 let _selCam = null;
 let _selPhase = "sunset";
-let _selDuration = 120;
-let _selTargetLength = 20;
+let _selDuration = 1200;
+let _selTargetLength = 10;
 let _pollTimer = null;
+let _lastEventTs = 0;
+let _eventCache = [];
 
 function _weatherCams(){
   return (state.cameras || []).filter(c => c && (c.weather && c.weather.enabled));
@@ -58,9 +89,14 @@ function _renderHeader(cams){
   const durChips = _DURATIONS.map(d =>
     `<button type="button" class="suntltest-chip${d.s === _selDuration ? ' is-active' : ''}" data-suntltest-dur="${d.s}">${d.label}</button>`
   ).join('');
-  const tgtChips = _TARGET_LENGTHS.map(d =>
-    `<button type="button" class="suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}" data-suntltest-tgt="${d.s}">${d.label}</button>`
-  ).join('');
+  // G1 · target chips that exceed the capture budget for the current
+  // window get the disabled state. Visual: opacity .35 + cursor not-
+  // allowed. Click is blocked in the form binder below.
+  const tgtChips = _TARGET_LENGTHS.map(d => {
+    const valid = _isTargetValid(_selDuration, d.s);
+    const cls = `suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}${valid ? '' : ' is-disabled'}`;
+    return `<button type="button" class="${cls}" data-suntltest-tgt="${d.s}"${valid ? '' : ' aria-disabled="true"'}>${d.label}</button>`;
+  }).join('');
   return `
     <div class="suntltest-form">
       <div class="suntltest-form-row">
@@ -80,8 +116,9 @@ function _renderHeader(cams){
       </div>
       <div class="suntltest-form-row">
         <span class="suntltest-lbl">Video-Länge</span>
-        <div class="suntltest-dur-row" role="radiogroup" aria-label="Video-Länge">${tgtChips}</div>
+        <div class="suntltest-dur-row" id="suntltestTgtRow" role="radiogroup" aria-label="Video-Länge">${tgtChips}</div>
       </div>
+      <div id="suntltestMath" class="suntltest-math">${_renderMathReadout(cams)}</div>
       <div class="suntltest-form-row suntltest-form-row--start">
         <button type="button" id="suntltestStart" class="btn-action accent suntltest-start">▶ Jetzt starten</button>
         <button type="button" id="suntltestCancel" class="btn-action danger suntltest-cancel" hidden>⏹ Abbrechen</button>
@@ -93,33 +130,118 @@ function _renderHeader(cams){
   `;
 }
 
+// G1 · live math readout. Recomputed on every selector change. Shows
+// the user EXACTLY what the backend will do with the chosen tuple so
+// invalid combinations (target × 15 fps > budget) are obvious before
+// the start. The check-/warn-icon at the bottom uses ✓ vs ⚠ to give
+// a glanceable signal even when the user isn't reading the numbers.
+function _renderMathReadout(cams){
+  const cam = (cams || []).find(c => c.id === _selCam) || {};
+  const camName = cam.name || _selCam || '—';
+  const windowS = _selDuration;
+  const windowLabel = (_DURATIONS.find(d => d.s === windowS) || {}).label || `${windowS} s`;
+  const phaseLabel = _selPhase === 'sunrise' ? 'Sonnenaufgang' : 'Sonnenuntergang';
+  const budget = _captureBudget(windowS);
+  const targetS = _selTargetLength;
+  const targetFrames = targetS * FPS;
+  const effectiveRate = budget >= targetFrames
+    ? FPS
+    : (budget / Math.max(1, targetS));
+  const valid = _isTargetValid(windowS, targetS);
+  const rateStr = valid
+    ? `<span class="suntltest-math-ok">${effectiveRate.toFixed(1)} fps ✓</span>`
+    : `<span class="suntltest-math-warn">${effectiveRate.toFixed(1)} fps ⚠ (Capture-Budget reicht nicht für ${FPS} fps — wähle kürzeres Video oder längeres Window)</span>`;
+  return `
+    <div class="suntltest-math-head">► Du startest:</div>
+    <dl class="suntltest-math-rows">
+      <dt>Kamera</dt><dd>${esc(camName)}</dd>
+      <dt>Phase</dt><dd>${phaseLabel}</dd>
+      <dt>Window</dt><dd>${esc(windowLabel)} <span class="suntltest-math-mute">(${windowS} s)</span></dd>
+      <dt>Intervall</dt><dd>${INTERVAL_S} s <span class="suntltest-math-mute">(fest)</span></dd>
+      <dt>Capture-Budget</dt><dd>${budget} Frames</dd>
+      <dt>Video-Länge</dt><dd>${targetS} s · ${FPS} fps = ${targetFrames} Frames</dd>
+      <dt>echte Rate</dt><dd>${rateStr}</dd>
+    </dl>`;
+}
+
 function _bindForm(root){
   byId('suntltestCam')?.addEventListener('change', (e) => {
     _selCam = e.target.value || null;
+    _refreshConfigurator(root);
   });
   root.querySelectorAll('[data-suntltest-phase]').forEach(btn => {
     btn.addEventListener('click', () => {
       _selPhase = btn.dataset.suntltestPhase;
       root.querySelectorAll('[data-suntltest-phase]').forEach(b =>
         b.classList.toggle('is-active', b.dataset.suntltestPhase === _selPhase));
+      _refreshConfigurator(root);
     });
   });
   root.querySelectorAll('[data-suntltest-dur]').forEach(btn => {
     btn.addEventListener('click', () => {
-      _selDuration = parseInt(btn.dataset.suntltestDur, 10) || 120;
+      _selDuration = parseInt(btn.dataset.suntltestDur, 10) || 1200;
       root.querySelectorAll('[data-suntltest-dur]').forEach(b =>
         b.classList.toggle('is-active', parseInt(b.dataset.suntltestDur, 10) === _selDuration));
+      // G1 · when the window shrinks below the current target's
+      // capture budget, snap the target down to the highest valid
+      // chip so the user never lands on a disabled-chip selection.
+      if (!_isTargetValid(_selDuration, _selTargetLength)){
+        const maxTgt = _maxTargetS(_selDuration);
+        const candidates = _TARGET_LENGTHS.filter(t => t.s <= maxTgt);
+        _selTargetLength = candidates.length
+          ? candidates[candidates.length - 1].s
+          : _TARGET_LENGTHS[0].s;
+      }
+      _refreshConfigurator(root);
     });
   });
   root.querySelectorAll('[data-suntltest-tgt]').forEach(btn => {
     btn.addEventListener('click', () => {
-      _selTargetLength = parseInt(btn.dataset.suntltestTgt, 10) || 20;
+      const next = parseInt(btn.dataset.suntltestTgt, 10) || 10;
+      // Block clicks on disabled chips so the start payload can't
+      // carry an over-budget target_duration_s. Visual feedback
+      // already comes from the .is-disabled style.
+      if (!_isTargetValid(_selDuration, next)) return;
+      _selTargetLength = next;
       root.querySelectorAll('[data-suntltest-tgt]').forEach(b =>
         b.classList.toggle('is-active', parseInt(b.dataset.suntltestTgt, 10) === _selTargetLength));
+      _refreshConfigurator(root);
     });
   });
   byId('suntltestStart')?.addEventListener('click', _startTest);
   byId('suntltestCancel')?.addEventListener('click', _cancelTest);
+}
+
+// G1 · re-render chip disabled-state + math readout + start-button
+// enablement whenever a selector changes. Called from each handler
+// above instead of a full _renderHeader so the user's focus / cursor
+// position inside the form is preserved.
+function _refreshConfigurator(root){
+  const cams = _weatherCams();
+  // Re-paint target chips (some may have flipped valid/invalid).
+  const tgtRow = byId('suntltestTgtRow');
+  if (tgtRow){
+    tgtRow.innerHTML = _TARGET_LENGTHS.map(d => {
+      const valid = _isTargetValid(_selDuration, d.s);
+      const cls = `suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}${valid ? '' : ' is-disabled'}`;
+      return `<button type="button" class="${cls}" data-suntltest-tgt="${d.s}"${valid ? '' : ' aria-disabled="true"'}>${d.label}</button>`;
+    }).join('');
+    // Re-bind the freshly-rendered chips.
+    tgtRow.querySelectorAll('[data-suntltest-tgt]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = parseInt(btn.dataset.suntltestTgt, 10) || 10;
+        if (!_isTargetValid(_selDuration, next)) return;
+        _selTargetLength = next;
+        _refreshConfigurator(root);
+      });
+    });
+  }
+  // Re-paint the math readout block.
+  const mathHost = byId('suntltestMath');
+  if (mathHost) mathHost.innerHTML = _renderMathReadout(cams);
+  // Start button only enabled when the tuple is mathematically valid.
+  const startBtn = byId('suntltestStart');
+  if (startBtn) startBtn.disabled = !_isTargetValid(_selDuration, _selTargetLength) || !_selCam;
 }
 
 // Centralised UI toggle — hide the start button while a test is in
@@ -485,6 +607,8 @@ export function renderSunTlTestPanel(){
   if (!cams.find(c => c.id === _selCam)) _selCam = cams[0].id;
   root.innerHTML = _renderHeader(cams);
   _bindForm(root);
+  // G1 · initial start-button enabled-state + math readout sync.
+  _refreshConfigurator(root);
   // Surface any prior session immediately on tab open so the user
   // doesn't lose state if they switch tabs mid-run.
   fetch('/api/weather/sun-tl/test/status').then(r => r.json()).then(d => {

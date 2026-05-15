@@ -166,6 +166,57 @@
 }
 .suntltest-chip:hover{background:rgba(255,255,255,0.10)}
 .suntltest-chip.is-active{background:#7faec9;color:#0b1320}
+/* G1 · disabled chip — the chosen target × 15 fps exceeds the
+   capture budget for the current window. Dim + not-allowed cursor;
+   the JS handler short-circuits the click, this is purely visual. */
+.suntltest-chip.is-disabled{opacity:.35;cursor:not-allowed}
+.suntltest-chip.is-disabled:hover{background:rgba(255,255,255,0.06)}
+
+/* G1 · math readout block. Sits between the chip rows and the start
+   button. Two-column dl for the rows, monospace numbers on the
+   value side so the layout doesn't shift as the user changes the
+   target. ✓ / ⚠ accent comes from .suntltest-math-ok /
+   .suntltest-math-warn. */
+.suntltest-math{
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(127,174,201,0.06);
+  font-size:12.5px;
+  line-height:1.45;
+  color:rgba(226,232,240,.85);
+}
+.suntltest-math-head{
+  font-weight:700;
+  color:#cbd5e1;
+  margin-bottom:6px;
+  letter-spacing:.01em;
+}
+.suntltest-math-rows{
+  display:grid;
+  grid-template-columns:140px 1fr;
+  gap:4px 12px;
+  margin:0;
+}
+.suntltest-math-rows dt{
+  color:rgba(226,232,240,.55);
+  font-weight:600;
+  letter-spacing:.02em;
+}
+.suntltest-math-rows dd{
+  margin:0;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  color:#e2e8f0;
+}
+.suntltest-math-mute{color:rgba(226,232,240,.45);font-family:inherit}
+.suntltest-math-ok{color:#86efac;font-weight:700}
+.suntltest-math-warn{color:#fbbf24;font-weight:700}
+@media (max-width:540px){
+  /* Mobile · tighter column gap, smaller key column so the wider
+     warn-line wraps cleanly instead of overflowing the panel. */
+  .suntltest-math{font-size:12px;padding:9px 10px}
+  .suntltest-math-rows{grid-template-columns:108px 1fr;gap:3px 8px}
+}
 .suntltest-start{min-height:48px;padding:10px 22px;font-size:15px;border-radius:14px}
 .suntltest-start:disabled{opacity:.55;cursor:not-allowed}
 /* Abbrechen — destructive action, red background tint (no border per

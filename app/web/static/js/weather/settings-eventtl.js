@@ -3,6 +3,16 @@
 // thunder/front-passing/storm-front trigger picker rendered inside the
 // Sun-TL camera panel). Uses delegated document listeners so the inline
 // rendering in settings-suntl.js never has to wire handlers per cell.
+//
+// E4 audit (2026-05-16) — this panel exposes ONLY the master enabled
+// toggle, the per-trigger checkboxes, and a window_min slider
+// (30–120 min). interval_s + fps are backend-only fields with no UI
+// surface, so the 8 s / 15 fps tightening landed via
+// EVENT_TL_DEFAULTS + migrate_timelapse_intervals (E1) and nothing
+// else in this module needs to change. window_min bounds remain
+// valid: at 30 min × 8 s × 15 fps the realised video is 15 s, at
+// 120 min it's 60 s — both inside the realistic-clip envelope. No
+// JS changes shipped under E4.
 import { esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { WEATHER_TYPES } from "../core/weather-types.js";

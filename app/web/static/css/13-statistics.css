@@ -179,20 +179,58 @@
 .stat-dc-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:0;color:var(--muted);font-size:12px;font-weight:600;padding:0 11px;height:44px;min-width:44px;border-radius:22px;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s,opacity .15s;opacity:.55}
 .stat-dc-pill:hover{background:rgba(255,255,255,.08);opacity:.9}
 .stat-dc-pill.is-active{background:color-mix(in srgb,var(--pill-c, #9aa5b3) 22%,transparent);color:var(--text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--pill-c, #9aa5b3) 50%,transparent);opacity:1}
-.stat-dc-pill-dot{display:inline-block;width:8px;height:8px;border-radius:3px;flex-shrink:0}
+/* D4 · .stat-dc-pill-dot was a redundant 8 px coloured chip leading
+   the icon; --pill-c already encodes identity through the pill's
+   border + background tint. Markup is gone; this empty rule kept
+   for grep-friendliness in case a future tweak wants the slot back. */
+.stat-dc-pill-dot{display:none}
 .stat-dc-pill-ico{display:inline-flex;align-items:center;font-size:14px;line-height:1;flex-shrink:0}
 .stat-dc-pill-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
 
+/* D4 · sliders + coverage hoisted out of .stat-dc-card into a
+   free-standing toolbar below the card. No background, no border-
+   radius — just the two controls riding on the page background. */
+.stat-dc-toolbar{
+  display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;
+  margin-top:14px;
+  padding:0;
+  background:transparent;
+}
+.stat-dc-toolbar .stat-dc-sliders{flex:1 1 320px;min-width:0}
+.stat-dc-toolbar .stat-dc-coverage{margin-left:auto;align-self:center}
 .stat-dc-sliders{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .stat-dc-slider{display:flex;flex-direction:column;gap:6px}
 .stat-dc-slider-lbl{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;gap:8px}
 .stat-dc-slider-lbl b{color:var(--text);font-weight:800;letter-spacing:0;text-transform:none}
-/* Slider visuals (track + thumb + focus ring) now ship as a global
-   rule in 01-base.css so every input[type=range] in the app reads
-   the same — no per-section duplication. Width:100% inside the
-   stat-dc-slider column ensures the slider fills the available
-   space, matching the desktop layout. */
-.stat-dc-slider input[type=range]{width:100%}
+/* Slider visuals — the global rule in 01-base.css paints the thumb
+   in var(--text) (already neutral) but the :focus-visible state
+   adds a 2 px var(--accent) outline that on iOS Safari reads as a
+   solid blue halo around the handle. D4 overrides the thumb +
+   focus rules for these specific sliders so they match the
+   neutral #cbd5e1 handle the timeline range slider already uses
+   (legacy rule in 04-coral-1.css). */
+.stat-dc-slider input[type=range]{
+  width:100%;
+  accent-color:transparent;
+}
+.stat-dc-slider input[type=range]::-webkit-slider-thumb{
+  background:#cbd5e1;
+  border:2px solid #1f1f24;
+  box-shadow:0 1px 3px rgba(0,0,0,.45);
+}
+.stat-dc-slider input[type=range]::-moz-range-thumb{
+  background:#cbd5e1;
+  border:2px solid #1f1f24;
+  box-shadow:0 1px 3px rgba(0,0,0,.45);
+}
+.stat-dc-slider input[type=range]:focus-visible::-webkit-slider-thumb{
+  outline:2px solid rgba(203,213,225,.6);
+  outline-offset:2px;
+}
+.stat-dc-slider input[type=range]:focus-visible::-moz-range-thumb{
+  outline:2px solid rgba(203,213,225,.6);
+  outline-offset:2px;
+}
 
 .stat-dc-coverage{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center;align-self:flex-end;font-size:12px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.04);padding:7px 12px;border-radius:11px;margin-left:auto;min-height:34px;transition:background .2s,color .2s,box-shadow .2s}
 .stat-dc-coverage.is-amber{background:rgba(245,158,11,.16);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(245,158,11,.30)}

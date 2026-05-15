@@ -140,6 +140,12 @@ function _mergeData(data, replace) {
 function _renderShell() {
   const host = byId('statDetCloudBlock');
   if (!host) return;
+  // D4 · sliders moved OUT of .stat-dc-card so they sit on the page
+  // background, no card chrome, no border-radius pill — same shape
+  // as the Zeit/Klasse chooser at the top. The two sliders + the
+  // coverage stat now ride in a free-standing .stat-dc-toolbar
+  // BELOW the card; handlers bind via byId so the move doesn't
+  // break the existing live-label/refresh wiring in _wireHandlers.
   host.innerHTML = `
     <div class="stat-card stat-dc-card" style="margin-top:12px">
       <div class="stat-dc-hdr">
@@ -158,21 +164,23 @@ function _renderShell() {
       <div class="stat-dc-filters">
         <div class="stat-dc-pillrow" id="dcCamPills"></div>
         <div class="stat-dc-pillrow" id="dcClsPills"></div>
-        <div class="stat-dc-sliders">
-          <label class="stat-dc-slider">
-            <span class="stat-dc-slider-lbl">Min. Konfidenz <b id="dcMinScoreLbl">0 %</b></span>
-            <input type="range" id="dcMinScore" min="0" max="100" step="1" value="0" aria-label="Mindest-Konfidenz">
-          </label>
-          <label class="stat-dc-slider">
-            <span class="stat-dc-slider-lbl">Zeitraum <b id="dcHoursLbl">letzte 12 h</b></span>
-            <input type="range" id="dcHours" min="1" max="720" step="1" value="12" aria-label="Zeitraum">
-          </label>
-        </div>
-        <div class="stat-dc-coverage" id="dcCoverage" aria-live="polite"></div>
       </div>
       <div class="stat-dc-chart-wrap">
         <div class="stat-dc-chart" id="dcChart"></div>
       </div>
+    </div>
+    <div class="stat-dc-toolbar">
+      <div class="stat-dc-sliders">
+        <label class="stat-dc-slider">
+          <span class="stat-dc-slider-lbl">Min. Konfidenz <b id="dcMinScoreLbl">0 %</b></span>
+          <input type="range" id="dcMinScore" min="0" max="100" step="1" value="0" aria-label="Mindest-Konfidenz">
+        </label>
+        <label class="stat-dc-slider">
+          <span class="stat-dc-slider-lbl">Zeitraum <b id="dcHoursLbl">letzte 12 h</b></span>
+          <input type="range" id="dcHours" min="1" max="720" step="1" value="12" aria-label="Zeitraum">
+        </label>
+      </div>
+      <div class="stat-dc-coverage" id="dcCoverage" aria-live="polite"></div>
     </div>
   `;
   _renderPills();
@@ -192,8 +200,10 @@ function _renderPills() {
     const color = getCameraColor(nm);
     const active = !_dc.filter.cameras.size || _dc.filter.cameras.has(id);
     const ico = getCameraIcon(nm);
+    // D4 · the leading .stat-dc-pill-dot regression got reverted —
+    // the pill's own --pill-c tint already encodes identity, the
+    // redundant 8 px dot was visual noise the user removed earlier.
     return `<button type="button" class="stat-dc-pill stat-dc-pill--cam${active ? ' is-active' : ''}" data-cam="${esc(id)}" title="${esc(nm)}" style="--pill-c:${color}">
-      <span class="stat-dc-pill-dot" style="background:${color}"></span>
       <span class="stat-dc-pill-ico">${ico}</span>
       <span class="stat-dc-pill-text">${esc(nm)}</span>
     </button>`;
@@ -205,7 +215,6 @@ function _renderPills() {
     const icon  = OBJ_SVG[lbl] ? objIconSvg(lbl, 14) : '';
     const name  = OBJ_LABEL[lbl] || lbl;
     return `<button type="button" class="stat-dc-pill stat-dc-pill--cls${active ? ' is-active' : ''}" data-cls="${esc(lbl)}" title="${esc(name)}" style="--pill-c:${color}">
-      <span class="stat-dc-pill-dot" style="background:${color}"></span>
       ${icon ? `<span class="stat-dc-pill-ico">${icon}</span>` : ''}
       <span class="stat-dc-pill-text">${esc(name)}</span>
     </button>`;

@@ -29,12 +29,19 @@ const _LS_KEY = 'tamspy.overlayToggles.v1';
 // Master toggle metadata — every callsite picks from this dict via
 // the ``available`` list. Single source of truth for label + German
 // description across contexts.
+//
+// C1 · defaults rebalanced: detection layers (bboxes/trails) stay ON
+// because the operator opens the lightbox / sim modal explicitly TO
+// see them, but surveillance layers (zones/masks) flip OFF so a
+// preview frame isn't cluttered with green/red polygons every time
+// the modal opens. The user can flip them on per-context; the choice
+// is persisted under localStorage[_LS_KEY][contextKey].
 const _TOGGLES = {
   bboxes:    { label: 'Bboxes',    default: true,
                desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
   trails:    { label: 'Trails',    default: true,
                desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
-  zones:     { label: 'Zonen',     default: true,
+  zones:     { label: 'Zonen',     default: false,
                desc: 'Erkennungs-Zonen (grün) anzeigen' },
   masks:     { label: 'Masken',    default: false,
                desc: 'Ausschluss-Masken (rot) anzeigen' },

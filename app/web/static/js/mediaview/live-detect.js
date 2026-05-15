@@ -65,7 +65,13 @@ const _DEBUG_TOGGLE = false;
 let _session = null;
 let _traceLines = [];
 let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
-let _overlays = { bboxes: true, trails: true, zones: true, masks: true };
+// C1 · sim modal opens with detection layers ON, surveillance layers
+// OFF — the operator wants to see what Coral is finding, not have
+// the preview cluttered with green zone polygons and red mask fills
+// every time they enter the modal. Mirrors the same defaults in the
+// shared overlay-toggles.js _TOGGLES dict so the two callsites stay
+// consistent.
+let _overlays = { bboxes: true, trails: true, zones: false, masks: false };
 let _selectedLabel = null;  // for detail-pill pin
 
 export function openLiveDetect({ camId, cameraName }){
@@ -81,7 +87,7 @@ export function openLiveDetect({ camId, cameraName }){
   _traceLines = [];
   _detBuffer = [];
   _selectedLabel = null;
-  _overlays = { bboxes: true, trails: true, zones: true, masks: true };
+  _overlays = { bboxes: true, trails: true, zones: false, masks: false };
   _setupLiveChrome(camId, cameraName);
   _mountPanels();
   _tick();

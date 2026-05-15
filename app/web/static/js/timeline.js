@@ -116,9 +116,15 @@ export function renderTimeline() {
     // already #a8a8a8 (generic).
     const camColor = getCameraColor(cam.id ? cam : camName);
     html += `<div class="tl-cam-block${ti > 0 ? ' tl-cam-block--notfirst' : ''}">`;
-    const sbCls = STAT_MEDIA_DRILLDOWN ? 'tl-cam-sidebox stat-drillable' : 'tl-cam-sidebox';
+    // D3 · the per-camera column of "icon + name in a tinted card to
+    // the LEFT of the lanes" turned the timeline into a card-in-card
+    // sandwich on iPhone. New layout puts the cam identity on its own
+    // heading row ABOVE the lanes, no background / no border-radius,
+    // and lets the lanes take the full available width. STAT_MEDIA
+    // _DRILLDOWN click semantics still ride on the heading.
+    const sbCls = STAT_MEDIA_DRILLDOWN ? 'tl-cam-head stat-drillable' : 'tl-cam-head';
     const sbClick = STAT_MEDIA_DRILLDOWN ? `onclick="_statOpenMedia('${esc(tr.camera_id)}','')"` : '';
-    html += `<div class="${sbCls}" style="--cam-color:${camColor}" ${sbClick}><div class="tl-cam-icon">${camIcon}</div><div class="tl-cam-name">${esc(camName)}</div></div>`;
+    html += `<div class="${sbCls}" style="--cam-color:${camColor}" ${sbClick}><span class="tl-cam-head-icon">${camIcon}</span><span class="tl-cam-head-name">${esc(camName)}</span></div>`;
     html += `<div class="tl-lanes-wrap">`;
     for (let k = 1; k < 5; k++) html += `<div class="tl-vgrid" style="left:calc(var(--tl-label-w) + (100% - var(--tl-label-w))*${k}/5)"></div>`;
     lanes.forEach(({ label, groups }) => {

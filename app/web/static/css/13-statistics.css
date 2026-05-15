@@ -88,6 +88,71 @@
 .stat-drillable:hover{background:rgba(255,255,255,.04)}
 .stat-drillable:active{opacity:.7}
 
+/* D3 · flatter timeline hierarchy. The "5 Tage" / 12 h range
+   chooser used to ride in a tinted pill (.tl-range-wrap with
+   background #1f1f24 + padding + radius — legacy rule in
+   04-coral-1.css); strip those so it reads as a plain inline
+   control beside the Timeline title — same shape as the Zeit /
+   Klasse / Live chooser above the Erkennungswolke. */
+.stat-tl-card-hdr .tl-range-wrap{
+  background:transparent;
+  padding:0;
+  border-radius:0;
+  gap:8px;
+}
+
+/* D3 · each camera block is vertical: heading row (icon + name)
+   on top, lanes below. Drops the .tl-cam-sidebox column + the
+   .tl-lanes-wrap background tint, so the rendered tree is
+   "section heading + outlined sub-items" rather than "card-in-
+   card-in-card". STAT_MEDIA_DRILLDOWN click target hangs on the
+   heading row. */
+.tl-cam-block{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:6px;
+}
+.tl-cam-block--notfirst{margin-top:14px}
+.tl-cam-head{
+  display:inline-flex;align-items:center;gap:10px;
+  background:transparent;
+  padding:2px 0;
+  border-radius:6px;
+  color:var(--text);
+  align-self:flex-start;
+  max-width:100%;
+  min-height:24px;
+}
+.tl-cam-head.stat-drillable{cursor:pointer;padding:2px 6px;margin-left:-6px}
+.tl-cam-head.stat-drillable:hover{background:rgba(255,255,255,.045)}
+.tl-cam-head-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:20px;flex-shrink:0;
+  color:var(--cam-color, #a8a8a8);
+}
+.tl-cam-head-icon svg{width:100%;height:100%;display:block}
+.tl-cam-head-name{
+  font-size:14px;font-weight:700;color:#e2e8f0;
+  line-height:1.25;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* Drop the .tl-lanes-wrap background tint that came from the legacy
+   monolithic CSS. The heading already separates the block visually;
+   the tint just added another shade of grey to the box-in-box stack. */
+.tl-lanes-wrap{
+  background:transparent !important;
+  border-radius:0 !important;
+  padding:2px 0 !important;
+}
+/* The x-axis padding was keyed to (sidebox-w + cam-gap + label-w +
+   14px). With the sidebox gone the offset collapses to just the
+   lane-label width + a small gutter so the first tick lines up
+   under the first track column. */
+.tl-xaxis{
+  padding-left:calc(var(--tl-label-w) + 14px) !important;
+}
+
 /* ── Erkennungswolke (detection scatter) ─────────────────────────────────── */
 .stat-dc-card{margin-top:16px}
 .stat-dc-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
@@ -193,31 +258,14 @@
        "Zeitraum" from 12 px to 16 px so the two thumbs don't sit
        in each other's vertical hit zone. */
 @media (max-width:480px){
-  .tl-cam-block{
-    flex-direction:column;
-    align-items:stretch;
-    gap:8px;
-  }
-  .tl-cam-sidebox{
-    width:100%;
-    align-self:stretch;
-    flex-direction:row;
-    justify-content:flex-start;
-    gap:10px;
-    text-align:left;
-    min-height:44px;
-    padding:8px 12px;
-  }
-  .tl-cam-name{
-    font-size:14px;
-    text-align:left;
-  }
-  /* Lanes carry their own min-width:0 already; just make sure the
-     X-axis tick padding tracks the new (zero) sidebox indent so
-     "letzte 12 h" doesn't sit off-screen. */
-  .tl-xaxis{
-    padding-left:calc(var(--tl-label-w) + 14px);
-  }
+  /* D3 · the .tl-cam-block is now always column-stacked, .tl-cam-
+     sidebox is gone from the markup, and the new .tl-cam-head is
+     the heading row. Mobile only needs to tighten the heading
+     padding so the tap target stays comfortable without padding
+     the row visually heavier than desktop. */
+  .tl-cam-block{gap:6px}
+  .tl-cam-head.stat-drillable{padding:6px 8px;min-height:36px}
+  .tl-cam-head-name{font-size:14px}
   .stat-dc-sliders{gap:16px}
 }
 

@@ -491,9 +491,23 @@ function _mountPanels(){
   const host = byId('lightboxSettings');
   if (!host) return;
   host.hidden = false;
+  // C3 · the Diagnose panel sits between the Detections tab and the
+  // Fein-Analyse fold. It's a native <details> with class hooks so
+  // collapse state is browser-managed (and persists across iOS Safari
+  // bfcache restores without extra JS). Collapsed by default so the
+  // panel doesn't dominate the layout the first time the user opens
+  // Simulieren; one tap expands.
   host.innerHTML = `
     <div class="mv-recorded-panels">
       <div class="mv-recorded-tabs"></div>
+      <details class="mv-ld-diag" id="mvLdDiag">
+        <summary class="mv-ld-diag-head">
+          <span class="mv-ld-diag-chev" aria-hidden="true">▸</span>
+          <span class="mv-ld-diag-title">Diagnose</span>
+          <span class="mv-ld-diag-pulse" id="mvLdDiagPulse">—</span>
+        </summary>
+        <div class="mv-ld-diag-body" id="mvLdDiagBody"></div>
+      </details>
       <div class="mv-recorded-fafold"></div>
     </div>`;
   const tabsHost = host.querySelector('.mv-recorded-tabs');
@@ -578,7 +592,78 @@ function _renderFrame(data){
   _renderZoneMaskOverlay();
   _renderDetectionsPanel(data);
   _renderLiveSwimlane();
+  _renderDiagPanel(data.diag || null);
   _appendTrace(data.decision_trace || []);
+}
+
+// C3 · in-modal diagnostic panel. Reads the structured ``diag`` block
+// the test-detection endpoint now returns (see coral.py — diag.gates,
+// diag.top_raw, diag.thresholds, …) and renders a compact key/value
+// list inside the collapsible <details> mounted in _mountPanels. The
+// summary line carries a one-glance pulse "raw=N · pass=N" so the
+// operator can tell from the collapsed state whether Coral is firing
+// at all without having to expand. Empty top_raw is rendered as a
+// muted "Coral lieferte keine Detektion" so the absence is a positive
+// signal, not a blank panel.
+function _renderDiagPanel(diag){
+  const body = byId('mvLdDiagBody');
+  const pulse = byId('mvLdDiagPulse');
+  if (!body) return;
+  if (!diag){
+    body.innerHTML = `<div class="mv-ld-diag-empty">Noch keine Antwort vom Endpunkt …</div>`;
+    if (pulse) pulse.textContent = '—';
+    return;
+  }
+  const fs = diag.frame_size || { w: 0, h: 0 };
+  const gates = diag.gates || {};
+  const tops = Array.isArray(diag.top_raw) ? diag.top_raw : [];
+  const thresholds = diag.thresholds || {};
+  const perClass = thresholds.per_class || {};
+  const perClassStr = Object.keys(perClass).length
+    ? Object.entries(perClass)
+        .map(([k, v]) => `${esc(k)}=${Number(v).toFixed(2)}`)
+        .join(' · ')
+    : '(keine Overrides)';
+  const inferStr = (Number(diag.inference_ms) > 0)
+    ? ` · ${Math.round(diag.inference_ms)} ms`
+    : '';
+  const coralStr = diag.coral_available
+    ? `verfügbar${inferStr}`
+    : 'nicht verfügbar';
+  const topRows = tops.length
+    ? tops.map(t => {
+        const pct = Math.round((Number(t.score) || 0) * 100);
+        return `<span class="mv-ld-diag-top-item">${esc(String(t.label))} ${pct}%</span>`;
+      }).join('')
+    : `<span class="mv-ld-diag-top-empty">Coral lieferte keine Detektion für diesen Frame</span>`;
+  body.innerHTML = `
+    <div class="mv-ld-diag-row">
+      <span class="mv-ld-diag-key">Quelle</span>
+      <span class="mv-ld-diag-val">${esc(diag.frame_src || '?')} · ${fs.w}×${fs.h} · ${Math.round(Number(diag.frame_age_ms) || 0)} ms</span>
+    </div>
+    <div class="mv-ld-diag-row">
+      <span class="mv-ld-diag-key">Coral</span>
+      <span class="mv-ld-diag-val">${esc(coralStr)}</span>
+    </div>
+    <div class="mv-ld-diag-row mv-ld-diag-gates">
+      <span class="mv-ld-diag-key">Gates</span>
+      <span class="mv-ld-diag-gate" data-kind="raw">raw=${Number(gates.raw || 0)}</span>
+      <span class="mv-ld-diag-gate" data-kind="pass">pass=${Number(gates.pass || 0)}</span>
+      <span class="mv-ld-diag-gate" data-kind="belowthresh">unter Schwelle=${Number(gates.belowthresh || 0)}</span>
+      <span class="mv-ld-diag-gate" data-kind="filtered">gefiltert=${Number(gates.filtered || 0)}</span>
+    </div>
+    <div class="mv-ld-diag-row mv-ld-diag-top">
+      <span class="mv-ld-diag-key">Top 3 raw</span>
+      <div class="mv-ld-diag-top-list">${topRows}</div>
+    </div>
+    <div class="mv-ld-diag-row">
+      <span class="mv-ld-diag-key">Schwellen</span>
+      <span class="mv-ld-diag-val">global=${Number(thresholds.global || 0).toFixed(2)} · ${perClassStr}</span>
+    </div>`;
+  if (pulse){
+    pulse.textContent = `raw=${Number(gates.raw || 0)} · pass=${Number(gates.pass || 0)}`;
+    pulse.dataset.alert = (Number(gates.raw || 0) === 0) ? '1' : '0';
+  }
 }
 
 function _renderBboxOverlay(){

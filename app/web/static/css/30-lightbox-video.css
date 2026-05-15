@@ -1383,8 +1383,25 @@
   font-weight:700;
   letter-spacing:.04em;
 }
-#lightboxLiveOverlay{
-  pointer-events:none;
+/* H2.b Fix 1 · the previous ID-rule
+     #lightboxLiveOverlay { pointer-events: none; }
+   competed with the inline `svg.style.pointerEvents = 'auto'` JS
+   sets in _renderBboxOverlay when bbox click-to-detail is enabled.
+   Inline style wins on specificity, but the rule was also fighting
+   the click handler in DevTools (computed style showed `none` on
+   some Safari builds). Drop the static rule entirely — the
+   cssText on creation already starts the SVG at pointer-events:none,
+   and the render path flips it to 'auto' when needed.
+
+   H2.b Fix 3 · make the image's stacking deterministic. With the
+   wrap as a sticky element forming a stacking context, the SVG
+   layers (z-index 14/15/16 below) need a known z below them to
+   sit on top of. Explicit `z-index:1; position:relative` on
+   #lightboxImg ensures it always sits BELOW the SVGs regardless
+   of which ancestor class chain the modal happens to carry. */
+#lightboxImg{
+  position:relative;
+  z-index:1;
 }
 
 /* ── Broken-event state ───────────────────────────────────────────────── */
@@ -1539,6 +1556,49 @@
 @media (max-width:480px){
   .mv-live-toggle{min-height:44px;padding:9px 14px}
   .mv-live-toggles-hint{display:none}
+}
+
+/* H2.a · in-modal sim diagnostic strip. Mounted under the toggle
+   pills while live-detect is open; one row per overlay (bbox /
+   trails / zonemask) plus a sticky position-fail row when any
+   render call ends up with a 0×0 SVG. Compact mono, low-contrast
+   so the strip never competes with the live frame for attention.
+   Horizontally scrollable on mobile when a row overflows. */
+.mv-sim-diag-strip{
+  background:#0a0e1a;
+  padding:6px 14px 8px;
+  border-top:1px solid rgba(255,255,255,.04);
+  display:flex;flex-direction:column;gap:2px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:10.5px;
+  color:rgba(226,232,240,.55);
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+}
+.mv-sim-diag-row{
+  white-space:nowrap;
+  letter-spacing:.01em;
+  line-height:1.4;
+}
+.mv-sim-diag-kind{
+  display:inline-block;
+  min-width:80px;
+  color:rgba(165,243,252,.85);
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.mv-sim-diag-row[data-kind="position-fail"]{color:#fda4af}
+.mv-sim-diag-row[data-kind="position-fail"] .mv-sim-diag-kind{color:#f43f5e}
+.mv-sim-diag-k{color:rgba(226,232,240,.45);font-weight:600}
+.mv-sim-diag-v{color:#e2e8f0;font-weight:600}
+@media (max-width:480px){
+  /* Mobile · same content, smaller text, tighter min-width on the
+     kind tag so the strip doesn't horizontal-scroll until the row
+     actually overflows. */
+  .mv-sim-diag-strip{font-size:10px;padding:5px 12px}
+  .mv-sim-diag-kind{min-width:70px}
 }
 
 /* ── LIVE pill pinned to scrubber right edge ────────────────────────── */

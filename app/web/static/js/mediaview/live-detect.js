@@ -88,6 +88,12 @@ export function openLiveDetect({ camId, cameraName }){
   _detBuffer = [];
   _selectedLabel = null;
   _overlays = { bboxes: true, trails: true, zones: false, masks: false };
+  // H2.a · reset the diag-strip state per session so the previous
+  // open's last-known SVG dims don't bleed into the new one.
+  _diagState.bbox = null;
+  _diagState.trails = null;
+  _diagState.zonemask = null;
+  _diagState.posFail = null;
   _setupLiveChrome(camId, cameraName);
   _mountPanels();
   _tick();
@@ -115,6 +121,8 @@ export function closeLiveDetect(){
   if (zoneMask) zoneMask.remove();
   const toggleRow = byId('mvLiveToggles');
   if (toggleRow) toggleRow.remove();
+  const diagStrip = byId('mvSimDiagStrip');
+  if (diagStrip) diagStrip.remove();
   const livePill = byId('mvLiveScrubPill');
   if (livePill) livePill.remove();
   const emptyHint = byId('mvLdEmptyHint');
@@ -248,11 +256,15 @@ function _ensureBboxOverlay(){
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveOverlay';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  // Stacking order (wp146): zones+masks z-index 4 (deepest),
-  // trails 5, bboxes 6 (top). Bboxes win the visual so the
-  // user always sees the live frame's verdict over the
-  // historical motion path.
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:6';
+  // H2.b Fix 3 · z-indexes bumped 4/5/6 → 14/15/16. The wrap is a
+  // sticky element (z-index:4 itself) which forms a stacking
+  // context; inside that context, an explicit #lightboxImg
+  // z-index:1 + position:relative (CSS) puts the image at a known
+  // floor and these SVGs at 14/15/16 sit above it regardless of
+  // ancestor stacking. Stacking order WITHIN: zones+masks bottom
+  // (14), trails middle (15), bboxes top (16) — bboxes always win
+  // so the user sees the live verdict over the historical trail.
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:16';
   wrap.appendChild(svg);
   return svg;
 }
@@ -265,7 +277,7 @@ function _ensureTrailsOverlay(){
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveTrails';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5';
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:15';
   wrap.appendChild(svg);
   return svg;
 }
@@ -278,7 +290,7 @@ function _ensureZoneMaskOverlay(){
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveZoneMask';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
   wrap.appendChild(svg);
   return svg;
 }
@@ -713,6 +725,57 @@ function _renderDiagPanel(diag){
   }
 }
 
+// H2.a · in-modal diagnostic strip. Surfaces the same data the
+// [sim-bbox] / [sim-zonemask] one-shot console.warn lines carry
+// — but as a visible row under the toggle pills, so the operator
+// can answer "is the SVG zero-sized" / "are dets reaching me" /
+// "is the z-index inverted" without DevTools. Updates on every
+// render call (not one-shot). Three rows: bbox / trails /
+// zonemask, plus a sticky "position-fail" warning row that
+// surfaces when any _renderXOverlay call ends up with a 0×0 SVG.
+// Mounted lazily on the first _updateDiagStrip call and torn down
+// alongside the toggle row in closeLiveDetect.
+const _diagState = { bbox: null, trails: null, zonemask: null, posFail: null };
+
+function _ensureDiagStrip(){
+  let strip = byId('mvSimDiagStrip');
+  if (strip) return strip;
+  const toggleRow = byId('mvLiveToggles');
+  if (!toggleRow) return null;
+  strip = document.createElement('div');
+  strip.id = 'mvSimDiagStrip';
+  strip.className = 'mv-sim-diag-strip';
+  toggleRow.insertAdjacentElement('afterend', strip);
+  return strip;
+}
+
+function _renderDiagStripLine(kind, fields){
+  if (!fields) return '';
+  const pairs = Object.entries(fields)
+    .map(([k, v]) => `<span class="mv-sim-diag-k">${esc(k)}</span>=<span class="mv-sim-diag-v">${esc(String(v))}</span>`)
+    .join(' · ');
+  return `<div class="mv-sim-diag-row" data-kind="${esc(kind)}"><span class="mv-sim-diag-kind">${esc(kind)}</span> · ${pairs}</div>`;
+}
+
+function _updateDiagStrip(kind, fields){
+  const strip = _ensureDiagStrip();
+  if (!strip) return;
+  if (kind === 'position-fail'){
+    _diagState.posFail = fields;
+  } else if (kind in _diagState){
+    _diagState[kind] = fields;
+  }
+  const rows = [
+    _renderDiagStripLine('bbox',     _diagState.bbox),
+    _renderDiagStripLine('trails',   _diagState.trails),
+    _renderDiagStripLine('zonemask', _diagState.zonemask),
+  ].filter(Boolean);
+  if (_diagState.posFail){
+    rows.push(_renderDiagStripLine('position-fail', _diagState.posFail));
+  }
+  strip.innerHTML = rows.join('');
+}
+
 function _renderBboxOverlay(){
   const svg = _ensureBboxOverlay();
   if (!svg || !_session) return;
@@ -726,26 +789,25 @@ function _renderBboxOverlay(){
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
-  // tg593 — 0×0 guard. If the image hasn't sized yet (first
-  // detection arrived before the first MJPEG frame), skip painting.
-  // The next tick OR the load/ResizeObserver listener on imgEl
-  // will re-fire _renderBboxOverlay with valid dimensions.
+  // H2.b · refresh the visible diag strip on every render so the
+  // user can SEE svgRect / viewBox / dets without DevTools. Pulled
+  // out of console.warn (which the user can't open). Falls back to
+  // a [sim-position-fail] line in the strip if rect still ends up
+  // 0×0 even after the wrap-fallback in _positionSvgOverImage.
   const rect = svg.getBoundingClientRect();
+  _updateDiagStrip('bbox', {
+    dets:     (_session.lastDetections || []).length,
+    viewBox:  `${fs.w}×${fs.h}`,
+    svgRect:  `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    zIndex:   window.getComputedStyle(svg).zIndex,
+  });
   if (rect.width <= 0 || rect.height <= 0){
+    _updateDiagStrip('position-fail', {
+      svg:   svg.id,
+      svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    });
     svg.innerHTML = '';
     return;
-  }
-  // tg593 — one-shot diagnostic on first detection-arrives-and-paints
-  // call per session. Single line answers "is the renderer running"
-  // vs "are detections empty" vs "is the SVG zero-sized" without
-  // needing DevTools to inspect every layer. Uses console.warn so
-  // the eslint no-console gate (allow: warn/error) lets it through;
-  // semantically it's a diagnostic, not a warning, but warn is what
-  // the lint policy permits.
-  if (_session && !_session._bboxDiagLogged && (_session.lastDetections || []).length){
-    _session._bboxDiagLogged = true;
-    const zIndex = window.getComputedStyle(svg).zIndex;
-    console.warn(`[sim-bbox] dets=${(_session.lastDetections || []).length} viewBox=${fs.w}x${fs.h} svgRect=${Math.round(rect.width)}x${Math.round(rect.height)} zIndex=${zIndex}`);
   }
   // gp384 — hold-time merge. Prefer the live tick's detections
   // (full opacity, _holdAge=0). If the tick is empty, fall back to
@@ -895,16 +957,44 @@ function _positionSvgOverImage(svg){
   if (!imgEl || !wrap) return;
   const wrapBox = wrap.getBoundingClientRect();
   const imgBox = imgEl.getBoundingClientRect();
-  if (wrapBox.width <= 0 || imgBox.width <= 0) return;
-  const fit = fittedRect(imgEl);
-  // fit is relative to the img's content box; the img's content box
-  // top-left = imgBox.top/left - wrapBox.top/left.
-  const dx = (imgBox.left - wrapBox.left) + fit.x;
-  const dy = (imgBox.top  - wrapBox.top)  + fit.y;
+  if (wrapBox.width <= 0) return;
+  // H2.c · MJPEG fallback. Some Safari builds expose naturalWidth=0
+  // for MJPEG streams even after the first frame paints, which makes
+  // fittedRect return {0,0,0,0} and the SVG ends up zero-sized.
+  // When the imgBox itself is non-zero we trust fittedRect; when it
+  // IS zero (image not laid out yet, or naturalWidth-less MJPEG), we
+  // fall back to the WRAP's bounds AND let the SVG's
+  // preserveAspectRatio:meet do the letterboxing internally against
+  // _session.lastFrameSize. Polygons + bboxes still land on the
+  // right pixels because the viewBox carries the source coord space.
+  let dx, dy, w, h;
+  if (imgBox.width > 0 && imgBox.height > 0){
+    const fit = fittedRect(imgEl);
+    // fit is relative to the img's content box; the img's content
+    // box top-left = imgBox.top/left - wrapBox.top/left.
+    dx = (imgBox.left - wrapBox.left) + fit.x;
+    dy = (imgBox.top  - wrapBox.top)  + fit.y;
+    w  = fit.w;
+    h  = fit.h;
+    // fittedRect itself can return 0×0 when the image is sized but
+    // naturalWidth/Height is 0 (the MJPEG case). Fall through to
+    // wrap-bounds if either dimension is zero.
+    if (w <= 0 || h <= 0){
+      dx = 0; dy = 0;
+      w  = wrapBox.width;
+      h  = wrapBox.height;
+    }
+  } else {
+    // Image hasn't laid out yet. Cover the wrap; preserveAspectRatio
+    // inside the SVG handles letterboxing against the viewBox.
+    dx = 0; dy = 0;
+    w  = wrapBox.width;
+    h  = wrapBox.height;
+  }
   svg.style.left = `${dx}px`;
   svg.style.top  = `${dy}px`;
-  svg.style.width  = `${fit.w}px`;
-  svg.style.height = `${fit.h}px`;
+  svg.style.width  = `${w}px`;
+  svg.style.height = `${h}px`;
   svg.style.right  = 'auto';
   svg.style.bottom = 'auto';
   svg.style.inset  = 'auto';
@@ -926,9 +1016,22 @@ function _renderTrailsOverlay(){
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
   const rect = svg.getBoundingClientRect();
+  _updateDiagStrip('trails', {
+    dets:     _detBuffer.length,
+    viewBox:  `${fs.w}×${fs.h}`,
+    svgRect:  `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    zIndex:   window.getComputedStyle(svg).zIndex,
+  });
   // Same 0×0 guard as the bbox layer — wait for the image to size
   // before paint so the polylines don't land in a sub-pixel corner.
-  if (rect.width <= 0 || rect.height <= 0){ svg.innerHTML = ''; return; }
+  if (rect.width <= 0 || rect.height <= 0){
+    _updateDiagStrip('position-fail', {
+      svg:   svg.id,
+      svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    });
+    svg.innerHTML = '';
+    return;
+  }
   // Group buffered detections by label so each label gets its own
   // contiguous trail. Pre-sort by ms inside each group; the
   // detBuffer is push-order but a polling-cadence change could
@@ -978,20 +1081,22 @@ function _renderZoneMaskOverlay(){
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
   const cam = (state.cameras || []).find(c => c.id === _session.camId) || {};
-  // F2.c · one-shot diag the first time zones OR masks turn on. Logs
-  // the raw counts pulled from state.cameras + the SVG's current rect
-  // so a "toggle is ON but nothing paints" symptom can be split into
-  // "the camera has no zones/masks configured" vs "the SVG is zero-
-  // sized" without DevTools.
-  if (_session && !_session._zoneMaskDiagLogged && (showZones || showMasks)){
-    _session._zoneMaskDiagLogged = true;
-    const rect = svg.getBoundingClientRect();
-    console.warn(
-      `[sim-zonemask] zones=${(cam.zones||[]).length} `
-      + `masks=${(cam.masks||[]).length} viewBox=${fs.w}x${fs.h} `
-      + `svgRect=${Math.round(rect.width)}x${Math.round(rect.height)} `
-      + `zonesOn=${showZones} masksOn=${showMasks}`,
-    );
+  // H2 · zone/mask diag now goes to the visible strip on every render
+  // (not console-warn-once). Same fields as before — counts pulled
+  // from state.cameras so "toggle on but no paint" splits between
+  // "camera has no zones/masks configured" vs "SVG is zero-sized".
+  const zmRect = svg.getBoundingClientRect();
+  _updateDiagStrip('zonemask', {
+    zones:    (cam.zones || []).length,
+    masks:    (cam.masks || []).length,
+    svgRect:  `${Math.round(zmRect.width)}×${Math.round(zmRect.height)}`,
+    zIndex:   window.getComputedStyle(svg).zIndex,
+  });
+  if (zmRect.width <= 0 || zmRect.height <= 0){
+    _updateDiagStrip('position-fail', {
+      svg:   svg.id,
+      svgRect: `${Math.round(zmRect.width)}×${Math.round(zmRect.height)}`,
+    });
   }
   // Stroke / fill colours pulled from core/zone-tokens.js so the
   // visual matches the cam-edit polygon editor + every other

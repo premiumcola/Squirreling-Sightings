@@ -1652,6 +1652,7 @@ class SunTimelapseMixin:
         a polling client can ask for the delta only. Default 0.0
         returns the full list."""
         from ..frame_helpers import read_capture_stats
+        from ..timelapse_qa import read_qa_sidecar
         with _test_session_lock:
             session = _active_test_session
         if session is None:
@@ -1666,6 +1667,23 @@ class SunTimelapseMixin:
             stats = read_capture_stats(session.frames_dir) or {}
         else:
             stats = {}
+        # G4 · once the encode lands and result_clip_path is set, fetch
+        # the <mp4>.qa.json playback metrics so the post-run diff
+        # panel can render unique_fps, container_fps, duplicate_ratio
+        # and the quality_grade chip without an extra round-trip.
+        # Best-effort — failure here just leaves the diff with the
+        # capture-side values only.
+        qa_data: dict | None = None
+        if session.result_clip_path:
+            try:
+                # result_clip_path is relative to storage/, so the
+                # absolute path is _sightings_dir().parent / clip_path.
+                # _sightings_dir() returns storage/weather, so parent
+                # is storage/. Joined: storage/weather/<cam>/<phase>/<file>.mp4
+                clip_abs = self._sightings_dir().parent / session.result_clip_path
+                qa_data = read_qa_sidecar(clip_abs)
+            except Exception:
+                qa_data = None
         with session.lock:
             log_tail = list(session.log_lines)
             cancelled = bool(session.cancelled)
@@ -1730,6 +1748,15 @@ class SunTimelapseMixin:
                 e for e in (stats.get("slot_events") or [])
                 if float(e.get("ts") or 0.0) > float(since or 0.0)
             ],
+            # G4 · QA-sidecar playback metrics for the post-run diff
+            # panel. Only present once result_clip_path is set AND
+            # the qa.json was found next to the mp4. Frontend renders
+            # the quality_grade chip + unique_fps row from this block.
+            "qa": ({
+                "quality_grade":   qa_data.get("quality_grade"),
+                "playback":        qa_data.get("playback") or {},
+                "target_duration_s": qa_data.get("target_duration_s"),
+            } if qa_data else None),
         }
 
     def sun_times_today(self) -> dict:

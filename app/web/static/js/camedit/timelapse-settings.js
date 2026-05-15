@@ -98,7 +98,17 @@ function _tlClosestPeriod(v){
   const n=parseInt(v)||3600;
   return _TL_PERIOD_OPTIONS.reduce((a,b)=>Math.abs(b.v-n)<Math.abs(a.v-n)?b:a).v;
 }
-const _TL_FPS_OPTIONS=[20,25];
+// E2 · fps is now a system-wide constant (matches the backend's hard
+// 15 fps lock from settings/migrations.py · migrate_timelapse_intervals).
+// The user-tunable <select> is gone; the field still round-trips via
+// a hidden input so the save payload shape is unchanged for any
+// downstream consumer.
+const _TL_FIXED_FPS=15;
+// _TL_MIN_INTERVAL_S mirrors the backend's 8 s capture-interval floor.
+// _tlCalcInterval rounds up to this floor; the slider max bound on each
+// non-custom profile is derived from period / (floor × fps) so the user
+// can't choose a target the encoder would have to back-fill below 8 s.
+const _TL_MIN_INTERVAL_S=8;
 function _tlFmtInterval(secs){
   const s=Number(secs);
   if(!isFinite(s)||s<=0) return '—';
@@ -133,7 +143,24 @@ function _tlTargetLabel(secs){
   return Math.round(n/60)+'min';
 }
 function _tlCalcInterval(periodS,targetS,fps){
-  return Math.max(2, Math.round((parseInt(periodS)||86400) / Math.max(1,(parseInt(targetS)||60)*(parseInt(fps)||30))));
+  // E2 · floor lifted 2 → 8 to match the system-wide capture floor.
+  // Returns {interval_s, clamped} so the caller (e.g. _tlResultDesc)
+  // can surface a "video will be shorter than chosen" hint when the
+  // raw arithmetic wants something tighter than 8 s.
+  const pN=parseInt(periodS)||86400;
+  const tN=Math.max(1,parseInt(targetS)||60);
+  const fN=Math.max(1,parseInt(fps)||_TL_FIXED_FPS);
+  const raw=pN/(tN*fN);
+  if(raw<_TL_MIN_INTERVAL_S) return {interval_s:_TL_MIN_INTERVAL_S, clamped:true, raw:raw};
+  return {interval_s:Math.round(raw), clamped:false, raw:raw};
+}
+// E2 · derived max target so the slider can't be dragged into the
+// clamp zone for a given period. Non-custom profiles call this when
+// rendering + when the period changes.
+function _tlMaxTargetForPeriod(periodS, profileMax){
+  const pN=parseInt(periodS)||86400;
+  const ceiling=Math.floor(pN/(_TL_MIN_INTERVAL_S*_TL_FIXED_FPS));
+  return Math.max(1, Math.min(profileMax||ceiling, ceiling));
 }
 function _updateTlActiveTags(cameras){
   const wrap=byId('tlActiveTags'); if(!wrap) return;
@@ -164,31 +191,31 @@ function _renderTlCameraList(cameras){
 function _renderTlModesGrid(cam){
   const tl=cam.timelapse||{};
   const profs=tl.profiles||{};
-  const camFps=parseInt(tl.fps)||25;
   const cols=_TL_PROFILES_DEF.map(p=>{
     const prof=profs[p.key]||{};
     const enabled=!!prof.enabled;
     const targetS=prof.target_seconds??p.defaultTarget;
     const periodS=prof.period_seconds??p.defaultPeriod;
-    // Snap the loaded fps to a valid dropdown option so the <select>
-    // selection and the description always agree. Legacy configs with
-    // fps=12 (no longer offered) snap to the closest option, e.g. 20.
-    const rawProfFps=parseInt(prof.fps)||camFps;
-    const profFps=_TL_FPS_OPTIONS.includes(rawProfFps)
-      ? rawProfFps
-      : _TL_FPS_OPTIONS.reduce((a,b)=>Math.abs(b-rawProfFps)<Math.abs(a-rawProfFps)?b:a);
+    // E2 · fps is always 15 now (backend lock + this UI no longer
+    // exposes a selector). Legacy profile fps values are read from
+    // settings but ignored; the hidden input below carries the
+    // fixed 15 to the save handler.
+    const profFps=_TL_FIXED_FPS;
     const isCustom=p.key==='custom';
-    const minT=p.minTarget||10, maxT=p.maxTarget||900;
+    const minT=p.minTarget||10;
+    // E2 · effective max target derived from the 8 s × 15 fps
+    // capture floor for this profile's period. Caps at the profile's
+    // own maxTarget when that's tighter (long periods like yearly
+    // keep their declared bound).
+    const profileMax=p.maxTarget||900;
+    const maxT=_tlMaxTargetForPeriod(periodS, profileMax);
     const clampedTarget=Math.max(minT,Math.min(maxT,targetS));
     const cid=esc(cam.id);
     const pk=p.key;
-    const fpsSelectHtml=`<div class="field-wrap">
-        <select id="tlProfFps_${cid}_${pk}" style="width:100%"
-          onchange="_tlRefreshDesc('${cid}','${pk}')">
-          ${_TL_FPS_OPTIONS.map(v=>`<option value="${v}"${v===profFps?' selected':''}>${v} fps</option>`).join('')}
-        </select>
-        <span class="field-label">Video-Framerate</span>
-      </div>`;
+    // Read-only "15 fps" indicator + a hidden form input so existing
+    // save logic keeps writing the field. No <select>, no chrome.
+    const fpsSelectHtml=`<div class="tl-fps-readout" aria-label="Video-Framerate"><span class="tl-fps-readout-num">${_TL_FIXED_FPS}</span><span class="tl-fps-readout-unit">fps</span></div>
+      <input type="hidden" id="tlProfFps_${cid}_${pk}" value="${_TL_FIXED_FPS}" />`;
     let controlHtml;
     if(isCustom){
       const currentKey=`${periodS},${clampedTarget}`;
@@ -204,6 +231,10 @@ function _renderTlModesGrid(cam){
       <input type="hidden" id="tlProfTarget_${cid}_${pk}" value="${clampedTarget}" />
       <input type="hidden" id="tlProfPeriod_${cid}_${pk}" value="${periodS}" />`;
     } else {
+      // E2 · slider max is the dynamic _tlMaxTargetForPeriod ceiling
+      // (= floor(period/(8*15))) intersected with the profile's own
+      // declared max — keeps yearly's 2700 s cap, tightens daily's
+      // 180 s when it would otherwise allow sub-8 s capture intervals.
       controlHtml=`<div class="field-wrap">
         <div style="display:flex;align-items:center;gap:8px">
           <input type="range" id="tlProfTarget_${cid}_${pk}" min="${minT}" max="${maxT}" step="${p.step||10}" value="${clampedTarget}" style="flex:1;accent-color:#a855f7"
@@ -266,49 +297,60 @@ function _tlDurationLabel(s){
   return Math.round(n/60)+' Min';
 }
 function _tlResultDesc(periodS,targetS,fps){
-  const pN=parseInt(periodS)||86400, tN=parseInt(targetS)||60, fN=parseInt(fps)||25;
-  const totalFrames=Math.max(1, Math.round(tN*fN));
-  const intervalS=pN/totalFrames;
+  const pN=parseInt(periodS)||86400, tN=parseInt(targetS)||60, fN=parseInt(fps)||_TL_FIXED_FPS;
+  const ci=_tlCalcInterval(pN, tN, fN);
+  // E2 · when the clamp fires, the EFFECTIVE total frame count is
+  // capped at period/floor and the realised video is shorter than
+  // the user asked for. Surface that explicitly instead of silently
+  // padding the encoder. ``effectiveFrames`` is what actually lands
+  // on disk; ``realisedDuration`` is what the user will see in the
+  // mediathek.
+  const intervalS=ci.interval_s;
+  const effectiveFrames=Math.max(1, Math.floor(pN/intervalS));
+  const realisedDuration=effectiveFrames/fN;
+  const requestedFrames=Math.max(1, Math.round(tN*fN));
+  const totalFrames = ci.clamped ? effectiveFrames : requestedFrames;
   const periodLabel=_tlDurationLabel(pN);
   const intervalLabel=_tlFmtInterval(intervalS);
   const compression=Math.round(pN/Math.max(1,tN));
   // ~40 KB per JPEG at q≈72; sub-1s interval drops to q=50 ≈ 26 KB.
   const perFrameKb=intervalS<1?26:40;
   const diskMb=Math.max(1, Math.round(totalFrames*perFrameKb/1024));
-  return `<div class="tl-drow"><span class="tl-drow-ico">⏱</span><span class="tl-drow-text">${periodLabel} → ${tN}s Video</span></div><div class="tl-drow"><span class="tl-drow-ico">📸</span><span class="tl-drow-text">${totalFrames} Frames · Alle ${intervalLabel} ein Foto</span></div><div class="tl-drow tl-drow-accent"><span class="tl-drow-ico">⚡</span><span class="tl-drow-text">${compression}× Zeitraffer · ~${diskMb} MB Speicher</span></div>`;
+  const targetLine = ci.clamped
+    ? `<div class="tl-drow tl-drow-warn"><span class="tl-drow-ico">⚠</span><span class="tl-drow-text">Intervall auf Minimum ${_TL_MIN_INTERVAL_S} s begrenzt — Video wird ${Math.round(realisedDuration)} s statt ${tN} s lang</span></div>`
+    : '';
+  return `<div class="tl-drow"><span class="tl-drow-ico">⏱</span><span class="tl-drow-text">${periodLabel} → ${tN}s Video</span></div>${targetLine}<div class="tl-drow"><span class="tl-drow-ico">📸</span><span class="tl-drow-text">${totalFrames} Frames · Alle ${intervalLabel} ein Foto</span></div><div class="tl-drow tl-drow-accent"><span class="tl-drow-ico">⚡</span><span class="tl-drow-text">${compression}× Zeitraffer · ~${diskMb} MB Speicher</span></div>`;
 }
 // _renderTlProfileCards replaced by _renderTlModesGrid (4-column grid)
 window._tlRefreshDesc=function(camId,profKey){
   const targetEl=byId(`tlProfTarget_${camId}_${profKey}`);
   const periodEl=byId(`tlProfPeriod_${camId}_${profKey}`);
-  const fpsEl=byId(`tlProfFps_${camId}_${profKey}`);
   const descEl=byId(`tlProfDesc_${camId}_${profKey}`);
   const lblEl=byId(`tlProfTargetLbl_${camId}_${profKey}`);
   if(!targetEl||!periodEl) return;
-  const fps=parseInt(fpsEl?.value)||25;
+  // E2 · fps always the constant; hidden input carries it but we
+  // don't read from it here — the constant IS the source of truth.
   if(lblEl) lblEl.textContent=_tlTargetLabel(parseInt(targetEl.value)||10);
-  if(descEl) descEl.innerHTML=_tlResultDesc(periodEl.value,targetEl.value,fps);
+  if(descEl) descEl.innerHTML=_tlResultDesc(periodEl.value,targetEl.value,_TL_FIXED_FPS);
 };
 // toggleTlCamCard replaced by selectTlCam (tab-based camera selector)
 window.saveTlCameraProfiles=async function(camId){
   const cam=(state.cameras||[]).find(c=>c.id===camId);
   if(!cam) return;
   const profiles={};
-  const tl=cam.timelapse||{};
-  const camFps=parseInt(tl.fps)||25;
-  let latestFps=camFps;
+  let latestFps=_TL_FIXED_FPS;
   for(const p of _TL_PROFILES_DEF){
     const enabledEl=byId(`tlProf_${camId}_${p.key}`);
     const targetEl=byId(`tlProfTarget_${camId}_${p.key}`);
     const periodEl=byId(`tlProfPeriod_${camId}_${p.key}`);
-    const fpsEl=byId(`tlProfFps_${camId}_${p.key}`);
-    const profFps=parseInt(fpsEl?.value)||camFps;
-    latestFps=profFps;
+    // E2 · always write 15. The hidden tlProfFps_<…> input reads the
+    // same constant; we hard-code here so a tampered DOM can't slip
+    // a legacy 24/25 past the save handler.
     profiles[p.key]={
       enabled:!!(enabledEl?.checked),
       target_seconds:parseInt(targetEl?.value)||p.defaultTarget,
       period_seconds:parseInt(periodEl?.value)||p.defaultPeriod,
-      fps:profFps,
+      fps:_TL_FIXED_FPS,
     };
   }
   const anyEnabled=Object.values(profiles).some(p=>p.enabled);

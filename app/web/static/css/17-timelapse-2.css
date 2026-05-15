@@ -17,4 +17,29 @@
 .tl-drow-ico{display:flex;align-items:center;flex-shrink:0}
 .tl-drow-text{font-size:11px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tl-drow-accent{color:#a855f7}
+/* E2 · interval-clamp warning row inside the result description.
+   Amber tint, no wrap so the line stays on one row up to the column
+   width; if it overflows the ellipsis still kicks in. */
+.tl-drow-warn{color:#fbbf24}
+.tl-drow-warn .tl-drow-text{white-space:normal}
+/* E2 · read-only "15 fps" pill that replaced the user-tunable FPS
+   <select>. Compact two-line stacking — large number, small unit —
+   so the slot reads as an info readout rather than a control. Same
+   accent purple the active-profile column uses. */
+.tl-fps-readout{
+  display:inline-flex;align-items:baseline;justify-content:center;
+  gap:4px;padding:6px 10px;
+  border-radius:10px;
+  background:rgba(168,85,247,.10);
+  color:#d8b4fe;
+  align-self:flex-start;
+}
+.tl-fps-readout-num{font-size:15px;font-weight:800;letter-spacing:0;font-variant-numeric:tabular-nums}
+.tl-fps-readout-unit{font-size:10.5px;font-weight:700;letter-spacing:.04em;color:rgba(216,180,254,.7)}
+@media(max-width:480px){
+  /* mobile · same readout, slightly tighter padding so it doesn't
+     push the result-description column wider than the slider. */
+  .tl-fps-readout{padding:5px 8px}
+  .tl-fps-readout-num{font-size:14px}
+}
 

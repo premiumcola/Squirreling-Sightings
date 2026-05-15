@@ -77,8 +77,9 @@
      as A2 (black on dark-bg, white on light-bg). The chained
      filter consumes the variable verbatim. */
   --overlay-icon-shadow:
-    drop-shadow(0 0 1.5px rgba(0,0,0,.9))
-    drop-shadow(0 0 5px rgba(0,0,0,.55));
+    drop-shadow(0 0 0.5px rgba(0,0,0,1))
+    drop-shadow(0 0 2px rgba(0,0,0,.92))
+    drop-shadow(0 0 7px rgba(0,0,0,.45));
 }
 .cv-overlay-region[data-bg="light"]{
   --overlay-fg:        #0f0f0f;
@@ -101,8 +102,9 @@
     0 1px 0 rgba(255,255,255,.85),
     0 -1px 0 rgba(255,255,255,.85);
   --overlay-icon-shadow:
-    drop-shadow(0 0 1.5px rgba(255,255,255,.95))
-    drop-shadow(0 0 5px rgba(255,255,255,.7));
+    drop-shadow(0 0 0.5px rgba(255,255,255,1))
+    drop-shadow(0 0 2px rgba(255,255,255,.95))
+    drop-shadow(0 0 7px rgba(255,255,255,.6));
 }
 /* Identity region — owns the live-pill palette. */
 .cv-overlay-region[data-region="identity"]{
@@ -215,7 +217,13 @@
 .cv-chrome-top-left{
   position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);
   display:flex;align-items:center;gap:4px;
-  max-width:calc(50% - 110px);
+  /* D1 · the previous `calc(50% - 110px)` reserved a 220 px middle
+     strip for nothing (the timestamp strip lives at the BOTTOM, not
+     top), so a 375 px card capped the title at ~78 px and chopped
+     "Squirrel Town 'Nut Bar'" mid-word. New budget reserves only
+     ~140 px on the right for HD / FS / cog + a 12 px gap, leaving
+     the title the actual horizontal space it needs. */
+  max-width:calc(100% - 140px);
   z-index:4;pointer-events:none;
 }
 .cv-chrome-top-left > *{pointer-events:auto}
@@ -255,13 +263,16 @@
    parent.
 
    B2 · size bumped 32 → 38 px and the single-layer drop-shadow
-   replaced with the chained --overlay-icon-shadow stack (tight
-   1.5 px ring + 5 px soft falloff, complementary tone via the
-   data-bg sampler). Gives the glyph real lift off any frame
-   without a bubble/box background. */
+   replaced with the chained --overlay-icon-shadow stack.
+   D1 · second size bump 38 → 42 px; the shadow stack gained a
+   third 0.5 px ring at full opacity AND a 2 px middle ring so the
+   silhouette has real density on a daylight grass / cloudy-sky
+   frame. The SVG stroke-width in core/icons.js also bumped 1.8 →
+   2.4 so the line itself isn't the limiting factor at the larger
+   render size. */
 .cv-cam-title-icon{
   display:inline-flex;align-items:center;justify-content:center;
-  width:38px;height:38px;flex-shrink:0;
+  width:42px;height:42px;flex-shrink:0;
   /* tx412 — per-camera identity colour tints the icon. The
      --cam-color custom property is set inline on this span from
      getCameraColor(cam); fallback to --overlay-fg keeps the legacy
@@ -283,9 +294,12 @@
      glyph so the title stays sharp on any frame regardless of where
      the per-region brightness sampler lands; the data-bg light/dark
      flip picks black-on-white vs white-on-black via the
-     --overlay-title-shadow var (defined alongside --overlay-fg). */
+     --overlay-title-shadow var (defined alongside --overlay-fg).
+     D1 · max-width drops to 100 % — the parent .cv-chrome-top-left
+     now caps the row at the right value, so an explicit pixel cap
+     here would only re-introduce mid-name truncation. */
   text-shadow:var(--overlay-title-shadow);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
 }
 .cv-tl-stack .cv-pill-live-wrap{align-self:flex-start}
 

@@ -229,11 +229,15 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    44 × 44 via the chrome-btn::before halo regardless of the visual
    shrink. */
 @media (max-width:768px){
-  /* B2 · mobile title icon proportional to the desktop 38 px bump —
-     30 px gives the glyph more presence on a 375 px card without
-     pushing the name into the live pill. */
-  .cv-cam-title-icon{width:30px;height:30px}
-  .cv-tl-stack .cv-name{font-size:16px;max-width:160px}
+  /* B2/D1 · mobile title icon proportional to the desktop 42 px
+     bump — 34 px gives the glyph clear presence on a 375 px card
+     without pushing the live pill off the row. The name's pixel
+     max-width drops: the parent .cv-chrome-top-left now caps the
+     row to (100% - 140px), which on a 375 px card leaves ~235 px
+     for icon + name — enough to read "Squirrel Town 'Nut Bar'"
+     without ellipsis. */
+  .cv-cam-title-icon{width:34px;height:34px}
+  .cv-tl-stack .cv-name{font-size:16px;max-width:100%}
   .cv-class-cluster{gap:10px}
   .cv-class-pill,
   .cv-class-pill svg{width:20px;height:20px}

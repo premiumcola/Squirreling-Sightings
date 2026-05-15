@@ -403,20 +403,13 @@ export function toggleCardHd(camId, btn){
 const _HD_IDLE_TIMEOUT_MS = 120 * 1000;
 const _hdIdleTimers = new Map();  // camId → { handle, deadline, paused, remaining }
 
-function _refreshHdRing(camId){
-  // Restart the CSS countdown animation on the HD badge by toggling
-  // the data attr — CSS animation restarts whenever the attribute
-  // value changes. Stamp the deadline epoch so two consecutive
-  // _armHdIdleTimer calls (e.g. on rapid pointerenter events) both
-  // trigger a fresh animation start.
-  const card = byId('cameraCards')?.querySelector(`[data-camid="${CSS.escape(camId)}"]`);
-  const hdBtn = card?.querySelector('.cv-hd-badge');
-  if (!hdBtn) return;
-  hdBtn.style.setProperty('--hd-dur', (_HD_IDLE_TIMEOUT_MS / 1000) + 's');
-  hdBtn.removeAttribute('data-hd-running');
-  // Force reflow so the next attribute set restarts the animation.
-  void hdBtn.offsetWidth;
-  hdBtn.setAttribute('data-hd-running', String(Date.now()));
+function _refreshHdRing(_camId){
+  // J1 · the visual countdown bar (jt719) was removed because it
+  // read as a rendering artefact on iPhone. The 120 s auto-revert
+  // timer still fires via _armHdIdleTimer below; this function is
+  // kept as a no-op so existing call sites stay valid without
+  // pulling apart the timer-arm flow. _hdDur + data-hd-running
+  // stamps are gone too — the DOM no longer carries inert state.
 }
 
 function _armHdIdleTimer(camId){

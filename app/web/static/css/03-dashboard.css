@@ -512,23 +512,14 @@
 .cv-hd-badge{width:36px;min-width:36px;padding:0;font-weight:700;letter-spacing:.04em;font-size:12px;flex-shrink:0}
 .cv-hd-badge.active{background:rgba(59,130,246,.7);color:#fff;font-weight:800}
 .cv-hd-badge.active:hover{background:rgba(59,130,246,.8)}
-/* jt719 — HD auto-revert countdown bar. A 2 px line under the badge
-   shrinks from full width to zero over var(--hd-dur) (default 120 s,
-   set by JS) so the user can SEE the timer instead of being
-   surprised when HD flips back to SD. Animation only runs while the
-   badge has data-hd-running set — dashboard.js stamps the attribute
-   with a fresh timestamp on every _armHdIdleTimer call so the bar
-   restarts every time the user interacts with the tile. */
-.cv-hd-badge.active{position:relative;overflow:hidden}
-.cv-hd-badge.active[data-hd-running]::after{
-  content:"";
-  position:absolute;left:0;right:0;bottom:0;height:2px;
-  background:rgba(255,255,255,.55);
-  transform-origin:left;
-  animation:cv-hd-countdown var(--hd-dur,120s) linear forwards;
-  pointer-events:none;
-}
-@keyframes cv-hd-countdown{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+/* J1 · the jt719 HD auto-revert countdown bar (a 2 px line under
+   the badge animating from full width → 0 over 120 s) was reading
+   as a rendering artefact on iPhone — "hellblauer Streifen, geht
+   nicht über das ganze Icon". Removed entirely. The 120 s auto-
+   revert still fires (dashboard.js' _armHdIdleTimer is unchanged);
+   users see HD flip back to SD on its own. The previous
+   `.cv-hd-badge.active { position:relative; overflow:hidden }`
+   declaration is also gone — nothing else hangs off it. */
 
 /* FS button — corner family 36 × 36 (v17). Inline expand / minimize
    spans wrap the SVGs so CSS swaps them by .cv-img-wrap.is-fs

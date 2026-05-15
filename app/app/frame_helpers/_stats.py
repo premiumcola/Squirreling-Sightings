@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +15,12 @@ from ..io_utils import atomic_write_json
 from ._validator import _classify_reason, _normalise_rejection_reason
 
 log = logging.getLogger(__name__)
+
+# G2 · upper bound on the per-session slot-event ring. A 75 min × 8 s
+# run resolves 562 slots; capped at 800 leaves a margin for longer
+# experimental windows without unbounded memory growth. Older entries
+# are pushed off the deque tail by maxlen.
+_SLOT_EVENTS_MAXLEN = 800
 
 
 @dataclass
@@ -74,12 +82,48 @@ class CaptureStats:
     baseline_brightness: float | None = None
     phase_drift_min: int | None = None
     phase_drift_warning: str | None = None
+    # G2 · per-slot event ring. Each entry records what HAPPENED at a
+    # specific slot (fresh capture, cache hit, validator reject,
+    # backfill, scene skip) so the live test panel can paint a
+    # density heatmap of slot outcomes WITHOUT having to derive them
+    # from rolling counters. Bounded by _SLOT_EVENTS_MAXLEN; older
+    # entries roll off the front when the deque is full. JSON-
+    # serialisable shape so flush() can persist the trail alongside
+    # the aggregate counters and a re-load mid-session keeps history.
+    slot_events: deque = field(
+        default_factory=lambda: deque(maxlen=_SLOT_EVENTS_MAXLEN),
+    )
 
     def record_capture(self, attempt_used: int = 0):
         """attempt_used==0 means first try succeeded; >0 means a retry saved it."""
         self.captured_frames += 1
         if attempt_used > 0:
             self.retry_recoveries += 1
+
+    def record_slot(self, slot: int, outcome: str,
+                    reason: str | None = None,
+                    age_ms: int | None = None,
+                    score: float | None = None):
+        """G2 · push one slot-event onto the per-session ring buffer.
+        Lightweight (single dict append) so the call site can stay in
+        the hot capture loop without I/O. The pushed shape matches
+        the JSON the status endpoint will serialise verbatim:
+
+            {"slot": int, "ts": float, "outcome": str,
+             "reason": str|None, "age_ms": int|None, "score": float|None}
+
+        outcome ∈ {"fresh", "cached", "rejected", "backfilled",
+        "skipped", "retry_ok"}. The caller picks the bucket; this
+        helper just stamps the timestamp and records.
+        """
+        self.slot_events.append({
+            "slot":    int(slot),
+            "ts":      float(time.time()),
+            "outcome": str(outcome),
+            "reason":  (str(reason) if reason else None),
+            "age_ms":  (int(age_ms) if age_ms is not None else None),
+            "score":   (float(score) if score is not None else None),
+        })
 
     def record_same_hash(self, run_len: int):
         """A FRESH grab returned the same SHA1 as the previous fresh
@@ -175,6 +219,11 @@ class CaptureStats:
                 "baseline_brightness": self.baseline_brightness,
                 "phase_drift_min": self.phase_drift_min,
                 "phase_drift_warning": self.phase_drift_warning,
+                # G2 · materialise the slot ring as a plain list. A
+                # mid-session re-load (read_capture_stats) gets the
+                # same shape the status endpoint will surface — no
+                # need to round-trip through the deque again.
+                "slot_events": list(self.slot_events),
             }
             atomic_write_json(path, payload)
         except Exception as e:

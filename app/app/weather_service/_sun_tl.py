@@ -948,11 +948,13 @@ class SunTimelapseMixin:
                             h = hashlib.sha1(jpg_bytes).hexdigest()[:12]
                         except Exception:
                             h = None
+                        _slot_outcome = "retry_ok" if attempt_used > 0 else "fresh"
                         if h is not None:
                             if h == _hash_state["last_hash"]:
                                 _hash_state["consec_same"] += 1
                                 _hash_state["fresh_in_row"] = 0
                                 stats.record_same_hash(_hash_state["consec_same"])
+                                _slot_outcome = "cached"
                                 log.info(
                                     "[%s] %s slot %05d: FRESH grab but SAME hash "
                                     "as last (consec_same=%d) — snapshot API "
@@ -964,6 +966,15 @@ class SunTimelapseMixin:
                                 _hash_state["last_hash"] = h
                                 _hash_state["consec_same"] = 0
                                 _hash_state["fresh_in_row"] += 1
+                        # G2 · push the slot-event for the live heatmap.
+                        # Reason carries the cached-hash suffix when the
+                        # outcome is "cached" so the UI tooltip can
+                        # explain WHY the cell is amber.
+                        stats.record_slot(
+                            i, _slot_outcome,
+                            reason=(f"consec_same={_hash_state['consec_same']}"
+                                    if _slot_outcome == "cached" else None),
+                        )
                     except Exception:
                         pass
                 else:
@@ -1003,6 +1014,13 @@ class SunTimelapseMixin:
                             last_valid_jpg = None
                             n_consecutive_backfills = 0
                             stats.backfill_cache_drops += 1
+                    # G2 · classify the invalid slot into one of three
+                    # outcomes for the live heatmap: backfilled (the
+                    # held last_valid_jpg got written into this slot),
+                    # skipped (scene-level reject we didn't even try
+                    # to backfill), or rejected (transient validator
+                    # failure without a fallback). The reason head
+                    # passes through verbatim for tooltip text.
                     if last_valid_jpg is not None:
                         # Backfill with the most recent valid frame so the
                         # slot index sequence stays gap-free for the
@@ -1017,16 +1035,27 @@ class SunTimelapseMixin:
                         try:
                             out.write_bytes(last_valid_jpg)
                             n_consecutive_backfills += 1
+                            stats.record_slot(i, "backfilled", reason=last_reason)
                             log.info("[%s] [backfill] %s slot %05d: invalid "
                                      "grab, filled with last valid frame "
                                      "(consec=%d, %s)",
                                      log_tag, cam_name, i,
                                      n_consecutive_backfills, last_reason)
                         except Exception:
+                            stats.record_slot(i, "rejected", reason=last_reason)
                             log.info("[%s] [backfill] %s slot %05d: invalid "
                                      "grab and backfill write failed (%s)",
                                      log_tag, cam_name, i, last_reason)
                     else:
+                        # No held jpg to backfill from. Bucket by reason
+                        # class — scene-level rejects (dead_area /
+                        # no_detail / too_dark / too_bright) become
+                        # "skipped" so the heatmap visually separates
+                        # them from transient validator failures.
+                        from ..frame_helpers._validator import _classify_reason as _cls_reason
+                        _bucket = ("skipped" if _cls_reason(last_reason or "") == "scene"
+                                   else "rejected")
+                        stats.record_slot(i, _bucket, reason=last_reason)
                         log.info("[%s] %s slot %05d: invalid grabs, "
                                  "leaving slot empty (%s)",
                                  log_tag, cam_name, i, last_reason)
@@ -1160,10 +1189,20 @@ class SunTimelapseMixin:
                 "api_cached_grabs": dict(_hash_state),
                 "max_consec_same":  int(stats.api_cached_grabs_max_consec),
                 "api_cached_grabs_total": int(stats.api_cached_grabs_total),
+                # G2 · also alias under api_cached_grabs_max_consec so
+                # the status endpoint's stats.get() picks it up after
+                # the live → final_stats handoff. ``max_consec_same``
+                # is the legacy alias kept for the existing UI rows.
+                "api_cached_grabs_max_consec": int(stats.api_cached_grabs_max_consec),
                 "validator_profile": active_profile.name,
                 "baseline_brightness": baseline_med,
                 "phase_drift_min": test_session.phase_drift_min,
                 "phase_drift_warning": test_session.phase_drift_warning,
+                # G2 · snapshot the per-slot ring into final_stats so
+                # the post-cleanup status endpoint can still surface it
+                # (the live _stats.json gets nuked when the scratch dir
+                # is cleaned up at the end of a successful run).
+                "slot_events": list(stats.slot_events),
             }
         # ── _skip.json sidecar plumbing ─────────────────────────────────
         # Every early-return branch below leaves a parallel
@@ -1599,7 +1638,7 @@ class SunTimelapseMixin:
                  session.cam_id, session.phase)
         return {"ok": True}
 
-    def get_sun_tl_test_status(self) -> dict:
+    def get_sun_tl_test_status(self, since: float = 0.0) -> dict:
         """Snapshot for the UI's live panel. Counters come from
         `_stats.json` written by CaptureStats.flush(); buffered log
         lines come from the in-memory ring populated by
@@ -1607,7 +1646,11 @@ class SunTimelapseMixin:
         when no session has ever run in this process — the
         module-level singleton (not the WeatherService instance)
         backs this so a service rebuild mid-run can't drop a live
-        session."""
+        session.
+
+        G2 · ``since`` (epoch seconds) filters the slot_events ring so
+        a polling client can ask for the delta only. Default 0.0
+        returns the full list."""
         from ..frame_helpers import read_capture_stats
         with _test_session_lock:
             session = _active_test_session
@@ -1673,6 +1716,20 @@ class SunTimelapseMixin:
             ),
             "phase_drift_min": session.phase_drift_min,
             "phase_drift_warning": session.phase_drift_warning,
+            # G2 · cache fingerprint counters surfaced for the live
+            # panel + the post-run diff. final_stats covers the
+            # post-cleanup case; the live-stats branch reads them
+            # from disk on every poll.
+            "api_cached_grabs_total": int(stats.get("api_cached_grabs_total", 0) or 0),
+            "api_cached_grabs_max_consec": int(stats.get("api_cached_grabs_max_consec", 0) or 0),
+            # G2 · per-slot event ring. ``since`` filters to entries
+            # strictly newer than the caller's last-seen timestamp so
+            # polling can ship the delta only. Default since=0
+            # returns the whole list.
+            "slot_events": [
+                e for e in (stats.get("slot_events") or [])
+                if float(e.get("ts") or 0.0) > float(since or 0.0)
+            ],
         }
 
     def sun_times_today(self) -> dict:

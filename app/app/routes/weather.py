@@ -588,11 +588,19 @@ def api_weather_sun_tl_test_start():
 @bp.get('/api/weather/sun-tl/test/status')
 def api_weather_sun_tl_test_status():
     """Live snapshot of the active (or most recently completed)
-    sun-tl test session. Polled by the UI every ~2 s while running."""
+    sun-tl test session. Polled by the UI every ~1.5 s while running.
+
+    G2 · ``?since=<epoch_s>`` filters slot_events to entries strictly
+    newer than that timestamp so the poller can ship just the delta.
+    Default (no since) returns the full slot_events history."""
     ws = app_state.weather_service
     if ws is None:
         return jsonify({"running": False, "session": None})
-    return jsonify(ws.get_sun_tl_test_status())
+    try:
+        since = float(request.args.get("since") or 0.0)
+    except (TypeError, ValueError):
+        since = 0.0
+    return jsonify(ws.get_sun_tl_test_status(since=since))
 
 
 @bp.post('/api/weather/sun-tl/test/cancel')

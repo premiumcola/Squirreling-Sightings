@@ -34,18 +34,53 @@ const _LS_KEY = 'tamspy.overlayToggles.v1';
 // because the operator opens the lightbox / sim modal explicitly TO
 // see them, but surveillance layers (zones/masks) flip OFF so a
 // preview frame isn't cluttered with green/red polygons every time
-// the modal opens. The user can flip them on per-context; the choice
-// is persisted under localStorage[_LS_KEY][contextKey].
+// the modal opens.
+//
+// K1 · persistence is now per-toggle. Bboxes/trails persist the
+// user's preference across opens (persist:true) — flip them off
+// once, they stay off. Zones/masks DO NOT persist (persist:false) —
+// they always re-open at default=false regardless of how the user
+// left them last time. Earlier behaviour persisted everything and
+// produced the "red mask polygon every clip" annoyance the user
+// flagged ("I never asked for this"). The matching localStorage
+// migration further down (_pruneNonPersistedFromLS) strips any
+// zones/masks values that leaked into prior sessions.
 const _TOGGLES = {
-  bboxes:    { label: 'Bboxes',    default: true,
+  bboxes:    { label: 'Bboxes',    default: true,  persist: true,
                desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
-  trails:    { label: 'Trails',    default: true,
+  trails:    { label: 'Trails',    default: true,  persist: true,
                desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
-  zones:     { label: 'Zonen',     default: false,
+  zones:     { label: 'Zonen',     default: false, persist: false,
                desc: 'Erkennungs-Zonen (grün) anzeigen' },
-  masks:     { label: 'Masken',    default: false,
+  masks:     { label: 'Masken',    default: false, persist: false,
                desc: 'Ausschluss-Masken (rot) anzeigen' },
 };
+
+// K1 · one-shot migration on module load. Walks every contextKey
+// stored under tamspy.overlayToggles.v1 and drops keys whose
+// _TOGGLES entry has persist:false (zones, masks). Silent — no
+// console output. Defensive: catches every step so a quota /
+// private-mode error path can't break module init.
+(function _pruneNonPersistedFromLS(){
+  try {
+    const raw = localStorage.getItem(_LS_KEY);
+    if (!raw) return;
+    const all = JSON.parse(raw);
+    if (!all || typeof all !== 'object') return;
+    let touched = false;
+    for (const ctx of Object.keys(all)){
+      const ctxState = all[ctx];
+      if (!ctxState || typeof ctxState !== 'object') continue;
+      for (const id of Object.keys(ctxState)){
+        if (_TOGGLES[id] && _TOGGLES[id].persist === false){
+          delete ctxState[id];
+          touched = true;
+        }
+      }
+    }
+    if (touched) localStorage.setItem(_LS_KEY, JSON.stringify(all));
+  } catch { /* private-mode / quota — silent */ }
+})();
 
 // Tooltip popover — one element, reused across contexts. Re-uses
 // the .mv-live-toggle-tip class from 30-lightbox-video.css so we
@@ -96,10 +131,21 @@ function _loadState(contextKey){
 }
 
 function _saveState(contextKey, state){
+  // K1 · filter to persistable keys only. Non-persisted toggles
+  // (zones, masks) MUST NOT leak into localStorage — otherwise the
+  // migration above just gets to re-clean them on every page load.
+  // The filter is the single source of truth; flipping a toggle's
+  // persist flag flips its localStorage participation automatically.
+  const clean = {};
+  for (const id of Object.keys(state || {})){
+    if (_TOGGLES[id] && _TOGGLES[id].persist){
+      clean[id] = !!state[id];
+    }
+  }
   try {
     const raw = localStorage.getItem(_LS_KEY);
     const all = raw ? (JSON.parse(raw) || {}) : {};
-    all[contextKey] = state;
+    all[contextKey] = clean;
     localStorage.setItem(_LS_KEY, JSON.stringify(all));
   } catch { /* quota / private mode — silent */ }
 }
@@ -136,10 +182,21 @@ export function renderOverlayToggles(host, opts = {}){
   }
   const contextKey = opts.contextKey || 'default';
   const persisted = _loadState(contextKey);
-  // Resolve initial state: persisted value wins, else default.
+  // K1 · per-toggle persistence. Persistable toggles (bboxes/trails)
+  // honour the localStorage value when present; non-persistable
+  // toggles (zones/masks) ALWAYS initialise to their declared
+  // default regardless of any leftover localStorage entry. The
+  // migration above strips those from the store on load, but this
+  // belt-and-suspenders also guards against a fresh write that
+  // somehow lands before the migration runs.
   const state = {};
   for (const id of available){
-    state[id] = (id in persisted) ? !!persisted[id] : !!_TOGGLES[id].default;
+    const t = _TOGGLES[id];
+    if (t.persist && id in persisted){
+      state[id] = !!persisted[id];
+    } else {
+      state[id] = !!t.default;
+    }
   }
   // Mark the host so multiple mounts can coexist in different parts
   // of the page (live + mediathek lightbox open simultaneously, etc.)

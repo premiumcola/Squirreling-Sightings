@@ -183,16 +183,40 @@ def _analyse_playback(mp4_path: Path) -> dict:
 def _load_capture_stats(frames_dir: Path | None) -> dict | None:
     """Read the validator's per-build ``_stats.json`` from the
     capture scratch dir. Returns the parsed dict or None when the
-    file is absent — never raises."""
+    file is absent — never raises.
+
+    Logs the miss reason at INFO when the file is unreadable so the
+    "capture-block leer" forensic from the 2026-05-14 Garten sunset
+    can be diagnosed from one log line instead of digging through
+    docker output for a missing-flush trail."""
     if frames_dir is None:
+        log.info("[timelapse] capture stats missing: frames_dir=None")
         return None
     stats_path = Path(frames_dir) / "_stats.json"
     if not stats_path.exists():
+        # Differentiate "scratch dir is gone" from "scratch dir exists
+        # but no _stats.json was ever flushed" — both signal a bug but
+        # different ones (cleanup race vs capture-loop crash before
+        # first flush).
+        if Path(frames_dir).exists():
+            log.info(
+                "[timelapse] capture stats missing: scratch=%s exists "
+                "but _stats.json absent — capture loop probably "
+                "crashed before any flush() ran",
+                frames_dir,
+            )
+        else:
+            log.info(
+                "[timelapse] capture stats missing: scratch dir %s "
+                "no longer exists — cleanup ran before QA",
+                frames_dir,
+            )
         return None
     try:
         return json.loads(stats_path.read_text(encoding="utf-8"))
     except Exception as e:
-        log.debug("[timelapse] capture stats read failed: %s", e)
+        log.warning("[timelapse] capture stats read failed: %s · %s",
+                    stats_path, e)
         return None
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 # Comprehensive per-mixin import block — some symbols are unused in this
 # mixin but kept identical across mixins so methods can move between them
 # without import bookkeeping. See service.py for the canonical import list.
+import hashlib
 import json
 import logging
 import os
@@ -201,6 +202,54 @@ def _sun_window_bounds(sun_dt: datetime, window_min: int) -> tuple[datetime, dat
         pre,
         post,
     )
+
+
+def _write_sun_skip_json(
+    out_dir: Path, stem: str, *,
+    phase: str, camera_id: str,
+    skip_reason: str, n_written: int,
+    min_required: int,
+    log_tail: list[str] | None = None,
+    extra: dict | None = None,
+) -> None:
+    """Write a parallel ``<stem>_skip.json`` next to where the .json
+    sighting would have lived. Called from every failure path inside
+    ``_run_sun_capture_inner`` so a failed sun build leaves a trail
+    the mediathek can surface as "capture aborted, here's why".
+
+    Without this file the 2026-05-14 sunrise on Nut Bar was completely
+    invisible — no mp4, no qa.json, no sighting JSON, nothing in the
+    on-disk tree to tell the operator the schedule even fired. The
+    payload mirrors the spec from the diagnose plan: phase, camera_id,
+    skip_reason, n_written, min_required, captured_at, log_tail, plus
+    any extras the caller wants to surface (e.g. exception type +
+    message for loop crashes). All writes are best-effort — a failure
+    here only emits a warning, never raises."""
+    payload = {
+        "phase":         phase,
+        "camera_id":     camera_id,
+        "skip_reason":   skip_reason,
+        "n_written":     int(n_written),
+        "min_required":  int(min_required),
+        "captured_at":   datetime.now().isoformat(timespec="seconds"),
+        "log_tail":      list(log_tail or [])[-30:],
+    }
+    if extra:
+        # Caller-supplied keys take precedence over defaults so a
+        # crash-context can override even the boilerplate fields if it
+        # wants. Realistic uses just add new keys.
+        payload.update(extra)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write_json(out_dir / f"{stem}_skip.json", payload)
+        log.info(
+            "[weather] _skip.json written: %s/%s_skip.json (reason=%s, "
+            "n_written=%d, min=%d)",
+            out_dir.name, stem, skip_reason, n_written, min_required,
+        )
+    except Exception as e:
+        log.warning("[weather] _skip.json write failed: %s · %s",
+                    out_dir / f"{stem}_skip.json", e)
 
 
 class SunTimelapseMixin:
@@ -778,145 +827,296 @@ class SunTimelapseMixin:
         # can't infect 5–10 adjacent slots. The counter resets on
         # every fresh successful grab.
         n_consecutive_backfills = 0
-        while datetime.now() < end_at:
-            # Cancellation polling at the slot boundary — the user-
-            # facing Abbrechen button sets ``cancel_requested`` via
-            # the HTTP cancel endpoint. The lock acquisition is
-            # cheap and matches the lifecycle invariant (HTTP writes
-            # under the lock, capture loop reads under it).
-            if test_session is not None:
-                with test_session.lock:
-                    if test_session.cancel_requested:
-                        log.info(
-                            "[sun-tl-test] cancel requested at slot %05d "
-                            "(%d frames captured)", i, n_written,
-                        )
-                        test_session.cancelled = True
-                if test_session.cancelled:
-                    break
-            # Periodic profile re-pick — production sun-tl windows span
-            # 75 min and cross civil twilight, so the right thresholds
-            # mid-window aren't necessarily the ones the start sample
-            # picked. Cadence is 2 min (down from 5 min) so a scene
-            # transition is detected before the slot loop burns
-            # through dozens of false-positive rejects.
-            now_dt = datetime.now()
-            if now_dt >= next_repick_at:
-                try:
-                    samp = rt.snapshot_jpeg_hires(quality=85)
-                    if samp:
-                        new_prof = pick_profile_from_baseline([samp])
-                        if new_prof is not active_profile:
-                            log.info(
-                                "[%s] profile-switch %s → %s mid-run",
-                                log_tag, active_profile.name.upper(),
-                                new_prof.name.upper(),
-                            )
-                            active_profile = new_prof
-                            if test_session is not None:
-                                test_session.validator_profile = active_profile.name
-                except Exception:
-                    pass
-                last_repick_at = now_dt
-                next_repick_at = now_dt + timedelta(minutes=2)
-            # Long-running capture loop — uses grab_valid_frame defaults
-            # (6 attempts × 0.4 s with a 5 s wall-clock cap). The hires
-            # variant reads only from the main-stream buffer so
-            # timelapses get the full sensor resolution rather than the
-            # 640x360 sub-stream the live preview path uses. The
-            # active validator profile flexes thresholds for the
-            # current lighting (DAY/TWILIGHT/NIGHT).
-            jpg, attempt_used, last_reason = grab_valid_frame(
-                lambda: rt.snapshot_jpeg_hires(quality=92),
-                on_reject=save_reject_cb,
-                profile=active_profile,
-                timestamp_zone=timestamp_zone,
-            )
-            if jpg:
-                out = frames_dir / f"{i:05d}.jpg"
-                try:
-                    out.write_bytes(jpg)
-                    n_written += 1
-                    stats.record_capture(attempt_used=attempt_used)
-                    last_valid_jpg = jpg
-                    # Fresh successful grab → reset the consecutive-
-                    # backfill counter. The next backfill, if any,
-                    # starts the chain over from zero.
-                    n_consecutive_backfills = 0
-                except Exception:
-                    pass
-            else:
-                stats.record_invalid(last_reason)
-                # ── Force re-pick on a dead_area reject ─────────────────
-                # A genuine scene-transition (twilight → night, daytime
-                # cloud rolling in) shows up first as a dead_area
-                # rejection: the validator's tile-fraction threshold
-                # for the OLD profile no longer fits the NEW lighting.
-                # Schedule the next re-pick immediately so the loop
-                # doesn't burn through 60+ false-positive slots
-                # waiting for the 2-min timer. Rate-limited to once
-                # per 30 s so a noisy slot can't stampede the picker
-                # into running on every iteration.
-                if last_reason and "dead_area" in last_reason:
-                    if (last_repick_at is None
-                            or (now_dt - last_repick_at).total_seconds() >= 30):
-                        next_repick_at = now_dt
-                # Self-defence: re-validate the cached jpg under a
-                # tighter profile after > 3 consecutive uses. If even
-                # the stricter gate accepts it, keep using it; if it
-                # now fails, drop the cache so a corrupt frame that
-                # snuck through can't infect adjacent slots.
-                if (last_valid_jpg is not None
-                        and n_consecutive_backfills >= 3):
-                    strict = _stricter_profile(active_profile)
-                    ok_strict, strict_reason = is_valid_frame(
-                        last_valid_jpg, profile=strict,
-                        timestamp_zone=timestamp_zone,
-                    )
-                    if not ok_strict:
-                        log.info(
-                            "[%s] dropped backfill cache after %d consecutive "
-                            "uses — re-validation flagged %s",
-                            log_tag, n_consecutive_backfills, strict_reason,
-                        )
-                        last_valid_jpg = None
-                        n_consecutive_backfills = 0
-                        stats.backfill_cache_drops += 1
-                if last_valid_jpg is not None:
-                    # Backfill with the most recent valid frame so the
-                    # slot index sequence stays gap-free for the
-                    # encoder. Counter still bumps invalid_frames for
-                    # diagnostic visibility.
-                    out = frames_dir / f"{i:05d}.jpg"
-                    try:
-                        out.write_bytes(last_valid_jpg)
-                        n_consecutive_backfills += 1
-                        log.info("[%s] %s slot %05d: invalid grab, "
-                                 "filled with last valid frame (%s)",
-                                 log_tag, cam_name, i, last_reason)
-                    except Exception:
-                        log.info("[%s] %s slot %05d: invalid grab and "
-                                 "backfill write failed (%s)",
-                                 log_tag, cam_name, i, last_reason)
-                else:
-                    log.info("[%s] %s slot %05d: invalid grabs, "
-                             "leaving slot empty (%s)",
-                             log_tag, cam_name, i, last_reason)
-            stats.flush()
-            i += 1
-            # Sleep in short chunks so we react quickly to stop signals.
-            slept = 0.0
-            while slept < interval_s and datetime.now() < end_at:
+        # Snapshot-API cache fingerprint. The 2026-05-14 sunset on
+        # Nut Bar produced 670 frames with 95 % duplicate ratio; the
+        # capture log shows 1090/1500 grabs succeeded fresh but the
+        # MP4 still played as one held frame. Two paths can produce
+        # that signature: (a) the camera's snapshot endpoint is
+        # caching its last JPEG and serving the same bytes for
+        # multiple successive grabs, (b) we backfilled invalid slots
+        # with ``last_valid_jpg``. The hash check below tags FRESH
+        # grabs that returned the same SHA1 as the previous fresh
+        # grab — the (a) signature — and the backfill log line
+        # carries an explicit ``[backfill]`` tag for the (b) one.
+        # Counters land in CaptureStats so they persist into
+        # _stats.json and the test-panel final_stats blob.
+        _hash_state = {"last_hash": None, "consec_same": 0, "fresh_in_row": 0}
+        # Loop exit bookkeeping — the 2026-05-14 Garten sunset run
+        # produced a 92-frame MP4 with an empty capture-block in the
+        # QA sidecar, which can only happen if the per-slot
+        # stats.flush() at the end of every iteration never landed a
+        # _stats.json on disk. The most likely cause is an unhandled
+        # exception inside the loop body that propagated up before
+        # the flush call ran. Wrap the whole loop in try/finally
+        # below so a final stats.flush() ALWAYS happens, and emit a
+        # single ``capture loop exit`` log line covering all three
+        # exit paths (timeout / cancel / exception) so future
+        # forensics can read why the loop stopped without digging
+        # through the surrounding 200 lines.
+        loop_exit_reason = "timeout"
+        loop_exit_exc: Exception | None = None
+        try:
+            while datetime.now() < end_at:
+                # Cancellation polling at the slot boundary — the user-
+                # facing Abbrechen button sets ``cancel_requested`` via
+                # the HTTP cancel endpoint. The lock acquisition is
+                # cheap and matches the lifecycle invariant (HTTP writes
+                # under the lock, capture loop reads under it).
                 if test_session is not None:
                     with test_session.lock:
                         if test_session.cancel_requested:
+                            log.info(
+                                "[sun-tl-test] cancel requested at slot %05d "
+                                "(%d frames captured)", i, n_written,
+                            )
                             test_session.cancelled = True
                     if test_session.cancelled:
                         break
-                time.sleep(0.5)
-                slept += 0.5
+                # Periodic profile re-pick — production sun-tl windows span
+                # 75 min and cross civil twilight, so the right thresholds
+                # mid-window aren't necessarily the ones the start sample
+                # picked. Cadence is 2 min (down from 5 min) so a scene
+                # transition is detected before the slot loop burns
+                # through dozens of false-positive rejects.
+                now_dt = datetime.now()
+                if now_dt >= next_repick_at:
+                    try:
+                        samp = rt.snapshot_jpeg_hires(quality=85)
+                        if samp:
+                            new_prof = pick_profile_from_baseline([samp])
+                            if new_prof is not active_profile:
+                                log.info(
+                                    "[%s] profile-switch %s → %s mid-run",
+                                    log_tag, active_profile.name.upper(),
+                                    new_prof.name.upper(),
+                                )
+                                active_profile = new_prof
+                                if test_session is not None:
+                                    test_session.validator_profile = active_profile.name
+                    except Exception:
+                        pass
+                    last_repick_at = now_dt
+                    next_repick_at = now_dt + timedelta(minutes=2)
+                # Long-running capture loop — uses grab_valid_frame defaults
+                # (6 attempts × 0.4 s with a 5 s wall-clock cap). The hires
+                # variant reads only from the main-stream buffer so
+                # timelapses get the full sensor resolution rather than the
+                # 640x360 sub-stream the live preview path uses. The
+                # active validator profile flexes thresholds for the
+                # current lighting (DAY/TWILIGHT/NIGHT).
+                jpg, attempt_used, last_reason = grab_valid_frame(
+                    lambda: rt.snapshot_jpeg_hires(quality=92),
+                    on_reject=save_reject_cb,
+                    profile=active_profile,
+                    timestamp_zone=timestamp_zone,
+                )
+                if jpg:
+                    out = frames_dir / f"{i:05d}.jpg"
+                    try:
+                        out.write_bytes(jpg)
+                        n_written += 1
+                        stats.record_capture(attempt_used=attempt_used)
+                        last_valid_jpg = jpg
+                        # Fresh successful grab → reset the consecutive-
+                        # backfill counter. The next backfill, if any,
+                        # starts the chain over from zero.
+                        n_consecutive_backfills = 0
+                        # Hash this fresh grab and compare against the
+                        # previous fresh grab. Same hash on two distinct
+                        # successful API calls means the snapshot endpoint
+                        # returned a cached buffer — we record but do NOT
+                        # reject, because the validator already accepted
+                        # the bytes as a valid frame. The diagnostic surfaces
+                        # so the operator can decide whether the camera
+                        # firmware or RTSP backend needs a poke. SHA1
+                        # truncated to 12 chars keeps log lines readable;
+                        # full collisions across millions of slots are
+                        # astronomically rare and not load-bearing here.
+                        try:
+                            jpg_bytes = bytes(jpg) if not isinstance(jpg, (bytes, bytearray)) else jpg
+                            h = hashlib.sha1(jpg_bytes).hexdigest()[:12]
+                        except Exception:
+                            h = None
+                        if h is not None:
+                            if h == _hash_state["last_hash"]:
+                                _hash_state["consec_same"] += 1
+                                _hash_state["fresh_in_row"] = 0
+                                stats.record_same_hash(_hash_state["consec_same"])
+                                log.info(
+                                    "[%s] %s slot %05d: FRESH grab but SAME hash "
+                                    "as last (consec_same=%d) — snapshot API "
+                                    "likely cached",
+                                    log_tag, cam_name, i,
+                                    _hash_state["consec_same"],
+                                )
+                            else:
+                                _hash_state["last_hash"] = h
+                                _hash_state["consec_same"] = 0
+                                _hash_state["fresh_in_row"] += 1
+                    except Exception:
+                        pass
+                else:
+                    stats.record_invalid(last_reason)
+                    # ── Force re-pick on a dead_area reject ─────────────────
+                    # A genuine scene-transition (twilight → night, daytime
+                    # cloud rolling in) shows up first as a dead_area
+                    # rejection: the validator's tile-fraction threshold
+                    # for the OLD profile no longer fits the NEW lighting.
+                    # Schedule the next re-pick immediately so the loop
+                    # doesn't burn through 60+ false-positive slots
+                    # waiting for the 2-min timer. Rate-limited to once
+                    # per 30 s so a noisy slot can't stampede the picker
+                    # into running on every iteration.
+                    if last_reason and "dead_area" in last_reason:
+                        if (last_repick_at is None
+                                or (now_dt - last_repick_at).total_seconds() >= 30):
+                            next_repick_at = now_dt
+                    # Self-defence: re-validate the cached jpg under a
+                    # tighter profile after > 3 consecutive uses. If even
+                    # the stricter gate accepts it, keep using it; if it
+                    # now fails, drop the cache so a corrupt frame that
+                    # snuck through can't infect adjacent slots.
+                    if (last_valid_jpg is not None
+                            and n_consecutive_backfills >= 3):
+                        strict = _stricter_profile(active_profile)
+                        ok_strict, strict_reason = is_valid_frame(
+                            last_valid_jpg, profile=strict,
+                            timestamp_zone=timestamp_zone,
+                        )
+                        if not ok_strict:
+                            log.info(
+                                "[%s] dropped backfill cache after %d consecutive "
+                                "uses — re-validation flagged %s",
+                                log_tag, n_consecutive_backfills, strict_reason,
+                            )
+                            last_valid_jpg = None
+                            n_consecutive_backfills = 0
+                            stats.backfill_cache_drops += 1
+                    if last_valid_jpg is not None:
+                        # Backfill with the most recent valid frame so the
+                        # slot index sequence stays gap-free for the
+                        # encoder. Counter still bumps invalid_frames for
+                        # diagnostic visibility. The ``[backfill]`` tag in
+                        # the message lets the operator separate "API
+                        # served us a cached buffer" (the FRESH-same-hash
+                        # line above) from "API gave nothing usable, we
+                        # filled in" — two failure modes the duplicate-
+                        # ratio in qa.json otherwise lumps together.
+                        out = frames_dir / f"{i:05d}.jpg"
+                        try:
+                            out.write_bytes(last_valid_jpg)
+                            n_consecutive_backfills += 1
+                            log.info("[%s] [backfill] %s slot %05d: invalid "
+                                     "grab, filled with last valid frame "
+                                     "(consec=%d, %s)",
+                                     log_tag, cam_name, i,
+                                     n_consecutive_backfills, last_reason)
+                        except Exception:
+                            log.info("[%s] [backfill] %s slot %05d: invalid "
+                                     "grab and backfill write failed (%s)",
+                                     log_tag, cam_name, i, last_reason)
+                    else:
+                        log.info("[%s] %s slot %05d: invalid grabs, "
+                                 "leaving slot empty (%s)",
+                                 log_tag, cam_name, i, last_reason)
+                stats.flush()
+                i += 1
+                # ── Abort thresholds ────────────────────────────────────
+                # The 2026-05-14 sunset on Nut Bar ran the full 75-min
+                # window, ended up with 95 % duplicate ratio on the
+                # final mp4, and produced a "successful" sighting file
+                # that was visually a single held frame. That's worse
+                # than no capture at all — the user spends time
+                # opening the clip to discover it's worthless. Two
+                # bail-outs below put a hard ceiling on backfill
+                # before the encode runs:
+                #
+                #  (a) Cumulative ratio > 60 % over ≥ 100 slots —
+                #      camera is structurally not delivering valid
+                #      fresh frames for this window. Abort + write
+                #      .skip.json. 60 % is the threshold below the
+                #      observed 95 % failure but above the typical
+                #      "noisy twilight, 30-40 % rejects" healthy run.
+                #
+                #  (b) > 20 consecutive backfills (≈ 1 min at the
+                #      default 3 s interval) — camera dropped offline
+                #      mid-window. The existing strict re-validation
+                #      drops the cache after 3 consecutive backfills,
+                #      so reaching 20 means even the stricter profile
+                #      keeps accepting the cached frame — a clear
+                #      "the buffer is the only thing we're getting"
+                #      signature.
+                if i >= 100 and stats.backfilled_slots / max(1, i) > 0.6:
+                    log.warning(
+                        "[%s] %s: aborting capture — %d/%d slots "
+                        "backfilled (%.0f%%) — camera not delivering "
+                        "fresh frames",
+                        log_tag, cam_name, stats.backfilled_slots, i,
+                        100.0 * stats.backfilled_slots / i,
+                    )
+                    loop_exit_reason = "too_many_backfills"
+                    break
+                if n_consecutive_backfills > 20:
+                    log.warning(
+                        "[%s] %s: aborting capture — %d consecutive "
+                        "backfills (~%d s without a fresh grab) — "
+                        "camera offline or wedged",
+                        log_tag, cam_name, n_consecutive_backfills,
+                        n_consecutive_backfills * interval_s,
+                    )
+                    loop_exit_reason = "too_many_consecutive_backfills"
+                    break
+                # Sleep in short chunks so we react quickly to stop signals.
+                slept = 0.0
+                while slept < interval_s and datetime.now() < end_at:
+                    if test_session is not None:
+                        with test_session.lock:
+                            if test_session.cancel_requested:
+                                test_session.cancelled = True
+                        if test_session.cancelled:
+                            break
+                    time.sleep(0.5)
+                    slept += 0.5
+                if test_session is not None and test_session.cancelled:
+                    break
+            # Loop ran to its `datetime.now() < end_at` ceiling without
+            # an exception. Promote the reason to "cancelled" if a test
+            # session signalled mid-run; "timeout" stays as the default
+            # for both production windows that simply burn the budget
+            # and tests that ride out the full duration_s.
             if test_session is not None and test_session.cancelled:
-                break
+                loop_exit_reason = "cancelled"
+        except Exception as _loop_exc:
+            # ANY uncaught exception inside the slot loop ends up here.
+            # Without this catch the daemon thread silently dies and the
+            # operator gets no MP4, no QA sidecar, no _skip.json (since
+            # the encode block below never runs) — exactly the failure
+            # signature of the 2026-05-14 Garten sunset capture (92
+            # frames on disk, empty QA capture-block, no logged crash).
+            loop_exit_reason = f"exception:{type(_loop_exc).__name__}"
+            loop_exit_exc = _loop_exc
+            log.warning(
+                "[%s] capture loop crashed at slot %d (n_written=%d): %s",
+                log_tag, i, n_written, _loop_exc,
+            )
+        finally:
+            # Guarantee a final ``_stats.json`` write regardless of how
+            # the loop exited. The per-slot flush at line ~959 lands the
+            # right shape after each iteration; this final flush makes
+            # sure the LAST iteration's counters land even when the
+            # loop body raised after a record_invalid / record_capture
+            # call but before its own flush.
+            try:
+                stats.flush()
+            except Exception as _fl:
+                log.warning("[%s] final stats.flush failed: %s", log_tag, _fl)
+            log.info(
+                "[%s] capture loop exit · reason=%s i=%d n_written=%d "
+                "fresh=%d backfilled=%d skipped=%d",
+                log_tag, loop_exit_reason, i, n_written,
+                int(stats.fresh_captures), int(stats.backfilled_slots),
+                int(stats.skipped_slots),
+            )
         sun_at_end = self._sun_position()
         log.info("[%s] Capture done: %s %s · %d Frames erfasst",
                  log_tag, cam_name, phase, n_written)
@@ -938,11 +1138,88 @@ class SunTimelapseMixin:
                 "backfilled_slots": int(stats.backfilled_slots),
                 "skipped_slots":    int(stats.skipped_slots),
                 "total_written":    int(stats.total_written),
+                # Snapshot-API cache fingerprint (cf. _hash_state in the
+                # capture loop). ``api_cached_grabs`` is the local hash
+                # state at loop end — last_hash / current run / total
+                # distinct hashes seen. ``max_consec_same`` is the
+                # longest run length of FRESH-but-same-hash events
+                # observed during this run (a high value means the
+                # snapshot API was stuck serving one buffer for many
+                # slots in a row, NOT that we backfilled them).
+                "api_cached_grabs": dict(_hash_state),
+                "max_consec_same":  int(stats.api_cached_grabs_max_consec),
+                "api_cached_grabs_total": int(stats.api_cached_grabs_total),
                 "validator_profile": active_profile.name,
                 "baseline_brightness": baseline_med,
                 "phase_drift_min": test_session.phase_drift_min,
                 "phase_drift_warning": test_session.phase_drift_warning,
             }
+        # ── _skip.json sidecar plumbing ─────────────────────────────────
+        # Every early-return branch below leaves a parallel
+        # ``<stem>_skip.json`` in ``out_dir`` so a failed sun build is
+        # still visible in the mediathek. Without it the 2026-05-14
+        # sunrise on Nut Bar produced no mp4, no qa.json, no .json —
+        # literally nothing on disk to tell the operator the schedule
+        # had fired. ``_log_tail`` only carries real lines in test mode
+        # (the session handler buffers them); production captures get
+        # an empty list because there's no per-capture handler attached.
+        # That's an acceptable trade for now — the docker log is the
+        # canonical trail in production, the .skip.json's job is just
+        # to mark "this slot was attempted and aborted".
+        min_frames = 4 if test_session is not None else target_fps * 2
+        _log_tail: list = []
+        if test_session is not None:
+            try:
+                with test_session.lock:
+                    _log_tail = list(test_session.log_lines)
+            except Exception:
+                _log_tail = []
+        # ── Capture loop crashed ────────────────────────────────────────
+        # If the slot loop raised, ``loop_exit_exc`` carries the
+        # exception. Skipping encode is the only safe move — the frames
+        # on disk are in unknown state, and the QA sidecar would
+        # otherwise read an incomplete _stats.json.
+        if loop_exit_exc is not None:
+            _write_sun_skip_json(
+                out_dir, stem,
+                phase=phase, camera_id=cam_id,
+                skip_reason=f"capture_loop_crashed:{type(loop_exit_exc).__name__}",
+                n_written=n_written, min_required=min_frames,
+                log_tail=_log_tail,
+                extra={"exception_message": str(loop_exit_exc)},
+            )
+            if test_session is not None and not test_session.error:
+                test_session.error = f"capture loop crashed: {loop_exit_exc}"
+            _finalise_scratch()
+            return
+        # ── Backfill-ratio bail-out ─────────────────────────────────────
+        # The slot loop set ``loop_exit_reason`` to one of these when it
+        # aborted itself before the window ran to end_at. Encoding the
+        # already-captured frames would just produce another 95 %-
+        # duplicate pseudo-success mp4, so we skip the encode and
+        # surface the abort via ``_skip.json``. Production gets an
+        # honest "capture aborted" in the mediathek instead of a
+        # worthless video file.
+        if loop_exit_reason in ("too_many_backfills",
+                                "too_many_consecutive_backfills"):
+            _write_sun_skip_json(
+                out_dir, stem,
+                phase=phase, camera_id=cam_id,
+                skip_reason=loop_exit_reason,
+                n_written=n_written, min_required=min_frames,
+                log_tail=_log_tail,
+                extra={
+                    "slots_attempted":  int(i),
+                    "fresh_captures":   int(stats.fresh_captures),
+                    "backfilled_slots": int(stats.backfilled_slots),
+                    "backfill_ratio":   round(
+                        stats.backfilled_slots / max(1, i), 3),
+                },
+            )
+            if test_session is not None and not test_session.error:
+                test_session.error = loop_exit_reason
+            _finalise_scratch()
+            return
         # Cancellation: skip the encode path entirely — a half-length
         # cancelled capture should not produce a sighting. Don't
         # overwrite ``error`` if a prior failure path already set it
@@ -951,18 +1228,31 @@ class SunTimelapseMixin:
             log.info("[sun-tl-test] capture cancelled — skipping encode")
             if not test_session.error:
                 test_session.error = "abgebrochen"
+            _write_sun_skip_json(
+                out_dir, stem,
+                phase=phase, camera_id=cam_id,
+                skip_reason="cancelled",
+                n_written=n_written, min_required=min_frames,
+                log_tail=_log_tail,
+            )
             _finalise_scratch()
             return
         # The "≥ 2 s of video" guard fits 75-min real captures fine
         # but kills 60-s tests at 3-s intervals (only ~20 frames).
         # Drop the guard to a static minimum during test so a short
         # window still produces a verifiable MP4.
-        min_frames = 4 if test_session is not None else target_fps * 2
         if n_written < min_frames:
             log.warning("[%s] Zu wenige Frames (%d) — Encode übersprungen",
                         log_tag, n_written)
             if test_session is not None:
                 test_session.error = f"too few frames ({n_written})"
+            _write_sun_skip_json(
+                out_dir, stem,
+                phase=phase, camera_id=cam_id,
+                skip_reason="too_few_frames",
+                n_written=n_written, min_required=min_frames,
+                log_tail=_log_tail,
+            )
             _finalise_scratch()
             return
         # Re-use the existing TimelapseBuilder._write_video logic — same
@@ -992,6 +1282,13 @@ class SunTimelapseMixin:
                 )
                 if test_session is not None:
                     test_session.error = f"too few frames on disk ({len(images)})"
+                _write_sun_skip_json(
+                    out_dir, stem,
+                    phase=phase, camera_id=cam_id,
+                    skip_reason="too_few_frames_on_disk",
+                    n_written=len(images), min_required=min_frames,
+                    log_tail=_log_tail,
+                )
                 _finalise_scratch()
                 return
             # Test runs let the user pick the final encoded MP4 length
@@ -1020,12 +1317,27 @@ class SunTimelapseMixin:
                 log.warning("[%s] Encode failed for %s %s", log_tag, cam_name, phase)
                 if test_session is not None:
                     test_session.error = "encode failed"
+                _write_sun_skip_json(
+                    out_dir, stem,
+                    phase=phase, camera_id=cam_id,
+                    skip_reason="encode_failed",
+                    n_written=n_written, min_required=min_frames,
+                    log_tail=_log_tail,
+                )
                 _finalise_scratch()
                 return
         except Exception as e:
             log.warning("[%s] Encode crash %s %s: %s", log_tag, cam_name, phase, e)
             if test_session is not None:
                 test_session.error = f"encode crash: {e}"
+            _write_sun_skip_json(
+                out_dir, stem,
+                phase=phase, camera_id=cam_id,
+                skip_reason=f"encode_crash:{type(e).__name__}",
+                n_written=n_written, min_required=min_frames,
+                log_tail=_log_tail,
+                extra={"exception_message": str(e)},
+            )
             _finalise_scratch()
             return
         # Write thumb from the middle JPEG (~halfway through the sun event).

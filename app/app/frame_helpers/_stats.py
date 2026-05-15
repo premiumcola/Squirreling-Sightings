@@ -57,6 +57,15 @@ class CaptureStats:
     # the operator sees "we caught one" rather than wondering why a
     # block of slots ended up empty.
     backfill_cache_drops: int = 0
+    # Snapshot-API cache fingerprint counters. ``api_cached_grabs_total``
+    # bumps every time a FRESH (non-backfill) grab returned a JPEG whose
+    # SHA1 matches the most recent fresh grab — strong signal that the
+    # camera's snapshot endpoint is serving a cached buffer.
+    # ``api_cached_grabs_max_consec`` is the longest run of consecutive
+    # same-hash fresh grabs observed during the run. Both stay at 0 for
+    # legacy capture paths that don't call ``record_same_hash``.
+    api_cached_grabs_total: int = 0
+    api_cached_grabs_max_consec: int = 0
     # Optional capture-context metadata. Populated by the caller right
     # before flush() lands to ``_stats.json`` and surfaces in the UI.
     # All optional so the existing call sites that don't set them
@@ -71,6 +80,17 @@ class CaptureStats:
         self.captured_frames += 1
         if attempt_used > 0:
             self.retry_recoveries += 1
+
+    def record_same_hash(self, run_len: int):
+        """A FRESH grab returned the same SHA1 as the previous fresh
+        grab. ``run_len`` is the current run length INCLUDING this
+        event (>=1). Bumps the total counter and tracks the maximum
+        observed run length so post-run inspection can tell "API
+        served a single cached frame once" from "API served a stuck
+        buffer for 30 slots in a row"."""
+        self.api_cached_grabs_total += 1
+        if run_len > self.api_cached_grabs_max_consec:
+            self.api_cached_grabs_max_consec = int(run_len)
 
     def record_invalid(self, reason: str | None = None):
         """Record a frame the capture loop gave up on. Optionally pass
@@ -141,6 +161,8 @@ class CaptureStats:
                 "scene_skips_by_reason": dict(self.scene_skips_by_reason),
                 "rejected_by_reason_examples": dict(self.rejected_by_reason_examples),
                 "backfill_cache_drops": int(self.backfill_cache_drops),
+                "api_cached_grabs_total": int(self.api_cached_grabs_total),
+                "api_cached_grabs_max_consec": int(self.api_cached_grabs_max_consec),
                 # Derived breakdown — denormalised here so consumers
                 # don't have to recompute. fresh+backfilled+skipped is
                 # the "how many slots in the MP4 are real content"

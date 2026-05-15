@@ -175,6 +175,18 @@ class FrameValidatorProfile:
     bright_outlier_max_tile_floor: float = 240.0
     bright_outlier_dev_floor: float = 100.0
     bright_outlier_frame_mean_max: float = 0.0
+    # Horizontal anomaly band — row-delta z-score floor. The 2026-05-14
+    # Nut Bar sunset rejected 98 of 115 frames as horizontal_anomaly_band
+    # because the Reolink IR-cut transition during twilight produces a
+    # transient row-delta spike at the exact band where the validator
+    # is most sensitive. DAY frames keep the historic 2.5 floor;
+    # TWILIGHT raises it so the IR-cut artefact stops dominating the
+    # reject tally during the exact window a sun-timelapse covers.
+    # The chroma stage (per-camera _ANOMALY_CHROMA_* constants) is
+    # NOT parameterised — real corruption almost always shows chroma
+    # evidence too, so the looser row-delta floor here only kills the
+    # false-positives, not the real bandings.
+    horizontal_anomaly_band_min_z: float = 2.5
 
 
 DAY_PROFILE = FrameValidatorProfile(name="day")
@@ -189,6 +201,16 @@ TWILIGHT_PROFILE = FrameValidatorProfile(
     # active up to mid-twilight without false-positives on the bright
     # half of dawn.
     bright_outlier_frame_mean_max=100.0,
+    # 2.5 → 4.0 specifically for sun-timelapse windows. Reolink CX810 +
+    # RLC-811A burn an IR-cut transition into the dawn/dusk window —
+    # the resulting row-delta lands at z ≈ 2.5-3.5 on the stripe rows,
+    # exactly inside the historical detector's flag zone. Raising the
+    # floor to 4.0 means a band needs SUBSTANTIAL row-to-row jump (true
+    # NAL/slice-loss corruption sits well above 4.0 in our test corpus)
+    # to trigger; the IR-cut bandings drop out as legitimate. The chroma
+    # stage still rejects independently when warm/cold leak is visible,
+    # so real corruption with colour evidence still bites.
+    horizontal_anomaly_band_min_z=4.0,
 )
 NIGHT_PROFILE = FrameValidatorProfile(
     name="night",

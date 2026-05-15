@@ -122,12 +122,19 @@ def _longest_above(mask: np.ndarray) -> tuple[int, int]:
     return (longest_start if longest_len > 0 else 0), longest_len
 
 
-def _row_delta_anomaly_band(gray: np.ndarray) -> tuple[int, int, float] | None:
+def _row_delta_anomaly_band(
+    gray: np.ndarray,
+    *,
+    min_z: float = _ANOMALY_BAND_MIN_Z,
+) -> tuple[int, int, float] | None:
     """Stage A — find a contiguous run of rows whose row-to-row delta
     is z>1.5 above the image's robust baseline. Returns
     (band_y_start, band_height, z_score) or None.
 
-    ``gray`` is uint8 H×W."""
+    ``gray`` is uint8 H×W. ``min_z`` overrides the module-level
+    z-score floor; the validator profiles use this to loosen the
+    detector during twilight (Reolink IR-cut transitions trigger a
+    z ≈ 2.5-3.5 band that's a false positive)."""
     h = gray.shape[0]
     if h < _ANOMALY_BAND_SMOOTH_WIN * 2:
         return None
@@ -152,7 +159,7 @@ def _row_delta_anomaly_band(gray: np.ndarray) -> tuple[int, int, float] | None:
         return None
     band_mean = float(smooth[start:start + length].mean())
     z = (band_mean - baseline) / max(float(np.std(smooth)), 0.5)
-    if z < _ANOMALY_BAND_MIN_Z:
+    if z < min_z:
         return None
     return (start, length, z)
 
@@ -194,7 +201,12 @@ def _chroma_anomaly_band(img_bgr: np.ndarray) -> tuple[int, int, float] | None:
     return (start, length, peak_pct)
 
 
-def is_horizontal_anomaly_band(img, *, timestamp_zone=None) -> tuple[bool, str]:
+def is_horizontal_anomaly_band(
+    img,
+    *,
+    timestamp_zone=None,
+    profile=None,
+) -> tuple[bool, str]:
     """Detect a horizontal band of corruption rows anywhere in the
     frame. Backwards-compat: when the band sits in the bottom 25 %
     the reason head emitted is the legacy ``bottom_strip_white`` /
@@ -211,7 +223,13 @@ def is_horizontal_anomaly_band(img, *, timestamp_zone=None) -> tuple[bool, str]:
     NOT independently fire, the band is suppressed — that signature
     matches a clock readout (single-row text spike, no chroma leak),
     not a NAL/slice-loss corruption (which produces both row-delta
-    AND wrong-colour evidence)."""
+    AND wrong-colour evidence).
+
+    ``profile`` (FrameValidatorProfile) lets the caller override the
+    row-delta z-score floor — twilight passes a profile whose value
+    is raised to 4.0 so Reolink IR-cut transition stripes (z≈2.5-3.5)
+    aren't misclassified as corruption. ``None`` keeps the historic
+    module-level default 2.5."""
     img = _decode(img)
     if img is None or img.size == 0:
         return False, ""
@@ -221,7 +239,9 @@ def is_horizontal_anomaly_band(img, *, timestamp_zone=None) -> tuple[bool, str]:
     if h < 40:
         return False, ""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    a = _row_delta_anomaly_band(gray)
+    min_z = getattr(profile, "horizontal_anomaly_band_min_z",
+                    _ANOMALY_BAND_MIN_Z)
+    a = _row_delta_anomaly_band(gray, min_z=float(min_z))
     b = _chroma_anomaly_band(img)
     if a is None and b is None:
         return False, ""
@@ -256,8 +276,12 @@ def is_horizontal_anomaly_band(img, *, timestamp_zone=None) -> tuple[bool, str]:
 # ``is_bottom_strip_anomaly``. Forwards to the new location-agnostic
 # detector so behaviour is the new behaviour everywhere; the only
 # difference is the name kept in the public symbol set.
-def is_bottom_strip_anomaly(img, *, timestamp_zone=None) -> tuple[bool, str]:
-    return is_horizontal_anomaly_band(img, timestamp_zone=timestamp_zone)
+def is_bottom_strip_anomaly(
+    img, *, timestamp_zone=None, profile=None,
+) -> tuple[bool, str]:
+    return is_horizontal_anomaly_band(
+        img, timestamp_zone=timestamp_zone, profile=profile,
+    )
 
 
 # Cheap pink/rainbow H.264 bottom-strip detector. Originally a static

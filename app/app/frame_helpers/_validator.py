@@ -143,7 +143,13 @@ def is_valid_frame(
     # slots in the MP4. Reason head stays as the legacy
     # ``bottom_strip_*`` when the band is in the bottom 25 % so
     # existing log greps and reject-folder layouts keep working.
-    bs, bs_reason = is_horizontal_anomaly_band(img, timestamp_zone=timestamp_zone)
+    # ``profile`` is threaded through so TWILIGHT's looser
+    # ``horizontal_anomaly_band_min_z`` actually flows down into the
+    # detector — without it the IR-cut transition during dawn/dusk
+    # dominates the reject tally on a sun-timelapse window.
+    bs, bs_reason = is_horizontal_anomaly_band(
+        img, timestamp_zone=timestamp_zone, profile=profile,
+    )
     if bs:
         return False, bs_reason
 

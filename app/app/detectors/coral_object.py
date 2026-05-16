@@ -18,6 +18,37 @@ from ._types import Detection, _apply_region_filter
 log = logging.getLogger(__name__)
 
 
+def _letterbox(
+    img: np.ndarray, dst_w: int, dst_h: int,
+) -> tuple[np.ndarray, float, int, int]:
+    """Fit `img` into a `dst_w x dst_h` canvas without distorting aspect.
+
+    A plain ``cv2.resize(img, (dst_w, dst_h))`` stretches a 16:9 frame
+    into a square model input — bodies get horizontally compressed and
+    the SSD confidence collapses (a clearly-visible person scored
+    0.28-0.44 in a live test). Letterboxing scales by
+    ``scale = min(dst_w/w, dst_h/h)`` so neither axis is squashed, then
+    pads the unused edges with the neutral grey 114 used by the YOLO /
+    COCO training pipelines.
+
+    Returns ``(canvas, scale, pad_x, pad_y)``; callers invert the
+    transform back to frame-space pixel coordinates with:
+
+        x_frame = (x_model_px - pad_x) / scale
+        y_frame = (y_model_px - pad_y) / scale
+    """
+    h, w = img.shape[:2]
+    scale = min(dst_w / float(w), dst_h / float(h))
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    pad_x = (dst_w - new_w) // 2
+    pad_y = (dst_h - new_h) // 2
+    canvas = np.full((dst_h, dst_w, 3), 114, dtype=resized.dtype)
+    canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized
+    return canvas, scale, pad_x, pad_y
+
+
 class CoralObjectDetector:
     """Object detector with three-tier fallback:
     1. pycoral + EdgeTPU  → mode="coral"
@@ -307,8 +338,11 @@ class CoralObjectDetector:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         with self._infer_lock:
             width, height = self.common.input_size(self.interpreter)
-            resized = cv2.resize(rgb, (width, height))
-            self.common.set_input(self.interpreter, resized)
+            # Aspect-preserving letterbox — see _letterbox for the why.
+            # pycoral returns bbox in model-pixel space, so the inverse
+            # transform below subtracts pad before dividing by scale.
+            canvas, scale, pad_x, pad_y = _letterbox(rgb, width, height)
+            self.common.set_input(self.interpreter, canvas)
             self.interpreter.invoke()
             # Materialise pycoral results into a plain list of (id, score, bbox)
             # tuples while still inside the lock so the underlying tensor
@@ -321,14 +355,13 @@ class CoralObjectDetector:
                 for o in objs
             ]
         h, w = frame.shape[:2]
-        sx = w / float(width)
-        sy = h / float(height)
+        inv_scale = 1.0 / scale if scale > 0 else 1.0
         out: list[Detection] = []
         for cid, score, (xmin, ymin, xmax, ymax) in snapshot:
-            x1 = max(0, int(xmin * sx))
-            y1 = max(0, int(ymin * sy))
-            x2 = min(w, int(xmax * sx))
-            y2 = min(h, int(ymax * sy))
+            x1 = max(0, min(w, int(round((xmin - pad_x) * inv_scale))))
+            y1 = max(0, min(h, int(round((ymin - pad_y) * inv_scale))))
+            x2 = max(0, min(w, int(round((xmax - pad_x) * inv_scale))))
+            y2 = max(0, min(h, int(round((ymax - pad_y) * inv_scale))))
             label = self.labels.get(cid, str(cid))
             out.append(Detection(label=label, score=score, bbox=(x1, y1, x2, y2), raw_cls_id=cid))
         return _apply_region_filter(out, self._region_filter)
@@ -352,8 +385,13 @@ class CoralObjectDetector:
         in_h = input_details[0]['shape'][1]
         in_w = input_details[0]['shape'][2]
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        resized = cv2.resize(rgb, (in_w, in_h))
-        inp = np.expand_dims(resized, axis=0)
+        # Aspect-preserving letterbox — same rationale as _detect_coral.
+        # SSD-MobileNet emits normalised bbox coords (0..1) in the
+        # padded model square, so the inverse transform multiplies by
+        # the model dim first, then subtracts pad, then divides by
+        # scale to land back in original frame pixels.
+        canvas, scale, pad_x, pad_y = _letterbox(rgb, in_w, in_h)
+        inp = np.expand_dims(canvas, axis=0)
         if input_details[0]['dtype'] == np.float32:
             inp = (inp.astype(np.float32) - 127.5) / 127.5
         with self._infer_lock:
@@ -364,16 +402,17 @@ class CoralObjectDetector:
             classes = np.copy(self.interpreter.get_tensor(output_details[1]['index'])[0])
             scores  = np.copy(self.interpreter.get_tensor(output_details[2]['index'])[0])
         h, w = frame.shape[:2]
+        inv_scale = 1.0 / scale if scale > 0 else 1.0
         out: list[Detection] = []
         for i in range(len(scores)):
             score = float(scores[i])
             if score < score_threshold:
                 continue
             ymin, xmin, ymax, xmax = boxes[i]
-            x1 = max(0, int(xmin * w))
-            y1 = max(0, int(ymin * h))
-            x2 = min(w, int(xmax * w))
-            y2 = min(h, int(ymax * h))
+            x1 = max(0, min(w, int(round((xmin * in_w - pad_x) * inv_scale))))
+            y1 = max(0, min(h, int(round((ymin * in_h - pad_y) * inv_scale))))
+            x2 = max(0, min(w, int(round((xmax * in_w - pad_x) * inv_scale))))
+            y2 = max(0, min(h, int(round((ymax * in_h - pad_y) * inv_scale))))
             cls_id = int(classes[i])
             label = self.labels.get(cls_id, str(cls_id))
             out.append(Detection(label=label, score=score, bbox=(x1, y1, x2, y2), raw_cls_id=cls_id))

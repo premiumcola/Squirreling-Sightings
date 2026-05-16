@@ -57,8 +57,12 @@ def default_camera(cam: dict | None = None) -> dict:
         # forgiving — false positives are caught by the N-of-M
         # confirmation window (see schedule_action_active +
         # DetectionConfirmer), so we no longer need a hard 0.72 floor
-        # on person to suppress single-frame artefacts.
-        #   - person:   0.65  (was 0.72)
+        # on person to suppress single-frame artefacts. A live test
+        # with a clearly-visible person scored 0.28-0.44 under the
+        # old 0.65 floor (every frame REJECTED), which was the root
+        # cause of "Person wird nicht erkannt". 0.45 is the SSD-
+        # MobileNet industry norm; see migrate_label_thresholds.
+        #   - person:   0.45  (was 0.65, originally 0.72)
         #   - cat:      0.55
         #   - bird:     0.45  (smaller subjects, lower COCO confidence)
         #   - squirrel: 0.45  (wildlife stage is the second guard)

@@ -107,7 +107,7 @@ TL_DEFAULT_PROFILES = {
 # default_camera don't accidentally mutate the source dict if a caller
 # pokes at it.
 LABEL_THRESHOLD_DEFAULTS = {
-    "person":   0.65,
+    "person":   0.45,
     "cat":      0.55,
     "bird":     0.45,
     "squirrel": 0.45,

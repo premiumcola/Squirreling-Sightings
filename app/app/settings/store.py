@@ -26,6 +26,7 @@ from .migrations import (
     migrate_alerting_schedules,
     migrate_camera_defaults,
     migrate_class_severity,
+    migrate_label_thresholds,
     migrate_runtime_defaults,
     migrate_schedules,
     migrate_server_location_defaults,
@@ -75,6 +76,7 @@ class SettingsStore:
         # event_timelapse blocks (from the additive backfill above)
         # already exist when the clamp tries to read interval_s / fps.
         migrate_timelapse_intervals(self.data)
+        migrate_label_thresholds(self.data)
         migrate_runtime_defaults(self.data)
         self._repair_snapshot_urls()
         # One-shot cleanup of any pre-existing duplicate camera rows.

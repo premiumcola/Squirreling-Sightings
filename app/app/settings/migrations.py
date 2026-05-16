@@ -367,6 +367,37 @@ def migrate_timelapse_intervals(data: dict) -> None:
         )
 
 
+def migrate_label_thresholds(data: dict) -> None:
+    """Rewrite the legacy person threshold default 0.65 → 0.45.
+
+    A live test (user standing arms-out in frame) had Coral score
+    person 0.28 and 0.44; both were rejected by the 0.65 floor and
+    the user saw "Person wird nicht erkannt". 0.65 was the previous
+    LABEL_THRESHOLD_DEFAULTS["person"], i.e. a value that landed
+    in storage purely because it was the default at write time, not
+    because the operator chose it. We rewrite ONLY that exact 0.65
+    value — any other stored threshold (e.g. a deliberately raised
+    0.55 or 0.80) is left untouched. Idempotent: cameras already on
+    0.45 (or any non-0.65 value) skip the touch path.
+    """
+    touched = 0
+    for cam in data.get("cameras", []):
+        thrs = cam.get("label_thresholds")
+        if not isinstance(thrs, dict):
+            continue
+        person = thrs.get("person")
+        if not isinstance(person, (int, float)):
+            continue
+        if abs(float(person) - 0.65) < 1e-9:
+            thrs["person"] = 0.45
+            touched += 1
+    if touched:
+        log.info(
+            "[migration] label-thresholds: rewrote stale person=0.65 → 0.45 "
+            "on %d Kameras", touched,
+        )
+
+
 def migrate_runtime_defaults(data: dict) -> None:
     rt = data.setdefault("runtime", {})
     if not isinstance(rt, dict):

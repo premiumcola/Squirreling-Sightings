@@ -82,6 +82,16 @@ SAMPLE_BBOX_DELTA_PX = 2
 # the standard NMS threshold — generous enough to collapse the
 # duplicate cluster while leaving genuinely distinct objects alone.
 NMS_IOU = 0.5
+# J2 · spawn-block IoU. An unmatched confirmed detection may only
+# spawn a NEW track when it does NOT strongly overlap any currently-
+# active track of ANY label. If it does, the detection is either
+# a same-label duplicate (extend instead) or a cross-label
+# misclassification of an already-tracked subject (drop) — the SSD's
+# occasional "Vogel" on a person used to spawn a fat parallel bird
+# track on top of the existing person track. 0.45 catches both
+# without blocking a fresh subject who happens to brush past an
+# unrelated existing track.
+SPAWN_BLOCK_IOU = 0.45
 
 
 # ── ID + colour helpers ─────────────────────────────────────────────────────
@@ -626,18 +636,73 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
     # `taken_tracks` and immediately gets missed_windows += 1 on its
     # birth frame — halving the intended grace period.
     original_count = len(state.active)
-    # Phase 3 — unmatched confirmed dets → first try re-identifying a
-    # recently-closed track, fall back to spawning a fresh id. The
-    # re-id pass catches "person walks back into frame after the
-    # original track's grace expired", which used to explode the id
-    # count on back-and-forth subjects. Unmatched tentative dets are
-    # still dropped (no spawn) so a flicker of low-conf noise can't
-    # seed a new track id.
+    # Phase 3 — unmatched confirmed dets. The flow now is:
+    #
+    #   1. SPAWN-BLOCK check (J2). If the det's bbox strongly
+    #      overlaps an active track's LAST-OBSERVED bbox (any
+    #      label, IoU > SPAWN_BLOCK_IOU), the det is either a
+    #      same-label duplicate (likely a direction-reversal that
+    #      slipped past Phase 1's prediction-based matcher) or a
+    #      cross-label misclassification of an already-tracked
+    #      subject. Same-label → ATTACH to that track. Cross-label
+    #      → DROP. Either way no fresh id spawns.
+    #   2. RE-ID against recently-closed same-label tracks for
+    #      "person walked back in after grace expired".
+    #   3. Fallback: spawn a fresh id.
+    #
+    # Unmatched tentative dets are still dropped (no spawn) so a
+    # flicker of low-conf noise can't seed a new track id.
+    def _spawn_blocking_track(det):
+        """Return the ACTIVE track whose last-observed bbox
+        overlaps ``det.bbox`` above SPAWN_BLOCK_IOU, or None.
+        Considers ALL labels — a cross-label hit indicates a
+        misclassification of an already-tracked subject. Picks the
+        highest IoU when multiple qualify."""
+        best_track: Track | None = None
+        best_iou = SPAWN_BLOCK_IOU
+        for ti, tr in enumerate(state.active):
+            if not tr.samples:
+                continue
+            # Predicted bbox was computed at frame entry — reuse.
+            pred = predicted[ti] if ti < len(predicted) else None
+            last_bb = tr.samples[-1]["bbox"]
+            last_tuple = (int(last_bb["x1"]), int(last_bb["y1"]),
+                          int(last_bb["x2"]), int(last_bb["y2"]))
+            iou_pred = iou(det.bbox, pred) if pred is not None else 0.0
+            iou_last = iou(det.bbox, last_tuple)
+            best_for_track = max(iou_pred, iou_last)
+            if best_for_track > best_iou:
+                best_iou = best_for_track
+                best_track = tr
+        return best_track
+
     for di, d in confirmed:
         if di in taken_confirmed:
             continue
         bbox_dict = {"x1": int(d.bbox[0]), "y1": int(d.bbox[1]),
                      "x2": int(d.bbox[2]), "y2": int(d.bbox[3])}
+        blocker = _spawn_blocking_track(d)
+        if blocker is not None:
+            if blocker.label == d.label:
+                # Same subject the predictor lost — attach the det
+                # as a normal detect sample so the existing track
+                # continues without spawning a parallel id.
+                blocker.add_sample(frame_idx, t_s, bbox_dict,
+                                   float(d.score), "detect")
+                blocker.missed_windows = 0
+                state.samples_emitted += 1
+                update_best_top(state, d, frame_idx, t_s)
+                matches.append((di, blocker))
+                # Mark the track as taken so the age-out loop below
+                # doesn't penalise it for missing this frame.
+                try:
+                    ti = state.active.index(blocker)
+                    taken_tracks.add(ti)
+                except ValueError:
+                    pass
+            # Cross-label spawn-block: drop the det silently — it's
+            # a misclassification of the already-tracked subject.
+            continue
         revived = _try_reidentify(state, d, t_s)
         if revived is not None:
             # Resurrect: move from closed → active, reset miss

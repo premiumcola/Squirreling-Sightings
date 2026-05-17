@@ -9,7 +9,12 @@ import { byId } from '../../core/dom.js';
 import { colors, OBJ_LABEL } from '../../core/icons.js';
 import { lbState } from '../state.js';
 import { _BBOX_FLOORS } from './track-loss-tooltip.js';
-import { _interpolateTrackAt } from './renderer.js';
+import {
+  _interpolateTrackAt,
+  _isPointInAnyMask,
+  _resolveMaskPolygonsForCam,
+} from './renderer.js';
+import { _getHiddenClassesForCam } from './hidden-classes.js';
 
 function _ensureConfidenceMeter(){
   let host = byId('lightboxConfidenceMeter');
@@ -23,14 +28,30 @@ function _ensureConfidenceMeter(){
   return host;
 }
 
-function _findActiveTracksAt(currentTime){
+function _findActiveTracksAt(currentTime, opts = {}){
   const tracks = lbState.item?._tracks?.tracks || [];
   const out = [];
-  for (let i = 0; i < tracks.length; i++){
-    const tr = tracks[i];
+  const hidden = opts.hidden || new Set();
+  const masks = opts.masks || [];
+  const natW = opts.natW || 0;
+  const natH = opts.natH || 0;
+  for (const tr of tracks){
+    // Filter out hidden classes (the per-class toggle in the
+    // timeline-panel sidebar) so toggling a class off also
+    // removes it from the characteristic card.
+    if (hidden.has(tr.label)) continue;
     const sample = _interpolateTrackAt(tr, currentTime);
     if (!sample) continue;
-    out.push({ track: tr, sample, num: i + 1 });
+    // Filter out masked-out tracks — same ground-point-in-mask
+    // test the bbox renderer uses, so the card stays aligned
+    // with which boxes are actually surfaced as alerting.
+    if (masks.length){
+      const bb = sample.bbox || {};
+      const cx = (bb.x1 + bb.x2) / 2;
+      const cy = bb.y2;
+      if (_isPointInAnyMask(cx, cy, natW, natH, masks)) continue;
+    }
+    out.push({ track: tr, sample, num: tr._num || 0 });
   }
   return out;
 }
@@ -102,7 +123,12 @@ export function _renderConfidenceMeter(){
     return;
   }
   const t = Number.isFinite(v.currentTime) ? v.currentTime : 0;
-  const active = _findActiveTracksAt(t);
+  const natW = v.videoWidth || 1;
+  const natH = v.videoHeight || 1;
+  const camId = lbState.item.camera_id || '';
+  const hidden = _getHiddenClassesForCam(camId);
+  const masks  = _resolveMaskPolygonsForCam(camId);
+  const active = _findActiveTracksAt(t, { hidden, masks, natW, natH });
   if (active.length === 0){
     host.hidden = true;
     return;
@@ -110,15 +136,17 @@ export function _renderConfidenceMeter(){
   const rs = lbState.item.recording_settings;
   const hasRs = !!(rs && typeof rs === 'object'
                    && (rs.mode || rs.conf_thresh_general != null));
-  const natW = v.videoWidth || 1;
-  const natH = v.videoHeight || 1;
-  const MAX_SHOW = 2;
-  const shown = active.slice(0, MAX_SHOW);
-  const overflow = active.length - shown.length;
-
-  const blocks = shown.map(({ track, sample, num }) => {
+  // H3 · the card now lists ALL currently-visible / non-masked
+  // tracks (was capped at 2). Hidden classes + masked-out subjects
+  // were filtered upstream so what survives is by definition
+  // worth showing.
+  const blocks = active.map(({ track, sample, num }) => {
     const lbl = OBJ_LABEL[track.label] || track.label || '?';
-    const c = colors[track.label] || colors.unknown;
+    // H3 · header color is the TRACK's per-clip identity color so
+    // the card visually links to the box + the timeline lane for
+    // the same person. The per-class palette is a fallback for
+    // legacy sidecars that never stamped tr.color.
+    const c = track.color || colors[track.label] || colors.unknown;
     // Score threshold: per-class override else general floor — only
     // read when the clip actually has recording_settings captured.
     // Older clips fall back to a missing tick + a subtitle note.
@@ -171,8 +199,6 @@ export function _renderConfidenceMeter(){
         ${rows.join('')}
       </div>`;
   }).join('');
-  const more = overflow > 0
-    ? `<div class="lbcm-more">+${overflow} weitere</div>` : '';
-  host.innerHTML = `${blocks}${more}${_GAUGE_LEGEND_HTML}`;
+  host.innerHTML = `${blocks}${_GAUGE_LEGEND_HTML}`;
   host.hidden = false;
 }

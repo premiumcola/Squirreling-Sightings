@@ -287,7 +287,10 @@ export function mountWeatherToggleBar(item, onChange){
     available:  isTL ? ['zones', 'masks'] : ['bboxes', 'trails', 'zones', 'masks'],
     contextKey: isTL ? 'timelapse' : 'mediathek',
     onChange,
-    hintText:   'Lange drücken für Beschreibung',
+    // No hintText — the status legend mounted right after this bar
+    // owns the "what does the dash style mean" affordance now. The
+    // long-press tip on each pill still fires for the per-pill
+    // description.
   });
 }
 

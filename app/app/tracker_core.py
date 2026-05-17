@@ -82,6 +82,15 @@ SAMPLE_BBOX_DELTA_PX = 2
 # the standard NMS threshold — generous enough to collapse the
 # duplicate cluster while leaving genuinely distinct objects alone.
 NMS_IOU = 0.5
+# K4 · frame-edge handling.
+#   EDGE_MARGIN_PX — a bbox is "at the edge" when any side sits within
+#   this many pixels of the frame boundary.
+#   EDGE_GRACE_SAMPLES — once a track at the edge stops getting detect
+#   samples, it ages out after this many missed frames (much smaller
+#   than the normal miss-grace). A subject that left the frame should
+#   close immediately, not keep tracking-on-prediction for 8 s.
+EDGE_MARGIN_PX = 8
+EDGE_GRACE_SAMPLES = 2
 # J2 · spawn-block IoU. An unmatched confirmed detection may only
 # spawn a NEW track when it does NOT strongly overlap any currently-
 # active track of ANY label. If it does, the detection is either
@@ -962,10 +971,31 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
     # scaled to 0.7 (floor 0.05) — a coarse "still tracking, lower
     # confidence" signal that doesn't invent fresh evidence.
     grace = max(1, int(miss_grace_samples))
+    # K4 · helper — is a bbox touching/exceeding the frame edge?
+    def _at_frame_edge(bb):
+        if frame_w <= 0 or frame_h <= 0:
+            return False
+        return (
+            bb["x1"] <= EDGE_MARGIN_PX
+            or bb["y1"] <= EDGE_MARGIN_PX
+            or bb["x2"] >= frame_w - EDGE_MARGIN_PX
+            or bb["y2"] >= frame_h - EDGE_MARGIN_PX
+        )
     for ti, tr in enumerate(state.active[:original_count]):
         if ti in taken_tracks:
             continue
+        # K4 · clamp the predicted bbox to frame bounds so a subject
+        # whose extrapolated position would land off-frame is held
+        # at the visible boundary instead. A box predicted at
+        # x2 = frame_w + 200 is geometrically nonsense for IoU
+        # matching and visually misleading on the bbox overlay.
         px1, py1, px2, py2 = predicted[ti]
+        if frame_w > 0:
+            px1 = max(0, min(frame_w, px1))
+            px2 = max(0, min(frame_w, px2))
+        if frame_h > 0:
+            py1 = max(0, min(frame_h, py1))
+            py2 = max(0, min(frame_h, py2))
         bbox_dict = {"x1": int(px1), "y1": int(py1),
                      "x2": int(px2), "y2": int(py2)}
         last_detect_score = next(
@@ -978,7 +1008,21 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
         tr.add_sample(frame_idx, t_s, bbox_dict, pred_score, "predicted")
         state.samples_emitted += 1
         tr.missed_windows += 1
-        if tr.missed_windows >= grace:
+        # K4 · short grace when the track's LAST OBSERVED bbox sits
+        # at the frame edge. The subject most likely walked out of
+        # frame — continuing to extrapolate "behind" the boundary
+        # for 8 s pins a stale box on the video and floods the
+        # timeline with a long predicted tail. Cap effective grace
+        # at EDGE_GRACE_SAMPLES so the track closes promptly.
+        last_detect_bb = next(
+            (s["bbox"] for s in reversed(tr.samples)
+             if s.get("source") in ("detect", "track")),
+            None,
+        )
+        effective_grace = grace
+        if last_detect_bb is not None and _at_frame_edge(last_detect_bb):
+            effective_grace = min(grace, EDGE_GRACE_SAMPLES)
+        if tr.missed_windows >= effective_grace:
             tr.close("timeout", frame_w, frame_h)
     state.closed.extend([t for t in state.active if not t.active])
     state.active = [t for t in state.active if t.active]

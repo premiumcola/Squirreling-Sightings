@@ -112,7 +112,6 @@ export function lbRenderSettingsPanel(item, hostOverride){
     return;
   }
   const ach = item.achievement || {};
-  const camId = item.camera_id || '';
 
   // Pre-render per-step rows. Each step shows Gesetzt (the recording
   // config) and Erreicht (what the clip's data actually produced),
@@ -204,9 +203,6 @@ export function lbRenderSettingsPanel(item, hostOverride){
     <div class="lbset-body" id="lightboxSettingsBody" hidden>
       ${stepsHtml}
       ${extrasHtml}
-      <button type="button" class="lbset-edit-btn" data-cam="${camId}">
-        Aktuelle Settings dieser Kamera bearbeiten →
-      </button>
     </div>`;
 
   const header = host.querySelector('.lbset-header');
@@ -216,30 +212,6 @@ export function lbRenderSettingsPanel(item, hostOverride){
       const open = body.hidden;
       body.hidden = !open;
       header.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-  }
-  const editBtn = host.querySelector('.lbset-edit-btn');
-  if (editBtn){
-    editBtn.addEventListener('click', () => {
-      const cid = editBtn.dataset.cam;
-      if (!cid) return;
-      // Close the lightbox first so the camera-edit panel isn't
-      // hidden behind the modal, then route to the Geräte section
-      // and open the Erkennung tab inside cam-edit. The double-
-      // requestAnimationFrame is there because window.editCamera()
-      // synchronously rebuilds the form DOM — the tab click needs
-      // to land on the freshly-rendered .cam-tab-btn nodes.
-      try { window.closeLightbox?.(); } catch { /* ignore */ }
-      setTimeout(() => {
-        location.hash = '#cameras';
-        try { window.editCamera?.(cid); } catch { /* ignore */ }
-        setTimeout(() => {
-          const tabBtn = document.querySelector('.cam-tab-btn[data-tab="cam-tab-erkennung"]');
-          tabBtn?.click();
-          document.querySelector('#cam-tab-erkennung')?.scrollIntoView(
-            { behavior: 'smooth', block: 'start' });
-        }, 180);
-      }, 60);
     });
   }
 }

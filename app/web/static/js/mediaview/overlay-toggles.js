@@ -23,6 +23,7 @@
 // popover state per context.
 
 import { byId, esc } from '../core/dom.js';
+import { showTooltip, hideTooltip } from '../core/tooltip.js';
 
 const _LS_KEY = 'tamspy.overlayToggles.v1';
 
@@ -82,40 +83,18 @@ const _TOGGLES = {
   } catch { /* private-mode / quota — silent */ }
 })();
 
-// Tooltip popover — one element, reused across contexts. Re-uses
-// the .mv-live-toggle-tip class from 30-lightbox-video.css so we
-// don't duplicate the styling.
-let _tipEl = null;
+// Tooltip popover state — the dom node + show/hide helpers live in
+// core/tooltip.js so the overlay-toggles popover and the
+// detection-cloud chip popover share one implementation.
 let _tipHoverTimer = 0;
 let _tipLongPressTimer = 0;
 
-function _ensureTip(){
-  if (_tipEl) return _tipEl;
-  _tipEl = document.createElement('div');
-  _tipEl.className = 'mv-live-toggle-tip';
-  _tipEl.setAttribute('role', 'tooltip');
-  _tipEl.hidden = true;
-  document.body.appendChild(_tipEl);
-  return _tipEl;
-}
-
 function _showTip(target, text){
-  const tip = _ensureTip();
-  tip.textContent = text;
-  tip.hidden = false;
-  const r = target.getBoundingClientRect();
-  const tipR = tip.getBoundingClientRect();
-  const above = r.top - tipR.height - 10;
-  const top = above >= 8 ? above : r.bottom + 10;
-  const vw = window.innerWidth || document.documentElement.clientWidth;
-  let left = r.left + r.width / 2 - tipR.width / 2;
-  left = Math.max(8, Math.min(vw - tipR.width - 8, left));
-  tip.style.top = `${Math.round(top)}px`;
-  tip.style.left = `${Math.round(left)}px`;
+  showTooltip(target, text);
 }
 
 function _hideTip(){
-  if (_tipEl) _tipEl.hidden = true;
+  hideTooltip();
   clearTimeout(_tipHoverTimer);
   clearTimeout(_tipLongPressTimer);
 }

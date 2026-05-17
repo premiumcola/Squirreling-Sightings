@@ -10,6 +10,7 @@ import { state, STAT_MEDIA_DRILLDOWN } from './core/state.js';
 import { j } from './core/api.js';
 import { CAT_COLORS } from './timeline.js';
 import { colors, OBJ_LABEL, OBJ_SVG, objIconSvg, getCameraIcon, getCameraColor } from './core/icons.js';
+import { attachHoverAndLongPress } from './core/tooltip.js';
 
 // Title icons — match statistics.js stroke style so the section reads
 // as one coherent column.
@@ -163,6 +164,7 @@ function _renderShell() {
           <span class="stat-dc-filtergrp-lbl">Kameras</span>
           <div class="stat-dc-pillrow" id="dcCamPills"></div>
         </div>
+        <div class="stat-dc-filterdiv" aria-hidden="true"></div>
         <div class="stat-dc-filtergrp">
           <span class="stat-dc-filtergrp-lbl">Objekte</span>
           <div class="stat-dc-pillrow" id="dcClsPills"></div>
@@ -196,6 +198,10 @@ function _renderPills() {
   const camHost = byId('dcCamPills');
   const clsHost = byId('dcClsPills');
   if (!camHost || !clsHost) return;
+  // G1 · icon-only chips. The per-cam / per-class color (var --pill-c)
+  // drives both the icon stroke + the filled background tint when
+  // active. Name lives in title + aria-label (browser-native tooltip
+  // on desktop, attachHoverAndLongPress wires the touch long-press).
   const cams = state.cameras || [];
   camHost.innerHTML = cams.map(c => {
     const id = c.id;
@@ -203,25 +209,30 @@ function _renderPills() {
     const color = getCameraColor(nm);
     const active = !_dc.filter.cameras.size || _dc.filter.cameras.has(id);
     const ico = getCameraIcon(nm);
-    // D4 · the leading .stat-dc-pill-dot regression got reverted —
-    // the pill's own --pill-c tint already encodes identity, the
-    // redundant 8 px dot was visual noise the user removed earlier.
-    return `<button type="button" class="stat-dc-pill stat-dc-pill--cam${active ? ' is-active' : ''}" data-cam="${esc(id)}" title="${esc(nm)}" style="--pill-c:${color}">
+    return `<button type="button" class="stat-dc-pill stat-dc-pill--icon stat-dc-pill--cam${active ? ' is-active' : ''}" data-cam="${esc(id)}" title="${esc(nm)}" aria-label="${esc(nm)}" style="--pill-c:${color}">
       <span class="stat-dc-pill-ico">${ico}</span>
-      <span class="stat-dc-pill-text">${esc(nm)}</span>
     </button>`;
   }).join('');
   const classes = _dc.knownClasses.length ? _dc.knownClasses : ['person','cat','bird','car','dog','squirrel'];
   clsHost.innerHTML = classes.map(lbl => {
     const active = !_dc.filter.classes.size || _dc.filter.classes.has(lbl);
     const color = CAT_COLORS[lbl] || colors[lbl] || '#cbd5e1';
-    const icon  = OBJ_SVG[lbl] ? objIconSvg(lbl, 14) : '';
+    const icon  = OBJ_SVG[lbl] ? objIconSvg(lbl, 16) : '';
     const name  = OBJ_LABEL[lbl] || lbl;
-    return `<button type="button" class="stat-dc-pill stat-dc-pill--cls${active ? ' is-active' : ''}" data-cls="${esc(lbl)}" title="${esc(name)}" style="--pill-c:${color}">
+    return `<button type="button" class="stat-dc-pill stat-dc-pill--icon stat-dc-pill--cls${active ? ' is-active' : ''}" data-cls="${esc(lbl)}" title="${esc(name)}" aria-label="${esc(name)}" style="--pill-c:${color}">
       ${icon ? `<span class="stat-dc-pill-ico">${icon}</span>` : ''}
-      <span class="stat-dc-pill-text">${esc(name)}</span>
     </button>`;
   }).join('');
+  // Wire long-press + hover tooltip onto every freshly-rendered chip.
+  // The `title` attr already gives desktop hover; this adds the touch
+  // long-press affordance using the same dark-surface popover the
+  // overlay-toggles uses, so the visual language stays consistent.
+  for (const btn of camHost.querySelectorAll('.stat-dc-pill--icon')){
+    attachHoverAndLongPress(btn, () => btn.getAttribute('aria-label') || '');
+  }
+  for (const btn of clsHost.querySelectorAll('.stat-dc-pill--icon')){
+    attachHoverAndLongPress(btn, () => btn.getAttribute('aria-label') || '');
+  }
 }
 
 function _renderCoverage() {

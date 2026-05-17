@@ -49,11 +49,29 @@ TRACK_SPAWN_SCORE = 0.50
 # live runtime computes its sample count from
 # ``compute_miss_grace_samples(seconds, fps)`` so the SAME wall-clock
 # intent (default 6 s) maps to the right sample count at any cadence.
-# 2026-05: bumped 4 → 6. Six seconds is plenty for a person walking
-# behind a small foreground obstruction (tree trunk, fence post) and
-# noticeably reduces fresh-spawn after the typical short occlusion.
-TRACK_MISS_WINDOWS = 6
-MISS_GRACE_DEFAULT_SECONDS = 6.0
+# 2026-05: bumped 4 → 6 → 8. The grace window has to cover both
+# (a) occlusion behind a foreground obstacle and (b) the velocity-
+# prediction "blind spot" right after a direction reversal — for the
+# back-and-forth-walking person the old 6 s window expired before
+# the bbox re-aligned with the actual subject. Eight seconds keeps
+# one identity through both cases without merging genuinely
+# distinct subjects (the IoU + label gates still discriminate).
+TRACK_MISS_WINDOWS = 8
+MISS_GRACE_DEFAULT_SECONDS = 8.0
+# Re-identification window — measured in WALL-CLOCK seconds so the
+# post-clip worker (sample_interval = fps frames per iteration; 1 Hz
+# wall-clock cadence regardless of source fps) and the live runtime
+# (frame-counter steps per loop) share the same temporal intuition.
+# 12 s covers a person walking back into frame after wandering off
+# briefly without merging into a fresh subject 5 minutes later.
+TRACK_REID_MAX_SECONDS = 12.0
+# Re-identification gates. Centroid must be within
+# ``REID_DIST_FACTOR × max(last_bw, last_bh)`` of the closed
+# track's last position, AND the size ratio must be ≤
+# ``REID_SIZE_RATIO`` so a tiny new det doesn't re-attach to a
+# large prior track. Same-label is enforced by the caller.
+TRACK_REID_DIST_FACTOR = 1.6
+TRACK_REID_SIZE_RATIO = 1.7
 # Sub-pixel jitter cutoff for `source="track"` samples (the post-clip
 # worker only — the live path emits no synthetic track samples today).
 SAMPLE_BBOX_DELTA_PX = 2
@@ -303,43 +321,135 @@ class TrackerState:
 
 # ── Algorithm ───────────────────────────────────────────────────────────────
 def predicted_bbox(track: Track, frame_idx: int) -> tuple[int, int, int, int]:
-    """Linear-velocity bbox prediction for IoU matching at ``frame_idx``.
+    """Smoothed-velocity bbox prediction for IoU matching at ``frame_idx``.
 
-    Uses the last two *detect-source* samples to estimate centroid
-    velocity (dx/df, dy/df) and projects the centroid forward to the
-    current frame index, keeping the most recent bbox size. With
-    fewer than two detect samples we have no velocity signal, so we
-    fall back to the literal last sample bbox.
+    Estimates centroid velocity as the MEDIAN of per-interval dx/dy
+    across the last few detect-source samples, then clamps the
+    projected displacement so a direction-reversal can't fling the
+    prediction off-frame. The match only needs the predicted bbox
+    to overlap the next detection by ``iou_threshold`` — staying
+    within ~one bbox-width of the last observed position is more
+    than enough at this cadence.
 
-    Linear is intentional: at ~1 Hz sampling and the IoU threshold
-    of 0.30, the prediction only needs to bring the bbox within
-    ~70 % overlap of the next detection. Full Kalman buys nothing
-    at this cadence."""
-    detect_samples = [s for s in track.samples if s.get("source") == "detect"]
+    Previous formula was raw 2-sample linear extrapolation: at a
+    direction reversal the prediction projected the subject further
+    along the OLD heading, IoU then failed, the track timed out,
+    and a fresh id spawned. With three samples of median averaging
+    a single reversed frame can't dominate the velocity estimate,
+    and the clamp caps the worst-case overshoot."""
     if not track.samples:
         return (0, 0, 0, 0)
+    detect_samples = [s for s in track.samples if s.get("source") == "detect"]
     if len(detect_samples) < 2:
         last = track.samples[-1]["bbox"]
         return (int(last["x1"]), int(last["y1"]),
                 int(last["x2"]), int(last["y2"]))
-    s_prev = detect_samples[-2]
     s_last = detect_samples[-1]
-    bb_prev = s_prev["bbox"]
     bb_last = s_last["bbox"]
-    cx_prev = (bb_prev["x1"] + bb_prev["x2"]) / 2.0
-    cy_prev = (bb_prev["y1"] + bb_prev["y2"]) / 2.0
+    # Smoothed velocity — median of pairwise dx/dy over up to the
+    # last 4 detect samples. Median is robust to a single anomalous
+    # reversal frame; an average would still drag the prediction in
+    # the OLD direction.
+    window = detect_samples[-min(4, len(detect_samples)):]
+    dxs: list[float] = []
+    dys: list[float] = []
+    for i in range(1, len(window)):
+        s_a = window[i - 1]
+        s_b = window[i]
+        bb_a = s_a["bbox"]
+        bb_b = s_b["bbox"]
+        df = max(1, int(s_b["f"]) - int(s_a["f"]))
+        cx_a = (bb_a["x1"] + bb_a["x2"]) / 2.0
+        cy_a = (bb_a["y1"] + bb_a["y2"]) / 2.0
+        cx_b = (bb_b["x1"] + bb_b["x2"]) / 2.0
+        cy_b = (bb_b["y1"] + bb_b["y2"]) / 2.0
+        dxs.append((cx_b - cx_a) / df)
+        dys.append((cy_b - cy_a) / df)
+    dxs.sort()
+    dys.sort()
+    dx = dxs[len(dxs) // 2]
+    dy = dys[len(dys) // 2]
+    elapsed = max(0, frame_idx - int(s_last["f"]))
+    # Clamp total displacement to ≤ 80 % of the bbox size. The IoU
+    # matcher's threshold (0.20) only requires the predicted box to
+    # overlap by 20 % of either area; clamping at 80 % bbox-shift
+    # keeps comfortable overlap regardless of how wildly the
+    # centroid history scaled with elapsed.
+    bw = bb_last["x2"] - bb_last["x1"]
+    bh = bb_last["y2"] - bb_last["y1"]
+    max_dx = bw * 0.8
+    max_dy = bh * 0.8
+    total_dx = max(-max_dx, min(max_dx, dx * elapsed))
+    total_dy = max(-max_dy, min(max_dy, dy * elapsed))
     cx_last = (bb_last["x1"] + bb_last["x2"]) / 2.0
     cy_last = (bb_last["y1"] + bb_last["y2"]) / 2.0
-    df = max(1, int(s_last["f"]) - int(s_prev["f"]))
-    dx = (cx_last - cx_prev) / df
-    dy = (cy_last - cy_prev) / df
-    elapsed = max(0, frame_idx - int(s_last["f"]))
-    p_cx = cx_last + dx * elapsed
-    p_cy = cy_last + dy * elapsed
-    half_w = (bb_last["x2"] - bb_last["x1"]) / 2.0
-    half_h = (bb_last["y2"] - bb_last["y1"]) / 2.0
+    p_cx = cx_last + total_dx
+    p_cy = cy_last + total_dy
+    half_w = bw / 2.0
+    half_h = bh / 2.0
     return (int(p_cx - half_w), int(p_cy - half_h),
             int(p_cx + half_w), int(p_cy + half_h))
+
+
+def _try_reidentify(state: TrackerState, det, t_s: float):
+    """Find the most recent CLOSED track that plausibly matches
+    ``det`` so an unmatched confirmed detection can RESUME the
+    track instead of spawning a fresh id. Returns the candidate
+    Track (still in ``state.closed`` — caller is responsible for
+    moving it back to ``state.active``) or None.
+
+    Match gates:
+      * same label
+      * closed within ``TRACK_REID_MAX_SECONDS`` of ``t_s``
+      * centroid distance ≤ ``TRACK_REID_DIST_FACTOR × max(bw,bh)``
+      * size ratio ≤ ``TRACK_REID_SIZE_RATIO``
+
+    Among candidates passing all gates, the closest in centroid
+    distance wins.
+    """
+    closed = state.closed
+    if not closed:
+        return None
+    bb = det.bbox
+    cx = (bb[0] + bb[2]) / 2.0
+    cy = (bb[1] + bb[3]) / 2.0
+    bw = max(1.0, float(bb[2] - bb[0]))
+    bh = max(1.0, float(bb[3] - bb[1]))
+    best: Track | None = None
+    best_dist = float("inf")
+    # Scan the recently-closed window. Iterate over a bounded tail of
+    # the closed list (newest closes first), then per-track filter on
+    # last-sample t proximity. `continue` rather than `break` because
+    # closed-order ≠ last_sample.t order — a track that closed late
+    # after a long active span can have an older tail than one that
+    # closed earlier with a fresher final sample.
+    for tr in reversed(closed[-32:]):
+        if tr.label != det.label:
+            continue
+        if not tr.samples:
+            continue
+        last_t = float(tr.samples[-1].get("t", 0) or 0)
+        if t_s - last_t > TRACK_REID_MAX_SECONDS:
+            continue
+        last_bb = tr.samples[-1]["bbox"]
+        last_bw = max(1.0, float(last_bb["x2"] - last_bb["x1"]))
+        last_bh = max(1.0, float(last_bb["y2"] - last_bb["y1"]))
+        sz_ratio = max(bw, last_bw) / min(bw, last_bw)
+        if sz_ratio > TRACK_REID_SIZE_RATIO:
+            continue
+        sz_ratio_h = max(bh, last_bh) / min(bh, last_bh)
+        if sz_ratio_h > TRACK_REID_SIZE_RATIO:
+            continue
+        last_cx = (last_bb["x1"] + last_bb["x2"]) / 2.0
+        last_cy = (last_bb["y1"] + last_bb["y2"]) / 2.0
+        d = ((cx - last_cx) ** 2 + (cy - last_cy) ** 2) ** 0.5
+        max_d = max(last_bw, last_bh) * TRACK_REID_DIST_FACTOR
+        if d > max_d:
+            continue
+        if d < best_dist:
+            best_dist = d
+            best = tr
+    return best
 
 
 def update_best_top(state: TrackerState, det, frame_idx: int, t_s: float) -> None:
@@ -465,16 +575,41 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
     # `taken_tracks` and immediately gets missed_windows += 1 on its
     # birth frame — halving the intended grace period.
     original_count = len(state.active)
-    # Phase 3 — unmatched confirmed dets → new tracks. Unmatched
-    # tentative dets are intentionally dropped (no spawn) so a flicker
-    # of low-conf noise can't seed a new track id.
+    # Phase 3 — unmatched confirmed dets → first try re-identifying a
+    # recently-closed track, fall back to spawning a fresh id. The
+    # re-id pass catches "person walks back into frame after the
+    # original track's grace expired", which used to explode the id
+    # count on back-and-forth subjects. Unmatched tentative dets are
+    # still dropped (no spawn) so a flicker of low-conf noise can't
+    # seed a new track id.
     for di, d in confirmed:
         if di in taken_confirmed:
             continue
-        tid = short_id()
-        tr = Track(tid, d.label, frame_idx)
         bbox_dict = {"x1": int(d.bbox[0]), "y1": int(d.bbox[1]),
                      "x2": int(d.bbox[2]), "y2": int(d.bbox[3])}
+        revived = _try_reidentify(state, d, t_s)
+        if revived is not None:
+            # Resurrect: move from closed → active, reset miss
+            # counter, append the matching detection as the next
+            # sample. The track keeps its original id, color, and
+            # sample history — downstream consumers see one
+            # continuous identity.
+            try:
+                state.closed.remove(revived)
+            except ValueError:
+                pass
+            revived.active = True
+            revived.end_reason = None
+            revived.missed_windows = 0
+            revived.add_sample(frame_idx, t_s, bbox_dict,
+                               float(d.score), "detect")
+            state.active.append(revived)
+            state.samples_emitted += 1
+            update_best_top(state, d, frame_idx, t_s)
+            matches.append((di, revived))
+            continue
+        tid = short_id()
+        tr = Track(tid, d.label, frame_idx)
         tr.add_sample(frame_idx, t_s, bbox_dict,
                       float(d.score), "detect")
         state.active.append(tr)

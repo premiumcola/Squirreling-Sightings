@@ -53,14 +53,37 @@ export function setBboxOverlayVisibility({ showBboxes, showTrails }){
   _lbDrawDetections();
 }
 
+// I3 · `predicted`-source samples extend a track past the last
+// real detection so the post-clip worker can express its grace
+// window. On the video those frames are NOT a claim that the
+// subject is still there — they're a tracker-internal "still
+// trying". Capping the bbox draw at the LAST `detect`-source
+// sample (with the small 0.05 s tolerance for sub-sample play
+// positions) makes the on-video box vanish the instant the
+// subject does, instead of pinning a stale outline in place
+// during the grace window. The timeline panel still renders the
+// predicted tail as its diagnostic hatch overlay.
+function _lastDetectT(track){
+  const samples = track.samples || [];
+  for (let i = samples.length - 1; i >= 0; i--){
+    const s = samples[i];
+    if (s.source === undefined || s.source === null
+        || s.source === 'detect' || s.source === 'track'){
+      return s.t;
+    }
+  }
+  return -1;
+}
+
 export function _interpolateTrackAt(track, t){
   const samples = track.samples || [];
   if (!samples.length) return null;
   const first = samples[0];
-  const last = samples[samples.length - 1];
   if (t < first.t - 0.05) return null;
-  if (t > last.t + 0.05) return null;
-  let prev = first, next = last;
+  const lastDetectT = _lastDetectT(track);
+  if (lastDetectT < 0) return null;
+  if (t > lastDetectT + 0.05) return null;
+  let prev = first, next = samples[samples.length - 1];
   for (let i = 0; i < samples.length; i++){
     if (samples[i].t <= t) prev = samples[i];
     if (samples[i].t >= t){ next = samples[i]; break; }

@@ -127,6 +127,13 @@ export function closeLiveDetect(){
   if (session.holdHandle) clearInterval(session.holdHandle);
   const modal = byId('lightboxModal');
   if (modal) modal.classList.remove('lb-live-detect');
+  // Restore prev/next chevrons so a subsequent recorded-clip open
+  // gets its navigation arrows back. Confirm + Delete are restored
+  // by lightbox.js's own teardown when openLightbox() runs.
+  const prevBtn = byId('lightboxPrev');
+  if (prevBtn) prevBtn.style.display = '';
+  const nextBtn = byId('lightboxNext');
+  if (nextBtn) nextBtn.style.display = '';
   const overlay = byId('lightboxLiveOverlay');
   if (overlay) overlay.remove();
   const trails = byId('lightboxLiveTrails');
@@ -258,6 +265,14 @@ function _setupLiveChrome(camId, cameraName){
   if (confirmBtn) confirmBtn.style.display = 'none';
   const delBtn = byId('lightboxDelete');
   if (delBtn) delBtn.style.display = 'none';
+  // Hide the recorded-clip prev/next chevrons in live-sim — there is
+  // no neighbour item to navigate to. The .lb-live-detect class on
+  // the modal also acts as a CSS hook the keyboard + swipe handlers
+  // in lightbox.js read to suppress their prev/next bindings.
+  const prevBtn = byId('lightboxPrev');
+  if (prevBtn) prevBtn.style.display = 'none';
+  const nextBtn = byId('lightboxNext');
+  if (nextBtn) nextBtn.style.display = 'none';
   _ensureBboxOverlay();
   _ensureTrailsOverlay();
   _ensureZoneMaskOverlay();

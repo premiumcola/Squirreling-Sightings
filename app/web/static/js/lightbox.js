@@ -692,11 +692,17 @@ document.addEventListener('keydown', (e) => {
   if (_editable) return;
   const _v = byId('lightboxVideo');
   const _videoActive = !!(_v && _v.style.display !== 'none' && _v.src);
+  // Live-sim suppresses prev/next + confirm/delete keys — there's no
+  // recorded item to navigate to or label. Esc + Space + F still
+  // route through their normal handlers below so the user keeps
+  // close-on-Esc and fullscreen-on-F.
+  const _liveDetect = byId('lightboxModal').classList.contains('lb-live-detect');
   // Seek step — was 10 s; tightened to 5 s to match the mediaview
   // task #6 spec. Five-second granularity reads more naturally for
   // 10-30 s motion clips, where 10 s would overshoot interesting
   // segments in two presses.
   if (e.key === 'ArrowLeft'){
+    if (_liveDetect){ e.preventDefault(); return; }
     e.preventDefault();
     if (_videoActive){
       _v.currentTime = Math.max(0, (_v.currentTime || 0) - 5);
@@ -707,6 +713,7 @@ document.addEventListener('keydown', (e) => {
     }
   }
   else if (e.key === 'ArrowRight'){
+    if (_liveDetect){ e.preventDefault(); return; }
     e.preventDefault();
     if (_videoActive){
       const dur = _v.duration || 0;
@@ -718,8 +725,16 @@ document.addEventListener('keydown', (e) => {
       if (i >= 0 && i < nav.length - 1) openLightbox(nav[i + 1]);
     }
   }
-  else if (e.key === 'ArrowUp'){ e.preventDefault(); byId('lightboxConfirm').click(); }
-  else if (e.key === 'ArrowDown'){ e.preventDefault(); _lbHandleDeleteKey(); }
+  else if (e.key === 'ArrowUp'){
+    if (_liveDetect){ e.preventDefault(); return; }
+    e.preventDefault();
+    byId('lightboxConfirm').click();
+  }
+  else if (e.key === 'ArrowDown'){
+    if (_liveDetect){ e.preventDefault(); return; }
+    e.preventDefault();
+    _lbHandleDeleteKey();
+  }
   else if (e.key === ' '){
     if (_videoActive){
       e.preventDefault();
@@ -770,6 +785,9 @@ _initFsBtn('liveViewFsBtn', byId('liveViewWrap'), () => byId('liveViewWrap'));
       return;
     }
     if (Math.abs(dx) < 40) return;
+    // Live-sim has no neighbour item to navigate to. Swipe-down to
+    // close still works via the vertical branch above.
+    if (modal.classList.contains('lb-live-detect')) return;
     if (dx < 0) byId('lightboxNext')?.click();
     else byId('lightboxPrev')?.click();
   }, { passive: true });

@@ -75,6 +75,13 @@ TRACK_REID_SIZE_RATIO = 1.7
 # Sub-pixel jitter cutoff for `source="track"` samples (the post-clip
 # worker only — the live path emits no synthetic track samples today).
 SAMPLE_BBOX_DELTA_PX = 2
+# J1 · per-label NMS gate. The SSD detector occasionally fires two or
+# three near-identical bboxes on a single object (model-internal NMS
+# imperfect at low confidence floors). Without dedup, each duplicate
+# spawns its own track and they coexist forever in parallel. 0.5 is
+# the standard NMS threshold — generous enough to collapse the
+# duplicate cluster while leaving genuinely distinct objects alone.
+NMS_IOU = 0.5
 
 
 # ── ID + colour helpers ─────────────────────────────────────────────────────
@@ -452,6 +459,42 @@ def _try_reidentify(state: TrackerState, det, t_s: float):
     return best
 
 
+def nms_per_label(dets, iou_threshold: float = NMS_IOU):
+    """Per-label non-max suppression on raw detector output.
+
+    Collapses the SSD's duplicate boxes on a single subject before
+    track association runs — without this, every duplicate spawns
+    its own track and the parallel copies coexist forever (the user-
+    reported "4 boxes stacked on one person, dozens of lanes" symptom).
+
+    Greedy, score-descending: within each label group, keep the
+    highest-score bbox, then drop any subsequent bbox whose IoU
+    against an already-kept box of the SAME label exceeds the
+    threshold. Cross-label overlaps are NOT touched here — they're
+    handled by the spawn-block gate in associate_detections so the
+    SSD's occasional misclassification (e.g. "Vogel" on a person)
+    can never seed a parallel cross-label track on the same subject.
+
+    Returns a NEW list (caller's input is untouched) so the helper
+    can sit pure at the entry of the live AND the post-clip path.
+    """
+    if not dets:
+        return list(dets)
+    by_label: dict[str, list] = {}
+    for d in dets:
+        by_label.setdefault(d.label, []).append(d)
+    survivors: list = []
+    for _lbl, group in by_label.items():
+        group_sorted = sorted(group, key=lambda d: float(d.score), reverse=True)
+        kept: list = []
+        for d in group_sorted:
+            if any(iou(d.bbox, k.bbox) > iou_threshold for k in kept):
+                continue
+            kept.append(d)
+        survivors.extend(kept)
+    return survivors
+
+
 def update_best_top(state: TrackerState, det, frame_idx: int, t_s: float) -> None:
     """Bump state.best_top when det.score beats the current best."""
     score = float(det.score)
@@ -508,6 +551,14 @@ def associate_detections(state: TrackerState, dets, frame_idx: int, t_s: float,
                 v = None
             return float(v) if v is not None else float(spawn_score)
         spawn_lookup = _resolve
+
+    # J1 · NMS at the entry so every later stage works on a deduped
+    # detection stream. Same-label boxes whose IoU exceeds NMS_IOU
+    # collapse to the highest-score one — kills the SSD-internal
+    # duplicate cluster that used to spawn parallel tracks on a
+    # single subject. Caller's `dets` list is left untouched (helper
+    # returns a new list).
+    dets = nms_per_label(dets, NMS_IOU)
 
     confirmed: list[tuple[int, object]] = []
     tentative: list[tuple[int, object]] = []

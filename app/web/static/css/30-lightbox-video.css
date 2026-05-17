@@ -375,6 +375,32 @@
   touch-action:none;
   cursor:pointer;
 }
+/* G4 · Pre-roll / post-roll context bands — subtle gray segments
+   on the leading + trailing portions of the scrub bar. Operator
+   reads them as "before this is Vorlauf, after that is Nachlauf"
+   without any text legend; the title attr surfaces the seconds
+   on hover. Strokes the scrub track height + a tiny tick on the
+   inner edge so the boundary is visually crisp. */
+.lb-scrub-roll{
+  position:absolute;top:50%;transform:translateY(-50%);
+  height:4px;
+  background:rgba(148,163,184,.55);
+  border-radius:2px;
+  pointer-events:none;
+  z-index:1;
+}
+.lb-scrub-roll--pre  { left:0; }
+.lb-scrub-roll--post { right:0; }
+.lb-scrub-roll--pre::after,
+.lb-scrub-roll--post::after{
+  content:'';
+  position:absolute;top:-4px;bottom:-4px;
+  width:2px;
+  background:rgba(226,232,240,.85);
+  border-radius:1px;
+}
+.lb-scrub-roll--pre::after { right:0; }
+.lb-scrub-roll--post::after{ left:0; }
 
 /* Strip rows — fixed 48 px tall on desktop. The strip's 0 % and
    100 % map to the time column's left edge and right edge — same
@@ -386,6 +412,35 @@
   background:rgba(255,255,255,.04);
 }
 .lbtt-strip[data-on="0"]{ opacity:.30; }
+/* G4 · Trigger marker — small tick + class icon at t=pre_motion_seconds
+   on the lane of the triggering class. Tells the operator "this clip
+   started because of <icon>" without any text legend. */
+.lbtt-trigger{
+  position:absolute;top:-6px;bottom:-6px;
+  width:0;
+  pointer-events:none;
+  z-index:2;
+}
+.lbtt-trigger-line{
+  position:absolute;top:0;bottom:0;left:-1px;
+  width:2px;
+  background:rgba(226,232,240,.85);
+  border-radius:1px;
+}
+.lbtt-trigger-ico{
+  position:absolute;top:-10px;left:-9px;
+  width:18px;height:18px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background:#000;
+  border-radius:50%;
+  padding:1px;
+}
+.lbtt-trigger-ico svg{
+  width:14px;height:14px;
+  display:block;
+}
 .lbtt-bar{
   position:absolute;top:14px;bottom:14px;
   border:0;padding:0;

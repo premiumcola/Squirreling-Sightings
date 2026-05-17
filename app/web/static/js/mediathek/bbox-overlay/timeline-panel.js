@@ -246,6 +246,23 @@ export function lbRenderTrackTimeline(item){
   const sidebarParts = [];
   const timeColParts = [];
 
+  // Pre-roll / post-roll context spans for the scrubber. The event
+  // JSON's recording_settings carries the seconds; we paint two
+  // subtle gray bands on the scrub bar so the user can tell at a
+  // glance "before this tick is leading buffer, after that tick is
+  // trailing tail". For ffmpeg-recorded clips the pre-roll is 0
+  // and the leading band collapses to zero width — invisible by
+  // design.
+  const rs = item.recording_settings || {};
+  const preS  = Math.max(0, Number(rs.pre_motion_seconds)  || 0);
+  const postS = Math.max(0, Number(rs.post_motion_seconds) || 0);
+  const prePct  = duration > 0 ? Math.min(100, (preS  / duration) * 100) : 0;
+  const postPct = duration > 0 ? Math.min(100, (postS / duration) * 100) : 0;
+  const rollHtml = (prePct > 0 || postPct > 0) ? `
+    ${prePct  > 0 ? `<span class="lb-scrub-roll lb-scrub-roll--pre" style="width:${prePct.toFixed(2)}%" title="Vorlauf · ${preS}s"></span>` : ''}
+    ${postPct > 0 ? `<span class="lb-scrub-roll lb-scrub-roll--post" style="width:${postPct.toFixed(2)}%" title="Nachlauf · ${postS}s"></span>` : ''}
+  ` : '';
+
   // Scrubber row — always present. Play button lives in the sidebar
   // (NOT inside the scrubber bar). Scrubber bar is full-width in the
   // time column so its leading 0 % aligns with every strip's 0 %.
@@ -255,6 +272,7 @@ export function lbRenderTrackTimeline(item){
     </button>`);
   timeColParts.push(`
     <div class="lb-scrub-bar" id="lbScrubBar">
+      ${rollHtml}
       <div class="lb-scrub-fill"></div>
       <div class="lb-scrub-thumb"></div>
       <div class="lb-scrub-hit"></div>
@@ -281,6 +299,13 @@ export function lbRenderTrackTimeline(item){
   // once the user kicks the worker on a timelapse MP4 — the
   // tracks.json sidecar lands alongside the clip exactly like for
   // motion events.
+  // Triggering class — surfaced as a small tick + class icon on
+  // the relevant lane at t=preS so the operator sees at a glance
+  // WHICH object started this recording. event.top_label is the
+  // headline detection persisted by _build_event_meta.
+  const triggerLabel = item.top_label || (Array.isArray(item.labels) ? item.labels[0] : null);
+  const triggerPct = duration > 0 ? Math.max(0, Math.min(100, (preS / duration) * 100)) : 0;
+
   if (haveTracks && orderedLabels.length > 0){
     for (const lbl of orderedLabels){
       const labelText = OBJ_LABEL[lbl] || lbl;
@@ -292,16 +317,24 @@ export function lbRenderTrackTimeline(item){
       // when a track lacks its own tracks.json color (legacy
       // sidecars). Modern sidecars always carry tr.color.
       const fallbackC = colors[lbl] || colors.unknown;
+      const c = fallbackC;
       const barsHtml = trs.map(tr => _renderTrackBar(
         tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks,
       )).join('');
+      // Trigger marker — vertical tick + class icon at t=preS,
+      // anchored to the triggering class's lane only.
+      const triggerHtml = (lbl === triggerLabel && duration > 0) ? `
+        <span class="lbtt-trigger" style="left:${triggerPct.toFixed(2)}%" title="Auslöser · ${labelText}" aria-label="Auslöser · ${labelText}">
+          <span class="lbtt-trigger-line"></span>
+          <span class="lbtt-trigger-ico" style="color:${c}">${avatarSvg}</span>
+        </span>` : '';
       sidebarParts.push(`
         <button type="button" class="lbtt-badge" data-label="${lbl}" data-on="${isOn ? '1' : '0'}" aria-label="Klasse ein/aus" title="Klasse ein/aus">
           <span class="lbtt-avatar" style="--c:${c}">${avatarSvg}</span>
           <span class="lbtt-name">${labelText}</span>
         </button>`);
       timeColParts.push(`
-        <div class="lbtt-strip" data-on="${isOn ? '1' : '0'}" data-label="${lbl}">${barsHtml}</div>`);
+        <div class="lbtt-strip" data-on="${isOn ? '1' : '0'}" data-label="${lbl}">${triggerHtml}${barsHtml}</div>`);
     }
   } else if (!haveTracks){
     // No-tracks placeholder — keep the layout structure so the

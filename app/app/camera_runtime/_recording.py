@@ -133,6 +133,11 @@ class RecordingMixin:
             "status": status,
             "recording_settings": self._build_recording_settings_snapshot(),
         }
+        # The ffmpeg stream-copy path (this caller) starts the encoder
+        # at trigger time — no in-memory pre-buffer. Override the
+        # snapshot's default 3 s pre-roll so the lightbox timeline
+        # renders the correct leading region.
+        event["recording_settings"]["pre_motion_seconds"] = 0
         self.store.add_event(self.camera_id, event)
 
     def _start_ffmpeg_recording(self, start_time: datetime, meta: dict) -> bool:
@@ -414,6 +419,14 @@ class RecordingMixin:
             # representation it has used since the wizard shipped.
             "motion_pretrigger_sensitivity":
                 float(self.cfg.get("motion_sensitivity") or 0.5),
+            # Pre-roll window — only the OpenCV-fallback recording path
+            # uses an actual in-memory pre-buffer (3.0 s, hard-coded in
+            # _main_loop's pre_cutoff). The ffmpeg stream-copy path
+            # starts the encoder at trigger time, so pre-roll is 0 s
+            # there. _finalize_motion_clip (this caller) IS the OpenCV
+            # path; the ffmpeg re-encode path overrides this field
+            # back to 0 inside _reencode_motion_clip's event update.
+            "pre_motion_seconds": 3,
             "post_motion_seconds":
                 int(self.cfg.get("post_motion_tail_s") or 0),
         }

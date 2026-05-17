@@ -16,7 +16,12 @@
 
 #lightboxModal.lb-fs-video{
   padding:0!important;
-  background:#0a0a0d!important;
+  /* F2 · single-tone solid-black surround. Previous #0a0a0d was a
+     subtly different shade from the wrap's #000, producing the
+     visible two-tone band around the letterboxed video. Pure #000
+     across modal + wrap + media-bg unifies the surround so the
+     only non-black pixels are the actual video content. */
+  background:#000!important;
   /* Override the .modal base (display:grid; place-items:center) so the
      inner doesn't get vertically centered inside a grid cell and
      leave dead space above the top bar. Flex column with start-aligned

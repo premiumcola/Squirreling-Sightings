@@ -101,6 +101,19 @@ export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted 
     const h = (p && typeof p === 'object' && p.source_h) || srcH;
     return { w, h };
   };
+  // F2 · hard-clip every polygon stroke + fill to the fitted video
+  // rect. The canvas drawing-buffer is wrap-sized (so it can carry
+  // the same letterbox offsets the bbox layer uses), but anything
+  // outside [fit.x..fit.x+fit.w, fit.y..fit.y+fit.h] is the black
+  // surround — a polygon must NEVER paint a single pixel there
+  // even if its source coords overshoot the authored frame (legacy
+  // polygons drawn against a slightly different substream size,
+  // mistyped coordinates, etc.). `ctx.save()` + `ctx.clip()` makes
+  // this a hard guarantee no later refactor can erode.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(fit.x, fit.y, fit.w, fit.h);
+  ctx.clip();
   // Masks drawn FIRST so the green inclusion lines sit on top — when
   // a zone overlaps a mask the user sees the inclusion edge clearly.
   for (const m of masks){
@@ -115,6 +128,7 @@ export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted 
     const mapped = mapPolygonToCanvas(poly, w, h, fit);
     _drawPoly(ctx, mapped, ZONE_STROKE, ZONE_FILL);
   }
+  ctx.restore();
 }
 
 /**

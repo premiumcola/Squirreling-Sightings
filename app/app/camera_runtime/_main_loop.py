@@ -374,6 +374,20 @@ class MainLoopMixin:
                 # the live preview overlay (drawn already paints them);
                 # only the trigger pipeline downstream filters on the
                 # confirmed labels.
+                #
+                # Score gate: only detections at-or-above the per-label
+                # spawn threshold count toward the confirmation window.
+                # The two-tier tracker keeps a track alive on tentative
+                # (< spawn) samples once it has been spawned at-or-above
+                # threshold, so an unconditional confirmer.check() would
+                # fire on the low-confidence tail of a sighting whose
+                # CURRENT score is well under the configured threshold
+                # (e.g. a person briefly seen at 60%, then dropping to
+                # 23% for many frames — old behaviour: confirmation
+                # stayed live, sub-threshold dips even re-fired after
+                # the 2× window decay). Ongoing sightings still
+                # propagate via is_confirmed so an already-running clip
+                # carries the label across its tail.
                 cw_cfg = self.cfg.get("confirmation_window") or {}
                 confirmed_object_labels: list[str] = []
                 _seen_this_frame: set[str] = set()
@@ -386,6 +400,21 @@ class MainLoopMixin:
                     cw = cw_cfg.get(d.label) or {}
                     n = max(1, int(cw.get("n", 3)))
                     secs = max(0.5, float(cw.get("seconds", 5.0)))
+                    spawn_threshold = spawn_for(d.label)
+                    if float(d.score) < spawn_threshold:
+                        # Sub-threshold continuation — counts in tracking
+                        # but NOT toward the recording-trigger
+                        # confirmation. Surface ongoing sightings only.
+                        if self._confirmer.is_confirmed(self.camera_id, d.label):
+                            confirmed_object_labels.append(d.label)
+                        log.debug(
+                            "[det][cam:%s] ↓ sub-threshold: %s %d%% "
+                            "(< spawn %d%%) — Bestätigung unverändert",
+                            self.camera_id, d.label,
+                            int(round(d.score * 100)),
+                            int(round(spawn_threshold * 100)),
+                        )
+                        continue
                     fired = self._confirmer.check(self.camera_id, d.label, n, secs)
                     if fired:
                         cur = self._confirmer.current_count(self.camera_id, d.label)

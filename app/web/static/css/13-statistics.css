@@ -174,8 +174,11 @@
 }
 .stat-dc-refresh svg{flex-shrink:0}
 
-.stat-dc-filters{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
-.stat-dc-pillrow{display:flex;flex-wrap:wrap;gap:6px}
+/* D1 · filter rows side-by-side on desktop (cameras + classes share
+   one horizontal band, each row still wraps internally if overflow).
+   Mobile keeps the stacked layout (overridden in the 768px block). */
+.stat-dc-filters{display:flex;flex-direction:row;flex-wrap:wrap;gap:14px;margin-bottom:12px;align-items:flex-start}
+.stat-dc-pillrow{display:flex;flex-wrap:wrap;gap:6px;flex:1 1 240px;min-width:0}
 .stat-dc-pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:0;color:var(--muted);font-size:12px;font-weight:600;padding:0 11px;height:44px;min-width:44px;border-radius:22px;cursor:pointer;transition:background .15s,color .15s,box-shadow .15s,opacity .15s;opacity:.55}
 .stat-dc-pill:hover{background:rgba(255,255,255,.08);opacity:.9}
 .stat-dc-pill.is-active{background:color-mix(in srgb,var(--pill-c, #9aa5b3) 22%,transparent);color:var(--text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--pill-c, #9aa5b3) 50%,transparent);opacity:1}
@@ -274,7 +277,9 @@
   .stat-dc-coverage{margin-left:0;align-self:flex-start;width:100%;justify-content:flex-start}
   .stat-dc-chart{min-height:240px}
   .stat-dc-xlbl,.stat-dc-ylbl{font-size:9.5px}
-  .stat-dc-pillrow{gap:5px}
+  /* D1 · stack camera + class pill rows vertically on mobile. */
+  .stat-dc-filters{flex-direction:column;gap:8px}
+  .stat-dc-pillrow{gap:5px;flex:0 0 auto}
   .stat-dc-pill{font-size:11.5px;padding:0 10px;max-width:100%}
   .stat-dc-pill-text{max-width:90px}
   .stat-dc-view-btn,.stat-dc-live,.stat-dc-refresh{min-height:40px}

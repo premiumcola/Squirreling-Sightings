@@ -193,7 +193,7 @@ function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, 
   const barStyle = `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${trackColor};--track-color:${trackColor};--mini-row:${miniRow}`;
   return `<button type="button" class="lbtt-bar lbtt-bar--hi" data-status="confirmed" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="${barStyle}">
     ${overlayParts.join('')}
-    <span class="lbtt-bar-num" style="color:${trackColor}">#${tr._num}</span>
+    <span class="lbtt-bar-num">#${tr._num}</span>
     ${showEndX ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
   </button>`;
 }
@@ -319,13 +319,10 @@ export function lbRenderTrackTimeline(item){
   // once the user kicks the worker on a timelapse MP4 — the
   // tracks.json sidecar lands alongside the clip exactly like for
   // motion events.
-  // Triggering class — surfaced as a small tick + class icon on
-  // the relevant lane at t=preS so the operator sees at a glance
-  // WHICH object started this recording. event.top_label is the
-  // headline detection persisted by _build_event_meta.
-  const triggerLabel = item.top_label || (Array.isArray(item.labels) ? item.labels[0] : null);
-  const triggerPct = duration > 0 ? Math.max(0, Math.min(100, (preS / duration) * 100)) : 0;
-
+  // I4 · the class-icon trigger marker at t=pre-roll-end was
+  // dropped — it duplicated information already obvious from the
+  // first confirmed track in each lane and added visual noise
+  // above the timeline.
   if (haveTracks && orderedLabels.length > 0){
     for (const lbl of orderedLabels){
       const labelText = OBJ_LABEL[lbl] || lbl;
@@ -366,20 +363,13 @@ export function lbRenderTrackTimeline(item){
       const barsHtml = `
         <div class="lbtt-strip-top" data-rows="${topRowCount}">${topBarsHtml}</div>
         ${botTracks.length ? `<div class="lbtt-strip-bot">${botBarsHtml}</div>` : ''}`;
-      // Trigger marker — vertical tick + class icon at t=preS,
-      // anchored to the triggering class's lane only.
-      const triggerHtml = (lbl === triggerLabel && duration > 0) ? `
-        <span class="lbtt-trigger" style="left:${triggerPct.toFixed(2)}%" title="Auslöser · ${labelText}" aria-label="Auslöser · ${labelText}">
-          <span class="lbtt-trigger-line"></span>
-          <span class="lbtt-trigger-ico" style="color:${c}">${avatarSvg}</span>
-        </span>` : '';
       sidebarParts.push(`
         <button type="button" class="lbtt-badge" data-label="${lbl}" data-on="${isOn ? '1' : '0'}" aria-label="Klasse ein/aus" title="Klasse ein/aus">
           <span class="lbtt-avatar" style="--c:${c}">${avatarSvg}</span>
           <span class="lbtt-name">${labelText}</span>
         </button>`);
       timeColParts.push(`
-        <div class="lbtt-strip" data-on="${isOn ? '1' : '0'}" data-label="${lbl}">${triggerHtml}${barsHtml}</div>`);
+        <div class="lbtt-strip" data-on="${isOn ? '1' : '0'}" data-label="${lbl}">${barsHtml}</div>`);
     }
   } else if (!haveTracks){
     // No-tracks placeholder — keep the layout structure so the

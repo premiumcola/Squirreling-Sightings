@@ -4,6 +4,7 @@
 // is the public entry called from openLightbox after the video src is
 // set; the RAF loop kicks off via the play/loadedmetadata listeners.
 import { lbState } from '../state.js';
+import { trackColor } from '../../core/track-color.js';
 import {
   _reindexFinalFailed,
   _reindexInflight,
@@ -49,15 +50,18 @@ export async function _fetchTracks(item){
       }
       const data = await r.json();
       // Sort each track's samples by frame index AND stamp a stable
-      // per-clip 1-based number (`_num`) onto every track. The
-      // bbox renderer + the timeline panel both read this for the
-      // visible "#N" badge — stamping once here keeps them in sync
-      // without each consumer having to re-derive the index.
+      // per-clip 1-based number (`_num`) onto every track + ensure
+      // tr.color is set (legacy sidecars without it derive a stable
+      // hex via the shared core/track-color.js palette). The bbox
+      // renderer, characteristic card AND timeline panel all read
+      // tr.color directly — stamping once here keeps them in lock-
+      // step without each consumer running its own fallback chain.
       let _num = 0;
       for (const tr of (data.tracks || [])){
         (tr.samples || []).sort((a, b) => a.f - b.f);
         _num += 1;
         tr._num = _num;
+        tr.color = trackColor(tr);
       }
       _tracksCache.set(eid, data);
       const fa = Array.isArray(data.filter_applied)

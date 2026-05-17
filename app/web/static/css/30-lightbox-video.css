@@ -436,35 +436,6 @@
   padding-top:3px;
   border-top:1px solid rgba(255,255,255,.10);
 }
-/* G4 · Trigger marker — small tick + class icon at t=pre_motion_seconds
-   on the lane of the triggering class. Tells the operator "this clip
-   started because of <icon>" without any text legend. */
-.lbtt-trigger{
-  position:absolute;top:-6px;bottom:-6px;
-  width:0;
-  pointer-events:none;
-  z-index:2;
-}
-.lbtt-trigger-line{
-  position:absolute;top:0;bottom:0;left:-1px;
-  width:2px;
-  background:rgba(226,232,240,.85);
-  border-radius:1px;
-}
-.lbtt-trigger-ico{
-  position:absolute;top:-10px;left:-9px;
-  width:18px;height:18px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  background:#000;
-  border-radius:50%;
-  padding:1px;
-}
-.lbtt-trigger-ico svg{
-  width:14px;height:14px;
-  display:block;
-}
 .lbtt-bar{
   position:absolute;
   border:0;padding:0;
@@ -529,29 +500,24 @@
   background:#94a3b8;
   opacity:.78;
 }
-/* H4 · #N badge — sits inside the bar now (was above) so the two
-   sub-bands don't have overflowing labels colliding with the
-   adjacent lane. Reads at 9 px monospace tucked at the left edge;
-   the track color is set inline by the renderer. */
+/* I4 · #N badge — readable contrast at small size via a white pill
+   chip behind the number. Inline color from the renderer goes on
+   the TEXT, the chip background is always white. Works on any
+   saturated track color without per-color luminance gymnastics. */
 .lbtt-bar-num{
   position:absolute;
   top:50%;left:3px;
   transform:translateY(-50%);
+  display:inline-flex;
+  align-items:center;
+  padding:1px 4px;
+  border-radius:3px;
+  background:rgba(255,255,255,.92);
+  color:#0f172a;
   font-family:ui-monospace,Menlo,Consolas,monospace;
   font-size:9px;font-weight:700;letter-spacing:.01em;
   line-height:1;
   pointer-events:none;
-  color:rgba(0,0,0,.78);
-  text-shadow:0 0 2px rgba(255,255,255,.55);
-}
-/* For top (confirmed) bars the badge text uses a darkened
-   per-track color via inline style; the white halo above keeps it
-   readable on saturated colors. Bottom (ghost / masked) bars use
-   a static muted shade so the badge contrasts with both the
-   transparent ghost fill and the gray masked fill. */
-.lbtt-bar--lo .lbtt-bar-num{
-  color:#0f172a;
-  text-shadow:0 0 2px rgba(255,255,255,.55);
 }
 .lbtt-bar-end{
   position:absolute;top:50%;transform:translate(0,-50%);

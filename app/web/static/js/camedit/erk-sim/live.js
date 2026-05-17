@@ -20,6 +20,7 @@ import { renderOverlayToggles } from '../../mediaview/overlay-toggles.js';
 import {
   ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL,
 } from '../../core/zone-tokens.js';
+import { buildTrailSvg } from '../../mediaview/canvas/trail-layer.js';
 
 // Floor/ceiling for the adaptive polling cadence. Fast healthy ticks
 // stay at 1 Hz (the floor); a backend that takes ~3 s to deliver a
@@ -349,30 +350,18 @@ function _renderTrails(tracks, frame_size){
   const verdictMul = (v) => v === 'pass' ? 1
                           : v === 'belowthresh' ? 0.7
                           : v === 'filtered' ? 0.4 : 0.85;
+  // Same fade ramp + head-dot visual as the Mediathek recorded-clip
+  // trail layer (mediaview/canvas/trail-layer.js · buildTrailSvg).
+  // Per-verdict opacity scaling dims filtered/below-threshold tracks
+  // uniformly so the alarm vs noise signal stays readable.
   const parts = [];
   for (const t of tracks){
     const path = t.path.slice(-_PATH_CAP);
     if (path.length < 2) continue;
     const c = _trailColorForTrack(t.id);
-    const verdictScale = verdictMul(t.last_verdict);
-    // Per-segment lines with a ramped opacity. 0.10 → 0.95 across
-    // the polyline length, scaled by the track's verdict (so a
-    // filtered track's whole trail reads dimmer than a passing
-    // track's). Single SVG `g` per track keeps the DOM compact.
-    const lines = [];
-    for (let i = 1; i < path.length; i++){
-      const a = path[i - 1];
-      const b = path[i];
-      const segIdx = (i - 1) / Math.max(1, path.length - 2);
-      const alpha = (0.10 + segIdx * 0.85) * verdictScale;
-      lines.push(`<line x1="${a.cx}" y1="${a.cy}" x2="${b.cx}" y2="${b.cy}" stroke="${c}" stroke-opacity="${alpha.toFixed(3)}" stroke-width="${strokeW}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`);
-    }
-    // Anchor dot at the leading edge of the trail — solid colour so
-    // the eye lands on the current track position even at a glance.
-    const head = path[path.length - 1];
-    const dotR = Math.max(strokeW + 1, Math.round(fs.w / 360));
-    lines.push(`<circle cx="${head.cx}" cy="${head.cy}" r="${dotR}" fill="${c}" />`);
-    parts.push(`<g class="erk-track-trail" data-track="${t.id}">${lines.join('')}</g>`);
+    const points = path.map(p => ({ x: p.cx, y: p.cy }));
+    const inner = buildTrailSvg(points, c, strokeW, verdictMul(t.last_verdict));
+    if (inner) parts.push(`<g class="erk-track-trail" data-track="${t.id}">${inner}</g>`);
   }
   layer.innerHTML = parts.join('');
 }

@@ -123,3 +123,52 @@ export function renderTrailLayer(ctx, track, t, color, offX, offY, scale){
   const pts = buildTrailPoints(track, t);
   drawTrailPolyline(ctx, pts, color, offX, offY, scale);
 }
+
+// ── SVG variant ─────────────────────────────────────────────────────────
+// Live-Sim views (mediaview/live-detect.js, camedit/erk-sim/*) paint
+// into <svg> overlays rather than <canvas>, but the trail VISUAL must
+// match the recorded-clip view byte-for-byte so the user reads the
+// same UI everywhere. Same ramp formula, same head-dot anchor —
+// only the surface differs.
+//
+// `points` is the same {x, y} array buildTrailPoints produces, but
+// expressed in the SVG's viewBox coordinate space (the SVG's own
+// preserveAspectRatio handles letterboxing against the displayed
+// element, so callers don't need offX/offY/scale here).
+
+/**
+ * Build the SVG markup for a trail polyline + leading-edge head dot.
+ * Returns a string the caller can drop into `svg.innerHTML` alongside
+ * other trail groups. `strokeWidth` should scale with the viewBox so
+ * the on-screen thickness reads consistently across resolutions.
+ *
+ * `scoreScale` (0..1) dims the entire ramp uniformly — used by the
+ * live-sim erk-sim to fade filtered/below-threshold tracks compared
+ * to passing tracks. Pass 1 to disable the scaling.
+ */
+export function buildTrailSvg(points, color, strokeWidth = 3, scoreScale = 1){
+  if (!Array.isArray(points) || points.length < 2) return '';
+  const c = color || '#22c55e';
+  const lines = [];
+  for (let i = 1; i < points.length; i++){
+    const a = points[i - 1];
+    const b = points[i];
+    const segIdx = (i - 1) / Math.max(1, points.length - 2);
+    const alpha = ((0.10 + segIdx * 0.85) * scoreScale).toFixed(3);
+    lines.push(
+      `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" `
+      + `stroke="${c}" stroke-width="${strokeWidth}" `
+      + `stroke-opacity="${alpha}" stroke-linecap="round" `
+      + `vector-effect="non-scaling-stroke"/>`,
+    );
+  }
+  // Solid head dot at the leading edge — anchors the eye to the
+  // current track position even at a glance. Radius scales with
+  // stroke so it reads as "trail tip" rather than "stray bullet".
+  const head = points[points.length - 1];
+  const r = Math.max(strokeWidth + 1, strokeWidth * 1.5);
+  lines.push(
+    `<circle cx="${head.x}" cy="${head.y}" r="${r}" fill="${c}" />`,
+  );
+  return lines.join('');
+}

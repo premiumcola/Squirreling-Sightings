@@ -33,6 +33,7 @@ import { fittedRect } from '../core/video-fit.js';
 import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { _setupVideoChrome } from '../lightbox.js';
 import { tryAttachHls } from '../core/hls-attach.js';
+import { buildTrailSvg } from './canvas/trail-layer.js';
 
 const _TICK_MIN_MS = 1000;
 const _TICK_MAX_MS = 4000;
@@ -1087,12 +1088,16 @@ function _positionSvgOverImage(svg){
 }
 
 
-// wp146 — Trails layer. Connects per-label bbox centroids from the
-// 60 s _detBuffer window into a fading polyline. Per-segment
-// stroke-opacity drops linearly from 1.0 (now) to 0.0 (60 s ago)
-// so the user sees motion freshness at a glance. Colour comes from
-// core/icons.js#colors (which spreads the canonical CLASS_COLORS
-// from class-colors.js, set up in yx748).
+// Per-label trail cap — newest N centroids drawn behind the bbox.
+// Matches the batch-A Mediathek trail (mediaview/canvas/trail-layer.js)
+// so the recorded and live UIs read identically.
+const _LIVE_TRAIL_MAX_POINTS = 20;
+
+// Trails layer. Connects per-label bbox centroids from the 60 s
+// _detBuffer window into a fading polyline. Visual matches the
+// batch-A Mediathek trail (last N points, linear opacity ramp,
+// solid head-dot) via the shared `buildTrailSvg` helper —
+// recorded clips and live simulation render trails the same way.
 function _renderTrailsOverlay(){
   const svg = _ensureTrailsOverlay();
   if (!svg || !_session) return;
@@ -1127,31 +1132,20 @@ function _renderTrailsOverlay(){
     if (!byLabel.has(e.label)) byLabel.set(e.label, []);
     byLabel.get(e.label).push(e);
   }
-  const now = Date.now();
+  const strokeW = Math.max(2, Math.round(fs.w / 720));
   const parts = [];
   for (const [label, entries] of byLabel){
     if (entries.length < 2) continue;
     entries.sort((a, b) => a.ms - b.ms);
+    // Keep only the newest N centroids — same cap the recorded
+    // Mediathek trail uses so the visual reads identically.
+    const tail = entries.slice(-_LIVE_TRAIL_MAX_POINTS);
+    const points = tail.map(e => ({
+      x: e.bbox[0] + e.bbox[2] / 2,
+      y: e.bbox[1] + e.bbox[3] / 2,
+    }));
     const c = colors[label] || colors.unknown;
-    // One <line> per consecutive pair so each segment can carry
-    // its own stroke-opacity. ~60 entries × few labels = ~200
-    // elements at the top end — cheap.
-    for (let i = 1; i < entries.length; i++){
-      const a = entries[i - 1];
-      const b = entries[i];
-      const ax = a.bbox[0] + a.bbox[2] / 2;
-      const ay = a.bbox[1] + a.bbox[3] / 2;
-      const bx = b.bbox[0] + b.bbox[2] / 2;
-      const by = b.bbox[1] + b.bbox[3] / 2;
-      const midAge = now - (a.ms + b.ms) / 2;
-      const op = Math.max(0, Math.min(1, 1 - midAge / _LIVE_WINDOW_MS));
-      if (op <= 0) continue;
-      parts.push(
-        `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" `
-        + `stroke="${c}" stroke-width="3" stroke-opacity="${op.toFixed(2)}" `
-        + `stroke-linecap="round" vector-effect="non-scaling-stroke"/>`,
-      );
-    }
+    parts.push(buildTrailSvg(points, c, strokeW));
   }
   svg.innerHTML = parts.join('');
 }
@@ -1189,16 +1183,25 @@ function _renderZoneMaskOverlay(){
   // read-only overlay context exactly (cm-43). SVG viewBox is
   // already in source coordinates, so a non-scaling-stroke keeps
   // the LINE_W constant regardless of the rendered size.
+  //
   // pn834 — each polygon may stamp its own source_w / source_h. The
   // SVG viewBox is set to the live frame size (fs.w × fs.h, typically
   // the main-stream resolution) so a polygon drawn in a 640 × 360
   // substream snapshot needs its points scaled up before they're
-  // written into the polygon string. Legacy polygons without
-  // source_w/h pass straight through (sx = sy = 1) and only render
-  // correctly when the polygon's saved coord-space matches fs.
+  // written into the polygon string. LEGACY polygons without
+  // source_w/h fall back to the camera's preview_resolution (the
+  // editor's canvas size for pre-pn834 saves) — without this
+  // fallback they'd be treated as already-main-stream coords and
+  // render as a tiny invisible polygon in the top-left corner.
+  let fbW = 0, fbH = 0;
+  const pres = String(cam.preview_resolution || '');
+  const presM = pres.match(/(\d+)\s*[x×]\s*(\d+)/);
+  if (presM){ fbW = parseInt(presM[1], 10) || 0; fbH = parseInt(presM[2], 10) || 0; }
   const _polyPts = (p) => {
-    const sx = (p && p.source_w) ? (fs.w / p.source_w) : 1;
-    const sy = (p && p.source_h) ? (fs.h / p.source_h) : 1;
+    const srcW = (p && p.source_w) || fbW || fs.w;
+    const srcH = (p && p.source_h) || fbH || fs.h;
+    const sx = fs.w / Math.max(1, srcW);
+    const sy = fs.h / Math.max(1, srcH);
     return (p.points || p.poly || []).map(pt => {
       const x = (pt.x != null ? pt.x : pt[0]) * sx;
       const y = (pt.y != null ? pt.y : pt[1]) * sy;

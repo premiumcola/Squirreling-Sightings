@@ -382,23 +382,42 @@ class TrackerState:
 
 
 # ── Algorithm ───────────────────────────────────────────────────────────────
+# K2 · stationary detection — if recent average centroid speed is
+# below this fraction of the bbox dimension PER FRAME, the subject
+# counts as "standing still" and predicted_bbox returns the last
+# observed bbox unchanged. A real moving person walks ≫ 5 % of
+# their bbox per frame; a wobbling stationary subject doesn't.
+STATIONARY_SPEED_FRAC = 0.05
+# K2 · per-frame displacement clamp + miss-window decay. Cap a
+# single predicted step at 40 % of the bbox dim (was 80 %, too
+# permissive), and decay the velocity contribution as the miss
+# grows — by miss-grace-cap we predict no movement at all and
+# rely entirely on the last observed position.
+PRED_STEP_FRAC = 0.4
+PRED_DECAY_CAP_SAMPLES = 6
+
+
 def predicted_bbox(track: Track, frame_idx: int) -> tuple[int, int, int, int]:
-    """Smoothed-velocity bbox prediction for IoU matching at ``frame_idx``.
+    """Stationary-aware, magnitude-clamped, miss-decay bbox prediction
+    for IoU matching at ``frame_idx``.
 
-    Estimates centroid velocity as the MEDIAN of per-interval dx/dy
-    across the last few detect-source samples, then clamps the
-    projected displacement so a direction-reversal can't fling the
-    prediction off-frame. The match only needs the predicted bbox
-    to overlap the next detection by ``iou_threshold`` — staying
-    within ~one bbox-width of the last observed position is more
-    than enough at this cadence.
+    Three rules combine to keep a small wobble from producing a
+    large prediction vector:
 
-    Previous formula was raw 2-sample linear extrapolation: at a
-    direction reversal the prediction projected the subject further
-    along the OLD heading, IoU then failed, the track timed out,
-    and a fresh id spawned. With three samples of median averaging
-    a single reversed frame can't dominate the velocity estimate,
-    and the clamp caps the worst-case overshoot."""
+      * MEDIAN velocity over up to 6 detect-source samples (was 4)
+        — more samples drown a single reversal frame.
+      * STATIONARY short-circuit — if the average centroid speed
+        across the recent window is below
+        ``STATIONARY_SPEED_FRAC × min(bw, bh)``, treat the subject
+        as stationary and return the last observed bbox unchanged.
+        A static subject must be matched by position, never flung
+        away by per-frame jitter.
+      * DECAY across the miss window — the further into the miss
+        we are, the less we trust the velocity estimate. At
+        elapsed = ``PRED_DECAY_CAP_SAMPLES`` the decay factor is
+        0 and the prediction reduces to the last observed bbox.
+        Combined with the hard ``PRED_STEP_FRAC`` clamp this caps
+        the worst-case overshoot regardless of velocity history."""
     if not track.samples:
         return (0, 0, 0, 0)
     detect_samples = [s for s in track.samples if s.get("source") == "detect"]
@@ -408,11 +427,13 @@ def predicted_bbox(track: Track, frame_idx: int) -> tuple[int, int, int, int]:
                 int(last["x2"]), int(last["y2"]))
     s_last = detect_samples[-1]
     bb_last = s_last["bbox"]
-    # Smoothed velocity — median of pairwise dx/dy over up to the
-    # last 4 detect samples. Median is robust to a single anomalous
-    # reversal frame; an average would still drag the prediction in
-    # the OLD direction.
-    window = detect_samples[-min(4, len(detect_samples)):]
+    bw = bb_last["x2"] - bb_last["x1"]
+    bh = bb_last["y2"] - bb_last["y1"]
+    cx_last = (bb_last["x1"] + bb_last["x2"]) / 2.0
+    cy_last = (bb_last["y1"] + bb_last["y2"]) / 2.0
+    # Wider window than before (6 samples vs 4) — five-plus pairwise
+    # deltas drown an outlier reversal frame in the median.
+    window = detect_samples[-min(6, len(detect_samples)):]
     dxs: list[float] = []
     dys: list[float] = []
     for i in range(1, len(window)):
@@ -427,24 +448,36 @@ def predicted_bbox(track: Track, frame_idx: int) -> tuple[int, int, int, int]:
         cy_b = (bb_b["y1"] + bb_b["y2"]) / 2.0
         dxs.append((cx_b - cx_a) / df)
         dys.append((cy_b - cy_a) / df)
+    # Stationary short-circuit — average MAGNITUDE of per-frame
+    # velocity. If the subject barely moved across the window, do
+    # NOT extrapolate; the next detection should match against the
+    # last-observed position. Compute mean speed = mean(sqrt(dx² + dy²)).
+    mean_speed = sum((d * d + e * e) ** 0.5
+                     for d, e in zip(dxs, dys)) / max(1, len(dxs))
+    min_dim = max(1.0, float(min(bw, bh)))
+    if mean_speed < STATIONARY_SPEED_FRAC * min_dim:
+        return (int(bb_last["x1"]), int(bb_last["y1"]),
+                int(bb_last["x2"]), int(bb_last["y2"]))
     dxs.sort()
     dys.sort()
     dx = dxs[len(dxs) // 2]
     dy = dys[len(dys) // 2]
     elapsed = max(0, frame_idx - int(s_last["f"]))
-    # Clamp total displacement to ≤ 80 % of the bbox size. The IoU
-    # matcher's threshold (0.20) only requires the predicted box to
-    # overlap by 20 % of either area; clamping at 80 % bbox-shift
-    # keeps comfortable overlap regardless of how wildly the
-    # centroid history scaled with elapsed.
-    bw = bb_last["x2"] - bb_last["x1"]
-    bh = bb_last["y2"] - bb_last["y1"]
-    max_dx = bw * 0.8
-    max_dy = bh * 0.8
-    total_dx = max(-max_dx, min(max_dx, dx * elapsed))
-    total_dy = max(-max_dy, min(max_dy, dy * elapsed))
-    cx_last = (bb_last["x1"] + bb_last["x2"]) / 2.0
-    cy_last = (bb_last["y1"] + bb_last["y2"]) / 2.0
+    # Decay: linear ramp from 1.0 at elapsed=0 to 0.0 at
+    # PRED_DECAY_CAP_SAMPLES. Past that point, prediction stops
+    # extrapolating entirely and stays at the last observed
+    # position. Below the cap, the velocity contribution gradually
+    # shrinks so a long miss doesn't fling the predicted box
+    # further and further away from the (likely returning)
+    # subject.
+    decay = max(0.0, 1.0 - elapsed / float(PRED_DECAY_CAP_SAMPLES))
+    # Hard clamp per-frame displacement to PRED_STEP_FRAC × bbox.
+    # Combined with the decay, the total displacement also stays
+    # bounded as elapsed grows.
+    max_dx = bw * PRED_STEP_FRAC
+    max_dy = bh * PRED_STEP_FRAC
+    total_dx = max(-max_dx, min(max_dx, dx * elapsed * decay))
+    total_dy = max(-max_dy, min(max_dy, dy * elapsed * decay))
     p_cx = cx_last + total_dx
     p_cy = cy_last + total_dy
     half_w = bw / 2.0

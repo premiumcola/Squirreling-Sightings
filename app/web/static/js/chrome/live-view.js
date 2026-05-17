@@ -14,9 +14,10 @@ import { byId } from '../core/dom.js';
 import { _hdCards } from '../dashboard.js';
 import { colors } from '../core/icons.js';
 import { fittedRect } from '../core/video-fit.js';
+import { tryAttachHls } from '../core/hls-attach.js';
 
 let _liveViewCamId = null;
-let _hlsInstance = null;
+let _hlsHandle = null;
 let _liveViewUsingHls = false;
 let _lvDetectAbort = null;
 let _lvDetectTimer = null;
@@ -175,41 +176,23 @@ function _attachLiveStream(){
   _teardownHls();
   if (video){ video.pause(); video.removeAttribute('src'); video.load?.(); }
   if (img) img.src = '';
-  const hlsUrl = `/api/camera/${encodeURIComponent(_liveViewCamId)}/live.m3u8`;
-  const Hls = window.Hls;
-  // Path 1 — hls.js (Chrome / Firefox / Edge / Chromium on desktop).
-  if (video && Hls && typeof Hls.isSupported === 'function' && Hls.isSupported()){
-    try {
-      _hlsInstance = new Hls({ lowLatencyMode: true });
-      _hlsInstance.loadSource(hlsUrl);
-      _hlsInstance.attachMedia(video);
-      _hlsInstance.on(Hls.Events.ERROR, (_evt, data) => {
-        // Fatal error → fall back to MJPEG. Non-fatal errors are
-        // recoverable; hls.js handles them internally.
-        if (data && data.fatal){
-          _teardownHls();
-          _attachMjpegFallback();
-        }
-      });
+  // Try HLS first (hls.js → native iOS). Fatal hls.js errors flip
+  // the modal to the MJPEG path; non-fatal errors recover internally.
+  if (video){
+    _hlsHandle = tryAttachHls(_liveViewCamId, video, {
+      onFatalError: () => { _teardownHls(); _attachMjpegFallback(); },
+    });
+    if (_hlsHandle){
       video.style.display = 'block';
       if (img) img.style.display = 'none';
       _liveViewUsingHls = true;
       if (hdBtn) hdBtn.style.display = 'none';
       return;
-    } catch { _teardownHls(); }
+    }
   }
-  // Path 2 — Safari / iOS native HLS (no hls.js needed). canPlayType
-  // returns 'maybe' or 'probably' when supported.
-  if (video && video.canPlayType('application/vnd.apple.mpegurl')){
-    video.src = hlsUrl;
-    video.style.display = 'block';
-    if (img) img.style.display = 'none';
-    _liveViewUsingHls = true;
-    if (hdBtn) hdBtn.style.display = 'none';
-    return;
-  }
-  // Path 3 — MJPEG fallback. Shows the HD toggle so the user retains
-  // the legacy SD ↔ HD switch.
+  // Last-resort MJPEG fallback — only reached when neither hls.js
+  // nor native HLS is available (rare desktop browsers). Shows the
+  // HD toggle so the user retains the legacy SD ↔ HD switch.
   _attachMjpegFallback();
 }
 
@@ -225,9 +208,9 @@ function _attachMjpegFallback(){
 }
 
 function _teardownHls(){
-  if (_hlsInstance){
-    try { _hlsInstance.destroy(); } catch { /* ignore */ }
-    _hlsInstance = null;
+  if (_hlsHandle){
+    _hlsHandle.detach();
+    _hlsHandle = null;
   }
   _liveViewUsingHls = false;
 }

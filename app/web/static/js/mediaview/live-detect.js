@@ -32,6 +32,7 @@ import {
 import { fittedRect } from '../core/video-fit.js';
 import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { _setupVideoChrome } from '../lightbox.js';
+import { tryAttachHls } from '../core/hls-attach.js';
 
 const _TICK_MIN_MS = 1000;
 const _TICK_MAX_MS = 4000;
@@ -63,6 +64,7 @@ const _HOLD_REFRESH_MS = 250;
 const _DEBUG_TOGGLE = false;
 
 let _session = null;
+let _hlsHandle = null;
 let _traceLines = [];
 let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
 // C1 · sim modal opens with detection layers ON, surveillance layers
@@ -107,6 +109,18 @@ export function closeLiveDetect(){
   _traceLines = [];
   _detBuffer = [];
   _selectedLabel = null;
+  if (_hlsHandle){
+    _hlsHandle.detach();
+    _hlsHandle = null;
+    const videoEl = byId('lightboxVideo');
+    if (videoEl){ videoEl.style.display = 'none'; }
+  }
+  const imgEl = byId('lightboxImg');
+  if (imgEl && imgEl.src && imgEl.src.includes('/stream')){
+    // Release the MJPEG fallback's HTTP connection so the server's
+    // viewer counter ticks down.
+    imgEl.removeAttribute('src');
+  }
   if (!session) return;
   try { session.abort?.abort(); } catch { /* ignore */ }
   if (session.tickHandle) clearTimeout(session.tickHandle);
@@ -194,41 +208,51 @@ function _setupLiveChrome(camId, cameraName){
   // Live mode title-bar marker — replaces the recorded timestamp.
   const tsEl = byId('lightboxTopTime');
   if (tsEl) tsEl.textContent = '● Live';
-  // kr493 — Simulieren v2 continuous-stream redesign. The video is
-  // now the SAME MJPEG sub-stream the dashboard tile + Live modal
-  // use (stream.mjpg, ~15-25 fps), and the polling tick fetches
-  // ONLY the detection payload (no_snapshot=1, ~1 kB response). The
-  // bbox/trail overlays update at the detector's natural rate
-  // (~1-2 fps) while the video itself stays smooth — no more
-  // "5 seconds per real second" felt lag.
+  // kr493 — Simulieren v2 continuous-stream redesign. The polling
+  // tick fetches ONLY the detection payload (no_snapshot=1, ~1 kB
+  // response); the video stays smooth at the stream's natural rate
+  // while the bbox/trail overlays update at ~1-2 fps.
+  //
+  // ROOT CAUSE FIX (iPhone): iOS Safari does NOT render
+  // `multipart/x-mixed-replace` MJPEG streams in `<img>` tags —
+  // it shows a "broken image" placeholder no matter what bytes the
+  // server sends. The dashboard's working Live modal sidesteps this
+  // by attaching HLS to a `<video>` first (hls.js on desktop, native
+  // HLS on iOS) and only falling back to MJPEG on the rare browser
+  // that supports neither. The Simulieren view does the same now —
+  // any iOS-reachable surface MUST go through HLS for the video to
+  // paint at all.
   const imgEl = byId('lightboxImg');
   const videoEl = byId('lightboxVideo');
-  if (videoEl){ videoEl.pause(); videoEl.src = ''; videoEl.style.display = 'none'; }
+  if (_hlsHandle){ _hlsHandle.detach(); _hlsHandle = null; }
+  if (videoEl){
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load?.();
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoEl.style.display = 'none';
+  }
   if (imgEl){
-    const mjpegUrl = `/api/camera/${encodeURIComponent(camId)}/stream.mjpg`;
-    imgEl.src = mjpegUrl;
-    imgEl.style.display = 'block';
-    // ph817 — zones + masks + bboxes must redraw whenever the
-    // image's rendered size changes (first MJPEG frame arriving,
-    // window resize, FS enter/exit, address-bar collapse on iOS).
-    // The polling tick at 1 Hz repaints on its own cadence; this
-    // listener bridges the gap so the overlays sit on the right
-    // pixels the moment a frame paints, not 1 s later.
-    if (!imgEl._zoneRefreshInstalled){
-      const refresh = () => {
-        _renderBboxOverlay();
-        _renderTrailsOverlay();
-        _renderZoneMaskOverlay();
-      };
-      imgEl.addEventListener('load', refresh);
-      try {
-        const obs = new ResizeObserver(refresh);
-        obs.observe(imgEl);
-        // Stash so a future re-mount can disconnect if needed.
-        imgEl._zoneResizeObs = obs;
-      } catch { /* older browsers — load listener still helps */ }
-      imgEl._zoneRefreshInstalled = true;
-    }
+    imgEl.removeAttribute('src');
+    imgEl.style.display = 'none';
+  }
+  _hlsHandle = videoEl ? tryAttachHls(camId, videoEl, {
+    onFatalError: () => {
+      // HLS spun up but died — fall back to MJPEG on the platforms
+      // that support it. On iOS this leaves the user with a broken
+      // image, but iOS shouldn't hit this branch in the first place
+      // (native HLS attach succeeds at line above).
+      if (_hlsHandle){ _hlsHandle.detach(); _hlsHandle = null; }
+      _attachLiveMjpegFallback(camId);
+    },
+  }) : null;
+  if (_hlsHandle){
+    videoEl.style.display = 'block';
+    videoEl.play?.().catch(() => { /* autoplay blocked — manual play still works */ });
+    _installLiveOverlayRefresh(videoEl);
+  } else {
+    _attachLiveMjpegFallback(camId);
   }
   const confirmBtn = byId('lightboxConfirm');
   if (confirmBtn) confirmBtn.style.display = 'none';
@@ -246,6 +270,44 @@ function _setupLiveChrome(camId, cameraName){
   // positions converge. Without this paint-before-tick the user
   // sees a 1 s window of no zone visuals after opening Simulieren.
   _renderZoneMaskOverlay();
+}
+
+// MJPEG fallback — used when HLS isn't supported (rare desktop
+// browsers). iOS reaches HLS via the native path so this is mostly
+// dead weight on mobile, but it keeps the desktop case alive.
+function _attachLiveMjpegFallback(camId){
+  const imgEl = byId('lightboxImg');
+  if (!imgEl) return;
+  imgEl.src = `/api/camera/${encodeURIComponent(camId)}/stream.mjpg`;
+  imgEl.style.display = 'block';
+  _installLiveOverlayRefresh(imgEl);
+}
+
+// Bind a `load` + ResizeObserver listener that re-runs the overlay
+// renderers whenever the media element's rendered size changes (first
+// frame arriving, window resize, address-bar collapse on iOS, FS
+// enter/exit). The polling tick repaints at ~1 Hz on its own, but
+// this listener bridges the sub-second gap so polygons + bboxes sit
+// on the right pixels the instant the frame paints. Idempotent —
+// the install flag is per-element so a re-mount on a different
+// element doesn't double-bind.
+function _installLiveOverlayRefresh(mediaEl){
+  if (!mediaEl || mediaEl._zoneRefreshInstalled) return;
+  const refresh = () => {
+    _renderBboxOverlay();
+    _renderTrailsOverlay();
+    _renderZoneMaskOverlay();
+  };
+  // <video> uses `loadedmetadata` (videoWidth/videoHeight known);
+  // <img> uses `load` (naturalWidth/Height known).
+  mediaEl.addEventListener('loadedmetadata', refresh);
+  mediaEl.addEventListener('load', refresh);
+  try {
+    const obs = new ResizeObserver(refresh);
+    obs.observe(mediaEl);
+    mediaEl._zoneResizeObs = obs;
+  } catch { /* older browsers — listeners still help */ }
+  mediaEl._zoneRefreshInstalled = true;
 }
 
 function _ensureBboxOverlay(){
@@ -952,11 +1014,20 @@ function _renderEmptyHint(noBboxes){
 // same math drives the canvas zone overlay in the Mediathek +
 // Wetter-TL paths.
 function _positionSvgOverImage(svg){
+  // Pick whichever media element is currently visible. HLS path
+  // uses `<video>` (iOS + desktop hls.js); MJPEG fallback uses
+  // `<img>`. Both honour object-fit:contain so the SVG must align
+  // to whichever element actually carries the pixels.
+  const videoEl = byId('lightboxVideo');
   const imgEl = byId('lightboxImg');
   const wrap = byId('lightboxMediaWrap');
-  if (!imgEl || !wrap) return;
+  if (!wrap) return;
+  const usingVideo = videoEl && videoEl.style.display !== 'none' && videoEl.videoWidth > 0;
+  const mediaEl = usingVideo ? videoEl
+                  : (imgEl && imgEl.style.display !== 'none' ? imgEl : null);
+  if (!mediaEl) return;
   const wrapBox = wrap.getBoundingClientRect();
-  const imgBox = imgEl.getBoundingClientRect();
+  const imgBox = mediaEl.getBoundingClientRect();
   if (wrapBox.width <= 0) return;
   // H2.c · MJPEG fallback. Some Safari builds expose naturalWidth=0
   // for MJPEG streams even after the first frame paints, which makes
@@ -969,7 +1040,7 @@ function _positionSvgOverImage(svg){
   // right pixels because the viewBox carries the source coord space.
   let dx, dy, w, h;
   if (imgBox.width > 0 && imgBox.height > 0){
-    const fit = fittedRect(imgEl);
+    const fit = fittedRect(mediaEl);
     // fit is relative to the img's content box; the img's content
     // box top-left = imgBox.top/left - wrapBox.top/left.
     dx = (imgBox.left - wrapBox.left) + fit.x;

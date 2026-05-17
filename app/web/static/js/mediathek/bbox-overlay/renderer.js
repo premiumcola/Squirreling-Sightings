@@ -11,6 +11,19 @@ import { lbState } from '../state.js';
 import { _TRACK_SPAWN_SCORE } from './_state.js';
 import { _isReindexBannerActive } from './reindex.js';
 import { _getHiddenClassesForCam } from './hidden-classes.js';
+import { renderTrailLayer } from '../../mediaview/canvas/trail-layer.js';
+
+// Bbox + trail visibility — flipped by the overlay-toggles pill bar
+// (bboxes/trails). Module-scoped so the RAF redraw loop and the
+// toggle handler share state without round-tripping through DOM
+// attributes. Defaults mirror overlay-toggles.js (both on by default).
+const _overlayVisibility = { showBboxes: true, showTrails: true };
+
+export function setBboxOverlayVisibility({ showBboxes, showTrails }){
+  if (typeof showBboxes === 'boolean') _overlayVisibility.showBboxes = showBboxes;
+  if (typeof showTrails === 'boolean') _overlayVisibility.showTrails = showTrails;
+  _lbDrawDetections();
+}
 
 export function _interpolateTrackAt(track, t){
   const samples = track.samples || [];
@@ -137,13 +150,26 @@ export function _lbDrawDetections(){
     // paint until its first sample is reached, which keeps the
     // overlay honest about the subject's actual appearance time.
     const t = usingVideo ? (videoEl.currentTime || 0) : null;
-    for (const tr of tracks.tracks){
-      if (!isVisible(tr.label)) continue;
-      const sample = (t == null)
-        ? _firstSampleOfTrack(tr)
-        : _interpolateTrackAt(tr, t);
-      if (!sample) continue;
-      _drawTrackBox(ctx, sample, tr.color, offX, offY, scale, spawnThreshold);
+
+    // Trails first so the bbox stroke sits on top — visually anchors
+    // the leading dot to the box. Skipped when the trails pill is
+    // off OR we're rendering a still photo (no time axis = no trail).
+    if (_overlayVisibility.showTrails && t != null){
+      for (const tr of tracks.tracks){
+        if (!isVisible(tr.label)) continue;
+        renderTrailLayer(ctx, tr, t, tr.color, offX, offY, scale);
+      }
+    }
+
+    if (_overlayVisibility.showBboxes){
+      for (const tr of tracks.tracks){
+        if (!isVisible(tr.label)) continue;
+        const sample = (t == null)
+          ? _firstSampleOfTrack(tr)
+          : _interpolateTrackAt(tr, t);
+        if (!sample) continue;
+        _drawTrackBox(ctx, sample, tr.color, offX, offY, scale, spawnThreshold);
+      }
     }
     return;
   }
@@ -170,6 +196,7 @@ export function _lbDrawDetections(){
   const isPlaying = usingVideo && !videoEl.paused && !videoEl.ended
                     && (videoEl.currentTime || 0) > 0.05;
   if (isPlaying) return;
+  if (!_overlayVisibility.showBboxes) return;
 
   const dets = (lbState.item.detections || [])
     .filter(d => d && d.bbox && typeof d.bbox.x1 === 'number')

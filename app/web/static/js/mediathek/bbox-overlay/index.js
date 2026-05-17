@@ -23,7 +23,7 @@ import { byId } from '../../core/dom.js';
 import { lbState } from '../state.js';
 import { _state } from './_state.js';
 import { lbInvalidateTracks, lbLoadTracksForItem } from './fetcher.js';
-import { _lbDrawDetections } from './renderer.js';
+import { _lbDrawDetections, setBboxOverlayVisibility } from './renderer.js';
 import { _renderConfidenceMeter } from './confidence-meter.js';
 import {
   _refreshPlayButtonGlyph,
@@ -43,6 +43,7 @@ export {
   lbRenderSettingsPanel,
   lbRenderTrackTimeline,
   lbStopTrackingPlayback,
+  setBboxOverlayVisibility,
   _lbDrawDetections,
 };
 

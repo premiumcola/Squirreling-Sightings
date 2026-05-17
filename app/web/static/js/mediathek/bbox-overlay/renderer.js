@@ -111,12 +111,31 @@ export function _lbDrawDetections(){
 
   const tracks = lbState.item._tracks;
   const haveTracks = tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0;
+  const sidecarFetched = tracks !== undefined;
+  const sidecarEmpty = !!(tracks
+    && Array.isArray(tracks.tracks) && tracks.tracks.length === 0);
+  // Per-clip spawn threshold (gates.min_confidence) wins over the
+  // module constant so the dashed/solid styling reflects what the
+  // worker's classifier actually used. Falls back to the constant
+  // for older sidecars without the gates block.
+  const spawnThreshold = (tracks && tracks.gates
+                          && typeof tracks.gates.min_confidence === 'number')
+    ? tracks.gates.min_confidence
+    : _TRACK_SPAWN_SCORE;
   const isVisible = _makeLabelVisibleFn();
 
   ctx.font = '600 12px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
   ctx.textBaseline = 'top';
 
   if (haveTracks){
+    // Interpolate every track's bbox to the current playback time.
+    // The RAF loop calls us every frame during play so the box
+    // moves smoothly; the seeked/pause/ended listeners call us on
+    // every scrub tick so the box snaps to the new position on
+    // pause + drag. _interpolateTrackAt returns null outside the
+    // track's [first.t, last.t] window — the track simply doesn't
+    // paint until its first sample is reached, which keeps the
+    // overlay honest about the subject's actual appearance time.
     const t = usingVideo ? (videoEl.currentTime || 0) : null;
     for (const tr of tracks.tracks){
       if (!isVisible(tr.label)) continue;
@@ -124,20 +143,28 @@ export function _lbDrawDetections(){
         ? _firstSampleOfTrack(tr)
         : _interpolateTrackAt(tr, t);
       if (!sample) continue;
-      _drawTrackBox(ctx, sample, tr.color, offX, offY, scale);
+      _drawTrackBox(ctx, sample, tr.color, offX, offY, scale, spawnThreshold);
     }
     return;
   }
 
-  // Legacy single-bbox fallback. The bbox is the trigger-frame
-  // detection — without per-frame tracks it would visually lie about
-  // where the subject is during playback. We suppress entirely while
-  // the reindex banner is showing (so the user doesn't stare at a
-  // stationary mis-positioned box for 17 s) and during active
-  // playback. Pause / ended / still-image modes paint the box back at
-  // the trigger position; the previous "Detection bei Auslösung" pill
-  // was retired with the timeline panel landing — the box is now its
-  // own statement.
+  // Indexer ran and produced an empty sidecar → keep the canvas
+  // clean. Showing the trigger-frame detection here would be a
+  // stationary, mis-positioned box that pops in only on scrub, with
+  // no relationship to where the subject actually was during the
+  // recorded clip. The timeline panel surfaces the WHY (gate values
+  // + filter) so the operator understands the empty state without
+  // a misleading box.
+  if (sidecarFetched && sidecarEmpty) return;
+
+  // Legacy single-bbox fallback for clips with no sidecar yet (404 /
+  // pending fetch). Suppressed entirely while the reindex banner is
+  // active (avoids staring at the same trigger-frame box for ~17 s)
+  // and during active playback (the trigger bbox is one moment in
+  // time; painting it during motion would lie about subject
+  // location). Pause / ended / still-image branches paint the box
+  // back at the trigger position so the user has SOMETHING to see
+  // before the indexer finishes.
   if (_isReindexBannerActive()) return;
 
   const isPlaying = usingVideo && !videoEl.paused && !videoEl.ended
@@ -151,11 +178,11 @@ export function _lbDrawDetections(){
   for (const d of dets){
     const c = colors[d.label] || colors.unknown;
     _drawTrackBox(ctx, { bbox: d.bbox, score: d.score, label: d.label },
-                  c, offX, offY, scale);
+                  c, offX, offY, scale, spawnThreshold);
   }
 }
 
-function _drawTrackBox(ctx, sample, color, offX, offY, scale){
+function _drawTrackBox(ctx, sample, color, offX, offY, scale, spawnThreshold){
   const b = sample.bbox;
   const x1 = offX + b.x1 * scale, y1 = offY + b.y1 * scale;
   const x2 = offX + b.x2 * scale, y2 = offY + b.y2 * scale;
@@ -167,7 +194,9 @@ function _drawTrackBox(ctx, sample, color, offX, offY, scale){
   // score label so the operator sees the SAME track id continuing
   // through low-confidence frames without confusing it with a fresh
   // detection.
-  const tentative = sample.score != null && sample.score < _TRACK_SPAWN_SCORE;
+  const tentativeThreshold = (typeof spawnThreshold === 'number')
+    ? spawnThreshold : _TRACK_SPAWN_SCORE;
+  const tentative = sample.score != null && sample.score < tentativeThreshold;
   ctx.strokeStyle = c;
   ctx.lineWidth = 2;
   ctx.setLineDash(tentative ? [5, 4] : []);

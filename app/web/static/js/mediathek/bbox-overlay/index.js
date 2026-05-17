@@ -73,6 +73,13 @@ export {
     videoEl.addEventListener('pause',    () => { _stopRafLoop(); _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); _refreshPlayButtonGlyph(); });
     videoEl.addEventListener('ended',    () => { _stopRafLoop(); _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); _refreshPlayButtonGlyph(); });
     videoEl.addEventListener('seeked',   () => { _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); });
+    // `seeking` fires on every currentTime write — including while the
+    // user is dragging the scrubber, before the new frame's decoded
+    // pixels are ready. Redrawing here keeps the bbox following the
+    // scrubber thumb smoothly during scrub instead of waiting for the
+    // post-decode `seeked` event (which can lag ~100 ms per tick on
+    // a high-resolution clip and produces a stuttering box trail).
+    videoEl.addEventListener('seeking',  () => { _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); });
     videoEl.addEventListener('timeupdate', () => {
       // Belt + braces — if the rAF loop is throttled (background tab,
       // power-save), `timeupdate` (~4 Hz native) still keeps the bar

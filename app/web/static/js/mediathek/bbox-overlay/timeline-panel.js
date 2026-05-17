@@ -27,30 +27,154 @@ import {
 } from './time-axis.js';
 import { _wireBarEndTooltips } from './track-loss-tooltip.js';
 
-// Per-track masked classification. Walks each sample's ground point
-// (bottom-center of bbox) and counts how many fall inside an exclusion
-// mask. A track whose majority of samples sit inside a mask is
-// rendered gray on the timeline + carries the ⊘ corner badge in the
-// row's bar so the operator sees the same alert-filtered indication
-// they see on the video bbox. C7 will refine this to per-segment.
-function _maskedRatioForTrack(track, srcW, srcH, masks){
-  if (!masks || !masks.length) return 0;
-  const samples = track?.samples || [];
-  if (!samples.length) return 0;
-  let masked = 0;
-  for (const s of samples){
-    const bb = s.bbox || {};
-    const cx = (bb.x1 + bb.x2) / 2;
-    const cy = bb.y2;
-    if (_isPointInAnyMask(cx, cy, srcW, srcH, masks)) masked++;
-  }
-  return masked / samples.length;
-}
-
 export function lbClearTrackTimeline(){
   const host = byId('lightboxBottomStack');
   if (!host) return;
   host.innerHTML = '';
+}
+
+// Classify a single sample into one of four buckets matching the
+// status visual language. Mirrors renderer._classifyTrackStatus but
+// at sample granularity so per-segment textures can be emitted along
+// a single bar.
+//
+//   confirmed — detect sample with score ≥ threshold, NOT masked.
+//   weak      — detect sample with score < threshold, NOT masked.
+//   predicted — non-detect sample (source = predicted), NOT masked.
+//   masked    — subject ground point inside an exclusion mask
+//               (overrides everything else — alerting filter wins).
+function _classifySample(s, threshold, masks, natW, natH){
+  if (!s) return 'confirmed';
+  const bb = s.bbox || {};
+  const cx = (bb.x1 + bb.x2) / 2;
+  const cy = bb.y2;
+  if (masks && masks.length
+      && _isPointInAnyMask(cx, cy, natW, natH, masks)){
+    return 'masked';
+  }
+  const src = s.source;
+  const isDetect = (src === undefined || src === null
+                    || src === 'detect' || src === 'track');
+  if (!isDetect) return 'predicted';
+  const sc = s.score;
+  if (typeof sc === 'number' && sc < threshold) return 'weak';
+  return 'confirmed';
+}
+
+// Collapse a per-sample classification into contiguous runs along
+// the [t0, t1] timeline. Each run carries a `status` + its time
+// boundaries so the bar template can paint one overlay per non-
+// confirmed run.
+function _segmentTrack(samples, threshold, masks, natW, natH){
+  if (!samples.length) return [];
+  const out = [];
+  let curStatus = _classifySample(samples[0], threshold, masks, natW, natH);
+  let curStart = samples[0].t;
+  for (let i = 1; i < samples.length; i++){
+    const s = samples[i];
+    const status = _classifySample(s, threshold, masks, natW, natH);
+    if (status !== curStatus){
+      out.push({ status: curStatus, t0: curStart, t1: s.t });
+      curStatus = status;
+      curStart = s.t;
+    }
+  }
+  const last = samples[samples.length - 1].t;
+  out.push({ status: curStatus, t0: curStart, t1: last });
+  return out;
+}
+
+function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks){
+  const samples = tr.samples || [];
+  if (!samples.length) return '';
+  // Clamp t1 to clip duration. The post-clip worker normally caps
+  // sample.t at frame_count/fps, so this is belt-and-braces against
+  // tracks that occasionally carry a predicted sample emitted in
+  // the last grace-window after the final detect frame.
+  const t0 = Math.max(0, samples[0].t);
+  const tLast = samples[samples.length - 1].t;
+  const t1 = Math.min(duration, tLast);
+  // Sanity: drop tracks whose visible span collapses to a point
+  // entirely past the clip duration (1-sample late blip). The track
+  // is still in tracks.json so the lightbox bbox renderer can show
+  // it during scrubbing if the user wants — only the swimlane lane
+  // is suppressed because a <0.05 s sliver carries no information.
+  if (t1 - t0 < 0.05 && tLast > duration) return '';
+  const left = Math.max(0, (t0 / duration) * 100);
+  const width = Math.max(0.5, ((t1 - t0) / duration) * 100);
+  // Per-track color from tracks.json. Falls back to the per-class
+  // palette entry for older sidecars that didn't stamp a color.
+  const trackColor = tr.color || fallbackC;
+  const segments = _segmentTrack(samples, threshold, masks, natW, natH);
+  // Track-level classification — for the bar's base style.
+  //   ghost  → best_score never crossed threshold; rendered as a
+  //            hollow dotted outline (no solid fill).
+  //   masked → every sample sits inside an exclusion mask; bar
+  //            background flips to neutral gray.
+  //   normal → use trackColor as the bar fill.
+  const bestScore = (typeof tr.best_score === 'number') ? tr.best_score : 0;
+  const isGhost = bestScore < threshold;
+  const maskedRun = segments.filter(s => s.status === 'masked');
+  const maskedSpan = maskedRun.reduce((acc, s) => acc + (s.t1 - s.t0), 0);
+  const isMaskedTrack = (samples.length > 0)
+    && maskedSpan >= ((t1 - t0) * 0.95);  // essentially all-masked
+  let barBg;
+  let barStatus;
+  if (isMaskedTrack){ barBg = '#94a3b8'; barStatus = 'masked'; }
+  else if (isGhost) { barBg = 'transparent'; barStatus = 'ghost'; }
+  else              { barBg = trackColor;   barStatus = 'confirmed'; }
+  // Per-segment overlays — emitted ONLY for non-confirmed runs of
+  // a non-ghost, non-fully-masked track. (Ghost bars are already
+  // entirely non-confirmed visually; the dotted outline encodes
+  // that.) Each overlay span is positioned relative to the BAR's
+  // [t0, t1] window so the percentages map directly.
+  const totalSpan = Math.max(0.0001, t1 - t0);
+  const overlayParts = [];
+  if (!isGhost && !isMaskedTrack){
+    for (const seg of segments){
+      if (seg.status === 'confirmed') continue;
+      const segL = Math.max(0, ((seg.t0 - t0) / totalSpan) * 100);
+      const segW = Math.max(0,
+        ((Math.min(seg.t1, t1) - Math.max(seg.t0, t0)) / totalSpan) * 100);
+      if (segW < 0.01) continue;
+      const cls = seg.status === 'masked'
+        ? 'lbtt-bar-maskspan'
+        : 'lbtt-bar-predicted';  // weak + predicted share the hatch
+      overlayParts.push(
+        `<span class="${cls}" style="left:${segL.toFixed(2)}%;width:${segW.toFixed(2)}%"></span>`,
+      );
+    }
+  }
+  // × lost marker — keep the existing rules. end_reason === "timeout"
+  // AND the bar still ends > 0.4 s before clip duration.
+  const endReason = tr.end_reason;
+  const endedEarlyGap = (duration - t1) > 0.4;
+  let showEndX;
+  if (endReason === 'timeout') showEndX = endedEarlyGap;
+  else if (endReason === undefined || endReason === null) showEndX = endedEarlyGap;
+  else showEndX = false;
+  const endRight = Math.max(0, ((duration - t1) / duration) * 100);
+  const predictedSpan = segments
+    .filter(s => s.status === 'predicted')
+    .reduce((acc, s) => acc + (s.t1 - s.t0), 0);
+  let tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
+  if (predictedSpan > 0.05) tt += ` · ${predictedSpan.toFixed(1)} s prädiziert`;
+  if (isGhost) tt += ' · Ghost (nie bestätigt)';
+  else if (isMaskedTrack) tt += ' · Maskiert';
+  const idx = tr._num - 1;
+  const maskedBadge = isMaskedTrack
+    ? `<span class="lbtt-bar-masked" aria-label="Maskiert" title="Außerhalb Alarmierung (Maskiert)">⊘</span>`
+    : '';
+  const dataAttrs = `data-status="${barStatus}"`
+    + (isMaskedTrack ? ' data-masked="1"' : '');
+  const barStyle = `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${barBg};--track-color:${trackColor}`;
+  const numColor = isGhost ? trackColor : (isMaskedTrack ? '#fff' : barBg);
+  return `<button type="button" class="lbtt-bar" ${dataAttrs} data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="${barStyle}">
+    ${overlayParts.join('')}
+    <span class="lbtt-bar-num" style="color:${numColor}">#${tr._num}</span>
+    ${maskedBadge}
+    ${showEndX ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
+  </button>`;
 }
 
 // Master renderer for the entire bottom-stack chrome — sidebar (play
@@ -143,6 +267,13 @@ export function lbRenderTrackTimeline(item){
   const _natW = videoEl?.videoWidth || 0;
   const _natH = videoEl?.videoHeight || 0;
 
+  // Per-clip spawn threshold (gates.min_confidence) drives the
+  // status classifier — same value the bbox renderer reads, so the
+  // bar texture agrees with the video bbox style for every sample.
+  const spawnThreshold = (tracks && tracks.gates
+                          && typeof tracks.gates.min_confidence === 'number')
+    ? tracks.gates.min_confidence : 0.50;
+
   // Per-class strips + matching badges. Skip when there are no
   // tracks (motion clips trigger the auto-reindex banner in that
   // case; timelapses fall through to the "Nach-Erkennung starten"
@@ -152,84 +283,18 @@ export function lbRenderTrackTimeline(item){
   // motion events.
   if (haveTracks && orderedLabels.length > 0){
     for (const lbl of orderedLabels){
-      const c = colors[lbl] || colors.unknown;
       const labelText = OBJ_LABEL[lbl] || lbl;
       const rawSvg = OBJ_SVG[lbl] || OBJ_SVG.alarm || '';
       const avatarSvg = rawSvg.replace('width="16" height="16"', 'width="18" height="18"');
       const isOn = !hidden.has(lbl);
       const trs = byLabel.get(lbl) || [];
-      const barsHtml = trs.map(tr => {
-        const samples = tr.samples || [];
-        if (!samples.length) return '';
-        const t0 = samples[0].t;
-        const t1 = samples[samples.length - 1].t;
-        const left = Math.max(0, (t0 / duration) * 100);
-        const width = Math.max(0.5, ((t1 - t0) / duration) * 100);
-        // Find the last DETECT sample — anything after it forms the
-        // predicted tail. Tolerant to old tracks.json without a
-        // `source` field: missing/undefined is treated as detect so
-        // pre-2026-05 clips keep rendering as solid bars.
-        let lastDetectIdx = -1;
-        for (let i = samples.length - 1; i >= 0; i--){
-          const src = samples[i].source;
-          if (src === undefined || src === null || src === 'detect' || src === 'track'){
-            lastDetectIdx = i;
-            break;
-          }
-        }
-        const hasPredictedTail = lastDetectIdx >= 0 && lastDetectIdx < samples.length - 1;
-        const tDetectEnd = hasPredictedTail ? samples[lastDetectIdx].t : t1;
-        const predictedSpan = hasPredictedTail ? Math.max(0, t1 - tDetectEnd) : 0;
-        // Two segments (when there's a predicted tail) share the
-        // bar's solid colour as the base, with a striped overlay
-        // covering only the predicted region. The percentages are
-        // relative to the bar itself, not the strip, so width:100%
-        // on the bar maps to the full track span [t0, t1].
-        const totalSpan = Math.max(0.0001, t1 - t0);
-        const detectFrac = hasPredictedTail
-          ? Math.max(0, Math.min(1, (tDetectEnd - t0) / totalSpan))
-          : 1;
-        const predLeftPct = (detectFrac * 100).toFixed(2);
-        const predWidthPct = ((1 - detectFrac) * 100).toFixed(2);
-        // × marker only when end_reason === "timeout" AND the bar
-        // (predicted tail included) still ends >0.4 s before the
-        // clip's end. Tracks that re-acquired (last sample is
-        // detect) or that closed because the clip simply ended
-        // (end_reason === "ended_at_clip") get no marker. Older
-        // tracks.json without end_reason fall back to the legacy
-        // duration-gap rule so those clips don't lose the cue.
-        const endReason = tr.end_reason;
-        const endedEarlyGap = (duration - t1) > 0.4;
-        let showEndX;
-        if (endReason === 'timeout') showEndX = endedEarlyGap;
-        else if (endReason === undefined || endReason === null) showEndX = endedEarlyGap;
-        else showEndX = false;
-        const endRight = Math.max(0, ((duration - t1) / duration) * 100);
-        let tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
-        if (predictedSpan > 0.05) tt += ` · ${predictedSpan.toFixed(1)} s prädiziert`;
-        const idx = tr._num - 1;
-        const predictedOverlay = hasPredictedTail
-          ? `<span class="lbtt-bar-predicted" style="left:${predLeftPct}%;width:${predWidthPct}%"></span>`
-          : '';
-        // ⊘ Maskiert — track whose subject sits inside an exclusion
-        // mask the majority of the time. Bar background overrides
-        // the track color to neutral gray and shows the ⊘ corner
-        // glyph so the row visually matches the bbox's masked
-        // modifier on the video.
-        const maskedRatio = _maskedRatioForTrack(tr, _natW, _natH, camMasks);
-        const isMasked = maskedRatio >= 0.5;
-        const barBg = isMasked ? '#94a3b8' : c;
-        const maskedAttrs = isMasked ? ' data-masked="1"' : '';
-        const maskedBadge = isMasked
-          ? `<span class="lbtt-bar-masked" aria-label="Maskiert" title="Außerhalb Alarmierung (Maskiert)">⊘</span>`
-          : '';
-        return `<button type="button" class="lbtt-bar${hasPredictedTail ? ' lbtt-bar-has-pred' : ''}"${maskedAttrs} data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${barBg}">
-          ${predictedOverlay}
-          <span class="lbtt-bar-num" style="color:${barBg}">#${tr._num}</span>
-          ${maskedBadge}
-          ${showEndX ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
-        </button>`;
-      }).join('');
+      // Per-class fallback color from the icons palette — only used
+      // when a track lacks its own tracks.json color (legacy
+      // sidecars). Modern sidecars always carry tr.color.
+      const fallbackC = colors[lbl] || colors.unknown;
+      const barsHtml = trs.map(tr => _renderTrackBar(
+        tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks,
+      )).join('');
       sidebarParts.push(`
         <button type="button" class="lbtt-badge" data-label="${lbl}" data-on="${isOn ? '1' : '0'}" aria-label="Klasse ein/aus" title="Klasse ein/aus">
           <span class="lbtt-avatar" style="--c:${c}">${avatarSvg}</span>

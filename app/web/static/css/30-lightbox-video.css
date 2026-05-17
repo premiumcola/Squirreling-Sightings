@@ -389,29 +389,46 @@
   -webkit-tap-highlight-color:transparent;
 }
 .lbtt-bar:hover{ filter:brightness(1.15); }
-/* Predicted tail overlay — sits on top of the solid class colour
-   and renders ~6 px 45° dark stripes so the eye reads it as
-   "uncertain, still tracking but not seeing detections." The base
-   bar background still shows through where the gradient is
-   transparent, keeping the class identity readable. */
+/* ≈ Ghost — best_score never crossed the spawn threshold. Render as
+   a hollow dotted outline at the per-track color so the track is
+   visible without claiming the same visual weight as a confirmed
+   bar. The #N badge still reads in the track color. */
+.lbtt-bar[data-status="ghost"]{
+  background:transparent !important;
+  border:1.5px dotted var(--track-color,#22c55e);
+}
+.lbtt-bar[data-status="ghost"]:hover{
+  background:color-mix(in srgb,var(--track-color,#22c55e) 10%,transparent) !important;
+  filter:none;
+}
+/* Schwach / predicted overlay — sits on top of the solid track
+   colour and renders ~6 px 45° dark stripes so the eye reads it as
+   "uncertain confidence" (sub-threshold detect samples OR predicted
+   tail samples). The base bar background still shows through where
+   the gradient is transparent, keeping track identity readable.
+   Same overlay class for both states by design (per the visual
+   spec: hatch = schwach AND predicted). */
 .lbtt-bar-predicted{
   position:absolute;top:0;bottom:0;
-  border-radius:0 5px 5px 0;
   pointer-events:none;
   background-image:repeating-linear-gradient(
     45deg,
     rgba(0,0,0,0)    0 4px,
     rgba(0,0,0,.55)  4px 8px
   );
-  /* Slightly desaturated overall so the predicted region also
-     reads quieter from a few feet away — paired with the stripe
-     pattern this is enough to communicate "lower confidence". */
+  /* Slightly desaturated overall so the schwach/predicted region
+     also reads quieter from a few feet away. */
   opacity:.85;
 }
-.lbtt-bar-has-pred .lbtt-bar-num{
-  /* When there's a predicted tail, the #N still anchors at the
-     bar's left edge — keep it readable above the solid section. */
-  z-index:1;
+/* ⊘ Maskiert per-segment overlay — neutral gray covers the masked
+   span of an otherwise-normal track. The hatch overlay is NOT
+   stacked on top of the mask overlay because masking already
+   communicates "filtered out of alerting." */
+.lbtt-bar-maskspan{
+  position:absolute;top:0;bottom:0;
+  pointer-events:none;
+  background:#94a3b8;
+  opacity:.78;
 }
 .lbtt-bar-num{
   position:absolute;top:-14px;left:0;

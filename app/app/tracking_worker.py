@@ -38,6 +38,7 @@ from pathlib import Path
 # legacy underscore-prefixed names so any external import that
 # happened to grab them via `from .tracking_worker import _Track`
 # keeps resolving.
+from .bbox_utils import iou as _iou
 from .tracker_core import (
     IOU_MATCH_THRESHOLD,
     MISS_GRACE_DEFAULT_SECONDS,
@@ -264,6 +265,232 @@ def _is_static_false_positive(track, spawn_score: float):
         f"net={net_px:.0f}px<{motion_floor:.0f}, max_step={max_step:.0f}px"
     )
     return True, reason
+
+
+# K3 · global offline tracklet stitching parameters.
+#
+# Sequential stitch: tracklet A ends at time t_a_end, tracklet B
+# starts at t_b_start. Linkable iff (same label) AND
+# (gap ≤ STITCH_MAX_GAP_S) AND (centroid distance ≤
+# STITCH_DIST_FACTOR × max(last_bw, last_bh, first_bw, first_bh))
+# AND (size ratio between A.last and B.first ≤ STITCH_SIZE_RATIO).
+#
+# Parallel/overlap merge: two tracklets co-existing in time whose
+# detect samples in the OVERLAP window have IoU ≥ STITCH_OVERLAP_IOU
+# on every shared frame. Same label only.
+STITCH_MAX_GAP_S = 6.0
+STITCH_DIST_FACTOR = 1.6
+STITCH_SIZE_RATIO = 1.8
+STITCH_OVERLAP_IOU = 0.55
+
+
+def _t_first_last_detect(track):
+    """Return ``(t_first, t_last, bb_first, bb_last)`` for the first
+    and LAST detect-source samples, or ``None`` when the track has
+    no observed samples."""
+    det = [s for s in (track.samples or [])
+           if s.get("source") in ("detect", "track")]
+    if not det:
+        return None
+    return (
+        float(det[0].get("t", 0.0)),
+        float(det[-1].get("t", 0.0)),
+        det[0]["bbox"],
+        det[-1]["bbox"],
+    )
+
+
+def _bb_tuple(bb):
+    return (int(bb["x1"]), int(bb["y1"]), int(bb["x2"]), int(bb["y2"]))
+
+
+def _bb_center(bb):
+    return ((bb["x1"] + bb["x2"]) / 2.0, (bb["y1"] + bb["y2"]) / 2.0)
+
+
+def _bb_dims(bb):
+    return (bb["x2"] - bb["x1"], bb["y2"] - bb["y1"])
+
+
+def _can_stitch_sequential(a, b) -> tuple[bool, str]:
+    """Return ``(yes, reason)``. ``b`` must start AFTER ``a`` ends.
+    Same-label, time gap small, spatial endpoints consistent.
+    """
+    if a.label != b.label:
+        return False, "label-mismatch"
+    a_meta = _t_first_last_detect(a)
+    b_meta = _t_first_last_detect(b)
+    if not a_meta or not b_meta:
+        return False, "no-detect-samples"
+    _, t_a_end, _, bb_a_end = a_meta
+    t_b_start, _, bb_b_start, _ = b_meta
+    if t_b_start < t_a_end - 0.01:
+        return False, "b-starts-before-a-ends"
+    gap = t_b_start - t_a_end
+    if gap > STITCH_MAX_GAP_S:
+        return False, f"gap={gap:.1f}>{STITCH_MAX_GAP_S}"
+    aw, ah = _bb_dims(bb_a_end)
+    bw, bh = _bb_dims(bb_b_start)
+    sz_w = max(aw, bw) / max(1.0, float(min(aw, bw)))
+    sz_h = max(ah, bh) / max(1.0, float(min(ah, bh)))
+    if sz_w > STITCH_SIZE_RATIO or sz_h > STITCH_SIZE_RATIO:
+        return False, f"size-ratio={max(sz_w, sz_h):.2f}>{STITCH_SIZE_RATIO}"
+    acx, acy = _bb_center(bb_a_end)
+    bcx, bcy = _bb_center(bb_b_start)
+    dist = ((bcx - acx) ** 2 + (bcy - acy) ** 2) ** 0.5
+    max_dim = max(aw, ah, bw, bh)
+    max_dist = STITCH_DIST_FACTOR * max_dim
+    if dist > max_dist:
+        return False, f"dist={dist:.0f}>{max_dist:.0f}"
+    return True, (
+        f"gap={gap:.1f}s dist={dist:.0f}px max_dim={max_dim} "
+        f"size_ratio={max(sz_w, sz_h):.2f}"
+    )
+
+
+def _overlap_iou_sustained(a, b) -> float:
+    """Return the MEAN IoU of detect samples that share frame indices
+    between tracklets a and b. 0.0 if they don't share any frame."""
+    a_by_f = {int(s["f"]): s["bbox"] for s in (a.samples or [])
+              if s.get("source") in ("detect", "track")}
+    b_by_f = {int(s["f"]): s["bbox"] for s in (b.samples or [])
+              if s.get("source") in ("detect", "track")}
+    shared = a_by_f.keys() & b_by_f.keys()
+    if not shared:
+        return 0.0
+    total = 0.0
+    for f in shared:
+        total += _iou(_bb_tuple(a_by_f[f]), _bb_tuple(b_by_f[f]))
+    return total / float(len(shared))
+
+
+def _absorb(into, donor) -> None:
+    """Merge donor's samples into ``into``. Frame-deduped; sample
+    list re-sorted. Aggregate fields refreshed from the unified set.
+    ``donor`` is left empty + marked inactive — caller drops it."""
+    existing_frames = {int(s.get("f", -1)) for s in (into.samples or [])}
+    for s in (donor.samples or []):
+        if int(s.get("f", -1)) in existing_frames:
+            continue
+        into.samples.append(s)
+    into.samples.sort(key=lambda s: int(s.get("f", 0)))
+    if into.samples:
+        into.first_frame = min(into.first_frame, donor.first_frame)
+        into.last_frame = max(into.last_frame, donor.last_frame)
+    for s in (into.samples or []):
+        sc = s.get("score")
+        if sc is not None and float(sc) > float(into.best_score or 0.0):
+            into.best_score = float(sc)
+            into.best_frame_idx = int(s.get("f", 0))
+    donor.samples = []
+    donor.active = False
+    donor.end_reason = "stitched"
+
+
+def _stitch_tracklets_offline(state: _TrackerState) -> int:
+    """Two-pass global stitcher run on ``state.closed`` before
+    payload serialisation. Returns the number of tracklets absorbed.
+
+    Pass 1 — sequential. Order tracklets by first detect t. For each
+    later tracklet B, look back over earlier tracklets and link to
+    the closest predecessor A that passes ``_can_stitch_sequential``.
+    Iterate until no more links found (fragments collapse).
+
+    Pass 2 — parallel overlap. Any pair (A, B) of same-label tracks
+    that share detect frames AND those shared frames have mean IoU
+    ≥ STITCH_OVERLAP_IOU → same object → merge B into A.
+
+    Conservative: simultaneous, spatially-separate tracks are NEVER
+    merged (the IoU gate would fail). Cross-label is gated out.
+    Quality scoring picks the canonical winner.
+    """
+    closed = state.closed
+    if len(closed) < 2:
+        return 0
+    absorbed_total = 0
+    # ── Pass 1 · sequential stitch (multi-iteration so chains collapse)
+    while True:
+        # Build start-time index over CURRENT (post-merge) survivors.
+        live = [t for t in closed if t.samples]
+        if len(live) < 2:
+            break
+        live.sort(key=lambda t: _t_first_last_detect(t)[0]
+                  if _t_first_last_detect(t) else 0.0)
+        merged_this_round = 0
+        absorbed_set: set = set()
+        for j, b in enumerate(live):
+            if id(b) in absorbed_set:
+                continue
+            best_a = None
+            best_gap = STITCH_MAX_GAP_S + 1.0
+            for i in range(j):
+                a = live[i]
+                if id(a) in absorbed_set:
+                    continue
+                ok, _why = _can_stitch_sequential(a, b)
+                if not ok:
+                    continue
+                a_meta = _t_first_last_detect(a)
+                b_meta = _t_first_last_detect(b)
+                if not a_meta or not b_meta:
+                    continue
+                gap = b_meta[0] - a_meta[1]
+                if 0.0 <= gap < best_gap:
+                    best_gap = gap
+                    best_a = a
+            if best_a is not None:
+                log.info(
+                    "[tracking] stitch tid=%s ← tid=%s · gap=%.1fs (sequential)",
+                    best_a.track_id, b.track_id, best_gap,
+                )
+                _absorb(best_a, b)
+                absorbed_set.add(id(b))
+                merged_this_round += 1
+        absorbed_total += merged_this_round
+        if merged_this_round == 0:
+            break
+    # ── Pass 2 · overlap merge
+    while True:
+        live = [t for t in closed if t.samples]
+        if len(live) < 2:
+            break
+        merged = 0
+        for i in range(len(live)):
+            a = live[i]
+            if not a.samples:
+                continue
+            for k in range(i + 1, len(live)):
+                b = live[k]
+                if not b.samples or a.label != b.label:
+                    continue
+                if _overlap_iou_sustained(a, b) < STITCH_OVERLAP_IOU:
+                    continue
+                # Score-based winner so the canonical track keeps
+                # going. More detect samples → higher; ties broken
+                # toward higher best_score.
+                a_n = sum(1 for s in a.samples
+                          if s.get("source") in ("detect", "track"))
+                b_n = sum(1 for s in b.samples
+                          if s.get("source") in ("detect", "track"))
+                if (b_n, b.best_score or 0.0) > (a_n, a.best_score or 0.0):
+                    into, donor = b, a
+                else:
+                    into, donor = a, b
+                log.info(
+                    "[tracking] stitch tid=%s ← tid=%s · overlap-iou (parallel)",
+                    into.track_id, donor.track_id,
+                )
+                _absorb(into, donor)
+                merged += 1
+                break  # restart outer loop
+            if merged:
+                break
+        absorbed_total += merged
+        if merged == 0:
+            break
+    # Prune absorbed (empty + inactive) tracklets from the closed list.
+    state.closed = [t for t in closed if t.samples]
+    return absorbed_total
 
 
 def _filter_static_false_positives(state: _TrackerState, spawn_score: float):
@@ -577,6 +804,19 @@ class TrackingWorker(threading.Thread):
                 tr.close("ended_at_clip", frame_w, frame_h)
             state.closed.extend(state.active)
             state.active = []
+
+            # K3 · global offline stitching pass. Re-joins
+            # fragmented tracks of the same physical subject (the
+            # back-and-forth-walker that ends up as many short
+            # tracklets) into single identities via observed
+            # endpoints — no extrapolated velocity. Runs BEFORE
+            # the static-FP sweep so a stitched-back-together real
+            # person's combined motion correctly fails the static
+            # gate and survives.
+            n_stitched = _stitch_tracklets_offline(state)
+            if n_stitched:
+                log.info("[tracking] stitched %d tracklet(s) (offline)",
+                         n_stitched)
 
             # K1 · global static-FP sweep on the closed tracklets
             # BEFORE payload build. Catches the chair/pole/lamp/

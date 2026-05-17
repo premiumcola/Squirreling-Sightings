@@ -9,6 +9,17 @@ import { _state } from './_state.js';
 export function _updatePlayPct(){
   const stack = document.querySelector('.lb-time-stack');
   if (!stack) return;
+  // Live-detect mode pins the playhead to the right edge — the HLS
+  // <video>'s currentTime keeps advancing but there's no recorded
+  // duration to scrub against, so a moving cursor is meaningless.
+  // _pinScrubberRight() already wrote --play-pct=1; this short-circuit
+  // keeps the timeupdate/play/seeked listeners on the videoEl from
+  // overwriting it back to a moving fraction.
+  const modal = byId('lightboxModal');
+  if (modal && modal.classList.contains('lb-live-detect')){
+    stack.style.setProperty('--play-pct', '1');
+    return;
+  }
   const v = byId('lightboxVideo');
   if (!v) return;
   const dur = Number.isFinite(v.duration) && v.duration > 0

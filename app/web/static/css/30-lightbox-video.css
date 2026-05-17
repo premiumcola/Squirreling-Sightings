@@ -614,6 +614,22 @@
   pointer-events:none;
   z-index:1;
 }
+/* D4 · live-detect pins the cursor to the right edge and recolors
+   it green (success token) so the operator reads it as "LIVE" — same
+   color as the ● LIVE pill above. Hit area is disabled in live mode
+   (no scrubbing on a live HLS stream) and so is the play/pause
+   button (the HLS player has no concept of pause that the UI here
+   would represent meaningfully). */
+#lightboxModal.lb-live-detect .lb-play-line{
+  background:#22c55e;
+  box-shadow:0 0 6px rgba(34,197,94,.6);
+}
+#lightboxModal.lb-live-detect .lb-play-hit{
+  display:none;
+}
+#lightboxModal.lb-live-detect #lbScrubPlay{
+  display:none;
+}
 .lb-play-hit{
   position:absolute;
   top:0;bottom:0;left:-8px;

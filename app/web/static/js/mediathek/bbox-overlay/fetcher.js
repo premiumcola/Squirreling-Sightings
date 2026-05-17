@@ -13,7 +13,6 @@ import {
 import { _logDiag } from './debug.js';
 import {
   _hideReindexBanner,
-  _kickReindexFor,
   _showReindexBannerError,
   _showReindexBannerPending,
 } from './reindex.js';
@@ -90,13 +89,16 @@ export function lbInvalidateTracks(eventId){
 // timeline. Called from openLightbox after the video src is set; the
 // RAF loop kicks off via the play/loadedmetadata listeners.
 //
-// G2 · every clip open now ALWAYS kicks a fresh tracking re-index
-// (was: only when the sidecar was missing/empty). Cached tracks
-// (if any) render immediately so the user gets a swimlane right
-// away; the indexer runs in the background and the polling loop
-// swaps in a fresher payload when it lands. Motion clips with no
-// trigger detection (motion-only events) skip the auto-kick — there
-// is nothing for the tracker to spawn against.
+// I1 · LOAD-ONLY behaviour. tracks.json is generated EXACTLY ONCE at
+// recording finalize (see camera_runtime/_recording.py · the
+// TrackingJob enqueue) and persisted as the <video>.tracks.json
+// sidecar. Every subsequent open just FETCHES and renders that
+// sidecar — no automatic re-index, no worker activity. The user can
+// still regenerate explicitly via the "Neu indexieren" pill button
+// (reindex-button.js → triggerManualReindex) or the banner retry.
+// Old clips with no sidecar show a calm placeholder ("noch nicht
+// indexiert — über »Neu indexieren« erzeugen") that the user can act
+// on; the indexer never starts on its own.
 export async function lbLoadTracksForItem(item){
   if (!item) return;
   const tracks = await _fetchTracks(item);
@@ -107,50 +109,26 @@ export async function lbLoadTracksForItem(item){
     && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
   const triggerDetCount = (item.detections || [])
     .filter(d => d && d.bbox && typeof d.bbox.x1 === 'number').length;
-  // Render any cached tracks immediately so the user isn't staring
-  // at an "Indexierung läuft" placeholder when usable data is
-  // already on disk. The fresher payload, when the reindex
-  // completes, replaces these via _retrySidecarFetch.
+  // Render whatever the sidecar produced — including the empty/
+  // missing case, where lbRenderTrackTimeline draws the
+  // un-indexed placeholder.
   lbRenderTrackTimeline(item);
   _lbDrawDetections();
   if (haveAnyTracks) _renderConfidenceMeter();
 
-  // Always kick a fresh reindex on open — unless this event has
-  // already exhausted the retry budget THIS session (final-failed),
-  // in which case re-kicking would just churn for nothing.
-  if (triggerDetCount === 0){
-    // Motion-only event: tracker has no spawnable detection to work
-    // with, so kicking the indexer is pointless. Hide any stale
-    // banner left over from a previous open.
-    if (!_reindexInflight.has(item.event_id)) _hideReindexBanner();
-    return;
-  }
+  // Banner state — surface ongoing manual reindexes / prior
+  // failures but never kick a new one.
   if (_reindexFinalFailed.has(item.event_id)){
     _showReindexBannerError(item);
-    return;
-  }
-  if (_reindexInflight.has(item.event_id)){
-    // A re-index started by a previous open is still polling — let
-    // it finish; its retry loop will update the swimlane when the
-    // new sidecar lands. Surface the pending banner so the user
-    // sees the progress.
+  } else if (_reindexInflight.has(item.event_id)){
     _showReindexBannerPending(item);
-    return;
-  }
-  // Fresh kick. The once-per-session gate was retired (see G2)
-  // so reopens also trigger a re-run — matches the brief's
-  // "every time a clip is opened" requirement.
-  _kickReindexFor(item);
-
-  if (!haveAnyTracks){
-    _logDiag(
-      `event=${item.event_id} render path=legacy `
-      + `(no tracks yet, ${triggerDetCount} trigger dets) — reindexing`,
-      'info');
   } else {
-    _logDiag(
-      `event=${item.event_id} render path=tracks `
-      + `(${tracks.tracks.length} tracks) — reindex refresh kicked`,
-      'info');
+    _hideReindexBanner();
   }
+
+  _logDiag(
+    `event=${item.event_id} render path=${haveAnyTracks ? 'tracks' : 'placeholder'} `
+    + `(${haveAnyTracks ? tracks.tracks.length : 0} tracks, `
+    + `${triggerDetCount} trigger dets) — load-only`,
+    'info');
 }

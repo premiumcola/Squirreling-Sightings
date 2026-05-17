@@ -428,7 +428,17 @@ export function lbRenderTrackTimeline(item){
           + `</div>`,
         );
       } else {
-        timeColParts.push(`<div class="lbtt-empty">Keine Track-Daten — erscheinen sobald die Indexierung fertig ist.</div>`);
+        // I1 · clip has no sidecar at all (recorded before the
+        // finalize-time enqueue existed, or its sidecar was deleted).
+        // Calm, action-oriented copy — the operator can hit the
+        // "Neu indexieren" pill in the overlay-toggles row to
+        // produce one. No automatic kick.
+        timeColParts.push(
+          `<div class="lbtt-empty lbtt-empty-unindexed">`
+          + `<span class="lbtt-empty-text">Noch nicht indexiert</span>`
+          + `<span class="lbtt-empty-sub">über »Neu indexieren« erzeugen</span>`
+          + `</div>`,
+        );
       }
     }
   }

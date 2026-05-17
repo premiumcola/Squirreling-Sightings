@@ -13,6 +13,7 @@ import { _isReindexBannerActive } from './reindex.js';
 import { _getHiddenClassesForCam } from './hidden-classes.js';
 import { renderTrailLayer } from '../../mediaview/canvas/trail-layer.js';
 import { _pointInPoly, _polyPoints } from '../../shape-editor/geometry.js';
+import { normalizePolygon } from '../../core/polygon-source.js';
 
 // Neutral gray for the ⊘ Maskiert modifier. Replaces the track's
 // per-identity color (the per-track hue still drives the timeline
@@ -235,32 +236,17 @@ function _isSampleMasked(sample, natW, natH, masks){
 
 /**
  * Resolve the camera's exclusion-mask polygons with normalized
- * source_w/source_h. Legacy masks without explicit source dims fall
- * back to the camera's preview_resolution — same logic the overlay
- * paint uses in zone-overlay-mount.js, so the "is this bbox in a
- * mask" test scales identically to what the user sees painted on
- * the video.
+ * source_w/source_h via the shared core/polygon-source.js helper —
+ * single source of truth across recorded lightbox, live-sim, and
+ * the bbox renderer's per-sample masked test. Modern polygons carry
+ * their own stamped dims; legacy unstamped polygons fall back to
+ * the camera's substream resolution.
  */
 export function _resolveMaskPolygonsForCam(camId){
   if (!camId) return [];
   const cam = (state.cameras || []).find(c => (c.id || '') === camId);
   if (!cam || !Array.isArray(cam.masks) || !cam.masks.length) return [];
-  let fallbackW = 0, fallbackH = 0;
-  const pres = String(cam.preview_resolution || '');
-  const presM = pres.match(/(\d+)\s*[x×]\s*(\d+)/);
-  if (presM){
-    fallbackW = parseInt(presM[1], 10) || 0;
-    fallbackH = parseInt(presM[2], 10) || 0;
-  }
-  return cam.masks.map(m => {
-    if (Array.isArray(m)){
-      return { points: m, source_w: fallbackW, source_h: fallbackH };
-    }
-    const out = { ...m };
-    if (!out.source_w && fallbackW > 0) out.source_w = fallbackW;
-    if (!out.source_h && fallbackH > 0) out.source_h = fallbackH;
-    return out;
-  });
+  return cam.masks.map(m => normalizePolygon(m, cam)).filter(Boolean);
 }
 
 /**

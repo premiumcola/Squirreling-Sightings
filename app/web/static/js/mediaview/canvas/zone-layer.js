@@ -132,11 +132,20 @@ export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted 
  * computed in wrap-coords: ``(mediaRect.left - wrapRect.left) +
  * letterbox-offset``. Polygons drawn at source-px coords land on
  * the pixels the user actually sees.
+ *
+ * ``opts.srcW`` / ``opts.srcH`` override the media element's natural
+ * dimensions. Use this when the element has no reliable naturalDims
+ * — most notably an MJPEG <img>, which Safari reports as 0×0 even
+ * after first frame decode. The live-sim path passes the backend's
+ * frame_size here so the letterbox math uses the same coordinate
+ * base the bbox layer does.
  */
 export function renderZoneLayerForMediaEl(canvas, mediaEl, polygons, opts = {}){
   if (!canvas || !mediaEl) return;
-  const srcW = mediaEl.videoWidth || mediaEl.naturalWidth || 0;
-  const srcH = mediaEl.videoHeight || mediaEl.naturalHeight || 0;
+  const overrideW = Number(opts.srcW) > 0 ? Number(opts.srcW) : 0;
+  const overrideH = Number(opts.srcH) > 0 ? Number(opts.srcH) : 0;
+  const srcW = overrideW || mediaEl.videoWidth || mediaEl.naturalWidth || 0;
+  const srcH = overrideH || mediaEl.videoHeight || mediaEl.naturalHeight || 0;
   const wrap = canvas.parentElement || mediaEl;
   const wrapRect = wrap.getBoundingClientRect();
   const mediaRect = mediaEl.getBoundingClientRect();

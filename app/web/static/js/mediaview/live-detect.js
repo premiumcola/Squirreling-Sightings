@@ -25,10 +25,8 @@ import { state } from '../core/state.js';
 import { OBJ_LABEL, OBJ_SVG, colors, objIconSvg } from '../core/icons.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { renderPanelTabs } from './panel-tabs.js';
-import {
-  ZONE_STROKE as _ZS, ZONE_FILL as _ZF,
-  MASK_STROKE as _MS, MASK_FILL as _MF, LINE_W as _LW,
-} from '../core/zone-tokens.js';
+import { normalizePolygon } from '../core/polygon-source.js';
+import { renderZoneLayerForMediaEl } from './canvas/zone-layer.js';
 import { fittedRect } from '../core/video-fit.js';
 import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { _setupVideoChrome } from '../lightbox.js';
@@ -361,16 +359,19 @@ function _ensureTrailsOverlay(){
 }
 
 function _ensureZoneMaskOverlay(){
-  let svg = byId('lightboxLiveZoneMask');
-  if (svg) return svg;
+  let canvas = byId('lightboxLiveZoneMask');
+  if (canvas) return canvas;
   const wrap = byId('lightboxMediaWrap');
   if (!wrap) return null;
-  svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.id = 'lightboxLiveZoneMask';
-  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
-  wrap.appendChild(svg);
-  return svg;
+  // Canvas (not SVG) so the SAME shared zone-layer the recorded
+  // Mediathek lightbox uses can paint it — single source of truth
+  // for the letterbox math and polygon source-resolution handling
+  // (see mediaview/canvas/zone-layer.js + core/polygon-source.js).
+  canvas = document.createElement('canvas');
+  canvas.id = 'lightboxLiveZoneMask';
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
+  wrap.appendChild(canvas);
+  return canvas;
 }
 
 // wv612 — single-line legend that appears under the toggle row only
@@ -1151,81 +1152,53 @@ function _renderTrailsOverlay(){
 }
 
 function _renderZoneMaskOverlay(){
-  const svg = _ensureZoneMaskOverlay();
-  if (!svg || !_session) return;
+  const canvas = _ensureZoneMaskOverlay();
+  if (!canvas || !_session) return;
   const showZones = _overlays.zones;
   const showMasks = _overlays.masks;
-  if (!showZones && !showMasks){ svg.innerHTML = ''; svg.style.display = 'none'; return; }
-  svg.style.display = 'block';
+  if (!showZones && !showMasks){
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = 'none';
+    return;
+  }
+  canvas.style.display = 'block';
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
-  svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
-  _positionSvgOverImage(svg);
   const cam = (state.cameras || []).find(c => c.id === _session.camId) || {};
-  // H2 · zone/mask diag now goes to the visible strip on every render
-  // (not console-warn-once). Same fields as before — counts pulled
-  // from state.cameras so "toggle on but no paint" splits between
-  // "camera has no zones/masks configured" vs "SVG is zero-sized".
-  const zmRect = svg.getBoundingClientRect();
+  // Normalise polygons through the shared resolver so source_w/h
+  // are always present (modern stamp wins, legacy fall back to
+  // preview_resolution / 1280×720 default).
+  const zones = showZones
+    ? (cam.zones || []).map(z => normalizePolygon(z, cam)).filter(Boolean)
+    : [];
+  const masks = showMasks
+    ? (cam.masks || []).map(m => normalizePolygon(m, cam)).filter(Boolean)
+    : [];
+  // The MJPEG <img> never reports a reliable naturalWidth on Safari
+  // (the multipart-replace stream confuses the natural-dims tracker).
+  // Pass the backend-reported frame_size to the shared zone-layer
+  // so its letterbox math uses the same coordinate base the rest of
+  // the live-detect overlays (bbox, trails) already use.
+  const liveImg = byId('lightboxImg');
+  renderZoneLayerForMediaEl(
+    canvas, liveImg, { zones, masks },
+    { srcW: fs.w, srcH: fs.h },
+  );
+  // Diag strip update — same fields the legacy SVG path emitted so
+  // operators can still read "did the polygons survive the toggle".
+  const rect = canvas.getBoundingClientRect();
   _updateDiagStrip('zonemask', {
     zones:    (cam.zones || []).length,
     masks:    (cam.masks || []).length,
-    svgRect:  `${Math.round(zmRect.width)}×${Math.round(zmRect.height)}`,
-    zIndex:   window.getComputedStyle(svg).zIndex,
+    svgRect:  `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    zIndex:   window.getComputedStyle(canvas).zIndex,
   });
-  if (zmRect.width <= 0 || zmRect.height <= 0){
+  if (rect.width <= 0 || rect.height <= 0){
     _updateDiagStrip('position-fail', {
-      svg:   svg.id,
-      svgRect: `${Math.round(zmRect.width)}×${Math.round(zmRect.height)}`,
+      svg:   canvas.id,
+      svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
     });
   }
-  // Stroke / fill colours pulled from core/zone-tokens.js so the
-  // visual matches the cam-edit polygon editor + every other
-  // read-only overlay context exactly (cm-43). SVG viewBox is
-  // already in source coordinates, so a non-scaling-stroke keeps
-  // the LINE_W constant regardless of the rendered size.
-  //
-  // pn834 — each polygon may stamp its own source_w / source_h. The
-  // SVG viewBox is set to the live frame size (fs.w × fs.h, typically
-  // the main-stream resolution) so a polygon drawn in a 640 × 360
-  // substream snapshot needs its points scaled up before they're
-  // written into the polygon string. LEGACY polygons without
-  // source_w/h fall back to the camera's preview_resolution (the
-  // editor's canvas size for pre-pn834 saves) — without this
-  // fallback they'd be treated as already-main-stream coords and
-  // render as a tiny invisible polygon in the top-left corner.
-  let fbW = 0, fbH = 0;
-  const pres = String(cam.preview_resolution || '');
-  const presM = pres.match(/(\d+)\s*[x×]\s*(\d+)/);
-  if (presM){ fbW = parseInt(presM[1], 10) || 0; fbH = parseInt(presM[2], 10) || 0; }
-  const _polyPts = (p) => {
-    const srcW = (p && p.source_w) || fbW || fs.w;
-    const srcH = (p && p.source_h) || fbH || fs.h;
-    const sx = fs.w / Math.max(1, srcW);
-    const sy = fs.h / Math.max(1, srcH);
-    return (p.points || p.poly || []).map(pt => {
-      const x = (pt.x != null ? pt.x : pt[0]) * sx;
-      const y = (pt.y != null ? pt.y : pt[1]) * sy;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-  };
-  const parts = [];
-  if (showZones){
-    for (const z of (cam.zones || [])){
-      const pts = _polyPts(z);
-      if (pts){
-        parts.push(`<polygon points="${pts}" fill="${_ZF}" stroke="${_ZS}" stroke-width="${_LW}" vector-effect="non-scaling-stroke"/>`);
-      }
-    }
-  }
-  if (showMasks){
-    for (const m of (cam.masks || [])){
-      const pts = _polyPts(m);
-      if (pts){
-        parts.push(`<polygon points="${pts}" fill="${_MF}" stroke="${_MS}" stroke-width="${_LW}" vector-effect="non-scaling-stroke"/>`);
-      }
-    }
-  }
-  svg.innerHTML = parts.join('');
 }
 
 function _renderDetectionsPanel(data){

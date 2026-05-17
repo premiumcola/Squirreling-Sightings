@@ -50,14 +50,17 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
   if (!wrap) return;
   const video = document.getElementById('lightboxVideo');
   const img = document.getElementById('lightboxImg');
-  // Prefer whichever element is currently visible — the lightbox
-  // shows the <img> for photos / pre-decode, the <video> for
-  // motion clips and timelapses.
-  const mediaEl = (video && video.style.display !== 'none' && video.src)
-    ? video
-    : (img && img.style.display !== 'none' && img.src ? img : null);
-  if (!mediaEl) return;
-  _videoEl = mediaEl;
+  // Both elements exist in the DOM at all times (the open flow just
+  // toggles their `display`). Attach listeners + the ResizeObserver
+  // unconditionally — at mount time the video src is still `""` (it
+  // gets set AFTER _setupVideoChrome returns), so a `videoEl.src`
+  // check here used to return early without creating the canvas, and
+  // toggling Masken later found `_redrawFn === null`. The draw
+  // function now resolves the visible media element fresh each call
+  // so it picks up videoEl as soon as its src lands + the
+  // loadedmetadata listener fires.
+  if (!video && !img) return;
+  _videoEl = video || img;
   const canvas = _ensureCanvas(wrap);
   const cam = (state.cameras || []).find(c => c.id === item.camera_id) || {};
   // Every polygon arrives with the authored source dims explicitly
@@ -80,6 +83,15 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
     showZones: true,
     showMasks: !(opts.hideMasks ?? isTL),
   };
+  // Resolve the currently-visible media element per-draw. The video
+  // and img alternate based on the open flow's `display:none` state;
+  // dynamic resolution means a tail-call from the loadedmetadata
+  // listener after videoEl.src is set picks the video correctly.
+  const resolveMediaEl = () => {
+    if (video && video.style.display !== 'none' && video.src) return video;
+    if (img && img.style.display !== 'none' && img.src) return img;
+    return video || img;
+  };
   const draw = () => {
     if (!_visibility.showZones && !_visibility.showMasks){
       // Both off — clear the canvas to a transparent state.
@@ -87,33 +99,32 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
-    renderZoneLayerForMediaEl(canvas, _videoEl, {
+    const liveMedia = resolveMediaEl();
+    if (!liveMedia) return;
+    renderZoneLayerForMediaEl(canvas, liveMedia, {
       zones: _visibility.showZones ? polygons.zones : [],
       masks: _visibility.showMasks ? polygons.masks : [],
     }, {});
   };
   _redrawFn = draw;
-  // ResizeObserver — fires on every layout change of the media
-  // element (window resize, address-bar collapse on iOS, modal
-  // open/close, fullscreen enter/exit).
+  // ResizeObserver on the wrap so layout changes (fullscreen enter /
+  // exit, iOS address-bar collapse, window resize) trigger a redraw
+  // regardless of which media element is currently in front.
   _resizeObs = new ResizeObserver(draw);
-  _resizeObs.observe(_videoEl);
-  // loadedmetadata — videoWidth/videoHeight only become non-zero
-  // after this fires. fittedRect handles the pre-metadata case but
-  // an explicit redraw keeps the overlay in sync the moment the
-  // browser knows the source dimensions.
+  _resizeObs.observe(wrap);
+  // Listen on BOTH elements for first-frame events so the redraw
+  // fires the moment the video src has decoded its first frame
+  // (loadedmetadata) OR the img has loaded.
   _onMeta = () => draw();
-  _videoEl.addEventListener('loadedmetadata', _onMeta);
-  if (img){
-    // Same trick on the <img> for photo / snapshot playback.
-    _videoEl.addEventListener('load', _onMeta);
-  }
+  if (video) video.addEventListener('loadedmetadata', _onMeta);
+  if (img)   img.addEventListener('load', _onMeta);
   // window resize — belt and braces for browsers where the
   // ResizeObserver on the inner element doesn't fire on viewport
   // changes that don't change the element's CSS box.
   _onResize = () => draw();
   window.addEventListener('resize', _onResize);
-  // First paint.
+  // First paint — usually a no-op until loadedmetadata supplies
+  // the natural dims, but cheap.
   draw();
 }
 
@@ -161,14 +172,14 @@ export function unmountZoneOverlayForLightbox(){
     try { _resizeObs.disconnect(); } catch { /* ignore */ }
     _resizeObs = null;
   }
-  if (_videoEl){
-    if (_onMeta){
-      _videoEl.removeEventListener('loadedmetadata', _onMeta);
-      _videoEl.removeEventListener('load', _onMeta);
-    }
-    _videoEl = null;
+  if (_onMeta){
+    const v = document.getElementById('lightboxVideo');
+    const i = document.getElementById('lightboxImg');
+    if (v) v.removeEventListener('loadedmetadata', _onMeta);
+    if (i) i.removeEventListener('load', _onMeta);
     _onMeta = null;
   }
+  _videoEl = null;
   if (_onResize){
     window.removeEventListener('resize', _onResize);
     _onResize = null;

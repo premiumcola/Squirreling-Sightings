@@ -407,11 +407,35 @@
    as the scrubber bar — so bars and ticks share x with the cursor. */
 .lbtt-strip{
   position:relative;
-  height:48px;
+  height:56px;
   border-radius:8px;
   background:rgba(255,255,255,.04);
+  display:flex;flex-direction:column;
+  overflow:visible;
 }
 .lbtt-strip[data-on="0"]{ opacity:.30; }
+/* H4 · TOP sub-band — confirmed/alerting tracks, solid color blocks.
+   Height grows with the number of stagger mini-rows (set via the
+   data-rows attribute) so overlapping confirmed tracks stay
+   individually visible. Each mini-row is 14 px tall. */
+.lbtt-strip-top{
+  position:relative;
+  flex:1 1 auto;
+  min-height:32px;
+}
+.lbtt-strip-top[data-rows="2"]{ min-height:38px; }
+.lbtt-strip-top[data-rows="3"]{ min-height:52px; }
+.lbtt-strip-top[data-rows="4"]{ min-height:60px; }
+/* H4 · BOTTOM sub-band — ghost + masked tracks. Smaller, separated
+   from the top band by a faint divider so the eye reads them as
+   second-class context, not active alerting. */
+.lbtt-strip-bot{
+  position:relative;
+  flex:0 0 16px;
+  margin-top:2px;
+  padding-top:3px;
+  border-top:1px solid rgba(255,255,255,.10);
+}
 /* G4 · Trigger marker — small tick + class icon at t=pre_motion_seconds
    on the lane of the triggering class. Tells the operator "this clip
    started because of <icon>" without any text legend. */
@@ -442,24 +466,39 @@
   display:block;
 }
 .lbtt-bar{
-  position:absolute;top:14px;bottom:14px;
+  position:absolute;
   border:0;padding:0;
   border-radius:5px;
   cursor:pointer;
   -webkit-tap-highlight-color:transparent;
 }
 .lbtt-bar:hover{ filter:brightness(1.15); }
-/* ≈ Ghost — best_score never crossed the spawn threshold. Render as
-   a hollow dotted outline at the per-track color so the track is
-   visible without claiming the same visual weight as a confirmed
-   bar. The #N badge still reads in the track color. */
-.lbtt-bar[data-status="ghost"]{
-  background:transparent !important;
-  border:1.5px dotted var(--track-color,#22c55e);
+/* H4 · TOP variant — confirmed bar, stacked at a mini-row index so
+   overlapping tracks remain visible side-by-side instead of merging
+   into one block. 12 px row height, 2 px gap (mini-row * 14). */
+.lbtt-bar--hi{
+  top:calc(4px + var(--mini-row,0) * 14px);
+  height:12px;
 }
-.lbtt-bar[data-status="ghost"]:hover{
-  background:color-mix(in srgb,var(--track-color,#22c55e) 10%,transparent) !important;
+/* H4 · BOTTOM variant — ghost (dotted outline neutral gray) or
+   masked (gray solid). Smaller, vertically centered inside the
+   bottom sub-band's 16 px height. */
+.lbtt-bar--lo{
+  top:1px;bottom:1px;
+  height:auto;
+  border-radius:3px;
+}
+.lbtt-bar--lo[data-status="ghost"]{
+  background:transparent !important;
+  border:1.5px dotted rgba(148,163,184,.85);
+}
+.lbtt-bar--lo[data-status="ghost"]:hover{
+  background:rgba(148,163,184,.10) !important;
   filter:none;
+}
+.lbtt-bar--lo[data-status="masked"]{
+  background:#94a3b8 !important;
+  opacity:.85;
 }
 /* Schwach / predicted overlay — sits on top of the solid track
    colour and renders ~6 px 45° dark stripes so the eye reads it as
@@ -490,11 +529,29 @@
   background:#94a3b8;
   opacity:.78;
 }
+/* H4 · #N badge — sits inside the bar now (was above) so the two
+   sub-bands don't have overflowing labels colliding with the
+   adjacent lane. Reads at 9 px monospace tucked at the left edge;
+   the track color is set inline by the renderer. */
 .lbtt-bar-num{
-  position:absolute;top:-14px;left:0;
+  position:absolute;
+  top:50%;left:3px;
+  transform:translateY(-50%);
   font-family:ui-monospace,Menlo,Consolas,monospace;
-  font-size:10px;font-weight:500;letter-spacing:.02em;
+  font-size:9px;font-weight:700;letter-spacing:.01em;
+  line-height:1;
   pointer-events:none;
+  color:rgba(0,0,0,.78);
+  text-shadow:0 0 2px rgba(255,255,255,.55);
+}
+/* For top (confirmed) bars the badge text uses a darkened
+   per-track color via inline style; the white halo above keeps it
+   readable on saturated colors. Bottom (ghost / masked) bars use
+   a static muted shade so the badge contrasts with both the
+   transparent ghost fill and the gray masked fill. */
+.lbtt-bar--lo .lbtt-bar-num{
+  color:#0f172a;
+  text-shadow:0 0 2px rgba(255,255,255,.55);
 }
 .lbtt-bar-end{
   position:absolute;top:50%;transform:translate(0,-50%);
@@ -1039,9 +1096,15 @@
   }
   .lbtt-badge .lbtt-avatar{ width:26px;height:26px; }
   .lbtt-badge .lbtt-avatar svg{ width:16px;height:16px; }
-  .lbtt-strip{ height:44px; }
-  .lbtt-bar{ top:12px;bottom:12px; }
-  .lbtt-bar-num{ font-size:9.5px; }
+  /* H4 · mobile lane — slightly tighter than desktop but keep the
+     two-tier split so the visual concept stays consistent. */
+  .lbtt-strip{ height:50px; }
+  .lbtt-strip-top{ min-height:28px; }
+  .lbtt-strip-top[data-rows="2"]{ min-height:34px; }
+  .lbtt-strip-top[data-rows="3"]{ min-height:46px; }
+  .lbtt-strip-bot{ flex-basis:14px; }
+  .lbtt-bar--hi{ top:calc(3px + var(--mini-row,0) * 13px); height:10px; }
+  .lbtt-bar-num{ font-size:8.5px; }
   .lb-play-btn{ width:32px;height:32px; }
   #lightboxSettings{ padding:6px 10px 12px 10px; }
 }

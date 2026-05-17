@@ -84,67 +84,59 @@ function _segmentTrack(samples, threshold, masks, natW, natH){
   return out;
 }
 
-function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks){
+// H4 · tier classification — top vs bottom sub-band.
+//   top    — best_score ≥ spawn-threshold AND not essentially all-
+//            masked. Strong, alerting-eligible track. Painted as a
+//            solid block in the track color.
+//   bottom — ghost (never confirmed) OR almost-entirely masked.
+//            Painted smaller + neutral gray in the de-emphasised
+//            second band.
+function _classifyTrackTier(tr, threshold, segments, t0, t1){
+  const bestScore = (typeof tr.best_score === 'number') ? tr.best_score : 0;
+  if (bestScore < threshold) return 'ghost';
+  const span = Math.max(0.0001, t1 - t0);
+  const maskedSpan = segments
+    .filter(s => s.status === 'masked')
+    .reduce((a, s) => a + (s.t1 - s.t0), 0);
+  if (maskedSpan >= 0.95 * span) return 'masked';
+  return 'confirmed';
+}
+
+// H4 · greedy mini-row assignment for the top sub-band. Each
+// confirmed track lands in the lowest mini-row index where no
+// previously-placed track still occupies its time window. Result
+// is one number per track + the total mini-row count so the
+// strip can size its top band.
+function _assignTopMiniRows(tracks){
+  const rows = [];
+  const assignment = new Map();
+  for (const tr of tracks){
+    const samples = tr.samples || [];
+    if (!samples.length) continue;
+    const start = samples[0].t;
+    const end = samples[samples.length - 1].t;
+    let placed = -1;
+    for (let r = 0; r < rows.length; r++){
+      if (rows[r] <= start){ rows[r] = end; placed = r; break; }
+    }
+    if (placed < 0){ rows.push(end); placed = rows.length - 1; }
+    assignment.set(tr, placed);
+  }
+  return { assignment, rowCount: rows.length || 1 };
+}
+
+function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, opts = {}){
   const samples = tr.samples || [];
   if (!samples.length) return '';
-  // Clamp t1 to clip duration. The post-clip worker normally caps
-  // sample.t at frame_count/fps, so this is belt-and-braces against
-  // tracks that occasionally carry a predicted sample emitted in
-  // the last grace-window after the final detect frame.
   const t0 = Math.max(0, samples[0].t);
   const tLast = samples[samples.length - 1].t;
   const t1 = Math.min(duration, tLast);
-  // Sanity: drop tracks whose visible span collapses to a point
-  // entirely past the clip duration (1-sample late blip). The track
-  // is still in tracks.json so the lightbox bbox renderer can show
-  // it during scrubbing if the user wants — only the swimlane lane
-  // is suppressed because a <0.05 s sliver carries no information.
   if (t1 - t0 < 0.05 && tLast > duration) return '';
   const left = Math.max(0, (t0 / duration) * 100);
   const width = Math.max(0.5, ((t1 - t0) / duration) * 100);
-  // Per-track color from tracks.json. Falls back to the per-class
-  // palette entry for older sidecars that didn't stamp a color.
   const trackColor = tr.color || fallbackC;
   const segments = _segmentTrack(samples, threshold, masks, natW, natH);
-  // Track-level classification — for the bar's base style.
-  //   ghost  → best_score never crossed threshold; rendered as a
-  //            hollow dotted outline (no solid fill).
-  //   masked → every sample sits inside an exclusion mask; bar
-  //            background flips to neutral gray.
-  //   normal → use trackColor as the bar fill.
-  const bestScore = (typeof tr.best_score === 'number') ? tr.best_score : 0;
-  const isGhost = bestScore < threshold;
-  const maskedRun = segments.filter(s => s.status === 'masked');
-  const maskedSpan = maskedRun.reduce((acc, s) => acc + (s.t1 - s.t0), 0);
-  const isMaskedTrack = (samples.length > 0)
-    && maskedSpan >= ((t1 - t0) * 0.95);  // essentially all-masked
-  let barBg;
-  let barStatus;
-  if (isMaskedTrack){ barBg = '#94a3b8'; barStatus = 'masked'; }
-  else if (isGhost) { barBg = 'transparent'; barStatus = 'ghost'; }
-  else              { barBg = trackColor;   barStatus = 'confirmed'; }
-  // Per-segment overlays — emitted ONLY for non-confirmed runs of
-  // a non-ghost, non-fully-masked track. (Ghost bars are already
-  // entirely non-confirmed visually; the dotted outline encodes
-  // that.) Each overlay span is positioned relative to the BAR's
-  // [t0, t1] window so the percentages map directly.
-  const totalSpan = Math.max(0.0001, t1 - t0);
-  const overlayParts = [];
-  if (!isGhost && !isMaskedTrack){
-    for (const seg of segments){
-      if (seg.status === 'confirmed') continue;
-      const segL = Math.max(0, ((seg.t0 - t0) / totalSpan) * 100);
-      const segW = Math.max(0,
-        ((Math.min(seg.t1, t1) - Math.max(seg.t0, t0)) / totalSpan) * 100);
-      if (segW < 0.01) continue;
-      const cls = seg.status === 'masked'
-        ? 'lbtt-bar-maskspan'
-        : 'lbtt-bar-predicted';  // weak + predicted share the hatch
-      overlayParts.push(
-        `<span class="${cls}" style="left:${segL.toFixed(2)}%;width:${segW.toFixed(2)}%"></span>`,
-      );
-    }
-  }
+  const tier = _classifyTrackTier(tr, threshold, segments, t0, t1);
   // × lost marker — keep the existing rules. end_reason === "timeout"
   // AND the bar still ends > 0.4 s before clip duration.
   const endReason = tr.end_reason;
@@ -159,20 +151,49 @@ function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks){
     .reduce((acc, s) => acc + (s.t1 - s.t0), 0);
   let tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
   if (predictedSpan > 0.05) tt += ` · ${predictedSpan.toFixed(1)} s prädiziert`;
-  if (isGhost) tt += ' · Ghost (nie bestätigt)';
-  else if (isMaskedTrack) tt += ' · Maskiert';
+  if (tier === 'ghost')       tt += ' · Ghost (nie bestätigt)';
+  else if (tier === 'masked') tt += ' · Maskiert';
   const idx = tr._num - 1;
-  const maskedBadge = isMaskedTrack
-    ? `<span class="lbtt-bar-masked" aria-label="Maskiert" title="Außerhalb Alarmierung (Maskiert)">⊘</span>`
-    : '';
-  const dataAttrs = `data-status="${barStatus}"`
-    + (isMaskedTrack ? ' data-masked="1"' : '');
-  const barStyle = `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${barBg};--track-color:${trackColor}`;
-  const numColor = isGhost ? trackColor : (isMaskedTrack ? '#fff' : barBg);
-  return `<button type="button" class="lbtt-bar" ${dataAttrs} data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="${barStyle}">
+  // BOTTOM sub-band — ghost (dotted outline gray) or masked (gray
+  // solid fill). Smaller, de-emphasised. No per-segment overlays
+  // here; the whole track is in the secondary tier.
+  if (tier !== 'confirmed'){
+    const barStyle = `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%`;
+    const maskedBadge = tier === 'masked'
+      ? `<span class="lbtt-bar-masked" aria-label="Maskiert" title="Außerhalb Alarmierung">⊘</span>`
+      : '';
+    return `<button type="button" class="lbtt-bar lbtt-bar--lo" data-status="${tier}" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="${barStyle}">
+      <span class="lbtt-bar-num">#${tr._num}</span>
+      ${maskedBadge}
+      ${showEndX ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
+    </button>`;
+  }
+  // TOP sub-band — confirmed track. Solid track-color block with
+  // per-segment hatch overlays for any sub-spans that dipped below
+  // confirmation (weak/predicted) or fell inside a mask. The
+  // overlays paint in the SAME track color (the hatch is dark
+  // stripes laid OVER the colored base — the base hue shows
+  // through the gaps so identity stays readable).
+  const totalSpan = Math.max(0.0001, t1 - t0);
+  const overlayParts = [];
+  for (const seg of segments){
+    if (seg.status === 'confirmed') continue;
+    const segL = Math.max(0, ((seg.t0 - t0) / totalSpan) * 100);
+    const segW = Math.max(0,
+      ((Math.min(seg.t1, t1) - Math.max(seg.t0, t0)) / totalSpan) * 100);
+    if (segW < 0.01) continue;
+    const cls = seg.status === 'masked'
+      ? 'lbtt-bar-maskspan'
+      : 'lbtt-bar-predicted';
+    overlayParts.push(
+      `<span class="${cls}" style="left:${segL.toFixed(2)}%;width:${segW.toFixed(2)}%"></span>`,
+    );
+  }
+  const miniRow = opts.miniRow != null ? opts.miniRow : 0;
+  const barStyle = `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${trackColor};--track-color:${trackColor};--mini-row:${miniRow}`;
+  return `<button type="button" class="lbtt-bar lbtt-bar--hi" data-status="confirmed" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="${barStyle}">
     ${overlayParts.join('')}
-    <span class="lbtt-bar-num" style="color:${numColor}">#${tr._num}</span>
-    ${maskedBadge}
+    <span class="lbtt-bar-num" style="color:${trackColor}">#${tr._num}</span>
     ${showEndX ? `<span class="lbtt-bar-end" data-track-idx="${idx}" data-track-num="${tr._num}" tabindex="0" role="button" aria-label="Track #${tr._num} verloren" style="right:-${endRight.toFixed(2)}%">×</span>` : ''}
   </button>`;
 }
@@ -317,9 +338,34 @@ export function lbRenderTrackTimeline(item){
       // sidecars). Modern sidecars always carry tr.color.
       const fallbackC = colors[lbl] || colors.unknown;
       const c = fallbackC;
-      const barsHtml = trs.map(tr => _renderTrackBar(
+      // H4 · split this class's tracks into the TOP (confirmed,
+      // strong) and BOTTOM (ghost + masked, secondary) sub-bands.
+      // We classify here at the strip level — _renderTrackBar
+      // re-classifies internally for tooltip/text purposes, but
+      // the SPLIT into two flex children happens once per class.
+      const topTracks = [];
+      const botTracks = [];
+      for (const tr of trs){
+        const samples = tr.samples || [];
+        if (!samples.length){ botTracks.push(tr); continue; }
+        const t0 = Math.max(0, samples[0].t);
+        const t1 = Math.min(duration, samples[samples.length - 1].t);
+        const segs = _segmentTrack(samples, spawnThreshold, camMasks, _natW, _natH);
+        const tier = _classifyTrackTier(tr, spawnThreshold, segs, t0, t1);
+        (tier === 'confirmed' ? topTracks : botTracks).push(tr);
+      }
+      const { assignment: topRows, rowCount: topRowCount }
+        = _assignTopMiniRows(topTracks);
+      const topBarsHtml = topTracks.map(tr => _renderTrackBar(
+        tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks,
+        { miniRow: topRows.get(tr) || 0 },
+      )).join('');
+      const botBarsHtml = botTracks.map(tr => _renderTrackBar(
         tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks,
       )).join('');
+      const barsHtml = `
+        <div class="lbtt-strip-top" data-rows="${topRowCount}">${topBarsHtml}</div>
+        ${botTracks.length ? `<div class="lbtt-strip-bot">${botBarsHtml}</div>` : ''}`;
       // Trigger marker — vertical tick + class icon at t=preS,
       // anchored to the triggering class's lane only.
       const triggerHtml = (lbl === triggerLabel && duration > 0) ? `

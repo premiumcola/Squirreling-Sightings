@@ -1256,10 +1256,19 @@ function _renderLiveSwimlane(){
       source: 'detect',
     });
   }
+  // 1-based per-render _num so the timeline-panel renders "#1", "#2"
+  // bar labels instead of "#undefined". Mirrors the stamping that
+  // bbox-overlay/fetcher.js does on recorded tracks at fetch time —
+  // the timeline-panel reads tr._num directly. Label-ordered via
+  // entries() insertion order; since each label gets one synthetic
+  // track in the live window, _num maps 1:1 to the visible bar.
   const tracks = [];
+  let _num = 0;
   for (const [label, samples] of byLabel.entries()){
+    _num += 1;
     tracks.push({
       track_id: `live-${label}`,
+      _num,
       label,
       color: colors[label] || '#94a3b8',
       first_frame: 0,

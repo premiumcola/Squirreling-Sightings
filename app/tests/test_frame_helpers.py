@@ -628,17 +628,23 @@ class TestBrightOutlierDarkScene:
 
     def _dark_scene_with_bright_patch(self, seed: int = 17) -> np.ndarray:
         """Mimic the real failure mode: a dark IR/twilight scene
-        (mean ~50, illuminator gradient + silhouette) with one
-        rectangular patch saturated at 255. Built on top of
+        (mean ~50, illuminator gradient + silhouette) with a 2-tile-
+        wide rectangular patch saturated at 255. Built on top of
         ``_ir_night_frame`` so dead_area + grey_toned + flat_gray
         don't false-positive before the bright_outlier detector
-        gets a chance to fire."""
+        gets a chance to fire.
+
+        Two tiles, not one — a single saturated tile is
+        overwhelmingly a legitimate point light source (porch lamp,
+        street lamp), and the validator deliberately requires 2+
+        saturated tiles to flag corruption (see
+        ``_bright_outlier.py``)."""
         img = _ir_night_frame(seed=seed).astype(np.int16)
         h, w = img.shape[:2]
         ty, tx = 1, 5
         tile_h, tile_w = h // 5, w // 8
         y0, y1 = ty * tile_h, (ty + 1) * tile_h
-        x0, x1 = tx * tile_w, (tx + 1) * tile_w
+        x0, x1 = tx * tile_w, (tx + 2) * tile_w
         img[y0:y1, x0:x1] = 255
         return np.clip(img, 0, 255).astype(np.uint8)
 

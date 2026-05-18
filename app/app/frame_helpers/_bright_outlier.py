@@ -72,6 +72,22 @@ def is_bright_outlier_dark_scene(img, profile) -> tuple[bool, str]:
     max_tile_floor = float(getattr(profile, "bright_outlier_max_tile_floor", 240.0))
     if max_tile <= max_tile_floor:
         return False, ""
+    # Require at least TWO saturated tiles. A real corruption patch in
+    # the test corpus always spans 2+ adjacent tiles (a "pure-white
+    # blowout patch" covers multiple macroblock tiles by definition).
+    # A SINGLE saturated tile is overwhelmingly a legitimate point
+    # light source — a porch lamp, street lamp, or IR-illuminator
+    # reflection close to the camera — which mass-rejects night-scene
+    # detection ticks if treated as corruption. The field data:
+    # 2026-05-18 logs showed ~60 % of test-detection calls on the
+    # Garten-Dachterrasse camera failing with this head when one
+    # patio light filled a single tile to 248. Requiring 2+ saturated
+    # tiles distinguishes corruption from legitimate point lights
+    # without weakening the corruption signal (real blowouts cover
+    # area).
+    n_saturated = int(np.sum(flat > max_tile_floor))
+    if n_saturated < 2:
+        return False, ""
     # Darkest-third median as the scene baseline. Robust to a single
     # outlier tile (it doesn't lift the bottom third) and doesn't
     # require us to drop the max manually.
@@ -85,4 +101,5 @@ def is_bright_outlier_dark_scene(img, profile) -> tuple[bool, str]:
     return True, (f"bright_outlier_dark_scene("
                   f"max={int(round(max_tile))},"
                   f"base={int(round(baseline))},"
-                  f"dev={int(round(dev))})")
+                  f"dev={int(round(dev))},"
+                  f"n_sat={n_saturated})")

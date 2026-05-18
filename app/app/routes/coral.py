@@ -593,20 +593,28 @@ def api_test_detection(cam_id: str):
     if rt is None:
         return jsonify({"error": "Kamera-Runtime nicht aktiv (deaktiviert?)"}), 503
 
-    # ── Fresh + validated frame contract ──────────────────────────────
-    # The endpoint used to paint inference boxes on whatever was in
-    # rt.frame, then reported the age as ms-since-decode — which lies
-    # when a decoder buffer is draining 25-second-old frames at us. The
-    # new contract: poll up to 2.5 s for a frame whose timestamp is
-    # NEWER than this request AND passes ``is_valid_frame`` + the
-    # corrupt-strip check. If the contract fails the panel gets a 503
-    # with a code that lets the frontend pick a precise banner — no
-    # bbox-on-broken-frame fallbacks. Implementation reuses the
-    # runtime's existing rt.lock / rt.frame / rt.frame_ts publication;
-    # no changes to the capture loop.
+    # ── Fresh + decoder-strip frame contract ──────────────────────────
+    # Poll up to 2.5 s for a frame whose timestamp is NEWER than this
+    # request AND passes the cheap ``has_corrupt_strip`` H.264 chroma-
+    # buffer-flush check. The richer ``is_valid_frame`` validator
+    # (bright_outlier_dark_scene, grey_toned, dead_area, …) is
+    # deliberately NOT applied here: it was designed to gate the alarm
+    # / notification pipeline against frames that look broken to the
+    # human, but the live-preview / Simulieren use case is exactly the
+    # opposite — show what Coral sees on the camera's CURRENT frame,
+    # whatever it looks like. Letting the validator gate the live
+    # preview produced ~60 % rejection on the Garten-Dachterrasse
+    # twilight scene (one patio light + low-chroma terrace) and made
+    # the UI show stale state. The human eye on the live video
+    # decides whether a frame is "trustworthy" — Coral's verdict on
+    # whatever frame is current is the data the user is asking for.
+    # has_corrupt_strip stays in because pink/rainbow bottom-strip is
+    # a narrow decoder-artefact signature that would just produce
+    # spurious detections on garbage chroma; the alarm-pipeline path
+    # in camera_runtime/_main_loop already filters those out
+    # independently.
     from ..frame_helpers import (
         has_corrupt_strip,
-        is_valid_frame,
         pick_profile_from_baseline,
     )
     request_started_at = _time.time()
@@ -644,33 +652,21 @@ def api_test_detection(cam_id: str):
             _time.sleep(0.05)
             continue
         saw_fresh_candidate = True
-        # Auto-pick DAY/TWILIGHT/NIGHT profile from this frame's own
-        # brightness — the timelapse capture loop does the same thing
-        # via _pick_profile, and without it the daytime brightness
-        # floor mass-rejects perfectly fine IR/night frames as
-        # "too_dark". Single-frame baseline is fine for a test ping.
+        # Profile pick stays — kept for the response payload so the
+        # diag panel can show whether the scene was classified
+        # DAY/TWILIGHT/NIGHT for context, even though no profile-
+        # specific validator runs on this path anymore.
         active_profile = pick_profile_from_baseline([candidate])
-        ok_valid, _vreason = is_valid_frame(candidate, profile=active_profile)
-        corrupt_strip = has_corrupt_strip(candidate)
-        if not ok_valid or corrupt_strip:
+        if has_corrupt_strip(candidate):
             final_outcome = "corrupt"
-            last_validator_reason = (
-                _vreason if not ok_valid
-                else "has_corrupt_strip"
-            )
-            # Promote to INFO when running — DEBUG hid the WHY-was-it-
-            # rejected detail behind a log-level the operator wouldn't
-            # touch mid-test. INFO is the minimum that lets the diag
-            # panel + docker logs answer "Stage 1 corruption or
-            # validator too strict?" in one read.
+            last_validator_reason = "has_corrupt_strip"
             log.info(
-                "[test-detection] %s rejected candidate · valid=%s "
-                "reason=%r strip=%s",
-                cam_id, ok_valid, last_validator_reason, corrupt_strip,
+                "[test-detection] %s rejected candidate · strip=True",
+                cam_id,
             )
             _time.sleep(0.05)
             continue
-        # Accepted — fresh, valid, no corrupt strip.
+        # Accepted — fresh, no decoder-strip artefact.
         frame = candidate
         frame_ts_accepted = candidate_ts
         final_outcome = "ok"

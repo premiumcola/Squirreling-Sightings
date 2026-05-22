@@ -112,6 +112,18 @@ class LifecycleMixin:
             log.warning("[weather] daily recompute job failed: %s", e)
         cams_in = [self._cam_name(cid) for cid in self._enabled_cam_ids()]
         log.info("[weather] Service started · interval=%ss · cameras=%s", interval, cams_in)
+        # O18 · scheduler inventory at boot — surface every job count so
+        # a missing recap/sun-tl/poll registration is visible without
+        # waiting for the scheduled firing. DEBUG dumps each job line.
+        try:
+            jobs = list(self._scheduler.get_jobs())
+            log.info("[scheduler] weather: %d job(s) scheduled", len(jobs))
+            if log.isEnabledFor(logging.DEBUG):
+                for j in jobs:
+                    log.debug("[scheduler]   %s · %s · next=%s",
+                              j.id, j.trigger, j.next_run_time)
+        except Exception as e:
+            log.warning("[scheduler] weather inventory log failed: %s", e)
         # ── Self-heal index drift after a filename refactor ────────────
         # The cam-slug rename refactor renamed every clip in-place; older
         # manifests still point at pre-rename paths. The tolerant

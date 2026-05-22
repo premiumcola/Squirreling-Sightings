@@ -26,20 +26,9 @@ import re
 import sys
 from pathlib import Path
 
-# test_rebuild_runtimes (sibling, alphabetically earlier) installs
-# MagicMock stubs in sys.modules at IMPORT time for cv2, numpy, and
-# the app.* sub-modules it doesn't want to construct. Drop those
-# stubs before we import anything that needs the real things — same
-# defensive pattern as test_settings_store. Must run BEFORE
-# `import cv2` / `import numpy` below or those statements pick up
-# the cached MagicMocks.
-for _stale in ("cv2", "numpy",
-               "app.frame_helpers", "app.timelapse", "app.weather_service"):
-    sys.modules.pop(_stale, None)
-
-import cv2  # noqa: E402
-import numpy as np  # noqa: E402
-import pytest  # noqa: F401,E402  (pytest collection + future fixtures)
+import cv2
+import numpy as np
+import pytest  # noqa: F401  (pytest collection + future fixtures)
 
 _pkg_root = str(Path(__file__).parent.parent)
 if _pkg_root not in sys.path:
@@ -159,6 +148,16 @@ def test_camera_timelapse_filters_invalid_via_shared_helper(tmp_path, monkeypatc
 
     monkeypatch.setattr(TimelapseBuilder, "_write_video_ffmpeg", _fake_ffmpeg)
     monkeypatch.setattr(TimelapseBuilder, "_write_video_opencv", _fake_opencv)
+    # The encoder runs ffprobe on its output as a QA step. The fake
+    # encoders above write 14 bytes of stub data, not a real MP4,
+    # so the real ffprobe call would reject and return None. Stub
+    # the QA check too — this test is about the is_valid_frame +
+    # encoder hand-off, not about MP4 container validity.
+    monkeypatch.setattr(
+        TimelapseBuilder,
+        "_ffprobe_validate",
+        lambda self, p: (True, "ok", {}),
+    )
 
     storage_root = tmp_path / "storage"
     (storage_root / "media").mkdir(parents=True)
@@ -200,13 +199,15 @@ def test_camera_timelapse_filters_invalid_via_shared_helper(tmp_path, monkeypatc
 # The weather_service module is now a package (split into mixins under
 # weather_service/). The assertions below check the SUM of the package
 # files — every .py under app/weather_service/ contributes its source.
+# rglob (not glob) so the nested _sun_tl/ subpackage's __init__.py is
+# included — it carries one of the two TimelapseBuilder call sites.
 _WS_DIR = Path(__file__).parent.parent / "app" / "weather_service"
 
 
 def _ws_source() -> str:
     return "\n".join(
         p.read_text(encoding="utf-8")
-        for p in sorted(_WS_DIR.glob("*.py"))
+        for p in sorted(_WS_DIR.rglob("*.py"))
     )
 
 
@@ -214,7 +215,7 @@ def test_weather_service_imports_timelapsebuilder():
     src = _ws_source()
     # Match either the legacy single-dot (from .timelapse) or the package-
     # relative double-dot (from ..timelapse) form.
-    assert re.search(r"from\s+\.{1,2}timelapse\s+import\s+TimelapseBuilder", src), (
+    assert re.search(r"from\s+\.{1,3}timelapse\s+import\s+TimelapseBuilder", src), (
         "weather_service must import TimelapseBuilder so weather + "
         "sun timelapses share the camera-timelapse encoder. If the "
         "import moved to a different name, update this assertion."
@@ -246,7 +247,7 @@ def test_sun_timelapse_routes_through_write_video():
     src = _ws_source()
     # Two distinct lazy imports of TimelapseBuilder, one per render path.
     lazy_imports = list(re.finditer(
-        r"from\s+\.{1,2}timelapse\s+import\s+TimelapseBuilder", src
+        r"from\s+\.{1,3}timelapse\s+import\s+TimelapseBuilder", src
     ))
     assert len(lazy_imports) >= 2, (
         f"weather_service has only {len(lazy_imports)} import(s) of "

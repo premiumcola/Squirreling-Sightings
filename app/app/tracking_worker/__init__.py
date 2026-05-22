@@ -40,8 +40,8 @@ from pathlib import Path
 # legacy underscore-prefixed names so any external import that
 # happened to grab them via `from .tracking_worker import _Track`
 # keeps resolving.
-from .bbox_utils import iou as _iou
-from .tracker_core import (
+from ..bbox_utils import iou as _iou
+from ..tracker_core import (
     MISS_GRACE_DEFAULT_SECONDS,
     TRACK_FLOOR_SCORE,
     TRACK_SPAWN_SCORE,

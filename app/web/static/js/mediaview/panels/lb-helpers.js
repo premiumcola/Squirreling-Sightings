@@ -20,6 +20,14 @@ export const _LB_HINT =
 export const _LB_TRASH_HTML =
   '<span style="font-size:14px;line-height:1;opacity:.8">↓</span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
 
+// SVG-only variant for small card-corner buttons. _LB_TRASH_HTML
+// prefixes a `↓` glyph that only reads in the lightbox confirm-
+// delete state; on a 16 px thumbnail-corner button it just adds
+// noise. Same canvas as the full version so the icon shape stays
+// consistent across the app — only the wrapper text differs.
+export const _LB_TRASH_ICON_ONLY =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+
 // Paint the confirm button in its current state. Caller passes the
 // boolean directly so this helper never reaches back into the
 // shared _lbItem.

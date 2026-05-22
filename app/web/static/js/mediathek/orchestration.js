@@ -39,6 +39,7 @@ import { _exitMediaSelectMode, _updateMediaSelectToggle } from './bulk-delete.js
 import { loadMedia } from './media-loader.js';
 import { renderMediaFilterPills, _seedTopMediaLabel, _pruneEmptyMediaFilters } from './filters.js';
 import { openLightbox } from '../lightbox.js';
+import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 
 // ── Page-size sizer ─────────────────────────────────────────────────────────
 // _lastKnownCols + window._cachedPageSize are bridged on window so the
@@ -170,7 +171,7 @@ export function mediaCardHTML(item) {
         }
         <div style="position:absolute;top:6px;left:6px;z-index:2"><span class="mmc-tl-badge">${objIconSvg('timelapse', 12)}Timelapse</span></div>
         <div class="mmc-actions" style="z-index:3">
-          <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteTLCard('${esc(item.camera_id || '')}','${esc(item.filename || '')}','${esc(item.event_id || '')}')">✕</button>
+          <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteTLCard('${esc(item.camera_id || '')}','${esc(item.filename || '')}','${esc(item.event_id || '')}')">${_LB_TRASH_ICON_ONLY}</button>
         </div>
       </div>
     </article>`;
@@ -279,7 +280,7 @@ export function mediaCardHTML(item) {
           ? `<span class="media-confirmed-badge">✓</span>`
           : `<div class="mmc-actions">
         <button class="mmc-btn mmc-confirm" title="Bestätigen" onclick="event.stopPropagation();window.confirmMediaCard('${esc(item.camera_id || '')}','${esc(item.event_id || '')}',this)">✓</button>
-        <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteMediaCard(this)">✕</button>
+        <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteMediaCard(this)">${_LB_TRASH_ICON_ONLY}</button>
       </div>`
       }
     </div>

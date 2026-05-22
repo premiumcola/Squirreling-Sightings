@@ -373,15 +373,15 @@ def main():
 
     if coral_success:
         print(f"\n{GREEN}{BOLD}  → Coral TPU ist einsatzbereit!{RESET}")
-        print(f"  → Dashboard zeigt: Coral aktiv (grün)")
+        print("  → Dashboard zeigt: Coral aktiv (grün)")
     elif cpu_success:
         print(f"\n{YELLOW}{BOLD}  → CPU-Modus aktiv (kein Coral, aber Erkennung funktioniert){RESET}")
-        print(f"  → Dashboard zeigt: CPU Modus (gelb)")
+        print("  → Dashboard zeigt: CPU Modus (gelb)")
         if not usb_found:
             info("Stecke den Coral USB Stick an und starte den Container neu")
     else:
         print(f"\n{RED}{BOLD}  → Nur Bewegungserkennung verfügbar{RESET}")
-        print(f"  → Dashboard zeigt: Nur Bewegung (grau)")
+        print("  → Dashboard zeigt: Nur Bewegung (grau)")
         print_model_download_instructions(args.model)
 
     print()

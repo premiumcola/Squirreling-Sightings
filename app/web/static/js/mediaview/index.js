@@ -88,19 +88,19 @@ export {
 // Other modes (live, live-detect, timelapse) currently throw — the
 // cam-edit, dashboard, and timelapse player callsites still go through
 // their own legacy paths. Migrating them lands in a follow-up prompt.
-export function openMediaView(config){
-  if (!config || typeof config !== 'object'){
+export function openMediaView(config) {
+  if (!config || typeof config !== 'object') {
     throw new Error('openMediaView: config object required');
   }
   const mode = config.mode;
-  if (mode === 'recorded'){
+  if (mode === 'recorded') {
     const render = typeof window !== 'undefined' && window._lbLegacyRender;
-    if (typeof render !== 'function'){
+    if (typeof render !== 'function') {
       throw new Error('openMediaView(recorded): legacy renderer not loaded');
     }
     return render(config.item);
   }
-  if (mode === 'live-detect'){
+  if (mode === 'live-detect') {
     // Live-detect mounts the same recorded-mode chrome (lb-fs-video
     // top bar, 16:9 wrap, panel-tabs strip, fine-analysis fold) but
     // swaps the data path: an <img> backed by 1 Hz test-detection
@@ -109,7 +109,7 @@ export function openMediaView(config){
     // index stays a thin entry point.
     const item = config.item || {};
     return openLiveDetect({
-      camId:      item.camera_id,
+      camId: item.camera_id,
       cameraName: item.camera_name || item.cam_name,
     });
   }

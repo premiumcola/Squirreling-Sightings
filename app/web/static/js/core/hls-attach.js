@@ -26,17 +26,17 @@
  *   caller can swap to MJPEG fallback (live-view's behaviour).
  * @returns {{kind:string,instance:any,detach:Function}|null}
  */
-export function tryAttachHls(camId, videoEl, opts = {}){
+export function tryAttachHls(camId, videoEl, opts = {}) {
   if (!videoEl || !camId) return null;
   const hlsUrl = `/api/camera/${encodeURIComponent(camId)}/live.m3u8`;
   const Hls = window.Hls;
   // Path 1 — hls.js (Chrome / Firefox / Edge / Chromium on desktop).
-  if (Hls && typeof Hls.isSupported === 'function' && Hls.isSupported()){
+  if (Hls && typeof Hls.isSupported === 'function' && Hls.isSupported()) {
     try {
       const inst = new Hls({ lowLatencyMode: true });
       inst.loadSource(hlsUrl);
       inst.attachMedia(videoEl);
-      if (typeof opts.onFatalError === 'function'){
+      if (typeof opts.onFatalError === 'function') {
         inst.on(Hls.Events.ERROR, (_evt, data) => {
           if (data && data.fatal) opts.onFatalError(data);
         });
@@ -44,13 +44,21 @@ export function tryAttachHls(camId, videoEl, opts = {}){
       return {
         kind: 'hls.js',
         instance: inst,
-        detach: () => { try { inst.destroy(); } catch { /* ignore */ } },
+        detach: () => {
+          try {
+            inst.destroy();
+          } catch {
+            /* ignore */
+          }
+        },
       };
-    } catch { /* fall through to native */ }
+    } catch {
+      /* fall through to native */
+    }
   }
   // Path 2 — Safari / iOS native HLS (no hls.js needed). canPlayType
   // returns 'maybe' or 'probably' when supported.
-  if (videoEl.canPlayType('application/vnd.apple.mpegurl')){
+  if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
     videoEl.src = hlsUrl;
     return {
       kind: 'native',
@@ -60,7 +68,9 @@ export function tryAttachHls(camId, videoEl, opts = {}){
           videoEl.pause();
           videoEl.removeAttribute('src');
           videoEl.load?.();
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       },
     };
   }

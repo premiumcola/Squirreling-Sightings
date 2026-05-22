@@ -12,16 +12,20 @@
 const _subscribers = new Set();
 let _rafScheduled = false;
 
-function _flush(){
+function _flush() {
   _rafScheduled = false;
-  const w = window.visualViewport?.width  ?? window.innerWidth;
+  const w = window.visualViewport?.width ?? window.innerWidth;
   const h = window.visualViewport?.height ?? window.innerHeight;
   for (const fn of _subscribers) {
-    try { fn({ width: w, height: h }); } catch { /* keep other subscribers alive */ }
+    try {
+      fn({ width: w, height: h });
+    } catch {
+      /* keep other subscribers alive */
+    }
   }
 }
 
-function _schedule(){
+function _schedule() {
   if (_rafScheduled) return;
   _rafScheduled = true;
   requestAnimationFrame(_flush);
@@ -42,7 +46,7 @@ export function onViewportChange(fn) {
 
 export function getViewportSize() {
   return {
-    width:  window.visualViewport?.width  ?? window.innerWidth,
+    width: window.visualViewport?.width ?? window.innerWidth,
     height: window.visualViewport?.height ?? window.innerHeight,
   };
 }

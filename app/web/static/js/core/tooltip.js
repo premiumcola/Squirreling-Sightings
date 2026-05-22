@@ -22,13 +22,13 @@
 // page lifetime.
 
 const _HOVER_DELAY_MS = 300;
-const _LONG_PRESS_MS  = 500;
+const _LONG_PRESS_MS = 500;
 
 let _tipEl = null;
 let _hoverTimer = 0;
 let _longPressTimer = 0;
 
-function _ensureTip(){
+function _ensureTip() {
   if (_tipEl) return _tipEl;
   _tipEl = document.createElement('div');
   _tipEl.className = 'mv-live-toggle-tip';
@@ -38,8 +38,11 @@ function _ensureTip(){
   return _tipEl;
 }
 
-export function showTooltip(target, text){
-  if (!target || !text){ hideTooltip(); return; }
+export function showTooltip(target, text) {
+  if (!target || !text) {
+    hideTooltip();
+    return;
+  }
   const tip = _ensureTip();
   tip.textContent = text;
   tip.hidden = false;
@@ -54,7 +57,7 @@ export function showTooltip(target, text){
   tip.style.left = `${Math.round(left)}px`;
 }
 
-export function hideTooltip(){
+export function hideTooltip() {
   if (_tipEl) _tipEl.hidden = true;
   clearTimeout(_hoverTimer);
   clearTimeout(_longPressTimer);
@@ -70,7 +73,7 @@ export function hideTooltip(){
  * is removed from the DOM to release the listeners + any pending
  * timers.
  */
-export function attachHoverAndLongPress(el, getText){
+export function attachHoverAndLongPress(el, getText) {
   if (!el) return () => {};
   const _text = () => (typeof getText === 'function' ? getText(el) : getText);
   const _showSoon = () => {
@@ -92,12 +95,16 @@ export function attachHoverAndLongPress(el, getText){
   };
   const onTouchEnd = () => clearTimeout(_longPressTimer);
   const onClick = (ev) => {
-    if (_suppressClick){ _suppressClick = false; ev.preventDefault(); ev.stopPropagation(); }
+    if (_suppressClick) {
+      _suppressClick = false;
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
   };
   el.addEventListener('pointerenter', onEnter);
   el.addEventListener('pointerleave', onLeave);
   el.addEventListener('touchstart', onTouchStart, { passive: true });
-  el.addEventListener('touchend',   onTouchEnd);
+  el.addEventListener('touchend', onTouchEnd);
   el.addEventListener('touchcancel', onTouchEnd);
   // Click listener runs in capture phase so it can swallow the
   // synthesized click that follows a long-press. Capture is required
@@ -110,7 +117,7 @@ export function attachHoverAndLongPress(el, getText){
     el.removeEventListener('pointerenter', onEnter);
     el.removeEventListener('pointerleave', onLeave);
     el.removeEventListener('touchstart', onTouchStart);
-    el.removeEventListener('touchend',   onTouchEnd);
+    el.removeEventListener('touchend', onTouchEnd);
     el.removeEventListener('touchcancel', onTouchEnd);
     el.removeEventListener('click', onClick, true);
   };

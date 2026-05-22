@@ -13,30 +13,32 @@
 // valid: at 30 min × 8 s × 15 fps the realised video is 15 s, at
 // 120 min it's 60 s — both inside the realistic-clip envelope. No
 // JS changes shipped under E4.
-import { esc } from "../core/dom.js";
-import { state } from "../core/state.js";
-import { WEATHER_TYPES } from "../core/weather-types.js";
-import { _weatherPanelSave } from "./settings.js";
-import { _renderWeatherCamList } from "./settings-suntl.js";
+import { esc } from '../core/dom.js';
+import { state } from '../core/state.js';
+import { WEATHER_TYPES } from '../core/weather-types.js';
+import { _weatherPanelSave } from './settings.js';
+import { _renderWeatherCamList } from './settings-suntl.js';
 
 // ── Event-Timelapse: per-camera Settings rows ─────────────────────────────────
 
 const _EVENT_TL_TRIGGERS = ['thunder_rising', 'front_passing', 'storm_front'];
 
-export function _renderEventTLBlock(cam, _sun){
+export function _renderEventTLBlock(cam, _sun) {
   const evt = (cam.weather && cam.weather.event_timelapse) || {};
   const enabled = !!evt.enabled;
   const triggers = evt.triggers || {};
   const win = evt.window_min || 60;
-  const trigChips = _EVENT_TL_TRIGGERS.map(t => {
-    const meta = WEATHER_TYPES[t] || { de: t, color: '#94a3b8', icon: '' };
-    const on = triggers[t] !== false;
-    return `
+  const trigChips = _EVENT_TL_TRIGGERS
+    .map((t) => {
+      const meta = WEATHER_TYPES[t] || { de: t, color: '#94a3b8', icon: '' };
+      const on = triggers[t] !== false;
+      return `
       <div class="ws-evt-trigger-row" data-trig="${esc(t)}">
         <span class="ws-evt-trigger-chip" style="background:${meta.color}22;border:1px solid ${meta.color}55;color:${meta.color}">${meta.icon} ${esc(meta.de)}</span>
         <label class="switch ws-evt-trigger-toggle"><input type="checkbox" data-evt-trigger="${esc(t)}" ${on ? 'checked' : ''}/><span class="slider"></span></label>
       </div>`;
-  }).join('');
+    })
+    .join('');
   return `
     <div class="ws-evt-block" data-cam-evt="${esc(cam.id)}">
       <div class="ws-evt-head">
@@ -56,8 +58,8 @@ export function _renderEventTLBlock(cam, _sun){
     </div>`;
 }
 
-async function _saveEventTL(camId, partial){
-  const cam = (state.cameras || []).find(c => c.id === camId);
+async function _saveEventTL(camId, partial) {
+  const cam = (state.cameras || []).find((c) => c.id === camId);
   if (!cam) return;
   // Deep-merge `partial` (e.g. {triggers:{thunder_rising:true}}) into the
   // current event_timelapse block so a single toggle save doesn't wipe
@@ -65,7 +67,8 @@ async function _saveEventTL(camId, partial){
   const cur = (cam.weather && cam.weather.event_timelapse) || {};
   const merged = { ...cur, ...partial };
   if (partial.triggers) merged.triggers = { ...(cur.triggers || {}), ...partial.triggers };
-  const updated = { ...cam,
+  const updated = {
+    ...cam,
     weather: {
       ...(cam.weather || { enabled: false }),
       event_timelapse: merged,
@@ -81,7 +84,8 @@ async function _saveEventTL(camId, partial){
 // Wire event-tl handlers via the existing weatherCamList delegated listener
 // added in Phase Sun-TL.
 document.addEventListener('change', (e) => {
-  const block = e.target.closest('.ws-evt-block'); if (!block) return;
+  const block = e.target.closest('.ws-evt-block');
+  if (!block) return;
   const camId = block.dataset.camEvt;
   if (e.target.matches('[data-evt-master]')) {
     _saveEventTL(camId, { enabled: !!e.target.checked });
@@ -95,13 +99,15 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('input', (e) => {
   if (!e.target.matches('[data-evt-window]')) return;
-  const block = e.target.closest('.ws-evt-block'); if (!block) return;
+  const block = e.target.closest('.ws-evt-block');
+  if (!block) return;
   const numEl = block.querySelector('.ws-evt-window-num');
   if (numEl) numEl.textContent = e.target.value;
 });
 document.addEventListener('change', (e) => {
   if (!e.target.matches('[data-evt-window]')) return;
-  const block = e.target.closest('.ws-evt-block'); if (!block) return;
+  const block = e.target.closest('.ws-evt-block');
+  if (!block) return;
   const camId = block.dataset.camEvt;
   _saveEventTL(camId, { window_min: parseInt(e.target.value, 10) });
 });

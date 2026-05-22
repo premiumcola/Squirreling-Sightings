@@ -19,12 +19,12 @@
  * @param {HTMLVideoElement|HTMLImageElement} el
  * @returns {{x:number, y:number, w:number, h:number}}
  */
-export function fittedRect(el){
+export function fittedRect(el) {
   if (!el) return { x: 0, y: 0, w: 0, h: 0 };
   const box = el.getBoundingClientRect();
   const srcW = el.videoWidth || el.naturalWidth || 0;
   const srcH = el.videoHeight || el.naturalHeight || 0;
-  if (srcW <= 0 || srcH <= 0 || box.width <= 0 || box.height <= 0){
+  if (srcW <= 0 || srcH <= 0 || box.width <= 0 || box.height <= 0) {
     // No source dimensions yet — return the full content box so the
     // overlay still mounts. Will redraw on the first ResizeObserver
     // tick once metadata loads.
@@ -43,7 +43,7 @@ export function fittedRect(el){
  * the centring offset. Handy for stroke widths that need to track
  * the displayed size without being pulled inside the letterbox rect.
  */
-export function fitScale(el){
+export function fitScale(el) {
   if (!el) return 1;
   const box = el.getBoundingClientRect();
   const srcW = el.videoWidth || el.naturalWidth || 0;

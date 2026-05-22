@@ -6,6 +6,4 @@
 // SKELETON — re-exports the existing settings-panel renderer; task #3
 // migrates it into a real tab body.
 
-export {
-  lbRenderSettingsPanel,
-} from '../../mediathek/bbox-overlay/settings-panel.js';
+export { lbRenderSettingsPanel } from '../../mediathek/bbox-overlay/settings-panel.js';

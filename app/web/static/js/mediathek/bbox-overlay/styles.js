@@ -3,7 +3,7 @@
 // panel itself lives in 30-lightbox-video.css — this only owns the
 // banner because it sits inside #lightboxMediaWrap and needs its own
 // z-stack rules independent of the bottom-panel layout.
-export function _ensureOverlayStyles(){
+export function _ensureOverlayStyles() {
   if (document.querySelector('#lbTrackingChipStyles')) return;
   const s = document.createElement('style');
   s.id = 'lbTrackingChipStyles';

@@ -9,12 +9,24 @@
 // Bit-for-bit mirror of the Python palette in app/app/tracker_core.py
 // `color_for_track`. If the Python list changes, update both.
 const _PALETTE = [
-  '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7',
-  '#14b8a6', '#ec4899', '#84cc16', '#f97316', '#06b6d4',
-  '#eab308', '#8b5cf6', '#10b981', '#f43f5e', '#0ea5e9',
+  '#22c55e',
+  '#3b82f6',
+  '#f59e0b',
+  '#ef4444',
+  '#a855f7',
+  '#14b8a6',
+  '#ec4899',
+  '#84cc16',
+  '#f97316',
+  '#06b6d4',
+  '#eab308',
+  '#8b5cf6',
+  '#10b981',
+  '#f43f5e',
+  '#0ea5e9',
 ];
 
-function _hashTrackId(id){
+function _hashTrackId(id) {
   let n = 0;
   for (let i = 0; i < id.length; i++) n += id.charCodeAt(i);
   return n;
@@ -26,9 +38,13 @@ function _hashTrackId(id){
  * tracks fall back to a deterministic derivation from `track_id` so
  * the rendered color stays stable across reloads of the same clip.
  */
-export function trackColor(track){
-  if (track && typeof track === 'object' && typeof track.color === 'string'
-      && track.color.length > 0){
+export function trackColor(track) {
+  if (
+    track &&
+    typeof track === 'object' &&
+    typeof track.color === 'string' &&
+    track.color.length > 0
+  ) {
     return track.color;
   }
   const id = String(track?.track_id || '');

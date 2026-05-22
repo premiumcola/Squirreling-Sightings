@@ -19,10 +19,10 @@
 // active; auto-stops on completion. Switching to another tab also
 // stops the poller (settings.js calls stopSunTlTestPolling).
 
-import { byId, esc } from "../core/dom.js";
-import { state } from "../core/state.js";
-import { showToast } from "../core/toast.js";
-import { apiGet, apiPost } from "../core/api.js";
+import { byId, esc } from '../core/dom.js';
+import { state } from '../core/state.js';
+import { showToast } from '../core/toast.js';
+import { apiGet, apiPost } from '../core/api.js';
 
 // G1 · System-wide capture-pipeline constants. Match
 //   weather_service/_sun_tl.py (target_fps fixed at 15) and
@@ -36,68 +36,76 @@ const INTERVAL_S = 8;
 // Window options spanning smoke tests (5/10 min) through the
 // production-equivalent 75 min lock. Internal seconds map below.
 const _DURATIONS = [
-  { s: 300,  label: "5 min" },
-  { s: 600,  label: "10 min" },
-  { s: 900,  label: "15 min" },
-  { s: 1200, label: "20 min" },
-  { s: 1800, label: "30 min" },
-  { s: 2700, label: "45 min" },
-  { s: 3600, label: "1 h" },
-  { s: 4500, label: "75 min" },
+  { s: 300, label: '5 min' },
+  { s: 600, label: '10 min' },
+  { s: 900, label: '15 min' },
+  { s: 1200, label: '20 min' },
+  { s: 1800, label: '30 min' },
+  { s: 2700, label: '45 min' },
+  { s: 3600, label: '1 h' },
+  { s: 4500, label: '75 min' },
 ];
 
 // Final MP4 length picker — chips greyed out when the window doesn't
 // produce enough frames for the chosen target × 15 fps.
 const _TARGET_LENGTHS = [
-  { s: 5,  label: "5 s" },
-  { s: 10, label: "10 s" },
-  { s: 15, label: "15 s" },
-  { s: 20, label: "20 s" },
-  { s: 30, label: "30 s" },
-  { s: 37, label: "37 s" },
+  { s: 5, label: '5 s' },
+  { s: 10, label: '10 s' },
+  { s: 15, label: '15 s' },
+  { s: 20, label: '20 s' },
+  { s: 30, label: '30 s' },
+  { s: 37, label: '37 s' },
 ];
 
 // Pure helpers — single source of truth for the math the backend
 // will run. Keep these aligned with _sun_tl.py · _run_sun_capture
 // _inner if either side ever changes.
-function _captureBudget(windowS){
+function _captureBudget(windowS) {
   return Math.floor(windowS / INTERVAL_S);
 }
-function _maxTargetS(windowS){
+function _maxTargetS(windowS) {
   return Math.floor(_captureBudget(windowS) / FPS);
 }
-function _isTargetValid(windowS, targetS){
+function _isTargetValid(windowS, targetS) {
   return targetS <= _maxTargetS(windowS);
 }
 
 // Local UI state — survives re-renders within a single tab visit.
 let _selCam = null;
-let _selPhase = "sunset";
+let _selPhase = 'sunset';
 let _selDuration = 1200;
 let _selTargetLength = 10;
 let _pollTimer = null;
 let _lastEventTs = 0;
 let _eventCache = [];
 
-function _weatherCams(){
-  return (state.cameras || []).filter(c => c && (c.weather && c.weather.enabled));
+function _weatherCams() {
+  return (state.cameras || []).filter((c) => c && c.weather && c.weather.enabled);
 }
 
-function _renderHeader(cams){
-  const camOpts = cams.map(c =>
-    `<option value="${esc(c.id)}"${c.id === _selCam ? ' selected' : ''}>${esc(c.name || c.id)}</option>`
-  ).join('');
-  const durChips = _DURATIONS.map(d =>
-    `<button type="button" class="suntltest-chip${d.s === _selDuration ? ' is-active' : ''}" data-suntltest-dur="${d.s}">${d.label}</button>`
-  ).join('');
+function _renderHeader(cams) {
+  const camOpts = cams
+    .map(
+      (c) =>
+        `<option value="${esc(c.id)}"${c.id === _selCam ? ' selected' : ''}>${esc(c.name || c.id)}</option>`,
+    )
+    .join('');
+  const durChips = _DURATIONS
+    .map(
+      (d) =>
+        `<button type="button" class="suntltest-chip${d.s === _selDuration ? ' is-active' : ''}" data-suntltest-dur="${d.s}">${d.label}</button>`,
+    )
+    .join('');
   // G1 · target chips that exceed the capture budget for the current
   // window get the disabled state. Visual: opacity .35 + cursor not-
   // allowed. Click is blocked in the form binder below.
-  const tgtChips = _TARGET_LENGTHS.map(d => {
-    const valid = _isTargetValid(_selDuration, d.s);
-    const cls = `suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}${valid ? '' : ' is-disabled'}`;
-    return `<button type="button" class="${cls}" data-suntltest-tgt="${d.s}"${valid ? '' : ' aria-disabled="true"'}>${d.label}</button>`;
-  }).join('');
+  const tgtChips = _TARGET_LENGTHS
+    .map((d) => {
+      const valid = _isTargetValid(_selDuration, d.s);
+      const cls = `suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}${valid ? '' : ' is-disabled'}`;
+      return `<button type="button" class="${cls}" data-suntltest-tgt="${d.s}"${valid ? '' : ' aria-disabled="true"'}>${d.label}</button>`;
+    })
+    .join('');
   return `
     <div class="suntltest-form">
       <div class="suntltest-form-row">
@@ -108,7 +116,7 @@ function _renderHeader(cams){
         <span class="suntltest-lbl">Phase</span>
         <div class="suntltest-phase-row" role="radiogroup" aria-label="Phase">
           <button type="button" class="suntltest-chip${_selPhase === 'sunrise' ? ' is-active' : ''}" data-suntltest-phase="sunrise">🌄 Sonnenaufgang</button>
-          <button type="button" class="suntltest-chip${_selPhase === 'sunset'  ? ' is-active' : ''}" data-suntltest-phase="sunset">🌇 Sonnenuntergang</button>
+          <button type="button" class="suntltest-chip${_selPhase === 'sunset' ? ' is-active' : ''}" data-suntltest-phase="sunset">🌇 Sonnenuntergang</button>
         </div>
       </div>
       <div class="suntltest-form-row">
@@ -136,18 +144,16 @@ function _renderHeader(cams){
 // invalid combinations (target × 15 fps > budget) are obvious before
 // the start. The check-/warn-icon at the bottom uses ✓ vs ⚠ to give
 // a glanceable signal even when the user isn't reading the numbers.
-function _renderMathReadout(cams){
-  const cam = (cams || []).find(c => c.id === _selCam) || {};
+function _renderMathReadout(cams) {
+  const cam = (cams || []).find((c) => c.id === _selCam) || {};
   const camName = cam.name || _selCam || '—';
   const windowS = _selDuration;
-  const windowLabel = (_DURATIONS.find(d => d.s === windowS) || {}).label || `${windowS} s`;
+  const windowLabel = (_DURATIONS.find((d) => d.s === windowS) || {}).label || `${windowS} s`;
   const phaseLabel = _selPhase === 'sunrise' ? 'Sonnenaufgang' : 'Sonnenuntergang';
   const budget = _captureBudget(windowS);
   const targetS = _selTargetLength;
   const targetFrames = targetS * FPS;
-  const effectiveRate = budget >= targetFrames
-    ? FPS
-    : (budget / Math.max(1, targetS));
+  const effectiveRate = budget >= targetFrames ? FPS : budget / Math.max(1, targetS);
   const valid = _isTargetValid(windowS, targetS);
   const rateStr = valid
     ? `<span class="suntltest-math-ok">${effectiveRate.toFixed(1)} fps ✓</span>`
@@ -165,30 +171,34 @@ function _renderMathReadout(cams){
     </dl>`;
 }
 
-function _bindForm(root){
+function _bindForm(root) {
   byId('suntltestCam')?.addEventListener('change', (e) => {
     _selCam = e.target.value || null;
     _refreshConfigurator(root);
   });
-  root.querySelectorAll('[data-suntltest-phase]').forEach(btn => {
+  root.querySelectorAll('[data-suntltest-phase]').forEach((btn) => {
     btn.addEventListener('click', () => {
       _selPhase = btn.dataset.suntltestPhase;
-      root.querySelectorAll('[data-suntltest-phase]').forEach(b =>
-        b.classList.toggle('is-active', b.dataset.suntltestPhase === _selPhase));
+      root
+        .querySelectorAll('[data-suntltest-phase]')
+        .forEach((b) => b.classList.toggle('is-active', b.dataset.suntltestPhase === _selPhase));
       _refreshConfigurator(root);
     });
   });
-  root.querySelectorAll('[data-suntltest-dur]').forEach(btn => {
+  root.querySelectorAll('[data-suntltest-dur]').forEach((btn) => {
     btn.addEventListener('click', () => {
       _selDuration = parseInt(btn.dataset.suntltestDur, 10) || 1200;
-      root.querySelectorAll('[data-suntltest-dur]').forEach(b =>
-        b.classList.toggle('is-active', parseInt(b.dataset.suntltestDur, 10) === _selDuration));
+      root
+        .querySelectorAll('[data-suntltest-dur]')
+        .forEach((b) =>
+          b.classList.toggle('is-active', parseInt(b.dataset.suntltestDur, 10) === _selDuration),
+        );
       // G1 · when the window shrinks below the current target's
       // capture budget, snap the target down to the highest valid
       // chip so the user never lands on a disabled-chip selection.
-      if (!_isTargetValid(_selDuration, _selTargetLength)){
+      if (!_isTargetValid(_selDuration, _selTargetLength)) {
         const maxTgt = _maxTargetS(_selDuration);
-        const candidates = _TARGET_LENGTHS.filter(t => t.s <= maxTgt);
+        const candidates = _TARGET_LENGTHS.filter((t) => t.s <= maxTgt);
         _selTargetLength = candidates.length
           ? candidates[candidates.length - 1].s
           : _TARGET_LENGTHS[0].s;
@@ -196,7 +206,7 @@ function _bindForm(root){
       _refreshConfigurator(root);
     });
   });
-  root.querySelectorAll('[data-suntltest-tgt]').forEach(btn => {
+  root.querySelectorAll('[data-suntltest-tgt]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const next = parseInt(btn.dataset.suntltestTgt, 10) || 10;
       // Block clicks on disabled chips so the start payload can't
@@ -204,8 +214,14 @@ function _bindForm(root){
       // already comes from the .is-disabled style.
       if (!_isTargetValid(_selDuration, next)) return;
       _selTargetLength = next;
-      root.querySelectorAll('[data-suntltest-tgt]').forEach(b =>
-        b.classList.toggle('is-active', parseInt(b.dataset.suntltestTgt, 10) === _selTargetLength));
+      root
+        .querySelectorAll('[data-suntltest-tgt]')
+        .forEach((b) =>
+          b.classList.toggle(
+            'is-active',
+            parseInt(b.dataset.suntltestTgt, 10) === _selTargetLength,
+          ),
+        );
       _refreshConfigurator(root);
     });
   });
@@ -217,18 +233,20 @@ function _bindForm(root){
 // enablement whenever a selector changes. Called from each handler
 // above instead of a full _renderHeader so the user's focus / cursor
 // position inside the form is preserved.
-function _refreshConfigurator(root){
+function _refreshConfigurator(root) {
   const cams = _weatherCams();
   // Re-paint target chips (some may have flipped valid/invalid).
   const tgtRow = byId('suntltestTgtRow');
-  if (tgtRow){
-    tgtRow.innerHTML = _TARGET_LENGTHS.map(d => {
-      const valid = _isTargetValid(_selDuration, d.s);
-      const cls = `suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}${valid ? '' : ' is-disabled'}`;
-      return `<button type="button" class="${cls}" data-suntltest-tgt="${d.s}"${valid ? '' : ' aria-disabled="true"'}>${d.label}</button>`;
-    }).join('');
+  if (tgtRow) {
+    tgtRow.innerHTML = _TARGET_LENGTHS
+      .map((d) => {
+        const valid = _isTargetValid(_selDuration, d.s);
+        const cls = `suntltest-chip${d.s === _selTargetLength ? ' is-active' : ''}${valid ? '' : ' is-disabled'}`;
+        return `<button type="button" class="${cls}" data-suntltest-tgt="${d.s}"${valid ? '' : ' aria-disabled="true"'}>${d.label}</button>`;
+      })
+      .join('');
     // Re-bind the freshly-rendered chips.
-    tgtRow.querySelectorAll('[data-suntltest-tgt]').forEach(btn => {
+    tgtRow.querySelectorAll('[data-suntltest-tgt]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const next = parseInt(btn.dataset.suntltestTgt, 10) || 10;
         if (!_isTargetValid(_selDuration, next)) return;
@@ -248,33 +266,49 @@ function _refreshConfigurator(root){
 // Centralised UI toggle — hide the start button while a test is in
 // flight so a fast clicker can't fire a second start before the
 // poller has reset state. The cancel button mirrors the inverse.
-function _setRunningUi(isRunning){
+function _setRunningUi(isRunning) {
   const start = byId('suntltestStart');
   const cancel = byId('suntltestCancel');
-  if (start)  { start.hidden = !!isRunning;  start.disabled = !!isRunning; }
-  if (cancel) { cancel.hidden = !isRunning; cancel.disabled = false; }
+  if (start) {
+    start.hidden = !!isRunning;
+    start.disabled = !!isRunning;
+  }
+  if (cancel) {
+    cancel.hidden = !isRunning;
+    cancel.disabled = false;
+  }
 }
 
-async function _startTest(){
+async function _startTest() {
   // Synchronous reset BEFORE the network round-trip so the user
   // never sees the previous run's MP4 card or live tile while the
   // new run is starting. Polling will repaint these from the live
   // status response within ~1.5 s.
   const wrap = byId('suntltestResult');
-  if (wrap) { wrap.hidden = true; wrap.innerHTML = ''; }
+  if (wrap) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+  }
   const live = byId('suntltestLive');
-  if (live) { live.hidden = true; live.innerHTML = ''; }
+  if (live) {
+    live.hidden = true;
+    live.innerHTML = '';
+  }
   // G3 · clear the per-slot cache so the previous session's cells
   // don't bleed into this run. _lastEventTs back to 0 so the first
   // poll re-fetches the whole event list.
   _resetEventCache();
 
   const btn = byId('suntltestStart');
-  if (!_selCam) { showToast('Keine Wetter-Kamera ausgewählt.', 'error'); return; }
+  if (!_selCam) {
+    showToast('Keine Wetter-Kamera ausgewählt.', 'error');
+    return;
+  }
   if (btn) btn.disabled = true;
   try {
     const j = await apiPost('/api/weather/sun-tl/test', {
-      cam_id: _selCam, phase: _selPhase,
+      cam_id: _selCam,
+      phase: _selPhase,
       duration_s: _selDuration,
       target_duration_s: _selTargetLength,
     });
@@ -292,7 +326,7 @@ async function _startTest(){
   }
 }
 
-async function _cancelTest(){
+async function _cancelTest() {
   const btn = byId('suntltestCancel');
   if (btn) btn.disabled = true;
   try {
@@ -318,13 +352,13 @@ async function _cancelTest(){
 // the poll ships the delta only.
 let _eventBySlot = new Map();
 
-function _resetEventCache(){
+function _resetEventCache() {
   _eventBySlot = new Map();
   _lastEventTs = 0;
   _eventCache = [];
 }
 
-function _startPolling(){
+function _startPolling() {
   stopSunTlTestPolling();
   _pollOnce();
   // G3 · bumped 2 s → 1.5 s once the heatmap is live. With ?since=
@@ -332,20 +366,24 @@ function _startPolling(){
   _pollTimer = setInterval(_pollOnce, 1500);
 }
 
-export function stopSunTlTestPolling(){
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+export function stopSunTlTestPolling() {
+  if (_pollTimer) {
+    clearInterval(_pollTimer);
+    _pollTimer = null;
+  }
 }
 
-async function _pollOnce(){
+async function _pollOnce() {
   let d = null;
   try {
     // G3 · ship the timestamp of the last event we've seen so the
     // backend's ?since=<float> filter returns only NEW slot_events.
     // The whole-history fallback is the unset default if _lastEventTs
     // is still 0 (fresh session).
-    const url = _lastEventTs > 0
-      ? `/api/weather/sun-tl/test/status?since=${encodeURIComponent(_lastEventTs)}`
-      : `/api/weather/sun-tl/test/status`;
+    const url =
+      _lastEventTs > 0
+        ? `/api/weather/sun-tl/test/status?since=${encodeURIComponent(_lastEventTs)}`
+        : `/api/weather/sun-tl/test/status`;
     d = await apiGet(url);
   } catch (_err) {
     return;
@@ -353,8 +391,8 @@ async function _pollOnce(){
   // Merge any new slot_events into the per-slot cache. The status
   // payload's slot_events is ALWAYS the post-since delta, never the
   // whole list, so we accumulate forward.
-  if (d && Array.isArray(d.slot_events)){
-    for (const e of d.slot_events){
+  if (d && Array.isArray(d.slot_events)) {
+    for (const e of d.slot_events) {
       if (!e || typeof e.slot !== 'number') continue;
       _eventBySlot.set(e.slot, e);
       if (e.ts > _lastEventTs) _lastEventTs = e.ts;
@@ -375,18 +413,18 @@ async function _pollOnce(){
 // ~2 px each (purely density visual). Desktop wider cells get a
 // title-tooltip with the per-slot detail. Cap at 800 cells —
 // extreme runs beyond that bound aren't realistic for sun-tl.
-function _renderHeatmap(d){
+function _renderHeatmap(d) {
   const expected = Math.max(0, Math.min(800, parseInt(d.expected_frames, 10) || 0));
   if (expected === 0) return '';
   const cells = [];
-  for (let i = 0; i < expected; i++){
+  for (let i = 0; i < expected; i++) {
     const ev = _eventBySlot.get(i);
-    if (!ev){
+    if (!ev) {
       cells.push(`<div class="suntltest-cell" data-outcome="empty" data-slot="${i}"></div>`);
       continue;
     }
     const reason = ev.reason ? ` · ${ev.reason}` : '';
-    const age = (typeof ev.age_ms === 'number') ? ` · ${ev.age_ms} ms` : '';
+    const age = typeof ev.age_ms === 'number' ? ` · ${ev.age_ms} ms` : '';
     const title = `Slot ${ev.slot} · ${ev.outcome}${reason}${age}`;
     cells.push(
       `<div class="suntltest-cell" data-outcome="${esc(ev.outcome)}" data-slot="${ev.slot}" title="${esc(title)}"></div>`,
@@ -400,18 +438,22 @@ function _renderHeatmap(d){
 // at a glance; counts are tabular-num so the row doesn't shift as
 // values increment. Frame-age average is derived from the slot_events
 // cache (age_ms field on fresh / cached / retry_ok outcomes).
-function _renderCounterRow(d){
+function _renderCounterRow(d) {
   const expected = parseInt(d.expected_frames, 10) || 0;
   const fresh = parseInt(d.fresh_captures, 10) || 0;
-  const back  = parseInt(d.backfilled_slots, 10) || 0;
-  const skip  = parseInt(d.skipped_slots, 10) || 0;
-  const rej   = Math.max(0, (parseInt(d.invalid_frames, 10) || 0) - back - skip);
+  const back = parseInt(d.backfilled_slots, 10) || 0;
+  const skip = parseInt(d.skipped_slots, 10) || 0;
+  const rej = Math.max(0, (parseInt(d.invalid_frames, 10) || 0) - back - skip);
   const cached = parseInt(d.api_cached_grabs_total, 10) || 0;
   const currentSlot = Math.min(expected, _eventBySlot.size);
   // Average frame-age across the events we've seen that carry one.
-  let ageSum = 0, ageCount = 0;
-  for (const ev of _eventBySlot.values()){
-    if (typeof ev.age_ms === 'number'){ ageSum += ev.age_ms; ageCount++; }
+  let ageSum = 0,
+    ageCount = 0;
+  for (const ev of _eventBySlot.values()) {
+    if (typeof ev.age_ms === 'number') {
+      ageSum += ev.age_ms;
+      ageCount++;
+    }
   }
   const ageStr = ageCount > 0 ? `${Math.round(ageSum / ageCount)} ms` : '—';
   const profileStr = d.validator_profile ? d.validator_profile : '—';
@@ -434,12 +476,12 @@ function _renderCounterRow(d){
 // erfasst — ETA HH:MM (M min S s verbleiben)". Between capture-end
 // and finished=true: "Encoding … (ffmpeg)". Hidden after finished
 // (the result diff panel takes over).
-function _renderActionRow(d){
+function _renderActionRow(d) {
   if (d.finished) return '';
   const elapsed = Math.max(0, parseInt(d.elapsed_s, 10) || 0);
   const target = Math.max(1, parseInt(d.target_s, 10) || 1);
   const expected = parseInt(d.expected_frames, 10) || 0;
-  if (elapsed >= target){
+  if (elapsed >= target) {
     return `
       <div class="suntltest-action">
         <span class="suntltest-action-ico">▶</span>
@@ -461,9 +503,14 @@ function _renderActionRow(d){
     </div>`;
 }
 
-function _renderLive(d){
-  const wrap = byId('suntltestLive'); if (!wrap) return;
-  if (!d || !d.cam_id) { wrap.hidden = true; wrap.innerHTML = ''; return; }
+function _renderLive(d) {
+  const wrap = byId('suntltestLive');
+  if (!wrap) return;
+  if (!d || !d.cam_id) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+    return;
+  }
   wrap.hidden = false;
   // G3 · live view rebuilt around a per-slot heatmap. The old card-
   // in-card tile grid + per-reason reject list moves out (the
@@ -471,23 +518,24 @@ function _renderLive(d){
   // Row 1 heatmap, row 2 counter chips, row 3 action/ETA, row 4 log
   // tail — flat layout, no nested boxes.
   const phaseLabel = d.phase === 'sunrise' ? '🌄 Sonnenaufgang' : '🌇 Sonnenuntergang';
-  const camName = (state.cameras || []).find(c => c.id === d.cam_id)?.name || d.cam_id;
-  const stateClass = d.finished ? 'is-done' : (d.running ? 'is-running' : 'is-idle');
+  const camName = (state.cameras || []).find((c) => c.id === d.cam_id)?.name || d.cam_id;
+  const stateClass = d.finished ? 'is-done' : d.running ? 'is-running' : 'is-idle';
   // Profile + drift pills.
   const profileBadge = _profileBadge(d.validator_profile, d.baseline_brightness);
-  const driftBadge   = _driftBadge(d.phase_drift_warning, d.phase_drift_min);
-  const pillRow = (profileBadge || driftBadge)
-    ? `<div class="suntltest-pill-row">${profileBadge}${driftBadge}</div>`
-    : '';
+  const driftBadge = _driftBadge(d.phase_drift_warning, d.phase_drift_min);
+  const pillRow =
+    profileBadge || driftBadge
+      ? `<div class="suntltest-pill-row">${profileBadge}${driftBadge}</div>`
+      : '';
   const logBlock = (d.last_log_lines || [])
     .slice(-60)
-    .map(line => `<div class="suntltest-log-line">${esc(line)}</div>`)
+    .map((line) => `<div class="suntltest-log-line">${esc(line)}</div>`)
     .join('');
   wrap.className = `suntltest-live ${stateClass}`;
   wrap.innerHTML = `
     <div class="suntltest-live-head">
       <div class="suntltest-live-title">${esc(camName)} · ${phaseLabel}</div>
-      <div class="suntltest-live-status">${d.finished ? '✅ fertig' : (d.running ? '⏺ läuft' : '⏸ pausiert')}</div>
+      <div class="suntltest-live-status">${d.finished ? '✅ fertig' : d.running ? '⏺ läuft' : '⏸ pausiert'}</div>
     </div>
     ${pillRow}
     ${_renderHeatmap(d)}
@@ -497,12 +545,16 @@ function _renderLive(d){
       <div class="suntltest-section-title">Log-Tail</div>
       <div class="suntltest-log-box" id="suntltestLog">${logBlock || '<div class="suntltest-log-line muted">— kein Log —</div>'}</div>
     </div>
-    ${d.raw_dir ? `
+    ${
+      d.raw_dir
+        ? `
     <div class="suntltest-section suntltest-rawdir">
       <span class="suntltest-rawdir-label">Roh-Frames:</span>
       <code class="suntltest-rawdir-path">${esc(d.raw_dir)}</code>
       <button type="button" class="suntltest-rawdir-copy" data-suntltest-copy="${esc(d.raw_dir)}" title="Pfad kopieren" aria-label="Pfad kopieren">⧉ kopieren</button>
-    </div>` : ''}
+    </div>`
+        : ''
+    }
   `;
   // Auto-stick the log to the bottom while it grows.
   const logBox = byId('suntltestLog');
@@ -511,49 +563,56 @@ function _renderLive(d){
   // when navigator.clipboard is unavailable (older Safari, http
   // contexts) so the path is still selectable manually.
   const copyBtn = wrap.querySelector('[data-suntltest-copy]');
-  if (copyBtn){
+  if (copyBtn) {
     copyBtn.addEventListener('click', async () => {
       const path = copyBtn.getAttribute('data-suntltest-copy') || '';
       try {
-        if (navigator.clipboard && navigator.clipboard.writeText){
+        if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(path);
         } else {
           const sel = window.getSelection();
           const range = document.createRange();
           range.selectNodeContents(wrap.querySelector('.suntltest-rawdir-path'));
-          sel?.removeAllRanges(); sel?.addRange(range);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
         }
         copyBtn.textContent = '✓ kopiert';
-        setTimeout(() => { copyBtn.textContent = '⧉ kopieren'; }, 1500);
-      } catch (_e){ /* noop — selection fallback already ran */ }
+        setTimeout(() => {
+          copyBtn.textContent = '⧉ kopieren';
+        }, 1500);
+      } catch (_e) {
+        /* noop — selection fallback already ran */
+      }
     });
   }
 }
 
-function _dnBadge(v){
-  if (v === true)  return '<span class="suntltest-badge suntltest-badge--ok">Color gesetzt</span>';
-  if (v === false) return '<span class="suntltest-badge suntltest-badge--err">fehlgeschlagen</span>';
+function _dnBadge(v) {
+  if (v === true) return '<span class="suntltest-badge suntltest-badge--ok">Color gesetzt</span>';
+  if (v === false)
+    return '<span class="suntltest-badge suntltest-badge--err">fehlgeschlagen</span>';
   return '<span class="suntltest-badge suntltest-badge--mute">übersprungen</span>';
 }
 
 // Profile pill — DAY (sun yellow) / TWILIGHT (horizon orange) / NIGHT
 // (deep blue). Soft tinted background, rounded ≥ 8 px, no thin border
 // per project rules.
-function _profileBadge(profile, brightness){
+function _profileBadge(profile, brightness) {
   if (!profile) return '';
   const labels = { day: 'DAY', twilight: 'TWILIGHT', night: 'NIGHT' };
   const cls = `suntltest-pill suntltest-pill--${profile}`;
   const lbl = labels[profile] || profile.toUpperCase();
-  const sub = (typeof brightness === 'number')
-    ? ` <span class="suntltest-pill-sub">brightness ${brightness}</span>`
-    : '';
+  const sub =
+    typeof brightness === 'number'
+      ? ` <span class="suntltest-pill-sub">brightness ${brightness}</span>`
+      : '';
   return `<span class="${cls}">${esc(lbl)}${sub}</span>`;
 }
 
 // Drift pill — only renders when the backend flagged a drift > limit.
 // Amber tint. Reads e.g. "Sunset-Capture lief 312 min nach Sonnen-
 // untergang — Frames sind reine Nacht".
-function _driftBadge(warning, _drift_min){
+function _driftBadge(warning, _drift_min) {
   if (!warning) return '';
   return `<span class="suntltest-pill suntltest-pill--drift">⚠ ${esc(warning)}</span>`;
 }
@@ -570,12 +629,15 @@ const _REJECT_HINT_DE = {
   colorbar: 'Kamera hat ein Test-Pattern gesendet',
   too_dark: 'Belichtung außerhalb des gültigen Bereichs',
   too_bright: 'Belichtung außerhalb des gültigen Bereichs',
-  bottom_strip_white: 'H.265-Decoder hat unteren Bildbereich mit weißem Füllmuster ersetzt — RTSP-Paketverlust oder defekter Slice',
-  bottom_strip_bright: 'Unterer Bildbereich deutlich heller als Szene — wahrscheinlich Macroblock-Korruption',
-  horizontal_anomaly_band: 'Horizontales Korruptions-Band im Bild — H.265-Decoder-Fehler, Slice unvollständig oder Macroblock-Verlust',
+  bottom_strip_white:
+    'H.265-Decoder hat unteren Bildbereich mit weißem Füllmuster ersetzt — RTSP-Paketverlust oder defekter Slice',
+  bottom_strip_bright:
+    'Unterer Bildbereich deutlich heller als Szene — wahrscheinlich Macroblock-Korruption',
+  horizontal_anomaly_band:
+    'Horizontales Korruptions-Band im Bild — H.265-Decoder-Fehler, Slice unvollständig oder Macroblock-Verlust',
   flat_gray_full_frame: 'Vollbild flach-grau — H.265-Decoder-Ausgabe ohne Szeneninhalt',
 };
-function _rejectHintDe(key){
+function _rejectHintDe(key) {
   if (!key) return '';
   // Normalise the key:
   //   • strip everything from the first '(' so a parameterised
@@ -596,26 +658,28 @@ function _rejectHintDe(key){
 // G4 · "Was schief lief" one-sentence summary. Mentions the
 // dominant rejection cluster + cache hits when any of those
 // counts is non-zero. Returns '' when the run was clean.
-function _whatWentWrong(d){
+function _whatWentWrong(d) {
   const rejected = d.rejected_by_reason || {};
   const sceneSkips = d.scene_skips_by_reason || {};
   const cached = parseInt(d.api_cached_grabs_total, 10) || 0;
   const bits = [];
   // Pick the dominant rejection reason if any.
   const rejEntries = Object.entries(rejected)
-    .filter(([k, _v]) => !(k in sceneSkips))   // skip scene-classified
+    .filter(([k, _v]) => !(k in sceneSkips)) // skip scene-classified
     .sort((a, b) => b[1] - a[1]);
-  if (rejEntries.length){
+  if (rejEntries.length) {
     const [head, count] = rejEntries[0];
     const hint = _rejectHintDe(head) || 'siehe Log';
     bits.push(`${count} Frame(s) vom Decoder verworfen: <code>${esc(head)}</code> — ${esc(hint)}`);
   }
   const sceneTotal = Object.values(sceneSkips).reduce((a, b) => a + b, 0);
-  if (sceneTotal > 0){
+  if (sceneTotal > 0) {
     bits.push(`${sceneTotal} Slot(s) ohne Szeneninhalt übersprungen`);
   }
-  if (cached > 0){
-    bits.push(`${cached} Slot(s) mit gecachtem Snapshot (Snapshot-API hat das gleiche Bild mehrfach geliefert)`);
+  if (cached > 0) {
+    bits.push(
+      `${cached} Slot(s) mit gecachtem Snapshot (Snapshot-API hat das gleiche Bild mehrfach geliefert)`,
+    );
   }
   if (!bits.length) return '';
   return bits.join(' · ');
@@ -624,25 +688,30 @@ function _whatWentWrong(d){
 // G4 · quality-grade chip from the QA sidecar. green/yellow/red are
 // the three buckets timelapse_qa.py emits. Colour tokens match the
 // dashboard's existing severity chips.
-function _qualityChip(grade){
+function _qualityChip(grade) {
   if (!grade) return '';
   const map = {
-    green:  { lbl: 'GREEN',  cls: 'suntltest-grade--green' },
+    green: { lbl: 'GREEN', cls: 'suntltest-grade--green' },
     yellow: { lbl: 'YELLOW', cls: 'suntltest-grade--yellow' },
-    red:    { lbl: 'RED',    cls: 'suntltest-grade--red' },
+    red: { lbl: 'RED', cls: 'suntltest-grade--red' },
   };
   const m = map[grade] || { lbl: grade.toUpperCase(), cls: 'suntltest-grade--mute' };
   return `<span class="suntltest-grade ${m.cls}">${esc(m.lbl)}</span>`;
 }
 
-function _fmtNum(v, digits = 1){
+function _fmtNum(v, digits = 1) {
   if (v == null || !isFinite(v)) return '—';
   return Number(v).toFixed(digits);
 }
 
-function _renderResult(d){
-  const wrap = byId('suntltestResult'); if (!wrap) return;
-  if (!d || !d.finished) { wrap.hidden = true; wrap.innerHTML = ''; return; }
+function _renderResult(d) {
+  const wrap = byId('suntltestResult');
+  if (!wrap) return;
+  if (!d || !d.finished) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+    return;
+  }
   // Cancelled-state card — distinct from a generic error so the user
   // recognises this as their own action, not a failure. Render BEFORE
   // the generic error branch so a session that ends with both
@@ -666,7 +735,10 @@ function _renderResult(d){
       </div>`;
     return;
   }
-  if (!d.result_sighting_id) { wrap.hidden = true; return; }
+  if (!d.result_sighting_id) {
+    wrap.hidden = true;
+    return;
+  }
   wrap.hidden = false;
   // G4 · planned vs delivered diff. Pull planned values from the
   // session (duration_s / target_duration_s / fixed interval+fps);
@@ -686,9 +758,10 @@ function _renderResult(d){
   const grade = qa ? qa.quality_grade : null;
   // Right-column row helper. cls=ok adds the ✓ when delivered matches
   // planned within tolerance; cls=warn flags a notable mismatch.
-  const okMark = (cond) => cond ? ' <span class="suntltest-diff-mark suntltest-diff-mark--ok">✓</span>' : '';
+  const okMark = (cond) =>
+    cond ? ' <span class="suntltest-diff-mark suntltest-diff-mark--ok">✓</span>' : '';
   const fpsOk = realisedFps != null && Math.abs(realisedFps - 15) < 0.5;
-  const intervalOk = true;     // backend lock — always matches
+  const intervalOk = true; // backend lock — always matches
   const cachedOk = cached === 0;
   // Build the diff grid rows. PLANNED column on the left, DELIVERED on
   // the right; mobile (≤ 540 px) stacks them vertically via CSS.
@@ -738,29 +811,32 @@ function _renderResult(d){
   });
 }
 
-export function renderSunTlTestPanel(){
-  const root = byId('sunTlTestPanel'); if (!root) return;
+export function renderSunTlTestPanel() {
+  const root = byId('sunTlTestPanel');
+  if (!root) return;
   const cams = _weatherCams();
   if (!cams.length) {
     root.innerHTML = `<div class="field-help">Keine Wetter-Kamera aktiv. Aktiviere eine Kamera unter "📷 Kameras".</div>`;
     return;
   }
-  if (!cams.find(c => c.id === _selCam)) _selCam = cams[0].id;
+  if (!cams.find((c) => c.id === _selCam)) _selCam = cams[0].id;
   root.innerHTML = _renderHeader(cams);
   _bindForm(root);
   // G1 · initial start-button enabled-state + math readout sync.
   _refreshConfigurator(root);
   // Surface any prior session immediately on tab open so the user
   // doesn't lose state if they switch tabs mid-run.
-  apiGet('/api/weather/sun-tl/test/status').then(d => {
-    if (d && d.cam_id) {
-      _renderLive(d);
-      // Tab-open re-render: if a test is still in flight when the user
-      // navigates back, surface the abort button immediately so they
-      // can stop it without waiting for the next poll tick.
-      _setRunningUi(d.running && !d.finished);
-      if (d.running && !d.finished) _startPolling();
-      else _renderResult(d);
-    }
-  }).catch(() => {});
+  apiGet('/api/weather/sun-tl/test/status')
+    .then((d) => {
+      if (d && d.cam_id) {
+        _renderLive(d);
+        // Tab-open re-render: if a test is still in flight when the user
+        // navigates back, surface the abort button immediately so they
+        // can stop it without waiting for the next poll tick.
+        _setRunningUi(d.running && !d.finished);
+        if (d.running && !d.finished) _startPolling();
+        else _renderResult(d);
+      }
+    })
+    .catch(() => {});
 }

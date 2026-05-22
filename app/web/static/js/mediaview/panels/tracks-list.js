@@ -5,4 +5,4 @@
 //
 // SKELETON — task #3 fills this in.
 
-export function renderTracksListPanel(/* host, item */){}
+export function renderTracksListPanel(/* host, item */) {}

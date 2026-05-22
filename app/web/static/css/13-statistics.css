@@ -1,63 +1,297 @@
 /* ── Statistics dashboard ───────────────────────────────────────────────── */
-.stat-period-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-.stat-period-pill{background:var(--surface);border-radius:18px;padding:18px 22px;flex:1;min-width:120px;min-height:80px;display:flex;flex-direction:column;gap:5px}
-.stat-period-num{font-size:34px;font-weight:800;line-height:1;color:var(--text)}
-.stat-period-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
-.stat-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-@media(max-width:768px){.stat-split{grid-template-columns:1fr}}
-.stat-card{background:var(--surface);border-radius:18px;padding:16px 18px;margin-bottom:16px}
-.stat-card:last-child{margin-bottom:0}
-.stat-split .stat-card{margin-bottom:0}
-.stat-card-title{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:14px}
-.stat-card-title svg{flex-shrink:0;opacity:.85}
-.stat-donut-wrap{display:flex;align-items:center;gap:18px;min-height:170px}
-.stat-donut-chart{position:relative;width:160px;height:160px;flex-shrink:0}
-.stat-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:none}
-.stat-donut-total{font-size:30px;font-weight:800;color:var(--text);line-height:1}
-.stat-donut-sub{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--muted)}
-.stat-donut-legend{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-.stat-donut-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;min-height:36px;font-size:13px;transition:background .15s}
-.stat-donut-row.stat-drillable{cursor:pointer}
-.stat-donut-row.stat-drillable:hover{background:rgba(255,255,255,.04)}
-.stat-donut-sw{width:10px;height:10px;border-radius:3px;flex-shrink:0}
-.stat-donut-icon{display:inline-flex;line-height:1;flex-shrink:0}
+.stat-period-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.stat-period-pill {
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 18px 22px;
+  flex: 1;
+  min-width: 120px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.stat-period-num {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+.stat-period-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+.stat-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+@media (max-width: 768px) {
+  .stat-split {
+    grid-template-columns: 1fr;
+  }
+}
+.stat-card {
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.stat-card:last-child {
+  margin-bottom: 0;
+}
+.stat-split .stat-card {
+  margin-bottom: 0;
+}
+.stat-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.stat-card-title svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.stat-donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 170px;
+}
+.stat-donut-chart {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex-shrink: 0;
+}
+.stat-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.stat-donut-total {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.stat-donut-sub {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.stat-donut-legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-donut-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  min-height: 36px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.stat-donut-row.stat-drillable {
+  cursor: pointer;
+}
+.stat-donut-row.stat-drillable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.stat-donut-sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.stat-donut-icon {
+  display: inline-flex;
+  line-height: 1;
+  flex-shrink: 0;
+}
 /* Donut-legend icon — 18 px size override on the cam-ico baseline.
    Colour comes from the parent .stat-donut-icon's inline ``color:``
    set in statistics.js so fill="currentColor" tints the glyph in
    the camera's identity colour (same one used for the donut
    segment). */
-.stat-donut-icon .cam-ico{width:18px;height:18px;vertical-align:-3px}
-.stat-donut-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--text)}
-.stat-donut-cnt{font-weight:700;color:var(--text);min-width:28px;text-align:right}
-.stat-donut-pct{color:var(--muted);font-weight:600;min-width:36px;text-align:right}
-@media(max-width:768px){.stat-donut-wrap{flex-direction:column;align-items:stretch;gap:12px}.stat-donut-chart{align-self:center}.stat-donut-legend{width:100%}}
-.stat-tile-row{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:12px;min-height:52px;margin-bottom:6px;transition:background .15s}
-.stat-tile-row:last-child{margin-bottom:0}
-.stat-tile-row.stat-drillable{cursor:pointer}
-.stat-tile-row.stat-drillable:hover{background:rgba(255,255,255,.04)}
-.stat-tile-chip{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.stat-tile-icon{display:inline-flex;line-height:0}
-.stat-tile-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.stat-tile-name{font-size:14px;font-weight:700;color:var(--text);text-transform:capitalize;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stat-tile-cnt{font-size:11px;color:var(--muted);font-weight:600}
-.stat-tile-pct{font-size:18px;font-weight:700;flex-shrink:0;text-align:right;min-width:54px}
-.stat-heatmap-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.stat-donut-icon .cam-ico {
+  width: 18px;
+  height: 18px;
+  vertical-align: -3px;
+}
+.stat-donut-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text);
+}
+.stat-donut-cnt {
+  font-weight: 700;
+  color: var(--text);
+  min-width: 28px;
+  text-align: right;
+}
+.stat-donut-pct {
+  color: var(--muted);
+  font-weight: 600;
+  min-width: 36px;
+  text-align: right;
+}
+@media (max-width: 768px) {
+  .stat-donut-wrap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .stat-donut-chart {
+    align-self: center;
+  }
+  .stat-donut-legend {
+    width: 100%;
+  }
+}
+.stat-tile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  min-height: 52px;
+  margin-bottom: 6px;
+  transition: background 0.15s;
+}
+.stat-tile-row:last-child {
+  margin-bottom: 0;
+}
+.stat-tile-row.stat-drillable {
+  cursor: pointer;
+}
+.stat-tile-row.stat-drillable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.stat-tile-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-tile-icon {
+  display: inline-flex;
+  line-height: 0;
+}
+.stat-tile-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-tile-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: capitalize;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-tile-cnt {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.stat-tile-pct {
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 54px;
+}
+.stat-heatmap-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 /* Layout: CSS grid with the first column sized at runtime by JS so the
    widest camera name fits without being clipped. The 24 hour cells fill
    the rest equally (1fr each). --hm-label-w is set inline by JS. */
-.stat-hm-grid{min-width:360px;--hm-label-w:130px}
-.stat-hm-header,.stat-hm-row{display:grid;align-items:center;grid-template-columns:var(--hm-label-w) repeat(24,1fr);column-gap:2px}
-.stat-hm-header{margin-bottom:4px}
-.stat-hm-cam-col,.stat-hm-cam{padding-right:10px}
-.stat-hm-cam{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:32px;display:flex;align-items:center}
+.stat-hm-grid {
+  min-width: 360px;
+  --hm-label-w: 130px;
+}
+.stat-hm-header,
+.stat-hm-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: var(--hm-label-w) repeat(24, 1fr);
+  column-gap: 2px;
+}
+.stat-hm-header {
+  margin-bottom: 4px;
+}
+.stat-hm-cam-col,
+.stat-hm-cam {
+  padding-right: 10px;
+}
+.stat-hm-cam {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
 /* Heatmap row label icon — 16 px size override on cam-ico baseline.
    The .stat-hm-cam-icon span around the icon (rendered in
    statistics.js) carries an inline ``color:`` so fill="currentColor"
    picks up the camera's identity tint. margin-right keeps a small
    gap between icon + name without an HTML &nbsp;. */
-.stat-hm-cam .cam-ico{width:16px;height:16px;vertical-align:-3px;margin-right:6px}
-.stat-hm-hours{display:contents}
-.stat-hm-cells{display:contents}
+.stat-hm-cam .cam-ico {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  margin-right: 6px;
+}
+.stat-hm-hours {
+  display: contents;
+}
+.stat-hm-cells {
+  display: contents;
+}
 /* Each hour label sits in its own 1fr column. flex:1 is a leftover —
    inside display:contents on .stat-hm-hours the parent's grid controls
    the layout, but it doesn't hurt. Use display:flex to center the
@@ -65,28 +299,84 @@
    when the label string is wider than the cell (the text overflow
    visually centres around the cell, not left-anchored against the
    adjacent label). */
-.stat-hm-hlabel{display:flex;align-items:center;justify-content:center;flex:1;font-size:9px;color:var(--muted);font-weight:600;min-width:0;padding:0;overflow:hidden}
+.stat-hm-hlabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  font-size: 9px;
+  color: var(--muted);
+  font-weight: 600;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
 /* On mobile the 24 columns get ~10 px each — too narrow for two-digit
    labels to fit at 9 px font. Hide every label that isn't a multiple
    of 3 hours, keeping 8 evenly-spaced labels (0, 3, 6, 9, 12, 15, 18,
    21). visibility:hidden preserves the grid layout so the visible
    labels still line up with their data cells. */
-@media(max-width:768px){
-  .stat-hm-hlabel:not(:nth-child(3n+1)){visibility:hidden}
+@media (max-width: 768px) {
+  .stat-hm-hlabel:not(:nth-child(3n + 1)) {
+    visibility: hidden;
+  }
 }
-.stat-hm-cell{flex:1;min-height:28px;border-radius:4px;position:relative;cursor:default;transition:filter .15s}
-.stat-hm-cell:hover{filter:brightness(1.25)}
-.stat-hm-row{margin-bottom:4px}
-.stat-hm-row:last-child{margin-bottom:0}
+.stat-hm-cell {
+  flex: 1;
+  min-height: 28px;
+  border-radius: 4px;
+  position: relative;
+  cursor: default;
+  transition: filter 0.15s;
+}
+.stat-hm-cell:hover {
+  filter: brightness(1.25);
+}
+.stat-hm-row {
+  margin-bottom: 4px;
+}
+.stat-hm-row:last-child {
+  margin-bottom: 0;
+}
 /* tooltip handled by JS _hmTip (position:fixed) to avoid overflow-x:auto clipping */
-.stat-tl-block{margin-top:12px}
-.stat-tl-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);padding:4px 0 10px}
-.stat-tl-card{margin-top:16px}
-.stat-tl-card-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:0;flex-wrap:wrap}
-.stat-tl-card-hdr .stat-card-title{margin-bottom:0}
-.stat-drillable{cursor:pointer;border-radius:8px;transition:background .12s,opacity .12s}
-.stat-drillable:hover{background:rgba(255,255,255,.04)}
-.stat-drillable:active{opacity:.7}
+.stat-tl-block {
+  margin-top: 12px;
+}
+.stat-tl-hdr {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  padding: 4px 0 10px;
+}
+.stat-tl-card {
+  margin-top: 16px;
+}
+.stat-tl-card-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+.stat-tl-card-hdr .stat-card-title {
+  margin-bottom: 0;
+}
+.stat-drillable {
+  cursor: pointer;
+  border-radius: 8px;
+  transition:
+    background 0.12s,
+    opacity 0.12s;
+}
+.stat-drillable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.stat-drillable:active {
+  opacity: 0.7;
+}
 
 /* R1 · the .tl-range-wrap base rule (04-coral-1.css) no longer
    carries a tinted box (background/padding/border-radius were
@@ -94,7 +384,9 @@
    the Timeline title — same shape as the Zeit / Klasse / Live
    chooser above the Erkennungswolke. Tighten the in-card gap so
    the label sits snug against the slider on iPhone width. */
-.stat-tl-card-hdr .tl-range-wrap{gap:8px}
+.stat-tl-card-hdr .tl-range-wrap {
+  gap: 8px;
+}
 
 /* D3 · each camera block is vertical: heading row (icon + name)
    on top, lanes below. Drops the .tl-cam-sidebox column + the
@@ -102,83 +394,182 @@
    "section heading + outlined sub-items" rather than "card-in-
    card-in-card". STAT_MEDIA_DRILLDOWN click target hangs on the
    heading row. */
-.tl-cam-block{
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-  gap:6px;
+.tl-cam-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
-.tl-cam-block--notfirst{margin-top:14px}
-.tl-cam-head{
-  display:inline-flex;align-items:center;gap:10px;
-  background:transparent;
-  padding:2px 0;
-  border-radius:6px;
-  color:var(--text);
-  align-self:flex-start;
-  max-width:100%;
-  min-height:24px;
+.tl-cam-block--notfirst {
+  margin-top: 14px;
 }
-.tl-cam-head.stat-drillable{cursor:pointer;padding:2px 6px;margin-left:-6px}
-.tl-cam-head.stat-drillable:hover{background:rgba(255,255,255,.045)}
-.tl-cam-head-icon{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:20px;height:20px;flex-shrink:0;
-  color:var(--cam-color, #a8a8a8);
+.tl-cam-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  padding: 2px 0;
+  border-radius: 6px;
+  color: var(--text);
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 24px;
 }
-.tl-cam-head-icon svg{width:100%;height:100%;display:block}
-.tl-cam-head-name{
-  font-size:14px;font-weight:700;color:#e2e8f0;
-  line-height:1.25;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+.tl-cam-head.stat-drillable {
+  cursor: pointer;
+  padding: 2px 6px;
+  margin-left: -6px;
+}
+.tl-cam-head.stat-drillable:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+.tl-cam-head-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--cam-color, #a8a8a8);
+}
+.tl-cam-head-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.tl-cam-head-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Drop the .tl-lanes-wrap background tint that came from the legacy
    monolithic CSS. The heading already separates the block visually;
    the tint just added another shade of grey to the box-in-box stack. */
-.tl-lanes-wrap{
-  background:transparent !important;
-  border-radius:0 !important;
-  padding:2px 0 !important;
+.tl-lanes-wrap {
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 2px 0 !important;
 }
 /* The x-axis padding was keyed to (sidebox-w + cam-gap + label-w +
    14px). With the sidebox gone the offset collapses to just the
    lane-label width + a small gutter so the first tick lines up
    under the first track column. */
-.tl-xaxis{
-  padding-left:calc(var(--tl-label-w) + 14px) !important;
+.tl-xaxis {
+  padding-left: calc(var(--tl-label-w) + 14px) !important;
 }
 
 /* ── Erkennungswolke (detection scatter) ─────────────────────────────────── */
-.stat-dc-card{margin-top:16px}
-.stat-dc-hdr{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-.stat-dc-hdr .stat-card-title{margin-bottom:0}
-.stat-dc-hdr-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.stat-dc-view{display:inline-flex;background:rgba(255,255,255,.04);border-radius:12px;padding:3px;gap:2px}
-.stat-dc-view-btn{display:inline-flex;align-items:center;gap:5px;background:transparent;border:0;color:var(--muted);font-size:12px;font-weight:600;padding:7px 11px;border-radius:9px;cursor:pointer;min-height:34px;transition:background .15s,color .15s}
-.stat-dc-view-btn:hover{color:var(--text)}
-.stat-dc-view-btn.is-active{background:rgba(255,255,255,.10);color:var(--text)}
-.stat-dc-view-btn svg{flex-shrink:0}
-.stat-dc-live{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);border:0;color:var(--muted);font-size:12px;font-weight:700;padding:8px 12px;border-radius:11px;cursor:pointer;min-height:36px;transition:background .15s,color .15s,box-shadow .15s}
-.stat-dc-live:hover{background:rgba(255,255,255,.10);color:var(--text)}
-.stat-dc-live.is-on{background:rgba(34,197,94,.16);color:#86efac;box-shadow:inset 0 0 0 1px rgba(34,197,94,.32)}
+.stat-dc-card {
+  margin-top: 16px;
+}
+.stat-dc-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.stat-dc-hdr .stat-card-title {
+  margin-bottom: 0;
+}
+.stat-dc-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stat-dc-view {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+.stat-dc-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 11px;
+  border-radius: 9px;
+  cursor: pointer;
+  min-height: 34px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.stat-dc-view-btn:hover {
+  color: var(--text);
+}
+.stat-dc-view-btn.is-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+.stat-dc-view-btn svg {
+  flex-shrink: 0;
+}
+.stat-dc-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 11px;
+  cursor: pointer;
+  min-height: 36px;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+}
+.stat-dc-live:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+.stat-dc-live.is-on {
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.32);
+}
 /* D2 · Live status dot — pure CSS circle. Muted slate when OFF,
    solid green token (#22c55e) when ON with a subtle pulse so the
    user can tell at a glance whether polling is active. */
-.stat-dc-live .stat-dc-live-dot{
-  display:inline-block;
-  width:9px;height:9px;
-  border-radius:50%;
-  background:#64748b;
-  transition:background .2s,box-shadow .2s;
+.stat-dc-live .stat-dc-live-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #64748b;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
 }
-.stat-dc-live.is-on .stat-dc-live-dot{
-  background:#22c55e;
-  box-shadow:0 0 0 3px rgba(34,197,94,.22);
-  animation:stat-dc-livepulse 1.6s ease-in-out infinite;
+.stat-dc-live.is-on .stat-dc-live-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22);
+  animation: stat-dc-livepulse 1.6s ease-in-out infinite;
 }
-@keyframes stat-dc-livepulse{
-  0%,100%{box-shadow:0 0 0 3px rgba(34,197,94,.22)}
-  50%    {box-shadow:0 0 0 5px rgba(34,197,94,.10)}
+@keyframes stat-dc-livepulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.1);
+  }
 }
 
 /* G1 · two labeled filter clusters (Kameras + Objekte) sit packed
@@ -186,71 +577,136 @@
    divider. Each cluster sizes to its content (no flex-grow / no
    space-between). Mobile stacks them vertically (override in the
    768px block). */
-.stat-dc-filters{display:flex;flex-direction:row;flex-wrap:wrap;gap:14px;margin-bottom:12px;align-items:flex-start}
-.stat-dc-filtergrp{display:flex;flex-direction:column;gap:6px;min-width:0;flex:0 0 auto}
-.stat-dc-filtergrp-lbl{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);line-height:1}
-.stat-dc-filterdiv{flex:0 0 1px;align-self:stretch;background:rgba(255,255,255,.08);margin:0 4px}
-.stat-dc-pillrow{display:flex;flex-wrap:wrap;gap:6px}
+.stat-dc-filters {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 12px;
+  align-items: flex-start;
+}
+.stat-dc-filtergrp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.stat-dc-filtergrp-lbl {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1;
+}
+.stat-dc-filterdiv {
+  flex: 0 0 1px;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 4px;
+}
+.stat-dc-pillrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 /* G1 · icon-only chip — square 44×44, solid-tint filled background,
    NO border lines. Color comes from --pill-c (per-camera /
    per-class). Inactive state: muted gray tint; active state: a
    stronger color-mix fill so it stays clearly readable in the
    icon-only style. The icon itself inherits --pill-c via
    currentColor so an active green-tagged camera reads green, etc. */
-.stat-dc-pill--icon{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:44px;
-  height:44px;
-  padding:0;
-  border:0;
-  outline:0;
-  border-radius:12px;
-  background:rgba(255,255,255,.06);
-  color:rgba(226,232,240,.55);
-  cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
-  transition:background .15s,color .15s,opacity .15s;
-  opacity:.65;
+.stat-dc-pill--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(226, 232, 240, 0.55);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    opacity 0.15s;
+  opacity: 0.65;
 }
-.stat-dc-pill--icon:hover{
-  background:rgba(255,255,255,.10);
-  color:#e2e8f0;
-  opacity:1;
+.stat-dc-pill--icon:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  opacity: 1;
 }
-.stat-dc-pill--icon.is-active{
-  background:color-mix(in srgb,var(--pill-c, #9aa5b3) 28%,transparent);
-  color:var(--pill-c,#e2e8f0);
-  opacity:1;
+.stat-dc-pill--icon.is-active {
+  background: color-mix(in srgb, var(--pill-c, #9aa5b3) 28%, transparent);
+  color: var(--pill-c, #e2e8f0);
+  opacity: 1;
 }
-.stat-dc-pill--icon.is-active:hover{
-  background:color-mix(in srgb,var(--pill-c, #9aa5b3) 38%,transparent);
+.stat-dc-pill--icon.is-active:hover {
+  background: color-mix(in srgb, var(--pill-c, #9aa5b3) 38%, transparent);
 }
-.stat-dc-pill-ico{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  line-height:1;
-  flex-shrink:0;
+.stat-dc-pill-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
 }
-.stat-dc-pill-ico svg{ display:block; }
+.stat-dc-pill-ico svg {
+  display: block;
+}
 
 /* D4 · sliders + coverage hoisted out of .stat-dc-card into a
    free-standing toolbar below the card. No background, no border-
    radius — just the two controls riding on the page background. */
-.stat-dc-toolbar{
-  display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;
-  margin-top:14px;
-  padding:0;
-  background:transparent;
+.stat-dc-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 0;
+  background: transparent;
 }
-.stat-dc-toolbar .stat-dc-sliders{flex:1 1 320px;min-width:0}
-.stat-dc-toolbar .stat-dc-coverage{margin-left:auto;align-self:center}
-.stat-dc-sliders{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.stat-dc-slider{display:flex;flex-direction:column;gap:6px}
-.stat-dc-slider-lbl{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;gap:8px}
-.stat-dc-slider-lbl b{color:var(--text);font-weight:800;letter-spacing:0;text-transform:none}
+.stat-dc-toolbar .stat-dc-sliders {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.stat-dc-toolbar .stat-dc-coverage {
+  margin-left: auto;
+  align-self: center;
+}
+.stat-dc-sliders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.stat-dc-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stat-dc-slider-lbl {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stat-dc-slider-lbl b {
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
 /* Slider visuals — the global rule in 01-base.css paints the thumb
    in var(--text) (already neutral) but the :focus-visible state
    adds a 2 px var(--accent) outline that on iOS Safari reads as a
@@ -258,83 +714,265 @@
    focus rules for these specific sliders so they match the
    neutral #cbd5e1 handle the timeline range slider already uses
    (legacy rule in 04-coral-1.css). */
-.stat-dc-slider input[type=range]{
-  width:100%;
-  accent-color:transparent;
+.stat-dc-slider input[type='range'] {
+  width: 100%;
+  accent-color: transparent;
 }
-.stat-dc-slider input[type=range]::-webkit-slider-thumb{
-  background:#cbd5e1;
-  border:2px solid #1f1f24;
-  box-shadow:0 1px 3px rgba(0,0,0,.45);
+.stat-dc-slider input[type='range']::-webkit-slider-thumb {
+  background: #cbd5e1;
+  border: 2px solid #1f1f24;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
-.stat-dc-slider input[type=range]::-moz-range-thumb{
-  background:#cbd5e1;
-  border:2px solid #1f1f24;
-  box-shadow:0 1px 3px rgba(0,0,0,.45);
+.stat-dc-slider input[type='range']::-moz-range-thumb {
+  background: #cbd5e1;
+  border: 2px solid #1f1f24;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
-.stat-dc-slider input[type=range]:focus-visible::-webkit-slider-thumb{
-  outline:2px solid rgba(203,213,225,.6);
-  outline-offset:2px;
+.stat-dc-slider input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid rgba(203, 213, 225, 0.6);
+  outline-offset: 2px;
 }
-.stat-dc-slider input[type=range]:focus-visible::-moz-range-thumb{
-  outline:2px solid rgba(203,213,225,.6);
-  outline-offset:2px;
-}
-
-.stat-dc-coverage{display:inline-flex;flex-wrap:wrap;gap:5px;align-items:center;align-self:flex-end;font-size:12px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.04);padding:7px 12px;border-radius:11px;margin-left:auto;min-height:34px;transition:background .2s,color .2s,box-shadow .2s}
-.stat-dc-coverage.is-amber{background:rgba(245,158,11,.16);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(245,158,11,.30)}
-.stat-dc-cov-num{color:var(--text);font-weight:800;letter-spacing:0}
-.stat-dc-coverage.is-amber .stat-dc-cov-num{color:#fde68a}
-.stat-dc-cov-sep{opacity:.85}
-
-.stat-dc-chart-wrap{background:rgba(255,255,255,.02);border-radius:14px;padding:10px 10px 6px;position:relative;overflow:hidden}
-.stat-dc-chart{width:100%;min-height:240px}
-.stat-dc-svg{display:block;width:100%}
-.stat-dc-grid{stroke:rgba(255,255,255,.05);stroke-width:1}
-.stat-dc-ref{stroke:rgba(245,158,11,.55);stroke-width:1.2;stroke-dasharray:4 4}
-.stat-dc-xlbl,.stat-dc-ylbl{font-size:10.5px;font-weight:600;fill:rgba(226,232,240,.55);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
-.stat-dc-dot{opacity:.5;transition:opacity .15s,r .15s,filter .15s;cursor:pointer}
-.stat-dc-dot:hover{opacity:1;filter:brightness(1.25) drop-shadow(0 1px 3px rgba(0,0,0,.45))}
-.stat-dc-dot.is-fresh{animation:stat-dc-fresh 600ms ease-out 1;transform-box:fill-box;transform-origin:center}
-@keyframes stat-dc-fresh{
-  0%  {transform:scale(1);   opacity:.5}
-  40% {transform:scale(1.6); opacity:.9}
-  100%{transform:scale(1);   opacity:.5}
+.stat-dc-slider input[type='range']:focus-visible::-moz-range-thumb {
+  outline: 2px solid rgba(203, 213, 225, 0.6);
+  outline-offset: 2px;
 }
 
-.stat-dc-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 16px;color:var(--muted);font-size:13px;font-weight:600;text-align:center;min-height:200px}
-.stat-dc-empty svg{opacity:.6}
+.stat-dc-coverage {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  align-self: flex-end;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 7px 12px;
+  border-radius: 11px;
+  margin-left: auto;
+  min-height: 34px;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    box-shadow 0.2s;
+}
+.stat-dc-coverage.is-amber {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.3);
+}
+.stat-dc-cov-num {
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.stat-dc-coverage.is-amber .stat-dc-cov-num {
+  color: #fde68a;
+}
+.stat-dc-cov-sep {
+  opacity: 0.85;
+}
+
+.stat-dc-chart-wrap {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 14px;
+  padding: 10px 10px 6px;
+  position: relative;
+  overflow: hidden;
+}
+.stat-dc-chart {
+  width: 100%;
+  min-height: 240px;
+}
+.stat-dc-svg {
+  display: block;
+  width: 100%;
+}
+.stat-dc-grid {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 1;
+}
+.stat-dc-ref {
+  stroke: rgba(245, 158, 11, 0.55);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+}
+.stat-dc-xlbl,
+.stat-dc-ylbl {
+  font-size: 10.5px;
+  font-weight: 600;
+  fill: rgba(226, 232, 240, 0.55);
+  font-family:
+    Inter,
+    system-ui,
+    Segoe UI,
+    Roboto,
+    Arial,
+    sans-serif;
+}
+.stat-dc-dot {
+  opacity: 0.5;
+  transition:
+    opacity 0.15s,
+    r 0.15s,
+    filter 0.15s;
+  cursor: pointer;
+}
+.stat-dc-dot:hover {
+  opacity: 1;
+  filter: brightness(1.25) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}
+.stat-dc-dot.is-fresh {
+  animation: stat-dc-fresh 600ms ease-out 1;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes stat-dc-fresh {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+}
+
+.stat-dc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 200px;
+}
+.stat-dc-empty svg {
+  opacity: 0.6;
+}
 
 /* Floating tooltip (position:fixed so overflow:hidden on the wrap doesn't clip). */
-.stat-dc-tip{position:fixed;z-index:var(--z-debug);display:flex;gap:10px;background:#0d1422;color:#edf4fb;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.08);pointer-events:none;max-width:260px}
-.stat-dc-tip-body{display:flex;flex-direction:column;gap:4px;min-width:0}
-.stat-dc-tip-row{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.2;min-width:0}
-.stat-dc-tip-dot{display:inline-block;width:8px;height:8px;border-radius:3px;flex-shrink:0}
-.stat-dc-tip-ico{display:inline-flex;align-items:center;font-size:14px;line-height:1;flex-shrink:0}
-.stat-dc-tip-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-dc-tip-score{margin-left:auto;font-weight:800;color:#86efac}
-.stat-dc-tip-meta{color:#94a3b8;font-weight:600}
+.stat-dc-tip {
+  position: fixed;
+  z-index: var(--z-debug);
+  display: flex;
+  gap: 10px;
+  background: #0d1422;
+  color: #edf4fb;
+  border-radius: 12px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  max-width: 260px;
+}
+.stat-dc-tip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.stat-dc-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+  min-width: 0;
+}
+.stat-dc-tip-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.stat-dc-tip-ico {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.stat-dc-tip-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-dc-tip-score {
+  margin-left: auto;
+  font-weight: 800;
+  color: #86efac;
+}
+.stat-dc-tip-meta {
+  color: #94a3b8;
+  font-weight: 600;
+}
 
-@media(max-width:768px){
-  .stat-dc-hdr{gap:8px}
-  .stat-dc-hdr-actions{order:2;width:100%;justify-content:flex-start}
-  .stat-dc-sliders{grid-template-columns:1fr}
-  .stat-dc-coverage{margin-left:0;align-self:flex-start;width:100%;justify-content:flex-start}
-  .stat-dc-chart{min-height:240px}
-  .stat-dc-xlbl,.stat-dc-ylbl{font-size:9.5px}
+@media (max-width: 768px) {
+  .stat-dc-hdr {
+    gap: 8px;
+  }
+  .stat-dc-hdr-actions {
+    order: 2;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .stat-dc-sliders {
+    grid-template-columns: 1fr;
+  }
+  .stat-dc-coverage {
+    margin-left: 0;
+    align-self: flex-start;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .stat-dc-chart {
+    min-height: 240px;
+  }
+  .stat-dc-xlbl,
+  .stat-dc-ylbl {
+    font-size: 9.5px;
+  }
   /* G1 · mobile stacks the two captioned groups vertically; the
      vertical divider only makes sense in the desktop side-by-side
      layout so we hide it. */
-  .stat-dc-filters{flex-direction:column;gap:10px}
-  .stat-dc-filtergrp{width:100%}
-  .stat-dc-filterdiv{display:none}
-  .stat-dc-pillrow{gap:5px}
-  .stat-dc-view-btn,.stat-dc-live{min-height:40px}
+  .stat-dc-filters {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .stat-dc-filtergrp {
+    width: 100%;
+  }
+  .stat-dc-filterdiv {
+    display: none;
+  }
+  .stat-dc-pillrow {
+    gap: 5px;
+  }
+  .stat-dc-view-btn,
+  .stat-dc-live {
+    min-height: 40px;
+  }
 }
 
-@media (prefers-reduced-motion: reduce){
-  .stat-dc-live.is-on .stat-dc-live-dot{animation:none}
-  .stat-dc-dot.is-fresh{animation:none;opacity:.9}
+@media (prefers-reduced-motion: reduce) {
+  .stat-dc-live.is-on .stat-dc-live-dot {
+    animation: none;
+  }
+  .stat-dc-dot.is-fresh {
+    animation: none;
+    opacity: 0.9;
+  }
 }
 
 /* ── iPhone-narrow layout for the mini-timeline + Erkennungswolke ─────── */
@@ -347,16 +985,25 @@
    (b) Slider rows: bump the gap between "Min. Konfidenz" and
        "Zeitraum" from 12 px to 16 px so the two thumbs don't sit
        in each other's vertical hit zone. */
-@media (max-width:480px){
+@media (max-width: 480px) {
   /* D3 · the .tl-cam-block is now always column-stacked, .tl-cam-
      sidebox is gone from the markup, and the new .tl-cam-head is
      the heading row. Mobile only needs to tighten the heading
      padding so the tap target stays comfortable without padding
      the row visually heavier than desktop. */
-  .tl-cam-block{gap:6px}
-  .tl-cam-head.stat-drillable{padding:6px 8px;min-height:36px}
-  .tl-cam-head-name{font-size:14px}
-  .stat-dc-sliders{gap:16px}
+  .tl-cam-block {
+    gap: 6px;
+  }
+  .tl-cam-head.stat-drillable {
+    padding: 6px 8px;
+    min-height: 36px;
+  }
+  .tl-cam-head-name {
+    font-size: 14px;
+  }
+  .stat-dc-sliders {
+    gap: 16px;
+  }
 }
 
 /* ── Touch-friendly slider thumb for the Erkennungswolke sliders ────── */
@@ -364,23 +1011,25 @@
    larger visible thumb plus an enlarged hit area. Scoped to the
    stat-dc + tl ranges via direct selector so the chrome dock /
    cam-edit sliders aren't enlarged unnecessarily. */
-@media (hover:none) and (pointer:coarse){
-  .stat-dc-slider input[type=range],
-  #tlRangeSlider{
+@media (hover: none) and (pointer: coarse) {
+  .stat-dc-slider input[type='range'],
+  #tlRangeSlider {
     /* Tall track keeps the touch zone vertically generous without
        changing the visual track height (the ::track rule keeps
        4 px). 44 px outer = the iOS minimum touch target. */
-    height:44px;
+    height: 44px;
   }
-  .stat-dc-slider input[type=range]::-webkit-slider-thumb,
-  #tlRangeSlider::-webkit-slider-thumb{
-    width:24px;height:24px;
-    margin-top:-10px;
-    box-shadow:0 1px 6px rgba(0,0,0,.55);
+  .stat-dc-slider input[type='range']::-webkit-slider-thumb,
+  #tlRangeSlider::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -10px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
   }
-  .stat-dc-slider input[type=range]::-moz-range-thumb,
-  #tlRangeSlider::-moz-range-thumb{
-    width:24px;height:24px;
-    box-shadow:0 1px 6px rgba(0,0,0,.55);
+  .stat-dc-slider input[type='range']::-moz-range-thumb,
+  #tlRangeSlider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
   }
 }

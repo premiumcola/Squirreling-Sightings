@@ -12,7 +12,7 @@
 // reach into legacy.js via window, which is the bug we're untangling.
 
 export const lbState = {
-  item: null,            // currently-shown media item (event payload)
-  index: -1,             // index into state._allMedia for prev/next nav
-  deletePending: false,  // two-step delete arming flag (↓ then ↓ again)
+  item: null, // currently-shown media item (event payload)
+  index: -1, // index into state._allMedia for prev/next nav
+  deletePending: false, // two-step delete arming flag (↓ then ↓ again)
 };

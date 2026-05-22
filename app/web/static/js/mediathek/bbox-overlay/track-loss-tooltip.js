@@ -10,11 +10,11 @@ import { lbState } from '../state.js';
 import { _state } from './_state.js';
 
 const _END_REASON_LABEL = {
-  conf_drop:       'Konfidenz unter Schwelle gefallen',
-  class_filter:    'Klasse aus Filter entfernt',
-  bbox_too_small:  'Bbox unter Mindestgröße',
-  timeout:         'Tracker verloren · keine Detektion',
-  ended_at_clip:   'Spielzeit-Ende erreicht',
+  conf_drop: 'Konfidenz unter Schwelle gefallen',
+  class_filter: 'Klasse aus Filter entfernt',
+  bbox_too_small: 'Bbox unter Mindestgröße',
+  timeout: 'Tracker verloren · keine Detektion',
+  ended_at_clip: 'Spielzeit-Ende erreicht',
 };
 
 // Per-class minimum bbox floors — mirrors detectors/coral_object.py's
@@ -26,7 +26,7 @@ export const _BBOX_FLOORS = {
   person: { min_h_frac: 0.15, min_area_frac: 0.02 },
 };
 
-function _ensureBarEndTip(){
+function _ensureBarEndTip() {
   if (_state.barEndTipEl) return _state.barEndTipEl;
   const tip = document.createElement('div');
   tip.className = 'lbtt-end-tip';
@@ -46,28 +46,30 @@ function _ensureBarEndTip(){
   return _state.barEndTipEl;
 }
 
-function _hideBarEndTip(){
+function _hideBarEndTip() {
   if (_state.barEndTipEl) _state.barEndTipEl.hidden = true;
 }
 
-function _buildBarEndTipHtml(track, trackNum, rs){
+function _buildBarEndTipHtml(track, trackNum, rs) {
   const lbl = OBJ_LABEL[track?.label] || track?.label || '?';
   // span = last - first sample time, in seconds, 1-decimal.
   const samples = track?.samples || [];
-  const span = (samples.length >= 2)
-    ? (parseFloat(samples[samples.length - 1].t) - parseFloat(samples[0].t)).toFixed(1)
-    : '0.0';
+  const span =
+    samples.length >= 2
+      ? (parseFloat(samples[samples.length - 1].t) - parseFloat(samples[0].t)).toFixed(1)
+      : '0.0';
   const reason = track?.end_reason;
   const summary = reason
-    ? (_END_REASON_LABEL[reason] || `Grund: ${reason}`)
+    ? _END_REASON_LABEL[reason] || `Grund: ${reason}`
     : 'Grund unbekannt — Re-Index empfohlen';
   // Score row — compare last_score against per-class or general thresh.
-  let scoreRow = '<span class="lbtt-end-tip-key">Score:</span> <span class="lbtt-end-tip-val">—</span>';
+  let scoreRow =
+    '<span class="lbtt-end-tip-key">Score:</span> <span class="lbtt-end-tip-val">—</span>';
   const lastScore = track?.last_score;
-  if (lastScore != null){
+  if (lastScore != null) {
     let thresh = rs?.conf_thresh_general ?? null;
     const perCls = rs?.conf_thresh_per_class || {};
-    if (Object.prototype.hasOwnProperty.call(perCls, track.label)){
+    if (Object.prototype.hasOwnProperty.call(perCls, track.label)) {
       thresh = perCls[track.label];
     }
     const pct = Math.round(parseFloat(lastScore) * 100);
@@ -77,12 +79,13 @@ function _buildBarEndTipHtml(track, trackNum, rs){
     scoreRow = `<span class="lbtt-end-tip-key">Score:</span> <span class="lbtt-end-tip-val ${tone}">${pct} %${tpct != null ? ` ${op} ${tpct} %` : ''}</span>`;
   }
   // Bbox row — compare last_bbox_size + frac against the per-class floor.
-  let bboxRow = '<span class="lbtt-end-tip-key">Bbox:</span> <span class="lbtt-end-tip-val">—</span>';
+  let bboxRow =
+    '<span class="lbtt-end-tip-key">Bbox:</span> <span class="lbtt-end-tip-val">—</span>';
   const lbs = track?.last_bbox_size_px;
-  if (Array.isArray(lbs) && lbs.length === 2){
+  if (Array.isArray(lbs) && lbs.length === 2) {
     const floors = _BBOX_FLOORS[track.label];
     let bad = false;
-    if (floors){
+    if (floors) {
       const fh = track?.last_bbox_frac_h ?? 0;
       const fa = track?.last_bbox_frac_area ?? 0;
       if (fh < floors.min_h_frac || fa < floors.min_area_frac) bad = true;
@@ -95,7 +98,7 @@ function _buildBarEndTipHtml(track, trackNum, rs){
   // is null), red ✗ if filter is non-null and excludes the class.
   let classRow = `<span class="lbtt-end-tip-key">Klasse:</span> <span class="lbtt-end-tip-val">${lbl}</span>`;
   const objFilter = rs?.object_filter;
-  if (objFilter != null && Array.isArray(objFilter)){
+  if (objFilter != null && Array.isArray(objFilter)) {
     const ok = objFilter.includes(track.label);
     const tone = ok ? 'is-ok' : 'is-bad';
     const tick = ok ? '✓' : '✗';
@@ -109,7 +112,7 @@ function _buildBarEndTipHtml(track, trackNum, rs){
     <div class="lbtt-end-tip-summary">${summary}</div>`;
 }
 
-function _showBarEndTip(target){
+function _showBarEndTip(target) {
   const idx = parseInt(target?.dataset?.trackIdx ?? '', 10);
   const trackNum = parseInt(target?.dataset?.trackNum ?? '', 10);
   if (!Number.isFinite(idx) || !Number.isFinite(trackNum)) return;
@@ -133,7 +136,7 @@ function _showBarEndTip(target){
   tip.style.left = `${Math.round(left)}px`;
 }
 
-export function _wireBarEndTooltips(host){
+export function _wireBarEndTooltips(host) {
   // Idempotent: per-render flag avoids re-binding for every re-render.
   if (host.dataset.barEndTipWired === '1') return;
   host.dataset.barEndTipWired = '1';
@@ -146,11 +149,18 @@ export function _wireBarEndTooltips(host){
   });
   host.addEventListener('click', (ev) => {
     const x = ev.target.closest('.lbtt-bar-end');
-    if (!x){ _hideBarEndTip(); return; }
+    if (!x) {
+      _hideBarEndTip();
+      return;
+    }
     // Don't bubble to the .lbtt-bar seek handler — × is its own UX.
-    ev.preventDefault(); ev.stopPropagation();
-    if (_state.barEndTipEl && !_state.barEndTipEl.hidden
-        && _state.barEndTipEl.dataset.activeFor === x.dataset.trackIdx){
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (
+      _state.barEndTipEl &&
+      !_state.barEndTipEl.hidden &&
+      _state.barEndTipEl.dataset.activeFor === x.dataset.trackIdx
+    ) {
       _hideBarEndTip();
       return;
     }

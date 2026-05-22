@@ -25,19 +25,20 @@ export function hydrateErkennungFields(formEl, c, state) {
     // the slider shows after the user touches it.
     const ms = parseFloat(c.motion_sensitivity) || 0.5;
     const auto = Math.min(1.0, ms * 1.4);
-    const v = (raw != null && parseFloat(raw) > 0) ? parseFloat(raw) : auto;
+    const v = raw != null && parseFloat(raw) > 0 ? parseFloat(raw) : auto;
     f['wildlife_motion_sensitivity'].value = v.toFixed(1);
     const lbl = byId('wildlifeMotionLabel');
     if (lbl) lbl.textContent = Math.round(v * 100) + '%';
   }
   if (f['detection_min_score']) {
     const globalMs = state.config?.processing?.detection?.min_score ?? 0.55;
-    const cms = (c.detection_min_score && c.detection_min_score > 0) ? c.detection_min_score : globalMs;
+    const cms =
+      c.detection_min_score && c.detection_min_score > 0 ? c.detection_min_score : globalMs;
     f['detection_min_score'].value = cms;
   }
   if (f['label_threshold_person']) {
     const lt = (c.label_thresholds || {}).person;
-    const v = (lt != null && !Number.isNaN(parseFloat(lt))) ? parseFloat(lt) : 0.72;
+    const v = lt != null && !Number.isNaN(parseFloat(lt)) ? parseFloat(lt) : 0.72;
     f['label_threshold_person'].value = v;
   }
   // Tracker overrides — restore the per-camera values. 0 (the
@@ -59,7 +60,7 @@ export function hydrateErkennungFields(formEl, c, state) {
   // off, anything else as on so legacy cams that pre-date the field
   // pick up the default cleanup.
   if (f['track_filter_ghosts']) {
-    f['track_filter_ghosts'].checked = (c.track_filter_ghosts !== false);
+    f['track_filter_ghosts'].checked = c.track_filter_ghosts !== false;
   }
   // Confirmation-window step 3 sliders — confirm_n/confirm_seconds carry
   // the new global entry. Existing per-class entries (cw[person] etc.)
@@ -77,7 +78,8 @@ export function hydrateErkennungFields(formEl, c, state) {
   // detection_trigger lives as a hidden input on the Erkennung tab during
   // this transition; the follow-up commit moves it to a visible select on
   // the Allgemein tab. Either way we set the value so save preserves it.
-  if (f['detection_trigger']) f['detection_trigger'].value = c.detection_trigger || 'motion_and_objects';
+  if (f['detection_trigger'])
+    f['detection_trigger'].value = c.detection_trigger || 'motion_and_objects';
   if (f['post_motion_tail_s']) {
     // Normalise: 0 or null → "0" (Standard / Global-Wert), otherwise pick
     // closest preset. Save handler stores 0 when "Standard" is selected,

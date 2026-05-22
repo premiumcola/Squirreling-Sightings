@@ -31,11 +31,11 @@ export const GAP_MS = 2 * 60 * 1000;
 
 function _tlGroupLane(points, label, tMin, tMax) {
   const filtered = points
-    .filter(p => {
+    .filter((p) => {
       const t = new Date(p.time).getTime();
       if (!t || t < tMin || t > tMax) return false;
       const labs = p.labels || [];
-      if (label === 'motion') return labs.length === 0 || labs.every(l => l === 'motion');
+      if (label === 'motion') return labs.length === 0 || labs.every((l) => l === 'motion');
       return labs.includes(label);
     })
     .sort((a, b) => new Date(a.time) - new Date(b.time));
@@ -56,19 +56,30 @@ function _tlGroupLane(points, label, tMin, tMax) {
 
 function _tlFmtTs(ts, hours) {
   const d = new Date(ts);
-  if (hours <= 3)   return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-  if (hours <= 24)  return d.getHours().toString().padStart(2, '0') + ':00';
-  if (hours <= 168) return ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()] + ' ' + d.getDate() + '.' + (d.getMonth() + 1);
+  if (hours <= 3)
+    return (
+      d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
+    );
+  if (hours <= 24) return d.getHours().toString().padStart(2, '0') + ':00';
+  if (hours <= 168)
+    return (
+      ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()] +
+      ' ' +
+      d.getDate() +
+      '.' +
+      (d.getMonth() + 1)
+    );
   return d.getDate() + '.' + (d.getMonth() + 1) + '.';
 }
 
 export function renderTimeline() {
-  const container = byId('timelineContainer'); if (!container) return;
+  const container = byId('timelineContainer');
+  if (!container) return;
   const tracks = state.timeline?.tracks || [];
 
   let earliestMs = null;
-  tracks.forEach(tr => {
-    (tr.points || []).forEach(p => {
+  tracks.forEach((tr) => {
+    (tr.points || []).forEach((p) => {
       const t = new Date(p.time).getTime();
       if (t && (!earliestMs || t < earliestMs)) earliestMs = t;
     });
@@ -92,12 +103,15 @@ export function renderTimeline() {
   if (earliestMs && earliestMs > tMin) tMin = earliestMs;
   const span = tMax - tMin || 1;
 
-  const camLaneGroups = tracks.map(tr => {
-    const lanes = TL_LANES
-      .map(label => ({ label, groups: _tlGroupLane(tr.points || [], label, tMin, tMax) }))
-      .filter(l => l.groups.length > 0);
-    return { tr, lanes };
-  }).filter(c => c.lanes.length > 0);
+  const camLaneGroups = tracks
+    .map((tr) => {
+      const lanes = TL_LANES.map((label) => ({
+        label,
+        groups: _tlGroupLane(tr.points || [], label, tMin, tMax),
+      })).filter((l) => l.groups.length > 0);
+      return { tr, lanes };
+    })
+    .filter((c) => c.lanes.length > 0);
 
   if (!camLaneGroups.length) {
     container.innerHTML = '<div class="tl-empty">Keine Ereignisse im gewählten Zeitraum.</div>';
@@ -106,7 +120,7 @@ export function renderTimeline() {
 
   let html = '';
   camLaneGroups.forEach(({ tr, lanes }, ti) => {
-    const cam = (state.config?.cameras || []).find(c => c.id === tr.camera_id) || {};
+    const cam = (state.config?.cameras || []).find((c) => c.id === tr.camera_id) || {};
     const camName = cam.name || tr.camera_id;
     const camIcon = getCameraIcon(camName);
     // tx412 — per-camera identity colour. --cam-color sits on the
@@ -123,19 +137,25 @@ export function renderTimeline() {
     // and lets the lanes take the full available width. STAT_MEDIA
     // _DRILLDOWN click semantics still ride on the heading.
     const sbCls = STAT_MEDIA_DRILLDOWN ? 'tl-cam-head stat-drillable' : 'tl-cam-head';
-    const sbClick = STAT_MEDIA_DRILLDOWN ? `onclick="_statOpenMedia('${esc(tr.camera_id)}','')"` : '';
+    const sbClick = STAT_MEDIA_DRILLDOWN
+      ? `onclick="_statOpenMedia('${esc(tr.camera_id)}','')"`
+      : '';
     html += `<div class="${sbCls}" style="--cam-color:${camColor}" ${sbClick}><span class="tl-cam-head-icon">${camIcon}</span><span class="tl-cam-head-name">${esc(camName)}</span></div>`;
     html += `<div class="tl-lanes-wrap">`;
-    for (let k = 1; k < 5; k++) html += `<div class="tl-vgrid" style="left:calc(var(--tl-label-w) + (100% - var(--tl-label-w))*${k}/5)"></div>`;
+    for (let k = 1; k < 5; k++)
+      html += `<div class="tl-vgrid" style="left:calc(var(--tl-label-w) + (100% - var(--tl-label-w))*${k}/5)"></div>`;
     lanes.forEach(({ label, groups }) => {
       const color = colors[label] || colors.unknown;
       const labelText = OBJ_LABEL[label] || label;
       html += `<div class="tl-lane">`;
       html += `<div class="tl-lane-label" style="--lane-c:${CAT_COLORS[label] || '#8888aa'}"><span class="tl-lane-label-icon">${OBJ_SVG[label] || ''}</span><span class="tl-lane-label-text">${labelText}</span></div>`;
       html += `<div class="tl-track">`;
-      groups.forEach(g => {
-        const leftPct = Math.max(0, (g.startTime - tMin) / span * 100);
-        const widthPct = Math.max(0.8, Math.min((g.endTime - g.startTime) / span * 100, 100 - leftPct));
+      groups.forEach((g) => {
+        const leftPct = Math.max(0, ((g.startTime - tMin) / span) * 100);
+        const widthPct = Math.max(
+          0.8,
+          Math.min(((g.endTime - g.startTime) / span) * 100, 100 - leftPct),
+        );
         if (leftPct >= 100) return;
         html += `<div class="tl-bar" style="left:${leftPct.toFixed(2)}%;width:${widthPct.toFixed(2)}%;background:${color};opacity:0.85" data-camid="${esc(tr.camera_id)}" data-label="${esc(label)}" title="${g.count} Events · ${labelText}"></div>`;
       });
@@ -148,10 +168,11 @@ export function renderTimeline() {
   // strip even with the .tl-container var shrinks, so phones get a
   // sparser axis (3 labels under 480 px, 4 between 480 and 768 px).
   // Above 768 px the desktop / tablet width takes the full set.
-  const w = (typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const w = typeof window !== 'undefined' ? window.innerWidth : 1024;
   const N = w < 480 ? 3 : w < 768 ? 4 : 6;
   html += `<div class="tl-xaxis">`;
-  for (let k = 0; k < N; k++) html += `<span class="tl-xlabel">${_tlFmtTs(tMin + span * k / (N - 1), hours)}</span>`;
+  for (let k = 0; k < N; k++)
+    html += `<span class="tl-xlabel">${_tlFmtTs(tMin + (span * k) / (N - 1), hours)}</span>`;
   html += `</div>`;
   container.innerHTML = html;
 
@@ -160,7 +181,7 @@ export function renderTimeline() {
   // navigation goes via window.X because loadMedia + renderMediaGrid
   // still live in legacy.js.
   const _isCoarsePtr = () => window.matchMedia('(hover:none) and (pointer:coarse)').matches;
-  container.querySelectorAll('.tl-bar').forEach(bar => {
+  container.querySelectorAll('.tl-bar').forEach((bar) => {
     bar.onclick = (ev) => {
       if (_isCoarsePtr() && !bar.classList.contains('tl-bar--tip-shown')) {
         ev.preventDefault();
@@ -177,7 +198,8 @@ export function renderTimeline() {
   });
 }
 
-let _tlTipEl = null, _tlTipTimer = 0;
+let _tlTipEl = null,
+  _tlTipTimer = 0;
 function _tlShowBarTooltip(bar) {
   const text = bar.getAttribute('title') || '';
   if (!text) return;
@@ -188,7 +210,8 @@ function _tlShowBarTooltip(bar) {
   }
   _tlTipEl.textContent = text;
   const r = bar.getBoundingClientRect();
-  _tlTipEl.style.left = Math.max(8, Math.min(window.innerWidth - 220, r.left + r.width / 2 - 110)) + 'px';
+  _tlTipEl.style.left =
+    Math.max(8, Math.min(window.innerWidth - 220, r.left + r.width / 2 - 110)) + 'px';
   _tlTipEl.style.top = Math.max(8, r.top - 44) + 'px';
   _tlTipEl.classList.add('visible');
   bar.classList.add('tl-bar--tip-shown');
@@ -198,7 +221,9 @@ function _tlShowBarTooltip(bar) {
 }
 function _tlHideBarTooltip() {
   if (_tlTipEl) _tlTipEl.classList.remove('visible');
-  document.querySelectorAll('.tl-bar--tip-shown').forEach(b => b.classList.remove('tl-bar--tip-shown'));
+  document
+    .querySelectorAll('.tl-bar--tip-shown')
+    .forEach((b) => b.classList.remove('tl-bar--tip-shown'));
 }
 function _tlOutsideTipHandler(e) {
   if (e.target?.closest?.('.tl-bar')) return;
@@ -215,27 +240,35 @@ function _tlOutsideTipHandler(e) {
 let _tlFetchTimer = null;
 let _tlFetchAbort = null;
 let _tlFetchToken = 0;
-function _tlFetchTimeline(hours){
-  if (_tlFetchAbort){ try { _tlFetchAbort.abort(); } catch {} }
+function _tlFetchTimeline(hours) {
+  if (_tlFetchAbort) {
+    try {
+      _tlFetchAbort.abort();
+    } catch {}
+  }
   const ctrl = new AbortController();
   _tlFetchAbort = ctrl;
   const myToken = ++_tlFetchToken;
   const url = `/api/timeline?hours=${hours}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`;
-  j(url, { signal: ctrl.signal }).then(data => {
-    if (myToken !== _tlFetchToken) return;
-    if (state.tlHours !== hours) return;
-    state.timeline = data;
-    renderTimeline();
-  }).catch(() => { /* abort or error: keep current data */ });
+  j(url, { signal: ctrl.signal })
+    .then((data) => {
+      if (myToken !== _tlFetchToken) return;
+      if (state.tlHours !== hours) return;
+      state.timeline = data;
+      renderTimeline();
+    })
+    .catch(() => {
+      /* abort or error: keep current data */
+    });
 }
-byId('tlRangeSlider')?.addEventListener('input', e => {
+byId('tlRangeSlider')?.addEventListener('input', (e) => {
   state.tlHours = parseInt(e.target.value);
   renderTimeline();
   clearTimeout(_tlFetchTimer);
   const hours = state.tlHours;
   _tlFetchTimer = setTimeout(() => _tlFetchTimeline(hours), 250);
 });
-byId('tlRangeSlider')?.addEventListener('change', e => {
+byId('tlRangeSlider')?.addEventListener('change', (e) => {
   state.tlHours = parseInt(e.target.value);
   clearTimeout(_tlFetchTimer);
   _tlFetchTimeline(state.tlHours);

@@ -6,14 +6,12 @@
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .catch((err) => {
-        // SW registration failures are non-fatal; the app keeps working
-        // without the shell cache. console.warn is allowed by the
-        // project lint config.
-        console.warn('[pwa] SW registration failed:', err);
-      });
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      // SW registration failures are non-fatal; the app keeps working
+      // without the shell cache. console.warn is allowed by the
+      // project lint config.
+      console.warn('[pwa] SW registration failed:', err);
+    });
   });
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {

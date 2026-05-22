@@ -62,17 +62,23 @@ async function _onClickMode(mode) {
   // Disable all three buttons during the call so the user can't fire
   // overlapping requests; ~1 s round-trip on LAN.
   const buttons = document.querySelectorAll('.reolink-imgmode-btn');
-  buttons.forEach((b) => { b.disabled = true; });
+  buttons.forEach((b) => {
+    b.disabled = true;
+  });
   _setFeedback(`… ${mode} wird gesendet`, 'info');
   let res = null;
   try {
     res = await apiPost(`/api/cameras/${encodeURIComponent(camId)}/reolink/image-mode`, { mode });
   } catch (e) {
     _setFeedback(`Netzwerkfehler: ${e?.message || e}`, 'error');
-    buttons.forEach((b) => { b.disabled = false; });
+    buttons.forEach((b) => {
+      b.disabled = false;
+    });
     return;
   }
-  buttons.forEach((b) => { b.disabled = false; });
+  buttons.forEach((b) => {
+    b.disabled = false;
+  });
   if (res && res.ok) {
     _setFeedback(`✓ Modus ${mode} gesetzt`, 'ok');
   } else {

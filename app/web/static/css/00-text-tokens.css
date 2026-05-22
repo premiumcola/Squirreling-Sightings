@@ -20,18 +20,18 @@
    tuned by eye.
 */
 :root {
-  --text-2xs:  9px;
-  --text-xs:   10px;
-  --text-sm:   11px;
+  --text-2xs: 9px;
+  --text-xs: 10px;
+  --text-sm: 11px;
   --text-base: 12px;
-  --text-md:   13px;
-  --text-lg:   14px;
-  --text-xl:   16px;
-  --text-2xl:  18px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+  --text-2xl: 18px;
 
   /* Line-height tokens — keep light/normal/tight as named values so
      the ladder reads in CSS without remembering ratios. */
-  --leading-tight:  1.15;
+  --leading-tight: 1.15;
   --leading-normal: 1.35;
-  --leading-loose:  1.55;
+  --leading-loose: 1.55;
 }

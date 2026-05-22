@@ -22,8 +22,9 @@
 #erkSimResult,
 .erk-sim-sheet,
 #erkSimLiveBody,
-#erkSimLiveBody > *{
-  min-width:0;max-width:100%;
+#erkSimLiveBody > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ── Live-detection toggle state ────────────────────────────────────────────
@@ -32,29 +33,40 @@
    the button surface in a warm red so the "currently active, click
    to stop" affordance is unambiguous; the .erk-live-dot inside
    pulses in sync with the polling tick. */
-.erk-test-btn.is-live{
-  background:#7f1d1d;
-  color:#fee2e2;
+.erk-test-btn.is-live {
+  background: #7f1d1d;
+  color: #fee2e2;
 }
-.erk-test-btn.is-live:hover{
-  background:#991b1b;
-  color:#fff;
+.erk-test-btn.is-live:hover {
+  background: #991b1b;
+  color: #fff;
 }
-.erk-live-dot{
+.erk-live-dot {
   /* Inline-flex sibling of the button label — never position:fixed,
      to avoid the iOS layout edge cases the user flagged. */
-  width:9px;height:9px;border-radius:50%;
-  background:#fca5a5;
-  flex-shrink:0;
-  box-shadow:0 0 0 0 rgba(248,113,113,.55);
-  animation:erk-live-pulse 1.6s ease-in-out infinite;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fca5a5;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.55);
+  animation: erk-live-pulse 1.6s ease-in-out infinite;
 }
-@keyframes erk-live-pulse{
-  0%,100%{ box-shadow:0 0 0 0 rgba(248,113,113,.55); transform:scale(1); }
-  50%    { box-shadow:0 0 0 6px rgba(248,113,113,0);  transform:scale(1.15); }
+@keyframes erk-live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.55);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(248, 113, 113, 0);
+    transform: scale(1.15);
+  }
 }
-@media (prefers-reduced-motion: reduce){
-  .erk-live-dot{ animation:none; }
+@media (prefers-reduced-motion: reduce) {
+  .erk-live-dot {
+    animation: none;
+  }
 }
 
 /* ── SVG overlay layer groups ──────────────────────────────────────────────
@@ -64,7 +76,9 @@
    `visibility` to show/hide an entire layer in one attribute write —
    keeps the per-tick redraw cheap and lets the layers paint in
    strict document order. */
-.erk-layer{ pointer-events:none; }
+.erk-layer {
+  pointer-events: none;
+}
 
 /* ── Path trails painted under each confirmed track ────────────────────────
    Per-track <g> groups in the trails layer; each contains a series
@@ -74,18 +88,22 @@
    12-hue palette) so two simultaneous subjects paint distinguishable
    trails; the verdict scales the ramp uniformly so a filtered
    track's whole trail reads dimmer than a passing one's. */
-.erk-track-trail{ fill:none; }
+.erk-track-trail {
+  fill: none;
+}
 
 /* ── Live-sim toggle bar ───────────────────────────────────────────────────
    Shared overlay-toggles pill bar mounted by live.js · startLive.
    Re-uses the same .mv-live-toggles base from the Mediathek
    lightbox; this rule only adds the camera-edit-context spacing so
    the pills don't crowd the snapshot wrap. */
-.erk-sim-toggles{
-  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-  margin:0 0 10px 0;
+.erk-sim-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 10px 0;
 }
-
 
 /* ── Live presence timeline (sliding 30 s, per class) ──────────────────────
    Sits between the snapshot preview and the detection list; renders
@@ -94,107 +112,129 @@
    tick. Pure DOM (no SVG) so each per-row badge is a real button
    with its own ≥44 px touch target — the slot tooltip works on
    both pointer hover and tap. */
-.erk-tl{
-  margin-top:10px;
-  padding:10px 10px 8px;
-  background:rgba(255,255,255,.03);
-  border-radius:10px;
+.erk-tl {
+  margin-top: 10px;
+  padding: 10px 10px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
 }
-.erk-tl-grid{
-  display:flex;flex-direction:column;gap:6px;
+.erk-tl-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.erk-tl-empty{
-  padding:14px 8px;
-  text-align:center;
-  font-size:12px;color:rgba(255,255,255,.45);
-  font-style:italic;
+.erk-tl-empty {
+  padding: 14px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
 }
-.erk-tl-row{
-  display:flex;align-items:center;gap:10px;
-  min-height:28px;
+.erk-tl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
 }
-.erk-tl-badge{
+.erk-tl-badge {
   /* Real button — gives us a ≥44 px tap target without any extra
      hit-area math. Padding goes inside the button so the bubble +
      label stay flush against each other. */
-  display:inline-flex;align-items:center;gap:8px;
-  flex:0 0 auto;
-  min-width:44px;min-height:44px;
-  padding:6px 10px 6px 6px;
-  background:transparent;border:0;
-  cursor:default;
-  -webkit-tap-highlight-color:transparent;
-  border-radius:8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 10px 6px 6px;
+  background: transparent;
+  border: 0;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 8px;
 }
-.erk-tl-badge-text{
-  font-size:11.5px;font-weight:600;
-  color:rgba(255,255,255,.78);
-  letter-spacing:.01em;
+.erk-tl-badge-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+  letter-spacing: 0.01em;
 }
-.erk-tl-strip{
-  position:relative;
-  flex:1 1 auto;min-width:0;
-  height:18px;
-  background:rgba(0,0,0,.35);
-  border-radius:8px;
-  overflow:hidden;
+.erk-tl-strip {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  overflow: hidden;
 }
-.erk-tl-slot{
-  position:absolute;top:0;bottom:0;
+.erk-tl-slot {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   /* Default state — empty 1 s slot, faint stripe so the strip reads
      as a grid even when no class fired. */
-  background:rgba(255,255,255,.025);
+  background: rgba(255, 255, 255, 0.025);
 }
-.erk-tl-slot.is-hit{
+.erk-tl-slot.is-hit {
   /* `background` is set inline per class colour, and `opacity` is
      also set inline by timeline.js — the per-run alternation lets
      adjacent same-class but different-track-id runs read as
      distinct without changing the colour itself. The fallback below
      applies only when JS forgets to set opacity (e.g. test fixtures). */
-  opacity:.78;
+  opacity: 0.78;
 }
 .erk-tl-slot.is-hit:hover,
-.erk-tl-slot.is-hit:focus{
-  opacity:1!important;
-  cursor:pointer;
+.erk-tl-slot.is-hit:focus {
+  opacity: 1 !important;
+  cursor: pointer;
 }
 /* Track-id break — first slot of a non-initial run gets a thin dark
    inset on the left edge so the eye picks up the discontinuity even
    when the saturation shift on its own is subtle. Pairs with the
    inline opacity step set by timeline.js's runIdx counter. */
-.erk-tl-slot.is-hit.erk-tl-slot-runstart{
-  box-shadow:inset 1px 0 0 rgba(0,0,0,.55);
+.erk-tl-slot.is-hit.erk-tl-slot-runstart {
+  box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.55);
 }
-.erk-tl-lost{
+.erk-tl-lost {
   /* Track-lost marker — small × at the lost-time x position. Sits
      above the slot fills and reads even on a busy strip. */
-  position:absolute;top:0;
-  transform:translate(-50%, 1px);
-  font-size:11px;font-weight:700;
-  color:rgba(248,113,113,.85);
-  pointer-events:none;
-  line-height:1;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, 1px);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(248, 113, 113, 0.85);
+  pointer-events: none;
+  line-height: 1;
 }
 
 /* Custom hover/tap tooltip — single page-level element managed by
    timeline.js. Fixed-positioned so layout reflows in the panel
    below don't shift it. Compact, dark surface, rounded corners. */
-.erk-tl-tooltip{
-  position:fixed;z-index:var(--z-toast);
-  padding:6px 10px;
-  background:rgba(15,23,42,.96);
-  color:#e2e8f0;
-  font-size:11px;font-weight:600;
-  letter-spacing:.01em;
-  border-radius:8px;
-  pointer-events:none;
-  white-space:nowrap;
-  box-shadow:0 4px 14px rgba(0,0,0,.45);
+.erk-tl-tooltip {
+  position: fixed;
+  z-index: var(--z-toast);
+  padding: 6px 10px;
+  background: rgba(15, 23, 42, 0.96);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 8px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
-@media (max-width:480px){
-  .erk-tl-badge-text{ display:none; }
-  .erk-tl-badge{ min-width:44px;padding:6px; }
+@media (max-width: 480px) {
+  .erk-tl-badge-text {
+    display: none;
+  }
+  .erk-tl-badge {
+    min-width: 44px;
+    padding: 6px;
+  }
 }
 
 /* ── K13 · Tracking-threshold info strip ───────────────────────────────────
@@ -207,145 +247,168 @@
    warning / idle). Monospaced numeric cells for column alignment.
    Each row is ≥ 44 px tall on mobile so the strip stays touch-target
    friendly even though the row itself isn't clickable. */
-.erk-thr-strip{
-  margin-top:10px;
-  padding:8px 10px;
-  background:rgba(255,255,255,.03);
-  border-radius:10px;
-  display:flex;flex-direction:column;gap:4px;
+.erk-thr-strip {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.erk-thr-row{
-  display:grid;
+.erk-thr-row {
+  display: grid;
   grid-template-columns:
-    minmax(140px, auto)      /* label */
-    minmax(72px, auto)       /* limit */
-    auto                     /* sep · */
-    minmax(140px, auto)      /* actual label */
-    minmax(72px, 1fr)        /* actual value */
-    auto                     /* mark */
-    auto;                    /* track tag */
-  align-items:center;gap:8px;
-  min-height:36px;
-  padding:6px 10px;
-  border-radius:8px;
-  background:rgba(255,255,255,.025);
-  transition:background-color .35s ease;
+    minmax(140px, auto) /* label */
+    minmax(72px, auto) /* limit */
+    auto /* sep · */
+    minmax(140px, auto) /* actual label */
+    minmax(72px, 1fr) /* actual value */
+    auto /* mark */
+    auto; /* track tag */
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  transition: background-color 0.35s ease;
 }
-.erk-thr-row--ok{
-  background:rgba(34,197,94,.10);
+.erk-thr-row--ok {
+  background: rgba(34, 197, 94, 0.1);
 }
-.erk-thr-row--warn{
-  background:rgba(248,113,113,.12);
+.erk-thr-row--warn {
+  background: rgba(248, 113, 113, 0.12);
 }
-.erk-thr-row--idle{
-  background:rgba(255,255,255,.025);
+.erk-thr-row--idle {
+  background: rgba(255, 255, 255, 0.025);
 }
-.erk-thr-lbl{
-  font-size:12.5px;font-weight:600;
-  color:rgba(255,255,255,.82);
-  letter-spacing:.01em;
+.erk-thr-lbl {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+  letter-spacing: 0.01em;
 }
 .erk-thr-limit,
-.erk-thr-actual{
+.erk-thr-actual {
   /* Numerics — monospaced and tabular so the columns line up across
      rows regardless of digit width. */
   font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, monospace;
   font-variant-numeric: tabular-nums;
-  font-size:13px;
-  color:rgba(255,255,255,.92);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.92);
 }
-.erk-thr-limit{
-  font-weight:600;
+.erk-thr-limit {
+  font-weight: 600;
 }
-.erk-thr-limit--default{
+.erk-thr-limit--default {
   /* Dimmed when the form input is 0 / blank and the strip is showing
      the module fallback. Tells the user "this is the system default
      because you haven't set a per-camera override." */
-  color:rgba(255,255,255,.55);
-  font-style:italic;
+  color: rgba(255, 255, 255, 0.55);
+  font-style: italic;
 }
-.erk-thr-sep{
-  color:rgba(255,255,255,.30);
-  font-size:12px;
+.erk-thr-sep {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
 }
-.erk-thr-actual-lbl{
-  font-size:12px;
-  color:rgba(255,255,255,.55);
+.erk-thr-actual-lbl {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
 }
-.erk-thr-actual{
-  color:rgba(255,255,255,.95);
+.erk-thr-actual {
+  color: rgba(255, 255, 255, 0.95);
 }
-.erk-thr-mark{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:18px;height:18px;border-radius:50%;
-  font-size:12px;font-weight:700;
-  line-height:1;
+.erk-thr-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
-.erk-thr-mark--ok{
-  background:rgba(34,197,94,.20);
-  color:#86efac;
+.erk-thr-mark--ok {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
 }
-.erk-thr-mark--warn{
-  background:rgba(248,113,113,.22);
-  color:#fca5a5;
+.erk-thr-mark--warn {
+  background: rgba(248, 113, 113, 0.22);
+  color: #fca5a5;
 }
-.erk-thr-mark--idle{
-  background:rgba(255,255,255,.06);
-  color:rgba(255,255,255,.4);
+.erk-thr-mark--idle {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
 }
-.erk-thr-tag{
+.erk-thr-tag {
   /* Small pill listing the backing track id. Stays neutral-tone so it
      doesn't compete with the status mark for attention. */
-  font-size:11px;font-weight:600;
-  padding:2px 8px;
-  border-radius:999px;
-  background:rgba(255,255,255,.08);
-  color:rgba(255,255,255,.75);
-  white-space:nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width:640px){
+@media (max-width: 640px) {
   /* iPhone width: collapse to a flex stack so limit + actual stay
      readable without overflowing the modal. Each row stays ≥ 44 px
      (label line + value line + padding) so the strip remains touch-
      target friendly even though the row itself isn't clickable. */
-  .erk-thr-row{
-    display:flex;flex-wrap:wrap;
-    align-items:center;
-    gap:6px 8px;
-    min-height:48px;
-    padding:8px 10px;
+  .erk-thr-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    min-height: 48px;
+    padding: 8px 10px;
   }
   /* Label takes the first column; limit pushes to the right end of
      the first visual line via margin-left:auto so the line reads
      "Spawn-Schwelle … 0,50". */
-  .erk-thr-lbl{ flex:0 0 auto; }
-  .erk-thr-limit{ flex:0 0 auto; margin-left:auto; text-align:right; }
-  .erk-thr-sep{ display:none; }
+  .erk-thr-lbl {
+    flex: 0 0 auto;
+  }
+  .erk-thr-limit {
+    flex: 0 0 auto;
+    margin-left: auto;
+    text-align: right;
+  }
+  .erk-thr-sep {
+    display: none;
+  }
   /* Forces a line break before the actual-label so it starts a new
      visual row. Width:100% on an empty pseudo would also work; using
      order:0 / flex-basis:100% on a real flex child is the cleaner
      wrap-control trick.  */
-  .erk-thr-actual-lbl{
-    flex:1 1 100%;
-    font-size:11.5px;
-    margin-top:2px;
+  .erk-thr-actual-lbl {
+    flex: 1 1 100%;
+    font-size: 11.5px;
+    margin-top: 2px;
   }
   /* Wrap the actual-related cells onto their own flex line so the
      break above doesn't push limit + actual onto the same row. */
   .erk-thr-actual-lbl,
   .erk-thr-actual,
   .erk-thr-mark,
-  .erk-thr-tag{
+  .erk-thr-tag {
     /* Reset any grid-cell side-effects from desktop. */
-    grid-column:auto;
+    grid-column: auto;
   }
-  .erk-thr-actual{
-    margin-left:auto;
-    text-align:right;
-    flex:0 0 auto;
+  .erk-thr-actual {
+    margin-left: auto;
+    text-align: right;
+    flex: 0 0 auto;
   }
-  .erk-thr-mark{ flex:0 0 auto; }
-  .erk-thr-tag { flex:0 0 auto; }
+  .erk-thr-mark {
+    flex: 0 0 auto;
+  }
+  .erk-thr-tag {
+    flex: 0 0 auto;
+  }
 }

@@ -18,7 +18,7 @@ export const panelState = { camId: null };
 // On close we move the same node back into the tab bar so the next
 // open finds it where it was authored — keeps DOM-source-of-truth
 // honest and avoids a duplicate-id collision.
-function _reparkRecoveryBtnInTabBar(){
+function _reparkRecoveryBtnInTabBar() {
   const recBtn = document.getElementById('camTabRecoveryBtn');
   const tabBar = document.querySelector('.cam-tab-bar');
   if (recBtn && tabBar && recBtn.parentElement !== tabBar) tabBar.appendChild(recBtn);
@@ -27,12 +27,12 @@ function _reparkRecoveryBtnInTabBar(){
 // Reset the slide-panel to its closed state and re-park the wrapper
 // back inside #cameras (its original DOM home). Idempotent — safe to
 // call when the panel is already closed.
-export function _restoreEditWrapper(){
+export function _restoreEditWrapper() {
   const w = byId('cameraEditWrapper');
   if (!w) return;
   w.classList.remove('slide-open');
   _reparkRecoveryBtnInTabBar();
-  document.querySelectorAll('.cam-item.editing').forEach(el => el.classList.remove('editing'));
+  document.querySelectorAll('.cam-item.editing').forEach((el) => el.classList.remove('editing'));
   const sec = byId('cameras');
   if (sec && w.parentElement !== sec) sec.appendChild(w);
   panelState.camId = null;
@@ -42,11 +42,11 @@ export function _restoreEditWrapper(){
 // 400 ms transition. The double null-check inside the timer absorbs
 // the race where renderCameraSettings has wiped the wrapper between
 // the click and the reparent.
-export function _closeEditPanel(){
+export function _closeEditPanel() {
   if (!panelState.camId) return;
   const w = byId('cameraEditWrapper');
   w?.classList.remove('slide-open');
-  document.querySelectorAll('.cam-item.editing').forEach(el => el.classList.remove('editing'));
+  document.querySelectorAll('.cam-item.editing').forEach((el) => el.classList.remove('editing'));
   setTimeout(() => {
     // Reparent the recovery button back into the tab bar AFTER the
     // slide-out finishes. Doing it earlier (before the animation)

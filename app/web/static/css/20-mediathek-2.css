@@ -1,47 +1,222 @@
 /* ── Lightbox ──────────────────────────────────────────────────────────── */
-.ws-lb{position:fixed;inset:0;z-index:var(--z-modal-top);display:none;align-items:center;justify-content:center;padding:24px}
-.ws-lb.open{display:flex}
-.ws-lb-backdrop{position:absolute;inset:0;background:rgba(8,5,16,0.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:zoom-out}
-.ws-lb-shell{position:relative;display:grid;grid-template-rows:1fr auto auto;gap:14px;width:min(960px,100%);max-height:calc(100dvh - 48px);background:#0d141d;border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.5);overflow:hidden}
-.ws-lb-close,.ws-lb-prev,.ws-lb-next{position:absolute;background:rgba(255,255,255,0.05);color:#fff;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;transition:background .15s}
-.ws-lb-close{top:14px;right:14px;width:36px;height:36px;z-index:5}
-.ws-lb-prev,.ws-lb-next{top:50%;transform:translateY(-50%);width:44px;height:44px;font-size:28px;line-height:1;z-index:5}
-.ws-lb-prev{left:8px} .ws-lb-next{right:8px}
-.ws-lb-close:hover,.ws-lb-prev:hover,.ws-lb-next:hover{background:rgba(127,174,201,0.35)}
-.ws-lb-video-wrap{display:flex;align-items:center;justify-content:center;background:#000;border-radius:10px;overflow:hidden;min-height:240px}
-.ws-lb-video-wrap video{width:100%;max-height:60vh;max-height:60dvh;object-fit:contain;display:block;background:#000}
-.ws-lb-meta{display:grid;gap:8px;padding:0 4px;color:var(--text);font-size:13px}
-.ws-lb-headline{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.ws-lb-type-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-weight:700;font-size:13px}
-.ws-lb-date{font-size:14px;font-weight:600;color:var(--text)}
-.ws-lb-cam{font-size:12px;color:var(--muted)}
-.ws-lb-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:4px}
+.ws-lb {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-top);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.ws-lb.open {
+  display: flex;
+}
+.ws-lb-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 5, 16, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: zoom-out;
+}
+.ws-lb-shell {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  gap: 14px;
+  width: min(960px, 100%);
+  max-height: calc(100dvh - 48px);
+  background: #0d141d;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.ws-lb-close,
+.ws-lb-prev,
+.ws-lb-next {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  transition: background 0.15s;
+}
+.ws-lb-close {
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  z-index: 5;
+}
+.ws-lb-prev,
+.ws-lb-next {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  font-size: 28px;
+  line-height: 1;
+  z-index: 5;
+}
+.ws-lb-prev {
+  left: 8px;
+}
+.ws-lb-next {
+  right: 8px;
+}
+.ws-lb-close:hover,
+.ws-lb-prev:hover,
+.ws-lb-next:hover {
+  background: rgba(127, 174, 201, 0.35);
+}
+.ws-lb-video-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  min-height: 240px;
+}
+.ws-lb-video-wrap video {
+  width: 100%;
+  max-height: 60vh;
+  max-height: 60dvh;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+.ws-lb-meta {
+  display: grid;
+  gap: 8px;
+  padding: 0 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+.ws-lb-headline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ws-lb-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.ws-lb-date {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ws-lb-cam {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ws-lb-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-top: 4px;
+}
 /* Weather data rows in the lightbox detail card. The grid auto-fits as
    many columns as the shell allows; on iPhone width that is normally
    2 columns, but the row's flex children used to overflow because they
    had no min-width:0 — long values like "0.1 mm/h" would push the
    right edge past the grid track. Now: the key flexes and ellipsises
    if needed, the value never shrinks but stays inside the cell. */
-.ws-lb-rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px}
-.ws-lb-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,0.03);border-radius:8px;min-width:0;overflow:hidden}
-.ws-lb-row--empty{justify-content:center;color:var(--muted);font-style:italic}
-.ws-lb-row-key{color:var(--muted);font-size:12px;min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ws-lb-row-val{font-weight:600;color:var(--text);font-size:12px;font-variant-numeric:tabular-nums;text-align:right;flex-shrink:0;white-space:nowrap}
-.ws-lb-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
-.ws-lb-actions .danger-btn{color:#ef4444}
+.ws-lb-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+.ws-lb-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.ws-lb-row--empty {
+  justify-content: center;
+  color: var(--muted);
+  font-style: italic;
+}
+.ws-lb-row-key {
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-lb-row-val {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ws-lb-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+.ws-lb-actions .danger-btn {
+  color: #ef4444;
+}
 
-@media (max-width:640px){
-  .ws-lb{padding:0}
-  .ws-lb-shell{border-radius:0;max-height:100dvh;padding:12px}
-  .ws-lb-close{top:8px;right:8px;width:34px;height:34px}
-  .ws-lb-prev,.ws-lb-next{width:38px;height:38px;font-size:24px}
-  .ws-lb-meta{font-size:12px}
+@media (max-width: 640px) {
+  .ws-lb {
+    padding: 0;
+  }
+  .ws-lb-shell {
+    border-radius: 0;
+    max-height: 100dvh;
+    padding: 12px;
+  }
+  .ws-lb-close {
+    top: 8px;
+    right: 8px;
+    width: 34px;
+    height: 34px;
+  }
+  .ws-lb-prev,
+  .ws-lb-next {
+    width: 38px;
+    height: 38px;
+    font-size: 24px;
+  }
+  .ws-lb-meta {
+    font-size: 12px;
+  }
   /* On iPhone-SE-class widths force a single column. minmax(140,1fr)
      fits two cols with each track ~165 px after gaps + shell padding,
      and once the row borders + 10 px row padding are subtracted from
      each track the value column has ~80 px — enough for "0.1 mm/h"
      in normal text but it gets visually cramped. One column gives
      each row the whole shell width. */
-  .ws-lb-rows{grid-template-columns:1fr}
+  .ws-lb-rows {
+    grid-template-columns: 1fr;
+  }
 }
-

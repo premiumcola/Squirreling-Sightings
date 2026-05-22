@@ -15,7 +15,11 @@ async function _request(url, init = {}) {
   const r = await fetch(url, init);
   if (!r.ok) {
     let detail;
-    try { detail = await r.text(); } catch { detail = r.statusText; }
+    try {
+      detail = await r.text();
+    } catch {
+      detail = r.statusText;
+    }
     throw new Error(detail || `${r.status} ${r.statusText}`);
   }
   // 204 No Content / empty body — return null rather than crashing
@@ -28,23 +32,26 @@ async function _request(url, init = {}) {
 
 export const apiGet = (url) => _request(url);
 
-export const apiPost = (url, body) => _request(url, {
-  method: 'POST',
-  headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
-  body: body !== undefined ? JSON.stringify(body) : undefined,
-});
+export const apiPost = (url, body) =>
+  _request(url, {
+    method: 'POST',
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
 
-export const apiPut = (url, body) => _request(url, {
-  method: 'PUT',
-  headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
-  body: body !== undefined ? JSON.stringify(body) : undefined,
-});
+export const apiPut = (url, body) =>
+  _request(url, {
+    method: 'PUT',
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
 
-export const apiDelete = (url, body) => _request(url, {
-  method: 'DELETE',
-  headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
-  body: body !== undefined ? JSON.stringify(body) : undefined,
-});
+export const apiDelete = (url, body) =>
+  _request(url, {
+    method: 'DELETE',
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
 
 // Legacy fetch helper — same shape as the original. Other modules
 // that haven't migrated yet still import this name.

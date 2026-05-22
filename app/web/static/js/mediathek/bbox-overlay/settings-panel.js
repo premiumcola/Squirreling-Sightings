@@ -32,20 +32,20 @@ const _SET_STEP_ICONS = {
 const _SET_HEADER_ICON =
   '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 0 1 7.04 4.29l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.31.61.85 1.04 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 
-function _fmtPct(v){
+function _fmtPct(v) {
   if (v == null || !Number.isFinite(parseFloat(v))) return '—';
   return `${Math.round(parseFloat(v) * 100)} %`;
 }
 
-function _fmtClassList(arr){
+function _fmtClassList(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return 'alle Klassen';
-  return arr.map(l => OBJ_LABEL[l] || l).join(', ');
+  return arr.map((l) => OBJ_LABEL[l] || l).join(', ');
 }
 
 // Build the "Erreicht" cell for step 1 — what classes actually
 // produced tracks in this clip. Reads achievement.tracks_by_class
 // (filled in by the worker after tracks.json lands).
-function _achStep1(ach){
+function _achStep1(ach) {
   const tbc = ach?.tracks_by_class;
   if (!tbc || typeof tbc !== 'object' || Object.keys(tbc).length === 0) return '—';
   return Object.entries(tbc)
@@ -54,60 +54,65 @@ function _achStep1(ach){
 }
 
 // Step 2 "Erreicht" — peak score per class with class-colour pill.
-function _achStep2(ach){
+function _achStep2(ach) {
   const peaks = ach?.peak_score_by_class;
   if (!peaks || typeof peaks !== 'object' || Object.keys(peaks).length === 0) return '—';
-  return Object.entries(peaks).map(([k, v]) => {
-    const c = colors[k] || colors.unknown;
-    return `<span class="lbset-peak" style="color:${c}">${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %</span>`;
-  }).join(' · ');
+  return Object.entries(peaks)
+    .map(([k, v]) => {
+      const c = colors[k] || colors.unknown;
+      return `<span class="lbset-peak" style="color:${c}">${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %</span>`;
+    })
+    .join(' · ');
 }
 
 // Step 3 "Erreicht" — per-track confirmation summary. Each track
 // reads "Person #1: 4×/3.2s ✓" with a green ✓ if confirmed, grey
 // circle otherwise.
-function _achStep3(ach){
+function _achStep3(ach) {
   const list = ach?.confirm_hits_by_track;
   if (!Array.isArray(list) || list.length === 0) return '—';
-  return list.map((t, i) => {
-    const lbl = OBJ_LABEL[t.label] || t.label || '?';
-    const ok = t.confirmed ? '<span class="lbset-ok">✓</span>'
-                           : '<span class="lbset-no">○</span>';
-    return `${lbl} #${i + 1}: ${t.hit_count}× / ${(t.span_seconds || 0).toFixed(1)}s ${ok}`;
-  }).join('<br>');
+  return list
+    .map((t, i) => {
+      const lbl = OBJ_LABEL[t.label] || t.label || '?';
+      const ok = t.confirmed
+        ? '<span class="lbset-ok">✓</span>'
+        : '<span class="lbset-no">○</span>';
+      return `${lbl} #${i + 1}: ${t.hit_count}× / ${(t.span_seconds || 0).toFixed(1)}s ${ok}`;
+    })
+    .join('<br>');
 }
 
 // Step 4 "Erreicht" — inference avg with status-coloured number.
 // CPU emergency renders the value in orange (#f97316); ok / elevated
 // stay in the default panel text colour.
-function _achStep4(ach){
+function _achStep4(ach) {
   const ms = ach?.inference_avg_ms;
   const status = ach?.inference_status;
   if (ms == null || !Number.isFinite(parseFloat(ms))) return '—';
-  const tone = status === 'cpu_emergency' ? 'is-emergency'
-             : status === 'elevated' ? 'is-elevated' : '';
+  const tone =
+    status === 'cpu_emergency' ? 'is-emergency' : status === 'elevated' ? 'is-elevated' : '';
   return `<span class="lbset-infer ${tone}">${Math.round(parseFloat(ms))} ms</span>`;
 }
 
 // Step 5 "Erreicht" — pretrigger fired flag.
-function _achStep5(ach){
+function _achStep5(ach) {
   if (ach?.motion_pretrigger_fired) return 'Pretrigger ausgelöst';
   return '—';
 }
 
-export function lbRenderSettingsPanel(item, hostOverride){
+export function lbRenderSettingsPanel(item, hostOverride) {
   // hostOverride lets the mediaview tabs container render the
   // settings panel inside a tab body instead of the global
   // #lightboxSettings element. Default behaviour (no override) keeps
   // the legacy callsite working bit-for-bit.
   const host = hostOverride || byId('lightboxSettings');
   if (!host) return;
-  if (!item || item.type === 'timelapse'){
+  if (!item || item.type === 'timelapse') {
     host.innerHTML = '';
     return;
   }
   const rs = item.recording_settings;
-  if (!rs || typeof rs !== 'object' || rs.mode === 'timelapse'){
+  if (!rs || typeof rs !== 'object' || rs.mode === 'timelapse') {
     host.innerHTML = `<div class="lbset-missing">Settings nicht aufgezeichnet · ältere Aufnahme</div>`;
     return;
   }
@@ -116,46 +121,58 @@ export function lbRenderSettingsPanel(item, hostOverride){
   // Pre-render per-step rows. Each step shows Gesetzt (the recording
   // config) and Erreicht (what the clip's data actually produced),
   // plus the wizard-mirroring numeric circle + icon + title + hint.
-  const objFilterCell = (rs.object_filter == null)
-    ? 'alle Klassen'
-    : _fmtClassList(rs.object_filter);
+  const objFilterCell = rs.object_filter == null ? 'alle Klassen' : _fmtClassList(rs.object_filter);
 
-  const conf2nd = (rs.conf_thresh_per_class && Object.keys(rs.conf_thresh_per_class).length > 0)
-    ? Object.entries(rs.conf_thresh_per_class)
-        .map(([k, v]) => `${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %`)
-        .join(', ')
-    : null;
+  const conf2nd =
+    rs.conf_thresh_per_class && Object.keys(rs.conf_thresh_per_class).length > 0
+      ? Object.entries(rs.conf_thresh_per_class)
+          .map(([k, v]) => `${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %`)
+          .join(', ')
+      : null;
 
   const steps = [
     {
-      num: 1, title: 'Was suchen?', sub: 'Klassen-Filter',
+      num: 1,
+      title: 'Was suchen?',
+      sub: 'Klassen-Filter',
       setVal: objFilterCell,
       achVal: _achStep1(ach),
     },
     {
-      num: 2, title: 'Wie sicher?', sub: 'Konfidenz',
-      setVal: _fmtPct(rs.conf_thresh_general)
-        + (conf2nd ? ` <span class="lbset-row-aux">${conf2nd}</span>` : ''),
+      num: 2,
+      title: 'Wie sicher?',
+      sub: 'Konfidenz',
+      setVal:
+        _fmtPct(rs.conf_thresh_general) +
+        (conf2nd ? ` <span class="lbset-row-aux">${conf2nd}</span>` : ''),
       achVal: _achStep2(ach),
     },
     {
-      num: 3, title: 'Wie oft bestätigen?', sub: 'Anti-Fehlalarm',
+      num: 3,
+      title: 'Wie oft bestätigen?',
+      sub: 'Anti-Fehlalarm',
       setVal: `${rs.confirm_n ?? '—'} Treffer in ${rs.confirm_seconds ?? '—'} s`,
       achVal: _achStep3(ach),
     },
     {
-      num: 4, title: 'Wie schnell scannen?', sub: 'Analyse-Intervall',
+      num: 4,
+      title: 'Wie schnell scannen?',
+      sub: 'Analyse-Intervall',
       setVal: `${rs.sample_interval_ms ?? '—'} ms`,
       achVal: _achStep4(ach),
     },
     {
-      num: 5, title: 'Bewegungs-Vortrigger', sub: 'vor der KI',
+      num: 5,
+      title: 'Bewegungs-Vortrigger',
+      sub: 'vor der KI',
       setVal: _fmtPct(rs.motion_pretrigger_sensitivity),
       achVal: _achStep5(ach),
     },
   ];
 
-  const stepsHtml = steps.map(st => `
+  const stepsHtml = steps
+    .map(
+      (st) => `
     <div class="lbset-step">
       <div class="lbset-step-head">
         <span class="lbset-step-num">${st.num}</span>
@@ -169,13 +186,16 @@ export function lbRenderSettingsPanel(item, hostOverride){
         <span class="lbset-row-label">Erreicht</span>
         <span class="lbset-row-value">${st.achVal}</span>
       </div>
-    </div>`).join('');
+    </div>`,
+    )
+    .join('');
 
   // Trailing "+" row — non-wizard items that still belong here so
   // the user has the full picture in one place.
-  const nachlauf = (rs.post_motion_seconds != null && rs.post_motion_seconds > 0)
-    ? `${rs.post_motion_seconds} s`
-    : 'Standard';
+  const nachlauf =
+    rs.post_motion_seconds != null && rs.post_motion_seconds > 0
+      ? `${rs.post_motion_seconds} s`
+      : 'Standard';
   const extrasHtml = `
     <div class="lbset-extras">
       <div class="lbset-extras-row">
@@ -207,7 +227,7 @@ export function lbRenderSettingsPanel(item, hostOverride){
 
   const header = host.querySelector('.lbset-header');
   const body = host.querySelector('.lbset-body');
-  if (header && body){
+  if (header && body) {
     header.addEventListener('click', () => {
       const open = body.hidden;
       body.hidden = !open;

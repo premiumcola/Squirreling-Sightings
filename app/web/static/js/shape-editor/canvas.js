@@ -5,29 +5,29 @@
 // dependency graph one-way).
 import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
-import {
-  ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL,
-} from '../core/zone-tokens.js';
+import { ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL } from '../core/zone-tokens.js';
 import { _polyPoints, _polyLabels, _polyCurves } from './geometry.js';
 
 // Labels available for per-polygon scoping. Mirrors KNOWN_OBJECT_LABELS
 // in schema.py — keep in sync if a new class joins the detector.
 export const _SHAPE_LABEL_OPTS = [
-  { k: 'person',   l: 'Person' },
-  { k: 'cat',      l: 'Katze' },
-  { k: 'bird',     l: 'Vogel' },
-  { k: 'car',      l: 'Auto' },
-  { k: 'dog',      l: 'Hund' },
+  { k: 'person', l: 'Person' },
+  { k: 'cat', l: 'Katze' },
+  { k: 'bird', l: 'Vogel' },
+  { k: 'car', l: 'Auto' },
+  { k: 'dog', l: 'Hund' },
   { k: 'squirrel', l: 'Eichhörnchen' },
 ];
 
-export function getCanvasCtx(){ return byId('maskCanvas').getContext('2d'); }
+export function getCanvasCtx() {
+  return byId('maskCanvas').getContext('2d');
+}
 
 // If the snapshot fails (camera offline, no recent frame, etc.) we
 // still want a usable drawing surface — set the canvas to a fixed
 // 1280×720 gray placeholder so clicks are mapped to a real coordinate
 // space and the user can draw zones blind.
-export function _maskCanvasFallback(){
+export function _maskCanvasFallback() {
   const canvas = byId('maskCanvas');
   if (!canvas) return;
   canvas.width = 1280;
@@ -42,11 +42,15 @@ export function _maskCanvasFallback(){
   ctx.fillStyle = '#64748b';
   ctx.font = '14px system-ui,sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Snapshot nicht verfügbar — Zonen können trotzdem gezeichnet werden.', canvas.width / 2, canvas.height / 2);
+  ctx.fillText(
+    'Snapshot nicht verfügbar — Zonen können trotzdem gezeichnet werden.',
+    canvas.width / 2,
+    canvas.height / 2,
+  );
   ctx.textAlign = 'left';
 }
 
-function scaleForCanvas(el, img){
+function scaleForCanvas(el, img) {
   // Internal canvas resolution = source resolution. canvasPoint() rescales
   // pointer events from CSS pixels (rect.width/height) to canvas pixels
   // (canvas.width/height) so polygon coordinates stay stable across any
@@ -60,7 +64,7 @@ function scaleForCanvas(el, img){
   el.style.height = '';
 }
 
-function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
+function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx) {
   const pts = _polyPoints(poly);
   if (!pts.length) return;
   // C2 — segment-aware path. For each segment i (0..N-1, last wrapping
@@ -71,10 +75,10 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   const curves = _polyCurves(poly);
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 0; i < pts.length; i++){
+  for (let i = 0; i < pts.length; i++) {
     const pNext = pts[(i + 1) % pts.length];
     const cp = curves[i];
-    if (cp && typeof cp === 'object' && Number.isFinite(cp.x) && Number.isFinite(cp.y)){
+    if (cp && typeof cp === 'object' && Number.isFinite(cp.x) && Number.isFinite(cp.y)) {
       ctx.quadraticCurveTo(cp.x, cp.y, pNext.x, pNext.y);
     } else {
       ctx.lineTo(pNext.x, pNext.y);
@@ -97,7 +101,7 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   // visual radius so touch taps stay comfortable.
   const hov = shapeState.hoverVertex;
   const isHov = (j) => hov && hov.kind === kind && hov.polyIdx === idx && hov.ptIdx === j;
-  for (let j = 0; j < pts.length; j++){
+  for (let j = 0; j < pts.length; j++) {
     const r = isHov(j) ? 7 : 5;
     ctx.beginPath();
     ctx.arc(pts[j].x, pts[j].y, r, 0, Math.PI * 2);
@@ -113,12 +117,12 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   // while a new polygon is being placed so the user can drop points
   // without the editor competing visually. _hitMidpoint mirrors the
   // midpoint formula so click targeting stays aligned.
-  if (!shapeState.points || shapeState.points.length === 0){
-    for (let i = 0; i < pts.length; i++){
+  if (!shapeState.points || shapeState.points.length === 0) {
+    for (let i = 0; i < pts.length; i++) {
       const p0 = pts[i];
       const p1 = pts[(i + 1) % pts.length];
       const cp = curves[i];
-      if (cp && Number.isFinite(cp.x) && Number.isFinite(cp.y)){
+      if (cp && Number.isFinite(cp.x) && Number.isFinite(cp.y)) {
         const mx = 0.25 * p0.x + 0.5 * cp.x + 0.25 * p1.x;
         const my = 0.25 * p0.y + 0.5 * cp.y + 0.25 * p1.y;
         // Dashed leader from segment midpoint to control point so the
@@ -160,9 +164,9 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
       }
     }
   }
-  if (poly && poly.label){
-    const minX = Math.min(...pts.map(p => p.x));
-    const minY = Math.min(...pts.map(p => p.y));
+  if (poly && poly.label) {
+    const minX = Math.min(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
     const labelY = Math.max(20, minY);
     ctx.fillStyle = 'rgba(0,0,0,.6)';
     ctx.fillRect(minX, labelY - 22, Math.max(70, poly.label.length * 9), 20);
@@ -171,10 +175,14 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
     ctx.fillText(poly.label, minX + 6, labelY - 7);
     // Second badge below: which labels this polygon scopes (or "Alle").
     const lbls = _polyLabels(poly);
-    const txt = lbls.length ? lbls.map(L => {
-      const o = _SHAPE_LABEL_OPTS.find(x => x.k === L);
-      return o ? o.l : L;
-    }).join(', ') : 'Alle Labels';
+    const txt = lbls.length
+      ? lbls
+          .map((L) => {
+            const o = _SHAPE_LABEL_OPTS.find((x) => x.k === L);
+            return o ? o.l : L;
+          })
+          .join(', ')
+      : 'Alle Labels';
     ctx.font = '500 11px system-ui,sans-serif';
     const w = Math.max(60, ctx.measureText(txt).width + 12);
     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -184,8 +192,9 @@ function drawPoly(ctx, poly, color, fillAlpha, emphasised, kind, idx){
   }
 }
 
-export function drawShapes(){
-  const img = byId('maskSnapshot'), canvas = byId('maskCanvas');
+export function drawShapes() {
+  const img = byId('maskSnapshot'),
+    canvas = byId('maskCanvas');
   if (!canvas) return;
   // Only re-scale to the snapshot when it actually loaded; if the
   // image is missing or broken we keep the placeholder dims set by
@@ -205,21 +214,21 @@ export function drawShapes(){
   // both fill colours line up at 0.18 on the canvas regardless
   // of caller-side overrides.
   (shapeState.zones || []).forEach((p, i) =>
-    drawPoly(ctx, p, ZONE_STROKE, 0.18, pulseId === `zone:${i}`, 'zone', i));
+    drawPoly(ctx, p, ZONE_STROKE, 0.18, pulseId === `zone:${i}`, 'zone', i),
+  );
   (shapeState.masks || []).forEach((p, i) =>
-    drawPoly(ctx, p, MASK_STROKE, 0.18, pulseId === `mask:${i}`, 'mask', i));
-  if (shapeState.points.length){
+    drawPoly(ctx, p, MASK_STROKE, 0.18, pulseId === `mask:${i}`, 'mask', i),
+  );
+  if (shapeState.points.length) {
     ctx.beginPath();
     ctx.moveTo(shapeState.points[0].x, shapeState.points[0].y);
-    shapeState.points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+    shapeState.points.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
     // Preview-stroke colour matches the committed-polygon colour for
     // the active mode so the user sees the upcoming shape's identity
     // while drawing. Vertex handles + the closing-point pulse below
     // stay neutral white so they remain visible against both blue
     // and red strokes.
-    const previewColor = shapeState.mode === 'mask'
-      ? MASK_STROKE
-      : ZONE_STROKE;
+    const previewColor = shapeState.mode === 'mask' ? MASK_STROKE : ZONE_STROKE;
     ctx.strokeStyle = previewColor;
     ctx.lineWidth = 2;
     ctx.setLineDash([7, 6]);
@@ -246,13 +255,14 @@ export function drawShapes(){
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
-    if (closable){
+    if (closable) {
       const first = shapeState.points[0];
       const t = (Date.now() % 1200) / 1200;
       const phase = 0.5 - 0.5 * Math.cos(t * Math.PI * 2);
       const ringR = 16 + phase * 8;
       const alpha = 0.7 - phase * 0.5;
-      const cw = canvas.width, chh = canvas.height;
+      const cw = canvas.width,
+        chh = canvas.height;
       const clamp = (v, r, max) => Math.max(r, Math.min(max - r, v));
       const cx = clamp(first.x, 24, cw);
       const cy = clamp(first.y, 24, chh);
@@ -272,11 +282,11 @@ export function drawShapes(){
 // screen. Redraws drawShapes() ~30 fps so the closing-point ring pulses
 // smoothly.
 let _shapePulseRaf = null;
-function _ensureShapePulseRaf(active){
-  if (active && !_shapePulseRaf){
+function _ensureShapePulseRaf(active) {
+  if (active && !_shapePulseRaf) {
     const tick = () => {
       // Stop if the editor closed or the in-progress polygon is gone.
-      if (!shapeState.camera || (shapeState.points || []).length < 3){
+      if (!shapeState.camera || (shapeState.points || []).length < 3) {
         _shapePulseRaf = null;
         return;
       }
@@ -284,7 +294,7 @@ function _ensureShapePulseRaf(active){
       _shapePulseRaf = requestAnimationFrame(tick);
     };
     _shapePulseRaf = requestAnimationFrame(tick);
-  } else if (!active && _shapePulseRaf){
+  } else if (!active && _shapePulseRaf) {
     cancelAnimationFrame(_shapePulseRaf);
     _shapePulseRaf = null;
   }

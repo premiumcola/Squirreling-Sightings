@@ -1,6 +1,6 @@
-            <div class="cam-tab-panel active" id="cam-tab-allgemein">
-              <div style="display:grid;gap:8px">
-                <!-- tx412 — identity row now carries a colour picker
+<div class="cam-tab-panel active" id="cam-tab-allgemein">
+  <div style="display: grid; gap: 8px">
+    <!-- tx412 — identity row now carries a colour picker
                      instead of the old icon-emoji slot. The icon is
                      auto-derived at render time via getCameraIcon(name)
                      and never goes through an <input>; the emoji slot
@@ -11,7 +11,7 @@
                      flagging the field so the form-submit path strips
                      it back to "" — keeping the JSON tidy when the
                      user picks the auto colour. -->
-                <!-- B1 · identity row redesign. The dead vertical column
+    <!-- B1 · identity row redesign. The dead vertical column
                      (label · color swatch · Auto button) collapsed into
                      a single avatar tile: getCameraIcon(name) rendered
                      in the current --cam-color tint, clicking the tile
@@ -20,21 +20,27 @@
                      has set a manual override; on auto-tone the row
                      reads as just "icon · input". camColor + dataset.auto
                      submit semantics are unchanged. -->
-                <div class="cam-name-row">
-                  <div class="cam-identity-avatar">
-                    <button type="button" class="cam-avatar-btn" id="camAvatarBtn" title="Symbolfarbe ändern" aria-label="Symbolfarbe ändern">
-                      <span class="cam-avatar-icon" id="camAvatarIcon" aria-hidden="true"></span>
-                    </button>
-                    <input type="color" name="color" id="camColor" autocomplete="off" tabindex="-1" />
-                    <span class="cam-avatar-sublabel">Symbolfarbe</span>
-                    <button type="button" id="camColorReset" class="cam-color-reset-link" hidden>↺ auto</button>
-                  </div>
-                  <div class="field-wrap cam-name-field">
-                    <input name="name" placeholder="Werkstatt" required />
-                    <span class="field-label">Anzeigename</span>
-                  </div>
-                </div>
-                <!-- Manuf + Model row plus a labelled green probe button.
+    <div class="cam-name-row">
+      <div class="cam-identity-avatar">
+        <button
+          type="button"
+          class="cam-avatar-btn"
+          id="camAvatarBtn"
+          title="Symbolfarbe ändern"
+          aria-label="Symbolfarbe ändern"
+        >
+          <span class="cam-avatar-icon" id="camAvatarIcon" aria-hidden="true"></span>
+        </button>
+        <input type="color" name="color" id="camColor" autocomplete="off" tabindex="-1" />
+        <span class="cam-avatar-sublabel">Symbolfarbe</span>
+        <button type="button" id="camColorReset" class="cam-color-reset-link" hidden>↺ auto</button>
+      </div>
+      <div class="field-wrap cam-name-field">
+        <input name="name" placeholder="Werkstatt" required />
+        <span class="field-label">Anzeigename</span>
+      </div>
+    </div>
+    <!-- Manuf + Model row plus a labelled green probe button.
                      Backend auto-detects via Reolink GetDevInfo on save
                      when these are blank; the probe button triggers a
                      fresh probe even when filled (firmware update /
@@ -42,44 +48,66 @@
                      erkannt" hint surfaces when the most recent save
                      filled the field by auto-detect — disappears on the
                      next manual edit. -->
-                <div class="cam-id-row">
-                  <div class="field-wrap">
-                    <input name="manufacturer" placeholder="Reolink" autocomplete="off" />
-                    <span class="field-label">Hersteller</span>
-                    <span class="cam-autodetected-hint" data-for="manufacturer" hidden>automatisch erkannt</span>
-                  </div>
-                  <div class="field-wrap">
-                    <input name="model" placeholder="RLC-810A" autocomplete="off" />
-                    <span class="field-label">Modell</span>
-                    <span class="cam-autodetected-hint" data-for="model" hidden>automatisch erkannt</span>
-                  </div>
-                  <button type="button" id="camProbeDeviceInfo" class="btn-action action-green cam-probe-btn"
-                          title="Hersteller &amp; Modell abfragen (Reolink GetDevInfo)"
-                          aria-label="Hersteller &amp; Modell abfragen">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                    <span>Hersteller &amp; Modell abfragen</span>
-                  </button>
-                </div>
-                <!-- Live ID preview. Read-only and updated by JS on every
+    <div class="cam-id-row">
+      <div class="field-wrap">
+        <input name="manufacturer" placeholder="Reolink" autocomplete="off" />
+        <span class="field-label">Hersteller</span>
+        <span class="cam-autodetected-hint" data-for="manufacturer" hidden
+          >automatisch erkannt</span
+        >
+      </div>
+      <div class="field-wrap">
+        <input name="model" placeholder="RLC-810A" autocomplete="off" />
+        <span class="field-label">Modell</span>
+        <span class="cam-autodetected-hint" data-for="model" hidden>automatisch erkannt</span>
+      </div>
+      <button
+        type="button"
+        id="camProbeDeviceInfo"
+        class="btn-action action-green cam-probe-btn"
+        title="Hersteller &amp; Modell abfragen (Reolink GetDevInfo)"
+        aria-label="Hersteller &amp; Modell abfragen"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="23 4 23 10 17 10" />
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        </svg>
+        <span>Hersteller &amp; Modell abfragen</span>
+      </button>
+    </div>
+    <!-- Live ID preview. Read-only and updated by JS on every
                      change to manufacturer / model / name / IP. -->
-                <div class="cam-id-preview">
-                  <span class="cam-id-preview-label">Kamera-ID</span>
-                  <code class="cam-id-preview-value" id="camIdPreview" data-camid="">unknown_unknown_unknown_unknown</code>
-                </div>
-                <span class="field-label cam-id-preview-subtitle">Kamera-ID &middot; wird automatisch aus Hersteller, Modell, Name und IP-Endung erzeugt</span>
-                <!-- Erkennungs-Modus — architecture-level switch (motion vs.
+    <div class="cam-id-preview">
+      <span class="cam-id-preview-label">Kamera-ID</span>
+      <code class="cam-id-preview-value" id="camIdPreview" data-camid=""
+        >unknown_unknown_unknown_unknown</code
+      >
+    </div>
+    <span class="field-label cam-id-preview-subtitle"
+      >Kamera-ID &middot; wird automatisch aus Hersteller, Modell, Name und IP-Endung erzeugt</span
+    >
+    <!-- Erkennungs-Modus — architecture-level switch (motion vs.
                      KI vs. both). Lives here on the Allgemein tab rather
                      than the Erkennung tab because it picks WHICH pipeline
                      runs, not how to tune it. -->
-                <div class="cam-sep"></div>
-                <div class="field-wrap">
-                  <select name="detection_trigger">
-                    <option value="motion_and_objects">Bewegung + Objekte (Standard)</option>
-                    <option value="objects_only">Nur Objekte (KI)</option>
-                    <option value="motion_only">Nur Bewegung</option>
-                  </select>
-                  <span class="field-label">Erkennungs-Modus · Welche Art von Event diese Kamera erkennt.</span>
-                </div>
-              </div>
-            </div>
-
+    <div class="cam-sep"></div>
+    <div class="field-wrap">
+      <select name="detection_trigger">
+        <option value="motion_and_objects">Bewegung + Objekte (Standard)</option>
+        <option value="objects_only">Nur Objekte (KI)</option>
+        <option value="motion_only">Nur Bewegung</option>
+      </select>
+      <span class="field-label">Erkennungs-Modus · Welche Art von Event diese Kamera erkennt.</span>
+    </div>
+  </div>
+</div>

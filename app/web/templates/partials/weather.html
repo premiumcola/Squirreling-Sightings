@@ -1,84 +1,112 @@
-      <section id="weather" class="panel section" data-accent="127,174,201">
-        <!-- Wetter-Ereignisse: clip grid + recaps + filter pills. The user
+<section id="weather" class="panel section" data-accent="127,174,201">
+  <!-- Wetter-Ereignisse: clip grid + recaps + filter pills. The user
              opens the section primarily to look at recent events, so this
              block sits at the top. Element ids (weatherSightingsBlock /
              Grid / Empty) keep the legacy "sightings" naming because the
              backend storage paths and API routes still use it — only the
              user-facing labels were renamed. -->
-        <div class="weather-sightings-block" id="weatherSightingsBlock">
-          <div class="weather-sightings-head">
-            <span class="ws-title">
-              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><use href="#icon-cloud-rain"/></svg>
-              Wetter-Ereignisse
-            </span>
-            <span class="ws-subtitle" id="weatherSightingsSubtitle"></span>
-          </div>
-          <div class="ws-recaps-row" id="weatherRecapsRow" hidden>
-            <div class="ws-recaps-title">Recaps</div>
-            <div class="ws-recaps-strip" id="weatherRecapsStrip"></div>
-          </div>
-          <div class="ws-filter-bar" id="weatherFilterBar"></div>
-          <div class="ws-grid" id="weatherSightingsGrid"></div>
-          <div class="ws-pagination media-pagination" id="weatherSightingsPagination" hidden></div>
-          <div class="ws-empty" id="weatherSightingsEmpty" hidden>
-            Noch keine Wetter-Ereignisse. Sobald eine Wetter-Kamera ein Ereignis erkennt (Gewitter, Starkregen, Nebel, Sonnenuntergang …), erscheint hier ein 10-Sekunden-Clip.
-          </div>
-        </div>
+  <div class="weather-sightings-block" id="weatherSightingsBlock">
+    <div class="weather-sightings-head">
+      <span class="ws-title">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <use href="#icon-cloud-rain" />
+        </svg>
+        Wetter-Ereignisse
+      </span>
+      <span class="ws-subtitle" id="weatherSightingsSubtitle"></span>
+    </div>
+    <div class="ws-recaps-row" id="weatherRecapsRow" hidden>
+      <div class="ws-recaps-title">Recaps</div>
+      <div class="ws-recaps-strip" id="weatherRecapsStrip"></div>
+    </div>
+    <div class="ws-filter-bar" id="weatherFilterBar"></div>
+    <div class="ws-grid" id="weatherSightingsGrid"></div>
+    <div class="ws-pagination media-pagination" id="weatherSightingsPagination" hidden></div>
+    <div class="ws-empty" id="weatherSightingsEmpty" hidden>
+      Noch keine Wetter-Ereignisse. Sobald eine Wetter-Kamera ein Ereignis erkennt (Gewitter,
+      Starkregen, Nebel, Sonnenuntergang …), erscheint hier ein 10-Sekunden-Clip.
+    </div>
+  </div>
 
-        <!-- Wetterdaten & Prognose: persisted history of all numeric
+  <!-- Wetterdaten & Prognose: persisted history of all numeric
              Open-Meteo parameters + sun altitude, rendered as a single
              multi-line SVG chart with per-line normalisation. Fetches
              /api/weather/history on visibility (IntersectionObserver)
              and refreshes every 60 s while the section is in view. -->
-        <div class="ws-stats-block" id="weatherStatsBlock">
-          <div class="ws-stats-head">
-            <span class="ws-title">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><use href="#icon-trend"/></svg>
-              Wetterdaten &amp; Prognose
-            </span>
-            <div class="ws-stats-pills" id="weatherStatsPills" role="tablist" aria-label="Zeitfenster">
-              <button type="button" class="ws-stats-pill" data-hours="1">1 h</button>
-              <button type="button" class="ws-stats-pill" data-hours="6">6 h</button>
-              <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
-              <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
-              <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
-            </div>
-          </div>
-          <div class="ws-stats-chart-wrap" id="weatherStatsChartWrap">
-            <!-- populated by renderWeatherStatsChart() -->
-          </div>
-          <div class="ws-stats-legend" id="weatherStatsLegend">
-            <!-- populated by renderWeatherStatsLegend() -->
-          </div>
-          <div class="ws-stats-explainer" id="weatherStatsExplainer" hidden>
-            <!-- populated by renderWeatherStatsExplainer() when a chip is isolated -->
-          </div>
-        </div>
+  <div class="ws-stats-block" id="weatherStatsBlock">
+    <div class="ws-stats-head">
+      <span class="ws-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <use href="#icon-trend" />
+        </svg>
+        Wetterdaten &amp; Prognose
+      </span>
+      <div class="ws-stats-pills" id="weatherStatsPills" role="tablist" aria-label="Zeitfenster">
+        <button type="button" class="ws-stats-pill" data-hours="1">1 h</button>
+        <button type="button" class="ws-stats-pill" data-hours="6">6 h</button>
+        <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
+        <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
+        <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
+      </div>
+    </div>
+    <div class="ws-stats-chart-wrap" id="weatherStatsChartWrap">
+      <!-- populated by renderWeatherStatsChart() -->
+    </div>
+    <div class="ws-stats-legend" id="weatherStatsLegend">
+      <!-- populated by renderWeatherStatsLegend() -->
+    </div>
+    <div class="ws-stats-explainer" id="weatherStatsExplainer" hidden>
+      <!-- populated by renderWeatherStatsExplainer() when a chip is isolated -->
+    </div>
+  </div>
 
-        {# Wetter-Wartung — recovery actions + retention controls, placed
-           LAST in the section so the user lands on the events grid first
-           and only sees maintenance controls when they intentionally
-           scroll to the bottom. Mirrors the Mediathek-Wartung position
-           at the foot of partials/mediathek.html. #}
-        {% from 'partials/_maintenance_panel.html' import maintenance_panel %}
-        {% call maintenance_panel(
-                panel_id='set-weather-maint',
-                accent='127,174,201',
-                title='Wetter-Wartung',
-                hint='Nur bei Indexproblemen — normalerweise nicht nötig.',
-                retention={
-                    'form_id':      'weatherMaintForm',
-                    'val_id':       'ws_retention_days_val',
-                    'input_id':     'ws_retention_days',
-                    'toggle_id':    'ws_auto_cleanup',
-                    'days_name':    'retention_days',
-                    'enabled_name': 'auto_cleanup_enabled',
-                    'current':      90,
-                    'min':          7,
-                    'max':          365,
-                }
-        ) %}
-          <button type="button" id="weatherRescanBtn" class="btn btn-action action-green"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><circle cx="8" cy="8" r="3.5" stroke-opacity=".45"/><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none"/><line x1="8" y1="8" x2="13" y2="5.5" stroke-opacity=".85"/></svg> Wetter neu einlesen</button>
-          <button type="button" id="weatherThumbRegenBtn" class="btn btn-action action-green"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="1" y="3" width="10" height="8" rx="1.5"/><path d="M2 9l2.5-2.5 2 1.5 2.5-3L11 9"/><circle cx="13" cy="11" r="2.5"/><path d="M13 9.5v-.8M13 12.5v-.8M11.5 11h-.8M14.5 11h-.8 M12 9.8l-.5-.5M14.5 12.2l-.5-.5 M11.5 12.2l.5-.5M14 9.8l.5-.5"/></svg> Wetter-Thumbnails neu erzeugen</button>
-        {% endcall %}
-      </section>
+  {# Wetter-Wartung — recovery actions + retention controls, placed LAST in the section so the user
+  lands on the events grid first and only sees maintenance controls when they intentionally scroll
+  to the bottom. Mirrors the Mediathek-Wartung position at the foot of partials/mediathek.html. #}
+  {% from 'partials/_maintenance_panel.html' import maintenance_panel %} {% call maintenance_panel(
+  panel_id='set-weather-maint', accent='127,174,201', title='Wetter-Wartung', hint='Nur bei
+  Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'weatherMaintForm', 'val_id':
+  'ws_retention_days_val', 'input_id': 'ws_retention_days', 'toggle_id': 'ws_auto_cleanup',
+  'days_name': 'retention_days', 'enabled_name': 'auto_cleanup_enabled', 'current': 90, 'min': 7,
+  'max': 365, } ) %}
+  <button type="button" id="weatherRescanBtn" class="btn btn-action action-green">
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" />
+      <circle cx="8" cy="8" r="3.5" stroke-opacity=".45" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+      <line x1="8" y1="8" x2="13" y2="5.5" stroke-opacity=".85" />
+    </svg>
+    Wetter neu einlesen
+  </button>
+  <button type="button" id="weatherThumbRegenBtn" class="btn btn-action action-green">
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      aria-hidden="true"
+    >
+      <rect x="1" y="3" width="10" height="8" rx="1.5" />
+      <path d="M2 9l2.5-2.5 2 1.5 2.5-3L11 9" />
+      <circle cx="13" cy="11" r="2.5" />
+      <path
+        d="M13 9.5v-.8M13 12.5v-.8M11.5 11h-.8M14.5 11h-.8 M12 9.8l-.5-.5M14.5 12.2l-.5-.5 M11.5 12.2l.5-.5M14 9.8l.5-.5"
+      />
+    </svg>
+    Wetter-Thumbnails neu erzeugen
+  </button>
+  {% endcall %}
+</section>

@@ -1,9 +1,20 @@
 /* ── iOS / mobile foundation ─────────────────────────────────────────────
    Globals first (benign on desktop), then mobile-specific overrides under
    a single @media block. Desktop layout at ≥ 769 px is unaffected.        */
-html{-webkit-text-size-adjust:100%}
-body{overscroll-behavior-y:none}
-button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  overscroll-behavior-y: none;
+}
+button,
+[role='button'],
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
 
 /* ── Inline horizontal tab strips ────────────────────────────────────────
    Single shared rule for every "tabs in a row" component in the app
@@ -33,80 +44,127 @@ button,[role="button"],a,input,select,textarea{-webkit-tap-highlight-color:trans
        toggles a `.is-end` class once the strip is scrolled all the
        way; matching :not() drops the mask so the last tab isn't
        cosmetically faded when fully visible. */
-:where(.set-tabs,.coral-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar){
-  overflow-x:auto;
-  overflow-y:hidden;
-  touch-action:pan-x;
-  overscroll-behavior-x:contain;
-  overscroll-behavior-y:none;
-  -webkit-overflow-scrolling:touch;
-  scroll-snap-type:x proximity;
-  scrollbar-width:none;
+:where(
+  .set-tabs,
+  .coral-tabs,
+  .cam-recovery-tabs,
+  .media-filter-bar,
+  .cam-tab-bar,
+  .ws-filter-bar
+) {
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
 }
-:where(.set-tabs,.coral-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar)::-webkit-scrollbar{
-  display:none;
+:where(
+  .set-tabs,
+  .coral-tabs,
+  .cam-recovery-tabs,
+  .media-filter-bar,
+  .cam-tab-bar,
+  .ws-filter-bar
+)::-webkit-scrollbar {
+  display: none;
 }
 /* Right-edge fade — visible only while there is more content to the
    right. The 24 px transparent ramp sits flush against the strip
    edge so it reads as "this scrolls" without obscuring tab labels.
    `.is-end` lands when JS detects the strip is at scrollLeft-max. */
-:where(.set-tabs,.coral-tabs,.cam-recovery-tabs,.media-filter-bar,.cam-tab-bar,.ws-filter-bar):not(.is-end){
-  -webkit-mask-image:linear-gradient(
-    to right,
-    #000 0,
-    #000 calc(100% - 28px),
-    transparent 100%
-  );
-  mask-image:linear-gradient(
-    to right,
-    #000 0,
-    #000 calc(100% - 28px),
-    transparent 100%
-  );
+:where(
+  .set-tabs,
+  .coral-tabs,
+  .cam-recovery-tabs,
+  .media-filter-bar,
+  .cam-tab-bar,
+  .ws-filter-bar
+):not(.is-end) {
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
 }
 /* iOS suppresses user-scalable=no since 10 (accessibility), so double-tap
    zoom on buttons is the default. touch-action:manipulation kills exactly
    that without blocking pinch-zoom (gestures.js / lightbox image keep
    pinch via their own touch-action overrides). Side effect: the legacy
    ~300 ms iOS click-delay disappears, so taps feel instant. */
-button,[role="button"],a,input,select,textarea,
-.btn,.clickable,.tappable,.toggle{touch-action:manipulation}
+button,
+[role='button'],
+a,
+input,
+select,
+textarea,
+.btn,
+.clickable,
+.tappable,
+.toggle {
+  touch-action: manipulation;
+}
 /* Leaflet owns its own pinch + pan handling; manipulation would block
    map pinch-zoom. Restore default. */
-.leaflet-container{touch-action:auto}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.leaflet-container {
+  touch-action: auto;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Body-scroll lock when the off-canvas sidebar is open. The class is
    toggled from JS in tandem with .sidebar.mobile-open. */
-body.sidebar-locked{overflow:hidden;touch-action:none}
+body.sidebar-locked {
+  overflow: hidden;
+  touch-action: none;
+}
 
 /* Hover-only desktop affordances — cards scale on hover, action rows
    reveal. Re-gate these behind hover-capable pointers so touch devices
    don't get sticky hover state after a tap. */
-@media (hover:hover) and (pointer:fine){
-  .media-card:hover .mmc-img-wrap img{transform:scale(1.03)}
-  .media-card:hover .mmc-actions{opacity:1}
-  .mmc-btn:hover{transform:scale(1.08)}
+@media (hover: hover) and (pointer: fine) {
+  .media-card:hover .mmc-img-wrap img {
+    transform: scale(1.03);
+  }
+  .media-card:hover .mmc-actions {
+    opacity: 1;
+  }
+  .mmc-btn:hover {
+    transform: scale(1.08);
+  }
 }
-@media (hover:none) and (pointer:coarse){
+@media (hover: none) and (pointer: coarse) {
   /* Touch: keep media-card thumbnails calm (no zoom-on-press) and let
      the action row sit at full opacity by default — the user has no
      hover to reveal it. */
-  .media-card .mmc-img-wrap img{transform:none}
-  .mmc-actions{opacity:1}
+  .media-card .mmc-img-wrap img {
+    transform: none;
+  }
+  .mmc-actions {
+    opacity: 1;
+  }
 }
 
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* Bump form-input font-size to 16px to suppress Safari's auto-zoom on
      focus. Keep desktop sizes. */
-  input,select,textarea,
-  .toolbar input,.toolbar select,
-  .form input,.form select{font-size:16px}
+  input,
+  select,
+  textarea,
+  .toolbar input,
+  .toolbar select,
+  .form input,
+  .form select {
+    font-size: 16px;
+  }
 
   /* Sidebar (when forced open via desktop toggle in landscape iPad
      edge cases) lives at the viewport edge — pad into the iPhone
      safe-area so the notch doesn't overlap the brand row. */
-  .sidebar{padding-top:calc(12px + env(safe-area-inset-top))}
+  .sidebar {
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
 
   /* Single anchor for the iPhone status bar / Dynamic Island offset.
      The shell collapses to display:block at this width, so .main
@@ -120,22 +178,45 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      Note: the sidebar above already pads its own top inset because
      it's a separate fixed overlay; padding .main does NOT double-
      up there because the sidebar isn't a child of .main. */
-  .main{padding-top:calc(12px + env(safe-area-inset-top,0px))}
+  .main {
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
 
   /* Lightbox button placement on mobile —
        Close             top-right (notch-safe)
        Confirm + Delete  bottom row, above prev/next
        Prev + Next       bottom row, home-indicator-safe       */
-  #lightboxClose{top:calc(12px + env(safe-area-inset-top))}
-  #lightboxConfirm{top:auto;right:18px;bottom:calc(86px + env(safe-area-inset-bottom));left:auto}
-  #lightboxDelete{top:auto;right:auto;left:18px;bottom:calc(86px + env(safe-area-inset-bottom))}
-  #lightboxPrev,#lightboxNext{bottom:calc(20px + env(safe-area-inset-bottom));top:auto;transform:none}
+  #lightboxClose {
+    top: calc(12px + env(safe-area-inset-top));
+  }
+  #lightboxConfirm {
+    top: auto;
+    right: 18px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    left: auto;
+  }
+  #lightboxDelete {
+    top: auto;
+    right: auto;
+    left: 18px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+  #lightboxPrev,
+  #lightboxNext {
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    top: auto;
+    transform: none;
+  }
 
   /* Pinch-zoom on the lightbox image. The surrounding wrap consumes
      horizontal swipes for prev/next; pinch is a two-finger gesture and
      coexists. The image still respects max-height: 100dvh. */
-  #lightboxImg{touch-action:pinch-zoom}
-  #lightboxVideo{touch-action:manipulation}
+  #lightboxImg {
+    touch-action: pinch-zoom;
+  }
+  #lightboxVideo {
+    touch-action: manipulation;
+  }
 
   /* Mediathek filter pill bar — horizontal-scroll row that aligns
      with the section's content edges (no negative margin bleed,
@@ -145,31 +226,49 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      only need the layout-specific bits here.
      The 4 px vertical padding gives the pills clearance for the
      focus ring without touching the bar's outer height. */
-  .media-filter-bar{
-    flex-wrap:nowrap;
-    padding:4px 0;
-    margin:0;
+  .media-filter-bar {
+    flex-wrap: nowrap;
+    padding: 4px 0;
+    margin: 0;
   }
-  .media-pill{scroll-snap-align:start;flex-shrink:0}
+  .media-pill {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
 
   /* Pagination pills bumped from 32×32 to 40×40 with more gap so
      they're tappable in a horizontal row. */
-  .media-pagination{gap:8px}
-  .page-pill{width:40px;height:40px;font-size:14px}
+  .media-pagination {
+    gap: 8px;
+  }
+  .page-pill {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
 
   /* Drilldown header on mobile — back-button + counter on row 1, the
      filter bar (which already scrolls horizontally) on row 2. */
-  .media-drill-head{flex-direction:column;align-items:stretch;gap:8px}
-  .media-drill-head .media-filter-bar{flex:initial;width:100%}
+  .media-drill-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .media-drill-head .media-filter-bar {
+    flex: initial;
+    width: 100%;
+  }
 }
-@media (max-width:400px){
+@media (max-width: 400px) {
   /* Tighter grid on iPhone SE-class widths so two columns still feel
      like cards, not letterboxed thumbnails. */
-  .media-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  .media-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
 }
 
 /* ── Dashboard / live-card mobile sizing ──────────────────────────────── */
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* Multi-cam layouts (.cam-grid-2/-4/-n) collapse to one column at 900 px.
      The previous 21/9 letterbox flattened the frames and read as broken
      proportions on iPhone — sticking to 16/9 (the actual security-cam
@@ -179,47 +278,120 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      16/9 — multi-cam matches it now. */
   .cam-grid-2 .cv-frame,
   .cam-grid-4 .cv-frame,
-  .cam-grid-n .cv-frame{aspect-ratio:16/9}
+  .cam-grid-n .cv-frame {
+    aspect-ratio: 16/9;
+  }
 
   /* Placeholder geometry rescales for the ~165 px-tall frame. The 180 px
      fixed stage and 72/48 px icons would otherwise clip; everything below
      scales by ≈2/3 to match the new frame height. */
-  .cv-ph-stage{width:120px;height:120px}
-  .cv-ph-icon--red svg{width:52px;height:52px}
-  .cv-ph-icon:not(.cv-ph-icon--red) svg{width:36px;height:36px}
-  .cv-ph-label{font-size:12px}
-  .cv-ph-ring{width:40px;height:40px;margin:-20px 0 0 -20px}
-  .cv-ph-guides,.cv-ph-radar{width:130px;height:130px}
-  .cv-ph-radar{transform-origin:65px 65px}
+  .cv-ph-stage {
+    width: 120px;
+    height: 120px;
+  }
+  .cv-ph-icon--red svg {
+    width: 52px;
+    height: 52px;
+  }
+  .cv-ph-icon:not(.cv-ph-icon--red) svg {
+    width: 36px;
+    height: 36px;
+  }
+  .cv-ph-label {
+    font-size: 12px;
+  }
+  .cv-ph-ring {
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+  }
+  .cv-ph-guides,
+  .cv-ph-radar {
+    width: 130px;
+    height: 130px;
+  }
+  .cv-ph-radar {
+    transform-origin: 65px 65px;
+  }
   /* Orbit dots — desktop keyframes hardcode translateX(40/52/28). Switch
      to mobile-only keyframes with a smaller radius proportional to the
      shrunken stage. */
-  .cv-ph-orbit--1{animation-name:orbitDotMobile1}
-  .cv-ph-orbit--2{animation-name:orbitDotMobile2}
-  .cv-ph-orbit--3{animation-name:orbitDotMobile3}
+  .cv-ph-orbit--1 {
+    animation-name: orbitDotMobile1;
+  }
+  .cv-ph-orbit--2 {
+    animation-name: orbitDotMobile2;
+  }
+  .cv-ph-orbit--3 {
+    animation-name: orbitDotMobile3;
+  }
 }
-@keyframes orbitDotMobile1{from{transform:rotate(0deg) translateX(27px)}to{transform:rotate(360deg) translateX(27px)}}
-@keyframes orbitDotMobile2{from{transform:rotate(0deg) translateX(34px)}to{transform:rotate(-360deg) translateX(34px)}}
-@keyframes orbitDotMobile3{from{transform:rotate(0deg) translateX(19px)}to{transform:rotate(360deg) translateX(19px)}}
+@keyframes orbitDotMobile1 {
+  from {
+    transform: rotate(0deg) translateX(27px);
+  }
+  to {
+    transform: rotate(360deg) translateX(27px);
+  }
+}
+@keyframes orbitDotMobile2 {
+  from {
+    transform: rotate(0deg) translateX(34px);
+  }
+  to {
+    transform: rotate(-360deg) translateX(34px);
+  }
+}
+@keyframes orbitDotMobile3 {
+  from {
+    transform: rotate(0deg) translateX(19px);
+  }
+  to {
+    transform: rotate(360deg) translateX(19px);
+  }
+}
 
-@media (max-width:480px){
-  .cv-name{font-size:13px}
+@media (max-width: 480px) {
+  .cv-name {
+    font-size: 13px;
+  }
   /* Live pill — sized purely by content via the global rule in
      03-dashboard.css. Only the font-size shrinks one step on mobile
      so the pill reads as a quieter overlay on a 375 px card. */
-  .cv-pill-live-wrap{font-size:10px}
-  .cv-pill-live-wrap.cv-lp-open{max-width:calc(100vw - 32px)}
+  .cv-pill-live-wrap {
+    font-size: 10px;
+  }
+  .cv-pill-live-wrap.cv-lp-open {
+    max-width: calc(100vw - 32px);
+  }
   /* B3 mobile · the cluster is now a single-line badge ("aktiv",
      "aktiv bis HH:MM", "aktiv ab HH:MM", or "Kamera nicht scharf");
      the legacy sched/status font-size overrides no longer apply.
      Drop the badge font 11 → 10 on mobile so two clusters coexist
      on a 375 px tile without crowding the class-pill row beneath. */
-  .cv-channel-row{gap:8px}
-  .cv-channel-cluster{padding:2px 7px 2px 5px;gap:6px}
-  .cv-channel-cluster .cv-channel-icon{width:16px;height:16px}
-  .cv-channel-cluster .cv-channel-dot{width:14px;height:14px;margin-left:1px}
-  .cv-channel-cluster .cv-channel-label{font-size:10px}
-  .cv-pill-tl{font-size:10px;padding:2px 7px}
+  .cv-channel-row {
+    gap: 8px;
+  }
+  .cv-channel-cluster {
+    padding: 2px 7px 2px 5px;
+    gap: 6px;
+  }
+  .cv-channel-cluster .cv-channel-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .cv-channel-cluster .cv-channel-dot {
+    width: 14px;
+    height: 14px;
+    margin-left: 1px;
+  }
+  .cv-channel-cluster .cv-channel-label {
+    font-size: 10px;
+  }
+  .cv-pill-tl {
+    font-size: 10px;
+    padding: 2px 7px;
+  }
 }
 
 /* ── E6 · Mobile v17 — tile chrome compaction ────────────────────────
@@ -228,7 +400,7 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    reserved (50% - 110 px) slot on a 375 px tile. Tap target stays
    44 × 44 via the chrome-btn::before halo regardless of the visual
    shrink. */
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* B2/D1 · mobile title icon proportional to the desktop 42 px
      bump — 34 px gives the glyph clear presence on a 375 px card
      without pushing the live pill off the row. The name's pixel
@@ -240,50 +412,105 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      mobile name is font-size:16 px (line-height:1.1 ≈ 18 px) and
      the icon is 34 px instead of 42 px; the original 2 px offset
      overshoots the smaller name's optical baseline. */
-  .cv-cam-title-icon{width:34px;height:34px;margin-top:1px}
-  .cv-tl-stack .cv-name{font-size:16px;max-width:100%}
-  .cv-class-cluster{gap:10px}
+  .cv-cam-title-icon {
+    width: 34px;
+    height: 34px;
+    margin-top: 1px;
+  }
+  .cv-tl-stack .cv-name {
+    font-size: 16px;
+    max-width: 100%;
+  }
+  .cv-class-cluster {
+    gap: 10px;
+  }
   .cv-class-pill,
-  .cv-class-pill svg{width:20px;height:20px}
-  .cv-chrome-btn{height:32px;min-width:32px}
-  .cv-hd-badge{width:32px;min-width:32px}
-  .cv-fs-btn{width:32px;min-width:32px}
-  .cv-cog{width:32px}
-  .cv-sim-btn span{display:none}
-  .cv-sim-btn{padding:0;width:32px;min-width:32px;gap:0}
+  .cv-class-pill svg {
+    width: 20px;
+    height: 20px;
+  }
+  .cv-chrome-btn {
+    height: 32px;
+    min-width: 32px;
+  }
+  .cv-hd-badge {
+    width: 32px;
+    min-width: 32px;
+  }
+  .cv-fs-btn {
+    width: 32px;
+    min-width: 32px;
+  }
+  .cv-cog {
+    width: 32px;
+  }
+  .cv-sim-btn span {
+    display: none;
+  }
+  .cv-sim-btn {
+    padding: 0;
+    width: 32px;
+    min-width: 32px;
+    gap: 0;
+  }
   /* Telegram cluster — let the single-line label truncate with
      ellipsis when the cluster shares a narrow row with MQTT on a
      375 px tile. B3: was .cv-channel-status before the two-row
      stack collapsed into one .cv-channel-label. */
-  .cv-channel-cluster .cv-channel-label{
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;
+  .cv-channel-cluster .cv-channel-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 140px;
   }
 }
 
 /* ── Statistik · timeline tap-tooltip ─────────────────────────────────── */
-.tl-bar-tooltip{
-  position:fixed;z-index:1200;
-  width:220px;padding:8px 12px;border-radius:10px;
-  background:rgba(15,24,37,.96);color:#e2e8f0;
-  font-size:12px;line-height:1.35;font-weight:600;
-  box-shadow:0 10px 30px rgba(0,0,0,.45);
-  pointer-events:none;opacity:0;transition:opacity .15s ease;
+.tl-bar-tooltip {
+  position: fixed;
+  z-index: 1200;
+  width: 220px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(15, 24, 37, 0.96);
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
-.tl-bar-tooltip.visible{opacity:1}
-.tl-bar--tip-shown{outline:2px solid rgba(255,255,255,.35);outline-offset:1px}
+.tl-bar-tooltip.visible {
+  opacity: 1;
+}
+.tl-bar--tip-shown {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 1px;
+}
 
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* Compress the timeline metrics so cam-name + label + lanes fit a 375 px
      viewport without horizontal scrolling. The existing 628 px-line block
      already shrinks these; this widens the rule to also cover desktop-
      mobile transition cases (short tablets). Values mirror the spec. */
-  .tl-container{--tl-sidebox-w:92px;--tl-label-w:88px}
-  .tl-cam-name{font-size:13px}
-  .tl-lane-label-text{font-size:12px}
+  .tl-container {
+    --tl-sidebox-w: 92px;
+    --tl-label-w: 88px;
+  }
+  .tl-cam-name {
+    font-size: 13px;
+  }
+  .tl-lane-label-text {
+    font-size: 12px;
+  }
 
   /* Sichtungen progress bar — slim on mobile so the achievements grid
      gets the visual weight, not the meta strip on top. */
-  .ach-progress-track{height:6px}
+  .ach-progress-track {
+    height: 6px;
+  }
 }
 
 /* Phone: shrink sidebox + label further so the x-axis tick row gets
@@ -292,60 +519,109 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    ~223 px for 3 evenly-spaced timestamp pills (was 189 px for 6 pills,
    which crammed 5-char labels into ~31 px slots and overran the right
    edge on 7-day views where labels read e.g. "Mo 5.5"). */
-@media (max-width:480px){
-  .tl-container{--tl-sidebox-w:72px;--tl-label-w:76px;--tl-cam-gap:8px}
-  .tl-cam-name{font-size:12px;font-weight:700}
-  .tl-lane-label-text{font-size:11.5px}
-  .tl-xlabel{font-size:11px;font-variant-numeric:tabular-nums}
+@media (max-width: 480px) {
+  .tl-container {
+    --tl-sidebox-w: 72px;
+    --tl-label-w: 76px;
+    --tl-cam-gap: 8px;
+  }
+  .tl-cam-name {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .tl-lane-label-text {
+    font-size: 11.5px;
+  }
+  .tl-xlabel {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 /* ── Wetter mobile ────────────────────────────────────────────────────── */
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* Mobile filter strip — flip to nowrap so the bar scrolls
      horizontally instead of wrapping. The pan-x lock + edge-fade +
      scrollbar-hide behaviour comes from the shared :where() rule
      above (with `.is-end` toggle from chrome/tab-strip.js); we only
      own the layout flip here. Children get scroll-snap-align so the
      swipe lands tab-by-tab. */
-  .ws-filter-bar{flex-wrap:nowrap}
-  .ws-filter-bar > *{scroll-snap-align:start;flex-shrink:0}
+  .ws-filter-bar {
+    flex-wrap: nowrap;
+  }
+  .ws-filter-bar > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
 
   /* Recap strip — let cards bleed to the screen edges so the next card
      visibly hints at the scroll affordance. Card width 140 px on mobile. */
-  .ws-recaps-strip{padding:2px 12px 6px;margin:0 -12px}
-  .ws-recap-card{flex-basis:140px;min-width:140px}
+  .ws-recaps-strip {
+    padding: 2px 12px 6px;
+    margin: 0 -12px;
+  }
+  .ws-recap-card {
+    flex-basis: 140px;
+    min-width: 140px;
+  }
 
   /* Time-range pills above the chart — 44 px tap-targets per iOS HIG, and
      allow horizontal scroll-snap so the 5-pill row (1h/6h/24h/7d/30d)
      never wraps awkwardly on a 375 px viewport. */
-  #weatherStatsPills{
-    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
-    scrollbar-width:none;scroll-snap-type:x proximity;max-width:100%;
+  #weatherStatsPills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    max-width: 100%;
   }
-  #weatherStatsPills::-webkit-scrollbar{display:none}
-  #weatherStatsPills > *{scroll-snap-align:start;flex-shrink:0}
+  #weatherStatsPills::-webkit-scrollbar {
+    display: none;
+  }
+  #weatherStatsPills > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
   #weatherStatsPills .ws-pill,
-  #weatherStatsPills button{min-height:44px;padding:10px 14px}
+  #weatherStatsPills button {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
 
   /* Tighten the gap above the filter pills row — the head's 12 px
      margin-bottom was wasting top-left space on iPhone widths. */
-  .weather-sightings-head{margin-bottom:6px}
+  .weather-sightings-head {
+    margin-bottom: 6px;
+  }
   /* The empty-state box and the Wetterdaten-block underneath it
      used to read as merged. Add a small clean gap so they're
      visually separated without floating apart. */
-  .ws-stats-block{margin-top:14px}
+  .ws-stats-block {
+    margin-top: 14px;
+  }
 
   /* Stat chips on mobile: tighten padding + drop label/value font
      to 10.5 px so full German labels (Niederschlag, Blitz-Energie,
      Sonnenhöhe, Bewölkung) fit in a 3-column grid on iPhone widths
      without ellipsis truncation. min-height pinned to 32 here too
      so the mobile legend matches the trimmed default. */
-  .ws-stats-chip{padding:3px 5px;gap:5px;min-height:32px}
-  .ws-stats-chip-meta{gap:5px}
-  .ws-stats-chip-label{font-size:10.5px}
-  .ws-stats-chip-value{font-size:10.5px}
+  .ws-stats-chip {
+    padding: 3px 5px;
+    gap: 5px;
+    min-height: 32px;
+  }
+  .ws-stats-chip-meta {
+    gap: 5px;
+  }
+  .ws-stats-chip-label {
+    font-size: 10.5px;
+  }
+  .ws-stats-chip-value {
+    font-size: 10.5px;
+  }
 }
-@media (max-width:380px){
+@media (max-width: 380px) {
   /* Two-column legend on iPhone SE so the labels don't truncate
      unreadably tightly inside 3 cramped chips. */
   /* Wetterdaten legend — condensed for iPhone widths so it doesn't
@@ -355,96 +631,149 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      instead of being pushed to opposite edges of the cell. The
      min-height:44px touch-target floor on .ws-stats-chip is kept —
      each chip is still tappable to isolate its metric. */
-  .ws-stats-legend{
-    grid-template-columns:repeat(2,1fr);
-    gap:2px 10px;
-    margin-top:8px;
+  .ws-stats-legend {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2px 10px;
+    margin-top: 8px;
   }
-  .ws-stats-chip{padding:2px 4px;font-size:11.5px}
+  .ws-stats-chip {
+    padding: 2px 4px;
+    font-size: 11.5px;
+  }
   /* Drop the label's flex:1 expansion so the value chip sits next to
      the label rather than at the far right of the cell — much less
      visual whitespace inside each row. */
-  .ws-stats-chip-label{flex:0 1 auto}
-  .ws-stats-chip-meta{gap:6px}
+  .ws-stats-chip-label {
+    flex: 0 1 auto;
+  }
+  .ws-stats-chip-meta {
+    gap: 6px;
+  }
 }
 
 /* ── Geräte / cam-edit mobile ─────────────────────────────────────────── */
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* Object-filter pill bar inside cam-edit — same horizontal-scroll
      pattern as the global media filter. */
-  .cam-objfilter-bar{
-    flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;
-    scrollbar-width:none;scroll-snap-type:x proximity;
-    padding:4px 0;margin:0;
+  .cam-objfilter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    padding: 4px 0;
+    margin: 0;
   }
-  .cam-objfilter-bar::-webkit-scrollbar{display:none}
-  .cam-objfilter-bar > *{scroll-snap-align:start;flex-shrink:0}
+  .cam-objfilter-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .cam-objfilter-bar > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
 
   /* Field rows inside the form: bump min-height so values aren't cramped
      when the floating label sits inside the input. */
-  .field-wrap{min-height:56px}
+  .field-wrap {
+    min-height: 56px;
+  }
 
   /* Mask canvas: allow pinch-zoom on top of single-finger draw — the
      desktop rule (touch-action: manipulation) suppressed pinch in
      Safari, which we want back on mobile so the user can zoom into the
      drawing area. */
-  #maskCanvas{touch-action:pinch-zoom}
+  #maskCanvas {
+    touch-action: pinch-zoom;
+  }
 
   /* Native range inputs are tiny on iOS — give them a bigger thumb. */
-  input[type="range"]{
-    height:6px;-webkit-appearance:none;appearance:none;
-    background:rgba(255,255,255,.08);border-radius:3px;outline:none;
+  input[type='range'] {
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    outline: none;
   }
-  input[type="range"]::-webkit-slider-thumb{
-    -webkit-appearance:none;appearance:none;
-    width:26px;height:26px;border-radius:50%;
-    background:var(--accent);border:2px solid #0a0a0a;cursor:pointer;
+  input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid #0a0a0a;
+    cursor: pointer;
   }
-  input[type="range"]::-moz-range-thumb{
-    width:26px;height:26px;border-radius:50%;
-    background:var(--accent);border:2px solid #0a0a0a;cursor:pointer;
+  input[type='range']::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid #0a0a0a;
+    cursor: pointer;
   }
 
   /* Save & Reload — sticky to the bottom of the cam-edit panel so the
      user doesn't have to scroll to the end of a long form to save.
      z-index sits below modals (1100) but above all form chrome. */
-  .cam-save-btn{
-    position:sticky;
-    bottom:calc(env(safe-area-inset-bottom));
-    z-index:5;box-shadow:0 -8px 16px rgba(0,0,0,.45);
+  .cam-save-btn {
+    position: sticky;
+    bottom: calc(env(safe-area-inset-bottom));
+    z-index: 5;
+    box-shadow: 0 -8px 16px rgba(0, 0, 0, 0.45);
   }
 
   /* Settings accordion chevron — keep it in view at narrow widths. */
-  .set-chevron{margin-left:auto;flex-shrink:0}
+  .set-chevron {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
 
   /* Inline tab strips — touch-target floor for every horizontal tab
      strip in the app. The scroll-lock + right-edge fade rules live
      outside this @media block (further down in this file) so the
      touch behaviour is consistent on tablets and Surface-style touch
      desktops too. */
-  .set-tab,.coral-tab,.cam-recovery-tab{
-    scroll-snap-align:start;flex-shrink:0;min-height:44px;
+  .set-tab,
+  .coral-tab,
+  .cam-recovery-tab {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    min-height: 44px;
   }
 
   /* Toggle row hit area — switch is 24 px tall, padding 10 px ⇒ 44 px
      row total. Lock that floor explicitly so future padding tweaks
      can't shrink the tap target below the iOS HIG. */
-  .toggle-row{min-height:44px}
+  .toggle-row {
+    min-height: 44px;
+  }
 
   /* Logs panel — wrap long lines instead of horizontal scrolling so the
      terminal feel survives a 375 px viewport. Drop the fixed columns;
      timestamp + level stack at the start of each row, body wraps. */
-  .log-output{font-size:12px;padding:10px}
-  .log-row{
-    grid-template-columns:auto auto auto 1fr;
-    overflow-wrap:anywhere;word-break:break-word;
+  .log-output {
+    font-size: 12px;
+    padding: 10px;
+  }
+  .log-row {
+    grid-template-columns: auto auto auto 1fr;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 }
-@media (max-width:480px){
+@media (max-width: 480px) {
   /* Stack the logs filter row vertically; the .section-head's inner
      flex collapses on phone to give each select full width. */
-  #logs .section-head{flex-direction:column;align-items:stretch;gap:8px}
-  #logs .section-head > div{flex-wrap:wrap}
+  #logs .section-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  #logs .section-head > div {
+    flex-wrap: wrap;
+  }
   /* Proportional widths: the level select auto-sizes to its widest
      option ("WARNING" ≈ 7 chars), the subsystem select grabs all
      remaining space so "Alle Subsysteme" / "camera_runtime.timelapse"
@@ -458,8 +787,16 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
      dropdowns visibly taller than the Refresh button alongside them.
      white-space:nowrap reinforces the no-wrap behaviour for the
      option text itself. */
-  #logs #logLevelFilter{flex:0 0 auto;min-width:max-content;white-space:nowrap}
-  #logs #logSubsystemFilter{flex:1 1 0;min-width:max-content;white-space:nowrap}
+  #logs #logLevelFilter {
+    flex: 0 0 auto;
+    min-width: max-content;
+    white-space: nowrap;
+  }
+  #logs #logSubsystemFilter {
+    flex: 1 1 0;
+    min-width: max-content;
+    white-space: nowrap;
+  }
 }
 
 /* (a) Mobile camera-name in the timeline sidebox previously used
@@ -467,8 +804,13 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    "Terrass e'". Force a single-line + ellipsis path so we get a
    clean "Garten 'Dach …" truncation instead. Desktop keeps the
    wrap-to-second-line behaviour (15 px font, wide enough sidebox). */
-@media(max-width:768px){
-  .tl-cam-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;word-break:normal}
+@media (max-width: 768px) {
+  .tl-cam-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: normal;
+  }
 }
 
 /* (c) Mediathek filter pill row at the bottom edge of the screen —
@@ -476,8 +818,11 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    iPhones with a left safe-area inset. Pad the row by max(8 px,
    safe-area-inset-left) so no pill touches the screen edge, scoped
    to mobile so desktop layout is unchanged. */
-@media(max-width:768px){
-  .media-filter-bar{padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px))}
+@media (max-width: 768px) {
+  .media-filter-bar {
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+  }
 }
 
 /* ── Cam-card stream containment ──────────────────────────────────────────
@@ -486,21 +831,32 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    the parent column past its grid track. Safe on desktop — these are
    already column-constrained there; max-width:100% just re-asserts
    that bound. */
-.cv-card,.cv-card *{min-width:0}
-.cv-card img,.cv-card video,
-.cam-card img,.cam-card video,
-#cameraCards img,#cameraCards video{
-  max-width:100%;
-  height:auto;
-  display:block;
+.cv-card,
+.cv-card * {
+  min-width: 0;
+}
+.cv-card img,
+.cv-card video,
+.cam-card img,
+.cam-card video,
+#cameraCards img,
+#cameraCards video {
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 /* The .cv-img path keeps its position:absolute/inset:0 contract — the
    above auto height shouldn't override that. Re-pin explicitly so an
    image with intrinsic 1080p dimensions still fills its frame instead
    of laying itself out at native size when the absolute positioning
    loses the cascade race. */
-.cv-card .cv-img,#cameraCards .cv-img{
-  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+.cv-card .cv-img,
+#cameraCards .cv-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* ── QA pass · long-tap context-menu suppression on UI thumbnails ─────── */
@@ -511,10 +867,10 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
 .mmc-img-wrap img,
 .ws-card img,
 .brand img,
-.cv-card img{
-  -webkit-touch-callout:none;
-  user-select:none;
-  -webkit-user-select:none;
+.cv-card img {
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* ── iOS mobile width-cap safety net ─────────────────────────────────────
@@ -530,9 +886,13 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
 .main > .panel.section,
 #dashboard,
 #dashboard .section-head,
-#cameraCards{min-width:0}
+#cameraCards {
+  min-width: 0;
+}
 #dashboard,
-#cameraCards{max-width:100%}
+#cameraCards {
+  max-width: 100%;
+}
 
 /* Strengthen the .cv-img cap with !important on max-width so a future
    stylesheet, an inline width attr from some refactor, or a Safari
@@ -540,16 +900,32 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    earlier rule stays untouched — only the cap gains priority. */
 #cameraCards img,
 #cameraCards video,
-.cv-card .cv-img{max-width:100%!important;max-height:100%}
+.cv-card .cv-img {
+  max-width: 100% !important;
+  max-height: 100%;
+}
 
 /* Final viewport-level guard. Even if a new element ships without proper
    sizing, mobile layout cannot scale out. The img/video catch-all here
    is overridden by the more specific .cv-img rule above for live tiles,
    so absolute positioning there is untouched. */
-@media (max-width:768px){
-  html,body{overflow-x:hidden;max-width:100vw}
-  .main,.panel,.section{max-width:100%;min-width:0}
-  img,video{max-width:100%;height:auto}
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  .main,
+  .panel,
+  .section {
+    max-width: 100%;
+    min-width: 0;
+  }
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
 }
 
 /* ── Mediathek header (mobile) ─────────────────────────────────────────
@@ -561,20 +937,24 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    the title gets squeezed down to "M…". On mobile we stack the head
    vertically — title in full, buttons row below — and relax the
    ellipsis since wrapping is fine here. */
-@media (max-width:768px){
+@media (max-width: 768px) {
   /* Long drilldown titles ("Mediathek · cam_xyz") need to wrap on
      iPhone — the .mst-text rule in 18-telegram-2.css keeps the
      title on a single line with text-overflow:ellipsis (so the
      whole title doesn't squeeze the right-side button when one
      is shown), so we relax that here only for the title text. */
-  #media .media-section-title .mst-text{
-    white-space:normal;overflow:visible;text-overflow:clip;
-    word-break:normal;overflow-wrap:break-word;
+  #media .media-section-title .mst-text {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: normal;
+    overflow-wrap: break-word;
   }
   /* Auswahl button is the only contextual right-side button; bump
      touch target to ≥44 px when it's actually visible. */
-  #media #mediaSelectToggleBtn{
-    min-height:44px;padding:10px 14px;
+  #media #mediaSelectToggleBtn {
+    min-height: 44px;
+    padding: 10px 14px;
   }
 }
 
@@ -582,114 +962,168 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    Each blur layer costs a compositor pass; on a card-heavy dashboard this
    adds up to dropped frames on iPhone SE. The pills stay readable as
    solid-coloured chips on touch widths. */
-@media (max-width:768px){
+@media (max-width: 768px) {
   .cv-pill,
   .cv-hd-badge,
   .cv-split-badge,
   .mmc-cam-pill,
   .media-label-bubble,
   .ct-pill,
-  .cb-ms{
-    backdrop-filter:none;-webkit-backdrop-filter:none;
+  .cb-ms {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
 /* Weather location map — Leaflet container.
    Storm-blue ring instead of a thin border (depth via color contrast). */
-.ws-map{
-  position:relative;
-  height:280px;
-  width:100%;
-  border-radius:14px;
-  overflow:hidden;
-  box-shadow:0 0 0 1px rgba(127,174,201,.25);
-  background:rgba(127,174,201,.04);
+.ws-map {
+  position: relative;
+  height: 280px;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(127, 174, 201, 0.25);
+  background: rgba(127, 174, 201, 0.04);
 }
-@media (max-width:768px){
-  .ws-map{height:220px}
+@media (max-width: 768px) {
+  .ws-map {
+    height: 220px;
+  }
 }
-.ws-map .leaflet-container{background:#1a1a1a}
-.ws-map .leaflet-control-attribution{
-  background:rgba(20,20,20,.72);
-  color:#aaa;
-  font-size:10px;
-  padding:1px 6px;
+.ws-map .leaflet-container {
+  background: #1a1a1a;
 }
-.ws-map .leaflet-control-attribution a{color:#7faec9}
+.ws-map .leaflet-control-attribution {
+  background: rgba(20, 20, 20, 0.72);
+  color: #aaa;
+  font-size: 10px;
+  padding: 1px 6px;
+}
+.ws-map .leaflet-control-attribution a {
+  color: #7faec9;
+}
 /* Custom flat-design pin: 32×42 visual centred on a 44×44 hit-area. */
-.ws-map-pin-wrap{background:transparent;border:none}
-.ws-map-pin-hit{
-  width:44px;height:44px;
-  display:flex;align-items:flex-end;justify-content:center;
+.ws-map-pin-wrap {
+  background: transparent;
+  border: none;
 }
-.ws-map-pin-hit svg{
-  filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));
+.ws-map-pin-hit {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.ws-map-pin-hit svg {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
 
 /* Weather "zuletzt gespeichert" footer hint — quiet auto-save signal.
    No top border line: depth comes from the muted color contrast. */
-.ws-saved-hint{
-  margin-top:14px;
-  padding-top:10px;
-  font-size:12px;
-  font-style:italic;
-  color:var(--muted, #8a8a8a);
-  text-align:right;
+.ws-saved-hint {
+  margin-top: 14px;
+  padding-top: 10px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted, #8a8a8a);
+  text-align: right;
 }
 /* Green save-confirmation pulse: same green as .btn-save (#4ade80).
    Holds the colour for ~1 s, then fades back to the muted resting tone
    over the remaining 1.4 s — long enough for the user to register
    "saved" without lingering. */
-@keyframes ws-saved-pulse{
-  0%   {color:#4ade80;opacity:1}
-  40%  {color:#4ade80;opacity:1}
-  100% {color:var(--muted,#8a8a8a);opacity:1}
+@keyframes ws-saved-pulse {
+  0% {
+    color: #4ade80;
+    opacity: 1;
+  }
+  40% {
+    color: #4ade80;
+    opacity: 1;
+  }
+  100% {
+    color: var(--muted, #8a8a8a);
+    opacity: 1;
+  }
 }
-.ws-saved-hint.is-pulsing{animation:ws-saved-pulse 2.4s ease-out}
-@media (prefers-reduced-motion: reduce){
-  .ws-saved-hint.is-pulsing{animation:none}
+.ws-saved-hint.is-pulsing {
+  animation: ws-saved-pulse 2.4s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-saved-hint.is-pulsing {
+    animation: none;
+  }
 }
 
 /* Camera-edit › Verbindung › Erweitert disclosure for the RTSP-Pfad
    picker. Most users never need it — auto-defaults from manufacturer.
    Depth via background contrast (no thin border lines per project rules). */
-.cam-rtsp-erw{margin-top:10px}
-.cam-rtsp-erw-btn{
-  display:flex;align-items:center;gap:8px;
-  width:100%;min-height:44px;padding:10px 14px;
-  border:none;border-radius:10px;
-  background:rgba(255,255,255,.04);
-  color:var(--text);
-  font:inherit;font-size:13px;font-weight:600;
-  text-align:left;cursor:pointer;
-  transition:background .15s;
-  -webkit-tap-highlight-color:transparent;
+.cam-rtsp-erw {
+  margin-top: 10px;
 }
-.cam-rtsp-erw-btn:hover{background:rgba(255,255,255,.07)}
-.cam-rtsp-erw-chev{flex-shrink:0;transition:transform .2s}
-.cam-rtsp-erw-btn[aria-expanded="true"] .cam-rtsp-erw-chev{transform:rotate(90deg)}
+.cam-rtsp-erw-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.cam-rtsp-erw-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.cam-rtsp-erw-chev {
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.cam-rtsp-erw-btn[aria-expanded='true'] .cam-rtsp-erw-chev {
+  transform: rotate(90deg);
+}
 /* "manuell" hint — used to be a coloured pill that visually competed
    with the form's own value pills. Toned down to small italic muted
    text per CLAUDE.md (no per-item pill chrome that doesn't carry
    meaningful semantics). */
-.cam-rtsp-erw-pill{
-  margin-left:auto;padding:0;background:transparent;
-  font-size:10px;font-style:italic;font-weight:400;
-  color:rgba(127,174,201,.65);
-  white-space:nowrap;letter-spacing:.02em;
+.cam-rtsp-erw-pill {
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 400;
+  color: rgba(127, 174, 201, 0.65);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
-.cam-rtsp-erw-pill[hidden]{display:none}
-.cam-rtsp-erw-body{
-  margin-top:8px;padding:10px;
-  border-radius:10px;
-  background:rgba(255,255,255,.025);
-  display:grid;gap:8px;
+.cam-rtsp-erw-pill[hidden] {
+  display: none;
+}
+.cam-rtsp-erw-body {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  display: grid;
+  gap: 8px;
 }
 /* Class display:grid otherwise wins over the user-agent
    [hidden]{display:none} (same specificity, class is later in the
    cascade), so without this explicit rule the disclosure body would
    stay visually open even when the toggle button reports collapsed. */
-.cam-rtsp-erw-body[hidden]{display:none}
+.cam-rtsp-erw-body[hidden] {
+  display: none;
+}
 
 /* Readonly display fields (Kamera-IP, RTSP-URL) — rendered as <input>
    so form.elements[name] still works, but styled as inline text:
@@ -697,119 +1131,168 @@ body.sidebar-locked{overflow:hidden;touch-action:none}
    match editable inputs), muted colour, no focus ring. White text =
    you can edit; muted text = readonly info. */
 .field-wrap input.cam-readonly-input,
-.field-wrap input.cam-readonly-input:focus{
-  background:transparent;
-  border:1.5px solid transparent;
-  color:var(--muted);
-  cursor:default;
-  box-shadow:none;
+.field-wrap input.cam-readonly-input:focus {
+  background: transparent;
+  border: 1.5px solid transparent;
+  color: var(--muted);
+  cursor: default;
+  box-shadow: none;
 }
-.cam-readonly-hint{
-  font-size:11px;font-style:italic;color:var(--muted);
-  margin-top:2px;padding-left:14px;line-height:1.3;
-  opacity:.75;
+.cam-readonly-hint {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted);
+  margin-top: 2px;
+  padding-left: 14px;
+  line-height: 1.3;
+  opacity: 0.75;
 }
 
 /* Bestätigungs-Filter — pro Klasse eine Zeile mit N+seconds Inputs.
    Flat design, kein border, depth via background-tint. */
-.cam-section-head{margin:8px 0 10px}
-.cam-confirm-grid{display:grid;gap:6px}
-.cam-confirm-row{
-  display:grid;
-  grid-template-columns:1fr 64px auto 64px auto;
-  align-items:center;gap:8px;
-  padding:10px 12px;
-  border-radius:10px;
-  background:rgba(255,255,255,.035);
-  min-height:44px;
+.cam-section-head {
+  margin: 8px 0 10px;
 }
-.cam-confirm-cls{
-  font-size:13px;font-weight:600;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+.cam-confirm-grid {
+  display: grid;
+  gap: 6px;
 }
-.cam-confirm-sep,.cam-confirm-unit{
-  font-size:12px;color:var(--muted);font-style:italic;white-space:nowrap;
+.cam-confirm-row {
+  display: grid;
+  grid-template-columns: 1fr 64px auto 64px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  min-height: 44px;
 }
-.cam-confirm-n,.cam-confirm-s{
-  width:100%;
-  padding:8px 10px;
-  border-radius:8px;
-  background:#1e1e1e;
-  border:1.5px solid rgba(255,255,255,.07);
-  color:var(--text);
-  font-size:14px;
-  text-align:center;
-  -webkit-appearance:none;appearance:none;
-  outline:none;
-  transition:border-color .15s,box-shadow .15s;
+.cam-confirm-cls {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.cam-confirm-n:focus,.cam-confirm-s:focus{
-  border-color:#555;box-shadow:0 0 0 3px rgba(255,255,255,.06);
+.cam-confirm-sep,
+.cam-confirm-unit {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  white-space: nowrap;
 }
-@media (max-width:640px){
-  .cam-confirm-row{
-    grid-template-columns:1fr;
-    gap:4px;padding:10px 12px;
+.cam-confirm-n,
+.cam-confirm-s {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1e1e1e;
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 14px;
+  text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.cam-confirm-n:focus,
+.cam-confirm-s:focus {
+  border-color: #555;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+@media (max-width: 640px) {
+  .cam-confirm-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 10px 12px;
   }
-  .cam-confirm-cls{font-size:12px}
-  .cam-confirm-row > input{width:100%}
-  .cam-confirm-sep,.cam-confirm-unit{display:none}
-  .cam-confirm-row::before{
-    content:"Treffer / Sekunden";
-    font-size:11px;color:var(--muted);font-style:italic;
+  .cam-confirm-cls {
+    font-size: 12px;
+  }
+  .cam-confirm-row > input {
+    width: 100%;
+  }
+  .cam-confirm-sep,
+  .cam-confirm-unit {
+    display: none;
+  }
+  .cam-confirm-row::before {
+    content: 'Treffer / Sekunden';
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
   }
 }
 
 /* Weather chart hover tooltip — flat surface, no border, depth via
    bg + shadow + blur. Tooltip lives inside .ws-stats-chart-wrap and
    gets absolute-positioned by the JS handler, clamped to the wrap. */
-.ws-chart-tooltip{
-  position:absolute;
-  background:rgba(15,15,18,.94);
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
-  border-radius:10px;
-  padding:8px 10px;
-  font-size:11px;
-  color:#edf4fb;
-  pointer-events:none;
-  white-space:nowrap;
-  z-index:10;
-  box-shadow:0 6px 20px rgba(0,0,0,.5);
-  min-width:140px;
-  max-width:240px;
+.ws-chart-tooltip {
+  position: absolute;
+  background: rgba(15, 15, 18, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #edf4fb;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  min-width: 140px;
+  max-width: 240px;
 }
-@media (prefers-reduced-motion: reduce){
+@media (prefers-reduced-motion: reduce) {
   /* Spec: tooltip appears/disappears instantly. The class has no
      transition by default, but explicitly disable any future addition
      so a visual rev doesn't accidentally animate for these users. */
-  .ws-chart-tooltip{transition:none !important}
+  .ws-chart-tooltip {
+    transition: none !important;
+  }
 }
-.ws-chart-tooltip[hidden]{display:none}
-.ws-tt-time{
-  font-family:ui-monospace,"SF Mono",Menlo,monospace;
-  font-size:10.5px;font-weight:700;letter-spacing:.04em;
-  color:rgba(255,255,255,.8);
-  margin-bottom:6px;
-  text-rendering:geometricPrecision;
+.ws-chart-tooltip[hidden] {
+  display: none;
 }
-.ws-tt-row{
-  display:grid;
-  grid-template-columns:8px 1fr auto;
-  align-items:center;gap:6px;
-  font-size:11px;line-height:1.35;
+.ws-tt-time {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 6px;
+  text-rendering: geometricPrecision;
 }
-.ws-tt-row + .ws-tt-row{margin-top:2px}
-.ws-tt-dot{
-  width:8px;height:8px;border-radius:50%;
+.ws-tt-row {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
 }
-.ws-tt-lbl{
-  color:rgba(255,255,255,.85);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+.ws-tt-row + .ws-tt-row {
+  margin-top: 2px;
 }
-.ws-tt-val{
-  font-family:ui-monospace,"SF Mono",Menlo,monospace;
-  font-variant-numeric:tabular-nums;
-  color:#fff;font-weight:600;
-  text-rendering:geometricPrecision;
+.ws-tt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.ws-tt-lbl {
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-tt-val {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  font-weight: 600;
+  text-rendering: geometricPrecision;
 }

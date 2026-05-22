@@ -1,41 +1,61 @@
-            <div class="cam-tab-panel" id="cam-tab-zonen">
-              <div class="mask-editor panel inset">
-                <!-- Mode switcher: zone (inclusion / blue) vs mask
+<div class="cam-tab-panel" id="cam-tab-zonen">
+  <div class="mask-editor panel inset">
+    <!-- Mode switcher: zone (inclusion / blue) vs mask
                      (exclusion / red). The next committed polygon
                      lands in the matching array — see shapeState in
                      core/state.js. Helper text under the toggle
                      swaps per mode so the user reads what drawing
                      here actually does. -->
-                <div class="shape-mode-row">
-                  <div class="shape-mode-toggle" id="shapeModeToggle" role="tablist" aria-label="Polygon-Modus">
-                    <button type="button" class="shape-mode-pill shape-mode-pill--zone is-active" data-mode="zone" role="tab" aria-selected="true">
-                      <span class="shape-mode-dot"></span>
-                      <span>Erkennungs-Zone</span>
-                    </button>
-                    <button type="button" class="shape-mode-pill shape-mode-pill--mask" data-mode="mask" role="tab" aria-selected="false">
-                      <span class="shape-mode-dot"></span>
-                      <span>Ausschluss-Maske</span>
-                    </button>
-                  </div>
-                  <p class="shape-mode-hint" id="shapeModeHint">Erkennungen werden nur innerhalb der GRÜNEN Polygone gezählt.</p>
-                </div>
-                <div class="canvas-wrap">
-                  <img id="maskSnapshot" src="" alt="Snapshot" />
-                  <canvas id="maskCanvas" width="1280" height="720"></canvas>
-                </div>
+    <div class="shape-mode-row">
+      <div class="shape-mode-toggle" id="shapeModeToggle" role="tablist" aria-label="Polygon-Modus">
+        <button
+          type="button"
+          class="shape-mode-pill shape-mode-pill--zone is-active"
+          data-mode="zone"
+          role="tab"
+          aria-selected="true"
+        >
+          <span class="shape-mode-dot"></span>
+          <span>Erkennungs-Zone</span>
+        </button>
+        <button
+          type="button"
+          class="shape-mode-pill shape-mode-pill--mask"
+          data-mode="mask"
+          role="tab"
+          aria-selected="false"
+        >
+          <span class="shape-mode-dot"></span>
+          <span>Ausschluss-Maske</span>
+        </button>
+      </div>
+      <p class="shape-mode-hint" id="shapeModeHint">
+        Erkennungen werden nur innerhalb der GRÜNEN Polygone gezählt.
+      </p>
+    </div>
+    <div class="canvas-wrap">
+      <img id="maskSnapshot" src="" alt="Snapshot" />
+      <canvas id="maskCanvas" width="1280" height="720"></canvas>
+    </div>
 
-                <!-- Live counter + drawing actions (only visible while drawing) -->
-                <div class="shape-drawing-bar" id="shapeDrawingBar" hidden>
-                  <span class="shape-drawing-count" id="shapeDrawingCount">0 Punkte gesetzt</span>
-                  <button class="ghost small-btn" id="undoShapeBtn" type="button">Letzten Punkt entfernen</button>
-                  <button class="small-btn shape-save-btn" id="saveShapeBtn" type="button">Polygon übernehmen</button>
-                </div>
+    <!-- Live counter + drawing actions (only visible while drawing) -->
+    <div class="shape-drawing-bar" id="shapeDrawingBar" hidden>
+      <span class="shape-drawing-count" id="shapeDrawingCount">0 Punkte gesetzt</span>
+      <button class="ghost small-btn" id="undoShapeBtn" type="button">
+        Letzten Punkt entfernen
+      </button>
+      <button class="small-btn shape-save-btn" id="saveShapeBtn" type="button">
+        Polygon übernehmen
+      </button>
+    </div>
 
-                <!-- Polygon list — one row per saved polygon, click to pulse, trash to delete -->
-                <div class="shape-list" id="shapeList"></div>
+    <!-- Polygon list — one row per saved polygon, click to pulse, trash to delete -->
+    <div class="shape-list" id="shapeList"></div>
 
-                <div class="shape-clear-row" id="shapeClearRow" hidden>
-                  <button class="ghost small-btn danger-btn" id="clearShapesBtn" type="button">Alle Polygone löschen</button>
-                </div>
-              </div>
-            </div>
+    <div class="shape-clear-row" id="shapeClearRow" hidden>
+      <button class="ghost small-btn danger-btn" id="clearShapesBtn" type="button">
+        Alle Polygone löschen
+      </button>
+    </div>
+  </div>
+</div>

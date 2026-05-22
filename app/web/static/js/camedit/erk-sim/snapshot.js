@@ -8,18 +8,18 @@ import { byId, esc } from '../../core/dom.js';
 import { renderTrace } from './trace.js';
 
 const _ERK_VERDICT_TXT = {
-  'pass':         'würde Alarm auslösen',
-  'belowthresh':  '',
-  'filtered':     '',
+  pass: 'würde Alarm auslösen',
+  belowthresh: '',
+  filtered: '',
 };
 
 // Distinct, honest messages per backend-error code. The 503 path from
 // /api/cameras/<id>/test-detection sets `code` to exactly one of these
 // keys; everything else falls back to the camera-side default.
 const _ERK_ERR_MSG = {
-  'stale':    'Stream-Puffer hinkt zurück · warte auf frischen Frame',
-  'corrupt':  'Stream liefert korrupte Frames · warte auf sauberes Bild',
-  'no_frame': 'Kamera liefert noch keine Frames',
+  stale: 'Stream-Puffer hinkt zurück · warte auf frischen Frame',
+  corrupt: 'Stream liefert korrupte Frames · warte auf sauberes Bild',
+  no_frame: 'Kamera liefert noch keine Frames',
 };
 
 // Render the error banner in place of the snapshot. Hides the IMG,
@@ -28,14 +28,14 @@ const _ERK_ERR_MSG = {
 // Called by live.js when the backend returns 503 with a structured
 // error code; the polling loop keeps running so the banner replaces
 // itself with a real frame as soon as the stream recovers.
-export function _renderErkSimError(data){
+export function _renderErkSimError(data) {
   const wrap = byId('erkSimResult');
   if (!wrap) return;
-  const img    = byId('erkSimImg');
-  const ovl    = byId('erkSimOverlay');
+  const img = byId('erkSimImg');
+  const ovl = byId('erkSimOverlay');
   const banner = byId('erkSimError');
-  const msg    = byId('erkSimErrorMsg');
-  const ageEl  = byId('erkSimFrameAge');
+  const msg = byId('erkSimErrorMsg');
+  const ageEl = byId('erkSimFrameAge');
   const wrapImg = wrap.querySelector('.erk-test-result-imgwrap');
   // Hide the (potentially stale) previous frame + any previously
   // painted boxes — explicit "no picture" rather than a misleading
@@ -45,15 +45,16 @@ export function _renderErkSimError(data){
   // Suppress the freshness label — "vor X.X s" is meaningless when
   // we never got a usable frame. Drop both stale modifiers too so a
   // recovered tick starts from a clean slate.
-  if (ageEl){
+  if (ageEl) {
     ageEl.textContent = '';
     ageEl.hidden = true;
     ageEl.classList.remove('is-stale', 'is-very-stale');
   }
   if (wrapImg) wrapImg.classList.remove('is-stuck');
-  if (banner && msg){
+  if (banner && msg) {
     const code = String(data?.code || '');
-    msg.textContent = _ERK_ERR_MSG[code] || data?.error || 'Stream-Problem · warte auf frischen Frame';
+    msg.textContent =
+      _ERK_ERR_MSG[code] || data?.error || 'Stream-Problem · warte auf frischen Frame';
     banner.hidden = false;
   }
   wrap.hidden = false;
@@ -61,18 +62,18 @@ export function _renderErkSimError(data){
 }
 
 // Hide the error banner when a subsequent tick succeeds. Idempotent.
-function _hideErkSimError(){
+function _hideErkSimError() {
   const banner = byId('erkSimError');
   if (banner) banner.hidden = true;
 }
 
-export function _renderErkSimResult(data){
+export function _renderErkSimResult(data) {
   const wrap = byId('erkSimResult');
   if (!wrap) return;
-  const img  = byId('erkSimImg');
-  const ovl  = byId('erkSimOverlay');
+  const img = byId('erkSimImg');
+  const ovl = byId('erkSimOverlay');
   const list = byId('erkSimList');
-  const ttl  = byId('erkSimTitle');
+  const ttl = byId('erkSimTitle');
   // A success render always clears any error banner left by a prior
   // tick — otherwise the banner would stick around on top of a fresh
   // good frame.
@@ -89,9 +90,9 @@ export function _renderErkSimResult(data){
   // field, so older responses are forward-compatible.
   const ageEl = byId('erkSimFrameAge');
   const wrapImg = wrap.querySelector('.erk-test-result-imgwrap');
-  if (ageEl){
+  if (ageEl) {
     const ageMs = parseInt(data.frame_age_ms, 10);
-    if (Number.isFinite(ageMs)){
+    if (Number.isFinite(ageMs)) {
       const ageS = ageMs / 1000;
       const stale = ageMs > 2000;
       const veryStale = ageMs > 5000;
@@ -104,12 +105,14 @@ export function _renderErkSimResult(data){
       // bug image 5 in the user's report: clock showed 19:38:33,
       // panel said "vor 0.2 s". Reuse the existing is-stale colour
       // ramp via the same modifier so we don't add new CSS.
-      if (data.decoder_backlog_suspected){
+      if (data.decoder_backlog_suspected) {
         txt += ' · ⚠ Decoder-Backlog';
       }
       ageEl.textContent = txt;
-      ageEl.classList.toggle('is-stale',
-        (stale && !veryStale) || (!stale && !veryStale && !!data.decoder_backlog_suspected));
+      ageEl.classList.toggle(
+        'is-stale',
+        (stale && !veryStale) || (!stale && !veryStale && !!data.decoder_backlog_suspected),
+      );
       ageEl.classList.toggle('is-very-stale', veryStale);
       ageEl.hidden = false;
       if (wrapImg) wrapImg.classList.toggle('is-stuck', veryStale);
@@ -128,11 +131,14 @@ export function _renderErkSimResult(data){
   if (ovl) ovl.setAttribute('viewBox', `0 0 ${Math.max(1, fs.w)} ${Math.max(1, fs.h)}`);
 
   const dets = data.detections || [];
-  const passCount = dets.filter(d => d.verdict === 'pass').length;
-  if (ttl){
-    ttl.textContent = passCount > 0
-      ? `${passCount} Treffer würden Alarm auslösen`
-      : (dets.length === 0 ? 'Keine Erkennung' : 'Kein Treffer würde Alarm auslösen');
+  const passCount = dets.filter((d) => d.verdict === 'pass').length;
+  if (ttl) {
+    ttl.textContent =
+      passCount > 0
+        ? `${passCount} Treffer würden Alarm auslösen`
+        : dets.length === 0
+          ? 'Keine Erkennung'
+          : 'Kein Treffer würde Alarm auslösen';
   }
   // Reset the SVG overlay to layer skeletons. Each layer renders its
   // own content into the matching <g class="erk-layer ..."> so the
@@ -140,7 +146,7 @@ export function _renderErkSimResult(data){
   // (visibility="hidden") without re-running inference. Order in the
   // DOM = paint order: zones/masks at the back, trails next, bboxes
   // in front — matches the Mediathek lightbox layering.
-  if (ovl){
+  if (ovl) {
     ovl.innerHTML = `
       <g class="erk-layer erk-zonemask-layer" data-layer="zones"></g>
       <g class="erk-layer erk-trails-layer" data-layer="trails"></g>
@@ -152,32 +158,36 @@ export function _renderErkSimResult(data){
   // "10 px" on a 1920-wide viewBox shows up as ~10 px in screen
   // pixels regardless of how the wrapper scales.
   const boxLayer = ovl?.querySelector('.erk-bboxes-layer');
-  if (boxLayer){
-    boxLayer.innerHTML = dets.map(d => {
-      const cls = `erk-det-box is-${d.verdict}`;
-      const labelText = `${d.label} ${Math.round(d.score * 100)}%`;
-      const fontSize = Math.max(10, Math.round(fs.w / 100));
-      const boxR = Math.max(2, Math.round(fs.w / 480));
-      return `
+  if (boxLayer) {
+    boxLayer.innerHTML = dets
+      .map((d) => {
+        const cls = `erk-det-box is-${d.verdict}`;
+        const labelText = `${d.label} ${Math.round(d.score * 100)}%`;
+        const fontSize = Math.max(10, Math.round(fs.w / 100));
+        const boxR = Math.max(2, Math.round(fs.w / 480));
+        return `
         <rect class="${cls}" x="${d.bbox[0]}" y="${d.bbox[1]}" width="${d.bbox[2]}" height="${d.bbox[3]}" rx="${boxR}" vector-effect="non-scaling-stroke" />
         <text class="erk-det-label" x="${d.bbox[0] + 4}" y="${d.bbox[1] + fontSize + 2}" font-size="${fontSize}">${esc(labelText)}</text>
       `;
-    }).join('');
+      })
+      .join('');
   }
-  if (list){
-    if (dets.length === 0){
+  if (list) {
+    if (dets.length === 0) {
       list.innerHTML = `<div class="erk-det-empty">Coral hat in diesem Frame nichts erkannt.</div>`;
     } else {
-      list.innerHTML = dets.map(d => {
-        const verdictText = d.reason || _ERK_VERDICT_TXT[d.verdict] || '';
-        return `
+      list.innerHTML = dets
+        .map((d) => {
+          const verdictText = d.reason || _ERK_VERDICT_TXT[d.verdict] || '';
+          return `
           <div class="erk-det-row is-${esc(d.verdict)}">
             <span class="det-dot"></span>
             <span class="det-name">${esc(d.label)}</span>
             <span class="det-score">${Math.round(d.score * 100)}%</span>
             <span class="det-verdict">${esc(verdictText)}</span>
           </div>`;
-      }).join('');
+        })
+        .join('');
     }
   }
   // Decision-trace block — collapsible terminal log + active-config
@@ -192,13 +202,13 @@ export function _renderErkSimResult(data){
   // through the trace without being yanked back every second.
   const firstShow = wrap.hidden || wrap.dataset.everShown !== '1';
   wrap.hidden = false;
-  if (firstShow){
+  if (firstShow) {
     const btn = byId('erkSimulateBtn');
-    if (btn){
+    if (btn) {
       const rect = btn.getBoundingClientRect();
       const vh = window.innerHeight || document.documentElement.clientHeight;
       const inView = rect.top >= 0 && rect.bottom <= vh;
-      if (!inView){
+      if (!inView) {
         const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
         btn.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
       }

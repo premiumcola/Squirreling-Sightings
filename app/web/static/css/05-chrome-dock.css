@@ -21,7 +21,9 @@
    the panel #1a1a1a) — no blue cast, no backdrop-filter saturate.
    The half-step toward brighter gives the bar more contrast
    against the #111 page without re-introducing any hue. */
-.m-dock{display:none}
+.m-dock {
+  display: none;
+}
 
 /* ── Top fog overlay (mobile only) ──────────────────────────────────
    Fixed-position frosted-glass band at the very top of the
@@ -34,11 +36,13 @@
    underneath; the bar exists for visual treatment only.
    Mounted via body::before so no HTML wrapper is needed.
    The mask-image gradient handles the soft fade at the bottom edge. */
-@media (max-width:768px){
-  body::before{
-    content:"";
-    position:fixed;
-    top:0;left:0;right:0;
+@media (max-width: 768px) {
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     /* env() inset + a 24 px fade-tail. The overlay needs enough
        vertical real estate below the status-bar area for the
        gradient to feel like a soft transition rather than ending
@@ -46,31 +50,31 @@
        only ~20 px of the overlay actually faded — the user's eye
        still read the bottom edge as a hard cutoff. The new +24
        tail gives a meaningful gradient region. */
-    height:calc(env(safe-area-inset-top, 0px) + 24px);
-    background:rgba(31,31,35,0.55);
-    -webkit-backdrop-filter:blur(22px) saturate(1.05);
-    backdrop-filter:blur(22px) saturate(1.05);
+    height: calc(env(safe-area-inset-top, 0px) + 24px);
+    background: rgba(31, 31, 35, 0.55);
+    -webkit-backdrop-filter: blur(22px) saturate(1.05);
+    backdrop-filter: blur(22px) saturate(1.05);
     /* Top 55 % stays at full strength (covers the Dynamic Island /
        status-bar region completely) and the bottom 45 % tapers to
        transparent — natural ~40 px fade band on iPhone 15 Pro,
        no banding. Both prefixed and unprefixed declarations,
        Safari iOS form first per CLAUDE.md. */
-    -webkit-mask-image:linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
-    mask-image:linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
     /* Same iOS Safari compositing dance as the dock — html/body
        overflow-x:hidden in 25-mobile.css collapses backdrop sampling
        on fixed descendants. Forcing an own composited layer fixes
        the empty-blur on the top fog band the same way. */
-    isolation:isolate;
-    will-change:backdrop-filter, transform;
-    transform:translateZ(0);
-    pointer-events:none;
-    z-index:91;
+    isolation: isolate;
+    will-change: backdrop-filter, transform;
+    transform: translateZ(0);
+    pointer-events: none;
+    z-index: 91;
   }
 }
 
-@media (max-width:768px){
-  .m-dock{
+@media (max-width: 768px) {
+  .m-dock {
     /* Concentric corner geometry — three nested radii.
        --m-dock-margin     : equal on left, right, and floor of bottom.
                              Bottom additionally clears the home-indicator
@@ -86,10 +90,10 @@
                              button cluster. Pill radius is derived as
                              (bar_radius − inner_pad) so the active
                              pill curve nests inside the bar curve. */
-    --m-dock-margin:8px;
-    --m-dock-radius:47px;
-    --m-dock-inner-pad:8px;
-    --m-dock-pill-radius:calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
+    --m-dock-margin: 8px;
+    --m-dock-radius: 47px;
+    --m-dock-inner-pad: 8px;
+    --m-dock-pill-radius: calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
     /* Floating-strip layout: the dock sits with a small visible
        gap above the home-indicator zone, all corners curved, with
        a single soft drop shadow surrounding it. The previous
@@ -103,21 +107,21 @@
        band — matches the toast container's max(24px, env(...)) pattern
        in 11-chrome-overlays.css. Devices without a safe-area inset
        (older iPads, Android, desktop) still get the 8 px floor. */
-    --m-dock-bottom-gap:max(8px, calc(env(safe-area-inset-bottom, 0px) + 6px));
-    display:grid;
-    grid-template-columns:repeat(5,1fr);
-    gap:2px;
-    position:fixed;
-    left:var(--m-dock-margin);
-    right:var(--m-dock-margin);
-    bottom:var(--m-dock-bottom-gap);
-    padding:var(--m-dock-inner-pad) var(--m-dock-inner-pad);
-    border-radius:var(--m-dock-radius);
+    --m-dock-bottom-gap: max(8px, calc(env(safe-area-inset-bottom, 0px) + 6px));
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    position: fixed;
+    left: var(--m-dock-margin);
+    right: var(--m-dock-margin);
+    bottom: var(--m-dock-bottom-gap);
+    padding: var(--m-dock-inner-pad) var(--m-dock-inner-pad);
+    border-radius: var(--m-dock-radius);
     /* Single diffuse drop shadow — small downward y to anchor the
        strip visually above the home-indicator band, 24 px blur for
        softness, no second sharp layer (the previous 0 -2px 6px
        layer painted as a hard line on iPhone). */
-    box-shadow:0 4px 24px rgba(0,0,0,.55);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
     /* Translucent neutral fill + heavy backdrop blur. The blur is
        what makes page content scrolling underneath unreadable
        through the dock — without it the dock was a solid plate
@@ -128,9 +132,9 @@
        amplify hues and re-introduce the old Blaustich risk. The
        -webkit prefix comes first because Safari iOS (even 17+)
        still consults the prefixed form. */
-    background:rgba(31,31,35,0.72);
-    -webkit-backdrop-filter:blur(22px) saturate(1.05);
-    backdrop-filter:blur(22px) saturate(1.05);
+    background: rgba(31, 31, 35, 0.72);
+    -webkit-backdrop-filter: blur(22px) saturate(1.05);
+    backdrop-filter: blur(22px) saturate(1.05);
     /* iOS Safari compositing dance — without these three the dock
        rendered as a flat translucent plate with no visible blur on
        iPhone, even though the rule pair above is correct. Root cause:
@@ -148,9 +152,9 @@
            older iOS versions (16.x) still rely on — newer iOS reads
            will-change but the cost of the redundant transform is
            zero. */
-    isolation:isolate;
-    will-change:backdrop-filter, transform;
-    transform:translateZ(0);
+    isolation: isolate;
+    will-change: backdrop-filter, transform;
+    transform: translateZ(0);
     /* Stronger upward shadow than the previous −4 / 16 / .40 — that
        value was almost invisible against the dark page bg. The new
        layered shadow stack creates a soft fog gradient above the
@@ -159,12 +163,12 @@
        overlay below so depth is guaranteed even when iOS Safari
        refuses to composite the dock's backdrop-filter sample. */
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.10),
-      0 -2px 8px rgba(0,0,0,.55),
-      0 -10px 28px rgba(0,0,0,.45),
-      0 12px 40px rgba(0,0,0,.65);
-    z-index:90;
-    outline:0;
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 -2px 8px rgba(0, 0, 0, 0.55),
+      0 -10px 28px rgba(0, 0, 0, 0.45),
+      0 12px 40px rgba(0, 0, 0, 0.65);
+    z-index: 90;
+    outline: 0;
   }
   /* Fog band above the dock — independent fixed overlay that does
      NOT depend on backdrop-filter rendering, so the visual depth
@@ -175,77 +179,102 @@
      sees when content scrolls into the dock area. Sits at z-index
      89 so the dock at z-index 90 still paints over it cleanly.
      pointer-events:none keeps taps reaching content underneath. */
-  body::after{
-    content:"";
-    position:fixed;
-    left:0;right:0;
+  body::after {
+    content: '';
+    position: fixed;
+    left: 0;
+    right: 0;
     /* dock occupies (bottom-gap → bottom-gap + dock-height); the
        overlay sits flush against the page-bg-side of that band.
        Dock-height = 2*inner-pad + button min-height = 16 + 54 = 70. */
-    bottom:calc(env(safe-area-inset-bottom, 0px) + 2px + 70px);
-    height:80px;
-    background:linear-gradient(
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 2px + 70px);
+    height: 80px;
+    background: linear-gradient(
       to top,
-      rgba(17,17,17,0.85) 0%,
-      rgba(17,17,17,0.55) 30%,
-      rgba(17,17,17,0)    100%
+      rgba(17, 17, 17, 0.85) 0%,
+      rgba(17, 17, 17, 0.55) 30%,
+      rgba(17, 17, 17, 0) 100%
     );
-    pointer-events:none;
-    z-index:89;
+    pointer-events: none;
+    z-index: 89;
   }
-  .m-dock-btn{
-    border:0;outline:0;
-    background:transparent;
-    -webkit-tap-highlight-color:transparent;
+  .m-dock-btn {
+    border: 0;
+    outline: 0;
+    background: transparent;
+    -webkit-tap-highlight-color: transparent;
     /* Pill radius derived from bar radius − inner padding so the
        active pill's curve sits concentrically inside the bar's curve.
        At default values this resolves to 39 px (47 − 8). */
-    border-radius:var(--m-dock-pill-radius);
-    display:flex;flex-direction:column;
-    align-items:center;justify-content:center;
-    gap:3px;
-    padding:8px 4px 6px;
-    min-height:54px;
+    border-radius: var(--m-dock-pill-radius);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px 6px;
+    min-height: 54px;
     /* Slightly darker neutral than the old slate-blue (155,168,196)
        so iOS OLED stops rendering the inactive dock labels as
        visibly blue. Opacity bumped .7 → .78 to compensate for the
        darker base. .is-active below still uses the orange/blue/green
        accent — left untouched. */
-    color:rgba(160,168,178,.78);
-    cursor:pointer;
-    transition:background .18s,color .18s,transform .12s;
-    position:relative;
-    font-family:inherit;
+    color: rgba(160, 168, 178, 0.78);
+    cursor: pointer;
+    transition:
+      background 0.18s,
+      color 0.18s,
+      transform 0.12s;
+    position: relative;
+    font-family: inherit;
   }
-  .m-dock-btn svg{
-    width:22px;height:22px;
-    stroke:currentColor;stroke-width:1.9;fill:none;
-    stroke-linecap:round;stroke-linejoin:round;
+  .m-dock-btn svg {
+    width: 22px;
+    height: 22px;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
-  .m-dock-lbl{
-    font-size:9.5px;font-weight:600;
-    letter-spacing:.01em;line-height:1;
+  .m-dock-lbl {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1;
   }
-  .m-dock-btn:active{transform:scale(.94)}
-  .m-dock-btn.is-active{
-    color:rgb(var(--m-acc));
-    background:rgba(var(--m-acc),.13);
+  .m-dock-btn:active {
+    transform: scale(0.94);
+  }
+  .m-dock-btn.is-active {
+    color: rgb(var(--m-acc));
+    background: rgba(var(--m-acc), 0.13);
   }
   /* Pulsing green dot on the Live tab while at least one camera is
      enabled+armed. JS toggles [hidden]. */
-  .m-dock-livedot{
-    position:absolute;
-    top:8px;right:14px;
-    width:6px;height:6px;
-    border-radius:50%;
-    background:#22c55e;
-    animation:m-dock-livePulse 2s ease-out infinite;
+  .m-dock-livedot {
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: m-dock-livePulse 2s ease-out infinite;
   }
-  .m-dock-livedot[hidden]{display:none}
-  @keyframes m-dock-livePulse{
-    0%   {box-shadow:0 0 0 0 rgba(34,197,94,.55)}
-    70%  {box-shadow:0 0 0 6px rgba(34,197,94,0)}
-    100% {box-shadow:0 0 0 0 rgba(34,197,94,0)}
+  .m-dock-livedot[hidden] {
+    display: none;
+  }
+  @keyframes m-dock-livePulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+    }
+    70% {
+      box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
   }
   /* Reserve scroll-space at the bottom so the floating dock never
      overlaps the last bit of page content. Tracks the bottom-gap
@@ -253,35 +282,89 @@
      the design margin changes. The +8 trailing gives a final
      breathing buffer between the last page element and the dock's
      top edge. */
-  body{
-    padding-bottom:calc(
-      70px
-      + env(safe-area-inset-bottom, 0px)
-      + 2px
-      + 8px
-    )!important;
+  body {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px) + 2px + 8px) !important;
   }
   /* Narrow iPhones: nudge label down a hair so "Sichtungen" doesn't
      wrap. Only triggers under 380 px. */
-  @media (max-width:380px){
-    .m-dock-lbl{font-size:9px}
+  @media (max-width: 380px) {
+    .m-dock-lbl {
+      font-size: 9px;
+    }
   }
 }
-@media (prefers-reduced-motion:reduce){
-  .m-dock-livedot{animation:none}
-  .m-dock-btn{transition:none}
+@media (prefers-reduced-motion: reduce) {
+  .m-dock-livedot {
+    animation: none;
+  }
+  .m-dock-btn {
+    transition: none;
+  }
 }
 
-textarea{width:100%;padding:12px 13px;border-radius:14px;background:var(--surface);color:var(--text);border:none;outline:none;resize:vertical}textarea:focus{box-shadow:0 0 0 2px var(--accent)}
-.item-head,.compact-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.compact-head{margin-bottom:12px}.two-thirds{grid-template-columns:1.1fr .9fr}.inset{padding:14px;margin-top:14px;border-radius:18px}/* Wrap height follows the snapshot's natural aspect ratio: image is in
+textarea {
+  width: 100%;
+  padding: 12px 13px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: none;
+  outline: none;
+  resize: vertical;
+}
+textarea:focus {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.item-head,
+.compact-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.compact-head {
+  margin-bottom: 12px;
+}
+.two-thirds {
+  grid-template-columns: 1.1fr 0.9fr;
+}
+.inset {
+  padding: 14px;
+  margin-top: 14px;
+  border-radius: 18px;
+} /* Wrap height follows the snapshot's natural aspect ratio: image is in
    normal flow with width:100% + height:auto, the wrap shrinks to fit.
    The canvas overlay then inset:0 covers exactly the same area. Without
    max-height/object-fit there is no letterbox; canvas and image bounds
    stay 1:1 so clicks always land where they appear to land. */
-.canvas-wrap{position:relative;border-radius:18px;overflow:hidden;background:#222222;min-height:240px}
-.canvas-wrap img{display:block;width:100%;height:auto}
+.canvas-wrap {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #222222;
+  min-height: 240px;
+}
+.canvas-wrap img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 /* Canvas sits ABOVE the snapshot image and any sibling overlays so clicks
    reliably reach it. pointer-events:auto is the default for canvas, but
    stating it explicitly guards against any inherited none from the
    collapsing/animated parent panel. */
-.canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;pointer-events:auto;z-index:10}.shape-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.canvas-wrap canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  pointer-events: auto;
+  z-index: 10;
+}
+.shape-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}

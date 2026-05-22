@@ -5,4 +5,4 @@
 // SKELETON — task #3 fills this in by lifting the existing
 // lightbox.js title-row markup into a self-contained renderer.
 
-export function renderTitleBar(/* host, config */){}
+export function renderTitleBar(/* host, config */) {}

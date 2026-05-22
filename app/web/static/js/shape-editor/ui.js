@@ -11,21 +11,21 @@ import { _polyPoints, _polyLabel, _polyLabels } from './geometry.js';
 import { drawShapes, _SHAPE_LABEL_OPTS } from './canvas.js';
 import { saveShapesIntoForm } from './persistence.js';
 
-
-export function _updateShapeDrawingBar(){
+export function _updateShapeDrawingBar() {
   const bar = byId('shapeDrawingBar');
   if (!bar) return;
   const n = shapeState.points.length;
   bar.hidden = n === 0;
   const count = byId('shapeDrawingCount');
-  if (count){
+  if (count) {
     // Prefix the current mode so the user always knows what they're
     // about to commit — drawing in zone mode reads "Zone · 3 Punkte
     // gesetzt …", drawing in mask mode reads "Maske · 3 Punkte …".
     const modeLbl = shapeState.mode === 'mask' ? 'Maske' : 'Zone';
-    const tail = n < 3
-      ? `${n} Punkt${n === 1 ? '' : 'e'} gesetzt · Mindestens 3 für ein Polygon`
-      : `${n} Punkte gesetzt · Übernehmen möglich`;
+    const tail =
+      n < 3
+        ? `${n} Punkt${n === 1 ? '' : 'e'} gesetzt · Mindestens 3 für ein Polygon`
+        : `${n} Punkte gesetzt · Übernehmen möglich`;
     count.textContent = `${modeLbl} · ${tail}`;
   }
   const save = byId('saveShapeBtn');
@@ -37,15 +37,16 @@ export function _updateShapeDrawingBar(){
 // via canvas click (see onUp in pointer.js).
 shapeState.expandedRows = shapeState.expandedRows || new Set();
 
-export function _renderShapeList(){
+export function _renderShapeList() {
   const host = byId('shapeList');
   if (!host) return;
   const zones = shapeState.zones || [];
   const masks = shapeState.masks || [];
   const clearRow = byId('shapeClearRow');
-  if (clearRow) clearRow.hidden = (zones.length + masks.length) === 0;
-  if (zones.length + masks.length === 0){
-    host.innerHTML = '<div class="field-help" style="padding:8px 2px">Noch keine Polygone. Wähle oben einen Modus und klicke Punkte auf den Snapshot.</div>';
+  if (clearRow) clearRow.hidden = zones.length + masks.length === 0;
+  if (zones.length + masks.length === 0) {
+    host.innerHTML =
+      '<div class="field-help" style="padding:8px 2px">Noch keine Polygone. Wähle oben einen Modus und klicke Punkte auf den Snapshot.</div>';
     return;
   }
   const row = (p, i, kind) => {
@@ -55,16 +56,19 @@ export function _renderShapeList(){
     const polyLabels = new Set(_polyLabels(p));
     const allOn = polyLabels.size === 0;
     const expanded = shapeState.expandedRows.has(pulseKey);
-    const checks = `<label class="shape-lbl-chip${allOn ? ' shape-lbl-chip--on' : ''}"><input type="checkbox" ${allOn ? 'checked' : ''} onclick="event.stopPropagation();_setShapeAllLabels('${kind}',${i},this.checked)"><span>Alle</span></label>`
-      + _SHAPE_LABEL_OPTS.map(o => {
-        const on = polyLabels.has(o.k);
-        return `<label class="shape-lbl-chip${on ? ' shape-lbl-chip--on' : ''}"><input type="checkbox" ${on ? 'checked' : ''} onclick="event.stopPropagation();_toggleShapeLabel('${kind}',${i},'${o.k}',this.checked)"><span>${o.l}</span></label>`;
-      }).join('');
+    const checks =
+      `<label class="shape-lbl-chip${allOn ? ' shape-lbl-chip--on' : ''}"><input type="checkbox" ${allOn ? 'checked' : ''} onclick="event.stopPropagation();_setShapeAllLabels('${kind}',${i},this.checked)"><span>Alle</span></label>` +
+      _SHAPE_LABEL_OPTS
+        .map((o) => {
+          const on = polyLabels.has(o.k);
+          return `<label class="shape-lbl-chip${on ? ' shape-lbl-chip--on' : ''}"><input type="checkbox" ${on ? 'checked' : ''} onclick="event.stopPropagation();_toggleShapeLabel('${kind}',${i},'${o.k}',this.checked)"><span>${o.l}</span></label>`;
+        })
+        .join('');
     // Trigger flags are zone-only: masks just exclude motion/detection so
     // there's nothing to trigger from. The chevron button is suppressed
     // for masks; the whole trigger panel block stays out of their markup.
     let triggerHtml = '';
-    if (kind === 'zone'){
+    if (kind === 'zone') {
       const sp = p?.save_photo !== false;
       const sv = p?.save_video !== false;
       const st = p?.send_telegram !== false;
@@ -74,9 +78,10 @@ export function _renderShapeList(){
         <label class="shape-trig-chip${st ? ' shape-trig-chip--on' : ''}"><input type="checkbox" ${st ? 'checked' : ''} onclick="event.stopPropagation();_toggleShapeOption('${kind}',${i},'send_telegram',this.checked)"><span>📨 Telegram</span></label>
       </div>`;
     }
-    const chev = (kind === 'zone')
-      ? `<button type="button" class="shape-row-chev${expanded ? ' shape-row-chev--open' : ''}" title="Aufnahme-Optionen" onclick="event.stopPropagation();_toggleShapeExpanded('${kind}',${i})"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,3 11,8 5,13"/></svg></button>`
-      : '';
+    const chev =
+      kind === 'zone'
+        ? `<button type="button" class="shape-row-chev${expanded ? ' shape-row-chev--open' : ''}" title="Aufnahme-Optionen" onclick="event.stopPropagation();_toggleShapeExpanded('${kind}',${i})"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,3 11,8 5,13"/></svg></button>`
+        : '';
     return `<div class="shape-row${shapeState.pulse === pulseKey ? ' pulse' : ''}" data-kind="${kind}" data-idx="${i}" id="shapeRow_${kind}_${i}" onclick="_pulseShape('${kind}',${i})">
       <div class="shape-row-head">
         <span class="shape-row-dot shape-row-dot--${kind}"></span>
@@ -90,22 +95,21 @@ export function _renderShapeList(){
     </div>`;
   };
   host.innerHTML =
-      zones.map((p, i) => row(p, i, 'zone')).join('')
-    + masks.map((p, i) => row(p, i, 'mask')).join('');
+    zones.map((p, i) => row(p, i, 'zone')).join('') +
+    masks.map((p, i) => row(p, i, 'mask')).join('');
 }
-
 
 // Inline onclick="..." callsites on shape rows / chips — these names are
 // rendered into innerHTML strings above and need to be reachable from
 // the global scope when the template fires.
-window._toggleShapeExpanded = function(kind, idx){
+window._toggleShapeExpanded = function (kind, idx) {
   const key = `${kind}:${idx}`;
   if (shapeState.expandedRows.has(key)) shapeState.expandedRows.delete(key);
   else shapeState.expandedRows.add(key);
   _renderShapeList();
 };
 
-window._toggleShapeOption = function(kind, idx, key, on){
+window._toggleShapeOption = function (kind, idx, key, on) {
   const arr = kind === 'zone' ? shapeState.zones : shapeState.masks;
   const poly = arr[idx];
   if (!poly) return;
@@ -114,7 +118,7 @@ window._toggleShapeOption = function(kind, idx, key, on){
   _renderShapeList();
 };
 
-window._toggleShapeLabel = function(kind, idx, labelKey, on){
+window._toggleShapeLabel = function (kind, idx, labelKey, on) {
   const arr = kind === 'zone' ? shapeState.zones : shapeState.masks;
   const poly = arr[idx];
   if (!poly) return;
@@ -127,7 +131,7 @@ window._toggleShapeLabel = function(kind, idx, labelKey, on){
   _renderShapeList();
 };
 
-window._setShapeAllLabels = function(kind, idx, allOn){
+window._setShapeAllLabels = function (kind, idx, allOn) {
   const arr = kind === 'zone' ? shapeState.zones : shapeState.masks;
   const poly = arr[idx];
   if (!poly) return;
@@ -140,13 +144,13 @@ window._setShapeAllLabels = function(kind, idx, allOn){
   _renderShapeList();
 };
 
-window._pulseShape = function(kind, idx){
+window._pulseShape = function (kind, idx) {
   shapeState.pulse = shapeState.pulse === `${kind}:${idx}` ? null : `${kind}:${idx}`;
   drawShapes();
   _renderShapeList();
 };
 
-window._deleteShape = function(kind, idx){
+window._deleteShape = function (kind, idx) {
   const arr = kind === 'zone' ? shapeState.zones : shapeState.masks;
   arr.splice(idx, 1);
   if (shapeState.pulse === `${kind}:${idx}`) shapeState.pulse = null;

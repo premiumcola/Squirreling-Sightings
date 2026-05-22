@@ -9,10 +9,7 @@ import { colors, OBJ_LABEL, OBJ_SVG } from '../../core/icons.js';
 import { apiPost } from '../../core/api.js';
 import { lbState } from '../state.js';
 import { _state } from './_state.js';
-import {
-  _getHiddenClassesForCam,
-  _setHiddenClassesForCam,
-} from './hidden-classes.js';
+import { _getHiddenClassesForCam, _setHiddenClassesForCam } from './hidden-classes.js';
 import {
   _isPointInAnyMask,
   _lbDrawDetections,
@@ -28,7 +25,7 @@ import {
 } from './time-axis.js';
 import { _wireBarEndTooltips } from './track-loss-tooltip.js';
 
-export function lbClearTrackTimeline(){
+export function lbClearTrackTimeline() {
   const host = byId('lightboxBottomStack');
   if (!host) return;
   host.innerHTML = '';
@@ -44,18 +41,16 @@ export function lbClearTrackTimeline(){
 //   predicted — non-detect sample (source = predicted), NOT masked.
 //   masked    — subject ground point inside an exclusion mask
 //               (overrides everything else — alerting filter wins).
-function _classifySample(s, threshold, masks, natW, natH){
+function _classifySample(s, threshold, masks, natW, natH) {
   if (!s) return 'confirmed';
   const bb = s.bbox || {};
   const cx = (bb.x1 + bb.x2) / 2;
   const cy = bb.y2;
-  if (masks && masks.length
-      && _isPointInAnyMask(cx, cy, natW, natH, masks)){
+  if (masks && masks.length && _isPointInAnyMask(cx, cy, natW, natH, masks)) {
     return 'masked';
   }
   const src = s.source;
-  const isDetect = (src === undefined || src === null
-                    || src === 'detect' || src === 'track');
+  const isDetect = src === undefined || src === null || src === 'detect' || src === 'track';
   if (!isDetect) return 'predicted';
   const sc = s.score;
   if (typeof sc === 'number' && sc < threshold) return 'weak';
@@ -66,15 +61,15 @@ function _classifySample(s, threshold, masks, natW, natH){
 // the [t0, t1] timeline. Each run carries a `status` + its time
 // boundaries so the bar template can paint one overlay per non-
 // confirmed run.
-function _segmentTrack(samples, threshold, masks, natW, natH){
+function _segmentTrack(samples, threshold, masks, natW, natH) {
   if (!samples.length) return [];
   const out = [];
   let curStatus = _classifySample(samples[0], threshold, masks, natW, natH);
   let curStart = samples[0].t;
-  for (let i = 1; i < samples.length; i++){
+  for (let i = 1; i < samples.length; i++) {
     const s = samples[i];
     const status = _classifySample(s, threshold, masks, natW, natH);
-    if (status !== curStatus){
+    if (status !== curStatus) {
       out.push({ status: curStatus, t0: curStart, t1: s.t });
       curStatus = status;
       curStart = s.t;
@@ -92,12 +87,12 @@ function _segmentTrack(samples, threshold, masks, natW, natH){
 //   bottom — ghost (never confirmed) OR almost-entirely masked.
 //            Painted smaller + neutral gray in the de-emphasised
 //            second band.
-function _classifyTrackTier(tr, threshold, segments, t0, t1){
-  const bestScore = (typeof tr.best_score === 'number') ? tr.best_score : 0;
+function _classifyTrackTier(tr, threshold, segments, t0, t1) {
+  const bestScore = typeof tr.best_score === 'number' ? tr.best_score : 0;
   if (bestScore < threshold) return 'ghost';
   const span = Math.max(0.0001, t1 - t0);
   const maskedSpan = segments
-    .filter(s => s.status === 'masked')
+    .filter((s) => s.status === 'masked')
     .reduce((a, s) => a + (s.t1 - s.t0), 0);
   if (maskedSpan >= 0.95 * span) return 'masked';
   return 'confirmed';
@@ -108,25 +103,32 @@ function _classifyTrackTier(tr, threshold, segments, t0, t1){
 // previously-placed track still occupies its time window. Result
 // is one number per track + the total mini-row count so the
 // strip can size its top band.
-function _assignTopMiniRows(tracks){
+function _assignTopMiniRows(tracks) {
   const rows = [];
   const assignment = new Map();
-  for (const tr of tracks){
+  for (const tr of tracks) {
     const samples = tr.samples || [];
     if (!samples.length) continue;
     const start = samples[0].t;
     const end = samples[samples.length - 1].t;
     let placed = -1;
-    for (let r = 0; r < rows.length; r++){
-      if (rows[r] <= start){ rows[r] = end; placed = r; break; }
+    for (let r = 0; r < rows.length; r++) {
+      if (rows[r] <= start) {
+        rows[r] = end;
+        placed = r;
+        break;
+      }
     }
-    if (placed < 0){ rows.push(end); placed = rows.length - 1; }
+    if (placed < 0) {
+      rows.push(end);
+      placed = rows.length - 1;
+    }
     assignment.set(tr, placed);
   }
   return { assignment, rowCount: rows.length || 1 };
 }
 
-function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, opts = {}){
+function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, opts = {}) {
   const samples = tr.samples || [];
   if (!samples.length) return '';
   const t0 = Math.max(0, samples[0].t);
@@ -141,28 +143,29 @@ function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, 
   // × lost marker — keep the existing rules. end_reason === "timeout"
   // AND the bar still ends > 0.4 s before clip duration.
   const endReason = tr.end_reason;
-  const endedEarlyGap = (duration - t1) > 0.4;
+  const endedEarlyGap = duration - t1 > 0.4;
   let showEndX;
   if (endReason === 'timeout') showEndX = endedEarlyGap;
   else if (endReason === undefined || endReason === null) showEndX = endedEarlyGap;
   else showEndX = false;
   const endRight = Math.max(0, ((duration - t1) / duration) * 100);
   const predictedSpan = segments
-    .filter(s => s.status === 'predicted')
+    .filter((s) => s.status === 'predicted')
     .reduce((acc, s) => acc + (s.t1 - s.t0), 0);
   let tt = `Track #${tr._num} · ${t0.toFixed(1)}s → ${t1.toFixed(1)}s`;
   if (predictedSpan > 0.05) tt += ` · ${predictedSpan.toFixed(1)} s prädiziert`;
-  if (tier === 'ghost')       tt += ' · Ghost (nie bestätigt)';
+  if (tier === 'ghost') tt += ' · Ghost (nie bestätigt)';
   else if (tier === 'masked') tt += ' · Maskiert';
   const idx = tr._num - 1;
   // BOTTOM sub-band — ghost (dotted outline gray) or masked (gray
   // solid fill). Smaller, de-emphasised. No per-segment overlays
   // here; the whole track is in the secondary tier.
-  if (tier !== 'confirmed'){
+  if (tier !== 'confirmed') {
     const barStyle = `left:${left.toFixed(2)}%;width:${width.toFixed(2)}%`;
-    const maskedBadge = tier === 'masked'
-      ? `<span class="lbtt-bar-masked" aria-label="Maskiert" title="Außerhalb Alarmierung">⊘</span>`
-      : '';
+    const maskedBadge =
+      tier === 'masked'
+        ? `<span class="lbtt-bar-masked" aria-label="Maskiert" title="Außerhalb Alarmierung">⊘</span>`
+        : '';
     return `<button type="button" class="lbtt-bar lbtt-bar--lo" data-status="${tier}" data-seek="${t0.toFixed(3)}" title="${tt}" aria-label="${tt}" style="${barStyle}">
       <span class="lbtt-bar-num">#${tr._num}</span>
       ${maskedBadge}
@@ -177,15 +180,12 @@ function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, 
   // through the gaps so identity stays readable).
   const totalSpan = Math.max(0.0001, t1 - t0);
   const overlayParts = [];
-  for (const seg of segments){
+  for (const seg of segments) {
     if (seg.status === 'confirmed') continue;
     const segL = Math.max(0, ((seg.t0 - t0) / totalSpan) * 100);
-    const segW = Math.max(0,
-      ((Math.min(seg.t1, t1) - Math.max(seg.t0, t0)) / totalSpan) * 100);
+    const segW = Math.max(0, ((Math.min(seg.t1, t1) - Math.max(seg.t0, t0)) / totalSpan) * 100);
     if (segW < 0.01) continue;
-    const cls = seg.status === 'masked'
-      ? 'lbtt-bar-maskspan'
-      : 'lbtt-bar-predicted';
+    const cls = seg.status === 'masked' ? 'lbtt-bar-maskspan' : 'lbtt-bar-predicted';
     overlayParts.push(
       `<span class="${cls}" style="left:${segL.toFixed(2)}%;width:${segW.toFixed(2)}%"></span>`,
     );
@@ -207,15 +207,17 @@ function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, 
 // origin. The shared --play-pct CSS variable on .lb-time-stack drives
 // scrubber-fill width + scrubber-thumb left + play-line left in
 // lockstep so a single rAF write paints all three.
-export function lbRenderTrackTimeline(item){
+export function lbRenderTrackTimeline(item) {
   const host = byId('lightboxBottomStack');
   if (!host) return;
-  if (!item){ host.innerHTML = ''; return; }
+  if (!item) {
+    host.innerHTML = '';
+    return;
+  }
 
   const isTimelapse = item.type === 'timelapse';
   const tracks = item._tracks;
-  const haveTracks = !!(tracks
-    && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
+  const haveTracks = !!(tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
   // Camera-side allowed-labels filter (same as the canvas render
   // path). Only classes that pass the filter get a row; hidden-classes
   // are still rendered as a row (with the badge dimmed) so the user
@@ -228,12 +230,11 @@ export function lbRenderTrackTimeline(item){
   // to the tracks' max sample timestamp for the rare pre-metadata
   // render. Used for bar percentages + tick labels.
   const videoEl = byId('lightboxVideo');
-  const vidDur = Number.isFinite(videoEl?.duration) && videoEl.duration > 0
-    ? videoEl.duration : 0;
+  const vidDur = Number.isFinite(videoEl?.duration) && videoEl.duration > 0 ? videoEl.duration : 0;
   let maxT = 0;
-  if (haveTracks){
-    for (const tr of tracks.tracks){
-      for (const sm of (tr.samples || [])){
+  if (haveTracks) {
+    for (const tr of tracks.tracks) {
+      for (const sm of tr.samples || []) {
         if (sm.t > maxT) maxT = sm.t;
       }
     }
@@ -248,16 +249,16 @@ export function lbRenderTrackTimeline(item){
   // strip stack stays stable across re-opens. `_num` was stamped at
   // fetch time (fetcher.js) so this loop only needs to bucket.
   const byLabel = new Map();
-  if (haveTracks){
-    for (const tr of tracks.tracks){
+  if (haveTracks) {
+    for (const tr of tracks.tracks) {
       const lbl = tr.label || 'unknown';
       if (allowed !== null && !allowed.has(lbl)) continue;
       if (!byLabel.has(lbl)) byLabel.set(lbl, []);
       byLabel.get(lbl).push(tr);
     }
   }
-  const orderedLabels = Object.keys(OBJ_LABEL).filter(l => byLabel.has(l));
-  for (const l of byLabel.keys()){
+  const orderedLabels = Object.keys(OBJ_LABEL).filter((l) => byLabel.has(l));
+  for (const l of byLabel.keys()) {
     if (!orderedLabels.includes(l)) orderedLabels.push(l);
   }
 
@@ -275,14 +276,17 @@ export function lbRenderTrackTimeline(item){
   // and the leading band collapses to zero width — invisible by
   // design.
   const rs = item.recording_settings || {};
-  const preS  = Math.max(0, Number(rs.pre_motion_seconds)  || 0);
+  const preS = Math.max(0, Number(rs.pre_motion_seconds) || 0);
   const postS = Math.max(0, Number(rs.post_motion_seconds) || 0);
-  const prePct  = duration > 0 ? Math.min(100, (preS  / duration) * 100) : 0;
+  const prePct = duration > 0 ? Math.min(100, (preS / duration) * 100) : 0;
   const postPct = duration > 0 ? Math.min(100, (postS / duration) * 100) : 0;
-  const rollHtml = (prePct > 0 || postPct > 0) ? `
-    ${prePct  > 0 ? `<span class="lb-scrub-roll lb-scrub-roll--pre" style="width:${prePct.toFixed(2)}%" title="Vorlauf · ${preS}s"></span>` : ''}
+  const rollHtml =
+    prePct > 0 || postPct > 0
+      ? `
+    ${prePct > 0 ? `<span class="lb-scrub-roll lb-scrub-roll--pre" style="width:${prePct.toFixed(2)}%" title="Vorlauf · ${preS}s"></span>` : ''}
     ${postPct > 0 ? `<span class="lb-scrub-roll lb-scrub-roll--post" style="width:${postPct.toFixed(2)}%" title="Nachlauf · ${postS}s"></span>` : ''}
-  ` : '';
+  `
+      : '';
 
   // Scrubber row — always present. Play button lives in the sidebar
   // (NOT inside the scrubber bar). Scrubber bar is full-width in the
@@ -309,9 +313,10 @@ export function lbRenderTrackTimeline(item){
   // Per-clip spawn threshold (gates.min_confidence) drives the
   // status classifier — same value the bbox renderer reads, so the
   // bar texture agrees with the video bbox style for every sample.
-  const spawnThreshold = (tracks && tracks.gates
-                          && typeof tracks.gates.min_confidence === 'number')
-    ? tracks.gates.min_confidence : 0.50;
+  const spawnThreshold =
+    tracks && tracks.gates && typeof tracks.gates.min_confidence === 'number'
+      ? tracks.gates.min_confidence
+      : 0.5;
 
   // Per-class strips + matching badges. Skip when there are no
   // tracks (motion clips trigger the auto-reindex banner in that
@@ -324,8 +329,8 @@ export function lbRenderTrackTimeline(item){
   // dropped — it duplicated information already obvious from the
   // first confirmed track in each lane and added visual noise
   // above the timeline.
-  if (haveTracks && orderedLabels.length > 0){
-    for (const lbl of orderedLabels){
+  if (haveTracks && orderedLabels.length > 0) {
+    for (const lbl of orderedLabels) {
       const labelText = OBJ_LABEL[lbl] || lbl;
       const rawSvg = OBJ_SVG[lbl] || OBJ_SVG.alarm || '';
       const avatarSvg = rawSvg.replace('width="16" height="16"', 'width="18" height="18"');
@@ -343,24 +348,31 @@ export function lbRenderTrackTimeline(item){
       // the SPLIT into two flex children happens once per class.
       const topTracks = [];
       const botTracks = [];
-      for (const tr of trs){
+      for (const tr of trs) {
         const samples = tr.samples || [];
-        if (!samples.length){ botTracks.push(tr); continue; }
+        if (!samples.length) {
+          botTracks.push(tr);
+          continue;
+        }
         const t0 = Math.max(0, samples[0].t);
         const t1 = Math.min(duration, samples[samples.length - 1].t);
         const segs = _segmentTrack(samples, spawnThreshold, camMasks, _natW, _natH);
         const tier = _classifyTrackTier(tr, spawnThreshold, segs, t0, t1);
         (tier === 'confirmed' ? topTracks : botTracks).push(tr);
       }
-      const { assignment: topRows, rowCount: topRowCount }
-        = _assignTopMiniRows(topTracks);
-      const topBarsHtml = topTracks.map(tr => _renderTrackBar(
-        tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks,
-        { miniRow: topRows.get(tr) || 0 },
-      )).join('');
-      const botBarsHtml = botTracks.map(tr => _renderTrackBar(
-        tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks,
-      )).join('');
+      const { assignment: topRows, rowCount: topRowCount } = _assignTopMiniRows(topTracks);
+      const topBarsHtml = topTracks
+        .map((tr) =>
+          _renderTrackBar(tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks, {
+            miniRow: topRows.get(tr) || 0,
+          }),
+        )
+        .join('');
+      const botBarsHtml = botTracks
+        .map((tr) =>
+          _renderTrackBar(tr, duration, fallbackC, spawnThreshold, _natW, _natH, camMasks),
+        )
+        .join('');
       const barsHtml = `
         <div class="lbtt-strip-top" data-rows="${topRowCount}">${topBarsHtml}</div>
         ${botTracks.length ? `<div class="lbtt-strip-bot">${botBarsHtml}</div>` : ''}`;
@@ -372,7 +384,7 @@ export function lbRenderTrackTimeline(item){
       timeColParts.push(`
         <div class="lbtt-strip" data-on="${isOn ? '1' : '0'}" data-label="${lbl}">${barsHtml}</div>`);
     }
-  } else if (!haveTracks){
+  } else if (!haveTracks) {
     // No-tracks placeholder — keep the layout structure so the
     // cursor + scrubber still align with the strips below. For
     // timelapses we add an inline "Nach-Erkennung starten" button
@@ -381,7 +393,7 @@ export function lbRenderTrackTimeline(item){
     // inside the video region surfaces the same affordance, so
     // here a plain text line is enough.
     sidebarParts.push(`<div class="lbtt-empty-side"></div>`);
-    if (isTimelapse){
+    if (isTimelapse) {
       const eid = item.event_id || '';
       const cid = item.camera_id || '';
       timeColParts.push(`
@@ -404,19 +416,21 @@ export function lbRenderTrackTimeline(item){
       // gefiltert"). Legacy clips without the gates field gracefully
       // fall back to a shorter message.
       const indexerRan = !!(tracks && (tracks.built_at || tracks.schema));
-      if (indexerRan){
+      if (indexerRan) {
         const gates = (tracks && tracks.gates) || null;
-        const minPct = gates && typeof gates.min_confidence === 'number'
-          ? Math.round(gates.min_confidence * 100)
-          : null;
-        const tail = minPct != null
-          ? `<span class="lbtt-empty-sub">kurze Sichtungen unter ${minPct} % werden gefiltert</span>`
-          : '';
+        const minPct =
+          gates && typeof gates.min_confidence === 'number'
+            ? Math.round(gates.min_confidence * 100)
+            : null;
+        const tail =
+          minPct != null
+            ? `<span class="lbtt-empty-sub">kurze Sichtungen unter ${minPct} % werden gefiltert</span>`
+            : '';
         timeColParts.push(
-          `<div class="lbtt-empty lbtt-empty-done">`
-          + `<span class="lbtt-empty-text">Indexierung fertig · keine Spuren bestätigt</span>`
-          + tail
-          + `</div>`,
+          `<div class="lbtt-empty lbtt-empty-done">` +
+            `<span class="lbtt-empty-text">Indexierung fertig · keine Spuren bestätigt</span>` +
+            tail +
+            `</div>`,
         );
       } else {
         // I1 · clip has no sidecar at all (recorded before the
@@ -425,10 +439,10 @@ export function lbRenderTrackTimeline(item){
         // "Neu indexieren" pill in the overlay-toggles row to
         // produce one. No automatic kick.
         timeColParts.push(
-          `<div class="lbtt-empty lbtt-empty-unindexed">`
-          + `<span class="lbtt-empty-text">Noch nicht indexiert</span>`
-          + `<span class="lbtt-empty-sub">über »Neu indexieren« erzeugen</span>`
-          + `</div>`,
+          `<div class="lbtt-empty lbtt-empty-unindexed">` +
+            `<span class="lbtt-empty-text">Noch nicht indexiert</span>` +
+            `<span class="lbtt-empty-sub">über »Neu indexieren« erzeugen</span>` +
+            `</div>`,
         );
       }
     }
@@ -440,7 +454,7 @@ export function lbRenderTrackTimeline(item){
   // operator has no idea where in the day they're scrubbing).
   const N = 4;
   let parts = '';
-  for (let i = 0; i < N; i++){
+  for (let i = 0; i < N; i++) {
     const tSec = (duration * i) / (N - 1);
     const pct = (i / (N - 1)) * 100;
     const nudge = i === 0 ? 0 : i === N - 1 ? 24 : 12;
@@ -484,13 +498,13 @@ export function lbRenderTrackTimeline(item){
   // + cursor drag. Listeners bind to freshly-rendered elements so
   // we don't need an idempotency flag here — innerHTML replaced any
   // previous bindings.
-  host.querySelectorAll('.lbtt-badge').forEach(btn => {
+  host.querySelectorAll('.lbtt-badge').forEach((btn) => {
     btn.addEventListener('click', _onTimelineBadgeClick);
   });
-  host.querySelectorAll('.lbtt-bar').forEach(btn => {
+  host.querySelectorAll('.lbtt-bar').forEach((btn) => {
     btn.addEventListener('click', _onTimelineBarClick);
   });
-  host.querySelectorAll('.lbtt-empty-rescan').forEach(btn => {
+  host.querySelectorAll('.lbtt-empty-rescan').forEach((btn) => {
     btn.addEventListener('click', _onTimelineRescanClick);
   });
   _wireBarEndTooltips(host);
@@ -503,7 +517,7 @@ export function lbRenderTrackTimeline(item){
   _updatePlayPct();
 }
 
-function _onTimelineBadgeClick(ev){
+function _onTimelineBadgeClick(ev) {
   ev.stopPropagation();
   const btn = ev.currentTarget;
   const lbl = btn.dataset.label;
@@ -521,7 +535,7 @@ function _onTimelineBadgeClick(ev){
   _lbDrawDetections();
 }
 
-function _onTimelineBarClick(ev){
+function _onTimelineBarClick(ev) {
   ev.stopPropagation();
   const btn = ev.currentTarget;
   const t = parseFloat(btn.dataset.seek || '0');
@@ -542,7 +556,7 @@ function _onTimelineBarClick(ev){
 // re-renders via the existing fetcher path. If the worker never
 // produces tracks (no detectable motion at all), surface a final
 // "Keine Objekte erkannt" state rather than spinning forever.
-async function _onTimelineRescanClick(ev){
+async function _onTimelineRescanClick(ev) {
   ev.preventDefault();
   ev.stopPropagation();
   const btn = ev.currentTarget;
@@ -558,18 +572,20 @@ async function _onTimelineRescanClick(ev){
   try {
     let d;
     try {
-      d = await apiPost(`/api/events/${encodeURIComponent(eid)}/rescan?camera_id=${encodeURIComponent(cid)}`);
+      d = await apiPost(
+        `/api/events/${encodeURIComponent(eid)}/rescan?camera_id=${encodeURIComponent(cid)}`,
+      );
     } catch (e) {
       if (label) label.textContent = `Fehler: ${e?.message || e}`;
       throw e;
     }
-    if (!d?.ok){
+    if (!d?.ok) {
       if (label) label.textContent = `Fehler: ${d?.error || 'Fehler'}`;
       host.dataset.state = 'err';
       btn.disabled = false;
       return;
     }
-  } catch (err){
+  } catch (err) {
     if (label) label.textContent = `Fehler: ${err?.message || err}`;
     host.dataset.state = 'err';
     btn.disabled = false;
@@ -584,20 +600,21 @@ async function _onTimelineRescanClick(ev){
   const pollInterval = 4000;
   const tick = async () => {
     attempts += 1;
-    if (lbState.item?.event_id !== eid) return;   // user navigated away
+    if (lbState.item?.event_id !== eid) return; // user navigated away
     try {
       lbInvalidateTracks(eid);
       if (lbState.item) delete lbState.item._tracks;
       await lbLoadTracksForItem(lbState.item);
       const fresh = lbState.item?._tracks;
-      const ready = !!(fresh
-        && Array.isArray(fresh.tracks) && fresh.tracks.length > 0);
-      if (ready){
+      const ready = !!(fresh && Array.isArray(fresh.tracks) && fresh.tracks.length > 0);
+      if (ready) {
         lbRenderTrackTimeline(lbState.item);
         return;
       }
-    } catch { /* swallow — keep polling */ }
-    if (attempts < maxAttempts){
+    } catch {
+      /* swallow — keep polling */
+    }
+    if (attempts < maxAttempts) {
       setTimeout(tick, pollInterval);
       return;
     }

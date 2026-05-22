@@ -14,9 +14,18 @@ export const byId = (id) => document.getElementById(id);
 // Handles the OWASP-recommended five characters; the `??` falls back
 // to '' on null/undefined so we never write the literal "null" into
 // markup.
-export const esc = (s) => String(s ?? '').replaceAll(/[&<>"']/g, (m) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[m]));
+export const esc = (s) =>
+  String(s ?? '').replaceAll(
+    /[&<>"']/g,
+    (m) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[m],
+  );
 
 // Convenience query helpers — used sparingly today but normalised
 // here so any future migration off byId-everywhere can land without

@@ -25,29 +25,34 @@ const _MODE_HINTS = {
   mask: 'Erkennungen innerhalb der roten Polygone werden unterdrückt.',
 };
 
-function _normalise(mode){
+function _normalise(mode) {
   return mode === 'mask' ? 'mask' : 'zone';
 }
 
-function _readStoredMode(){
+function _readStoredMode() {
   try {
     return _normalise(localStorage.getItem(STORAGE_KEY));
-  } catch { return 'zone'; }
+  } catch {
+    return 'zone';
+  }
 }
 
-function _writeStoredMode(mode){
-  try { localStorage.setItem(STORAGE_KEY, _normalise(mode)); }
-  catch { /* quota / private mode — fall through silently */ }
+function _writeStoredMode(mode) {
+  try {
+    localStorage.setItem(STORAGE_KEY, _normalise(mode));
+  } catch {
+    /* quota / private mode — fall through silently */
+  }
 }
 
 // Sync the segmented control's visual + ARIA state to the current
 // shapeState.mode. Idempotent — safe to call on every editor open
 // even when the toggle DOM is freshly rendered.
-export function _syncShapeModeUI(){
+export function _syncShapeModeUI() {
   const mode = _normalise(shapeState.mode);
   const toggle = byId('shapeModeToggle');
-  if (toggle){
-    toggle.querySelectorAll('.shape-mode-pill').forEach(btn => {
+  if (toggle) {
+    toggle.querySelectorAll('.shape-mode-pill').forEach((btn) => {
       const active = btn.dataset.mode === mode;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -60,7 +65,7 @@ export function _syncShapeModeUI(){
 // Apply a mode change — pure state + UI update, no DOM event handling.
 // Callers: the click handler in bindShapeModeToggle, and editCamera
 // (via restoreShapeMode) when the editor opens.
-function _applyMode(mode, { resetPoints = true } = {}){
+function _applyMode(mode, { resetPoints = true } = {}) {
   const next = _normalise(mode);
   const prev = _normalise(shapeState.mode);
   shapeState.mode = next;
@@ -69,7 +74,7 @@ function _applyMode(mode, { resetPoints = true } = {}){
   // toast when there actually WAS something to discard AND the mode
   // genuinely changed.
   const hadPoints = (shapeState.points || []).length > 0;
-  if (resetPoints && hadPoints){
+  if (resetPoints && hadPoints) {
     shapeState.points = [];
     if (prev !== next) showToast('Modus gewechselt — Punkte verworfen');
   }
@@ -82,7 +87,7 @@ function _applyMode(mode, { resetPoints = true } = {}){
 // One-shot binding called from pointer.js's init IIFE so the click
 // handlers attach before the user can interact. Idempotent guard via
 // dataset.bound so a future re-render of the tab doesn't double-bind.
-export function bindShapeModeToggle(){
+export function bindShapeModeToggle() {
   const toggle = byId('shapeModeToggle');
   if (!toggle || toggle.dataset.bound === '1') return;
   toggle.dataset.bound = '1';
@@ -100,6 +105,6 @@ export function bindShapeModeToggle(){
 // editor opens in the user's last-chosen mode. resetPoints=false
 // because shapeState.points was just zeroed by the caller — no need
 // to toast on a fresh open.
-export function restoreShapeMode(){
+export function restoreShapeMode() {
   _applyMode(_readStoredMode(), { resetPoints: false });
 }

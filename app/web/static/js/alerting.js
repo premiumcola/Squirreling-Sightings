@@ -12,16 +12,16 @@ import { apiGet, apiPost } from './core/api.js';
 import { _fmtRelativeAgeS } from './camedit/detection.js';
 
 const _ALERT_SEV_CLASSES = [
-  { key: 'person',   label: 'Person',       em: '👤' },
-  { key: 'cat',      label: 'Katze',        em: '🐈' },
-  { key: 'bird',     label: 'Vogel',        em: '🐦' },
+  { key: 'person', label: 'Person', em: '👤' },
+  { key: 'cat', label: 'Katze', em: '🐈' },
+  { key: 'bird', label: 'Vogel', em: '🐦' },
   { key: 'squirrel', label: 'Eichhörnchen', em: '🐿' },
-  { key: 'car',      label: 'Auto',         em: '🚗' },
-  { key: 'dog',      label: 'Hund',         em: '🐕' },
-  { key: 'motion',   label: 'Bewegung',     em: '〰️' },
+  { key: 'car', label: 'Auto', em: '🚗' },
+  { key: 'dog', label: 'Hund', em: '🐕' },
+  { key: 'motion', label: 'Bewegung', em: '〰️' },
 ];
 
-export function _renderSeverityMatrix(form, cam){
+export function _renderSeverityMatrix(form, cam) {
   const wrap = byId('alertSeverityMatrix');
   if (!wrap) return;
   const cs = cam?.class_severity || {};
@@ -41,7 +41,7 @@ export function _renderSeverityMatrix(form, cam){
       Alarm
     </div>
   `;
-  for (const c of _ALERT_SEV_CLASSES){
+  for (const c of _ALERT_SEV_CLASSES) {
     const cur = cs[c.key] || 'off';
     const cell = (val, mode) => {
       const on = cur === val;
@@ -50,8 +50,8 @@ export function _renderSeverityMatrix(form, cam){
     };
     html += `
       <div class="sev-cell sev-row-label"><span class="em">${c.em}</span>${esc(c.label)}</div>
-      ${cell('off',   'off')}
-      ${cell('info',  'info')}
+      ${cell('off', 'off')}
+      ${cell('info', 'info')}
       ${cell('alarm', 'alarm')}
     `;
   }
@@ -63,7 +63,7 @@ export function _renderSeverityMatrix(form, cam){
     if (!cell) return;
     const cls = cell.dataset.cls;
     const val = cell.dataset.val;
-    wrap.querySelectorAll(`.sev-radio[data-cls="${cls}"]`).forEach(r => {
+    wrap.querySelectorAll(`.sev-radio[data-cls="${cls}"]`).forEach((r) => {
       r.classList.remove('is-on', 'is-off-mode', 'is-info-mode', 'is-alarm-mode');
       r.setAttribute('aria-checked', 'false');
       r.textContent = '○';
@@ -78,11 +78,11 @@ export function _renderSeverityMatrix(form, cam){
 // Read the matrix back into the dict shape settings.json expects.
 // Drops unset rows silently (every row has exactly one is-on cell after
 // render so the .is-on selector is the source of truth).
-export function _collectClassSeverity(_form){
+export function _collectClassSeverity(_form) {
   const wrap = byId('alertSeverityMatrix');
   const out = {};
   if (!wrap) return out;
-  wrap.querySelectorAll('.sev-radio.is-on').forEach(r => {
+  wrap.querySelectorAll('.sev-radio.is-on').forEach((r) => {
     out[r.dataset.cls] = r.dataset.val;
   });
   return out;
@@ -95,23 +95,27 @@ export function _collectClassSeverity(_form){
 //   2. Any class is set to alarm/info but the master "Alerting aktiv"
 //      switch (armed) is off → push is globally muted.
 // Banner is purely informational — never blocks save.
-export function _checkAlertingConflicts(form){
+export function _checkAlertingConflicts(form) {
   const banner = byId('alertConflictBanner');
-  const text   = byId('alertConflictText');
+  const text = byId('alertConflictText');
   if (!banner || !text) return;
   const cs = _collectClassSeverity(form);
-  const anyAlarming = Object.values(cs).some(v => v === 'alarm' || v === 'info');
+  const anyAlarming = Object.values(cs).some((v) => v === 'alarm' || v === 'info');
   const tg = !!form.querySelector('[name="telegram_enabled"]')?.checked;
   const mq = !!form.querySelector('[name="mqtt_enabled"]')?.checked;
   const armed = !!form.querySelector('[name="armed"]')?.checked;
   const messages = [];
-  if (anyAlarming && !tg && !mq){
-    messages.push("Klassen sind auf <strong>Alarm</strong> oder <strong>Info</strong> gesetzt, aber <strong>kein Kanal aktiv</strong> — es kommt nichts an. Aktiviere Telegram oder MQTT in Schritt 2.");
+  if (anyAlarming && !tg && !mq) {
+    messages.push(
+      'Klassen sind auf <strong>Alarm</strong> oder <strong>Info</strong> gesetzt, aber <strong>kein Kanal aktiv</strong> — es kommt nichts an. Aktiviere Telegram oder MQTT in Schritt 2.',
+    );
   }
-  if (anyAlarming && !armed){
-    messages.push("Der globale <strong>Stumm-Schalter</strong> in Schritt 5 ist aus — alle Pushes werden blockiert.");
+  if (anyAlarming && !armed) {
+    messages.push(
+      'Der globale <strong>Stumm-Schalter</strong> in Schritt 5 ist aus — alle Pushes werden blockiert.',
+    );
   }
-  if (messages.length){
+  if (messages.length) {
     text.innerHTML = messages.join(' · ');
     banner.hidden = false;
   } else {
@@ -124,31 +128,32 @@ export function _checkAlertingConflicts(form){
 // Defaults match _NOTIFY_COOLDOWN_DEFAULTS in telegram_bot so the
 // surfaced values reflect the actual runtime fallback.
 const _ALERT_COOLDOWN_CLASSES = [
-  { key: 'person',   label: 'Person',       def: 60  },
-  { key: 'cat',      label: 'Katze',        def: 120 },
-  { key: 'bird',     label: 'Vogel',        def: 300 },
+  { key: 'person', label: 'Person', def: 60 },
+  { key: 'cat', label: 'Katze', def: 120 },
+  { key: 'bird', label: 'Vogel', def: 300 },
   { key: 'squirrel', label: 'Eichhörnchen', def: 300 },
-  { key: 'dog',      label: 'Hund',         def: 120 },
-  { key: 'car',      label: 'Auto',         def: 30  },
-  { key: 'motion',   label: 'Bewegung',     def: 30  },
+  { key: 'dog', label: 'Hund', def: 120 },
+  { key: 'car', label: 'Auto', def: 30 },
+  { key: 'motion', label: 'Bewegung', def: 30 },
 ];
 
-function _fmtCooldownVal(s){
+function _fmtCooldownVal(s) {
   const v = parseInt(s, 10);
   if (!Number.isFinite(v)) return '—';
   if (v === 0) return 'aus';
-  if (v < 60)  return v + ' s';
+  if (v < 60) return v + ' s';
   return Math.round(v / 60) + ' min';
 }
 
-export function _renderAlertCooldownGrid(form, cam){
+export function _renderAlertCooldownGrid(form, cam) {
   const wrap = byId('alertCooldownGrid');
   if (!wrap) return;
   const cd = cam?.notification_cooldown || {};
-  wrap.innerHTML = _ALERT_COOLDOWN_CLASSES.map(c => {
-    const raw = cd[c.key];
-    const v = (raw != null && Number.isFinite(parseInt(raw, 10))) ? parseInt(raw, 10) : c.def;
-    return `
+  wrap.innerHTML = _ALERT_COOLDOWN_CLASSES
+    .map((c) => {
+      const raw = cd[c.key];
+      const v = raw != null && Number.isFinite(parseInt(raw, 10)) ? parseInt(raw, 10) : c.def;
+      return `
       <div class="erk-card">
         <div class="row">
           <input type="range" name="cooldown_${c.key}" min="0" max="600" step="15" value="${v}" />
@@ -156,17 +161,20 @@ export function _renderAlertCooldownGrid(form, cam){
         </div>
         <span class="lbl">${esc(c.label)} · min. Abstand zwischen zwei Pushes</span>
       </div>`;
-  }).join('');
-  _ALERT_COOLDOWN_CLASSES.forEach(c => {
+    })
+    .join('');
+  _ALERT_COOLDOWN_CLASSES.forEach((c) => {
     const inp = wrap.querySelector(`[name="cooldown_${c.key}"]`);
     const lbl = byId(`erkCD_${c.key}_val`);
-    if (inp && lbl){
-      inp.addEventListener('input', () => { lbl.textContent = _fmtCooldownVal(inp.value); });
+    if (inp && lbl) {
+      inp.addEventListener('input', () => {
+        lbl.textContent = _fmtCooldownVal(inp.value);
+      });
     }
   });
 }
 
-export function _bindAlertCooldownToggle(){
+export function _bindAlertCooldownToggle() {
   const btn = byId('alertCooldownToggle');
   const wrap = byId('alertCooldownGrid');
   const lbl = byId('alertCooldownToggleLbl');
@@ -183,9 +191,9 @@ export function _bindAlertCooldownToggle(){
 // Read every cooldown_<class> slider from the form into the dict
 // shape settings.json expects. Empty grid (drilldown never opened)
 // yields {}, which the runtime treats as "use _NOTIFY_COOLDOWN_DEFAULTS".
-export function _collectAlertCooldown(form){
+export function _collectAlertCooldown(form) {
   const out = {};
-  form.querySelectorAll('[name^="cooldown_"]').forEach(inp => {
+  form.querySelectorAll('[name^="cooldown_"]').forEach((inp) => {
     const key = inp.name.replace('cooldown_', '');
     const v = parseInt(inp.value, 10);
     if (key && Number.isFinite(v)) out[key] = v;
@@ -197,7 +205,7 @@ export function _collectAlertCooldown(form){
 // /api/cameras/<id>/test-alert, animates the play-icon while in
 // flight, then renders a per-channel result panel below: ✓ Telegram
 // angekommen / ✗ MQTT: Kanal aus. Idempotent wiring via dataset.wired.
-export function _bindAlertTestButton(){
+export function _bindAlertTestButton() {
   const btn = byId('alertTestBtn');
   if (!btn || btn.dataset.wired) return;
   btn.dataset.wired = '1';
@@ -206,7 +214,7 @@ export function _bindAlertTestButton(){
 
 const _ALERT_CHAN_LABELS = { telegram: 'Telegram', mqtt: 'MQTT' };
 
-async function _onAlertTestClick(ev){
+async function _onAlertTestClick(ev) {
   const btn = ev.currentTarget;
   const camId = byId('cameraForm')?.elements?.['id']?.value;
   const result = byId('alertTestResult');
@@ -226,21 +234,21 @@ async function _onAlertTestClick(ev){
   btn.disabled = false;
   btn.classList.remove('is-busy');
   if (lblEl) lblEl.textContent = original;
-  if (!data){
+  if (!data) {
     result.className = 'alert-test-result is-err';
     result.innerHTML = `<strong>Fehler:</strong> Netzwerk · keine Antwort vom Server`;
     result.hidden = false;
     return;
   }
   const lines = [];
-  for (const [chan, res] of Object.entries(data.channels || {})){
+  for (const [chan, res] of Object.entries(data.channels || {})) {
     const label = _ALERT_CHAN_LABELS[chan] || chan;
-    if (res?.ok)  lines.push(`✓ ${label} angekommen`);
-    else          lines.push(`✗ ${label}: ${res?.error || 'Fehler'}`);
+    if (res?.ok) lines.push(`✓ ${label} angekommen`);
+    else lines.push(`✗ ${label}: ${res?.error || 'Fehler'}`);
   }
   result.className = 'alert-test-result ' + (data.ok ? 'is-ok' : 'is-err');
   const head = data.ok ? 'Erfolg' : 'Fehler';
-  result.innerHTML = `<strong>${head}</strong><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`;
+  result.innerHTML = `<strong>${head}</strong><ul>${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`;
   result.hidden = false;
 }
 
@@ -252,7 +260,7 @@ async function _onAlertTestClick(ev){
 //   - alertStatusLast: relative "vor X Min." since last push
 // Errors during fetch leave the strip showing whatever it had — a
 // transient flake shouldn't blank the UI.
-export async function _renderAlertStatusStrip(){
+export async function _renderAlertStatusStrip() {
   const host = byId('alertStatusStrip');
   if (!host) return;
   let data = null;
@@ -262,21 +270,27 @@ export async function _renderAlertStatusStrip(){
   const dot = byId('alertStatusDot');
   const txt = byId('alertStatusBot');
   const last = byId('alertStatusLast');
-  if (!data){
-    if (dot){ dot.classList.remove('is-ok', 'is-cpu', 'is-off'); dot.classList.add('is-off'); }
+  if (!data) {
+    if (dot) {
+      dot.classList.remove('is-ok', 'is-cpu', 'is-off');
+      dot.classList.add('is-off');
+    }
     if (txt) txt.textContent = '—';
     if (last) last.textContent = '—';
     return;
   }
   let variant, label;
-  if (!data.enabled){
-    variant = 'is-off'; label = 'deaktiviert';
-  } else if (data.connected){
-    variant = 'is-ok'; label = 'verbunden';
+  if (!data.enabled) {
+    variant = 'is-off';
+    label = 'deaktiviert';
+  } else if (data.connected) {
+    variant = 'is-ok';
+    label = 'verbunden';
   } else {
-    variant = 'is-cpu'; label = 'getrennt';
+    variant = 'is-cpu';
+    label = 'getrennt';
   }
-  if (dot){
+  if (dot) {
     dot.classList.remove('is-ok', 'is-cpu', 'is-off');
     dot.classList.add(variant);
   }
@@ -289,10 +303,10 @@ export async function _renderAlertStatusStrip(){
 // doesn't double-bind. The matrix click handler in
 // _renderSeverityMatrix already calls _checkAlertingConflicts on every
 // cell click.
-export function _bindAlertingConflictWatch(form){
+export function _bindAlertingConflictWatch(form) {
   if (!form || form.dataset.alertingConflictWired) return;
   form.dataset.alertingConflictWired = '1';
-  ['telegram_enabled', 'mqtt_enabled', 'armed', 'recording_enabled'].forEach(name => {
+  ['telegram_enabled', 'mqtt_enabled', 'armed', 'recording_enabled'].forEach((name) => {
     const inp = form.querySelector(`[name="${name}"]`);
     if (inp) inp.addEventListener('change', () => _checkAlertingConflicts(form));
   });
@@ -303,13 +317,13 @@ export function _bindAlertingConflictWatch(form){
 // truth on save; this dropdown survives only for the rare flow where
 // the user wants to bulk-set a profile and let the matrix fill in.
 const _ALARM_PROFILE_HINTS = {
-  hard:   'Telegram nur bei Person/Auto. Tiere & reine Bewegung werden ignoriert.',
+  hard: 'Telegram nur bei Person/Auto. Tiere & reine Bewegung werden ignoriert.',
   medium: 'Telegram bei Person/Auto (Alarm) und bei Tieren (Info-Meldung). Reine Bewegung still.',
-  soft:   'Telegram bei jedem Event — Person, Tier oder reine Bewegung.',
-  info:   'Telegram nur bei Tieren (Katze, Vogel, Fuchs …). Personen & Bewegung still.',
+  soft: 'Telegram bei jedem Event — Person, Tier oder reine Bewegung.',
+  info: 'Telegram nur bei Tieren (Katze, Vogel, Fuchs …). Personen & Bewegung still.',
 };
-window._updateAlarmProfileHint = function(){
-  const sel  = byId('camAlarmProfileSelect');
+window._updateAlarmProfileHint = function () {
+  const sel = byId('camAlarmProfileSelect');
   const hint = byId('camAlarmProfileHint');
   if (!sel || !hint) return;
   hint.textContent = _ALARM_PROFILE_HINTS[sel.value] || '';

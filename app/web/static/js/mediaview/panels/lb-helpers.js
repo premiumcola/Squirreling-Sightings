@@ -13,18 +13,20 @@ import { byId } from '../../core/dom.js';
 // not yet confirmed); _LB_CHECK2_SVG = double tick (already
 // confirmed). _LB_HINT and _LB_TRASH_HTML are the small caption +
 // trash-icon block used by the delete button.
-export const _LB_CHECK_SVG  = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,12 9,18 20,6"/></svg>`;
+export const _LB_CHECK_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,12 9,18 20,6"/></svg>`;
 export const _LB_CHECK2_SVG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,13 6,18 13,9"/><polyline points="10,13 15,18 23,6"/></svg>`;
-export const _LB_HINT = '<span style="font-size:9px;line-height:1;opacity:.7;white-space:nowrap">↑ behalten</span>';
-export const _LB_TRASH_HTML = '<span style="font-size:14px;line-height:1;opacity:.8">↓</span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+export const _LB_HINT =
+  '<span style="font-size:9px;line-height:1;opacity:.7;white-space:nowrap">↑ behalten</span>';
+export const _LB_TRASH_HTML =
+  '<span style="font-size:14px;line-height:1;opacity:.8">↓</span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
 
 // Paint the confirm button in its current state. Caller passes the
 // boolean directly so this helper never reaches back into the
 // shared _lbItem.
-export function _updateLbConfirmBtn(confirmed){
+export function _updateLbConfirmBtn(confirmed) {
   const btn = byId('lightboxConfirm');
   if (!btn) return;
-  if (confirmed){
+  if (confirmed) {
     btn.style.background = '#166534';
     btn.innerHTML = _LB_CHECK2_SVG;
     btn.title = 'Bestätigt';
@@ -39,7 +41,7 @@ export function _updateLbConfirmBtn(confirmed){
 // lightbox switches between media or closes; the resize/load hooks in
 // legacy.js call _lbDrawDetections again next paint if we're still
 // open.
-export function _lbClearDetections(){
+export function _lbClearDetections() {
   const cv = byId('lightboxDetections');
   if (!cv) return;
   const ctx = cv.getContext('2d');
@@ -52,7 +54,7 @@ export function _lbClearDetections(){
 // button. Called whenever a new photo item is opened so any prior
 // state (lingering video, error message) doesn't leak into the new
 // view.
-export function _lbResetToPhoto(){
+export function _lbResetToPhoto() {
   const videoEl = byId('lightboxVideo');
   if (videoEl) {
     videoEl.pause();

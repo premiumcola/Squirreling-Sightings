@@ -13,7 +13,6 @@
 
 const _now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
-
 // ── onSwipe ─────────────────────────────────────────────────────────────
 // Threshold = primary-axis travel; restraint = max perpendicular travel
 // (separates a swipe from a diagonal scroll). allowedTime caps the
@@ -24,7 +23,10 @@ export function onSwipe(element, callbacks = {}, opts = {}) {
   const restraint = opts.restraint ?? 100;
   const allowedTime = opts.allowedTime ?? 400;
 
-  let _startX = 0, _startY = 0, _startT = 0, _active = false;
+  let _startX = 0,
+    _startY = 0,
+    _startT = 0,
+    _active = false;
 
   const onDown = (evt) => {
     if (evt.pointerType === 'mouse' && evt.button !== 0) return;
@@ -46,7 +48,9 @@ export function onSwipe(element, callbacks = {}, opts = {}) {
       (dy < 0 ? callbacks.onUp : callbacks.onDown)?.(evt);
     }
   };
-  const onCancel = () => { _active = false; };
+  const onCancel = () => {
+    _active = false;
+  };
 
   element.addEventListener('pointerdown', onDown);
   element.addEventListener('pointerup', onUp);
@@ -57,7 +61,6 @@ export function onSwipe(element, callbacks = {}, opts = {}) {
     element.removeEventListener('pointercancel', onCancel);
   };
 }
-
 
 // ── onPinch ─────────────────────────────────────────────────────────────
 // Tracks two simultaneous pointers and fires `cb({scale, center, phase})`
@@ -78,8 +81,8 @@ export function onPinch(element, cb) {
     const pts = [...pointers.values()];
     const r = element.getBoundingClientRect();
     return {
-      x: ((pts[0].x + pts[1].x) / 2) - r.left,
-      y: ((pts[0].y + pts[1].y) / 2) - r.top,
+      x: (pts[0].x + pts[1].x) / 2 - r.left,
+      y: (pts[0].y + pts[1].y) / 2 - r.top,
     };
   };
 
@@ -114,26 +117,35 @@ export function onPinch(element, cb) {
   };
 }
 
-
 // ── onLongPress ─────────────────────────────────────────────────────────
 // Fires `cb(evt)` when the pointer stays still on `element` for `ms`
 // milliseconds. Movement of more than `tolerance` px cancels.
 export function onLongPress(element, cb, ms = 500, tolerance = 8) {
   if (!element || !cb) return () => {};
-  let _timer = null, _startX = 0, _startY = 0;
+  let _timer = null,
+    _startX = 0,
+    _startY = 0;
 
-  const _clear = () => { if (_timer) { clearTimeout(_timer); _timer = null; } };
+  const _clear = () => {
+    if (_timer) {
+      clearTimeout(_timer);
+      _timer = null;
+    }
+  };
   const onDown = (evt) => {
     if (evt.pointerType === 'mouse' && evt.button !== 0) return;
     _startX = evt.clientX;
     _startY = evt.clientY;
     _clear();
-    _timer = setTimeout(() => { _timer = null; cb(evt); }, ms);
+    _timer = setTimeout(() => {
+      _timer = null;
+      cb(evt);
+    }, ms);
   };
   const onMove = (evt) => {
     if (!_timer) return;
-    if (Math.abs(evt.clientX - _startX) > tolerance
-        || Math.abs(evt.clientY - _startY) > tolerance) _clear();
+    if (Math.abs(evt.clientX - _startX) > tolerance || Math.abs(evt.clientY - _startY) > tolerance)
+      _clear();
   };
 
   element.addEventListener('pointerdown', onDown);
@@ -151,7 +163,6 @@ export function onLongPress(element, cb, ms = 500, tolerance = 8) {
   };
 }
 
-
 // ── onPullToRefresh ─────────────────────────────────────────────────────
 // Drag-down at the top of `scrollEl` (scrollTop === 0) past `threshold`
 // fires `cb()`. While pulling, `indicatorEl` (optional) gets its
@@ -161,7 +172,9 @@ export function onPullToRefresh(scrollEl, cb, opts = {}) {
   const threshold = opts.threshold ?? 80;
   const indicatorEl = opts.indicatorEl || null;
 
-  let _startY = 0, _pulling = false, _firing = false;
+  let _startY = 0,
+    _pulling = false,
+    _firing = false;
 
   const _setProgress = (progress) => {
     if (indicatorEl) {
@@ -179,7 +192,10 @@ export function onPullToRefresh(scrollEl, cb, opts = {}) {
   const onMove = (evt) => {
     if (!_pulling) return;
     const dy = evt.clientY - _startY;
-    if (dy <= 0) { _setProgress(0); return; }
+    if (dy <= 0) {
+      _setProgress(0);
+      return;
+    }
     _setProgress(Math.min(1, dy / threshold));
   };
   const onUp = async (evt) => {
@@ -189,7 +205,12 @@ export function onPullToRefresh(scrollEl, cb, opts = {}) {
     if (dy >= threshold) {
       _firing = true;
       _setProgress(1);
-      try { await cb(); } finally { _firing = false; _setProgress(0); }
+      try {
+        await cb();
+      } finally {
+        _firing = false;
+        _setProgress(0);
+      }
     } else {
       _setProgress(0);
     }

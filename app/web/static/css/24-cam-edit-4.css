@@ -2,18 +2,30 @@
 /* Read-only block under the manufacturer/model/name fields. Visually
    secondary so it doesn't compete with the actual inputs, but legible so
    the user can see exactly what id will be persisted on save. */
-.cam-id-preview{
-  display:flex;flex-direction:column;gap:3px;
-  padding:10px 12px;border-radius:10px;
-  background:rgba(127,174,201,0.06);border:1px dashed rgba(127,174,201,0.22);
-  margin-top:4px
+.cam-id-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(127, 174, 201, 0.06);
+  border: 1px dashed rgba(127, 174, 201, 0.22);
+  margin-top: 4px;
 }
-.cam-id-preview-label{font-size:10px;font-weight:700;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.08em}
-.cam-id-preview-value{
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size:13px;color:#cfe1ee;
-  min-width:0;overflow-wrap:anywhere;word-break:normal
+.cam-id-preview-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.cam-id-preview-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #cfe1ee;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 /* B1 · Identity row — avatar tile + Anzeigename. The legacy "Farbe"
@@ -26,7 +38,7 @@
    "Symbolfarbe" microlabel sits underneath; a "↺ auto" reset link
    surfaces only while the user has set a manual override (dataset
    .auto === '0'). Auto-tone stays the default. */
-.cam-name-row{
+.cam-name-row {
   /* D2 · flex-wrap:nowrap keeps icon + Anzeigename on the same row
      at iPhone portrait widths (375 px and up). The previous wrap +
      a 100 % mobile flex-basis on the input cell forced the input
@@ -35,76 +47,115 @@
      to 0 below its natural content width thanks to min-width:0,
      and the parent's overflow is non-existent because both
      children declare their own min-widths. */
-  display:flex;align-items:center;gap:14px;flex-wrap:nowrap;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
 }
-.cam-identity-avatar{
-  position:relative;
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  flex-shrink:0;
+.cam-identity-avatar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
   /* D2 · width pinned to the avatar tile so the wider "Symbolfarbe"
      sublabel can centre underneath without growing the column past
      the tile. Allows the side-by-side row to fit on a 375 px panel
      without the sublabel hogging the column width. */
-  width:56px;
+  width: 56px;
 }
-.cam-avatar-btn{
-  width:56px;height:56px;
-  border-radius:14px;
-  border:0;outline:0;
-  background:rgba(127,174,201,.06);
-  display:inline-flex;align-items:center;justify-content:center;
-  cursor:pointer;
+.cam-avatar-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  border: 0;
+  outline: 0;
+  background: rgba(127, 174, 201, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   /* --cam-color cascades into the SVG via stroke="currentColor".
      Fallback to the muted text tone so the avatar still reads on
      a brand-new camera that hasn't picked a color yet. */
-  color:var(--cam-color, #cbd5e1);
-  -webkit-tap-highlight-color:transparent;
-  transition:background .15s,transform .1s;
+  color: var(--cam-color, #cbd5e1);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.15s,
+    transform 0.1s;
 }
-.cam-avatar-btn:hover{background:rgba(127,174,201,.12)}
-.cam-avatar-btn:active{transform:scale(.96)}
-.cam-avatar-btn:focus-visible{
-  outline:2px solid var(--cam-color, rgba(127,174,201,.7));
-  outline-offset:2px;
+.cam-avatar-btn:hover {
+  background: rgba(127, 174, 201, 0.12);
 }
-.cam-avatar-icon{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:34px;height:34px;
+.cam-avatar-btn:active {
+  transform: scale(0.96);
+}
+.cam-avatar-btn:focus-visible {
+  outline: 2px solid var(--cam-color, rgba(127, 174, 201, 0.7));
+  outline-offset: 2px;
+}
+.cam-avatar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   /* Tone-coloured drop-shadow so the glyph has lift inside the
      tile. Soft + small radius keeps it flat-design, not a heavy
      glow. */
-  filter:drop-shadow(0 0 5px var(--cam-color, rgba(127,174,201,.35)));
+  filter: drop-shadow(0 0 5px var(--cam-color, rgba(127, 174, 201, 0.35)));
 }
-.cam-avatar-icon svg{width:100%;height:100%;display:block}
+.cam-avatar-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 /* Visually-hidden native colour input. The avatar button forwards
    .click() to it, so the chooser still opens; the input is the
    form-submit source of truth and the JS sets its value directly. */
-.cam-name-row input[type="color"]{
-  position:absolute;
-  width:0;height:0;
-  padding:0;border:0;
-  opacity:0;pointer-events:none;
+.cam-name-row input[type='color'] {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
-.cam-avatar-sublabel{
-  font-size:10.5px;font-style:italic;
-  color:var(--muted);
-  letter-spacing:.02em;
+.cam-avatar-sublabel {
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--muted);
+  letter-spacing: 0.02em;
   /* D2 · drop the nowrap so the sublabel can break in two lines
      under the 56 px avatar tile if needed (e.g. "Symbol-/farbe"
      on a narrow viewport) rather than widening the column. */
-  text-align:center;line-height:1.2;
+  text-align: center;
+  line-height: 1.2;
 }
-.cam-color-reset-link{
-  font-size:10.5px;font-weight:600;
-  background:transparent;border:0;outline:0;padding:0;
-  color:rgba(127,174,201,.75);
-  cursor:pointer;letter-spacing:.02em;
-  -webkit-tap-highlight-color:transparent;
+.cam-color-reset-link {
+  font-size: 10.5px;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  color: rgba(127, 174, 201, 0.75);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  -webkit-tap-highlight-color: transparent;
 }
-.cam-color-reset-link:hover{color:var(--text)}
-.cam-color-reset-link[hidden]{display:none}
-.cam-name-field{
-  flex:1 1 auto;min-width:0;max-width:340px;
+.cam-color-reset-link:hover {
+  color: var(--text);
+}
+.cam-color-reset-link[hidden] {
+  display: none;
+}
+.cam-name-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 340px;
 }
 
 /* Manuf + model + labelled probe button row. The probe button shares
@@ -121,7 +172,7 @@
        instead of stretching with the inputs.
    iPhone-narrow widths drop the button to a full second row so the
    two inputs keep usable widths; the label stays visible there. */
-.cam-id-row{
+.cam-id-row {
   /* minmax(0,1fr) on the input columns lets them shrink below their
      default content width when the probe-button label would otherwise
      push the row past the cam-edit-inner right edge. Plain 1fr held
@@ -132,46 +183,82 @@
      underneath, so end-alignment placed the button below the input
      baseline. The labels still render below their inputs (same
      .field-wrap flex container, unaffected by grid alignment). */
-  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) max-content;gap:8px;align-items:start
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content;
+  gap: 8px;
+  align-items: start;
 }
-.cam-probe-btn{
+.cam-probe-btn {
   /* Carries the .btn-action.action-green base (radius, font). Height
      pinned to 40 px so the button baseline matches the cam-edit-inner
      input height (also 40 px) — start-alignment makes any difference
      visible at the top edge, so they have to be equal. */
-  height:40px;min-height:40px;padding:6px 12px;font-size:13px;flex-shrink:0
+  height: 40px;
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
-.cam-probe-btn.is-busy{opacity:.55;pointer-events:none}
-.cam-probe-btn.is-busy svg{animation:cam-probe-spin .9s linear infinite}
-@keyframes cam-probe-spin{
-  from{transform:rotate(0deg)} to{transform:rotate(360deg)}
+.cam-probe-btn.is-busy {
+  opacity: 0.55;
+  pointer-events: none;
 }
-@media (prefers-reduced-motion: reduce){
-  .cam-probe-btn.is-busy svg{animation:none}
+.cam-probe-btn.is-busy svg {
+  animation: cam-probe-spin 0.9s linear infinite;
+}
+@keyframes cam-probe-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cam-probe-btn.is-busy svg {
+    animation: none;
+  }
 }
 
 /* "automatisch erkannt" hint — small italic muted text under the
    manuf/model inputs when the most recent save filled them by Reolink
    GetDevInfo. Spec: ≤ 11 px italic, no pill background. Disappears on
    the next manual edit (JS toggles the [hidden] attribute). */
-.cam-autodetected-hint{
-  display:block;
-  font-size:10.5px;
-  font-style:italic;
-  color:rgba(127,174,201,.65);
-  margin-top:2px;letter-spacing:.01em
+.cam-autodetected-hint {
+  display: block;
+  font-size: 10.5px;
+  font-style: italic;
+  color: rgba(127, 174, 201, 0.65);
+  margin-top: 2px;
+  letter-spacing: 0.01em;
 }
-.cam-autodetected-hint[hidden]{display:none}
+.cam-autodetected-hint[hidden] {
+  display: none;
+}
 
-@media (max-width:520px){
+@media (max-width: 520px) {
   /* On narrow phones the probe button drops to a full-width row
      beneath the inputs so the inputs don't squeeze to unusable widths.
      Label stays visible — green tint + min-height 44 carries iOS
      touch-target conformance. */
-  .cam-id-row{grid-template-columns:1fr 1fr;grid-template-areas:'a b' 'c c';gap:6px}
-  .cam-id-row .field-wrap:first-of-type{grid-area:a}
-  .cam-id-row .field-wrap:nth-of-type(2){grid-area:b}
-  .cam-id-row .cam-probe-btn{grid-area:c;width:100%;justify-content:center;height:auto;min-height:44px}
+  .cam-id-row {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: 'a b' 'c c';
+    gap: 6px;
+  }
+  .cam-id-row .field-wrap:first-of-type {
+    grid-area: a;
+  }
+  .cam-id-row .field-wrap:nth-of-type(2) {
+    grid-area: b;
+  }
+  .cam-id-row .cam-probe-btn {
+    grid-area: c;
+    width: 100%;
+    justify-content: center;
+    height: auto;
+    min-height: 44px;
+  }
   /* D2 · Identity row stays side-by-side on iPhone portrait. The
      previous `flex:1 1 100%` forced the input onto a new row
      beneath the avatar — that was the regression. New rule:
@@ -180,10 +267,24 @@
      column width pinned to 48 px tile (matching .cam-avatar-btn
      mobile size) so the wider sublabel can centre beneath without
      hogging the row. */
-  .cam-name-row{gap:10px}
-  .cam-identity-avatar{width:48px}
-  .cam-avatar-btn{width:48px;height:48px;border-radius:12px}
-  .cam-avatar-icon{width:30px;height:30px}
-  .cam-name-field{max-width:none;flex:1 1 0;min-width:0}
+  .cam-name-row {
+    gap: 10px;
+  }
+  .cam-identity-avatar {
+    width: 48px;
+  }
+  .cam-avatar-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+  .cam-avatar-icon {
+    width: 30px;
+    height: 30px;
+  }
+  .cam-name-field {
+    max-width: none;
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
-

@@ -2,25 +2,111 @@
 /* Safe-area-aware bottom + right so the stack clears the iPhone home-indicator
    and the right-edge inset on landscape notch devices. max() falls back to the
    24 px baseline on browsers without env() support. */
-#toastContainer{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px));right:max(24px,env(safe-area-inset-right,0px));z-index:var(--z-fullscreen);display:flex;flex-direction:column;gap:10px;pointer-events:none}
-.toast{display:flex;align-items:center;gap:12px;padding:12px 14px 12px 16px;border-radius:12px;background:var(--panel);box-shadow:0 8px 32px rgba(0,0,0,.55);font-size:14px;max-width:360px;pointer-events:auto;animation:toast-in .25s cubic-bezier(.4,0,.2,1) both;color:var(--text)}
-.toast-icon{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--surface);color:var(--muted);font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;line-height:1}
-.toast-msg{flex:1;line-height:1.45}
-.toast-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 2px;line-height:1;flex-shrink:0}
-.toast-close:hover{color:var(--text)}
-.toast.toast-out{animation:toast-out .25s cubic-bezier(.4,0,.2,1) both}
-@keyframes toast-in{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
-@keyframes toast-out{from{opacity:1;transform:none}to{opacity:0;transform:translateX(40px)}}
+#toastContainer {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  right: max(24px, env(safe-area-inset-right, 0px));
+  z-index: var(--z-fullscreen);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+  font-size: 14px;
+  max-width: 360px;
+  pointer-events: auto;
+  animation: toast-in 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+  color: var(--text);
+}
+.toast-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1;
+}
+.toast-msg {
+  flex: 1;
+  line-height: 1.45;
+}
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.toast-close:hover {
+  color: var(--text);
+}
+.toast.toast-out {
+  animation: toast-out 0.25s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
 
 /* ── Section-head icon (shared across top-level .panel.section blocks) ──── */
 /* When a section uses .section-head--with-icon, the SVG sits left of the H3
    and inherits the panel's --acc (set via data-accent on the section root).
    No fixed colour here — accent is the single source of truth. */
-.section-head--with-icon{display:flex;justify-content:flex-start;align-items:center;gap:10px;flex-wrap:wrap}
-.section-head--with-icon h3{margin:0}
-.section-head--with-icon .section-subtitle{margin-left:auto}
-.section-head-icon{display:inline-flex;align-items:center;color:rgb(var(--acc, 143,158,181))}
-.section-head-icon svg{display:block}
+.section-head--with-icon {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.section-head--with-icon h3 {
+  margin: 0;
+}
+.section-head--with-icon .section-subtitle {
+  margin-left: auto;
+}
+.section-head-icon {
+  display: inline-flex;
+  align-items: center;
+  color: rgb(var(--acc, 143, 158, 181));
+}
+.section-head-icon svg {
+  display: block;
+}
 
 /* ── Live-view modal · safe-area-aware overlay controls ─────────────────
    Click-target geometry: tap close → exit, tap FS → fullscreen, tap
@@ -34,74 +120,158 @@
    max(14px, env(safe-area-inset-*)) so notch / Dynamic-Island devices
    get the system-reserved padding while flat-edge devices keep the
    14 px baseline. */
-.lvm{position:fixed;inset:0;background:#000;z-index:1000;
-     display:flex;align-items:center;justify-content:center}
-.lvm.hidden{display:none}
-.lvm-wrap{position:relative;width:100%;height:100dvh;
-          display:flex;align-items:center;justify-content:center;
-          background:#000}
+.lvm {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lvm.hidden {
+  display: none;
+}
+.lvm-wrap {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
 .lvm-img,
-.lvm-video{max-width:100%;max-height:100dvh;object-fit:contain;display:block;background:#000}
-.lvm-top{position:absolute;
-         top:max(12px, env(safe-area-inset-top, 0px));
-         left:0;right:0;
-         padding:0 max(14px, env(safe-area-inset-right, 0px))
-                0 max(14px, env(safe-area-inset-left, 0px));
-         display:flex;align-items:center;
-         justify-content:space-between;gap:12px;
-         pointer-events:none;z-index:2}
-.lvm-top > *{pointer-events:auto}
-.lvm-title{font-size:14px;font-weight:600;color:#fff;
-           background:rgba(0,0,0,.55);
-           padding:6px 14px;border-radius:18px;
-           backdrop-filter:blur(8px);
-           -webkit-backdrop-filter:blur(8px);
-           max-width:60%;
-           overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lvm-close-btn{width:40px;height:40px;border-radius:50%;
-               background:rgba(0,0,0,.55);border:none;cursor:pointer;
-               display:flex;align-items:center;justify-content:center;
-               backdrop-filter:blur(8px);
-               -webkit-backdrop-filter:blur(8px)}
-.lvm-close-btn:hover{background:rgba(0,0,0,.75)}
-.lvm-bot{position:absolute;
-         bottom:max(14px, env(safe-area-inset-bottom, 0px));
-         left:max(14px, env(safe-area-inset-left, 0px));
-         display:flex;gap:8px;align-items:center;z-index:2}
-.lvm-hd-btn{height:36px;padding:0 14px;border-radius:10px;
-            border:1.5px solid rgba(255,255,255,.20);
-            background:rgba(0,0,0,.55);color:rgba(255,255,255,.55);
-            font-size:11px;font-weight:700;letter-spacing:.05em;
-            cursor:pointer;
-            backdrop-filter:blur(8px);
-            -webkit-backdrop-filter:blur(8px);
-            transition:background .15s ease,color .15s ease}
+.lvm-video {
+  max-width: 100%;
+  max-height: 100dvh;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+.lvm-top {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: 0;
+  right: 0;
+  padding: 0 max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 2;
+}
+.lvm-top > * {
+  pointer-events: auto;
+}
+.lvm-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 6px 14px;
+  border-radius: 18px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lvm-close-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.lvm-close-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+.lvm-bot {
+  position: absolute;
+  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  left: max(14px, env(safe-area-inset-left, 0px));
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 2;
+}
+.lvm-hd-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
 /* HD-active state — chrome/live-view.js _setLiveViewStream paints
    inline styles directly on the element; element-level inline beats
    class-level so the JS still wins. The class rule below covers
    future call paths that might use a class swap. */
-.lvm-hd-btn.lvm-hd-on{background:rgba(255,255,255,.92);color:#0a0e1a;
-                      font-weight:800;border-color:transparent}
+.lvm-hd-btn.lvm-hd-on {
+  background: rgba(255, 255, 255, 0.92);
+  color: #0a0e1a;
+  font-weight: 800;
+  border-color: transparent;
+}
 /* mr637 — same 38 × 30 footprint as the dashboard-tile FS button so
    the live-view modal reads as the same affordance family. SVG bumps
    to 18 px to match. */
-.lvm-fs-btn{width:38px;min-width:38px;height:30px;border-radius:10px;
-            background:rgba(0,0,0,.55);
-            border:1px solid rgba(255,255,255,.15);cursor:pointer;
-            display:flex;align-items:center;justify-content:center;
-            padding:0;
-            backdrop-filter:blur(8px);
-            -webkit-backdrop-filter:blur(8px);
-            transition:background .15s ease}
-.lvm-fs-btn svg{width:18px;height:18px}
-.lvm-fs-btn:hover{background:rgba(0,0,0,.75)}
+.lvm-fs-btn {
+  width: 38px;
+  min-width: 38px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s ease;
+}
+.lvm-fs-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.lvm-fs-btn:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
 /* mx918 — two-state FS icon, expand/minimize swap via .is-fs on
    .lvm-wrap. Mirrors the .cv-fs-btn rules in 03-dashboard.css. */
 .lvm-fs-btn .fs-icon-expand,
-.lvm-fs-btn .fs-icon-minimize{display:block}
-.lvm-fs-btn .fs-icon-minimize{display:none}
-.lvm-wrap.is-fs .lvm-fs-btn .fs-icon-expand{display:none}
-.lvm-wrap.is-fs .lvm-fs-btn .fs-icon-minimize{display:block}
+.lvm-fs-btn .fs-icon-minimize {
+  display: block;
+}
+.lvm-fs-btn .fs-icon-minimize {
+  display: none;
+}
+.lvm-wrap.is-fs .lvm-fs-btn .fs-icon-expand {
+  display: none;
+}
+.lvm-wrap.is-fs .lvm-fs-btn .fs-icon-minimize {
+  display: block;
+}
 
 /* ── Live-view modal fullscreen ──────────────────────────────────
    Three-way rule: native browser :fullscreen on desktop Chrome /
@@ -126,35 +296,38 @@
    promoting to viewport-fill. */
 .lvm-wrap:fullscreen,
 .lvm-wrap:-webkit-full-screen,
-.lvm-wrap.fake-fullscreen{
-  position:relative !important;
-  width:100vw !important;
+.lvm-wrap.fake-fullscreen {
+  position: relative !important;
+  width: 100vw !important;
   /* iOS-safe: vh fallback first, dvh override so Safari's address-
      bar collapse doesn't leave a black strip at the bottom. */
-  height:100vh !important;
-  height:100dvh !important;
-  background:#000;
+  height: 100vh !important;
+  height: 100dvh !important;
+  background: #000;
 }
-.lvm-wrap.fake-fullscreen{
-  position:fixed !important;
-  inset:0 !important;
-  z-index:var(--z-debug) !important;
-  margin:0 !important;
+.lvm-wrap.fake-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: var(--z-debug) !important;
+  margin: 0 !important;
 }
 .lvm-wrap:fullscreen .lvm-img,
 .lvm-wrap:-webkit-full-screen .lvm-img,
 .lvm-wrap.fake-fullscreen .lvm-img,
 .lvm-wrap:fullscreen .lvm-video,
 .lvm-wrap:-webkit-full-screen .lvm-video,
-.lvm-wrap.fake-fullscreen .lvm-video{
-  position:absolute !important;
-  top:0; right:0; bottom:0; left:0;
-  margin:auto !important;
-  width:auto !important;
-  height:auto !important;
-  max-width:100% !important;
-  max-height:100% !important;
-  object-fit:contain;
+.lvm-wrap.fake-fullscreen .lvm-video {
+  position: absolute !important;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: auto !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain;
 }
 
 /* iOS-only loading overlay shown for the brief window between
@@ -163,20 +336,24 @@
    (#00ff41 on pure black) so it reads as the app's trace-log
    surface, not as a new visual style. Uses 100dvh so the iOS
    address-bar collapse doesn't yank the bottom edge mid-load. */
-.lv-loading-overlay{
-  position:fixed;inset:0;z-index:1200;
-  background:#000;
-  display:flex;align-items:center;justify-content:center;
-  padding:max(18px, env(safe-area-inset-top, 0px))
-          max(18px, env(safe-area-inset-right, 0px))
-          max(18px, env(safe-area-inset-bottom, 0px))
-          max(18px, env(safe-area-inset-left, 0px));
+.lv-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(18px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px))
+    max(18px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
 }
-.lv-loading-overlay.hidden{display:none}
-.lv-loading-text{
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size:13px;letter-spacing:.05em;
-  color:#00ff41;
-  text-align:center;
+.lv-loading-overlay.hidden {
+  display: none;
 }
-
+.lv-loading-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  color: #00ff41;
+  text-align: center;
+}

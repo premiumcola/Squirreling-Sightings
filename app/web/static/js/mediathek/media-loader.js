@@ -11,14 +11,19 @@ import { calcItemsPerPage } from './orchestration.js';
 import { syncMediaPills } from './filters.js';
 
 // ── loadMedia ───────────────────────────────────────────────────────────────
-export async function loadMedia(){
+export async function loadMedia() {
   const labels = state.mediaLabels;
-  const ps = calcItemsPerPage(); window._cachedPageSize = ps;
-  const cams = state.mediaCamera ? [state.mediaCamera] : state.cameras.map(c => c.id);
+  const ps = calcItemsPerPage();
+  window._cachedPageSize = ps;
+  const cams = state.mediaCamera ? [state.mediaCamera] : state.cameras.map((c) => c.id);
   // Unified filter — EventStore now holds both motion and timelapse events.
   const allLabels = [...labels];
-  const labelParam = allLabels.length === 1 ? `&label=${encodeURIComponent(allLabels[0])}`
-    : allLabels.length > 1 ? `&labels=${encodeURIComponent(allLabels.join(','))}` : '';
+  const labelParam =
+    allLabels.length === 1
+      ? `&label=${encodeURIComponent(allLabels[0])}`
+      : allLabels.length > 1
+        ? `&labels=${encodeURIComponent(allLabels.join(','))}`
+        : '';
   // Fetch ALL matching items from every camera in one pass (no server-side offset).
   // Pagination is done client-side on the merged+sorted list so that multi-camera
   // views produce a consistent global order and every page is fully filled.
@@ -26,12 +31,12 @@ export async function loadMedia(){
   // NOT blank the whole grid. Symptom we're killing: "Lade Medien…" stuck on
   // first open because a single fetch threw and renderMediaGrid never ran.
   const allItems = [];
-  for (const camId of cams){
+  for (const camId of cams) {
     try {
       const data = await j(`/api/camera/${camId}/media?limit=9999&offset=0${labelParam}`);
       const items = data.items || [];
       for (const item of items) allItems.push({ ...item, camera_id: camId });
-    } catch (err){
+    } catch (err) {
       console.warn(`[mediathek] failed to load media for cam ${camId}:`, err);
     }
   }
@@ -39,10 +44,10 @@ export async function loadMedia(){
   state._allMedia = allItems;
   // If the active label filter has no matching items (period change etc.),
   // drop it and reload once with the cleaned filter.
-  const availNow = new Set(allItems.flatMap(item => item.labels || []));
-  const toClear = [...state.mediaLabels].filter(l => l !== 'timelapse' && !availNow.has(l));
-  if (toClear.length){
-    toClear.forEach(l => state.mediaLabels.delete(l));
+  const availNow = new Set(allItems.flatMap((item) => item.labels || []));
+  const toClear = [...state.mediaLabels].filter((l) => l !== 'timelapse' && !availNow.has(l));
+  if (toClear.length) {
+    toClear.forEach((l) => state.mediaLabels.delete(l));
     syncMediaPills();
     return loadMedia();
   }

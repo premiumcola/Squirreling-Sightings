@@ -6,12 +6,12 @@
 // (loadWeatherSightings -> loadWeatherRecaps; renderWeatherSightings
 // -> _renderWeatherRecaps) so callers see one definition, no double-
 // override risk.
-import { byId, esc } from "../core/dom.js";
-import { state } from "../core/state.js";
-import { showToast, showConfirm } from "../core/toast.js";
-import { apiGet, apiDelete } from "../core/api.js";
-import { WEATHER_TYPES } from "../core/weather-types.js";
-import { precipitationLabel } from "../core/weather-precip.js";
+import { byId, esc } from '../core/dom.js';
+import { state } from '../core/state.js';
+import { showToast, showConfirm } from '../core/toast.js';
+import { apiGet, apiDelete } from '../core/api.js';
+import { WEATHER_TYPES } from '../core/weather-types.js';
+import { precipitationLabel } from '../core/weather-precip.js';
 
 // Pick the right human-readable label for a sighting badge. For
 // `heavy_rain` we band the actual current precipitation reading
@@ -19,7 +19,7 @@ import { precipitationLabel } from "../core/weather-precip.js";
 // WEATHER_TYPES is the *event-type* name and would mislabel a card
 // captured at e.g. 0.1 mm/h. For all other event types we fall back
 // to the static WEATHER_TYPES label.
-function _weatherSightingLabel(s, meta){
+function _weatherSightingLabel(s, meta) {
   if (s && s.event_type === 'heavy_rain') {
     const snap = s.api_snapshot || {};
     if (snap.precipitation !== null && snap.precipitation !== undefined) {
@@ -28,16 +28,16 @@ function _weatherSightingLabel(s, meta){
   }
   return meta.de;
 }
-import { WEATHER_FIELD_LABEL_DE, WEATHER_FIELD_UNIT_DE } from "./stats.js";
+import { WEATHER_FIELD_LABEL_DE, WEATHER_FIELD_UNIT_DE } from './stats.js';
 
-async function loadWeatherSightings(filter){
+async function loadWeatherSightings(filter) {
   // Filter migrates from single-string to Set semantics: state.weather.filter
   // is a Set of event_type strings. Empty Set = "no filter, show everything"
   // (matches the Mediathek pill UX). Server fetch always pulls the full list
   // — filtering happens client-side in _renderWeatherGrid so toggling pills
   // doesn't trigger a network round-trip. The legacy single-string call site
   // is still tolerated: a string argument seeds a single-member Set.
-  try{
+  try {
     const data = await apiGet('/api/weather/sightings');
     state.weather.items = data.items || [];
     state.weather.counts = data.counts || {};
@@ -49,11 +49,11 @@ async function loadWeatherSightings(filter){
     } else if (!(state.weather.filter instanceof Set)) {
       // First load → seed with every event type that has items, mirroring
       // the Mediathek "all on by default" rule.
-      const present = Object.keys(WEATHER_TYPES).filter(t => (state.weather.counts[t]||0) > 0);
+      const present = Object.keys(WEATHER_TYPES).filter((t) => (state.weather.counts[t] || 0) > 0);
       state.weather.filter = new Set(present);
     }
     renderWeatherSightings();
-  }catch(_err){
+  } catch (_err) {
     // silently degrade — section stays empty
   }
   // Phase 3 — Recaps live next to sightings; loading them here keeps the
@@ -63,8 +63,9 @@ async function loadWeatherSightings(filter){
   await loadWeatherRecaps();
 }
 
-function renderWeatherSightings(){
-  const block = byId('weatherSightingsBlock'); if (!block) return;
+function renderWeatherSightings() {
+  const block = byId('weatherSightingsBlock');
+  if (!block) return;
   const sub = byId('weatherSightingsSubtitle');
   if (sub) {
     const yr = new Date().getFullYear();
@@ -77,36 +78,40 @@ function renderWeatherSightings(){
   _renderWeatherRecaps();
 }
 
-function _renderWeatherFilterPills(){
-  const bar = byId('weatherFilterBar'); if (!bar) return;
+function _renderWeatherFilterPills() {
+  const bar = byId('weatherFilterBar');
+  if (!bar) return;
   // Sort by count desc, with ties by spec order. Counts==0 → empty/disabled
   // (mirrors the Mediathek pill recipe so the visual language is identical).
   const types = Object.keys(WEATHER_TYPES);
   const counts = state.weather.counts || {};
-  const sorted = types.slice().sort((a,b) => {
-    const d = (counts[b]||0) - (counts[a]||0);
-    return d || (types.indexOf(a) - types.indexOf(b));
+  const sorted = types.slice().sort((a, b) => {
+    const d = (counts[b] || 0) - (counts[a] || 0);
+    return d || types.indexOf(a) - types.indexOf(b);
   });
   const sel = state.weather.filter instanceof Set ? state.weather.filter : new Set();
-  let html = sorted.map(t => {
-    const meta = WEATHER_TYPES[t];
-    const cnt = counts[t] || 0;
-    const empty = cnt === 0;
-    const active = sel.has(t);
-    const cls = `media-pill cat-filter-btn${active ? ' active' : ''}${empty ? ' media-pill--empty' : ''}`;
-    const cntChip = cnt > 0 ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>` : '';
-    // Visible text: short `de` label. Tooltip + accessible name: full
-    // `de_full` (falls back to `de` when not set) so screen readers and
-    // hover tooltips keep the long form even when the chip itself is
-    // truncated for space.
-    const fullLbl = meta.de_full || meta.de;
-    return `<button type="button" class="${cls}" data-type="weather" data-val="${esc(t)}" title="${esc(fullLbl)}" aria-label="${esc(fullLbl)}${cnt > 0 ? `, ${cnt} Ereignisse` : ''}" style="--cb:${meta.color}"${empty ? ' tabindex="-1" aria-disabled="true"' : ''}><span class="cfb-icon" style="pointer-events:none;color:${meta.color}">${meta.icon}</span><span style="pointer-events:none">${esc(meta.de)}</span>${cntChip}</button>`;
-  }).join('');
+  let html = sorted
+    .map((t) => {
+      const meta = WEATHER_TYPES[t];
+      const cnt = counts[t] || 0;
+      const empty = cnt === 0;
+      const active = sel.has(t);
+      const cls = `media-pill cat-filter-btn${active ? ' active' : ''}${empty ? ' media-pill--empty' : ''}`;
+      const cntChip =
+        cnt > 0 ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>` : '';
+      // Visible text: short `de` label. Tooltip + accessible name: full
+      // `de_full` (falls back to `de` when not set) so screen readers and
+      // hover tooltips keep the long form even when the chip itself is
+      // truncated for space.
+      const fullLbl = meta.de_full || meta.de;
+      return `<button type="button" class="${cls}" data-type="weather" data-val="${esc(t)}" title="${esc(fullLbl)}" aria-label="${esc(fullLbl)}${cnt > 0 ? `, ${cnt} Ereignisse` : ''}" style="--cb:${meta.color}"${empty ? ' tabindex="-1" aria-disabled="true"' : ''}><span class="cfb-icon" style="pointer-events:none;color:${meta.color}">${meta.icon}</span><span style="pointer-events:none">${esc(meta.de)}</span>${cntChip}</button>`;
+    })
+    .join('');
   if (sel.size === 0) {
     html += `<span class="media-pill media-pill--status" aria-disabled="true">alle Filter aus</span>`;
   }
   bar.innerHTML = html;
-  bar.querySelectorAll('.media-pill').forEach(p => {
+  bar.querySelectorAll('.media-pill').forEach((p) => {
     if (p.classList.contains('media-pill--empty')) return;
     if (p.classList.contains('media-pill--status')) return;
     p.addEventListener('click', () => {
@@ -129,23 +134,23 @@ function _renderWeatherFilterPills(){
 // 3×3 on desktop so the pagination control stays in view on a
 // 1080 p screen without scrolling. Recomputed on every render so a
 // window resize adjusts the page count without a reload.
-function _weatherPageSize(){
+function _weatherPageSize() {
   const w = window.innerWidth || 1200;
-  if (w <= 768)  return 4;
+  if (w <= 768) return 4;
   if (w <= 1180) return 8;
   return 9;
 }
 
-function _renderWeatherGrid(){
-  const grid = byId('weatherSightingsGrid'); if (!grid) return;
+function _renderWeatherGrid() {
+  const grid = byId('weatherSightingsGrid');
+  if (!grid) return;
   const empty = byId('weatherSightingsEmpty');
   const allItems = state.weather.items || [];
   // Client-side filter: include items whose event_type is in the active
   // filter Set. Empty Set = "no filter active → show all" (matches the
   // Mediathek mental model).
   const sel = state.weather.filter instanceof Set ? state.weather.filter : new Set();
-  const items = sel.size === 0 ? allItems
-                                : allItems.filter(s => sel.has(s.event_type));
+  const items = sel.size === 0 ? allItems : allItems.filter((s) => sel.has(s.event_type));
   if (!items.length) {
     grid.innerHTML = '';
     if (empty) empty.hidden = false;
@@ -177,39 +182,44 @@ function _renderWeatherGrid(){
   // those entries avoids the network request and keeps the console
   // clean — the card still renders with a placeholder so the user can
   // see the orphan exists and decide whether to delete it.
-  const _activeCamIds = new Set((state.cameras || []).map(c => c.id));
+  const _activeCamIds = new Set((state.cameras || []).map((c) => c.id));
   // Render only the visible slice for the current page; data-idx
   // carries the absolute index in `items` (filtered list) so the
   // lightbox can navigate prev/next across the whole filtered set.
-  grid.innerHTML = visibleItems.map((s, localIdx) => {
-    const idx = sliceStart + localIdx;
-    const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8', icon: '' };
-    // For sun-timelapse sightings the user wants the actual sunrise /
-    // sunset time on the card, not the window-end timestamp. sun_event_at
-    // is the manifest field added in this commit; fall back to started_at
-    // for older records that don't carry it.
-    const tsRaw = s.sun_event_at || s.started_at;
-    const t = new Date(tsRaw);
-    const dateLabel = t.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
-    const timeLabel = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    const sevPct = Math.round((s.score || s.severity || 0) * 100);
-    // The percentage badge means different things per event type and
-    // users were asking what it stood for. sun_timelapse_* uses a
-    // sky-quality metric (100% = clear sky, ~50% = overcast); all
-    // other event types use a generic severity score. The same text
-    // is mirrored into the click-to-toast handler below for touch
-    // devices since title= doesn't surface on tap.
-    const isSunTl = typeof s.event_type === 'string' && s.event_type.startsWith('sun_timelapse');
-    const scoreTip = isSunTl
-      ? 'Himmelsqualität · 100% = klarer Himmel, 50% = stark bewölkt'
-      : 'Stärke des Wetterereignisses';
-    const camName = esc(s.cam_name || s.cam_id || '');
-    const camActive = _activeCamIds.has(s.cam_id);
-    const displayLabel = _weatherSightingLabel(s, meta);
-    const thumbHtml = camActive
-      ? `<img class="ws-card-thumb" loading="lazy" src="/api/weather/sightings/${encodeURIComponent(s.id)}/thumb" alt="${esc(displayLabel)}" onerror="this.style.opacity=0.2"/>`
-      : `<div class="ws-card-thumb ws-card-thumb--orphan" aria-hidden="true"></div>`;
-    return `
+  grid.innerHTML = visibleItems
+    .map((s, localIdx) => {
+      const idx = sliceStart + localIdx;
+      const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8', icon: '' };
+      // For sun-timelapse sightings the user wants the actual sunrise /
+      // sunset time on the card, not the window-end timestamp. sun_event_at
+      // is the manifest field added in this commit; fall back to started_at
+      // for older records that don't carry it.
+      const tsRaw = s.sun_event_at || s.started_at;
+      const t = new Date(tsRaw);
+      const dateLabel = t.toLocaleDateString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+      });
+      const timeLabel = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const sevPct = Math.round((s.score || s.severity || 0) * 100);
+      // The percentage badge means different things per event type and
+      // users were asking what it stood for. sun_timelapse_* uses a
+      // sky-quality metric (100% = clear sky, ~50% = overcast); all
+      // other event types use a generic severity score. The same text
+      // is mirrored into the click-to-toast handler below for touch
+      // devices since title= doesn't surface on tap.
+      const isSunTl = typeof s.event_type === 'string' && s.event_type.startsWith('sun_timelapse');
+      const scoreTip = isSunTl
+        ? 'Himmelsqualität · 100% = klarer Himmel, 50% = stark bewölkt'
+        : 'Stärke des Wetterereignisses';
+      const camName = esc(s.cam_name || s.cam_id || '');
+      const camActive = _activeCamIds.has(s.cam_id);
+      const displayLabel = _weatherSightingLabel(s, meta);
+      const thumbHtml = camActive
+        ? `<img class="ws-card-thumb" loading="lazy" src="/api/weather/sightings/${encodeURIComponent(s.id)}/thumb" alt="${esc(displayLabel)}" onerror="this.style.opacity=0.2"/>`
+        : `<div class="ws-card-thumb ws-card-thumb--orphan" aria-hidden="true"></div>`;
+      return `
       <div class="ws-card${camActive ? '' : ' ws-card--orphan'}" data-idx="${idx}" data-id="${esc(s.id)}">
         <div class="ws-card-thumb-wrap">
           ${thumbHtml}
@@ -224,21 +234,28 @@ function _renderWeatherGrid(){
           <span class="ws-card-bottom-r">${camName}</span>
         </div>
       </div>`;
-  }).join('');
-  grid.querySelectorAll('.ws-card').forEach(card => {
+    })
+    .join('');
+  grid.querySelectorAll('.ws-card').forEach((card) => {
     card.addEventListener('click', () => _openSightingInLightbox(parseInt(card.dataset.idx, 10)));
   });
   _renderWeatherPagination(items.length, pageSize);
   // Score badges fire a toast with the metric explanation on tap —
   // title= alone is desktop-only. stopPropagation keeps the badge tap
   // from also opening the card lightbox.
-  grid.querySelectorAll('.ws-card-badge--score').forEach(b => {
+  grid.querySelectorAll('.ws-card-badge--score').forEach((b) => {
     const tip = b.getAttribute('data-score-tip');
     if (!tip) return;
-    const fire = (e) => { e.stopPropagation(); showToast(tip, 'info'); };
+    const fire = (e) => {
+      e.stopPropagation();
+      showToast(tip, 'info');
+    };
     b.addEventListener('click', fire);
     b.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(e); }
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fire(e);
+      }
     });
   });
 }
@@ -248,7 +265,7 @@ function _renderWeatherGrid(){
 // numeric pills (max 5 visible) plus prev/next chevrons; for 1-page
 // lists the strip stays hidden via [hidden]. The page index lives on
 // state.weather.page and is read by _renderWeatherGrid on every call.
-function _renderWeatherPagination(totalItems, pageSize){
+function _renderWeatherPagination(totalItems, pageSize) {
   const pag = byId('weatherSightingsPagination');
   if (!pag) return;
   if (!totalItems || totalItems <= pageSize) {
@@ -263,13 +280,19 @@ function _renderWeatherPagination(totalItems, pageSize){
   const winStart = Math.max(0, Math.min(cur - 2, pageCount - 5));
   const winEnd = Math.min(pageCount, winStart + 5);
   const pills = [];
-  pills.push(`<button type="button" class="page-pill" data-act="prev" ${cur === 0 ? 'disabled' : ''} aria-label="Vorherige Seite">‹</button>`);
+  pills.push(
+    `<button type="button" class="page-pill" data-act="prev" ${cur === 0 ? 'disabled' : ''} aria-label="Vorherige Seite">‹</button>`,
+  );
   for (let i = winStart; i < winEnd; i++) {
-    pills.push(`<button type="button" class="page-pill${i === cur ? ' active' : ''}" data-go="${i}">${i + 1}</button>`);
+    pills.push(
+      `<button type="button" class="page-pill${i === cur ? ' active' : ''}" data-go="${i}">${i + 1}</button>`,
+    );
   }
-  pills.push(`<button type="button" class="page-pill" data-act="next" ${cur >= pageCount - 1 ? 'disabled' : ''} aria-label="Nächste Seite">›</button>`);
+  pills.push(
+    `<button type="button" class="page-pill" data-act="next" ${cur >= pageCount - 1 ? 'disabled' : ''} aria-label="Nächste Seite">›</button>`,
+  );
   pag.innerHTML = pills.join('');
-  pag.querySelectorAll('button').forEach(btn => {
+  pag.querySelectorAll('button').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (btn.disabled) return;
       const act = btn.dataset.act;
@@ -291,10 +314,16 @@ function _renderWeatherPagination(totalItems, pageSize){
 // the grid so the user sees the right column count immediately and
 // the page index gets clamped to the new page count.
 let _wsResizeTimer = null;
-window.addEventListener('resize', () => {
-  if (_wsResizeTimer) clearTimeout(_wsResizeTimer);
-  _wsResizeTimer = setTimeout(() => { _renderWeatherGrid(); }, 150);
-}, { passive: true });
+window.addEventListener(
+  'resize',
+  () => {
+    if (_wsResizeTimer) clearTimeout(_wsResizeTimer);
+    _wsResizeTimer = setTimeout(() => {
+      _renderWeatherGrid();
+    }, 150);
+  },
+  { passive: true },
+);
 
 let _wsLbIdx = -1;
 
@@ -307,12 +336,14 @@ let _wsLbIdx = -1;
 // the old static block did. Legacy openWeatherLightbox stays as
 // the fallback if openTLPlayer is unavailable (e.g. lightbox.js
 // failed to load).
-function _openSightingInLightbox(idx){
+function _openSightingInLightbox(idx) {
   const items = state.weather.itemsFiltered || state.weather.items || [];
-  if (idx < 0 || idx >= items.length){ return; }
+  if (idx < 0 || idx >= items.length) {
+    return;
+  }
   const s = items[idx];
   const open = typeof window !== 'undefined' && window.openTLPlayer;
-  if (typeof open !== 'function'){
+  if (typeof open !== 'function') {
     openWeatherLightbox(idx);
     return;
   }
@@ -341,7 +372,7 @@ function _openSightingInLightbox(idx){
   open(synth);
 }
 
-function openWeatherLightbox(idx){
+function openWeatherLightbox(idx) {
   // Cards carry an absolute index into the filtered list (the slice
   // window for the current page is just a render concern). When no
   // filter is active, itemsFiltered == items.
@@ -382,10 +413,12 @@ function openWeatherLightbox(idx){
       if (action === 'delete') {
         const cur = (state.weather.itemsFiltered || state.weather.items)[_wsLbIdx];
         if (cur) {
-          showConfirm('Wetter-Ereignis wirklich löschen?').then(ok => {
+          showConfirm('Wetter-Ereignis wirklich löschen?').then((ok) => {
             if (!ok) return;
-            apiDelete(`/api/weather/sightings/${encodeURIComponent(cur.id)}`)
-              .then(() => { closeWeatherLightbox(); loadWeatherSightings(state.weather.filter); });
+            apiDelete(`/api/weather/sightings/${encodeURIComponent(cur.id)}`).then(() => {
+              closeWeatherLightbox();
+              loadWeatherSightings(state.weather.filter);
+            });
           });
         }
       }
@@ -400,7 +433,8 @@ function openWeatherLightbox(idx){
   // Update video src + metadata
   const video = byId('wsLbVideo');
   video.src = `/api/weather/sightings/${encodeURIComponent(s.id)}/clip`;
-  video.load(); video.play().catch(() => {});
+  video.load();
+  video.play().catch(() => {});
   byId('wsLbMeta').innerHTML = _renderWsLbMeta(s);
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -408,14 +442,21 @@ function openWeatherLightbox(idx){
   modal.querySelector('.ws-lb-next').style.opacity = idx < items.length - 1 ? '1' : '0.25';
 }
 
-function closeWeatherLightbox(){
-  const modal = byId('wsLightbox'); if (!modal) return;
+function closeWeatherLightbox() {
+  const modal = byId('wsLightbox');
+  if (!modal) return;
   modal.classList.remove('open');
   document.body.style.overflow = '';
-  const v = byId('wsLbVideo'); if (v) { try { v.pause(); v.src = ''; } catch (_err) {} }
+  const v = byId('wsLbVideo');
+  if (v) {
+    try {
+      v.pause();
+      v.src = '';
+    } catch (_err) {}
+  }
 }
 
-function _renderWsLbMeta(s){
+function _renderWsLbMeta(s) {
   const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8' };
   const t = new Date(s.started_at);
   const fullDate = t.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
@@ -426,13 +467,19 @@ function _renderWsLbMeta(s){
       const lbl = WEATHER_FIELD_LABEL_DE[k] || k;
       const unit = WEATHER_FIELD_UNIT_DE[k] || '';
       return `<div class="ws-lb-row"><span class="ws-lb-row-key">${esc(lbl)}</span><span class="ws-lb-row-val">${esc(String(v))}${unit ? ' ' + unit : ''}</span></div>`;
-    }).join('');
+    })
+    .join('');
   const showSun = (s.event_type === 'sunset' || s.event_type === 'fog') && s.sun_snapshot;
-  const sunRows = showSun && s.sun_snapshot
-    ? Object.entries(s.sun_snapshot)
-        .filter(([_k, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => `<div class="ws-lb-row"><span class="ws-lb-row-key">${k === 'altitude' ? 'Höhe' : 'Azimut'}</span><span class="ws-lb-row-val">${Number(v).toFixed(1)}°</span></div>`).join('')
-    : '';
+  const sunRows =
+    showSun && s.sun_snapshot
+      ? Object.entries(s.sun_snapshot)
+          .filter(([_k, v]) => v !== null && v !== undefined)
+          .map(
+            ([k, v]) =>
+              `<div class="ws-lb-row"><span class="ws-lb-row-key">${k === 'altitude' ? 'Höhe' : 'Azimut'}</span><span class="ws-lb-row-val">${Number(v).toFixed(1)}°</span></div>`,
+          )
+          .join('')
+      : '';
   const displayLabel = _weatherSightingLabel(s, meta);
   return `
     <div class="ws-lb-headline">
@@ -448,27 +495,34 @@ function _renderWsLbMeta(s){
 
 // ── Settings: Wetter-Ereignisse ──────────────────────────────────────────────
 
-
-async function loadWeatherRecaps(){
-  try{
+async function loadWeatherRecaps() {
+  try {
     const d = await apiGet('/api/weather/recaps');
     state.weather.recaps = d.items || [];
     _renderWeatherRecaps();
-  }catch(_err){ /* silent */ }
+  } catch (_err) {
+    /* silent */
+  }
 }
 
-function _renderWeatherRecaps(){
+function _renderWeatherRecaps() {
   const row = byId('weatherRecapsRow');
   const strip = byId('weatherRecapsStrip');
   if (!row || !strip) return;
   const items = state.weather.recaps || [];
-  if (!items.length) { row.hidden = true; strip.innerHTML = ''; return; }
+  if (!items.length) {
+    row.hidden = true;
+    strip.innerHTML = '';
+    return;
+  }
   row.hidden = false;
-  strip.innerHTML = items.map((m, idx) => {
-    const dur = parseInt(m.duration_s || 0, 10);
-    const mm = Math.floor(dur / 60), ss = dur % 60;
-    const durLbl = `${mm}:${ss.toString().padStart(2, '0')} min`;
-    return `
+  strip.innerHTML = items
+    .map((m, idx) => {
+      const dur = parseInt(m.duration_s || 0, 10);
+      const mm = Math.floor(dur / 60),
+        ss = dur % 60;
+      const durLbl = `${mm}:${ss.toString().padStart(2, '0')} min`;
+      return `
       <div class="ws-recap-card" data-idx="${idx}" data-id="${esc(m.id)}">
         <div class="ws-recap-card-period">${esc(m.period_label || m.id)}</div>
         <div class="ws-recap-card-meta">${m.n_clips || 0} Clips · ${esc(durLbl)}</div>
@@ -476,13 +530,14 @@ function _renderWeatherRecaps(){
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
         </span>
       </div>`;
-  }).join('');
-  strip.querySelectorAll('.ws-recap-card').forEach(card => {
+    })
+    .join('');
+  strip.querySelectorAll('.ws-recap-card').forEach((card) => {
     card.addEventListener('click', () => openWeatherRecapLightbox(parseInt(card.dataset.idx, 10)));
   });
 }
 
-function openWeatherRecapLightbox(idx){
+function openWeatherRecapLightbox(idx) {
   // Reuse the wsLightbox shell built by Phase 2 — swap the video src and
   // metadata, no separate DOM. The Prev/Next nav stays disabled because
   // recaps don't form an ordered series across the year.
@@ -523,7 +578,8 @@ function openWeatherRecapLightbox(idx){
   }
   const video = byId('wsLbVideo');
   video.src = `/api/weather/recaps/${encodeURIComponent(m.id)}/clip`;
-  video.load(); video.play().catch(() => {});
+  video.load();
+  video.play().catch(() => {});
   byId('wsLbMeta').innerHTML = `
     <div class="ws-lb-headline">
       <span class="ws-lb-type-badge" style="background:#7faec933;border:1px solid #7faec966;color:#7faec9">🎞 ${esc(m.period_label || m.id)}</span>
@@ -540,10 +596,9 @@ function openWeatherRecapLightbox(idx){
   document.body.style.overflow = 'hidden';
 }
 
-
 // ── Hash anchor handler — open lightbox for #weather/<id> on page load ──────
 
-function _handleWeatherHashAnchor(){
+function _handleWeatherHashAnchor() {
   const h = window.location.hash || '';
   // Scroll to the new top-level #weather section (was a sub-block of
   // #achievements before the Sichtungen↔Wetter split). Falls back to the
@@ -557,7 +612,7 @@ function _handleWeatherHashAnchor(){
   if (!h.startsWith('#weather/')) return;
   const id = decodeURIComponent(h.slice('#weather/'.length));
   const items = state.weather.items || [];
-  const idx = items.findIndex(s => s.id === id);
+  const idx = items.findIndex((s) => s.id === id);
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   if (typeof window._setActiveNav === 'function') window._setActiveNav('weather');
   if (idx >= 0 && typeof openWeatherLightbox === 'function') {
@@ -576,19 +631,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // Public surface — bridges in legacy.js consume these by name.
 
 export {
-
   loadWeatherSightings,
-
   renderWeatherSightings,
-
   openWeatherLightbox,
-
   closeWeatherLightbox,
-
   loadWeatherRecaps,
-
   openWeatherRecapLightbox,
-
 };
 
 // ── window.* bridges ────────────────────────────────────────────────────────
@@ -596,6 +644,6 @@ export {
 // by global name. The hash-anchor handler at module-import time
 // already binds; these bridges are about cross-module callers.
 window.loadWeatherSightings = loadWeatherSightings;
-window.loadWeatherRecaps    = loadWeatherRecaps;
-window.openWeatherLightbox  = openWeatherLightbox;
-window.openWeatherRecap     = openWeatherRecapLightbox;
+window.loadWeatherRecaps = loadWeatherRecaps;
+window.openWeatherLightbox = openWeatherLightbox;
+window.openWeatherRecap = openWeatherRecapLightbox;

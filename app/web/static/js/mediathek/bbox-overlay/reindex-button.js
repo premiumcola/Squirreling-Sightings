@@ -21,8 +21,8 @@ const _BTN_ID = 'lbReindexBtn';
  *
  * @param {HTMLElement|string} host  Container element or its id.
  */
-export function mountReindexButton(host){
-  const row = (typeof host === 'string') ? byId(host) : host;
+export function mountReindexButton(host) {
+  const row = typeof host === 'string' ? byId(host) : host;
   if (!row) return null;
   const prev = byId(_BTN_ID);
   if (prev) prev.remove();
@@ -49,6 +49,8 @@ export function mountReindexButton(host){
     triggerManualReindex(btn);
   });
   return {
-    teardown: () => { btn.remove(); },
+    teardown: () => {
+      btn.remove();
+    },
   };
 }

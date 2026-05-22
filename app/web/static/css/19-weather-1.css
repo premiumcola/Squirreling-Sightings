@@ -5,11 +5,35 @@
    section split it is the only child of #weather, so the old border-top
    shows up as an unwanted line at the top of the panel — hence flat margin
    and no border. */
-.weather-sightings-block{margin:0 0 12px;padding:0;background:transparent}
-.weather-sightings-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px;flex-wrap:wrap}
-.ws-title{display:inline-flex;align-items:center;gap:8px;font-size:18px;font-weight:700;color:#7faec9}
-.ws-title svg{flex-shrink:0;color:#7faec9}
-.ws-subtitle{font-size:12px;color:var(--muted);font-style:italic}
+.weather-sightings-block {
+  margin: 0 0 12px;
+  padding: 0;
+  background: transparent;
+}
+.weather-sightings-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.ws-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #7faec9;
+}
+.ws-title svg {
+  flex-shrink: 0;
+  color: #7faec9;
+}
+.ws-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
 /* Filter pill row. Touch-scroll behaviour (overflow-x, pan-x lock,
    right-edge fade, scroll-snap, hidden scrollbar) lives in the
    shared :where() rule in 25-mobile.css — same component as the
@@ -19,53 +43,178 @@
    filter bar on desktop (Library parity) — the mobile override in
    25-mobile.css flips this to flex-wrap:nowrap so the strip scrolls
    horizontally on iPhone instead. */
-.ws-filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
-.ws-empty{padding:18px 8px;text-align:center;color:var(--muted);font-size:13px;background:transparent}
+.ws-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.ws-empty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  background: transparent;
+}
 
 /* Galerie 3-spaltig auf Desktop, 2 auf Tablet, 2 auf iPhone (was 1).
    The 2-column phone grid mirrors the main Library cadence — 4
    thumbnails per page (2×2) feel like cards, not letterboxed full-
    width tiles. */
-.ws-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-@media (max-width:980px){.ws-grid{grid-template-columns:repeat(2,1fr);gap:10px}}
+.ws-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 980px) {
+  .ws-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+}
 
-.ws-card{cursor:pointer;border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.03);transition:background .15s,transform .15s}
-.ws-card:hover{background:rgba(127,174,201,0.08)}
-.ws-card-thumb-wrap{position:relative;aspect-ratio:16/9;background:#0a0e14;overflow:hidden}
-.ws-card-thumb{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s}
-.ws-card:hover .ws-card-thumb{transform:scale(1.03)}
+.ws-card {
+  cursor: pointer;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  transition:
+    background 0.15s,
+    transform 0.15s;
+}
+.ws-card:hover {
+  background: rgba(127, 174, 201, 0.08);
+}
+.ws-card-thumb-wrap {
+  position: relative;
+  aspect-ratio: 16/9;
+  background: #0a0e14;
+  overflow: hidden;
+}
+.ws-card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s;
+}
+.ws-card:hover .ws-card-thumb {
+  transform: scale(1.03);
+}
 /* Orphan-camera placeholder — used when a sighting's cam_id is no
    longer in the active cameras list, so the thumb endpoint would 404.
    Card still renders so the user knows the entry exists; the thumb
    slot just shows a subtle striped surface in place of the missing
    image. */
-.ws-card-thumb--orphan{
-  width:100%;height:100%;display:block;
-  background:repeating-linear-gradient(
+.ws-card-thumb--orphan {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: repeating-linear-gradient(
     135deg,
-    rgba(255,255,255,.04) 0 6px,
-    rgba(255,255,255,.02) 6px 12px
+    rgba(255, 255, 255, 0.04) 0 6px,
+    rgba(255, 255, 255, 0.02) 6px 12px
   );
 }
-.ws-card--orphan{ opacity:.65; }
+.ws-card--orphan {
+  opacity: 0.65;
+}
 
 /* Top-Left type badge with icon — blur background like Mediathek */
-.ws-card-badge{position:absolute;display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:700;color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);text-shadow:0 1px 2px rgba(0,0,0,0.4);line-height:1}
-.ws-card-badge--type{top:8px;left:8px}
-.ws-card-badge--score{top:8px;right:8px;background:rgba(0,0,0,0.55);font-variant-numeric:tabular-nums;cursor:help}
+.ws-card-badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  line-height: 1;
+}
+.ws-card-badge--type {
+  top: 8px;
+  left: 8px;
+}
+.ws-card-badge--score {
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
 /* Info-dot inside the score badge — signals to touch users that the
    percentage is tappable for an explanation toast. Slightly muted vs
    the digits so it doesn't fight the value. */
-.ws-card-badge--score .ws-score-info{margin-left:3px;opacity:.7;font-size:10px;font-weight:600;line-height:1}
-.ws-card-badge-icon{display:inline-flex;align-items:center}
-.ws-card-badge-icon svg{width:14px;height:14px}
+.ws-card-badge--score .ws-score-info {
+  margin-left: 3px;
+  opacity: 0.7;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.ws-card-badge-icon {
+  display: inline-flex;
+  align-items: center;
+}
+.ws-card-badge-icon svg {
+  width: 14px;
+  height: 14px;
+}
 
 /* Center play button */
-.ws-card-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:rgba(0,0,0,0.5);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:transform .15s,background .15s;pointer-events:none}
-.ws-card:hover .ws-card-play{transform:translate(-50%,-50%) scale(1.08);background:rgba(127,174,201,0.65)}
+.ws-card-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition:
+    transform 0.15s,
+    background 0.15s;
+  pointer-events: none;
+}
+.ws-card:hover .ws-card-play {
+  transform: translate(-50%, -50%) scale(1.08);
+  background: rgba(127, 174, 201, 0.65);
+}
 
 /* Bottom row: date left, camera right */
-.ws-card-bottom-l,.ws-card-bottom-r{position:absolute;bottom:8px;font-size:11px;font-weight:600;color:#fff;padding:3px 8px;border-radius:6px;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);text-shadow:0 1px 2px rgba(0,0,0,0.5);line-height:1}
-.ws-card-bottom-l{left:8px}
-.ws-card-bottom-r{right:8px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
+.ws-card-bottom-l,
+.ws-card-bottom-r {
+  position: absolute;
+  bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+.ws-card-bottom-l {
+  left: 8px;
+}
+.ws-card-bottom-r {
+  right: 8px;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -6,7 +6,7 @@
 // .panel.section[data-accent] feeds --acc for top-level panels.
 import { byId } from '../core/dom.js';
 
-window.toggleSetSection = function(id){
+window.toggleSetSection = function (id) {
   const el = byId(id);
   if (!el) return;
   if (el.dataset.accent) el.style.setProperty('--sa', el.dataset.accent);
@@ -17,10 +17,10 @@ window.toggleSetSection = function(id){
 // Seed --sa / --acc on first load so even closed sections render with
 // the correct accent the moment they open (no first-click flash).
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.set-section[data-accent]').forEach(el => {
+  document.querySelectorAll('.set-section[data-accent]').forEach((el) => {
     el.style.setProperty('--sa', el.dataset.accent);
   });
-  document.querySelectorAll('.panel.section[data-accent]').forEach(el => {
+  document.querySelectorAll('.panel.section[data-accent]').forEach((el) => {
     el.style.setProperty('--acc', el.dataset.accent);
   });
 });

@@ -12,28 +12,35 @@
 import { byId } from '../core/dom.js';
 
 const _CAM_ID_TRANSLIT = {
-  'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'ae', 'Ö': 'oe', 'Ü': 'ue',
-  'ß': 'ss', 'ñ': 'n', 'ç': 'c',
+  ä: 'ae',
+  ö: 'oe',
+  ü: 'ue',
+  Ä: 'ae',
+  Ö: 'oe',
+  Ü: 'ue',
+  ß: 'ss',
+  ñ: 'n',
+  ç: 'c',
 };
 
-function _camIdSanitise(seg){
+function _camIdSanitise(seg) {
   if (seg == null) return '';
-  let s = String(seg).replaceAll(/./g, ch => _CAM_ID_TRANSLIT[ch] ?? ch);
+  let s = String(seg).replaceAll(/./g, (ch) => _CAM_ID_TRANSLIT[ch] ?? ch);
   // NFKD decompose, drop combining marks (mirrors python unicodedata)
   s = s.normalize('NFKD').replaceAll(/[̀-ͯ]/g, '');
   s = s.toLowerCase().replaceAll(/[^a-z0-9]+/g, '');
   return s;
 }
 
-function _camIdLastIpSegment(ip){
+function _camIdLastIpSegment(ip) {
   if (!ip) return '';
   const s = String(ip).trim();
-  if (s.indexOf('.') >= 0){
+  if (s.indexOf('.') >= 0) {
     const last = s.split('.').pop();
     const san = _camIdSanitise(last);
     if (san) return san;
   }
-  if (s.indexOf(':') >= 0){
+  if (s.indexOf(':') >= 0) {
     const noZone = s.split('%')[0];
     const last = noZone.split(':').pop();
     const san = _camIdSanitise(last);
@@ -42,8 +49,8 @@ function _camIdLastIpSegment(ip){
   return '';
 }
 
-export function buildCameraId(manufacturer, model, name, ip){
-  const parts = [manufacturer, model, name].map(raw => {
+export function buildCameraId(manufacturer, model, name, ip) {
+  const parts = [manufacturer, model, name].map((raw) => {
     const c = _camIdSanitise(raw);
     return c || 'unknown';
   });
@@ -52,7 +59,7 @@ export function buildCameraId(manufacturer, model, name, ip){
   return parts.join('_');
 }
 
-export function _refreshCamIdPreview(){
+export function _refreshCamIdPreview() {
   const el = byId('camIdPreview');
   if (!el) return;
   const f = byId('cameraForm')?.elements;
@@ -66,10 +73,10 @@ export function _refreshCamIdPreview(){
   el.textContent = newId;
 }
 
-export function _bindCamIdPreviewListeners(){
+export function _bindCamIdPreviewListeners() {
   const form = byId('cameraForm');
   if (!form || form.dataset.idPreviewWired) return;
-  ['manufacturer', 'model', 'name', 'rtsp_ip'].forEach(n => {
+  ['manufacturer', 'model', 'name', 'rtsp_ip'].forEach((n) => {
     const el = form.elements[n];
     if (el) el.addEventListener('input', _refreshCamIdPreview);
   });

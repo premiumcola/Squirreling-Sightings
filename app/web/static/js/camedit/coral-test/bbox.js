@@ -10,14 +10,15 @@
 import { CLASS_COLORS as _CORAL_LABEL_COLORS } from '../../core/class-colors.js';
 export { _CORAL_LABEL_COLORS };
 
-export function _coralLabelColor(lbl){
-  return _CORAL_LABEL_COLORS[String(lbl||'').toLowerCase()]||'#ffb400';
+export function _coralLabelColor(lbl) {
+  return _CORAL_LABEL_COLORS[String(lbl || '').toLowerCase()] || '#ffb400';
 }
 
-export function _truncMid(s,max){
-  s=String(s||''); if(s.length<=max) return s;
-  const keep=Math.max(8,Math.floor((max-1)/2));
-  return s.slice(0,keep)+'…'+s.slice(-keep);
+export function _truncMid(s, max) {
+  s = String(s || '');
+  if (s.length <= max) return s;
+  const keep = Math.max(8, Math.floor((max - 1) / 2));
+  return s.slice(0, keep) + '…' + s.slice(-keep);
 }
 
 // Draw the source image to the canvas, then overlay COCO detection
@@ -25,7 +26,7 @@ export function _truncMid(s,max){
 // rectangle in amber. Bbox coords come back from the server in the
 // ORIGINAL image's pixel space, so we rescale them to the canvas size
 // (= the resized transport image).
-export function _drawCoralBatchCanvas(canvas, im, item){
+export function _drawCoralBatchCanvas(canvas, im, item) {
   // Match the canvas surface to the loaded image's intrinsic resolution
   // (= the 480-px-wide transport variant). CSS handles display sizing
   // via .cb-canvas { width:100%; height:auto }.
@@ -42,22 +43,25 @@ export function _drawCoralBatchCanvas(canvas, im, item){
   // ── COCO detections ───────────────────────────────────────────────
   const dets = item.detections || [];
   const cocoColor = '#4ade80';
-  for(const d of dets){
+  for (const d of dets) {
     const b = d.bbox || [];
-    if(b.length !== 4) continue;
-    const x1=b[0]*sx, y1=b[1]*sy, x2=b[2]*sx, y2=b[3]*sy;
+    if (b.length !== 4) continue;
+    const x1 = b[0] * sx,
+      y1 = b[1] * sy,
+      x2 = b[2] * sx,
+      y2 = b[3] * sy;
     ctx.strokeStyle = cocoColor;
     ctx.lineWidth = 2;
-    ctx.strokeRect(x1, y1, x2-x1, y2-y1);
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
     // Label tab above the box. Falls inside the frame when box hugs the top edge.
-    const txt = `${d.label} ${(d.score*100|0)}%`;
+    const txt = `${d.label} ${(d.score * 100) | 0}%`;
     const tw = ctx.measureText(txt).width + 8;
     const th = 16;
     const ly = y1 - th >= 0 ? y1 - th : y1;
     ctx.fillStyle = 'rgba(0,0,0,.65)';
     ctx.fillRect(x1, ly, tw, th);
     ctx.fillStyle = cocoColor;
-    ctx.fillText(txt, x1+4, ly+2);
+    ctx.fillText(txt, x1 + 4, ly + 2);
   }
   // ── Wildlife classifier ────────────────────────────────────────────
   // Only render the overlay when the classifier successfully mapped to one
@@ -65,34 +69,41 @@ export function _drawCoralBatchCanvas(canvas, im, item){
   // (wl.label == null) we leave the canvas alone — the bottom pill already
   // tells the user what ImageNet thought of the frame, and a full-frame
   // amber border would otherwise read like a positive detection.
-  if(item.wildlife && item.wildlife.label){
+  if (item.wildlife && item.wildlife.label) {
     const wl = item.wildlife;
     // Use the squirrel/fox/hedgehog category colour so the box matches
     // the rest of the UI (and is consistent with COCO bbox colouring).
     const lblColor = _coralLabelColor(wl.label);
-    let x1=0, y1=0, x2=canvas.width, y2=canvas.height, fullFrame=true;
-    if(Array.isArray(wl.bbox) && wl.bbox.length===4){
-      x1 = wl.bbox[0]*sx; y1 = wl.bbox[1]*sy;
-      x2 = wl.bbox[2]*sx; y2 = wl.bbox[3]*sy;
+    let x1 = 0,
+      y1 = 0,
+      x2 = canvas.width,
+      y2 = canvas.height,
+      fullFrame = true;
+    if (Array.isArray(wl.bbox) && wl.bbox.length === 4) {
+      x1 = wl.bbox[0] * sx;
+      y1 = wl.bbox[1] * sy;
+      x2 = wl.bbox[2] * sx;
+      y2 = wl.bbox[3] * sy;
       // Treat a near-full-frame bbox as the "no localisation" fallback.
-      const w = x2-x1, h = y2-y1;
-      fullFrame = (w >= canvas.width*0.95 && h >= canvas.height*0.95);
+      const w = x2 - x1,
+        h = y2 - y1;
+      fullFrame = w >= canvas.width * 0.95 && h >= canvas.height * 0.95;
     }
     // Don't outline the entire image — when no localised bbox is available
     // we just paint the label badge in the top-left.
-    if(!fullFrame){
+    if (!fullFrame) {
       ctx.strokeStyle = lblColor;
       ctx.lineWidth = 2;
-      ctx.strokeRect(x1+1, y1+1, Math.max(0, x2-x1-2), Math.max(0, y2-y1-2));
+      ctx.strokeRect(x1 + 1, y1 + 1, Math.max(0, x2 - x1 - 2), Math.max(0, y2 - y1 - 2));
     }
-    const txt = wl.score!=null ? `${wl.label} ${(wl.score*100|0)}%` : wl.label;
+    const txt = wl.score != null ? `${wl.label} ${(wl.score * 100) | 0}%` : wl.label;
     const tw = ctx.measureText(txt).width + 8;
     const th = 16;
     const lx = fullFrame ? 4 : x1;
-    const ly = fullFrame ? 4 : (y1 - th >= 0 ? y1 - th : y1);
+    const ly = fullFrame ? 4 : y1 - th >= 0 ? y1 - th : y1;
     ctx.fillStyle = 'rgba(0,0,0,.65)';
     ctx.fillRect(lx, ly, tw, th);
     ctx.fillStyle = lblColor;
-    ctx.fillText(txt, lx+4, ly+2);
+    ctx.fillText(txt, lx + 4, ly + 2);
   }
 }

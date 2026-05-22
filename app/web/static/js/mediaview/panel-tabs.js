@@ -20,13 +20,16 @@
 //   .mv-tab[data-active="1"] — the active tab
 //   .mv-tabs-content — the active-tab content block
 
-export function renderPanelTabs(host, tabs, opts = {}){
+export function renderPanelTabs(host, tabs, opts = {}) {
   if (!host) return null;
   const initialId = opts.initialId || (tabs[0] && tabs[0].id);
   let activeId = initialId;
-  const tabsHtml = tabs.map(t => (
-    `<button type="button" class="mv-tab" data-tab="${t.id}" data-active="${t.id === activeId ? '1' : '0'}">${t.label}</button>`
-  )).join('');
+  const tabsHtml = tabs
+    .map(
+      (t) =>
+        `<button type="button" class="mv-tab" data-tab="${t.id}" data-active="${t.id === activeId ? '1' : '0'}">${t.label}</button>`,
+    )
+    .join('');
   host.innerHTML = `
     <div class="mv-tabs-root">
       <div class="mv-tabs-strip" role="tablist">${tabsHtml}</div>
@@ -34,20 +37,21 @@ export function renderPanelTabs(host, tabs, opts = {}){
     </div>`;
   const contentHost = host.querySelector('[data-tab-content]');
   const renderActive = () => {
-    const t = tabs.find(x => x.id === activeId);
+    const t = tabs.find((x) => x.id === activeId);
     if (!t || !contentHost) return;
     contentHost.innerHTML = '';
-    try { t.render(contentHost, opts.ctx || {}); }
-    catch (err){
+    try {
+      t.render(contentHost, opts.ctx || {});
+    } catch (err) {
       console.warn('[mediaview:tabs] render failed for', t.id, err);
     }
   };
-  host.querySelectorAll('.mv-tab').forEach(btn => {
+  host.querySelectorAll('.mv-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.tab;
       if (!id || id === activeId) return;
       activeId = id;
-      host.querySelectorAll('.mv-tab').forEach(b => {
+      host.querySelectorAll('.mv-tab').forEach((b) => {
         b.dataset.active = b.dataset.tab === activeId ? '1' : '0';
       });
       renderActive();
@@ -55,14 +59,16 @@ export function renderPanelTabs(host, tabs, opts = {}){
   });
   renderActive();
   return {
-    setActive(id){
-      if (!tabs.find(x => x.id === id) || id === activeId) return;
+    setActive(id) {
+      if (!tabs.find((x) => x.id === id) || id === activeId) return;
       activeId = id;
-      host.querySelectorAll('.mv-tab').forEach(b => {
+      host.querySelectorAll('.mv-tab').forEach((b) => {
         b.dataset.active = b.dataset.tab === activeId ? '1' : '0';
       });
       renderActive();
     },
-    getActive(){ return activeId; },
+    getActive() {
+      return activeId;
+    },
   };
 }

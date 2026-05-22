@@ -23,39 +23,45 @@ const SHELL_ASSETS = [
 
 let _activeCache = CACHE_PREFIX + 'init';
 
-async function _resolveCacheName(){
+async function _resolveCacheName() {
   try {
     const r = await fetch('/version.json', { cache: 'no-store' });
-    if (r.ok){
+    if (r.ok) {
       const data = await r.json();
       if (data && data.shell_hash) return CACHE_PREFIX + data.shell_hash;
     }
-  } catch { /* offline → keep the init name */ }
+  } catch {
+    /* offline → keep the init name */
+  }
   return _activeCache;
 }
 
 self.addEventListener('install', (evt) => {
-  evt.waitUntil((async () => {
-    _activeCache = await _resolveCacheName();
-    const c = await caches.open(_activeCache);
-    await c.addAll(SHELL_ASSETS);
-  })());
+  evt.waitUntil(
+    (async () => {
+      _activeCache = await _resolveCacheName();
+      const c = await caches.open(_activeCache);
+      await c.addAll(SHELL_ASSETS);
+    })(),
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (evt) => {
-  evt.waitUntil((async () => {
-    if (_activeCache === CACHE_PREFIX + 'init'){
-      _activeCache = await _resolveCacheName();
-    }
-    const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((k) => k.startsWith(CACHE_PREFIX) && k !== _activeCache)
-        .map((k) => caches.delete(k)),
-    );
-    await self.clients.claim();
-  })());
+  evt.waitUntil(
+    (async () => {
+      if (_activeCache === CACHE_PREFIX + 'init') {
+        _activeCache = await _resolveCacheName();
+      }
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== _activeCache)
+          .map((k) => caches.delete(k)),
+      );
+      await self.clients.claim();
+    })(),
+  );
 });
 
 self.addEventListener('fetch', (evt) => {

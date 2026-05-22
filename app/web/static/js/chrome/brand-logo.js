@@ -18,13 +18,13 @@
 const FAMILIES = ['tree-lens', 'branch-cam', 'leaf-framed'];
 const HERO_ID = 'heroBrandLogo';
 
-function _pickFamily(){
+function _pickFamily() {
   // Math.random() not crypto — we just want roughly 50/50 over many
   // page loads, no security property attached.
   return FAMILIES[Math.floor(Math.random() * FAMILIES.length)];
 }
 
-function _applyLogoAsset(){
+function _applyLogoAsset() {
   const img = document.getElementById(HERO_ID);
   if (!img) return;
   const family = _pickFamily();

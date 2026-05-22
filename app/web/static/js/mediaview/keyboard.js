@@ -16,36 +16,36 @@
 
 const _FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
-function _isFormFocus(target){
+function _isFormFocus(target) {
   if (!target) return false;
   if (_FORM_TAGS.has(target.tagName)) return true;
   if (target.isContentEditable) return true;
   return false;
 }
 
-export function installMediaViewKeyboard(getVideoEl){
-  if (typeof getVideoEl !== 'function'){
+export function installMediaViewKeyboard(getVideoEl) {
+  if (typeof getVideoEl !== 'function') {
     throw new Error('installMediaViewKeyboard: pass a getVideoEl() callback');
   }
   const onKey = (e) => {
     if (_isFormFocus(e.target)) return;
     const video = getVideoEl();
     if (!video) return;
-    if (e.key === ' '){
+    if (e.key === ' ') {
       e.preventDefault();
-      if (video.paused || video.ended){
+      if (video.paused || video.ended) {
         video.play().catch(() => {});
       } else {
         video.pause();
       }
       return;
     }
-    if (e.key === 'ArrowLeft'){
+    if (e.key === 'ArrowLeft') {
       e.preventDefault();
       video.currentTime = Math.max(0, (video.currentTime || 0) - 5);
       return;
     }
-    if (e.key === 'ArrowRight'){
+    if (e.key === 'ArrowRight') {
       e.preventDefault();
       const dur = Number.isFinite(video.duration) ? video.duration : 0;
       const next = (video.currentTime || 0) + 5;

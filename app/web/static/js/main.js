@@ -39,33 +39,33 @@ import { bindMergeModal } from './camera-merge.js';
 // Order matches the dependency graph: chrome shell → mediathek/lightbox
 // → weather → cam-edit subdomain → router. Each comment tags the stage
 // the module ships in so future archaeology stays cheap.
-import './chrome/launch-splash.js';                     // first-paint zoom-out
-import './chrome/brand-logo.js';                         // random spy/acorn header pick
-import './chrome/settings-collapse.js';                 // stage 10
-import './chrome/sidebar.js';                           // stage 10
-import './chrome/mobile-dock.js';                       // stage 10
-import './chrome/tab-strip.js';                          // .is-end toggle
-import './chrome/live-view.js';                         // stage 11
-import './chrome/fullscreen.js';                        // stage 11
-import './chrome/logs.js';                              // stage 10
-import './statistics.js';                               // stage 15
-import './mediathek/rescan.js';                         // stage 13
-import './mediathek/bulk-delete.js';                    // stage 13
-import './mediathek/grid.js';                           // stage 13
-import './lightbox.js';                                 // stage 23 B
-import './mediathek/orchestration.js';                  // stage 23 A
-import './mediathek/qa-pill.js';                         // timelapse QA pill + modal
-import './weather/stats.js';                            // stage 24 A
-import './weather/sightings.js';                        // stage 24 B
-import './weather/settings.js';                         // stage 24 C
-import './weather/maintenance.js';                      // rescan + thumb regen
-import './camedit/coral-test.js';                       // stage 25 A
-import './camedit/timelapse-settings.js';               // stage 25 B
-import './camedit/wizard.js';                           // stage 25 C
-import './camedit/discovery.js';                        // stage 25 C
-import './camedit/erk-sim/index.js';                     // erk-sim Snapshot + Video tabs
-import './camedit/index.js';                            // stage 25 D
-import './router.js';                                   // stage 18
+import './chrome/launch-splash.js'; // first-paint zoom-out
+import './chrome/brand-logo.js'; // random spy/acorn header pick
+import './chrome/settings-collapse.js'; // stage 10
+import './chrome/sidebar.js'; // stage 10
+import './chrome/mobile-dock.js'; // stage 10
+import './chrome/tab-strip.js'; // .is-end toggle
+import './chrome/live-view.js'; // stage 11
+import './chrome/fullscreen.js'; // stage 11
+import './chrome/logs.js'; // stage 10
+import './statistics.js'; // stage 15
+import './mediathek/rescan.js'; // stage 13
+import './mediathek/bulk-delete.js'; // stage 13
+import './mediathek/grid.js'; // stage 13
+import './lightbox.js'; // stage 23 B
+import './mediathek/orchestration.js'; // stage 23 A
+import './mediathek/qa-pill.js'; // timelapse QA pill + modal
+import './weather/stats.js'; // stage 24 A
+import './weather/sightings.js'; // stage 24 B
+import './weather/settings.js'; // stage 24 C
+import './weather/maintenance.js'; // rescan + thumb regen
+import './camedit/coral-test.js'; // stage 25 A
+import './camedit/timelapse-settings.js'; // stage 25 B
+import './camedit/wizard.js'; // stage 25 C
+import './camedit/discovery.js'; // stage 25 C
+import './camedit/erk-sim/index.js'; // erk-sim Snapshot + Video tabs
+import './camedit/index.js'; // stage 25 D
+import './router.js'; // stage 18
 // Achievement panel — loadAchievements rides the loadAll() kickoff
 // below; the named import makes it visible to the .then() callback.
 import { loadAchievements } from './sichtungen.js';
@@ -91,14 +91,21 @@ bindMergeModal();
 // inline SVG ornament on the hyphen of "TAM-spy", so the random
 // SQUIRREL_CHARS pick is no longer wired. Kept null-safe in case a
 // stale template still has the #heroSquirrel element.
-(() => { const el = byId('heroSquirrel'); if (el) el.innerHTML = ''; })();
+(() => {
+  const el = byId('heroSquirrel');
+  if (el) el.innerHTML = '';
+})();
 
 // ── Boot kickoff ────────────────────────────────────────────────────────────
 // loadAll() fetches bootstrap + cameras + timeline + media stats, then
 // runs every domain renderer (most via window.X lookups in
 // live-update.js — those evaporate as each domain migrates). Once it
 // resolves, the 3 s status poll starts and Sichtungen hydrates.
-loadAll().then(() => { startLiveUpdate(); loadAchievements(); loadBirdDossiers(); });
+loadAll().then(() => {
+  startLiveUpdate();
+  loadAchievements();
+  loadBirdDossiers();
+});
 // loadLogs() self-fires from chrome/logs.js's import-time boot.
 
 // debug helper used by a couple of inline-onclick attributes when the

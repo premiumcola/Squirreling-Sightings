@@ -10,14 +10,14 @@ import { _lbDrawDetections } from './renderer.js';
 import { _renderConfidenceMeter } from './confidence-meter.js';
 import { _updatePlayPct } from './time-axis.js';
 
-export function _stopRafLoop(){
-  if (_state.rafHandle){
+export function _stopRafLoop() {
+  if (_state.rafHandle) {
     cancelAnimationFrame(_state.rafHandle);
     _state.rafHandle = 0;
   }
 }
 
-export function _startRafLoop(){
+export function _startRafLoop() {
   _stopRafLoop();
   const tick = () => {
     _state.rafHandle = 0;
@@ -30,7 +30,7 @@ export function _startRafLoop(){
     _updatePlayPct();
     // Canvas + meter only need lbState.item._tracks for content;
     // they're cheap no-ops when tracks haven't loaded yet.
-    if (lbState.item){
+    if (lbState.item) {
       _lbDrawDetections();
       _renderConfidenceMeter();
     }

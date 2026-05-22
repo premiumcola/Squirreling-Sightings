@@ -25,7 +25,7 @@ import { lbRenderTrackTimeline } from './timeline-panel.js';
 // at call-time rather than at module-evaluation time.
 import { _fetchTracks, lbInvalidateTracks } from './fetcher.js';
 
-export async function _kickReindexFor(item){
+export async function _kickReindexFor(item) {
   const eid = item.event_id;
   const cam = item.camera_id || '';
   if (!eid) return;
@@ -34,9 +34,9 @@ export async function _kickReindexFor(item){
   _logDiag(`event=${eid} kicking reindex (camera_id=${cam})`, 'warn');
   try {
     const d = await apiPost(
-      `/api/tracking/reindex/${encodeURIComponent(eid)}`
-      + `?camera_id=${encodeURIComponent(cam)}`);
-    if (!d?.ok){
+      `/api/tracking/reindex/${encodeURIComponent(eid)}` + `?camera_id=${encodeURIComponent(cam)}`,
+    );
+    if (!d?.ok) {
       _logDiag(`event=${eid} reindex POST failed: ${d?.error || 'Fehler'}`, 'error');
       _failReindex(item);
       return;
@@ -46,30 +46,29 @@ export async function _kickReindexFor(item){
     _failReindex(item);
     return;
   }
-  setTimeout(
-    () => _retrySidecarFetch(item, 1), _REINDEX_INITIAL_WAIT_MS);
+  setTimeout(() => _retrySidecarFetch(item, 1), _REINDEX_INITIAL_WAIT_MS);
 }
 
-async function _retrySidecarFetch(item, attempt){
+async function _retrySidecarFetch(item, attempt) {
   const eid = item.event_id;
-  if (lbState.item !== item){
+  if (lbState.item !== item) {
     _reindexInflight.delete(eid);
     return;
   }
   lbInvalidateTracks(eid);
   delete item._tracks;
   const tracks = await _fetchTracks(item);
-  if (lbState.item !== item){
+  if (lbState.item !== item) {
     _reindexInflight.delete(eid);
     return;
   }
-  const haveTracks = !!(tracks
-    && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
-  if (haveTracks){
+  const haveTracks = !!(tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
+  if (haveTracks) {
     _logDiag(
-      `event=${eid} reindex completed → ${tracks.tracks.length} tracks `
-      + `(attempt ${attempt}/${_REINDEX_MAX_RETRIES})`,
-      'warn');
+      `event=${eid} reindex completed → ${tracks.tracks.length} tracks ` +
+        `(attempt ${attempt}/${_REINDEX_MAX_RETRIES})`,
+      'warn',
+    );
     _reindexInflight.delete(eid);
     item._tracks = tracks;
     _hideReindexBanner();
@@ -77,34 +76,32 @@ async function _retrySidecarFetch(item, attempt){
     _lbDrawDetections();
     return;
   }
-  if (attempt >= _REINDEX_MAX_RETRIES){
+  if (attempt >= _REINDEX_MAX_RETRIES) {
     _logDiag(
-      `event=${eid} reindex final fail `
-      + `(${_REINDEX_MAX_RETRIES} retries exhausted)`,
-      'error');
+      `event=${eid} reindex final fail ` + `(${_REINDEX_MAX_RETRIES} retries exhausted)`,
+      'error',
+    );
     _failReindex(item);
     return;
   }
   _logDiag(
-    `event=${eid} reindex retry ${attempt}/${_REINDEX_MAX_RETRIES} `
-    + `(no tracks yet)`,
-    'info');
-  setTimeout(
-    () => _retrySidecarFetch(item, attempt + 1),
-    _REINDEX_RETRY_INTERVAL_MS);
+    `event=${eid} reindex retry ${attempt}/${_REINDEX_MAX_RETRIES} ` + `(no tracks yet)`,
+    'info',
+  );
+  setTimeout(() => _retrySidecarFetch(item, attempt + 1), _REINDEX_RETRY_INTERVAL_MS);
 }
 
-function _failReindex(item){
+function _failReindex(item) {
   const eid = item.event_id;
   _reindexInflight.delete(eid);
   _reindexFinalFailed.add(eid);
-  if (lbState.item === item){
+  if (lbState.item === item) {
     _showReindexBannerError(item);
     _lbDrawDetections();
   }
 }
 
-function _ensureBanner(){
+function _ensureBanner() {
   let banner = byId('lbTrackingBanner');
   if (banner) return banner;
   const wrap = byId('lightboxMediaWrap');
@@ -132,7 +129,7 @@ function _ensureBanner(){
   return banner;
 }
 
-export function _showReindexBannerPending(item){
+export function _showReindexBannerPending(item) {
   const banner = _ensureBanner();
   if (!banner || lbState.item !== item) return;
   banner.classList.remove('lbtb-error');
@@ -144,7 +141,7 @@ export function _showReindexBannerPending(item){
   banner.style.opacity = '1';
 }
 
-export function _showReindexBannerError(item){
+export function _showReindexBannerError(item) {
   const banner = _ensureBanner();
   if (!banner || lbState.item !== item) return;
   banner.classList.add('lbtb-error');
@@ -156,7 +153,7 @@ export function _showReindexBannerError(item){
   banner.style.opacity = '1';
 }
 
-export function _hideReindexBanner(){
+export function _hideReindexBanner() {
   const banner = byId('lbTrackingBanner');
   if (!banner) return;
   banner.style.opacity = '0';
@@ -165,7 +162,7 @@ export function _hideReindexBanner(){
   }, 250);
 }
 
-export function _isReindexBannerActive(){
+export function _isReindexBannerActive() {
   const eid = lbState.item?.event_id;
   return !!eid && _reindexInflight.has(eid);
 }
@@ -180,19 +177,20 @@ export function _isReindexBannerActive(){
  * POST is in flight. Pass null when there's no UI handle (callers
  * that want to fire and forget).
  */
-export async function triggerManualReindex(btn){
+export async function triggerManualReindex(btn) {
   const item = lbState.item;
   if (!item || !item.event_id) return;
-  if (btn){
+  if (btn) {
     btn.disabled = true;
     btn.style.opacity = '.5';
   }
   _reindexFinalFailed.delete(item.event_id);
   try {
     const d = await apiPost(
-      `/api/tracking/reindex/${encodeURIComponent(item.event_id)}`
-      + `?camera_id=${encodeURIComponent(item.camera_id || '')}`);
-    if (!d?.ok){
+      `/api/tracking/reindex/${encodeURIComponent(item.event_id)}` +
+        `?camera_id=${encodeURIComponent(item.camera_id || '')}`,
+    );
+    if (!d?.ok) {
       const msg = d?.error || 'Fehler';
       showToast('Tracking-Re-Index fehlgeschlagen: ' + msg, 'error');
       _logDiag(`event=${item.event_id} manual reindex failed: ${msg}`, 'error');
@@ -203,25 +201,19 @@ export async function triggerManualReindex(btn){
     delete item._tracks;
     _reindexInflight.add(item.event_id);
     _showReindexBannerPending(item);
-    setTimeout(
-      () => _retrySidecarFetch(item, 1),
-      _REINDEX_INITIAL_WAIT_MS);
-  } catch (e){
-    showToast(
-      'Tracking-Re-Index fehlgeschlagen: ' + (e.message || e),
-      'error');
-    _logDiag(
-      `event=${item.event_id} manual reindex error: ${e?.message || e}`,
-      'error');
+    setTimeout(() => _retrySidecarFetch(item, 1), _REINDEX_INITIAL_WAIT_MS);
+  } catch (e) {
+    showToast('Tracking-Re-Index fehlgeschlagen: ' + (e.message || e), 'error');
+    _logDiag(`event=${item.event_id} manual reindex error: ${e?.message || e}`, 'error');
   } finally {
-    if (btn){
+    if (btn) {
       btn.disabled = false;
       btn.style.opacity = '';
     }
   }
 }
 
-async function _onReindexClick(ev){
+async function _onReindexClick(ev) {
   ev.stopPropagation();
   await triggerManualReindex(ev.currentTarget);
 }

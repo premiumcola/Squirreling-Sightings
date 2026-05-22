@@ -65,7 +65,7 @@ const _DEBUG_TOGGLE = false;
 let _session = null;
 let _hlsHandle = null;
 let _traceLines = [];
-let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
+let _detBuffer = []; // [{ms, label, score, bbox, verdict}, …]
 // C1 · sim modal opens with detection layers ON, surveillance layers
 // OFF — the operator wants to see what Coral is finding, not have
 // the preview cluttered with green zone polygons and red mask fills
@@ -73,14 +73,17 @@ let _detBuffer = [];  // [{ms, label, score, bbox, verdict}, …]
 // shared overlay-toggles.js _TOGGLES dict so the two callsites stay
 // consistent.
 let _overlays = { bboxes: true, trails: true, zones: false, masks: false };
-let _selectedLabel = null;  // for detail-pill pin
+let _selectedLabel = null; // for detail-pill pin
 
-export function openLiveDetect({ camId, cameraName }){
+export function openLiveDetect({ camId, cameraName }) {
   if (!camId) return;
   closeLiveDetect();
   _session = {
-    camId, cameraName,
-    abort: null, tickHandle: null, fold: null,
+    camId,
+    cameraName,
+    abort: null,
+    tickHandle: null,
+    fold: null,
     startedMs: Date.now(),
     lastNonEmptyTickMs: 0,
     holdHandle: null,
@@ -102,26 +105,32 @@ export function openLiveDetect({ camId, cameraName }){
   document.body.style.overflow = 'hidden';
 }
 
-export function closeLiveDetect(){
+export function closeLiveDetect() {
   const session = _session;
   _session = null;
   _traceLines = [];
   _detBuffer = [];
   _selectedLabel = null;
-  if (_hlsHandle){
+  if (_hlsHandle) {
     _hlsHandle.detach();
     _hlsHandle = null;
     const videoEl = byId('lightboxVideo');
-    if (videoEl){ videoEl.style.display = 'none'; }
+    if (videoEl) {
+      videoEl.style.display = 'none';
+    }
   }
   const imgEl = byId('lightboxImg');
-  if (imgEl && imgEl.src && imgEl.src.includes('/stream')){
+  if (imgEl && imgEl.src && imgEl.src.includes('/stream')) {
     // Release the MJPEG fallback's HTTP connection so the server's
     // viewer counter ticks down.
     imgEl.removeAttribute('src');
   }
   if (!session) return;
-  try { session.abort?.abort(); } catch { /* ignore */ }
+  try {
+    session.abort?.abort();
+  } catch {
+    /* ignore */
+  }
   if (session.tickHandle) clearTimeout(session.tickHandle);
   if (session.holdHandle) clearInterval(session.holdHandle);
   const modal = byId('lightboxModal');
@@ -155,7 +164,7 @@ export function closeLiveDetect(){
 // requestAnimationFrame so the rate is fixed (the detector tick is
 // 1 Hz anyway — animating at 60 Hz would just burn CPU without
 // any visible benefit).
-function _startHoldRefresh(){
+function _startHoldRefresh() {
   if (!_session) return;
   if (_session.holdHandle) clearInterval(_session.holdHandle);
   _session.holdHandle = setInterval(() => {
@@ -164,7 +173,7 @@ function _startHoldRefresh(){
   }, _HOLD_REFRESH_MS);
 }
 
-function _setupLiveChrome(camId, cameraName){
+function _setupLiveChrome(camId, cameraName) {
   // kz368 — Simulieren intentionally does NOT render an HD toggle.
   // The detection pipeline runs on the sub-preview stream
   // (stream.mjpg, ~15-25 fps) per the kr493 redesign, not on HD —
@@ -180,14 +189,14 @@ function _setupLiveChrome(camId, cameraName){
   // panels). The 'live-detect' type tag lets downstream renderers
   // (this file's _renderLivePlaybar override) recognise the mode.
   const liveItem = {
-    type:        'live-detect',
-    event_id:    `live-${camId}`,
-    camera_id:   camId,
+    type: 'live-detect',
+    event_id: `live-${camId}`,
+    camera_id: camId,
     camera_name: cameraName || camId,
-    time:        '',
-    weather:     null,
+    time: '',
+    weather: null,
     api_snapshot: null,
-    _tracks:     { tracks: [] },
+    _tracks: { tracks: [] },
   };
   // _setupVideoChrome mounts lb-fs-video + relocates Close/Confirm/
   // Delete to the top-bar action cluster + calls lbRenderTrackTimeline
@@ -205,9 +214,13 @@ function _setupLiveChrome(camId, cameraName){
   // keeps live-detect's SVG (lightboxLiveZoneMask) as the single
   // owner of zone + mask rendering for the lifetime of the
   // simulation.
-  try { window._unmountZoneOverlayForLightbox?.(); } catch { /* not mounted */ }
+  try {
+    window._unmountZoneOverlayForLightbox?.();
+  } catch {
+    /* not mounted */
+  }
   const modal = byId('lightboxModal');
-  if (modal){
+  if (modal) {
     modal.classList.add('lb-live-detect');
     modal.classList.remove('hidden');
   }
@@ -230,8 +243,11 @@ function _setupLiveChrome(camId, cameraName){
   // paint at all.
   const imgEl = byId('lightboxImg');
   const videoEl = byId('lightboxVideo');
-  if (_hlsHandle){ _hlsHandle.detach(); _hlsHandle = null; }
-  if (videoEl){
+  if (_hlsHandle) {
+    _hlsHandle.detach();
+    _hlsHandle = null;
+  }
+  if (videoEl) {
     videoEl.pause();
     videoEl.removeAttribute('src');
     videoEl.load?.();
@@ -239,23 +255,30 @@ function _setupLiveChrome(camId, cameraName){
     videoEl.playsInline = true;
     videoEl.style.display = 'none';
   }
-  if (imgEl){
+  if (imgEl) {
     imgEl.removeAttribute('src');
     imgEl.style.display = 'none';
   }
-  _hlsHandle = videoEl ? tryAttachHls(camId, videoEl, {
-    onFatalError: () => {
-      // HLS spun up but died — fall back to MJPEG on the platforms
-      // that support it. On iOS this leaves the user with a broken
-      // image, but iOS shouldn't hit this branch in the first place
-      // (native HLS attach succeeds at line above).
-      if (_hlsHandle){ _hlsHandle.detach(); _hlsHandle = null; }
-      _attachLiveMjpegFallback(camId);
-    },
-  }) : null;
-  if (_hlsHandle){
+  _hlsHandle = videoEl
+    ? tryAttachHls(camId, videoEl, {
+        onFatalError: () => {
+          // HLS spun up but died — fall back to MJPEG on the platforms
+          // that support it. On iOS this leaves the user with a broken
+          // image, but iOS shouldn't hit this branch in the first place
+          // (native HLS attach succeeds at line above).
+          if (_hlsHandle) {
+            _hlsHandle.detach();
+            _hlsHandle = null;
+          }
+          _attachLiveMjpegFallback(camId);
+        },
+      })
+    : null;
+  if (_hlsHandle) {
     videoEl.style.display = 'block';
-    videoEl.play?.().catch(() => { /* autoplay blocked — manual play still works */ });
+    videoEl.play?.().catch(() => {
+      /* autoplay blocked — manual play still works */
+    });
     _installLiveOverlayRefresh(videoEl);
   } else {
     _attachLiveMjpegFallback(camId);
@@ -289,7 +312,7 @@ function _setupLiveChrome(camId, cameraName){
 // MJPEG fallback — used when HLS isn't supported (rare desktop
 // browsers). iOS reaches HLS via the native path so this is mostly
 // dead weight on mobile, but it keeps the desktop case alive.
-function _attachLiveMjpegFallback(camId){
+function _attachLiveMjpegFallback(camId) {
   const imgEl = byId('lightboxImg');
   if (!imgEl) return;
   imgEl.src = `/api/camera/${encodeURIComponent(camId)}/stream.mjpg`;
@@ -305,7 +328,7 @@ function _attachLiveMjpegFallback(camId){
 // on the right pixels the instant the frame paints. Idempotent —
 // the install flag is per-element so a re-mount on a different
 // element doesn't double-bind.
-function _installLiveOverlayRefresh(mediaEl){
+function _installLiveOverlayRefresh(mediaEl) {
   if (!mediaEl || mediaEl._zoneRefreshInstalled) return;
   const refresh = () => {
     _renderBboxOverlay();
@@ -320,11 +343,13 @@ function _installLiveOverlayRefresh(mediaEl){
     const obs = new ResizeObserver(refresh);
     obs.observe(mediaEl);
     mediaEl._zoneResizeObs = obs;
-  } catch { /* older browsers — listeners still help */ }
+  } catch {
+    /* older browsers — listeners still help */
+  }
   mediaEl._zoneRefreshInstalled = true;
 }
 
-function _ensureBboxOverlay(){
+function _ensureBboxOverlay() {
   let svg = byId('lightboxLiveOverlay');
   if (svg) return svg;
   const wrap = byId('lightboxMediaWrap');
@@ -340,12 +365,13 @@ function _ensureBboxOverlay(){
   // ancestor stacking. Stacking order WITHIN: zones+masks bottom
   // (14), trails middle (15), bboxes top (16) — bboxes always win
   // so the user sees the live verdict over the historical trail.
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:16';
+  svg.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:16';
   wrap.appendChild(svg);
   return svg;
 }
 
-function _ensureTrailsOverlay(){
+function _ensureTrailsOverlay() {
   let svg = byId('lightboxLiveTrails');
   if (svg) return svg;
   const wrap = byId('lightboxMediaWrap');
@@ -353,12 +379,13 @@ function _ensureTrailsOverlay(){
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveTrails';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:15';
+  svg.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:15';
   wrap.appendChild(svg);
   return svg;
 }
 
-function _ensureZoneMaskOverlay(){
+function _ensureZoneMaskOverlay() {
   let canvas = byId('lightboxLiveZoneMask');
   if (canvas) return canvas;
   const wrap = byId('lightboxMediaWrap');
@@ -369,7 +396,8 @@ function _ensureZoneMaskOverlay(){
   // (see mediaview/canvas/zone-layer.js + core/polygon-source.js).
   canvas = document.createElement('canvas');
   canvas.id = 'lightboxLiveZoneMask';
-  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
+  canvas.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
   wrap.appendChild(canvas);
   return canvas;
 }
@@ -381,22 +409,23 @@ function _ensureZoneMaskOverlay(){
 // translates the visual language. Auto-hides when every visible
 // bbox is in the pass state so the row stays quiet in the common
 // case. Mount lives next to the overlay toggle row.
-function _updateVerdictLegend(visible){
+function _updateVerdictLegend(visible) {
   const toggleRow = byId('mvLiveToggles');
   if (!toggleRow) return;
   let legend = byId('mvLiveVerdictLegend');
-  if (!visible){
+  if (!visible) {
     if (legend) legend.remove();
     return;
   }
-  if (!legend){
+  if (!legend) {
     legend = document.createElement('div');
     legend.id = 'mvLiveVerdictLegend';
     legend.className = 'mv-live-verdict-legend';
-    legend.innerHTML = ''
-      + '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--pass"></span>solid: gepasst</span>'
-      + '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--below"></span>schwach: unter Schwelle</span>'
-      + '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--filtered"></span>dashed grau: gefiltert</span>';
+    legend.innerHTML =
+      '' +
+      '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--pass"></span>solid: gepasst</span>' +
+      '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--below"></span>schwach: unter Schwelle</span>' +
+      '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--filtered"></span>dashed grau: gefiltert</span>';
     toggleRow.insertAdjacentElement('afterend', legend);
   }
 }
@@ -407,38 +436,40 @@ function _updateVerdictLegend(visible){
 // One console.warn per line so the lines stay readable in DevTools
 // instead of folding into a single multi-line entry that's harder
 // to copy-paste.
-function _logSimDiag(){
+function _logSimDiag() {
   if (!_session || _session._diagLogged) return;
   _session._diagLogged = true;
   const imgEl = byId('lightboxImg');
   const wrap = byId('lightboxMediaWrap');
   const bboxSvg = byId('lightboxLiveOverlay');
   const zoneSvg = byId('lightboxLiveZoneMask');
-  const _rect = el => {
+  const _rect = (el) => {
     if (!el) return '0x0';
     const r = el.getBoundingClientRect();
     return `${Math.round(r.width)}x${Math.round(r.height)}`;
   };
-  const _z = el => el ? window.getComputedStyle(el).zIndex : 'n/a';
-  const _disp = el => el ? window.getComputedStyle(el).display : 'n/a';
-  const _vb = el => el ? (el.getAttribute('viewBox') || 'n/a') : 'n/a';
-  const imgSrc = imgEl ? (imgEl.src || '<empty>') : '<missing>';
+  const _z = (el) => (el ? window.getComputedStyle(el).zIndex : 'n/a');
+  const _disp = (el) => (el ? window.getComputedStyle(el).display : 'n/a');
+  const _vb = (el) => (el ? el.getAttribute('viewBox') || 'n/a' : 'n/a');
+  const imgSrc = imgEl ? imgEl.src || '<empty>' : '<missing>';
   console.warn(`[sim-diag] imgEl: src=${imgSrc} display=${_disp(imgEl)} rect=${_rect(imgEl)}`);
-  console.warn(`[sim-diag] bboxSvg: viewBox=${_vb(bboxSvg)} rect=${_rect(bboxSvg)} display=${_disp(bboxSvg)} z-index=${_z(bboxSvg)}`);
-  console.warn(`[sim-diag] zoneSvg: viewBox=${_vb(zoneSvg)} rect=${_rect(zoneSvg)} display=${_disp(zoneSvg)} z-index=${_z(zoneSvg)}`);
+  console.warn(
+    `[sim-diag] bboxSvg: viewBox=${_vb(bboxSvg)} rect=${_rect(bboxSvg)} display=${_disp(bboxSvg)} z-index=${_z(bboxSvg)}`,
+  );
+  console.warn(
+    `[sim-diag] zoneSvg: viewBox=${_vb(zoneSvg)} rect=${_rect(zoneSvg)} display=${_disp(zoneSvg)} z-index=${_z(zoneSvg)}`,
+  );
   console.warn(`[sim-diag] wrap: rect=${_rect(wrap)}`);
-  console.warn(`[sim-diag] _session.lastDetections.length=${(_session.lastDetections || []).length}`);
+  console.warn(
+    `[sim-diag] _session.lastDetections.length=${(_session.lastDetections || []).length}`,
+  );
 }
 
 const _TOGGLES = [
-  { id: 'bboxes',    label: 'Bboxes',
-    desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
-  { id: 'trails',    label: 'Trails',
-    desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
-  { id: 'zones',     label: 'Zonen',
-    desc: 'Erkennungs-Zonen (grün) anzeigen' },
-  { id: 'masks',     label: 'Masken',
-    desc: 'Ausschluss-Masken (rot) anzeigen' },
+  { id: 'bboxes', label: 'Bboxes', desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
+  { id: 'trails', label: 'Trails', desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
+  { id: 'zones', label: 'Zonen', desc: 'Erkennungs-Zonen (grün) anzeigen' },
+  { id: 'masks', label: 'Masken', desc: 'Ausschluss-Masken (rot) anzeigen' },
 ];
 
 // Shared tooltip popover state — one element, reused. Created lazily
@@ -448,7 +479,7 @@ let _toggleTipEl = null;
 let _toggleTipHoverTimer = 0;
 let _toggleTipLongPressTimer = 0;
 
-function _ensureToggleTip(){
+function _ensureToggleTip() {
   if (_toggleTipEl) return _toggleTipEl;
   _toggleTipEl = document.createElement('div');
   _toggleTipEl.className = 'mv-live-toggle-tip';
@@ -458,7 +489,7 @@ function _ensureToggleTip(){
   return _toggleTipEl;
 }
 
-function _showToggleTip(target, text){
+function _showToggleTip(target, text) {
   const tip = _ensureToggleTip();
   tip.textContent = text;
   tip.hidden = false;
@@ -474,18 +505,18 @@ function _showToggleTip(target, text){
   tip.style.left = `${Math.round(left)}px`;
 }
 
-function _hideToggleTip(){
+function _hideToggleTip() {
   if (_toggleTipEl) _toggleTipEl.hidden = true;
   clearTimeout(_toggleTipHoverTimer);
   clearTimeout(_toggleTipLongPressTimer);
 }
 
-function _mountOverlayToggles(){
+function _mountOverlayToggles() {
   const inner = byId('lightboxInner');
   const stack = byId('lightboxBottomStack');
   if (!inner || !stack) return;
   let row = byId('mvLiveToggles');
-  if (!row){
+  if (!row) {
     row = document.createElement('div');
     row.id = 'mvLiveToggles';
     row.className = 'mv-live-toggles';
@@ -496,15 +527,19 @@ function _mountOverlayToggles(){
   // browser will show its own bubble after ~700 ms). Touch devices
   // never trigger ``title`` — they get the long-press popover
   // below instead.
-  row.innerHTML = _TOGGLES.map(t => (
-    `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-desc="${esc(t.desc)}" data-on="${_overlays[t.id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${t.label}</button>`
-  )).join('') + '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
-  row.querySelectorAll('.mv-live-toggle').forEach(btn => {
+  row.innerHTML =
+    _TOGGLES
+      .map(
+        (t) =>
+          `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-desc="${esc(t.desc)}" data-on="${_overlays[t.id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${t.label}</button>`,
+      )
+      .join('') + '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
+  row.querySelectorAll('.mv-live-toggle').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       // Suppress click after a long-press touch: the long-press
       // already opened the tooltip, the user didn't intend to
       // toggle. Detect via a flag set by touchstart below.
-      if (btn._suppressClick){
+      if (btn._suppressClick) {
         btn._suppressClick = false;
         ev.preventDefault();
         return;
@@ -512,7 +547,7 @@ function _mountOverlayToggles(){
       const id = btn.dataset.tog;
       _overlays[id] = !_overlays[id];
       btn.dataset.on = _overlays[id] ? '1' : '0';
-      if (_DEBUG_TOGGLE){
+      if (_DEBUG_TOGGLE) {
         console.warn(`[sim-toggle] ${id} → ${_overlays[id] ? 'ON' : 'OFF'}`);
       }
       _hideToggleTip();
@@ -524,42 +559,51 @@ function _mountOverlayToggles(){
     btn.addEventListener('pointerenter', (ev) => {
       if (ev.pointerType !== 'mouse') return;
       clearTimeout(_toggleTipHoverTimer);
-      _toggleTipHoverTimer = setTimeout(
-        () => _showToggleTip(btn, btn.dataset.desc || ''),
-        300,
-      );
+      _toggleTipHoverTimer = setTimeout(() => _showToggleTip(btn, btn.dataset.desc || ''), 300);
     });
     btn.addEventListener('pointerleave', _hideToggleTip);
     // Touch long-press — ≥ 500 ms. Short-press still toggles via
     // the click handler above (touchend → click in the standard
     // event cycle); long-press shows the tooltip and suppresses
     // the synthetic click via the _suppressClick flag.
-    btn.addEventListener('touchstart', () => {
-      clearTimeout(_toggleTipLongPressTimer);
-      _toggleTipLongPressTimer = setTimeout(() => {
-        btn._suppressClick = true;
-        _showToggleTip(btn, btn.dataset.desc || '');
-      }, 500);
-    }, { passive: true });
-    btn.addEventListener('touchend', () => {
-      clearTimeout(_toggleTipLongPressTimer);
-      // Don't hide instantly — the user may want to read the
-      // tooltip after lifting their finger. Auto-dismiss on the
-      // next document touchstart.
-    }, { passive: true });
+    btn.addEventListener(
+      'touchstart',
+      () => {
+        clearTimeout(_toggleTipLongPressTimer);
+        _toggleTipLongPressTimer = setTimeout(() => {
+          btn._suppressClick = true;
+          _showToggleTip(btn, btn.dataset.desc || '');
+        }, 500);
+      },
+      { passive: true },
+    );
+    btn.addEventListener(
+      'touchend',
+      () => {
+        clearTimeout(_toggleTipLongPressTimer);
+        // Don't hide instantly — the user may want to read the
+        // tooltip after lifting their finger. Auto-dismiss on the
+        // next document touchstart.
+      },
+      { passive: true },
+    );
     btn.addEventListener('touchcancel', () => {
       clearTimeout(_toggleTipLongPressTimer);
     });
   });
   // Outside-tap dismiss for the touch path.
-  document.addEventListener('touchstart', (ev) => {
-    if (!_toggleTipEl || _toggleTipEl.hidden) return;
-    if (ev.target.closest && ev.target.closest('.mv-live-toggle')) return;
-    _hideToggleTip();
-  }, { passive: true });
+  document.addEventListener(
+    'touchstart',
+    (ev) => {
+      if (!_toggleTipEl || _toggleTipEl.hidden) return;
+      if (ev.target.closest && ev.target.closest('.mv-live-toggle')) return;
+      _hideToggleTip();
+    },
+    { passive: true },
+  );
 }
 
-function _pinScrubberRight(){
+function _pinScrubberRight() {
   // Live mode has no recorded clip → no seek; pin the playhead to
   // the right edge by writing --play-pct=1 and adding an "LIVE" pill
   // overlay anchored to the scrubber row. lbRenderTrackTimeline
@@ -569,7 +613,7 @@ function _pinScrubberRight(){
   const stackHost = byId('lightboxBottomStack');
   if (!stackHost) return;
   let pill = byId('mvLiveScrubPill');
-  if (!pill){
+  if (!pill) {
     pill = document.createElement('span');
     pill.id = 'mvLiveScrubPill';
     pill.className = 'mv-live-scrub-pill';
@@ -578,7 +622,7 @@ function _pinScrubberRight(){
   }
 }
 
-function _mountPanels(){
+function _mountPanels() {
   const host = byId('lightboxSettings');
   if (!host) return;
   host.hidden = false;
@@ -603,22 +647,28 @@ function _mountPanels(){
     </div>`;
   const tabsHost = host.querySelector('.mv-recorded-tabs');
   const faHost = host.querySelector('.mv-recorded-fafold');
-  const tabs = [{
-    id: 'detections',
-    label: 'Detections',
-    render: (h) => {
-      h.innerHTML = `<div id="mvLdDetections" class="mv-ld-detections"><div class="mv-ld-empty">Noch keine Detektion …</div></div>`;
+  const tabs = [
+    {
+      id: 'detections',
+      label: 'Detections',
+      render: (h) => {
+        h.innerHTML = `<div id="mvLdDetections" class="mv-ld-detections"><div class="mv-ld-empty">Noch keine Detektion …</div></div>`;
+      },
     },
-  }];
+  ];
   renderPanelTabs(tabsHost, tabs, { initialId: 'detections' });
   const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: true });
   if (_session) _session.fold = fold;
 }
 
-async function _tick(){
+async function _tick() {
   const session = _session;
   if (!session) return;
-  try { session.abort?.abort(); } catch { /* ignore */ }
+  try {
+    session.abort?.abort();
+  } catch {
+    /* ignore */
+  }
   session.abort = new AbortController();
   const controller = session.abort;
   const cycleStart = performance.now();
@@ -632,7 +682,11 @@ async function _tick(){
     );
     if (_session !== session) return;
     let data = null;
-    try { data = await r.json(); } catch { /* keep null */ }
+    try {
+      data = await r.json();
+    } catch {
+      /* keep null */
+    }
     if (data?.ok) _renderFrame(data);
   } catch (err) {
     if (err?.name === 'AbortError') return;
@@ -640,7 +694,7 @@ async function _tick(){
   _scheduleNext(session, performance.now() - cycleStart);
 }
 
-function _scheduleNext(session, lastCycleMs){
+function _scheduleNext(session, lastCycleMs) {
   if (_session !== session) return;
   const projected = Math.round(
     (Number.isFinite(lastCycleMs) ? lastCycleMs : _TICK_MIN_MS) * _TICK_FACTOR,
@@ -649,7 +703,7 @@ function _scheduleNext(session, lastCycleMs){
   session.tickHandle = setTimeout(_tick, delay);
 }
 
-function _renderFrame(data){
+function _renderFrame(data) {
   // kr493 — Simulieren v2 no longer paints data.snapshot into
   // #lightboxImg. The img element streams the continuous MJPEG
   // (set in _setupLiveChrome on mount); this tick only updates
@@ -665,18 +719,18 @@ function _renderFrame(data){
   // the user can spot a serialisation drop between Flask and the
   // frontend (rare but possible if response shaping went sideways).
   // Single-line console.warn (lint-allowed escape hatch).
-  if (_session && !_session._frameDiagLogged){
+  if (_session && !_session._frameDiagLogged) {
     _session._frameDiagLogged = true;
     const dets = _session.lastDetections;
-    const np = dets.filter(d => d.verdict === 'pass').length;
-    const nb = dets.filter(d => d.verdict === 'belowthresh').length;
-    const nf = dets.filter(d => d.verdict === 'filtered').length;
+    const np = dets.filter((d) => d.verdict === 'pass').length;
+    const nb = dets.filter((d) => d.verdict === 'belowthresh').length;
+    const nf = dets.filter((d) => d.verdict === 'filtered').length;
     const fs = _session.lastFrameSize;
     const gates = data.diag?.gates || {};
     console.warn(
-      `[sim-frame] dets=${dets.length} pass=${np} below=${nb} filtered=${nf} `
-      + `frame_size=${fs.w}x${fs.h} diag.raw=${gates.raw ?? '?'} `
-      + `outcome=${data.ok ? 'ok' : '?'}`,
+      `[sim-frame] dets=${dets.length} pass=${np} below=${nb} filtered=${nf} ` +
+        `frame_size=${fs.w}x${fs.h} diag.raw=${gates.raw ?? '?'} ` +
+        `outcome=${data.ok ? 'ok' : '?'}`,
     );
   }
   // F2 · track the latest raw count from the backend's diag block so
@@ -701,12 +755,12 @@ function _renderFrame(data){
   // per tick; per-track id would be ideal here but the live tracker
   // doesn't expose ids — group by label instead).
   const now = Date.now();
-  for (const d of (data.detections || [])){
+  for (const d of data.detections || []) {
     _detBuffer.push({ ms: now, label: d.label, score: d.score, bbox: d.bbox, verdict: d.verdict });
   }
   // Drop entries older than the window.
   const cutoff = now - _LIVE_WINDOW_MS;
-  _detBuffer = _detBuffer.filter(e => e.ms >= cutoff);
+  _detBuffer = _detBuffer.filter((e) => e.ms >= cutoff);
   _renderBboxOverlay();
   _renderTrailsOverlay();
   _renderZoneMaskOverlay();
@@ -725,11 +779,11 @@ function _renderFrame(data){
 // at all without having to expand. Empty top_raw is rendered as a
 // muted "Coral lieferte keine Detektion" so the absence is a positive
 // signal, not a blank panel.
-function _renderDiagPanel(diag){
+function _renderDiagPanel(diag) {
   const body = byId('mvLdDiagBody');
   const pulse = byId('mvLdDiagPulse');
   if (!body) return;
-  if (!diag){
+  if (!diag) {
     body.innerHTML = `<div class="mv-ld-diag-empty">Noch keine Antwort vom Endpunkt …</div>`;
     if (pulse) pulse.textContent = '—';
     return;
@@ -744,17 +798,15 @@ function _renderDiagPanel(diag){
         .map(([k, v]) => `${esc(k)}=${Number(v).toFixed(2)}`)
         .join(' · ')
     : '(keine Overrides)';
-  const inferStr = (Number(diag.inference_ms) > 0)
-    ? ` · ${Math.round(diag.inference_ms)} ms`
-    : '';
-  const coralStr = diag.coral_available
-    ? `verfügbar${inferStr}`
-    : 'nicht verfügbar';
+  const inferStr = Number(diag.inference_ms) > 0 ? ` · ${Math.round(diag.inference_ms)} ms` : '';
+  const coralStr = diag.coral_available ? `verfügbar${inferStr}` : 'nicht verfügbar';
   const topRows = tops.length
-    ? tops.map(t => {
-        const pct = Math.round((Number(t.score) || 0) * 100);
-        return `<span class="mv-ld-diag-top-item">${esc(String(t.label))} ${pct}%</span>`;
-      }).join('')
+    ? tops
+        .map((t) => {
+          const pct = Math.round((Number(t.score) || 0) * 100);
+          return `<span class="mv-ld-diag-top-item">${esc(String(t.label))} ${pct}%</span>`;
+        })
+        .join('')
     : `<span class="mv-ld-diag-top-empty">Coral lieferte keine Detektion für diesen Frame</span>`;
   // H1 · object_filter + validator_profile surfaced as two extra rows.
   // Stage 3 (filter eats everything) is now one glance away in the
@@ -764,11 +816,9 @@ function _renderDiagPanel(diag){
   // filtered=N).
   const objFilter = Array.isArray(diag.object_filter) ? diag.object_filter : [];
   const objFilterStr = objFilter.length
-    ? objFilter.map(c => esc(String(c))).join(' · ')
+    ? objFilter.map((c) => esc(String(c))).join(' · ')
     : '(alle Klassen)';
-  const profStr = diag.validator_profile
-    ? esc(String(diag.validator_profile))
-    : '—';
+  const profStr = diag.validator_profile ? esc(String(diag.validator_profile)) : '—';
   body.innerHTML = `
     <div class="mv-ld-diag-row">
       <span class="mv-ld-diag-key">Quelle</span>
@@ -801,9 +851,9 @@ function _renderDiagPanel(diag){
       <span class="mv-ld-diag-key">Schwellen</span>
       <span class="mv-ld-diag-val">global=${Number(thresholds.global || 0).toFixed(2)} · ${perClassStr}</span>
     </div>`;
-  if (pulse){
+  if (pulse) {
     pulse.textContent = `raw=${Number(gates.raw || 0)} · pass=${Number(gates.pass || 0)}`;
-    pulse.dataset.alert = (Number(gates.raw || 0) === 0) ? '1' : '0';
+    pulse.dataset.alert = Number(gates.raw || 0) === 0 ? '1' : '0';
   }
 }
 
@@ -819,7 +869,7 @@ function _renderDiagPanel(diag){
 // alongside the toggle row in closeLiveDetect.
 const _diagState = { bbox: null, trails: null, zonemask: null, posFail: null };
 
-function _ensureDiagStrip(){
+function _ensureDiagStrip() {
   let strip = byId('mvSimDiagStrip');
   if (strip) return strip;
   const toggleRow = byId('mvLiveToggles');
@@ -831,38 +881,41 @@ function _ensureDiagStrip(){
   return strip;
 }
 
-function _renderDiagStripLine(kind, fields){
+function _renderDiagStripLine(kind, fields) {
   if (!fields) return '';
   const pairs = Object.entries(fields)
-    .map(([k, v]) => `<span class="mv-sim-diag-k">${esc(k)}</span>=<span class="mv-sim-diag-v">${esc(String(v))}</span>`)
+    .map(
+      ([k, v]) =>
+        `<span class="mv-sim-diag-k">${esc(k)}</span>=<span class="mv-sim-diag-v">${esc(String(v))}</span>`,
+    )
     .join(' · ');
   return `<div class="mv-sim-diag-row" data-kind="${esc(kind)}"><span class="mv-sim-diag-kind">${esc(kind)}</span> · ${pairs}</div>`;
 }
 
-function _updateDiagStrip(kind, fields){
+function _updateDiagStrip(kind, fields) {
   const strip = _ensureDiagStrip();
   if (!strip) return;
-  if (kind === 'position-fail'){
+  if (kind === 'position-fail') {
     _diagState.posFail = fields;
-  } else if (kind in _diagState){
+  } else if (kind in _diagState) {
     _diagState[kind] = fields;
   }
   const rows = [
-    _renderDiagStripLine('bbox',     _diagState.bbox),
-    _renderDiagStripLine('trails',   _diagState.trails),
+    _renderDiagStripLine('bbox', _diagState.bbox),
+    _renderDiagStripLine('trails', _diagState.trails),
     _renderDiagStripLine('zonemask', _diagState.zonemask),
   ].filter(Boolean);
-  if (_diagState.posFail){
+  if (_diagState.posFail) {
     rows.push(_renderDiagStripLine('position-fail', _diagState.posFail));
   }
   strip.innerHTML = rows.join('');
 }
 
-function _renderBboxOverlay(){
+function _renderBboxOverlay() {
   const svg = _ensureBboxOverlay();
   if (!svg || !_session) return;
   svg.style.display = _overlays.bboxes ? 'block' : 'none';
-  if (!_overlays.bboxes){
+  if (!_overlays.bboxes) {
     svg.innerHTML = '';
     _updateVerdictLegend(false);
     _renderEmptyHint(false);
@@ -878,14 +931,14 @@ function _renderBboxOverlay(){
   // 0×0 even after the wrap-fallback in _positionSvgOverImage.
   const rect = svg.getBoundingClientRect();
   _updateDiagStrip('bbox', {
-    dets:     (_session.lastDetections || []).length,
-    viewBox:  `${fs.w}×${fs.h}`,
-    svgRect:  `${Math.round(rect.width)}×${Math.round(rect.height)}`,
-    zIndex:   window.getComputedStyle(svg).zIndex,
+    dets: (_session.lastDetections || []).length,
+    viewBox: `${fs.w}×${fs.h}`,
+    svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    zIndex: window.getComputedStyle(svg).zIndex,
   });
-  if (rect.width <= 0 || rect.height <= 0){
+  if (rect.width <= 0 || rect.height <= 0) {
     _updateDiagStrip('position-fail', {
-      svg:   svg.id,
+      svg: svg.id,
       svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
     });
     svg.innerHTML = '';
@@ -901,19 +954,22 @@ function _renderBboxOverlay(){
   const now = Date.now();
   const liveDets = _session.lastDetections || [];
   let renderDets;
-  if (liveDets.length){
-    renderDets = liveDets.map(d => ({ ...d, _holdAge: 0 }));
+  if (liveDets.length) {
+    renderDets = liveDets.map((d) => ({ ...d, _holdAge: 0 }));
   } else {
     const seen = new Set();
     const held = [];
-    for (let i = _detBuffer.length - 1; i >= 0; i--){
+    for (let i = _detBuffer.length - 1; i >= 0; i--) {
       const e = _detBuffer[i];
       const age = now - e.ms;
-      if (age > _HOLD_MS) break;          // _detBuffer is push-order → older entries follow
-      if (seen.has(e.label)) continue;     // one bbox per label, most-recent wins
+      if (age > _HOLD_MS) break; // _detBuffer is push-order → older entries follow
+      if (seen.has(e.label)) continue; // one bbox per label, most-recent wins
       seen.add(e.label);
       held.push({
-        label: e.label, score: e.score, bbox: e.bbox, verdict: e.verdict,
+        label: e.label,
+        score: e.score,
+        bbox: e.bbox,
+        verdict: e.verdict,
         _holdAge: age,
       });
     }
@@ -931,41 +987,43 @@ function _renderBboxOverlay(){
   // A small legend below the toggle row only renders while at least
   // one non-pass bbox is currently on screen.
   let _hasSuppressed = false;
-  svg.innerHTML = renderDets.map(d => {
-    const baseC = colors[d.label] || colors.unknown;
-    const isPass = d.verdict === 'pass';
-    const isBelow = d.verdict === 'belowthresh';
-    const isFiltered = !isPass && !isBelow;            // 'filtered' or absent
-    if (!isPass) _hasSuppressed = true;
-    const c = isFiltered ? '#94a3b8' : baseC;          // slate-grey for class-filtered
-    const verdictOp = isPass ? 1 : isBelow ? 0.55 : 0.45;
-    const holdMul = d._holdAge > 0 ? Math.max(0, 1 - d._holdAge / _HOLD_MS) : 1;
-    const op = verdictOp * holdMul;
-    const dash = isFiltered ? '12 8' : isBelow ? '6 6' : 'none';
-    const [x, y, bw, bh] = d.bbox;
-    const lbl = OBJ_LABEL[d.label] || d.label;
-    const suffix = isPass
-      ? `${Math.round((d.score || 0) * 100)} %`
-      : isBelow
-        ? 'unter Schwelle'
-        : 'gefiltert';
-    const txt = `${lbl} · ${suffix}`;
-    const stroke = (_selectedLabel === d.label) ? 5 : 3;
-    const dashAttr = dash === 'none' ? '' : ` stroke-dasharray="${dash}"`;
-    return `<g opacity="${op.toFixed(2)}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">
+  svg.innerHTML = renderDets
+    .map((d) => {
+      const baseC = colors[d.label] || colors.unknown;
+      const isPass = d.verdict === 'pass';
+      const isBelow = d.verdict === 'belowthresh';
+      const isFiltered = !isPass && !isBelow; // 'filtered' or absent
+      if (!isPass) _hasSuppressed = true;
+      const c = isFiltered ? '#94a3b8' : baseC; // slate-grey for class-filtered
+      const verdictOp = isPass ? 1 : isBelow ? 0.55 : 0.45;
+      const holdMul = d._holdAge > 0 ? Math.max(0, 1 - d._holdAge / _HOLD_MS) : 1;
+      const op = verdictOp * holdMul;
+      const dash = isFiltered ? '12 8' : isBelow ? '6 6' : 'none';
+      const [x, y, bw, bh] = d.bbox;
+      const lbl = OBJ_LABEL[d.label] || d.label;
+      const suffix = isPass
+        ? `${Math.round((d.score || 0) * 100)} %`
+        : isBelow
+          ? 'unter Schwelle'
+          : 'gefiltert';
+      const txt = `${lbl} · ${suffix}`;
+      const stroke = _selectedLabel === d.label ? 5 : 3;
+      const dashAttr = dash === 'none' ? '' : ` stroke-dasharray="${dash}"`;
+      return `<g opacity="${op.toFixed(2)}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">
       <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${c}" stroke-width="${stroke}" vector-effect="non-scaling-stroke"${dashAttr}/>
       <text x="${x + 4}" y="${y + 20}" fill="${c}" font-size="14" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${esc(txt)}</text>
     </g>`;
-  }).join('');
+    })
+    .join('');
   _updateVerdictLegend(_hasSuppressed && renderDets.length > 0);
   _renderEmptyHint(renderDets.length === 0);
   // Click handler — toggle detail-pill selection.
   svg.style.pointerEvents = 'auto';
-  svg.querySelectorAll('[data-label]').forEach(g => {
+  svg.querySelectorAll('[data-label]').forEach((g) => {
     g.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const lbl = g.dataset.label;
-      _selectedLabel = (_selectedLabel === lbl) ? null : lbl;
+      _selectedLabel = _selectedLabel === lbl ? null : lbl;
       _renderBboxOverlay();
       _renderDetailPill();
     });
@@ -989,12 +1047,14 @@ function _renderBboxOverlay(){
 // .lastRawCount makes the banner's meaning exactly "Coral found
 // nothing for this frame". Removes itself when any condition
 // flips back. Idempotent.
-function _renderEmptyHint(noBboxes){
+function _renderEmptyHint(noBboxes) {
   const wrap = byId('lightboxMediaWrap');
   if (!wrap) return;
   let banner = byId('mvLdEmptyHint');
-  const remove = () => { if (banner) banner.remove(); };
-  if (!noBboxes || !_overlays.bboxes || !_session){
+  const remove = () => {
+    if (banner) banner.remove();
+  };
+  if (!noBboxes || !_overlays.bboxes || !_session) {
     remove();
     return;
   }
@@ -1004,17 +1064,17 @@ function _renderEmptyHint(noBboxes){
   // suppressed because Coral DID find something — the threshold
   // just rejected it. Default 0 (no tick yet) → mount-time silence
   // is governed by the lastSeen condition below.
-  if ((_session.lastRawCount ?? 0) > 0){
+  if ((_session.lastRawCount ?? 0) > 0) {
     remove();
     return;
   }
   const now = Date.now();
   const lastSeen = _session.lastNonEmptyTickMs || _session.startedMs || now;
-  if (now - lastSeen < _EMPTY_HINT_MS){
+  if (now - lastSeen < _EMPTY_HINT_MS) {
     remove();
     return;
   }
-  if (!banner){
+  if (!banner) {
     banner = document.createElement('div');
     banner.id = 'mvLdEmptyHint';
     banner.className = 'mv-ld-empty-hint';
@@ -1033,7 +1093,7 @@ function _renderEmptyHint(noBboxes){
 // "where does the media really sit inside this element" helper;
 // same math drives the canvas zone overlay in the Mediathek +
 // Wetter-TL paths.
-function _positionSvgOverImage(svg){
+function _positionSvgOverImage(svg) {
   // Pick whichever media element is currently visible. HLS path
   // uses `<video>` (iOS + desktop hls.js); MJPEG fallback uses
   // `<img>`. Both honour object-fit:contain so the SVG must align
@@ -1043,8 +1103,7 @@ function _positionSvgOverImage(svg){
   const wrap = byId('lightboxMediaWrap');
   if (!wrap) return;
   const usingVideo = videoEl && videoEl.style.display !== 'none' && videoEl.videoWidth > 0;
-  const mediaEl = usingVideo ? videoEl
-                  : (imgEl && imgEl.style.display !== 'none' ? imgEl : null);
+  const mediaEl = usingVideo ? videoEl : imgEl && imgEl.style.display !== 'none' ? imgEl : null;
   if (!mediaEl) return;
   const wrapBox = wrap.getBoundingClientRect();
   const imgBox = mediaEl.getBoundingClientRect();
@@ -1059,38 +1118,39 @@ function _positionSvgOverImage(svg){
   // _session.lastFrameSize. Polygons + bboxes still land on the
   // right pixels because the viewBox carries the source coord space.
   let dx, dy, w, h;
-  if (imgBox.width > 0 && imgBox.height > 0){
+  if (imgBox.width > 0 && imgBox.height > 0) {
     const fit = fittedRect(mediaEl);
     // fit is relative to the img's content box; the img's content
     // box top-left = imgBox.top/left - wrapBox.top/left.
-    dx = (imgBox.left - wrapBox.left) + fit.x;
-    dy = (imgBox.top  - wrapBox.top)  + fit.y;
-    w  = fit.w;
-    h  = fit.h;
+    dx = imgBox.left - wrapBox.left + fit.x;
+    dy = imgBox.top - wrapBox.top + fit.y;
+    w = fit.w;
+    h = fit.h;
     // fittedRect itself can return 0×0 when the image is sized but
     // naturalWidth/Height is 0 (the MJPEG case). Fall through to
     // wrap-bounds if either dimension is zero.
-    if (w <= 0 || h <= 0){
-      dx = 0; dy = 0;
-      w  = wrapBox.width;
-      h  = wrapBox.height;
+    if (w <= 0 || h <= 0) {
+      dx = 0;
+      dy = 0;
+      w = wrapBox.width;
+      h = wrapBox.height;
     }
   } else {
     // Image hasn't laid out yet. Cover the wrap; preserveAspectRatio
     // inside the SVG handles letterboxing against the viewBox.
-    dx = 0; dy = 0;
-    w  = wrapBox.width;
-    h  = wrapBox.height;
+    dx = 0;
+    dy = 0;
+    w = wrapBox.width;
+    h = wrapBox.height;
   }
   svg.style.left = `${dx}px`;
-  svg.style.top  = `${dy}px`;
-  svg.style.width  = `${w}px`;
+  svg.style.top = `${dy}px`;
+  svg.style.width = `${w}px`;
   svg.style.height = `${h}px`;
-  svg.style.right  = 'auto';
+  svg.style.right = 'auto';
   svg.style.bottom = 'auto';
-  svg.style.inset  = 'auto';
+  svg.style.inset = 'auto';
 }
-
 
 // Per-label trail cap — newest N centroids drawn behind the bbox.
 // Matches the batch-A Mediathek trail (mediaview/canvas/trail-layer.js)
@@ -1102,26 +1162,29 @@ const _LIVE_TRAIL_MAX_POINTS = 20;
 // batch-A Mediathek trail (last N points, linear opacity ramp,
 // solid head-dot) via the shared `buildTrailSvg` helper —
 // recorded clips and live simulation render trails the same way.
-function _renderTrailsOverlay(){
+function _renderTrailsOverlay() {
   const svg = _ensureTrailsOverlay();
   if (!svg || !_session) return;
   svg.style.display = _overlays.trails ? 'block' : 'none';
-  if (!_overlays.trails){ svg.innerHTML = ''; return; }
+  if (!_overlays.trails) {
+    svg.innerHTML = '';
+    return;
+  }
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
   const rect = svg.getBoundingClientRect();
   _updateDiagStrip('trails', {
-    dets:     _detBuffer.length,
-    viewBox:  `${fs.w}×${fs.h}`,
-    svgRect:  `${Math.round(rect.width)}×${Math.round(rect.height)}`,
-    zIndex:   window.getComputedStyle(svg).zIndex,
+    dets: _detBuffer.length,
+    viewBox: `${fs.w}×${fs.h}`,
+    svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    zIndex: window.getComputedStyle(svg).zIndex,
   });
   // Same 0×0 guard as the bbox layer — wait for the image to size
   // before paint so the polylines don't land in a sub-pixel corner.
-  if (rect.width <= 0 || rect.height <= 0){
+  if (rect.width <= 0 || rect.height <= 0) {
     _updateDiagStrip('position-fail', {
-      svg:   svg.id,
+      svg: svg.id,
       svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
     });
     svg.innerHTML = '';
@@ -1132,19 +1195,19 @@ function _renderTrailsOverlay(){
   // detBuffer is push-order but a polling-cadence change could
   // technically interleave entries from one to the next.
   const byLabel = new Map();
-  for (const e of _detBuffer){
+  for (const e of _detBuffer) {
     if (!byLabel.has(e.label)) byLabel.set(e.label, []);
     byLabel.get(e.label).push(e);
   }
   const strokeW = Math.max(2, Math.round(fs.w / 720));
   const parts = [];
-  for (const [label, entries] of byLabel){
+  for (const [label, entries] of byLabel) {
     if (entries.length < 2) continue;
     entries.sort((a, b) => a.ms - b.ms);
     // Keep only the newest N centroids — same cap the recorded
     // Mediathek trail uses so the visual reads identically.
     const tail = entries.slice(-_LIVE_TRAIL_MAX_POINTS);
-    const points = tail.map(e => ({
+    const points = tail.map((e) => ({
       x: e.bbox[0] + e.bbox[2] / 2,
       y: e.bbox[1] + e.bbox[3] / 2,
     }));
@@ -1154,12 +1217,12 @@ function _renderTrailsOverlay(){
   svg.innerHTML = parts.join('');
 }
 
-function _renderZoneMaskOverlay(){
+function _renderZoneMaskOverlay() {
   const canvas = _ensureZoneMaskOverlay();
   if (!canvas || !_session) return;
   const showZones = _overlays.zones;
   const showMasks = _overlays.masks;
-  if (!showZones && !showMasks){
+  if (!showZones && !showMasks) {
     const ctx = canvas.getContext('2d');
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas.style.display = 'none';
@@ -1167,15 +1230,15 @@ function _renderZoneMaskOverlay(){
   }
   canvas.style.display = 'block';
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
-  const cam = (state.cameras || []).find(c => c.id === _session.camId) || {};
+  const cam = (state.cameras || []).find((c) => c.id === _session.camId) || {};
   // Normalise polygons through the shared resolver so source_w/h
   // are always present (modern stamp wins, legacy fall back to
   // preview_resolution / 1280×720 default).
   const zones = showZones
-    ? (cam.zones || []).map(z => normalizePolygon(z, cam)).filter(Boolean)
+    ? (cam.zones || []).map((z) => normalizePolygon(z, cam)).filter(Boolean)
     : [];
   const masks = showMasks
-    ? (cam.masks || []).map(m => normalizePolygon(m, cam)).filter(Boolean)
+    ? (cam.masks || []).map((m) => normalizePolygon(m, cam)).filter(Boolean)
     : [];
   // The MJPEG <img> never reports a reliable naturalWidth on Safari
   // (the multipart-replace stream confuses the natural-dims tracker).
@@ -1183,60 +1246,64 @@ function _renderZoneMaskOverlay(){
   // so its letterbox math uses the same coordinate base the rest of
   // the live-detect overlays (bbox, trails) already use.
   const liveImg = byId('lightboxImg');
-  renderZoneLayerForMediaEl(
-    canvas, liveImg, { zones, masks },
-    { srcW: fs.w, srcH: fs.h },
-  );
+  renderZoneLayerForMediaEl(canvas, liveImg, { zones, masks }, { srcW: fs.w, srcH: fs.h });
   // Diag strip update — same fields the legacy SVG path emitted so
   // operators can still read "did the polygons survive the toggle".
   const rect = canvas.getBoundingClientRect();
   _updateDiagStrip('zonemask', {
-    zones:    (cam.zones || []).length,
-    masks:    (cam.masks || []).length,
-    svgRect:  `${Math.round(rect.width)}×${Math.round(rect.height)}`,
-    zIndex:   window.getComputedStyle(canvas).zIndex,
+    zones: (cam.zones || []).length,
+    masks: (cam.masks || []).length,
+    svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
+    zIndex: window.getComputedStyle(canvas).zIndex,
   });
-  if (rect.width <= 0 || rect.height <= 0){
+  if (rect.width <= 0 || rect.height <= 0) {
     _updateDiagStrip('position-fail', {
-      svg:   canvas.id,
+      svg: canvas.id,
       svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
     });
   }
 }
 
-function _renderDetectionsPanel(data){
+function _renderDetectionsPanel(data) {
   const detHost = byId('mvLdDetections');
   if (!detHost) return;
   const dets = data.detections || [];
-  if (!dets.length){
+  if (!dets.length) {
     detHost.innerHTML = `<div class="mv-ld-empty">Keine Objekte erkannt</div>`;
     return;
   }
-  detHost.innerHTML = dets.map(d => {
-    const c = colors[d.label] || colors.unknown;
-    const lblText = OBJ_LABEL[d.label] || d.label;
-    const tone = d.verdict === 'pass' ? 'ok' : d.verdict === 'belowthresh' ? 'warn' : 'mute';
-    const verdictText = d.verdict === 'pass' ? 'PASS'
-                      : d.verdict === 'belowthresh' ? 'unter Schwelle'
-                      : d.verdict === 'filtered' ? 'gefiltert' : '—';
-    return `<div class="mv-ld-row" data-tone="${tone}" data-label="${esc(d.label)}">
+  detHost.innerHTML = dets
+    .map((d) => {
+      const c = colors[d.label] || colors.unknown;
+      const lblText = OBJ_LABEL[d.label] || d.label;
+      const tone = d.verdict === 'pass' ? 'ok' : d.verdict === 'belowthresh' ? 'warn' : 'mute';
+      const verdictText =
+        d.verdict === 'pass'
+          ? 'PASS'
+          : d.verdict === 'belowthresh'
+            ? 'unter Schwelle'
+            : d.verdict === 'filtered'
+              ? 'gefiltert'
+              : '—';
+      return `<div class="mv-ld-row" data-tone="${tone}" data-label="${esc(d.label)}">
       <span class="mv-ld-row-bar" style="background:${c}"></span>
       <span class="mv-ld-row-label">${esc(lblText)}</span>
       <span class="mv-ld-row-score">${Math.round((d.score || 0) * 100)} %</span>
       <span class="mv-ld-row-verdict">${esc(verdictText)}</span>
     </div>`;
-  }).join('');
-  detHost.querySelectorAll('.mv-ld-row').forEach(row => {
+    })
+    .join('');
+  detHost.querySelectorAll('.mv-ld-row').forEach((row) => {
     row.addEventListener('click', () => {
       const lbl = row.dataset.label;
-      _selectedLabel = (_selectedLabel === lbl) ? null : lbl;
+      _selectedLabel = _selectedLabel === lbl ? null : lbl;
       _renderBboxOverlay();
       _renderDetailPill();
     });
   });
 }
 
-function _renderLiveSwimlane(){
+function _renderLiveSwimlane() {
   // Build a synthetic _tracks payload from the 60 s buffer (one
   // synthetic track per label) and ask the recorded swimlane to
   // render it. Sample timestamps are shifted into [0, 60] so the
@@ -1245,16 +1312,19 @@ function _renderLiveSwimlane(){
   const now = Date.now();
   const windowStart = now - _LIVE_WINDOW_MS;
   const byLabel = new Map();
-  for (const e of _detBuffer){
+  for (const e of _detBuffer) {
     if (e.ms < windowStart) continue;
     const t = (e.ms - windowStart) / 1000;
     if (!byLabel.has(e.label)) byLabel.set(e.label, []);
     byLabel.get(e.label).push({
       f: byLabel.get(e.label).length,
       t,
-      bbox: { x1: e.bbox?.[0] || 0, y1: e.bbox?.[1] || 0,
-              x2: (e.bbox?.[0] || 0) + (e.bbox?.[2] || 0),
-              y2: (e.bbox?.[1] || 0) + (e.bbox?.[3] || 0) },
+      bbox: {
+        x1: e.bbox?.[0] || 0,
+        y1: e.bbox?.[1] || 0,
+        x2: (e.bbox?.[0] || 0) + (e.bbox?.[2] || 0),
+        y2: (e.bbox?.[1] || 0) + (e.bbox?.[3] || 0),
+      },
       score: e.score,
       source: 'detect',
     });
@@ -1267,7 +1337,7 @@ function _renderLiveSwimlane(){
   // track in the live window, _num maps 1:1 to the visible bar.
   const tracks = [];
   let _num = 0;
-  for (const [label, samples] of byLabel.entries()){
+  for (const [label, samples] of byLabel.entries()) {
     _num += 1;
     tracks.push({
       track_id: `live-${label}`,
@@ -1276,7 +1346,7 @@ function _renderLiveSwimlane(){
       color: colors[label] || '#94a3b8',
       first_frame: 0,
       last_frame: samples.length - 1,
-      best_score: Math.max(0, ...samples.map(s => s.score || 0)),
+      best_score: Math.max(0, ...samples.map((s) => s.score || 0)),
       best_frame: 0,
       samples,
     });
@@ -1291,15 +1361,15 @@ function _renderLiveSwimlane(){
   _pinScrubberRight();
 }
 
-function _renderDetailPill(){
+function _renderDetailPill() {
   const wrap = byId('lightboxMediaWrap');
   if (!wrap) return;
   let pill = byId('mvLiveDetailPill');
-  if (!_selectedLabel){
+  if (!_selectedLabel) {
     if (pill) pill.remove();
     return;
   }
-  if (!pill){
+  if (!pill) {
     pill = document.createElement('div');
     pill.id = 'mvLiveDetailPill';
     pill.className = 'mv-live-detail-pill';
@@ -1308,22 +1378,22 @@ function _renderDetailPill(){
   const c = colors[_selectedLabel] || colors.unknown;
   const lblText = OBJ_LABEL[_selectedLabel] || _selectedLabel;
   // Find the live detection for this label (most recent).
-  const det = (_session?.lastDetections || []).find(d => d.label === _selectedLabel);
-  if (!det){
+  const det = (_session?.lastDetections || []).find((d) => d.label === _selectedLabel);
+  if (!det) {
     pill.innerHTML = `<div class="mv-live-detail-head" style="color:${c}">${esc(lblText)}</div>
       <div class="mv-live-detail-empty">Aktuell nicht im Bild</div>`;
     return;
   }
-  const cam = (state.cameras || []).find(x => x.id === _session.camId) || {};
+  const cam = (state.cameras || []).find((x) => x.id === _session.camId) || {};
   const perCls = cam.label_thresholds || {};
   const generalThresh = Number(cam.detection_min_score) || 0.55;
-  const scoreThresh = perCls[_selectedLabel] != null
-    ? Number(perCls[_selectedLabel]) : generalThresh;
+  const scoreThresh =
+    perCls[_selectedLabel] != null ? Number(perCls[_selectedLabel]) : generalThresh;
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   const bh = det.bbox?.[3] || 0;
   const bw = det.bbox?.[2] || 0;
   const fracH = fs.h > 0 ? bh / fs.h : 0;
-  const fracArea = (fs.w * fs.h) > 0 ? (bw * bh) / (fs.w * fs.h) : 0;
+  const fracArea = fs.w * fs.h > 0 ? (bw * bh) / (fs.w * fs.h) : 0;
   const score = det.score || 0;
   const scorePct = Math.round(score * 100);
   const threshPct = Math.round(scoreThresh * 100);
@@ -1358,23 +1428,21 @@ function _renderDetailPill(){
     </div>`;
 }
 
-function _appendTrace(lines){
+function _appendTrace(lines) {
   if (!Array.isArray(lines) || !_session?.fold) return;
-  for (const line of lines){
+  for (const line of lines) {
     _traceLines.push({ kind: _classifyTrace(line), text: line });
   }
   while (_traceLines.length > _TRACE_CAP) _traceLines.shift();
   const body = document.querySelector('#lightboxSettings .mv-fafold-body');
-  const wasAtBottom = body
-    ? (body.scrollHeight - body.scrollTop - body.clientHeight) < 24
-    : true;
+  const wasAtBottom = body ? body.scrollHeight - body.scrollTop - body.clientHeight < 24 : true;
   _session.fold.setLines(_traceLines);
-  if (body && wasAtBottom){
+  if (body && wasAtBottom) {
     body.scrollTop = body.scrollHeight;
   }
 }
 
-function _classifyTrace(line){
+function _classifyTrace(line) {
   if (!line) return 'info';
   if (line.indexOf(' PASS') !== -1) return 'pass';
   if (line.indexOf(' REJECTED') !== -1 || line.indexOf(' FILTERED') !== -1) return 'reject';
@@ -1387,6 +1455,7 @@ function _classifyTrace(line){
 // the shared detail-pill.js module which uses these for the
 // per-class icon glyph above the gauges. Cheaper than re-importing
 // when that lands.
-void OBJ_SVG; void objIconSvg;
+void OBJ_SVG;
+void objIconSvg;
 
 window.closeLiveDetect = closeLiveDetect;

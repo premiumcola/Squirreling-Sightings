@@ -26,9 +26,7 @@ export function showToast(msg, type = 'info') {
   // Toast lifetime by severity — errors linger longest because the
   // user usually wants time to read what failed before reaching for
   // a retry.
-  const lifetime = type === 'error' ? 8000
-                 : (type === 'warn' || type === 'info') ? 6000
-                 : 4000;
+  const lifetime = type === 'error' ? 8000 : type === 'warn' || type === 'info' ? 6000 : 4000;
   const dismiss = () => {
     t.classList.add('toast-out');
     t.addEventListener('animationend', () => t.remove(), { once: true });
@@ -42,7 +40,10 @@ export function showConfirm(msg) {
     _confirmResolve = resolve;
     const modal = byId('confirmModal');
     const msgEl = byId('confirmMsg');
-    if (!modal || !msgEl) { resolve(false); return; }
+    if (!modal || !msgEl) {
+      resolve(false);
+      return;
+    }
     msgEl.textContent = msg;
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';

@@ -7,4 +7,4 @@
 //
 // SKELETON — task #4 fills this in.
 
-export function mountPlayBar(/* host, config */){}
+export function mountPlayBar(/* host, config */) {}

@@ -7,4 +7,4 @@
 // SKELETON — task #3 fills this in by lifting the source-switching
 // logic out of lightbox.js into a clean function.
 
-export function mountCanvasSource(/* host, source */){}
+export function mountCanvasSource(/* host, source */) {}

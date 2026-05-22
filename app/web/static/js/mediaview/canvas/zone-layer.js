@@ -24,20 +24,18 @@
 // because they'd visually clutter a sped-up overview without
 // adding info).
 
-import {
-  ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL, LINE_W,
-} from '../../core/zone-tokens.js';
+import { ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL, LINE_W } from '../../core/zone-tokens.js';
 
 /**
  * Compute the source-to-canvas-coord mapping for a single polygon.
  * Exposed so tests can pin the letterbox math without invoking the
  * full render pass.
  */
-export function mapPolygonToCanvas(poly, srcW, srcH, fitted){
+export function mapPolygonToCanvas(poly, srcW, srcH, fitted) {
   if (!poly || !Array.isArray(poly) || srcW <= 0 || srcH <= 0) return [];
   const sx = fitted.w / srcW;
   const sy = fitted.h / srcH;
-  return poly.map(pt => {
+  return poly.map((pt) => {
     const px = (pt && (pt.x ?? pt[0])) ?? 0;
     const py = (pt && (pt.y ?? pt[1])) ?? 0;
     return {
@@ -47,10 +45,10 @@ export function mapPolygonToCanvas(poly, srcW, srcH, fitted){
   });
 }
 
-function _drawPoly(ctx, mapped, stroke, fill){
+function _drawPoly(ctx, mapped, stroke, fill) {
   if (!mapped || mapped.length < 2) return;
   ctx.beginPath();
-  for (let i = 0; i < mapped.length; i++){
+  for (let i = 0; i < mapped.length; i++) {
     const p = mapped[i];
     if (i === 0) ctx.moveTo(p.x, p.y);
     else ctx.lineTo(p.x, p.y);
@@ -81,7 +79,7 @@ function _drawPoly(ctx, mapped, stroke, fill){
  *   rect from `core/video-fit.js#fittedRect`. Caller computes this
  *   once per redraw — the renderer is pure.
  */
-export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted = null){
+export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted = null) {
   if (!canvas || !canvas.getContext) return;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -89,7 +87,7 @@ export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted 
   const fit = fitted || { x: 0, y: 0, w: canvas.width, h: canvas.height };
   if (fit.w <= 0 || fit.h <= 0) return;
   const zones = polygons.zones || [];
-  const masks = opts.hideMasks ? [] : (polygons.masks || []);
+  const masks = opts.hideMasks ? [] : polygons.masks || [];
   // pn834 — each polygon may stamp its own source_w / source_h
   // (saved by the editor at commit time). When present, those win
   // over the media-element's videoWidth/Height so a polygon drawn
@@ -116,14 +114,14 @@ export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted 
   ctx.clip();
   // Masks drawn FIRST so the green inclusion lines sit on top — when
   // a zone overlaps a mask the user sees the inclusion edge clearly.
-  for (const m of masks){
-    const poly = Array.isArray(m) ? m : (m?.points || m?.poly || []);
+  for (const m of masks) {
+    const poly = Array.isArray(m) ? m : m?.points || m?.poly || [];
     const { w, h } = _src(m);
     const mapped = mapPolygonToCanvas(poly, w, h, fit);
     _drawPoly(ctx, mapped, MASK_STROKE, MASK_FILL);
   }
-  for (const z of zones){
-    const poly = Array.isArray(z) ? z : (z?.points || z?.poly || []);
+  for (const z of zones) {
+    const poly = Array.isArray(z) ? z : z?.points || z?.poly || [];
     const { w, h } = _src(z);
     const mapped = mapPolygonToCanvas(poly, w, h, fit);
     _drawPoly(ctx, mapped, ZONE_STROKE, ZONE_FILL);
@@ -154,7 +152,7 @@ export function renderZoneLayer(canvas, polygons, srcW, srcH, opts = {}, fitted 
  * frame_size here so the letterbox math uses the same coordinate
  * base the bbox layer does.
  */
-export function renderZoneLayerForMediaEl(canvas, mediaEl, polygons, opts = {}){
+export function renderZoneLayerForMediaEl(canvas, mediaEl, polygons, opts = {}) {
   if (!canvas || !mediaEl) return;
   const overrideW = Number(opts.srcW) > 0 ? Number(opts.srcW) : 0;
   const overrideH = Number(opts.srcH) > 0 ? Number(opts.srcH) : 0;
@@ -174,21 +172,21 @@ export function renderZoneLayerForMediaEl(canvas, mediaEl, polygons, opts = {}){
   // previous size, draw against the canvas's own buffer dims.
   let drawW = Math.round(wrapRect.width);
   let drawH = Math.round(wrapRect.height);
-  if (drawW <= 0 || drawH <= 0){
-    if (canvas.width > 0 && canvas.height > 0){
+  if (drawW <= 0 || drawH <= 0) {
+    if (canvas.width > 0 && canvas.height > 0) {
       drawW = canvas.width;
       drawH = canvas.height;
     } else {
       return;
     }
   }
-  if (canvas.width !== drawW || canvas.height !== drawH){
+  if (canvas.width !== drawW || canvas.height !== drawH) {
     canvas.width = drawW;
     canvas.height = drawH;
   }
   // Letterbox math in WRAP coordinates — matches the bbox renderer.
   let fit;
-  if (srcW > 0 && srcH > 0 && mediaRect.width > 0 && mediaRect.height > 0){
+  if (srcW > 0 && srcH > 0 && mediaRect.width > 0 && mediaRect.height > 0) {
     const scale = Math.min(mediaRect.width / srcW, mediaRect.height / srcH);
     const renderedW = srcW * scale;
     const renderedH = srcH * scale;

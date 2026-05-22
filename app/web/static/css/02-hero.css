@@ -5,26 +5,39 @@
    as a section header above Live Feed. .hero is just a flex row that
    keeps the brand-glyph + title + subtitle stack on the left and the
    build-info chip on the right. */
-.hero{
+.hero {
   /* No top padding (the safe-area inset lives on .main) and no
      bottom padding either — the hero now butts directly against
      the .main grid gap. The previous 4 px below stacked with the
      gap and the next panel's padding-top to ~30 px of background
      between the title and the first content row. */
-  padding:0;
-  display:flex;align-items:center;
-  gap:16px;
-  background:transparent;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: transparent;
   /* Pull the next .main grid item up so the visible gap between
      hero and Live Feed shrinks from 14 px to ~6 px. Negative
      margin-bottom on a grid item reduces its track height, which
      in turn moves every subsequent row up by the same amount —
      the gap value itself stays untouched, so other panel-to-panel
      spacing is unaffected. */
-  margin-bottom:-8px;
+  margin-bottom: -8px;
 }
-.hero-actions{display:flex;gap:10px}
-.hero button,.form button{padding:12px 16px;border:0;border-radius:14px;background:var(--accent);color:white;font-weight:700;min-height:40px}
+.hero-actions {
+  display: flex;
+  gap: 10px;
+}
+.hero button,
+.form button {
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  min-height: 40px;
+}
 /* Title + subtitle as a TIGHT pair, top-anchored next to the
    squirrel glyph. Each of the three brand variants
    (branch-cam, tree-lens, leaf-framed) concentrates its visual
@@ -38,41 +51,52 @@
    position:absolute inside this wrap so it stays out of flex
    flow; padding-left + min-height reserve its 88×151-ish footprint
    so the wordmark never overlaps it. */
-.hero-title-wrap{
-  flex:1;min-width:0;
-  display:flex;flex-direction:column;
-  align-items:flex-start;justify-content:flex-start;
-  gap:4px;
-  position:relative;
+.hero-title-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 4px;
+  position: relative;
   /* Reserve space for the absolutely-positioned glyph: 88 px tall
      × ~151 px wide (110×64 viewBox) plus a small visual gap. */
-  padding-left:160px;
-  min-height:88px;
+  padding-left: 160px;
+  min-height: 88px;
 }
-.hero-title{
-  margin:0;
+.hero-title {
+  margin: 0;
   /* Wordmark text only — the glyph escapes the title row via
      position:absolute on .hero-brand-glyph below, so the h1's
      intrinsic height is just the wordmark line-box (~35 px) and
      the title + subtitle pair stays compact. */
-  font-size:32px;font-weight:800;
-  letter-spacing:-.025em;line-height:1.1;
-  color:#fff;
-  display:block;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: #fff;
+  display: block;
 }
-.hero-wordmark{ color:#fff; }
+.hero-wordmark {
+  color: #fff;
+}
 /* Brand glyph — one of three squirrel-themed variants per
    chrome/brand-logo.js. Anchored to .hero-title-wrap (the
    position:relative ancestor above), vertically centred at 50 %.
    Out of flow so the title row's height collapses to the
    wordmark and the pair below packs tight. */
-.hero-brand-glyph{
-  position:absolute;left:0;top:50%;transform:translateY(-50%);
-  height:88px;width:auto;
-  flex-shrink:0;
+.hero-brand-glyph {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 88px;
+  width: auto;
+  flex-shrink: 0;
 }
-.hero-subtitle{
-  margin:0;
+.hero-subtitle {
+  margin: 0;
   /* Subtitle sits horizontally under "Sightings" rather than under
      "Squirreling" — visual hierarchy points to the noun, not the
      verb. 200 px is empirical for the 32 / 800 / -.025em wordmark
@@ -80,31 +104,144 @@
      starts at the wordmark's x via the wrap's padding-left:160).
      Mobile drops the indent (override below) because phone width
      can't spare the columns. Neutral grey (no blue cast). */
-  font-size:11px;font-weight:500;
-  font-style:italic;
-  color:rgba(255,255,255,.55);
-  letter-spacing:.02em;
-  padding-left:200px;
+  font-size: 11px;
+  font-weight: 500;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.02em;
+  padding-left: 200px;
 }
-.ghost{background:var(--surface)!important;border:none!important}.section{padding:12px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-subtitle{font-size:12px;font-style:italic;color:var(--muted);font-weight:400;margin-left:auto}.toolbar{display:grid;grid-template-columns:240px 220px 160px;gap:12px;margin-bottom:18px}.toolbar select,.toolbar input,.form input,.form select{width:100%;padding:12px 40px 12px 14px;border-radius:14px;background:var(--surface);color:var(--text);border:none;outline:none}.toolbar select:focus,.toolbar input:focus,.form input:focus,.form select:focus{box-shadow:0 0 0 2px var(--accent)}
-.toolbar select,.form select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' stroke='%2391a4b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center}
+.ghost {
+  background: var(--surface) !important;
+  border: none !important;
+}
+.section {
+  padding: 12px;
+}
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.section-subtitle {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: auto;
+}
+.toolbar {
+  display: grid;
+  grid-template-columns: 240px 220px 160px;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.toolbar select,
+.toolbar input,
+.form input,
+.form select {
+  width: 100%;
+  padding: 12px 40px 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: none;
+  outline: none;
+}
+.toolbar select:focus,
+.toolbar input:focus,
+.form input:focus,
+.form select:focus {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.toolbar select,
+.form select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='M3 5l4 4 4-4' stroke='%2391a4b8' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+}
 /* Site-wide neutral select baseline. Replaces the slate-blue tones that
    used to leak through from older scoped rules. Specific overrides
    (#logs.panel select for the Matrix terminal) sit below this with
    higher specificity so they still win where intended. */
-select{background:#1e1e1e;color:#c8c8c8;border:1px solid #333333;border-radius:6px;font-family:inherit;appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding:6px 32px 6px 10px}
-select:focus{outline:none;border-color:#555555;box-shadow:none}
-select option{background:#1e1e1e;color:#c8c8c8}
+select {
+  background: #1e1e1e;
+  color: #c8c8c8;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  font-family: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding: 6px 32px 6px 10px;
+}
+select:focus {
+  outline: none;
+  border-color: #555555;
+  box-shadow: none;
+}
+select option {
+  background: #1e1e1e;
+  color: #c8c8c8;
+}
 /* ── Hero build-info (top-right column) ────────────────────────────────────── */
-.hero-build{flex-shrink:0;margin-left:auto;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:flex-end;gap:6px;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:10.5px;color:rgba(255,255,255,.45);text-align:right;letter-spacing:.02em;padding-left:16px;white-space:nowrap}
-.hero-build:empty{display:none}
-.hero-build .hero-build-count{color:var(--accent);text-decoration:none;font-weight:700}
-.hero-build .hero-build-count:hover{text-decoration:underline}
-.hero-build .hero-build-count--dev{color:rgba(255,255,255,.35);font-weight:600}
-.hero-build .hero-build-commit{background:rgba(255,255,255,.06);padding:1px 6px;border-radius:6px;color:rgba(255,255,255,.75);font-size:10.5px}
-.hero-build .hero-build-date{color:rgba(255,255,255,.55);font-size:10.5px}
-.hero-build .hero-build-sep{color:rgba(255,255,255,.25)}
-@media(max-width:640px){.hero-build{font-size:10px;padding-left:8px}}
+.hero-build {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: right;
+  letter-spacing: 0.02em;
+  padding-left: 16px;
+  white-space: nowrap;
+}
+.hero-build:empty {
+  display: none;
+}
+.hero-build .hero-build-count {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+.hero-build .hero-build-count:hover {
+  text-decoration: underline;
+}
+.hero-build .hero-build-count--dev {
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 600;
+}
+.hero-build .hero-build-commit {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 10.5px;
+}
+.hero-build .hero-build-date {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10.5px;
+}
+.hero-build .hero-build-sep {
+  color: rgba(255, 255, 255, 0.25);
+}
+@media (max-width: 640px) {
+  .hero-build {
+    font-size: 10px;
+    padding-left: 8px;
+  }
+}
 
 /* Mobile compact — glyph drops to 64 px (110×64 → ~110 px wide),
    wordmark to 26 / 800. Subtitle indent is REMOVED on mobile —
@@ -113,16 +250,32 @@ select option{background:#1e1e1e;color:#c8c8c8}
    title at this scale. The wrap's padding-left and min-height
    shrink in lockstep so the pair stays centred against the
    smaller glyph. Neutral grey carries through. */
-@media (max-width:540px){
-  .hero-brand-glyph{ height:64px; }
-  .hero-title{ font-size:26px; }
-  .hero-subtitle{ font-size:10.5px; padding-left:0; }
-  .hero-title-wrap{ padding-left:120px; min-height:64px; }
-  .hero-build{ display:none; }
-}
-@media (max-width:768px){
-  .hero-build{
-    font-size:10px;
+@media (max-width: 540px) {
+  .hero-brand-glyph {
+    height: 64px;
   }
-  .hero-build > *{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hero-title {
+    font-size: 26px;
+  }
+  .hero-subtitle {
+    font-size: 10.5px;
+    padding-left: 0;
+  }
+  .hero-title-wrap {
+    padding-left: 120px;
+    min-height: 64px;
+  }
+  .hero-build {
+    display: none;
+  }
+}
+@media (max-width: 768px) {
+  .hero-build {
+    font-size: 10px;
+  }
+  .hero-build > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }

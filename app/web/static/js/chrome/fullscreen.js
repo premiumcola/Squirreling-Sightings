@@ -5,25 +5,29 @@
 // browsers that block it (iOS Safari) so the wrap still expands.
 import { byId } from '../core/dom.js';
 
-function _fsToggle(wrapEl, targetEl){
+function _fsToggle(wrapEl, targetEl) {
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
   // jh742 — iOS fallback uses .fake-fullscreen with no real FS API
   // engaged, so document.fullscreenElement is null even when the
   // wrap is visibly fullscreened. Detect that case explicitly so a
   // second click on the FS button exits instead of re-entering.
   const fakeFs = wrapEl.classList.contains('fake-fullscreen');
-  if (fsEl){
+  if (fsEl) {
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-  } else if (fakeFs){
+  } else if (fakeFs) {
     wrapEl.classList.remove('fake-fullscreen');
     wrapEl.classList.remove('is-fs');
   } else {
-    const req = targetEl.requestFullscreen || targetEl.webkitRequestFullscreen || targetEl.mozRequestFullScreen;
-    if (req) req.call(targetEl).catch(() => {
-      wrapEl.classList.add('fake-fullscreen');
-      wrapEl.classList.add('is-fs');
-    });
+    const req =
+      targetEl.requestFullscreen ||
+      targetEl.webkitRequestFullscreen ||
+      targetEl.mozRequestFullScreen;
+    if (req)
+      req.call(targetEl).catch(() => {
+        wrapEl.classList.add('fake-fullscreen');
+        wrapEl.classList.add('is-fs');
+      });
     else {
       wrapEl.classList.add('fake-fullscreen');
       wrapEl.classList.add('is-fs');
@@ -37,16 +41,19 @@ function _fsToggle(wrapEl, targetEl){
 // wrap. _initFsBtn keeps wiring the click + the wrap's class state
 // across both the native fullscreenchange event and the iOS
 // fake-fullscreen fallback.
-export function _initFsBtn(btnId, wrapEl, getTarget){
+export function _initFsBtn(btnId, wrapEl, getTarget) {
   const btn = byId(btnId);
   if (!btn || !wrapEl) return;
-  btn.addEventListener('click', e => { e.stopPropagation(); _fsToggle(wrapEl, getTarget()); });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _fsToggle(wrapEl, getTarget());
+  });
   const update = () => {
     const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
     const nativeFs = !!(fsEl && (fsEl === wrapEl || wrapEl.contains(fsEl)));
     const fakeFs = wrapEl.classList.contains('fake-fullscreen');
     wrapEl.classList.toggle('is-fs', nativeFs || fakeFs);
-    if (!fsEl){
+    if (!fsEl) {
       wrapEl.classList.remove('fake-fullscreen');
       if (!fakeFs) wrapEl.classList.remove('is-fs');
     }

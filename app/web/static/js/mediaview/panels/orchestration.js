@@ -18,14 +18,14 @@ import { lbRenderSettingsPanel } from '../../mediathek/bbox-overlay/settings-pan
 import { renderPanelTabs } from '../panel-tabs.js';
 import { renderFineAnalysisFold } from '../fine-analysis-fold.js';
 
-function _renderSettingsTab(host, item){
+function _renderSettingsTab(host, item) {
   // Reuse the existing settings renderer with a custom host. After
   // it renders, auto-expand the body so the user doesn't have to
   // click twice (once for the tab, once for the panel collapse).
   lbRenderSettingsPanel(item, host);
   const body = host.querySelector('.lbset-body');
   const header = host.querySelector('.lbset-header');
-  if (body && header && body.hidden){
+  if (body && header && body.hidden) {
     body.hidden = false;
     header.setAttribute('aria-expanded', 'true');
   }
@@ -65,7 +65,7 @@ const _WS_FIELD_UNIT = {
   visibility: 'm',
 };
 
-function _renderWeatherTab(host, item){
+function _renderWeatherTab(host, item) {
   // Two shapes are supported:
   //   item.weather      → simple {temperature_c, cloud_cover_pct, …}
   //                       (motion-clip / future generic timelapse)
@@ -75,21 +75,21 @@ function _renderWeatherTab(host, item){
   const w = item?.weather;
   const snap = item?.api_snapshot;
   const sun = item?.sun_snapshot;
-  if ((!w || typeof w !== 'object') && (!snap || typeof snap !== 'object')){
+  if ((!w || typeof w !== 'object') && (!snap || typeof snap !== 'object')) {
     host.innerHTML = `<div class="mv-rescan-empty">Keine Wetterdaten für diese Aufnahme.</div>`;
     return;
   }
   let rows = [];
-  if (w && typeof w === 'object'){
+  if (w && typeof w === 'object') {
     rows = [
-      ['Temperatur',  w.temperature_c, '°C'],
-      ['Bewölkung',   w.cloud_cover_pct, '%'],
+      ['Temperatur', w.temperature_c, '°C'],
+      ['Bewölkung', w.cloud_cover_pct, '%'],
       ['Niederschlag', w.precip_mm, ' mm'],
-      ['Wind',        w.wind_kmh, ' km/h'],
+      ['Wind', w.wind_kmh, ' km/h'],
       ['Luftfeuchte', w.humidity_pct, '%'],
-      ['Bedingung',   w.condition, ''],
+      ['Bedingung', w.condition, ''],
     ];
-  } else if (snap){
+  } else if (snap) {
     rows = Object.entries(snap)
       .filter(([k, v]) => v !== null && v !== undefined && k !== 'time')
       .map(([k, v]) => [_WS_FIELD_LBL[k] || k, v, _WS_FIELD_UNIT[k] || '']);
@@ -105,31 +105,34 @@ function _renderWeatherTab(host, item){
   // values. Unknown keys fall back to a humanised version of the
   // key so a future field addition still reads sensibly.
   const _SUN_LBL = {
-    altitude:          'Sonne · Höhe',
-    azimuth:           'Sonne · Azimut',
+    altitude: 'Sonne · Höhe',
+    azimuth: 'Sonne · Azimut',
     altitude_at_start: 'Sonne · Höhe (Start)',
-    altitude_at_end:   'Sonne · Höhe (Ende)',
-    azimuth_at_start:  'Sonne · Azimut (Start)',
-    azimuth_at_end:    'Sonne · Azimut (Ende)',
-    noon_altitude:     'Sonne mittags · Höhe',
-    sunrise_azimuth:   'Sonnenaufgang · Azimut',
-    sunset_azimuth:    'Sonnenuntergang · Azimut',
+    altitude_at_end: 'Sonne · Höhe (Ende)',
+    azimuth_at_start: 'Sonne · Azimut (Start)',
+    azimuth_at_end: 'Sonne · Azimut (Ende)',
+    noon_altitude: 'Sonne mittags · Höhe',
+    sunrise_azimuth: 'Sonnenaufgang · Azimut',
+    sunset_azimuth: 'Sonnenuntergang · Azimut',
   };
-  const sunRows = (sun && typeof sun === 'object')
-    ? Object.entries(sun)
-        .filter(([, v]) => v !== null && v !== undefined)
-        .map(([k, v]) => {
-          const label = _SUN_LBL[k]
-            || ('Sonne · ' + k.replaceAll('_', ' '));
-          return [label, Number(v).toFixed(1), '°'];
-        })
-    : [];
+  const sunRows =
+    sun && typeof sun === 'object'
+      ? Object.entries(sun)
+          .filter(([, v]) => v !== null && v !== undefined)
+          .map(([k, v]) => {
+            const label = _SUN_LBL[k] || 'Sonne · ' + k.replaceAll('_', ' ');
+            return [label, Number(v).toFixed(1), '°'];
+          })
+      : [];
   const allRows = [...rows, ...sunRows];
   host.innerHTML = `
     <div class="mv-weather">
-      ${allRows.map(([k, v, unit]) =>
-        `<div class="mv-weather-row"><span class="mv-weather-key">${k}</span><span class="mv-weather-val">${v}${unit ? ' ' + unit : ''}</span></div>`,
-      ).join('')}
+      ${allRows
+        .map(
+          ([k, v, unit]) =>
+            `<div class="mv-weather-row"><span class="mv-weather-key">${k}</span><span class="mv-weather-val">${v}${unit ? ' ' + unit : ''}</span></div>`,
+        )
+        .join('')}
     </div>`;
 }
 
@@ -140,10 +143,10 @@ function _renderWeatherTab(host, item){
 // by the alarm pipeline). The Nach-Erkennung tab was retired —
 // its single regenerate action moved into the overlay-toggles row
 // (lightbox.js · mountReindexButton) so it's always visible.
-export function mountRecordedPanels(item){
+export function mountRecordedPanels(item) {
   const host = byId('lightboxSettings');
   if (!host) return;
-  if (!item){
+  if (!item) {
     host.innerHTML = '';
     return;
   }
@@ -156,22 +159,24 @@ export function mountRecordedPanels(item){
   const tabsHost = host.querySelector('.mv-recorded-tabs');
   const faHost = host.querySelector('.mv-recorded-fafold');
   const tabs = [];
-  if (!isTimelapse){
-    tabs.push({ id: 'settings',
+  if (!isTimelapse) {
+    tabs.push({
+      id: 'settings',
       label: 'Aufnahme-Settings',
-      render: (h) => _renderSettingsTab(h, item) });
+      render: (h) => _renderSettingsTab(h, item),
+    });
   }
   // Weather tab — mounted whenever the item carries a weather
   // snapshot. Two shapes are accepted: item.weather (normalised
   // pairs) and item.api_snapshot (raw Open-Meteo dict, used by
   // weather sightings via openTLPlayer). Motion clips usually
   // carry neither; timelapses + weather sightings do.
-  const hasWeather = !!((item.weather && typeof item.weather === 'object')
-                         || (item.api_snapshot && typeof item.api_snapshot === 'object'));
-  if (hasWeather){
-    tabs.push({ id: 'weather',
-      label: 'Wetter',
-      render: (h) => _renderWeatherTab(h, item) });
+  const hasWeather = !!(
+    (item.weather && typeof item.weather === 'object') ||
+    (item.api_snapshot && typeof item.api_snapshot === 'object')
+  );
+  if (hasWeather) {
+    tabs.push({ id: 'weather', label: 'Wetter', render: (h) => _renderWeatherTab(h, item) });
   }
   // Initial tab — Aufnahme-Settings for motion clips; Wetter for
   // timelapses when present. Timelapses with no weather data fall
@@ -179,7 +184,7 @@ export function mountRecordedPanels(item){
   let initialId;
   if (isTimelapse && hasWeather) initialId = 'weather';
   else if (!isTimelapse) initialId = 'settings';
-  if (tabs.length){
+  if (tabs.length) {
     renderPanelTabs(tabsHost, tabs, { initialId });
   }
   // Recorded clips don't carry a server-side decision trace today —

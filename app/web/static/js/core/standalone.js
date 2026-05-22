@@ -7,13 +7,12 @@
 // keyed on the class can pull stronger safe-area paddings, hide
 // browser-only affordances, etc.
 
-export const isStandalone = (
-  (typeof window !== 'undefined') &&
-  ((window.matchMedia?.('(display-mode: standalone)').matches)
-    || window.navigator?.standalone === true)
-);
+export const isStandalone =
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.navigator?.standalone === true);
 
-function _apply(){
+function _apply() {
   if (!isStandalone) return;
   const body = document.body;
   if (body && !body.classList.contains('is-standalone')) {

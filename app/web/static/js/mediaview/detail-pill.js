@@ -14,4 +14,4 @@
 // + Bbox-Höhe + Bbox-Fläche bars with thresholds); task #5 will lift
 // its renderer into here and add the colours + legend strip.
 
-export function renderDetailPill(/* host, trackContext */){}
+export function renderDetailPill(/* host, trackContext */) {}

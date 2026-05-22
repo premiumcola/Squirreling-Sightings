@@ -47,14 +47,30 @@ const _LS_KEY = 'tamspy.overlayToggles.v1';
 // migration further down (_pruneNonPersistedFromLS) strips any
 // zones/masks values that leaked into prior sessions.
 const _TOGGLES = {
-  bboxes:    { label: 'Bboxes',    default: true,  persist: true,
-               desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
-  trails:    { label: 'Trails',    default: true,  persist: true,
-               desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
-  zones:     { label: 'Zonen',     default: false, persist: false,
-               desc: 'Erkennungs-Zonen (grün) anzeigen' },
-  masks:     { label: 'Masken',    default: false, persist: false,
-               desc: 'Ausschluss-Masken (rot) anzeigen' },
+  bboxes: {
+    label: 'Bboxes',
+    default: true,
+    persist: true,
+    desc: 'Erkannte Objekte als Rahmen über dem Video einblenden',
+  },
+  trails: {
+    label: 'Trails',
+    default: true,
+    persist: true,
+    desc: 'Bewegungspfade jeder erkannten Spur einzeichnen',
+  },
+  zones: {
+    label: 'Zonen',
+    default: false,
+    persist: false,
+    desc: 'Erkennungs-Zonen (grün) anzeigen',
+  },
+  masks: {
+    label: 'Masken',
+    default: false,
+    persist: false,
+    desc: 'Ausschluss-Masken (rot) anzeigen',
+  },
 };
 
 // K1 · one-shot migration on module load. Walks every contextKey
@@ -62,25 +78,27 @@ const _TOGGLES = {
 // _TOGGLES entry has persist:false (zones, masks). Silent — no
 // console output. Defensive: catches every step so a quota /
 // private-mode error path can't break module init.
-(function _pruneNonPersistedFromLS(){
+(function _pruneNonPersistedFromLS() {
   try {
     const raw = localStorage.getItem(_LS_KEY);
     if (!raw) return;
     const all = JSON.parse(raw);
     if (!all || typeof all !== 'object') return;
     let touched = false;
-    for (const ctx of Object.keys(all)){
+    for (const ctx of Object.keys(all)) {
       const ctxState = all[ctx];
       if (!ctxState || typeof ctxState !== 'object') continue;
-      for (const id of Object.keys(ctxState)){
-        if (_TOGGLES[id] && _TOGGLES[id].persist === false){
+      for (const id of Object.keys(ctxState)) {
+        if (_TOGGLES[id] && _TOGGLES[id].persist === false) {
           delete ctxState[id];
           touched = true;
         }
       }
     }
     if (touched) localStorage.setItem(_LS_KEY, JSON.stringify(all));
-  } catch { /* private-mode / quota — silent */ }
+  } catch {
+    /* private-mode / quota — silent */
+  }
 })();
 
 // Tooltip popover state — the dom node + show/hide helpers live in
@@ -89,44 +107,48 @@ const _TOGGLES = {
 let _tipHoverTimer = 0;
 let _tipLongPressTimer = 0;
 
-function _showTip(target, text){
+function _showTip(target, text) {
   showTooltip(target, text);
 }
 
-function _hideTip(){
+function _hideTip() {
   hideTooltip();
   clearTimeout(_tipHoverTimer);
   clearTimeout(_tipLongPressTimer);
 }
 
 // Persisted-state helpers — one entry per (contextKey, layerId).
-function _loadState(contextKey){
+function _loadState(contextKey) {
   try {
     const raw = localStorage.getItem(_LS_KEY);
     if (!raw) return {};
     const all = JSON.parse(raw);
     return (all && all[contextKey]) || {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
-function _saveState(contextKey, state){
+function _saveState(contextKey, state) {
   // K1 · filter to persistable keys only. Non-persisted toggles
   // (zones, masks) MUST NOT leak into localStorage — otherwise the
   // migration above just gets to re-clean them on every page load.
   // The filter is the single source of truth; flipping a toggle's
   // persist flag flips its localStorage participation automatically.
   const clean = {};
-  for (const id of Object.keys(state || {})){
-    if (_TOGGLES[id] && _TOGGLES[id].persist){
+  for (const id of Object.keys(state || {})) {
+    if (_TOGGLES[id] && _TOGGLES[id].persist) {
       clean[id] = !!state[id];
     }
   }
   try {
     const raw = localStorage.getItem(_LS_KEY);
-    const all = raw ? (JSON.parse(raw) || {}) : {};
+    const all = raw ? JSON.parse(raw) || {} : {};
     all[contextKey] = clean;
     localStorage.setItem(_LS_KEY, JSON.stringify(all));
-  } catch { /* quota / private mode — silent */ }
+  } catch {
+    /* quota / private mode — silent */
+  }
 }
 
 /**
@@ -151,11 +173,13 @@ function _saveState(contextKey, state){
  * @returns {{ getState(): Object, setState(id, on): void,
  *            teardown(): void }}
  */
-export function renderOverlayToggles(host, opts = {}){
-  const el = (typeof host === 'string') ? byId(host) : host;
+export function renderOverlayToggles(host, opts = {}) {
+  const el = typeof host === 'string' ? byId(host) : host;
   if (!el) return null;
-  const available = (opts.available || []).filter(id => Object.prototype.hasOwnProperty.call(_TOGGLES, id));
-  if (available.length === 0){
+  const available = (opts.available || []).filter((id) =>
+    Object.prototype.hasOwnProperty.call(_TOGGLES, id),
+  );
+  if (available.length === 0) {
     el.innerHTML = '';
     return { getState: () => ({}), setState: () => {}, teardown: () => {} };
   }
@@ -169,9 +193,9 @@ export function renderOverlayToggles(host, opts = {}){
   // belt-and-suspenders also guards against a fresh write that
   // somehow lands before the migration runs.
   const state = {};
-  for (const id of available){
+  for (const id of available) {
     const t = _TOGGLES[id];
-    if (t.persist && id in persisted){
+    if (t.persist && id in persisted) {
       state[id] = !!persisted[id];
     } else {
       state[id] = !!t.default;
@@ -180,21 +204,31 @@ export function renderOverlayToggles(host, opts = {}){
   // Mark the host so multiple mounts can coexist in different parts
   // of the page (live + mediathek lightbox open simultaneously, etc.)
   el.classList.add('mv-live-toggles');
-  el.innerHTML = available.map(id => {
-    const t = _TOGGLES[id];
-    return `<button type="button" class="mv-live-toggle" data-tog="${id}" data-desc="${esc(t.desc)}" data-on="${state[id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${esc(t.label)}</button>`;
-  }).join('') + (opts.hintText
-    ? `<span class="mv-live-toggles-hint">${esc(opts.hintText)}</span>`
-    : '');
+  el.innerHTML =
+    available
+      .map((id) => {
+        const t = _TOGGLES[id];
+        return `<button type="button" class="mv-live-toggle" data-tog="${id}" data-desc="${esc(t.desc)}" data-on="${state[id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${esc(t.label)}</button>`;
+      })
+      .join('') +
+    (opts.hintText ? `<span class="mv-live-toggles-hint">${esc(opts.hintText)}</span>` : '');
   const fireChange = (id, on) => {
-    if (typeof opts.onChange === 'function'){
-      try { opts.onChange(id, on, { ...state }); } catch { /* swallow */ }
+    if (typeof opts.onChange === 'function') {
+      try {
+        opts.onChange(id, on, { ...state });
+      } catch {
+        /* swallow */
+      }
     }
   };
   const teardown = [];
-  el.querySelectorAll('.mv-live-toggle').forEach(btn => {
+  el.querySelectorAll('.mv-live-toggle').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
-      if (btn._suppressClick){ btn._suppressClick = false; ev.preventDefault(); return; }
+      if (btn._suppressClick) {
+        btn._suppressClick = false;
+        ev.preventDefault();
+        return;
+      }
       const id = btn.dataset.tog;
       state[id] = !state[id];
       btn.dataset.on = state[id] ? '1' : '0';
@@ -208,18 +242,25 @@ export function renderOverlayToggles(host, opts = {}){
       _tipHoverTimer = setTimeout(() => _showTip(btn, btn.dataset.desc || ''), 300);
     });
     btn.addEventListener('pointerleave', _hideTip);
-    btn.addEventListener('touchstart', () => {
-      clearTimeout(_tipLongPressTimer);
-      _tipLongPressTimer = setTimeout(() => {
-        btn._suppressClick = true;
-        _showTip(btn, btn.dataset.desc || '');
-      }, 500);
-    }, { passive: true });
+    btn.addEventListener(
+      'touchstart',
+      () => {
+        clearTimeout(_tipLongPressTimer);
+        _tipLongPressTimer = setTimeout(() => {
+          btn._suppressClick = true;
+          _showTip(btn, btn.dataset.desc || '');
+        }, 500);
+      },
+      { passive: true },
+    );
     btn.addEventListener('touchend', () => clearTimeout(_tipLongPressTimer));
     btn.addEventListener('touchcancel', () => clearTimeout(_tipLongPressTimer));
   });
   const outsideTouch = (ev) => {
-    if (!_tipEl || _tipEl.hidden) return;
+    // The tip element lives in core/tooltip.js now — query the DOM
+    // by class so we don't have to thread the node back through.
+    const tip = document.querySelector('.mv-live-toggle-tip');
+    if (!tip || tip.hidden) return;
     if (ev.target.closest && ev.target.closest('.mv-live-toggle')) return;
     _hideTip();
   };
@@ -236,8 +277,12 @@ export function renderOverlayToggles(host, opts = {}){
       fireChange(id, state[id]);
     },
     teardown: () => {
-      for (const fn of teardown){
-        try { fn(); } catch { /* ignore */ }
+      for (const fn of teardown) {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
       }
       el.innerHTML = '';
     },
@@ -251,19 +296,19 @@ export function renderOverlayToggles(host, opts = {}){
  * once its overlay layers are wired through this state path —
  * pending the bbox-overlay refactor for show/hide toggles.
  */
-export function mountWeatherToggleBar(item, onChange){
+export function mountWeatherToggleBar(item, onChange) {
   const inner = byId('lightboxInner');
   const stack = byId('lightboxBottomStack');
   if (!inner || !stack) return null;
   let row = byId('mvLiveToggles');
-  if (!row){
+  if (!row) {
     row = document.createElement('div');
     row.id = 'mvLiveToggles';
     inner.insertBefore(row, stack);
   }
   const isTL = item?.type === 'timelapse';
   return renderOverlayToggles(row, {
-    available:  isTL ? ['zones', 'masks'] : ['bboxes', 'trails', 'zones', 'masks'],
+    available: isTL ? ['zones', 'masks'] : ['bboxes', 'trails', 'zones', 'masks'],
     contextKey: isTL ? 'timelapse' : 'mediathek',
     onChange,
     // No hintText — the status legend mounted right after this bar

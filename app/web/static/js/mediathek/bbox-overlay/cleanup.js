@@ -8,10 +8,10 @@ import { _stopRafLoop } from './raf.js';
 // hidden by the lightbox.js teardown via the [hidden] attribute on
 // #lightboxTrackTimeline; its content stays until the next render so
 // re-opening the same item doesn't flash an empty panel.
-export function lbStopTrackingPlayback(){
+export function lbStopTrackingPlayback() {
   _stopRafLoop();
   const banner = byId('lbTrackingBanner');
-  if (banner){
+  if (banner) {
     banner.style.opacity = '0';
     banner.style.display = 'none';
   }

@@ -27,17 +27,17 @@
      --z-debug        dev-only diagnostic overlays
 */
 :root {
-  --z-base:         0;
-  --z-overlay:      1;
-  --z-sticky:       10;
-  --z-dock:         90;
-  --z-toolbar:      100;
-  --z-tooltip:      200;
-  --z-dropdown:     1000;
-  --z-modal:        1100;
+  --z-base: 0;
+  --z-overlay: 1;
+  --z-sticky: 10;
+  --z-dock: 90;
+  --z-toolbar: 100;
+  --z-tooltip: 200;
+  --z-dropdown: 1000;
+  --z-modal: 1100;
   --z-modal-action: 1200;
-  --z-toast:        1300;
-  --z-fullscreen:   2000;
-  --z-modal-top:    9990;
-  --z-debug:        9999;
+  --z-toast: 1300;
+  --z-fullscreen: 2000;
+  --z-modal-top: 9990;
+  --z-debug: 9999;
 }

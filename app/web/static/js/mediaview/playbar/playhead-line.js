@@ -8,4 +8,4 @@
 // SKELETON — task #4 builds the shared content-area container and
 // mounts the line inside it.
 
-export function mountPlayheadLine(/* contentArea */){}
+export function mountPlayheadLine(/* contentArea */) {}

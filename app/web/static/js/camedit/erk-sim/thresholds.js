@@ -19,19 +19,19 @@ import { byId } from '../../core/dom.js';
 
 const _LIMIT_LABELS = {
   spawn: 'Spawn-Schwelle',
-  cont:  'Fortsetzungs-Floor',
+  cont: 'Fortsetzungs-Floor',
   grace: 'Gnadenfrist',
-  iou:   'IoU-Schwelle',
+  iou: 'IoU-Schwelle',
 };
 
 // Module defaults — mirror tracker_core.py constants so the displayed
 // "Limit" matches what the production tracker would actually use when
 // the per-camera input is 0.0 ("System-Default verwenden").
 const _MODULE_DEFAULTS = {
-  spawn: 0.50,
-  cont:  0.20,
+  spawn: 0.5,
+  cont: 0.2,
   grace: 8.0,
-  iou:   0.20,
+  iou: 0.2,
 };
 
 // Read the four form inputs, fall back to module defaults when the
@@ -39,7 +39,7 @@ const _MODULE_DEFAULTS = {
 // sentinel). Returns numeric values for the four rows + a boolean
 // flag per row that tells the renderer whether the limit is custom
 // or defaulted (used to dim the value cell).
-function _readLimits(formEl){
+function _readLimits(formEl) {
   const f = formEl?.elements;
   const _read = (name, fallback) => {
     const raw = parseFloat(f?.[name]?.value);
@@ -49,9 +49,9 @@ function _readLimits(formEl){
   };
   return {
     spawn: _read('track_spawn_min_score', _MODULE_DEFAULTS.spawn),
-    cont:  _read('track_continue_min_score', _MODULE_DEFAULTS.cont),
+    cont: _read('track_continue_min_score', _MODULE_DEFAULTS.cont),
     grace: _read('track_miss_grace_seconds', _MODULE_DEFAULTS.grace),
-    iou:   _read('track_iou_match_threshold', _MODULE_DEFAULTS.iou),
+    iou: _read('track_iou_match_threshold', _MODULE_DEFAULTS.iou),
   };
 }
 
@@ -59,38 +59,46 @@ function _readLimits(formEl){
 // list. Returns null entries when there's no signal yet (no active
 // tracks, no last-tick matches) so the renderer can show "—" instead
 // of misleading zeros.
-function _readActual(tracks, lastMatches, now_ms){
-  let spawnHi = null, spawnHiTrack = null;
-  let contLo = null, contLoTrack = null;
-  let graceMax = null, graceMaxTrack = null;
-  for (const t of tracks){
+function _readActual(tracks, lastMatches, now_ms) {
+  let spawnHi = null,
+    spawnHiTrack = null;
+  let contLo = null,
+    contLoTrack = null;
+  let graceMax = null,
+    graceMaxTrack = null;
+  for (const t of tracks) {
     if (!Number.isFinite(t.best_score)) continue;
-    if (spawnHi === null || t.best_score > spawnHi){
-      spawnHi = t.best_score; spawnHiTrack = t.id;
+    if (spawnHi === null || t.best_score > spawnHi) {
+      spawnHi = t.best_score;
+      spawnHiTrack = t.id;
     }
-    if (Number.isFinite(t.last_score)){
-      if (contLo === null || t.last_score < contLo){
-        contLo = t.last_score; contLoTrack = t.id;
+    if (Number.isFinite(t.last_score)) {
+      if (contLo === null || t.last_score < contLo) {
+        contLo = t.last_score;
+        contLoTrack = t.id;
       }
     }
     const missMs = now_ms - t.last_seen_ms;
-    if (Number.isFinite(missMs)){
-      if (graceMax === null || missMs > graceMax){
-        graceMax = missMs; graceMaxTrack = t.id;
+    if (Number.isFinite(missMs)) {
+      if (graceMax === null || missMs > graceMax) {
+        graceMax = missMs;
+        graceMaxTrack = t.id;
       }
     }
   }
-  let iouHi = null, iouHiTrack = null;
-  for (const m of lastMatches){
-    if (iouHi === null || m.iou > iouHi){
-      iouHi = m.iou; iouHiTrack = m.trackId;
+  let iouHi = null,
+    iouHiTrack = null;
+  for (const m of lastMatches) {
+    if (iouHi === null || m.iou > iouHi) {
+      iouHi = m.iou;
+      iouHiTrack = m.trackId;
     }
   }
   return {
     spawn: spawnHi !== null ? { v: spawnHi, track: spawnHiTrack } : null,
-    cont:  contLo  !== null ? { v: contLo,  track: contLoTrack  } : null,
+    cont: contLo !== null ? { v: contLo, track: contLoTrack } : null,
     grace: graceMax !== null ? { v: graceMax / 1000, track: graceMaxTrack } : null,
-    iou:   iouHi   !== null ? { v: iouHi,   track: iouHiTrack   } : null,
+    iou: iouHi !== null ? { v: iouHi, track: iouHiTrack } : null,
   };
 }
 
@@ -104,7 +112,7 @@ const _fmt = (n, digits = 2) => {
 
 // Build one row's HTML. `status` is 'ok' / 'warn' / 'idle' (no signal).
 // Track suffix (`#N`) appears only when the row has a backing track id.
-function _row(key, limit, actual){
+function _row(key, limit, actual) {
   const lbl = _LIMIT_LABELS[key];
   const isGrace = key === 'grace';
   const limitDigits = isGrace ? 1 : 2;
@@ -118,7 +126,7 @@ function _row(key, limit, actual){
   else if (key === 'cont') actualLbl = 'aktuell niedrigste';
   else if (key === 'grace') actualLbl = 'aktuell ohne Treffer';
   else actualLbl = 'letzter Match';
-  if (actual !== null){
+  if (actual !== null) {
     actualTxt = _fmt(actual.v, limitDigits) + limitUnit;
     // OK semantics differ per row:
     //   spawn  → highest current score ≥ limit  → at least one track
@@ -129,17 +137,18 @@ function _row(key, limit, actual){
     //   iou    → last match IoU ≥ limit         → matches accepted.
     let ok;
     if (key === 'grace') ok = actual.v < limit.v;
-    else                  ok = actual.v >= limit.v;
+    else ok = actual.v >= limit.v;
     status = ok ? 'ok' : 'warn';
-    if (actual.track != null){
+    if (actual.track != null) {
       trackTxt = `<span class="erk-thr-tag">Track #${actual.track}</span>`;
     }
   }
-  const icon = status === 'ok'
-    ? '<span class="erk-thr-mark erk-thr-mark--ok" aria-hidden="true">✓</span>'
-    : status === 'warn'
-      ? '<span class="erk-thr-mark erk-thr-mark--warn" aria-hidden="true">↓</span>'
-      : '<span class="erk-thr-mark erk-thr-mark--idle" aria-hidden="true">·</span>';
+  const icon =
+    status === 'ok'
+      ? '<span class="erk-thr-mark erk-thr-mark--ok" aria-hidden="true">✓</span>'
+      : status === 'warn'
+        ? '<span class="erk-thr-mark erk-thr-mark--warn" aria-hidden="true">↓</span>'
+        : '<span class="erk-thr-mark erk-thr-mark--idle" aria-hidden="true">·</span>';
   const limitClass = limit.defaulted ? 'erk-thr-limit erk-thr-limit--default' : 'erk-thr-limit';
   return `
     <div class="erk-thr-row erk-thr-row--${status}">
@@ -157,32 +166,28 @@ function _row(key, limit, actual){
 // IoUTracker.tick(). Renders the four-row strip into #erkSimThresholds.
 // The host element is created lazily on first render and slotted
 // between the live timeline and the detection list.
-export function renderThresholdStrip(formEl, tracker, now_ms){
+export function renderThresholdStrip(formEl, tracker, now_ms) {
   const host = _ensureHost();
   if (!host) return;
   const limits = _readLimits(formEl);
-  const actual = _readActual(
-    tracker.activeTracks(),
-    tracker.lastMatches(),
-    now_ms,
-  );
+  const actual = _readActual(tracker.activeTracks(), tracker.lastMatches(), now_ms);
   host.innerHTML = [
     _row('spawn', limits.spawn, actual.spawn),
-    _row('cont',  limits.cont,  actual.cont),
+    _row('cont', limits.cont, actual.cont),
     _row('grace', limits.grace, actual.grace),
-    _row('iou',   limits.iou,   actual.iou),
+    _row('iou', limits.iou, actual.iou),
   ].join('');
   host.hidden = false;
 }
 
 // Hide the strip when live mode stops so the frozen frame doesn't
 // show stale "Ist-Werte" implying the loop is still running.
-export function hideThresholdStrip(){
+export function hideThresholdStrip() {
   const host = byId('erkSimThresholds');
   if (host) host.hidden = true;
 }
 
-function _ensureHost(){
+function _ensureHost() {
   let host = byId('erkSimThresholds');
   if (host) return host;
   const body = byId('erkSimLiveBody');
@@ -197,9 +202,9 @@ function _ensureHost(){
   // anchor via the detection list.
   const tl = byId('erkSimTimeline');
   const list = byId('erkSimList');
-  if (tl && tl.parentNode === body){
+  if (tl && tl.parentNode === body) {
     body.insertBefore(host, tl.nextSibling);
-  } else if (list && list.parentNode === body){
+  } else if (list && list.parentNode === body) {
     body.insertBefore(host, list);
   } else {
     body.appendChild(host);

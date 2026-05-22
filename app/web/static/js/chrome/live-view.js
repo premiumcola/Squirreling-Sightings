@@ -42,7 +42,7 @@ const _LV_DETECT_INTERVAL_MS = 1000;
 // the bridge in lockstep with the local primitive on every set.
 window._liveViewHd = false;
 
-export function openLiveView(camId, camName){
+export function openLiveView(camId, camName) {
   const modal = byId('liveViewModal');
   if (!modal) return;
   _liveViewCamId = camId;
@@ -65,9 +65,8 @@ export function openLiveView(camId, camName){
   _startLvDetectPolling();
 }
 
-
 // ── Live-modal bbox overlay (vm625) ────────────────────────────────────────
-function _ensureLvBboxOverlay(){
+function _ensureLvBboxOverlay() {
   let svg = byId('liveViewBboxOverlay');
   if (svg) return svg;
   const wrap = byId('liveViewWrap');
@@ -75,12 +74,13 @@ function _ensureLvBboxOverlay(){
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'liveViewBboxOverlay';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3';
+  svg.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3';
   wrap.appendChild(svg);
   return svg;
 }
 
-function _activeLvMediaEl(){
+function _activeLvMediaEl() {
   // Whichever of <video> / <img> is currently visible drives the
   // fittedRect math — the SVG must sit over the on-screen pixels,
   // not the wrap's outer box.
@@ -91,7 +91,7 @@ function _activeLvMediaEl(){
   return null;
 }
 
-function _positionLvOverlay(svg){
+function _positionLvOverlay(svg) {
   const wrap = byId('liveViewWrap');
   const mediaEl = _activeLvMediaEl();
   if (!wrap || !mediaEl || !svg) return;
@@ -99,18 +99,18 @@ function _positionLvOverlay(svg){
   const mBox = mediaEl.getBoundingClientRect();
   if (wrapBox.width <= 0 || mBox.width <= 0) return;
   const fit = fittedRect(mediaEl);
-  const dx = (mBox.left - wrapBox.left) + fit.x;
-  const dy = (mBox.top  - wrapBox.top)  + fit.y;
+  const dx = mBox.left - wrapBox.left + fit.x;
+  const dy = mBox.top - wrapBox.top + fit.y;
   svg.style.left = `${dx}px`;
-  svg.style.top  = `${dy}px`;
-  svg.style.width  = `${fit.w}px`;
+  svg.style.top = `${dy}px`;
+  svg.style.width = `${fit.w}px`;
   svg.style.height = `${fit.h}px`;
-  svg.style.right  = 'auto';
+  svg.style.right = 'auto';
   svg.style.bottom = 'auto';
-  svg.style.inset  = 'auto';
+  svg.style.inset = 'auto';
 }
 
-function _renderLvBboxOverlay(data){
+function _renderLvBboxOverlay(data) {
   const svg = _ensureLvBboxOverlay();
   if (!svg) return;
   _positionLvOverlay(svg);
@@ -120,22 +120,28 @@ function _renderLvBboxOverlay(data){
   // Only paint PASS verdicts in the regular Live modal — the user
   // wants the same picture they get in normal operation, not the
   // raw coral firehose (that's what the Simulieren mode is for).
-  const passes = dets.filter(d => d.verdict === 'pass');
-  svg.innerHTML = passes.map(d => {
-    const c = colors[d.label] || '#cbd5e1';
-    const [x, y, w, h] = d.bbox;
-    const pct = Math.round((d.score || 0) * 100);
-    const label = `${d.label} · ${pct}%`;
-    return `<g>
+  const passes = dets.filter((d) => d.verdict === 'pass');
+  svg.innerHTML = passes
+    .map((d) => {
+      const c = colors[d.label] || '#cbd5e1';
+      const [x, y, w, h] = d.bbox;
+      const pct = Math.round((d.score || 0) * 100);
+      const label = `${d.label} · ${pct}%`;
+      return `<g>
       <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${c}" stroke-width="3" vector-effect="non-scaling-stroke"/>
       <text x="${x + 4}" y="${y + 18}" fill="${c}" font-size="14" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${label}</text>
     </g>`;
-  }).join('');
+    })
+    .join('');
 }
 
-async function _lvDetectTick(){
+async function _lvDetectTick() {
   if (!_liveViewCamId) return;
-  try { _lvDetectAbort?.abort(); } catch { /* ignore */ }
+  try {
+    _lvDetectAbort?.abort();
+  } catch {
+    /* ignore */
+  }
   _lvDetectAbort = new AbortController();
   const start = performance.now();
   try {
@@ -147,8 +153,12 @@ async function _lvDetectTick(){
     );
     if (!_liveViewCamId) return;
     let data = null;
-    try { data = await r.json(); } catch { /* keep null */ }
-    if (data && data.ok){
+    try {
+      data = await r.json();
+    } catch {
+      /* keep null */
+    }
+    if (data && data.ok) {
       _renderLvBboxOverlay(data);
     }
   } catch (e) {
@@ -163,17 +173,24 @@ async function _lvDetectTick(){
   _lvDetectTimer = setTimeout(_lvDetectTick, delay);
 }
 
-function _startLvDetectPolling(){
+function _startLvDetectPolling() {
   _stopLvDetectPolling();
   // Kick the first tick immediately so the bbox layer paints within
   // the first detection cycle rather than waiting a full second.
   _lvDetectTimer = setTimeout(_lvDetectTick, 250);
 }
 
-function _stopLvDetectPolling(){
-  try { _lvDetectAbort?.abort(); } catch { /* ignore */ }
+function _stopLvDetectPolling() {
+  try {
+    _lvDetectAbort?.abort();
+  } catch {
+    /* ignore */
+  }
   _lvDetectAbort = null;
-  if (_lvDetectTimer){ clearTimeout(_lvDetectTimer); _lvDetectTimer = null; }
+  if (_lvDetectTimer) {
+    clearTimeout(_lvDetectTimer);
+    _lvDetectTimer = null;
+  }
   const svg = byId('liveViewBboxOverlay');
   if (svg) svg.remove();
 }
@@ -182,21 +199,28 @@ function _stopLvDetectPolling(){
 // two media elements. Tears down any previous HLS instance first
 // so re-opening the modal on a different camera doesn't leak the
 // old session.
-function _attachLiveStream(){
+function _attachLiveStream() {
   if (!_liveViewCamId) return;
   const video = byId('liveViewVideo');
   const img = byId('liveViewImg');
   const hdBtn = byId('liveViewHdBtn');
   _teardownHls();
-  if (video){ video.pause(); video.removeAttribute('src'); video.load?.(); }
+  if (video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load?.();
+  }
   if (img) img.src = '';
   // Try HLS first (hls.js → native iOS). Fatal hls.js errors flip
   // the modal to the MJPEG path; non-fatal errors recover internally.
-  if (video){
+  if (video) {
     _hlsHandle = tryAttachHls(_liveViewCamId, video, {
-      onFatalError: () => { _teardownHls(); _attachMjpegFallback(); },
+      onFatalError: () => {
+        _teardownHls();
+        _attachMjpegFallback();
+      },
     });
-    if (_hlsHandle){
+    if (_hlsHandle) {
       video.style.display = 'block';
       if (img) img.style.display = 'none';
       _liveViewUsingHls = true;
@@ -210,26 +234,30 @@ function _attachLiveStream(){
   _attachMjpegFallback();
 }
 
-function _attachMjpegFallback(){
+function _attachMjpegFallback() {
   _liveViewUsingHls = false;
   const video = byId('liveViewVideo');
   const img = byId('liveViewImg');
   const hdBtn = byId('liveViewHdBtn');
-  if (video){ video.style.display = 'none'; }
-  if (img){ img.style.display = 'block'; }
+  if (video) {
+    video.style.display = 'none';
+  }
+  if (img) {
+    img.style.display = 'block';
+  }
   if (hdBtn) hdBtn.style.display = '';
   _setLiveViewStream(window._liveViewHd);
 }
 
-function _teardownHls(){
-  if (_hlsHandle){
+function _teardownHls() {
+  if (_hlsHandle) {
     _hlsHandle.detach();
     _hlsHandle = null;
   }
   _liveViewUsingHls = false;
 }
 
-export function _setLiveViewStream(hd){
+export function _setLiveViewStream(hd) {
   // MJPEG-fallback HD/SD switch. No-op when HLS owns the modal —
   // the HD button is hidden in that case, but a stray external
   // window._setLiveViewStream call still shouldn't bleed past the
@@ -239,28 +267,33 @@ export function _setLiveViewStream(hd){
   const img = byId('liveViewImg');
   if (!img || !_liveViewCamId) return;
   img.src = ''; // disconnect current stream first
-  const url = hd ? `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream_hd.mjpg`
-                 : `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream.mjpg`;
+  const url = hd
+    ? `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream_hd.mjpg`
+    : `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream.mjpg`;
   img.src = url;
   if (hd) _hdCards.add(_liveViewCamId);
   else _hdCards.delete(_liveViewCamId);
-  const cardBadge = document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-hd-badge`);
+  const cardBadge = document.querySelector(
+    `.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-hd-badge`,
+  );
   if (cardBadge) cardBadge.classList.toggle('active', hd);
-  const cardImg = document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-img`);
-  if (cardImg){
-    if (hd && cardImg.dataset.hdMode !== '1'){
+  const cardImg = document.querySelector(
+    `.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"] .cv-img`,
+  );
+  if (cardImg) {
+    if (hd && cardImg.dataset.hdMode !== '1') {
       cardImg.dataset.hdMode = '1';
       cardImg.src = `/api/camera/${encodeURIComponent(_liveViewCamId)}/stream_hd.mjpg`;
-    } else if (!hd && cardImg.dataset.hdMode === '1'){
+    } else if (!hd && cardImg.dataset.hdMode === '1') {
       cardImg.dataset.hdMode = '0';
       cardImg.src = `/api/camera/${encodeURIComponent(_liveViewCamId)}/snapshot.jpg?t=${Date.now()}`;
     }
   }
   const hdBtn = byId('liveViewHdBtn');
-  if (hdBtn){
+  if (hdBtn) {
     hdBtn.textContent = 'HD';
     hdBtn.style.border = 'none';
-    if (hd){
+    if (hd) {
       hdBtn.style.background = 'rgba(255,255,255,0.85)';
       hdBtn.style.color = '#0a0e1a';
       hdBtn.style.fontWeight = '800';
@@ -272,7 +305,7 @@ export function _setLiveViewStream(hd){
   }
 }
 
-export function closeLiveView(){
+export function closeLiveView() {
   const modal = byId('liveViewModal');
   if (!modal) return;
   // jt719 — revert any active HD session for this camera when the
@@ -280,25 +313,27 @@ export function closeLiveView(){
   // flip the HD button via the canonical toggleCardHd so the
   // _hdCards set, the tile's data attr, and the badge visual stay
   // in lockstep. Silent — the badge just de-activates.
-  if (_liveViewCamId && _hdCards.has(_liveViewCamId)){
+  if (_liveViewCamId && _hdCards.has(_liveViewCamId)) {
     const card = document.querySelector(`.cv-card[data-camid="${CSS.escape(_liveViewCamId)}"]`);
     const hdBtn = card?.querySelector('.cv-hd-badge');
-    if (hdBtn && typeof window.toggleCardHd === 'function'){
+    if (hdBtn && typeof window.toggleCardHd === 'function') {
       window.toggleCardHd(_liveViewCamId, hdBtn);
     }
   }
   _stopLvDetectPolling();
   _teardownHls();
   const video = byId('liveViewVideo');
-  if (video){
+  if (video) {
     video.pause();
     video.removeAttribute('src');
     video.load?.();
   }
   const img = byId('liveViewImg');
   if (img) img.src = ''; // disconnect MJPEG stream → remove_viewer
-  if (document.fullscreenElement || document.webkitFullscreenElement){
-    (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document).catch(() => {});
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen || function () {})
+      .call(document)
+      .catch(() => {});
   }
   const wrap = byId('liveViewWrap');
   if (wrap) wrap.classList.remove('fake-fullscreen');
@@ -327,17 +362,17 @@ export function closeLiveView(){
 // The 1 Hz bbox detect polling is intentionally skipped here —
 // it would render to an invisible SVG and waste detector cycles
 // while the native iOS player occupies the screen.
-function _setLoadingText(text){
+function _setLoadingText(text) {
   const t = byId('liveViewLoadingOverlay')?.querySelector('.lv-loading-text');
   if (t) t.textContent = text;
 }
 
-function _iosLoadingFail(){
+function _iosLoadingFail() {
   _setLoadingText('~/ Stream nicht verfügbar');
   setTimeout(closeLiveView, 1500);
 }
 
-export function openLiveViewIosNative(camId){
+export function openLiveViewIosNative(camId) {
   const overlay = byId('liveViewLoadingOverlay');
   const video = byId('liveViewVideo');
   if (!video || typeof video.webkitEnterFullscreen !== 'function') return false;
@@ -348,7 +383,7 @@ export function openLiveViewIosNative(camId){
   // Lock body scroll and show only the loading overlay. The live
   // modal stays .hidden — never revealed on the iOS path.
   document.body.style.overflow = 'hidden';
-  if (overlay){
+  if (overlay) {
     _setLoadingText('~/ Verbinde …');
     overlay.classList.remove('hidden');
   }
@@ -362,9 +397,12 @@ export function openLiveViewIosNative(camId){
   video.load?.();
 
   _hlsHandle = tryAttachHls(camId, video, {
-    onFatalError: () => { _teardownHls(); _iosLoadingFail(); },
+    onFatalError: () => {
+      _teardownHls();
+      _iosLoadingFail();
+    },
   });
-  if (!_hlsHandle){
+  if (!_hlsHandle) {
     _iosLoadingFail();
     return false;
   }
@@ -373,11 +411,17 @@ export function openLiveViewIosNative(camId){
   const enter = () => {
     if (_liveViewCamId !== camId) return; // teardown raced metadata
     if (overlay) overlay.classList.add('hidden');
-    try { video.webkitEnterFullscreen(); } catch { /* ignore */ }
+    try {
+      video.webkitEnterFullscreen();
+    } catch {
+      /* ignore */
+    }
   };
-  const onEnd = () => { closeLiveView(); };
+  const onEnd = () => {
+    closeLiveView();
+  };
   const onPresChange = () => {
-    if (video.webkitPresentationMode === 'inline'){
+    if (video.webkitPresentationMode === 'inline') {
       video.removeEventListener('webkitpresentationmodechanged', onPresChange);
       closeLiveView();
     }
@@ -385,7 +429,7 @@ export function openLiveViewIosNative(camId){
   video.addEventListener('webkitendfullscreen', onEnd, { once: true });
   video.addEventListener('webkitpresentationmodechanged', onPresChange);
 
-  if (video.readyState >= 1){
+  if (video.readyState >= 1) {
     enter();
   } else {
     video.addEventListener('loadedmetadata', enter, { once: true });

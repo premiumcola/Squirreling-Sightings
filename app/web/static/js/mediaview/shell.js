@@ -11,7 +11,7 @@
 // open/close flow; the shell function below is a placeholder so the
 // rest of the tree can reference it without resolution errors.
 
-export function mountMediaView(/* config */){
+export function mountMediaView(/* config */) {
   // task #3: build the host node, attach the structural pieces, wire
   // lifecycle (resize, dismiss, keyboard) and return a teardown handle.
   return { teardown: () => {} };

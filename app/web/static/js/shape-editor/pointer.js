@@ -13,16 +13,20 @@ import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import {
-  _hitVertex, _hitMidpoint, _isClosingPoint, _findPolygonAt, _polyPoints,
-  _SHAPE_HIT_PX, canvasPoint,
+  _hitVertex,
+  _hitMidpoint,
+  _isClosingPoint,
+  _findPolygonAt,
+  _polyPoints,
+  _SHAPE_HIT_PX,
+  canvasPoint,
 } from './geometry.js';
 import { drawShapes } from './canvas.js';
 import { saveShapesIntoForm, _nextPolyName } from './persistence.js';
 import { _renderShapeList, _updateShapeDrawingBar } from './ui.js';
 import { bindShapeModeToggle } from './mode-toggle.js';
 
-
-function _commitInProgressPolygon(){
+function _commitInProgressPolygon() {
   if (shapeState.points.length < 3) return false;
   // pn834 — stamp the polygon with the canvas dimensions it was drawn
   // in. Frontend overlay renderer (zone-layer.js) prefers these over
@@ -32,11 +36,11 @@ function _commitInProgressPolygon(){
   // source_w/h and the renderer falls back to the media element's
   // native dimensions — re-edit a polygon to upgrade it.
   const canvas = byId('maskCanvas');
-  const sourceW = (canvas && canvas.width)  || 1280;
+  const sourceW = (canvas && canvas.width) || 1280;
   const sourceH = (canvas && canvas.height) || 720;
   const poly = {
     points: [...shapeState.points],
-    label:  _nextPolyName(shapeState.mode),
+    label: _nextPolyName(shapeState.mode),
     source_w: sourceW,
     source_h: sourceH,
   };
@@ -51,8 +55,7 @@ function _commitInProgressPolygon(){
   return true;
 }
 
-
-(function _initShapeEditor(){
+(function _initShapeEditor() {
   const canvas = byId('maskCanvas');
   if (!canvas) return;
   // Wire the zone/mask segmented toggle that lives above the canvas
@@ -64,7 +67,7 @@ function _commitInProgressPolygon(){
   // (segIdx-based bend-handle drag, added in C3). Vertices win over
   // midpoints when both could be hit (vertices render on top).
   let drag = null;
-  let downPt = null;        // pointer at mousedown — distinguishes click vs drag
+  let downPt = null; // pointer at mousedown — distinguishes click vs drag
 
   const _drawingInProgress = () => Array.isArray(shapeState.points) && shapeState.points.length > 0;
 
@@ -73,16 +76,16 @@ function _commitInProgressPolygon(){
     if (evt.cancelable) evt.preventDefault();
     const pt = canvasPoint(evt);
     const hit = _hitVertex(pt);
-    if (hit){
+    if (hit) {
       drag = { ...hit, mode: 'vertex' };
       downPt = pt;
       return;
     }
     // Midpoint handles only respond while the user isn't placing a new
     // polygon — during drawing, every click drops the next vertex.
-    if (!_drawingInProgress()){
+    if (!_drawingInProgress()) {
       const mid = _hitMidpoint(pt);
-      if (mid){
+      if (mid) {
         drag = { ...mid, mode: 'midpoint' };
         downPt = pt;
         return;
@@ -99,14 +102,14 @@ function _commitInProgressPolygon(){
   const onMove = (evt) => {
     if (!shapeState.camera) return;
     const pt = canvasPoint(evt);
-    if (drag){
+    if (drag) {
       if (evt.cancelable) evt.preventDefault();
       const arr = drag.kind === 'zone' ? shapeState.zones : shapeState.masks;
       const poly = arr[drag.polyIdx];
-      if (drag.mode === 'midpoint'){
+      if (drag.mode === 'midpoint') {
         const pts = _polyPoints(poly);
         if (!pts.length) return;
-        if (!Array.isArray(poly.curves)){
+        if (!Array.isArray(poly.curves)) {
           poly.curves = new Array(pts.length).fill(null);
         }
         poly.curves[drag.segIdx] = { x: Math.round(pt.x), y: Math.round(pt.y) };
@@ -126,10 +129,14 @@ function _commitInProgressPolygon(){
     const hover = _hitVertex(pt);
     const mid = !hover && !_drawingInProgress() ? _hitMidpoint(pt) : null;
     const closing = !hover && !mid && _isClosingPoint(pt);
-    const sig = hover ? `${hover.kind}:${hover.polyIdx}:${hover.ptIdx}`
-      : mid ? `m:${mid.kind}:${mid.polyIdx}:${mid.segIdx}`
-      : (closing ? 'close' : '');
-    if (sig !== shapeState.hoverSig){
+    const sig = hover
+      ? `${hover.kind}:${hover.polyIdx}:${hover.ptIdx}`
+      : mid
+        ? `m:${mid.kind}:${mid.polyIdx}:${mid.segIdx}`
+        : closing
+          ? 'close'
+          : '';
+    if (sig !== shapeState.hoverSig) {
       shapeState.hoverVertex = hover;
       shapeState.hoverClosing = closing;
       shapeState.hoverSig = sig;
@@ -137,9 +144,9 @@ function _commitInProgressPolygon(){
       // 'move'; straight-segment midpoint uses 'grab' to hint "drag to
       // bend". Vertex hover keeps 'move'.
       let cursor;
-      if (hover){
+      if (hover) {
         cursor = 'move';
-      } else if (mid){
+      } else if (mid) {
         const arr = mid.kind === 'zone' ? shapeState.zones : shapeState.masks;
         const poly = arr[mid.polyIdx];
         const isCurved = poly && Array.isArray(poly.curves) && poly.curves[mid.segIdx];
@@ -153,8 +160,12 @@ function _commitInProgressPolygon(){
   };
 
   const onUp = (evt) => {
-    if (!shapeState.camera){ drag = null; downPt = null; return; }
-    if (drag){
+    if (!shapeState.camera) {
+      drag = null;
+      downPt = null;
+      return;
+    }
+    if (drag) {
       saveShapesIntoForm();
       drag = null;
       downPt = null;
@@ -163,11 +174,12 @@ function _commitInProgressPolygon(){
     if (!downPt) return;
     const pt = canvasPoint(evt);
     // Treat as a click only when the pointer didn't move significantly.
-    const dx = pt.x - downPt.x, dy = pt.y - downPt.y;
+    const dx = pt.x - downPt.x,
+      dy = pt.y - downPt.y;
     downPt = null;
-    if (dx * dx + dy * dy > 9) return;  // moved more than 3 px → ignore
+    if (dx * dx + dy * dy > 9) return; // moved more than 3 px → ignore
     if (evt.cancelable) evt.preventDefault();
-    if (_isClosingPoint(pt)){
+    if (_isClosingPoint(pt)) {
       _commitInProgressPolygon();
       shapeState.hoverClosing = false;
       canvas.style.cursor = 'crosshair';
@@ -178,9 +190,9 @@ function _commitInProgressPolygon(){
     // points are only added when nothing was selected and the click
     // missed every polygon — that preserves the legacy "click empty
     // area to draw" UX.
-    if (shapeState.points.length === 0){
+    if (shapeState.points.length === 0) {
       const hit = _findPolygonAt(pt);
-      if (hit){
+      if (hit) {
         const key = `${hit.kind}:${hit.idx}`;
         shapeState.pulse = key;
         shapeState.expandedRows.add(key);
@@ -190,7 +202,7 @@ function _commitInProgressPolygon(){
         if (row && row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         return;
       }
-      if (shapeState.pulse){
+      if (shapeState.pulse) {
         shapeState.pulse = null;
         drawShapes();
         _renderShapeList();
@@ -216,7 +228,7 @@ function _commitInProgressPolygon(){
     const poly = arr[hit.polyIdx];
     if (!poly || !Array.isArray(poly.curves) || !poly.curves[hit.segIdx]) return;
     poly.curves[hit.segIdx] = null;
-    if (poly.curves.every(c => c == null)) delete poly.curves;
+    if (poly.curves.every((c) => c == null)) delete poly.curves;
     saveShapesIntoForm();
     drawShapes();
     if (evt.cancelable) evt.preventDefault();
@@ -235,10 +247,10 @@ function _commitInProgressPolygon(){
   const onTouchStart = (evt) => {
     const pt = canvasPoint(evt);
     const now = Date.now();
-    if (_lastTapPt && (now - _lastTapAt) < 350){
+    if (_lastTapPt && now - _lastTapAt < 350) {
       const dx = pt.x - _lastTapPt.x;
       const dy = pt.y - _lastTapPt.y;
-      if (dx * dx + dy * dy < _SHAPE_HIT_PX * _SHAPE_HIT_PX){
+      if (dx * dx + dy * dy < _SHAPE_HIT_PX * _SHAPE_HIT_PX) {
         _lastTapAt = 0;
         _lastTapPt = null;
         onDblClick(evt);
@@ -252,8 +264,8 @@ function _commitInProgressPolygon(){
 
   canvas.addEventListener('mousedown', onDown);
   canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseup',   onUp);
-  canvas.addEventListener('dblclick',  onDblClick);
+  canvas.addEventListener('mouseup', onUp);
+  canvas.addEventListener('dblclick', onDblClick);
   canvas.addEventListener('mouseleave', () => {
     drag = null;
     downPt = null;
@@ -264,9 +276,12 @@ function _commitInProgressPolygon(){
     drawShapes();
   });
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-  canvas.addEventListener('touchmove',  onMove, { passive: false });
-  canvas.addEventListener('touchend',   onUp,   { passive: false });
-  canvas.addEventListener('touchcancel', () => { drag = null; downPt = null; });
+  canvas.addEventListener('touchmove', onMove, { passive: false });
+  canvas.addEventListener('touchend', onUp, { passive: false });
+  canvas.addEventListener('touchcancel', () => {
+    drag = null;
+    downPt = null;
+  });
 
   byId('undoShapeBtn')?.addEventListener('click', () => {
     shapeState.points.pop();
@@ -275,7 +290,7 @@ function _commitInProgressPolygon(){
   });
 
   byId('saveShapeBtn')?.addEventListener('click', () => {
-    if (shapeState.points.length < 3){
+    if (shapeState.points.length < 3) {
       showToast('Mindestens 3 Punkte.', 'warn');
       return;
     }
@@ -283,7 +298,7 @@ function _commitInProgressPolygon(){
   });
 
   byId('clearShapesBtn')?.addEventListener('click', async () => {
-    if (!await showConfirm('Alle Zonen und Masken löschen?')) return;
+    if (!(await showConfirm('Alle Zonen und Masken löschen?'))) return;
     shapeState.zones = [];
     shapeState.masks = [];
     shapeState.points = [];

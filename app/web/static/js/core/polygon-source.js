@@ -23,7 +23,7 @@
 
 /** Parse a "WxH" / "W×H" string into {w, h}. Returns null when the
  *  string is missing or malformed. */
-function _parseRes(str){
+function _parseRes(str) {
   if (!str) return null;
   const m = String(str).match(/(\d+)\s*[x×]\s*(\d+)/);
   if (!m) return null;
@@ -40,7 +40,7 @@ function _parseRes(str){
  * default (the shape-editor's hard-coded fallback when no snapshot
  * loads — same constant in `shape-editor/canvas.js#scaleForCanvas`).
  */
-export function resolveCamSourceDims(cam){
+export function resolveCamSourceDims(cam) {
   const fromPreview = _parseRes(cam && cam.preview_resolution);
   if (fromPreview) return fromPreview;
   const fromDetect = _parseRes(cam && cam.detection_resolution);
@@ -54,9 +54,8 @@ export function resolveCamSourceDims(cam){
  * stamped at save time and are gospel. Anything missing falls back
  * to the camera's authoring resolution.
  */
-export function resolvePolygonSourceDims(polygon, cam){
-  if (polygon && typeof polygon === 'object'
-      && polygon.source_w > 0 && polygon.source_h > 0){
+export function resolvePolygonSourceDims(polygon, cam) {
+  if (polygon && typeof polygon === 'object' && polygon.source_w > 0 && polygon.source_h > 0) {
     return { w: polygon.source_w, h: polygon.source_h };
   }
   return resolveCamSourceDims(cam);
@@ -70,10 +69,10 @@ export function resolvePolygonSourceDims(polygon, cam){
  * explicit source_w / source_h so downstream renderers never need
  * to second-guess the reference frame.
  */
-export function normalizePolygon(polygon, cam){
+export function normalizePolygon(polygon, cam) {
   if (!polygon) return null;
   const dims = resolvePolygonSourceDims(polygon, cam);
-  if (Array.isArray(polygon)){
+  if (Array.isArray(polygon)) {
     return { points: polygon, source_w: dims.w, source_h: dims.h };
   }
   const out = { ...polygon };

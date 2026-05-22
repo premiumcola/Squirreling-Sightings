@@ -11,16 +11,16 @@
 // carry the same hex per key.
 
 export const CLASS_COLORS = {
-  person:    '#facc15',
-  cat:       '#fb923c',
-  dog:       '#a855f7',
-  bird:      '#62d26f',
-  squirrel:  '#c8651a',
-  fox:       '#ff7a1a',
-  hedgehog:  '#a67c52',
-  car:       '#00c2ff',
-  motion:    '#cbd5e1',
-  alle:      '#8888aa',
+  person: '#facc15',
+  cat: '#fb923c',
+  dog: '#a855f7',
+  bird: '#62d26f',
+  squirrel: '#c8651a',
+  fox: '#ff7a1a',
+  hedgehog: '#a67c52',
+  car: '#00c2ff',
+  motion: '#cbd5e1',
+  alle: '#8888aa',
 };
 
 /**
@@ -28,7 +28,7 @@ export const CLASS_COLORS = {
  * the neutral chrome grey when the class isn't in the canonical set
  * — caller can override with an explicit ``fallback`` arg.
  */
-export function classColor(key, fallback = '#8888aa'){
+export function classColor(key, fallback = '#8888aa') {
   if (!key) return fallback;
   return CLASS_COLORS[String(key).toLowerCase()] || fallback;
 }

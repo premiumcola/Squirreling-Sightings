@@ -1,77 +1,71 @@
-
 <!doctype html>
 <html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Squirreling · Sightings" />
-  <meta name="theme-color" content="#F0E5D0" />
-  <meta name="format-detection" content="telephone=no" />
-  <link rel="manifest" href="/static/manifest.json" />
-  <title>Squirreling · Sightings</title>
-  <!-- Browser-tab icon — PNGs preferred where supported, emoji as ultimate fallback. -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐿️</text></svg>">
-  <!-- Apple-touch-icon family — homescreen tile per device class. -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-180.png" />
-  <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/icon-167.png" />
-  <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/icon-152.png" />
-  <link rel="apple-touch-icon" sizes="120x120" href="/static/icons/icon-120.png" />
-  <link rel="apple-touch-icon-precomposed" href="/static/icons/icon-180.png" />
-  <!-- iOS standalone splash screens — generated per device-pixel-ratio. -->
-  {% include 'partials/splash_links.html' %}
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-        crossorigin="anonymous" />
-  <script defer
-          src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-          crossorigin="anonymous"></script>
-  <!-- HLS playback library. Loaded eagerly (defer = parsed after HTML)
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Squirreling · Sightings" />
+    <meta name="theme-color" content="#F0E5D0" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/static/manifest.json" />
+    <title>Squirreling · Sightings</title>
+    <!-- Browser-tab icon — PNGs preferred where supported, emoji as ultimate fallback. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐿️</text></svg>"
+    />
+    <!-- Apple-touch-icon family — homescreen tile per device class. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/icon-152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/static/icons/icon-120.png" />
+    <link rel="apple-touch-icon-precomposed" href="/static/icons/icon-180.png" />
+    <!-- iOS standalone splash screens — generated per device-pixel-ratio. -->
+    {% include 'partials/splash_links.html' %}
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="anonymous"
+    />
+    <script
+      defer
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin="anonymous"
+    ></script>
+    <!-- HLS playback library. Loaded eagerly (defer = parsed after HTML)
        so Hls.isSupported() in chrome/live-view.js can synchronously
        check support on first openLiveView. iOS Safari plays HLS
        natively via <video src=…m3u8> and ignores this script. -->
-  <script defer
-          src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"
-          crossorigin="anonymous"></script>
-  <link rel="stylesheet" href="/static/app.css?v={{ static_v('app.css') }}" />
-</head>
-<body>
-  {% include 'partials/icons.html' %}
-  <div id="sidebarOverlay" class="sidebar-overlay"></div>
-  {% include 'partials/wizard.html' %}
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"
+      crossorigin="anonymous"
+    ></script>
+    <link rel="stylesheet" href="/static/app.css?v={{ static_v('app.css') }}" />
+  </head>
+  <body>
+    {% include 'partials/icons.html' %}
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    {% include 'partials/wizard.html' %}
 
-  <div class="shell">
-    {% include 'partials/sidenav.html' %}
-    <main class="main">
-      {% include 'partials/hero.html' %}
+    <div class="shell">
+      {% include 'partials/sidenav.html' %}
+      <main class="main">
+        {% include 'partials/hero.html' %} {% include 'partials/dashboard.html' %} {% include
+        'partials/cam_edit.html' %} {% include 'partials/statistik.html' %} {% include
+        'partials/mediathek.html' %} {% include 'partials/sichtungen.html' %} {% include
+        'partials/weather.html' %} {% include 'partials/settings.html' %} {% include
+        'partials/logs.html' %}
+      </main>
+    </div>
 
-      {% include 'partials/dashboard.html' %}
-
-      {% include 'partials/cam_edit.html' %}
-
-      {% include 'partials/statistik.html' %}
-
-      {% include 'partials/mediathek.html' %}
-
-      {% include 'partials/sichtungen.html' %}
-
-      {% include 'partials/weather.html' %}
-
-      {% include 'partials/settings.html' %}
-
-      {% include 'partials/logs.html' %}
-    </main>
-  </div>
-
-  {% include 'partials/modals.html' %}
-
-  {% include 'partials/mobile_dock.html' %}
-  <script type="module" src="/static/js/main.js?v={{ static_v('js/main.js') }}"></script>
-</body>
+    {% include 'partials/modals.html' %} {% include 'partials/mobile_dock.html' %}
+    <script type="module" src="/static/js/main.js?v={{ static_v('js/main.js') }}"></script>
+  </body>
 </html>

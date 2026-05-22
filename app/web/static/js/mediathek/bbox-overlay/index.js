@@ -25,10 +25,7 @@ import { _state } from './_state.js';
 import { lbInvalidateTracks, lbLoadTracksForItem } from './fetcher.js';
 import { _lbDrawDetections, setBboxOverlayVisibility } from './renderer.js';
 import { _renderConfidenceMeter } from './confidence-meter.js';
-import {
-  _refreshPlayButtonGlyph,
-  _updatePlayPct,
-} from './time-axis.js';
+import { _refreshPlayButtonGlyph, _updatePlayPct } from './time-axis.js';
 import { _startRafLoop, _stopRafLoop } from './raf.js';
 import { lbClearTrackTimeline, lbRenderTrackTimeline } from './timeline-panel.js';
 import { lbRenderSettingsPanel } from './settings-panel.js';
@@ -53,11 +50,11 @@ export {
 // behaviour is bit-identical (the listeners attach as soon as the
 // module is imported by main.js's `import` graph, before any user
 // interaction).
-(function _initLbDetectionsHooks(){
+(function _initLbDetectionsHooks() {
   const imgEl = byId('lightboxImg');
   const videoEl = byId('lightboxVideo');
   if (imgEl) imgEl.addEventListener('load', () => _lbDrawDetections());
-  if (videoEl){
+  if (videoEl) {
     videoEl.addEventListener('loadedmetadata', () => {
       // The duration just became known — re-render the timeline so
       // bars rescale from the (possibly approximate) maxT estimate to
@@ -69,18 +66,46 @@ export {
       _updatePlayPct();
       _renderConfidenceMeter();
     });
-    videoEl.addEventListener('play',     () => { _startRafLoop(); _lbDrawDetections(); _refreshPlayButtonGlyph(); });
-    videoEl.addEventListener('playing',  () => { _startRafLoop(); _lbDrawDetections(); _refreshPlayButtonGlyph(); });
-    videoEl.addEventListener('pause',    () => { _stopRafLoop(); _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); _refreshPlayButtonGlyph(); });
-    videoEl.addEventListener('ended',    () => { _stopRafLoop(); _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); _refreshPlayButtonGlyph(); });
-    videoEl.addEventListener('seeked',   () => { _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); });
+    videoEl.addEventListener('play', () => {
+      _startRafLoop();
+      _lbDrawDetections();
+      _refreshPlayButtonGlyph();
+    });
+    videoEl.addEventListener('playing', () => {
+      _startRafLoop();
+      _lbDrawDetections();
+      _refreshPlayButtonGlyph();
+    });
+    videoEl.addEventListener('pause', () => {
+      _stopRafLoop();
+      _lbDrawDetections();
+      _updatePlayPct();
+      _renderConfidenceMeter();
+      _refreshPlayButtonGlyph();
+    });
+    videoEl.addEventListener('ended', () => {
+      _stopRafLoop();
+      _lbDrawDetections();
+      _updatePlayPct();
+      _renderConfidenceMeter();
+      _refreshPlayButtonGlyph();
+    });
+    videoEl.addEventListener('seeked', () => {
+      _lbDrawDetections();
+      _updatePlayPct();
+      _renderConfidenceMeter();
+    });
     // `seeking` fires on every currentTime write — including while the
     // user is dragging the scrubber, before the new frame's decoded
     // pixels are ready. Redrawing here keeps the bbox following the
     // scrubber thumb smoothly during scrub instead of waiting for the
     // post-decode `seeked` event (which can lag ~100 ms per tick on
     // a high-resolution clip and produces a stuttering box trail).
-    videoEl.addEventListener('seeking',  () => { _lbDrawDetections(); _updatePlayPct(); _renderConfidenceMeter(); });
+    videoEl.addEventListener('seeking', () => {
+      _lbDrawDetections();
+      _updatePlayPct();
+      _renderConfidenceMeter();
+    });
     videoEl.addEventListener('timeupdate', () => {
       // Belt + braces — if the rAF loop is throttled (background tab,
       // power-save), `timeupdate` (~4 Hz native) still keeps the bar
@@ -94,11 +119,14 @@ export {
   const _scheduleRedraw = () => {
     if (!byId('lightboxModal') || byId('lightboxModal').classList.contains('hidden')) return;
     cancelAnimationFrame(_raf);
-    _raf = requestAnimationFrame(() => { _lbDrawDetections(); _updatePlayPct(); });
+    _raf = requestAnimationFrame(() => {
+      _lbDrawDetections();
+      _updatePlayPct();
+    });
   };
   window.addEventListener('resize', _scheduleRedraw);
   const _wrap = byId('lightboxMediaWrap');
-  if (_wrap && 'ResizeObserver' in window){
+  if (_wrap && 'ResizeObserver' in window) {
     const obs = new ResizeObserver(_scheduleRedraw);
     obs.observe(_wrap);
   }

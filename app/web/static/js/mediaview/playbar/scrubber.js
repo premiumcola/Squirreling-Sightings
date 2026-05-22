@@ -6,4 +6,4 @@
 // SKELETON — task #4 fills this in (lifts the relevant bits out of
 // bbox-overlay/time-axis.js).
 
-export function renderScrubber(/* host */){}
+export function renderScrubber(/* host */) {}

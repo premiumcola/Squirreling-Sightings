@@ -25,7 +25,7 @@ import { IS_IOS } from '../core/state.js';
 
 const SESSION_FLAG = 'tamspy.launchSplashShown';
 
-function _shouldRun(){
+function _shouldRun() {
   // H1 · the zoom-out reveal exists primarily because iOS Safari's
   // native apple-touch-startup-image splash hands off to a black
   // page-load gap that reads as "did the app crash?"; the animation
@@ -45,8 +45,10 @@ function _shouldRun(){
   // is one continuous motion. Browser-tab loads (no native splash)
   // keep the in-app animation; that's why this only short-circuits
   // for standalone display-mode, not unconditionally.
-  if (window.matchMedia?.('(display-mode: standalone)')?.matches ||
-      window.navigator.standalone === true /* iOS Safari legacy */) {
+  if (
+    window.matchMedia?.('(display-mode: standalone)')?.matches ||
+    window.navigator.standalone === true /* iOS Safari legacy */
+  ) {
     return false;
   }
   // Soft-nav suppression: once per session.
@@ -68,11 +70,13 @@ function _shouldRun(){
   return true;
 }
 
-function _markShown(){
-  try { sessionStorage.setItem(SESSION_FLAG, '1'); } catch {}
+function _markShown() {
+  try {
+    sessionStorage.setItem(SESSION_FLAG, '1');
+  } catch {}
 }
 
-function _runSplash(){
+function _runSplash() {
   if (!_shouldRun()) return;
   // Mark up-front so a fast double-load (e.g. nav-back) doesn't
   // re-trigger half-way through the animation.
@@ -147,33 +151,40 @@ function _runSplash(){
       // Hero not laid out yet — fall back to a simple shrink-and-fade
       // that doesn't need a target.
       img.animate(
-        [{ transform: 'scale(1)', opacity: 1 },
-         { transform: 'scale(0.4)', opacity: 0 }],
-        { duration: 700, easing: 'cubic-bezier(.25,.1,.25,1)', fill: 'forwards' }
+        [
+          { transform: 'scale(1)', opacity: 1 },
+          { transform: 'scale(0.4)', opacity: 0 },
+        ],
+        { duration: 700, easing: 'cubic-bezier(.25,.1,.25,1)', fill: 'forwards' },
       ).onfinish = _cleanup;
       return;
     }
 
     // Compute translate + scale that lands the splash logo exactly
     // on top of the hero logo.
-    const dx = (targetRect.left + targetRect.width / 2) - (startRect.left + startRect.width / 2);
-    const dy = (targetRect.top + targetRect.height / 2) - (startRect.top + startRect.height / 2);
+    const dx = targetRect.left + targetRect.width / 2 - (startRect.left + startRect.width / 2);
+    const dy = targetRect.top + targetRect.height / 2 - (startRect.top + startRect.height / 2);
     const scale = targetRect.width / startRect.width;
 
     // Hide the hero logo while the splash is mid-flight so we don't
     // see two logos at once near the end of the animation.
     target.style.opacity = '0';
 
-    const anim = img.animate([
-      { transform: 'translate(0,0) scale(1)', opacity: 1, borderRadius: '48px' },
-      { transform: `translate(${dx}px, ${dy}px) scale(${scale})`,
-        opacity: 1,
-        borderRadius: '8px' },
-    ], {
-      duration: 750,
-      easing: 'cubic-bezier(.25,.1,.25,1)',
-      fill: 'forwards',
-    });
+    const anim = img.animate(
+      [
+        { transform: 'translate(0,0) scale(1)', opacity: 1, borderRadius: '48px' },
+        {
+          transform: `translate(${dx}px, ${dy}px) scale(${scale})`,
+          opacity: 1,
+          borderRadius: '8px',
+        },
+      ],
+      {
+        duration: 750,
+        easing: 'cubic-bezier(.25,.1,.25,1)',
+        fill: 'forwards',
+      },
+    );
 
     anim.onfinish = () => {
       // Hand off to the in-place hero logo and tidy up.
@@ -186,7 +197,7 @@ function _runSplash(){
     };
   });
 
-  function _cleanup(){
+  function _cleanup() {
     overlay.remove();
     if (shell) {
       // Don't leave our inline transition rule lying around.

@@ -26,17 +26,19 @@
 // post-rename invalidate the map.
 export const _failedSnapshotIds = new Map();
 
-export function _resetFailedSnapshotIds(){ _failedSnapshotIds.clear(); }
+export function _resetFailedSnapshotIds() {
+  _failedSnapshotIds.clear();
+}
 
-export function _isSnapshotIdDead(camId){
+export function _isSnapshotIdDead(camId) {
   return camId ? (_failedSnapshotIds.get(camId) || 0) >= 2 : false;
 }
 
-export function _camIdFromImg(img){
+export function _camIdFromImg(img) {
   return img?.closest?.('[data-camid]')?.dataset?.camid || null;
 }
 
-export function _camImgRetry(img){
+export function _camImgRetry(img) {
   const camId = _camIdFromImg(img);
   // Two consecutive failures is the threshold for marking the id dead —
   // catches a real rename (the new img element will carry the fresh id)
@@ -50,7 +52,10 @@ export function _camImgRetry(img){
     }
   }
   const retries = parseInt(img.dataset.snapRetry || '0');
-  if (retries >= 12) { img.style.display = 'none'; return; }
+  if (retries >= 12) {
+    img.style.display = 'none';
+    return;
+  }
   img.dataset.snapRetry = retries + 1;
   // Exponential backoff: 500ms, 1s, 1.5s … capped at 3s
   const delay = Math.min(500 * (retries + 1), 3000);
@@ -67,11 +72,12 @@ export function _camImgRetry(img){
 // being locked to a single 16:9 default. Combined with the
 // `object-fit:contain` rule on .cv-img this means the full sensor
 // frame is always visible — no cropping, no squashing.
-export function _cvImgLoaded(img){
+export function _cvImgLoaded(img) {
   img.classList.add('loaded');
   const placeholder = img.previousElementSibling;
   if (placeholder) placeholder.style.display = 'none';
-  const w = img.naturalWidth, h = img.naturalHeight;
+  const w = img.naturalWidth,
+    h = img.naturalHeight;
   if (w > 0 && h > 0) {
     const frame = img.closest('.cv-frame');
     if (frame) frame.style.setProperty('--cv-aspect', `${w} / ${h}`);

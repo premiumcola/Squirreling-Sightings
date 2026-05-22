@@ -1,79 +1,208 @@
-      <section id="cameras" class="panel section" data-dock-section="dashboard">
-        <div class="section-head section-head--with-icon">
-          <span class="section-head-icon" aria-hidden="true"><svg width="24" height="24"><use href="#icon-cameras"/></svg></span>
-          <h3>Geräte</h3>
-          <button id="discoverBtn" type="button" class="btn-action action-green" style="margin-left:auto"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/><circle cx="7" cy="7" r="2" opacity=".4"/></svg> Netzwerk-Discovery</button>
-        </div>
-        <div id="tlStatusBar" class="tl-status-bar"></div>
-        <div id="cameraSettingsList" class="list"></div>
-        <div id="cameraEditWrapper" class="cam-edit-wrapper">
-          <div class="cam-edit-inner">
-          <div class="cam-edit-header">
-            <h3 id="cameraEditTitle">Kamera bearbeiten</h3>
-          </div>
-          <form id="cameraForm" class="cam-form-compact">
-            <input type="hidden" name="id" />
-            <input type="hidden" name="zones_json" />
-            <input type="hidden" name="masks_json" />
-            <input type="hidden" name="whitelist_names" />
+<section id="cameras" class="panel section" data-dock-section="dashboard">
+  <div class="section-head section-head--with-icon">
+    <span class="section-head-icon" aria-hidden="true"
+      ><svg width="24" height="24"><use href="#icon-cameras" /></svg
+    ></span>
+    <h3>Geräte</h3>
+    <button
+      id="discoverBtn"
+      type="button"
+      class="btn-action action-green"
+      style="margin-left: auto"
+    >
+      <svg
+        viewBox="0 0 16 16"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="7" cy="7" r="4.5" />
+        <line x1="10.5" y1="10.5" x2="14" y2="14" />
+        <circle cx="7" cy="7" r="2" opacity=".4" />
+      </svg>
+      Netzwerk-Discovery
+    </button>
+  </div>
+  <div id="tlStatusBar" class="tl-status-bar"></div>
+  <div id="cameraSettingsList" class="list"></div>
+  <div id="cameraEditWrapper" class="cam-edit-wrapper">
+    <div class="cam-edit-inner">
+      <div class="cam-edit-header">
+        <h3 id="cameraEditTitle">Kamera bearbeiten</h3>
+      </div>
+      <form id="cameraForm" class="cam-form-compact">
+        <input type="hidden" name="id" />
+        <input type="hidden" name="zones_json" />
+        <input type="hidden" name="masks_json" />
+        <input type="hidden" name="whitelist_names" />
 
-            <!-- Tab bar — 5 tabs: Allgemein / Verbindung / Erkennung / Alerting / Zonen -->
-            <div class="cam-tab-bar">
-              <button type="button" class="cam-tab-btn active" data-tab="cam-tab-allgemein"><svg class="cam-tab-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M13 10h4"/><path d="M13 13h4"/></svg><span>Allgemein</span></button>
-              <button type="button" class="cam-tab-btn" data-tab="cam-tab-verbindung"><svg class="cam-tab-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v6"/><path d="M15 2v6"/><rect x="7" y="8" width="10" height="6" rx="1.2"/><path d="M12 14v4a3 3 0 0 0 3 3h1"/></svg><span>Verbindung</span></button>
-              <button type="button" class="cam-tab-btn" data-tab="cam-tab-erkennung"><svg class="cam-tab-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span>Erkennung</span></button>
-              <button type="button" class="cam-tab-btn" data-tab="cam-tab-alerting"><svg class="cam-tab-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span>Alerting</span></button>
-              <button type="button" class="cam-tab-btn" data-tab="cam-tab-zonen"><svg class="cam-tab-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg><span>Zonen</span></button>
-              <!-- Connection-recovery indicator: always present, pinned to
+        <!-- Tab bar — 5 tabs: Allgemein / Verbindung / Erkennung / Alerting / Zonen -->
+        <div class="cam-tab-bar">
+          <button type="button" class="cam-tab-btn active" data-tab="cam-tab-allgemein">
+            <svg
+              class="cam-tab-ico"
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <circle cx="8" cy="11" r="2" />
+              <path d="M13 10h4" />
+              <path d="M13 13h4" /></svg
+            ><span>Allgemein</span>
+          </button>
+          <button type="button" class="cam-tab-btn" data-tab="cam-tab-verbindung">
+            <svg
+              class="cam-tab-ico"
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 2v6" />
+              <path d="M15 2v6" />
+              <rect x="7" y="8" width="10" height="6" rx="1.2" />
+              <path d="M12 14v4a3 3 0 0 0 3 3h1" /></svg
+            ><span>Verbindung</span>
+          </button>
+          <button type="button" class="cam-tab-btn" data-tab="cam-tab-erkennung">
+            <svg
+              class="cam-tab-ico"
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+              <circle cx="12" cy="12" r="3" /></svg
+            ><span>Erkennung</span>
+          </button>
+          <button type="button" class="cam-tab-btn" data-tab="cam-tab-alerting">
+            <svg
+              class="cam-tab-ico"
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg
+            ><span>Alerting</span>
+          </button>
+          <button type="button" class="cam-tab-btn" data-tab="cam-tab-zonen">
+            <svg
+              class="cam-tab-ico"
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="5" />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" /></svg
+            ><span>Zonen</span>
+          </button>
+          <!-- Connection-recovery indicator: always present, pinned to
                    the right edge so the existing horizontal-scrolling tab
                    list keeps its behaviour. Default state shares the
                    action-green token with the Netzwerk-Discovery button
                    so its purpose reads at a glance; .is-warn flips it
                    to orange and reveals the ⚠ badge. The state is
                    driven by _refreshConnectionWarn() in app.js. -->
-              <button type="button" id="camTabRecoveryBtn"
-                      class="btn-action action-green cam-tab-recovery-btn"
-                      data-action="openCamRecoveryModal"
-                      aria-label="Reconnect">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                     stroke-linejoin="round" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7"/>
-                  <polyline points="3 4 3 9 8 9"/>
-                </svg>
-                <span class="cam-tab-recovery-label">Reconnect</span>
-                <span class="cam-tab-recovery-badge" aria-hidden="true">⚠</span>
-              </button>
-            </div>
+          <button
+            type="button"
+            id="camTabRecoveryBtn"
+            class="btn-action action-green cam-tab-recovery-btn"
+            data-action="openCamRecoveryModal"
+            aria-label="Reconnect"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <polyline points="3 4 3 9 8 9" />
+            </svg>
+            <span class="cam-tab-recovery-label">Reconnect</span>
+            <span class="cam-tab-recovery-badge" aria-hidden="true">⚠</span>
+          </button>
+        </div>
 
-            <!-- O22 · panel bodies moved into partials/cam_edit/*.html.
+        <!-- O22 · panel bodies moved into partials/cam_edit/*.html.
                  Each include slot retains the wrapping .cam-tab-panel
                  div so the JS that toggles them via #cam-tab-X still
                  works unchanged. -->
-            {% include 'partials/cam_edit/allgemein.html' %}
-            {% include 'partials/cam_edit/verbindung.html' %}
-            {% include 'partials/cam_edit/erkennung.html' %}
-            {% include 'partials/cam_edit/alerting.html' %}
-            {% include 'partials/cam_edit/zonen.html' %}
+        {% include 'partials/cam_edit/allgemein.html' %} {% include
+        'partials/cam_edit/verbindung.html' %} {% include 'partials/cam_edit/erkennung.html' %} {%
+        include 'partials/cam_edit/alerting.html' %} {% include 'partials/cam_edit/zonen.html' %}
 
-            <div class="cam-form-actions">
-              <button type="button" id="deleteCameraBtn" class="cam-delete-btn">
-                <svg class="cam-delete-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                  <path d="M10 11v6"/><path d="M14 11v6"/>
-                  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
-                </svg>
-                Kamera löschen
-              </button>
-              <button class="cam-save-btn">Speichern &amp; Reload</button>
-            </div>
-          </form>
-          </div><!-- /.cam-edit-inner -->
+        <div class="cam-form-actions">
+          <button type="button" id="deleteCameraBtn" class="cam-delete-btn">
+            <svg
+              class="cam-delete-ico"
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+            </svg>
+            Kamera löschen
+          </button>
+          <button class="cam-save-btn">Speichern &amp; Reload</button>
         </div>
-      </section>
+      </form>
+    </div>
+    <!-- /.cam-edit-inner -->
+  </div>
+</section>
 
-
-      <!-- #timeline redirect anchor — JS scrolls to #statistik for backward compat -->
-      <div id="timeline" style="position:absolute;visibility:hidden;pointer-events:none"></div>
-
+<!-- #timeline redirect anchor — JS scrolls to #statistik for backward compat -->
+<div id="timeline" style="position: absolute; visibility: hidden; pointer-events: none"></div>

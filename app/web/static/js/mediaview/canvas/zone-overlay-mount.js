@@ -25,12 +25,13 @@ let _onResize = null;
 let _visibility = { showZones: true, showMasks: true };
 let _redrawFn = null;
 
-function _ensureCanvas(wrap){
+function _ensureCanvas(wrap) {
   let c = document.getElementById(_ZONE_CANVAS_ID);
   if (c) return c;
   c = document.createElement('canvas');
   c.id = _ZONE_CANVAS_ID;
-  c.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
+  c.style.cssText =
+    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4';
   wrap.appendChild(c);
   return c;
 }
@@ -43,7 +44,7 @@ function _ensureCanvas(wrap){
  *
  * Idempotent — calling again replaces the previous wiring cleanly.
  */
-export function mountZoneOverlayForLightbox(item, opts = {}){
+export function mountZoneOverlayForLightbox(item, opts = {}) {
   unmountZoneOverlayForLightbox();
   if (!item || !item.camera_id) return;
   const wrap = document.getElementById('lightboxMediaWrap');
@@ -62,7 +63,7 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
   if (!video && !img) return;
   _videoEl = video || img;
   const canvas = _ensureCanvas(wrap);
-  const cam = (state.cameras || []).find(c => c.id === item.camera_id) || {};
+  const cam = (state.cameras || []).find((c) => c.id === item.camera_id) || {};
   // Every polygon arrives with the authored source dims explicitly
   // filled in by normalizePolygon — either from its own stamp
   // (modern saves) or from cam.preview_resolution / detection_resolution
@@ -71,8 +72,8 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
   // resolution — wrong reference frame for a polygon drawn against
   // the substream snapshot).
   const polygons = {
-    zones: (cam.zones || []).map(p => normalizePolygon(p, cam)).filter(Boolean),
-    masks: (cam.masks || []).map(p => normalizePolygon(p, cam)).filter(Boolean),
+    zones: (cam.zones || []).map((p) => normalizePolygon(p, cam)).filter(Boolean),
+    masks: (cam.masks || []).map((p) => normalizePolygon(p, cam)).filter(Boolean),
   };
   const isTL = item.type === 'timelapse';
   // Initial visibility — zones always on, masks hidden by default
@@ -93,7 +94,7 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
     return video || img;
   };
   const draw = () => {
-    if (!_visibility.showZones && !_visibility.showMasks){
+    if (!_visibility.showZones && !_visibility.showMasks) {
       // Both off — clear the canvas to a transparent state.
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -101,10 +102,15 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
     }
     const liveMedia = resolveMediaEl();
     if (!liveMedia) return;
-    renderZoneLayerForMediaEl(canvas, liveMedia, {
-      zones: _visibility.showZones ? polygons.zones : [],
-      masks: _visibility.showMasks ? polygons.masks : [],
-    }, {});
+    renderZoneLayerForMediaEl(
+      canvas,
+      liveMedia,
+      {
+        zones: _visibility.showZones ? polygons.zones : [],
+        masks: _visibility.showMasks ? polygons.masks : [],
+      },
+      {},
+    );
   };
   _redrawFn = draw;
   // ResizeObserver on the wrap so layout changes (fullscreen enter /
@@ -117,7 +123,7 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
   // (loadedmetadata) OR the img has loaded.
   _onMeta = () => draw();
   if (video) video.addEventListener('loadedmetadata', _onMeta);
-  if (img)   img.addEventListener('load', _onMeta);
+  if (img) img.addEventListener('load', _onMeta);
   // window resize — belt and braces for browsers where the
   // ResizeObserver on the inner element doesn't fire on viewport
   // changes that don't change the element's CSS box.
@@ -148,11 +154,11 @@ export function mountZoneOverlayForLightbox(item, opts = {}){
  * a one-shot diagnostic. The actual repaint regression was fixed in
  * zone-layer.js · renderZoneLayerForMediaEl (transient 0×0 bail).
  */
-export function setZoneOverlayVisibility({ showZones, showMasks }){
+export function setZoneOverlayVisibility({ showZones, showMasks }) {
   if (typeof showZones === 'boolean') _visibility.showZones = showZones;
   if (typeof showMasks === 'boolean') _visibility.showMasks = showMasks;
   const c = document.getElementById(_ZONE_CANVAS_ID);
-  if (c){
+  if (c) {
     const ctx = c.getContext('2d');
     if (ctx) ctx.clearRect(0, 0, c.width, c.height);
   }
@@ -162,17 +168,23 @@ export function setZoneOverlayVisibility({ showZones, showMasks }){
     // One-shot diagnostic: the visibility setter ran but the mount
     // was already torn down. Earlier symptom of K2 — the canvas
     // gets cleared, no redraw fires, polygons stay invisible.
-    console.warn('[zone-overlay] setZoneOverlayVisibility ran without _redrawFn — mount torn down?');
+    console.warn(
+      '[zone-overlay] setZoneOverlayVisibility ran without _redrawFn — mount torn down?',
+    );
   }
 }
 window._setZoneOverlayVisibility = setZoneOverlayVisibility;
 
-export function unmountZoneOverlayForLightbox(){
-  if (_resizeObs){
-    try { _resizeObs.disconnect(); } catch { /* ignore */ }
+export function unmountZoneOverlayForLightbox() {
+  if (_resizeObs) {
+    try {
+      _resizeObs.disconnect();
+    } catch {
+      /* ignore */
+    }
     _resizeObs = null;
   }
-  if (_onMeta){
+  if (_onMeta) {
     const v = document.getElementById('lightboxVideo');
     const i = document.getElementById('lightboxImg');
     if (v) v.removeEventListener('loadedmetadata', _onMeta);
@@ -180,7 +192,7 @@ export function unmountZoneOverlayForLightbox(){
     _onMeta = null;
   }
   _videoEl = null;
-  if (_onResize){
+  if (_onResize) {
     window.removeEventListener('resize', _onResize);
     _onResize = null;
   }

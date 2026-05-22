@@ -7,4 +7,4 @@
 // renders this same content under the video; task #3 relocates it
 // into a panel tab.
 
-export function renderDetectionsPanel(/* host, item */){}
+export function renderDetectionsPanel(/* host, item */) {}

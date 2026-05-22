@@ -51,10 +51,10 @@ function _handle(eventType, ev) {
 function _wire() {
   if (_wired) return;
   _wired = true;
-  document.addEventListener('click',  (ev) => _handle('click',  ev), { capture: false });
+  document.addEventListener('click', (ev) => _handle('click', ev), { capture: false });
   document.addEventListener('change', (ev) => _handle('change', ev), { capture: false });
   document.addEventListener('submit', (ev) => _handle('submit', ev), { capture: false });
-  document.addEventListener('input',  (ev) => _handle('input',  ev), { capture: false });
+  document.addEventListener('input', (ev) => _handle('input', ev), { capture: false });
 }
 
 // Auto-wire on import so callers don't need to remember to call init.
@@ -66,21 +66,26 @@ _wire();
 // with one-liner forwarders. Keeping them here lets the template-side
 // migration land without touching every owner. As each owner migrates
 // fully (`window.fn` retires), the shim here goes with it.
-const _shim = (winName, withSecArg = null) => (el) => {
-  const fn = (typeof window !== 'undefined') ? window[winName] : null;
-  if (typeof fn !== 'function') return;
-  if (withSecArg) return fn(el.dataset[withSecArg]);
-  return fn();
-};
-registerAction('closeLiveView',            _shim('closeLiveView'));
-registerAction('toggleLiveViewHd',         () => { if (typeof window._setLiveViewStream === 'function') window._setLiveViewStream(!window._liveViewHd); });
-registerAction('openCamRecoveryModal',     _shim('openCamRecoveryModal'));
+const _shim =
+  (winName, withSecArg = null) =>
+  (el) => {
+    const fn = typeof window !== 'undefined' ? window[winName] : null;
+    if (typeof fn !== 'function') return;
+    if (withSecArg) return fn(el.dataset[withSecArg]);
+    return fn();
+  };
+registerAction('closeLiveView', _shim('closeLiveView'));
+registerAction('toggleLiveViewHd', () => {
+  if (typeof window._setLiveViewStream === 'function')
+    window._setLiveViewStream(!window._liveViewHd);
+});
+registerAction('openCamRecoveryModal', _shim('openCamRecoveryModal'));
 registerAction('loadCamRecoveryDiscovery', _shim('loadCamRecoveryDiscovery'));
-registerAction('closeCamRecoveryModal',    _shim('closeCamRecoveryModal'));
-registerAction('toggleMediaSelectMode',    _shim('toggleMediaSelectMode'));
-registerAction('closeMediaDrilldown',      _shim('closeMediaDrilldown'));
-registerAction('bulkDeleteSelectedMedia',  _shim('bulkDeleteSelectedMedia'));
-registerAction('toggleSetSection',         _shim('toggleSetSection', 'section'));
+registerAction('closeCamRecoveryModal', _shim('closeCamRecoveryModal'));
+registerAction('toggleMediaSelectMode', _shim('toggleMediaSelectMode'));
+registerAction('closeMediaDrilldown', _shim('closeMediaDrilldown'));
+registerAction('bulkDeleteSelectedMedia', _shim('bulkDeleteSelectedMedia'));
+registerAction('toggleSetSection', _shim('toggleSetSection', 'section'));
 // cam-edit Verbindung tab
 registerAction('togglePwField', (el) => {
   if (typeof window.togglePwField === 'function') {
@@ -88,8 +93,10 @@ registerAction('togglePwField', (el) => {
   }
 });
 registerAction('toggleCamRtspErw', _shim('_toggleCamRtspErw'));
-registerAction('toggleUrlMask',    (el) => { if (typeof window._toggleUrlMask === 'function') window._toggleUrlMask(el); });
-registerAction('toggleCamDiag',    _shim('_toggleCamDiag'));
+registerAction('toggleUrlMask', (el) => {
+  if (typeof window._toggleUrlMask === 'function') window._toggleUrlMask(el);
+});
+registerAction('toggleCamDiag', _shim('_toggleCamDiag'));
 // settings.html
 registerAction('togglePwFieldById', (el) => {
   if (typeof window.togglePwFieldById === 'function') window.togglePwFieldById(el.dataset.field);
@@ -103,7 +110,7 @@ registerAction('toggleCoralSetting', (el) => {
   }
 });
 registerAction('reloadCoralRuntime', _shim('reloadCoralRuntime'));
-registerAction('saveMqttSettings',   _shim('saveMqttSettings'));
+registerAction('saveMqttSettings', _shim('saveMqttSettings'));
 // Extended toggleSetSection — supports an optional "data-also" companion
 // fn for cases where opening a section triggers a side-load (Timelapse).
 registerAction('toggleSetSection', (el) => {

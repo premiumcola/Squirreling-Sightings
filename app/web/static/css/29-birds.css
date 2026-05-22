@@ -3,314 +3,367 @@
    legend. Soft warm tint that picks up the bronze accent of the
    parent panel without competing with the medal grid. */
 
-#birdDossiers{
-  margin-top:18px;
-  padding-top:14px;
+#birdDossiers {
+  margin-top: 18px;
+  padding-top: 14px;
   /* Subtle separator without a 1-px line — uses an inset gradient instead */
-  background:linear-gradient(180deg,rgba(var(--acc),.0) 0%,rgba(0,0,0,.10) 12%,rgba(0,0,0,0) 100%);
-  border-radius:12px;
+  background: linear-gradient(
+    180deg,
+    rgba(var(--acc), 0) 0%,
+    rgba(0, 0, 0, 0.1) 12%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  border-radius: 12px;
 }
-.birds-section-head{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  margin:0 4px 10px;
+.birds-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 4px 10px;
 }
-.birds-section-title{
-  margin:0;
-  font-size:14px;
-  font-weight:700;
-  color:rgba(var(--acc),.9);
+.birds-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(var(--acc), 0.9);
 }
-.birds-section-subtitle{
-  font-size:12px;
-  color:var(--muted);
+.birds-section-subtitle {
+  font-size: 12px;
+  color: var(--muted);
 }
-.birds-empty{
-  padding:16px 18px;
-  border-radius:10px;
-  background:rgba(255,255,255,.03);
-  color:var(--muted);
-  font-size:13px;
-  text-align:center;
+.birds-empty {
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
-.birds-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-  gap:10px;
+.birds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
 }
-.bird-tile{
-  position:relative;
-  display:grid;
-  grid-template-columns:72px 1fr;
-  gap:12px;
-  align-items:center;
-  padding:10px 12px;
-  border-radius:12px;
-  background:linear-gradient(155deg,rgba(var(--acc),.10) 0%,rgba(0,0,0,.18) 100%);
-  cursor:pointer;
-  transition:transform .15s,background .15s;
-  min-height:88px;
+.bird-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(155deg, rgba(var(--acc), 0.1) 0%, rgba(0, 0, 0, 0.18) 100%);
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    background 0.15s;
+  min-height: 88px;
 }
 .bird-tile:hover,
-.bird-tile:focus-visible{
-  transform:translateY(-1px);
-  background:linear-gradient(155deg,rgba(var(--acc),.15) 0%,rgba(0,0,0,.18) 100%);
-  outline:none;
+.bird-tile:focus-visible {
+  transform: translateY(-1px);
+  background: linear-gradient(155deg, rgba(var(--acc), 0.15) 0%, rgba(0, 0, 0, 0.18) 100%);
+  outline: none;
 }
-.bird-thumb{
-  width:72px;
-  height:72px;
-  border-radius:10px;
-  overflow:hidden;
-  background:rgba(0,0,0,.30);
-  display:flex;
-  align-items:center;
-  justify-content:center;
+.bird-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.bird-thumb-img{width:100%;height:100%;object-fit:cover;display:block}
-.bird-thumb-placeholder{font-size:34px;opacity:.55}
-.bird-info{min-width:0}
-.bird-name-de{
-  font-size:14px;
-  font-weight:700;
-  color:rgba(255,255,255,.95);
-  line-height:1.2;
+.bird-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bird-thumb-placeholder {
+  font-size: 34px;
+  opacity: 0.55;
+}
+.bird-info {
+  min-width: 0;
+}
+.bird-name-de {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.2;
   /* Single-line truncate — long latin names already wrap on the next row */
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.bird-name-latin{
-  font-size:11px;
-  font-style:italic;
-  color:rgba(255,255,255,.55);
-  margin-top:1px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+.bird-name-latin {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.bird-meta{
-  font-size:11px;
-  color:var(--muted);
-  margin-top:4px;
+.bird-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
 }
-.bird-count-badge{
-  position:absolute;
-  top:8px;
-  right:10px;
-  font-size:11px;
-  font-weight:800;
-  padding:2px 8px;
-  border-radius:999px;
-  background:rgba(var(--acc),.25);
-  color:rgba(255,255,255,.95);
+.bird-count-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--acc), 0.25);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* ── Detail modal ────────────────────────────────────────────────────── */
-.bird-modal-backdrop{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.74);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
-  z-index:200;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:20px;
+.bird-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.74);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
   /* dvh keeps the address-bar collapse on iOS from squashing the modal */
-  min-height:100dvh;
+  min-height: 100dvh;
 }
-.bird-modal{
-  position:relative;
-  width:min(640px,96vw);
-  max-height:calc(100dvh - 40px);
-  overflow:auto;
-  background:linear-gradient(160deg,#1f1a14 0%,#0f0c08 100%);
-  border-radius:18px;
-  padding:18px 20px 24px;
-  box-shadow:0 20px 60px rgba(0,0,0,.55);
+.bird-modal {
+  position: relative;
+  width: min(640px, 96vw);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  background: linear-gradient(160deg, #1f1a14 0%, #0f0c08 100%);
+  border-radius: 18px;
+  padding: 18px 20px 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
-.bird-modal-close{
-  position:absolute;
-  top:10px;
-  right:10px;
-  width:36px;
-  height:36px;
-  min-width:44px;
-  min-height:44px;
-  border:none;
-  background:rgba(255,255,255,.08);
-  color:rgba(255,255,255,.85);
-  border-radius:10px;
-  font-size:18px;
-  cursor:pointer;
+.bird-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 10px;
+  font-size: 18px;
+  cursor: pointer;
 }
-.bird-modal-close:hover{background:rgba(255,255,255,.14)}
-.bird-modal-head{
-  display:flex;
-  align-items:flex-end;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:12px;
-  padding-right:48px;
+.bird-modal-close:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
-.bird-modal-head h3{
-  margin:0;
-  font-size:20px;
-  font-weight:800;
-  color:rgba(255,255,255,.96);
+.bird-modal-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-right: 48px;
 }
-.bird-modal-latin{
-  font-size:13px;
-  font-style:italic;
-  color:rgba(255,255,255,.5);
-  margin-top:2px;
+.bird-modal-head h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.96);
 }
-.bird-modal-hero{
-  margin:8px 0 12px;
-  border-radius:12px;
-  overflow:hidden;
-  background:#000;
-  aspect-ratio:16/9;
+.bird-modal-latin {
+  font-size: 13px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
 }
-.bird-modal-hero img{width:100%;height:100%;object-fit:cover;display:block}
-.bird-modal-summary{
-  margin:0 0 12px;
-  font-size:14px;
-  line-height:1.55;
-  color:rgba(255,255,255,.82);
+.bird-modal-hero {
+  margin: 8px 0 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 16/9;
 }
-.bird-modal-summary--missing{font-style:italic;color:var(--muted)}
+.bird-modal-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bird-modal-summary {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+}
+.bird-modal-summary--missing {
+  font-style: italic;
+  color: var(--muted);
+}
 /* Audio block — up to three xeno-canto recordings, each labelled
    with its call type (Gesang / Ruf / Warnruf etc.). Per-row stack
    keeps the player-attribution pair clearly grouped; on iPhone-SE
    width the rows stack vertically and the controls stay tappable. */
-.bird-modal-audio{
-  margin:0 0 12px;
-  padding:10px 12px;
-  border-radius:10px;
-  background:rgba(255,255,255,.04);
-  display:flex;
-  flex-direction:column;
-  gap:10px;
+.bird-modal-audio {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.bird-audio-row{
-  display:flex;
-  flex-direction:column;
-  gap:4px;
+.bird-audio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.bird-audio-row + .bird-audio-row{
-  padding-top:10px;
+.bird-audio-row + .bird-audio-row {
+  padding-top: 10px;
   /* Subtle inner separator — single 1 px line because audio rows
      genuinely benefit from a divider here; depth-via-color alone
      reads as one big audio mass. */
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.bird-audio-row-head{
-  display:flex;
-  align-items:center;
-  gap:8px;
+.bird-audio-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.bird-audio-type{
-  font-size:11px;
-  font-weight:700;
-  color:rgba(var(--acc),.95);
-  text-transform:uppercase;
-  letter-spacing:.04em;
+.bird-audio-type {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(var(--acc), 0.95);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.bird-audio-player{
-  width:100%;
-  outline:none;
+.bird-audio-player {
+  width: 100%;
+  outline: none;
   /* iOS Safari renders <audio controls> at ~44 px high which already
      meets the touch-target floor. Lock the height so a future UA
      style doesn't shrink it below that on mobile. */
-  min-height:44px;
+  min-height: 44px;
 }
-.bird-modal-attribution{
-  font-size:11px;
-  color:var(--muted);
-  line-height:1.4;
+.bird-modal-attribution {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
 }
-.bird-modal-attribution--source{
-  margin-top:4px;
-  font-style:italic;
+.bird-modal-attribution--source {
+  margin-top: 4px;
+  font-style: italic;
 }
-.bird-modal-attribution a{color:rgba(var(--acc),.95);text-decoration:none}
-.bird-modal-attribution a:hover{text-decoration:underline}
-.bird-modal-wiki-link{
-  display:inline-block;
-  margin:6px 0 14px;
-  font-size:13px;
-  font-weight:600;
-  color:rgba(var(--acc),.95);
-  text-decoration:none;
+.bird-modal-attribution a {
+  color: rgba(var(--acc), 0.95);
+  text-decoration: none;
 }
-.bird-modal-wiki-link:hover{text-decoration:underline}
-.bird-modal-footline{
-  font-size:12px;
-  color:var(--muted);
-  margin-bottom:12px;
+.bird-modal-attribution a:hover {
+  text-decoration: underline;
 }
-.bird-modal-events{
-  margin-top:14px;
-  padding-top:12px;
+.bird-modal-wiki-link {
+  display: inline-block;
+  margin: 6px 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(var(--acc), 0.95);
+  text-decoration: none;
 }
-.bird-modal-events-title{
-  font-size:12px;
-  font-weight:700;
-  color:rgba(255,255,255,.7);
-  margin-bottom:8px;
-  letter-spacing:.04em;
-  text-transform:uppercase;
+.bird-modal-wiki-link:hover {
+  text-decoration: underline;
 }
-.bird-modal-events-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
-  gap:6px;
+.bird-modal-footline {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 12px;
 }
-.bird-event-thumb{
-  display:block;
-  position:relative;
-  aspect-ratio:1/1;
-  border-radius:8px;
-  overflow:hidden;
-  background:#0a0a0a;
-  text-decoration:none;
+.bird-modal-events {
+  margin-top: 14px;
+  padding-top: 12px;
 }
-.bird-event-thumb img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
+.bird-modal-events-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
-.bird-event-thumb span{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  padding:3px 6px;
-  font-size:10px;
-  color:rgba(255,255,255,.85);
-  background:linear-gradient(transparent,rgba(0,0,0,.7));
+.bird-modal-events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
 }
-.bird-event-thumb--missing{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--muted);
-  font-size:11px;
+.bird-event-thumb {
+  display: block;
+  position: relative;
+  aspect-ratio: 1/1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0a0a0a;
+  text-decoration: none;
+}
+.bird-event-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.bird-event-thumb span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.85);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+}
+.bird-event-thumb--missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 /* Mobile tightening */
-@media (max-width:768px){
-  .birds-grid{grid-template-columns:1fr;gap:8px}
-  .bird-tile{grid-template-columns:60px 1fr;min-height:76px;padding:8px 10px}
-  .bird-thumb{width:60px;height:60px}
-  .bird-name-de{font-size:13px}
-  .bird-modal{padding:16px 16px 20px;border-radius:14px}
-  .bird-modal-head h3{font-size:18px}
-  .bird-modal-events-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))}
+@media (max-width: 768px) {
+  .birds-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .bird-tile {
+    grid-template-columns: 60px 1fr;
+    min-height: 76px;
+    padding: 8px 10px;
+  }
+  .bird-thumb {
+    width: 60px;
+    height: 60px;
+  }
+  .bird-name-de {
+    font-size: 13px;
+  }
+  .bird-modal {
+    padding: 16px 16px 20px;
+    border-radius: 14px;
+  }
+  .bird-modal-head h3 {
+    font-size: 18px;
+  }
+  .bird-modal-events-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  }
 }

@@ -7,61 +7,120 @@
    without its own card surface — depth was redundant box-in-box.
    The title demotes from 18 → 14 px so it reads as a sub-section
    under the section's own H3. */
-.ws-stats-block{
+.ws-stats-block {
   /* margin-bottom 4 (was 12) — chart + legend are one logical unit;
      the next section below has its own panel padding, no need for
      extra space here. */
-  margin:0 0 4px;padding:0;border-radius:0;background:transparent;
+  margin: 0 0 4px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
 }
-.ws-stats-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  margin-bottom:10px;flex-wrap:wrap
+.ws-stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
-.ws-stats-head .ws-title{
-  display:inline-flex;align-items:center;gap:6px;
-  font-size:14px;font-weight:600;
-  color:rgba(127,174,201,.85);
-  letter-spacing:.01em;
+.ws-stats-head .ws-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(127, 174, 201, 0.85);
+  letter-spacing: 0.01em;
 }
-.ws-stats-head .ws-title svg{flex-shrink:0;width:16px;height:16px;color:rgba(127,174,201,.85)}
-.ws-stats-pills{display:flex;gap:6px;background:rgba(0,0,0,0.18);border-radius:999px;padding:3px}
-.ws-stats-pill{
-  background:transparent;border:0;color:var(--muted);
-  font-size:12px;font-weight:700;letter-spacing:.04em;
-  padding:6px 12px;border-radius:999px;cursor:pointer;
-  min-height:32px;transition:background .15s,color .15s
+.ws-stats-head .ws-title svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: rgba(127, 174, 201, 0.85);
 }
-.ws-stats-pill:hover{color:var(--text)}
-.ws-stats-pill.is-active{background:rgba(127,174,201,0.22);color:#cfe1ee}
+.ws-stats-pills {
+  display: flex;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+  padding: 3px;
+}
+.ws-stats-pill {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 32px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.ws-stats-pill:hover {
+  color: var(--text);
+}
+.ws-stats-pill.is-active {
+  background: rgba(127, 174, 201, 0.22);
+  color: #cfe1ee;
+}
 
 /* Chart svg fills its wrapper. Height is fixed on desktop, slightly
    shorter on mobile so the legend isn't pushed off-screen. */
-.ws-stats-chart-wrap{
-  position:relative;width:100%;height:220px;
-  border-radius:10px;background:rgba(0,0,0,0.18);overflow:hidden
+.ws-stats-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
 }
-.ws-stats-chart-wrap svg{display:block;width:100%;height:100%}
-.ws-stats-empty{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  text-align:center;color:var(--muted);font-size:13px;padding:20px
+.ws-stats-chart-wrap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-.ws-stats-threshold-label{
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size:10px;font-weight:700;fill:#fb7185;letter-spacing:.04em;
+.ws-stats-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 20px;
+}
+.ws-stats-threshold-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  fill: #fb7185;
+  letter-spacing: 0.04em;
   /* paint-order=stroke draws the dark stroke first, fill on top — so
      each glyph gets a 3 px dark halo that keeps the red text legible
      even when it crosses a coloured data line beneath. */
-  paint-order:stroke;
-  stroke:rgba(15,15,18,.9);
-  stroke-width:3;
-  stroke-linejoin:round;
-  text-rendering:geometricPrecision;
+  paint-order: stroke;
+  stroke: rgba(15, 15, 18, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  text-rendering: geometricPrecision;
 }
-.ws-stats-no-threshold{
-  position:absolute;top:8px;right:10px;
-  font-size:11px;color:rgba(251,113,133,0.85);font-weight:600;
-  background:rgba(0,0,0,0.45);padding:3px 8px;border-radius:6px;
-  pointer-events:none
+.ws-stats-no-threshold {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 11px;
+  color: rgba(251, 113, 133, 0.85);
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 /* Legend chips below the chart. Flat layout — no per-chip background
@@ -80,68 +139,151 @@
    right under the chart axis labels. min-height 32 still meets a
    reasonable tap target in the dense legend context — the iOS
    strict 44 px floor was overspending vertical real estate here. */
-.ws-stats-legend{
-  display:grid;grid-template-columns:repeat(2,1fr);gap:1px 14px;margin-top:6px;margin-bottom:0
+.ws-stats-legend {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px 14px;
+  margin-top: 6px;
+  margin-bottom: 0;
 }
-@media (min-width:640px){.ws-stats-legend{grid-template-columns:repeat(4,1fr)}}
-.ws-stats-chip{
-  display:flex;align-items:center;gap:8px;padding:3px 4px;
-  background:transparent;border:0;
-  border-radius:0;cursor:pointer;text-align:left;
-  min-height:32px;
-  min-width:0;
-  font-size:11.5px;
-  -webkit-font-smoothing:antialiased;
-  text-rendering:geometricPrecision;
-  transition:opacity .15s
+@media (min-width: 640px) {
+  .ws-stats-legend {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
-.ws-stats-chip:hover{opacity:.8}
-.ws-stats-chip.is-isolated .ws-stats-chip-label{color:#cfe1ee;font-weight:800}
-.ws-stats-chip.is-disabled{opacity:.35}
-.ws-stats-chip-dot{
-  width:8px;height:8px;border-radius:50%;background:var(--cb,#94a3b8);
-  flex-shrink:0
+.ws-stats-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  min-height: 32px;
+  min-width: 0;
+  font-size: 11.5px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  transition: opacity 0.15s;
 }
-.ws-stats-chip-meta{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
-.ws-stats-chip-label{font-size:11.5px;font-weight:600;color:#cbd5e1;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
-.ws-stats-chip-value{font-family:ui-monospace,"SF Mono",Menlo,monospace;
-  font-size:11px;font-variant-numeric:tabular-nums;
-  color:rgba(255,255,255,.7);
-  flex-shrink:0;text-align:right}
-.ws-stats-chip.is-isolated .ws-stats-chip-value{color:#fff}
+.ws-stats-chip:hover {
+  opacity: 0.8;
+}
+.ws-stats-chip.is-isolated .ws-stats-chip-label {
+  color: #cfe1ee;
+  font-weight: 800;
+}
+.ws-stats-chip.is-disabled {
+  opacity: 0.35;
+}
+.ws-stats-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cb, #94a3b8);
+  flex-shrink: 0;
+}
+.ws-stats-chip-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.ws-stats-chip-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.ws-stats-chip-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+  text-align: right;
+}
+.ws-stats-chip.is-isolated .ws-stats-chip-value {
+  color: #fff;
+}
 
 /* Field-detail explainer — appears beneath the legend when a chip is
    isolated. Depth comes from a soft surface tint plus an inset accent
    stripe in the field's palette colour (CLAUDE.md: depth from colour, no
    thin borders). dt/dd render as a 2-col grid on desktop; on mobile they
    stack so the long German labels don't truncate the values. */
-.ws-stats-explainer{margin-top:12px}
-.ws-explainer-card{
-  padding:14px 16px;border-radius:12px;
-  background:rgba(127,174,201,0.08);
-  box-shadow:inset 4px 0 0 var(--cb,#94a3b8)
+.ws-stats-explainer {
+  margin-top: 12px;
 }
-.ws-explainer-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.ws-explainer-dot{
-  width:10px;height:10px;border-radius:50%;flex-shrink:0;
-  box-shadow:0 0 0 2px rgba(0,0,0,0.25) inset
+.ws-explainer-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(127, 174, 201, 0.08);
+  box-shadow: inset 4px 0 0 var(--cb, #94a3b8);
 }
-.ws-explainer-head h4{margin:0;font-size:14px;font-weight:700;color:var(--text)}
-.ws-explainer-summary{
-  margin:0 0 10px 0;font-size:13px;line-height:1.5;color:var(--text)
+.ws-explainer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
-.ws-explainer-list{
-  margin:0;display:grid;grid-template-columns:max-content 1fr;
-  gap:6px 14px;font-size:12px;line-height:1.5
+.ws-explainer-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25) inset;
 }
-.ws-explainer-list dt{font-weight:700;color:var(--muted);white-space:nowrap}
-.ws-explainer-list dd{margin:0;color:var(--text)}
-@media (max-width:768px){
-  .ws-explainer-card{padding:12px 14px}
-  .ws-explainer-list{grid-template-columns:1fr;gap:0}
-  .ws-explainer-list dt{margin-top:6px}
-  .ws-explainer-list dt:first-of-type{margin-top:0}
+.ws-explainer-head h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ws-explainer-summary {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.ws-explainer-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ws-explainer-list dt {
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ws-explainer-list dd {
+  margin: 0;
+  color: var(--text);
+}
+@media (max-width: 768px) {
+  .ws-explainer-card {
+    padding: 12px 14px;
+  }
+  .ws-explainer-list {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .ws-explainer-list dt {
+    margin-top: 6px;
+  }
+  .ws-explainer-list dt:first-of-type {
+    margin-top: 0;
+  }
 }
 
 /* ── Sun-Timelapse Test subtab ─────────────────────────────────────────────
@@ -152,116 +294,336 @@
    accent stripe — no thin borders. All controls ≥44 px tall on mobile;
    the rejection list and log box scroll vertically without horizontal
    overflow on a 375 px iPhone width. */
-.suntltest-panel{padding-top:8px;display:grid;gap:14px}
-.suntltest-form{display:grid;gap:12px;padding:14px;border-radius:14px;background:rgba(127,174,201,0.08);box-shadow:inset 4px 0 0 #7faec9}
-.suntltest-form-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
-.suntltest-form-row--start{justify-content:flex-end}
-.suntltest-lbl{font-size:13px;color:var(--muted);font-weight:700;min-width:62px}
-.suntltest-sel{flex:1;min-width:200px;min-height:44px;padding:10px 36px 10px 12px;border-radius:12px}
-.suntltest-phase-row,.suntltest-dur-row{display:flex;flex-wrap:wrap;gap:8px;flex:1}
-.suntltest-chip{
-  min-height:44px;padding:8px 14px;border-radius:12px;border:0;
-  background:rgba(255,255,255,0.06);color:var(--text);font-weight:600;font-size:14px;
-  cursor:pointer;transition:background 120ms ease, color 120ms ease
+.suntltest-panel {
+  padding-top: 8px;
+  display: grid;
+  gap: 14px;
 }
-.suntltest-chip:hover{background:rgba(255,255,255,0.10)}
-.suntltest-chip.is-active{background:#7faec9;color:#0b1320}
+.suntltest-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(127, 174, 201, 0.08);
+  box-shadow: inset 4px 0 0 #7faec9;
+}
+.suntltest-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.suntltest-form-row--start {
+  justify-content: flex-end;
+}
+.suntltest-lbl {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 700;
+  min-width: 62px;
+}
+.suntltest-sel {
+  flex: 1;
+  min-width: 200px;
+  min-height: 44px;
+  padding: 10px 36px 10px 12px;
+  border-radius: 12px;
+}
+.suntltest-phase-row,
+.suntltest-dur-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+}
+.suntltest-chip {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.suntltest-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.suntltest-chip.is-active {
+  background: #7faec9;
+  color: #0b1320;
+}
 /* G1 · disabled chip — the chosen target × 15 fps exceeds the
    capture budget for the current window. Dim + not-allowed cursor;
    the JS handler short-circuits the click, this is purely visual. */
-.suntltest-chip.is-disabled{opacity:.35;cursor:not-allowed}
-.suntltest-chip.is-disabled:hover{background:rgba(255,255,255,0.06)}
+.suntltest-chip.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.suntltest-chip.is-disabled:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
 
 /* G1 · math readout block. Sits between the chip rows and the start
    button. Two-column dl for the rows, monospace numbers on the
    value side so the layout doesn't shift as the user changes the
    target. ✓ / ⚠ accent comes from .suntltest-math-ok /
    .suntltest-math-warn. */
-.suntltest-math{
-  padding:10px 12px;
-  border-radius:10px;
-  background:rgba(127,174,201,0.06);
-  font-size:12.5px;
-  line-height:1.45;
-  color:rgba(226,232,240,.85);
+.suntltest-math {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(127, 174, 201, 0.06);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.85);
 }
-.suntltest-math-head{
-  font-weight:700;
-  color:#cbd5e1;
-  margin-bottom:6px;
-  letter-spacing:.01em;
+.suntltest-math-head {
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
 }
-.suntltest-math-rows{
-  display:grid;
-  grid-template-columns:140px 1fr;
-  gap:4px 12px;
-  margin:0;
+.suntltest-math-rows {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 12px;
+  margin: 0;
 }
-.suntltest-math-rows dt{
-  color:rgba(226,232,240,.55);
-  font-weight:600;
-  letter-spacing:.02em;
+.suntltest-math-rows dt {
+  color: rgba(226, 232, 240, 0.55);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
-.suntltest-math-rows dd{
-  margin:0;
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  font-variant-numeric:tabular-nums;
-  color:#e2e8f0;
+.suntltest-math-rows dd {
+  margin: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
 }
-.suntltest-math-mute{color:rgba(226,232,240,.45);font-family:inherit}
-.suntltest-math-ok{color:#86efac;font-weight:700}
-.suntltest-math-warn{color:#fbbf24;font-weight:700}
-@media (max-width:540px){
+.suntltest-math-mute {
+  color: rgba(226, 232, 240, 0.45);
+  font-family: inherit;
+}
+.suntltest-math-ok {
+  color: #86efac;
+  font-weight: 700;
+}
+.suntltest-math-warn {
+  color: #fbbf24;
+  font-weight: 700;
+}
+@media (max-width: 540px) {
   /* Mobile · tighter column gap, smaller key column so the wider
      warn-line wraps cleanly instead of overflowing the panel. */
-  .suntltest-math{font-size:12px;padding:9px 10px}
-  .suntltest-math-rows{grid-template-columns:108px 1fr;gap:3px 8px}
+  .suntltest-math {
+    font-size: 12px;
+    padding: 9px 10px;
+  }
+  .suntltest-math-rows {
+    grid-template-columns: 108px 1fr;
+    gap: 3px 8px;
+  }
 }
-.suntltest-start{min-height:48px;padding:10px 22px;font-size:15px;border-radius:14px}
-.suntltest-start:disabled{opacity:.55;cursor:not-allowed}
+.suntltest-start {
+  min-height: 48px;
+  padding: 10px 22px;
+  font-size: 15px;
+  border-radius: 14px;
+}
+.suntltest-start:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 /* Abbrechen — destructive action, red background tint (no border per
    project rules). Sits next to the start button via the form-row's
    default flex layout. Mobile bumps min-height to 48 px to clear the
    iOS 44 px touch-target floor with margin. */
-.suntltest-cancel{min-height:44px;padding:10px 18px;font-size:14px;border-radius:14px;background:rgba(239,68,68,0.20);color:#fecaca;border:0}
-.suntltest-cancel:hover{background:rgba(239,68,68,0.30);color:#fff}
-.suntltest-cancel:disabled{opacity:.55;cursor:not-allowed}
-@media (max-width:540px){
-  .suntltest-cancel{min-height:48px;width:100%}
+.suntltest-cancel {
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 14px;
+  border-radius: 14px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+  border: 0;
 }
-.suntltest-hint{margin:0}
+.suntltest-cancel:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fff;
+}
+.suntltest-cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+@media (max-width: 540px) {
+  .suntltest-cancel {
+    min-height: 48px;
+    width: 100%;
+  }
+}
+.suntltest-hint {
+  margin: 0;
+}
 
-.suntltest-live{display:grid;gap:14px;padding:14px;border-radius:14px;background:rgba(127,174,201,0.06);box-shadow:inset 4px 0 0 rgba(127,174,201,0.6)}
-.suntltest-live.is-running{box-shadow:inset 4px 0 0 #7faec9}
-.suntltest-live.is-done{box-shadow:inset 4px 0 0 #34d399}
-.suntltest-live-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
-.suntltest-live-title{font-weight:700;font-size:15px;color:var(--text)}
-.suntltest-live-status{font-size:13px;color:var(--muted);font-weight:600}
-.suntltest-live-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.suntltest-tile{padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.04);display:grid;gap:4px}
-.suntltest-tile-label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.suntltest-tile-val{font-size:15px;color:var(--text);font-weight:600}
-.suntltest-tile-val b{font-weight:800;color:#fff}
-.suntltest-tile-sub{font-size:11px;color:var(--muted)}
-.suntltest-progress{height:4px;border-radius:4px;background:rgba(255,255,255,0.08);overflow:hidden;margin-top:4px}
-.suntltest-progress > span{display:block;height:100%;background:#7faec9;transition:width 250ms ease}
-.suntltest-live.is-done .suntltest-progress > span{background:#34d399}
+.suntltest-live {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(127, 174, 201, 0.06);
+  box-shadow: inset 4px 0 0 rgba(127, 174, 201, 0.6);
+}
+.suntltest-live.is-running {
+  box-shadow: inset 4px 0 0 #7faec9;
+}
+.suntltest-live.is-done {
+  box-shadow: inset 4px 0 0 #34d399;
+}
+.suntltest-live-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.suntltest-live-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.suntltest-live-status {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.suntltest-live-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.suntltest-tile {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  display: grid;
+  gap: 4px;
+}
+.suntltest-tile-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.suntltest-tile-val {
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 600;
+}
+.suntltest-tile-val b {
+  font-weight: 800;
+  color: #fff;
+}
+.suntltest-tile-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+.suntltest-progress {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.suntltest-progress > span {
+  display: block;
+  height: 100%;
+  background: #7faec9;
+  transition: width 250ms ease;
+}
+.suntltest-live.is-done .suntltest-progress > span {
+  background: #34d399;
+}
 
-.suntltest-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700}
-.suntltest-badge--ok{background:rgba(52,211,153,0.18);color:#7af1c1}
-.suntltest-badge--err{background:rgba(251,113,133,0.18);color:#fca5b5}
-.suntltest-badge--mute{background:rgba(255,255,255,0.06);color:var(--muted)}
+.suntltest-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.suntltest-badge--ok {
+  background: rgba(52, 211, 153, 0.18);
+  color: #7af1c1;
+}
+.suntltest-badge--err {
+  background: rgba(251, 113, 133, 0.18);
+  color: #fca5b5;
+}
+.suntltest-badge--mute {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
 
-.suntltest-section{display:grid;gap:8px}
-.suntltest-section-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.suntltest-rej-list{display:grid;gap:4px}
-.suntltest-rej-row{display:grid;gap:4px;padding:8px 12px;border-radius:10px;background:rgba(251,113,133,0.10);font-size:13px}
-.suntltest-rej-row-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.suntltest-rej-key{color:var(--text);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-.suntltest-rej-val{color:#fca5b5;font-weight:700;font-variant-numeric:tabular-nums}
-.suntltest-rej-detail{font-size:11.5px;color:rgba(252,165,181,0.75);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-.suntltest-rej-hint{font-size:12px;color:rgba(255,255,255,0.62);line-height:1.35}
-.suntltest-rej-empty{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.04);font-size:13px;color:var(--muted)}
+.suntltest-section {
+  display: grid;
+  gap: 8px;
+}
+.suntltest-section-title {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.suntltest-rej-list {
+  display: grid;
+  gap: 4px;
+}
+.suntltest-rej-row {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(251, 113, 133, 0.1);
+  font-size: 13px;
+}
+.suntltest-rej-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suntltest-rej-key {
+  color: var(--text);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+.suntltest-rej-val {
+  color: #fca5b5;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.suntltest-rej-detail {
+  font-size: 11.5px;
+  color: rgba(252, 165, 181, 0.75);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+.suntltest-rej-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.35;
+}
+.suntltest-rej-empty {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  color: var(--muted);
+}
 
 /* G3 · per-slot heatmap bar. One row, flex children = cells. No
    gap (cells touch) so dense windows (562 cells for 75 min × 8 s)
@@ -269,170 +631,273 @@
    flex:1; min-width:2 px on mobile, 6 px on desktop. The colour
    legend matches the counter chips below + the post-run diff
    panel's "Was schief lief" line. */
-.suntltest-heatmap{
-  display:flex;flex-wrap:nowrap;
-  height:14px;
-  border-radius:4px;
-  overflow:hidden;
-  background:rgba(255,255,255,.04);
+.suntltest-heatmap {
+  display: flex;
+  flex-wrap: nowrap;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
 }
-.suntltest-cell{
-  flex:1 1 0;min-width:2px;
-  background:rgba(255,255,255,.06);
-  transition:background 120ms ease;
+.suntltest-cell {
+  flex: 1 1 0;
+  min-width: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 120ms ease;
 }
-.suntltest-cell[data-outcome="empty"]      { background:rgba(255,255,255,.06); }
-.suntltest-cell[data-outcome="fresh"]      { background:#34d399; }
-.suntltest-cell[data-outcome="retry_ok"]   { background:#34d399;
+.suntltest-cell[data-outcome='empty'] {
+  background: rgba(255, 255, 255, 0.06);
+}
+.suntltest-cell[data-outcome='fresh'] {
+  background: #34d399;
+}
+.suntltest-cell[data-outcome='retry_ok'] {
+  background: #34d399;
   /* Inset 1 px ring marks the retry-recovered slot — visible on
      desktop (6 px cells); on mobile the cells are too narrow for
      the ring to show, but the colour still indicates "captured ok". */
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
 }
-.suntltest-cell[data-outcome="cached"]     { background:#fbbf24; }
-.suntltest-cell[data-outcome="rejected"]   { background:#f43f5e; }
-.suntltest-cell[data-outcome="backfilled"] { background:#6366f1; }
-.suntltest-cell[data-outcome="skipped"]    { background:#475569; }
-@media (min-width:768px){
-  .suntltest-heatmap{ height:18px; }
-  .suntltest-cell{ min-width:6px; }
+.suntltest-cell[data-outcome='cached'] {
+  background: #fbbf24;
+}
+.suntltest-cell[data-outcome='rejected'] {
+  background: #f43f5e;
+}
+.suntltest-cell[data-outcome='backfilled'] {
+  background: #6366f1;
+}
+.suntltest-cell[data-outcome='skipped'] {
+  background: #475569;
+}
+@media (min-width: 768px) {
+  .suntltest-heatmap {
+    height: 18px;
+  }
+  .suntltest-cell {
+    min-width: 6px;
+  }
 }
 
 /* G3 · counter chip row + meta line. Same colour legend as the
    heatmap so the user connects the dots; tabular-num so the row
    doesn't shift as values increment. .suntltest-counter-progress
    sits left-aligned, chips and meta wrap below at narrow widths. */
-.suntltest-counter-row{
-  display:flex;flex-wrap:wrap;align-items:center;gap:6px;
-  font-size:12.5px;
+.suntltest-counter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
 }
-.suntltest-counter-progress{
-  font-weight:600;color:var(--text);
-  font-variant-numeric:tabular-nums;
-  padding-right:6px;
+.suntltest-counter-progress {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  padding-right: 6px;
 }
-.suntltest-counter-progress b{font-weight:800}
-.suntltest-counter-chip{
-  display:inline-flex;align-items:center;
-  padding:3px 9px;border-radius:8px;
-  font-weight:700;font-variant-numeric:tabular-nums;
-  font-size:11.5px;
-  background:rgba(255,255,255,.06);
-  color:var(--muted);
+.suntltest-counter-progress b {
+  font-weight: 800;
 }
-.suntltest-counter-chip[data-outcome="fresh"]      { background:rgba(52,211,153,.18); color:#86efac; }
-.suntltest-counter-chip[data-outcome="cached"]     { background:rgba(251,191,36,.18); color:#fcd34d; }
-.suntltest-counter-chip[data-outcome="rejected"]   { background:rgba(244,63,94,.18);  color:#fda4af; }
-.suntltest-counter-chip[data-outcome="backfilled"] { background:rgba(99,102,241,.20); color:#a5b4fc; }
-.suntltest-counter-chip[data-outcome="skipped"]    { background:rgba(71,85,105,.30);  color:#cbd5e1; }
-.suntltest-counter-meta{
-  display:flex;flex-wrap:wrap;gap:14px;
-  font-size:11.5px;color:var(--muted);
+.suntltest-counter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
 }
-.suntltest-counter-meta b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+.suntltest-counter-chip[data-outcome='fresh'] {
+  background: rgba(52, 211, 153, 0.18);
+  color: #86efac;
+}
+.suntltest-counter-chip[data-outcome='cached'] {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fcd34d;
+}
+.suntltest-counter-chip[data-outcome='rejected'] {
+  background: rgba(244, 63, 94, 0.18);
+  color: #fda4af;
+}
+.suntltest-counter-chip[data-outcome='backfilled'] {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+.suntltest-counter-chip[data-outcome='skipped'] {
+  background: rgba(71, 85, 105, 0.3);
+  color: #cbd5e1;
+}
+.suntltest-counter-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.suntltest-counter-meta b {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
 /* G3 · current-action / ETA line. Single row, no panel chrome —
    reads as a status line under the counters. */
-.suntltest-action{
-  display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
-  padding:6px 0;
-  font-size:13px;color:var(--text);
+.suntltest-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text);
 }
-.suntltest-action-ico{color:#7faec9;font-weight:700}
-.suntltest-action-text b{font-weight:800;color:#fff}
-.suntltest-action-eta{
-  margin-left:auto;
-  font-size:11.5px;color:var(--muted);
-  font-variant-numeric:tabular-nums;
+.suntltest-action-ico {
+  color: #7faec9;
+  font-weight: 700;
 }
-.suntltest-action-eta b{color:var(--text);font-weight:700}
-@media (max-width:540px){
-  .suntltest-action-eta{margin-left:0;width:100%}
+.suntltest-action-text b {
+  font-weight: 800;
+  color: #fff;
+}
+.suntltest-action-eta {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.suntltest-action-eta b {
+  color: var(--text);
+  font-weight: 700;
+}
+@media (max-width: 540px) {
+  .suntltest-action-eta {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 /* G4 · post-run diff. Two-column side-by-side on desktop (Geplant |
    Geliefert), stacked vertically on mobile. dl-grid drives the
    key→value alignment within each column so the two columns line
    up row-for-row at the same vertical position. */
-.suntltest-diff{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:18px;
-  margin:8px 0 4px;
-  padding:14px;
-  border-radius:12px;
-  background:rgba(255,255,255,.03);
+.suntltest-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 8px 0 4px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
 }
-.suntltest-diff-col{display:grid;gap:6px;min-width:0}
-.suntltest-diff-col-head{
-  font-size:11px;font-weight:700;
-  color:var(--muted);
-  text-transform:uppercase;letter-spacing:.08em;
-  padding-bottom:4px;
-  border-bottom:1px solid rgba(255,255,255,.06);
+.suntltest-diff-col {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
-.suntltest-diff-rows{
-  display:grid;
-  grid-template-columns:115px 1fr;
-  gap:4px 10px;
-  margin:0;
-  font-size:12.5px;
+.suntltest-diff-col-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.suntltest-diff-rows dt{
-  color:rgba(226,232,240,.55);
-  font-weight:600;
+.suntltest-diff-rows {
+  display: grid;
+  grid-template-columns: 115px 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 12.5px;
 }
-.suntltest-diff-rows dd{
-  margin:0;
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  font-variant-numeric:tabular-nums;
-  color:#e2e8f0;
+.suntltest-diff-rows dt {
+  color: rgba(226, 232, 240, 0.55);
+  font-weight: 600;
 }
-.suntltest-diff-mark{
-  display:inline-block;margin-left:3px;
-  font-family:inherit;font-weight:700;
+.suntltest-diff-rows dd {
+  margin: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
 }
-.suntltest-diff-mark--ok{color:#86efac}
-.suntltest-diff-mute{color:rgba(226,232,240,.45);font-family:inherit}
-.suntltest-diff-wrong{
-  margin:10px 0 6px;
-  padding:8px 12px;border-radius:10px;
-  background:rgba(245,158,11,.14);
-  color:#fcd34d;
-  font-size:12.5px;line-height:1.45;
+.suntltest-diff-mark {
+  display: inline-block;
+  margin-left: 3px;
+  font-family: inherit;
+  font-weight: 700;
 }
-.suntltest-diff-wrong code{
-  background:rgba(0,0,0,.25);padding:1px 6px;border-radius:6px;
-  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;
+.suntltest-diff-mark--ok {
+  color: #86efac;
+}
+.suntltest-diff-mute {
+  color: rgba(226, 232, 240, 0.45);
+  font-family: inherit;
+}
+.suntltest-diff-wrong {
+  margin: 10px 0 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.suntltest-diff-wrong code {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
 }
 
 /* Quality-grade chip — three buckets from timelapse_qa.py. Same
    colour tokens as the per-camera severity chips on the dashboard.
    No border per project rules; tint + bold weight does the work. */
-.suntltest-grade{
-  display:inline-block;
-  padding:2px 8px;border-radius:8px;
-  font-weight:800;font-size:11px;letter-spacing:.06em;
-  font-family:Inter,system-ui,sans-serif;
+.suntltest-grade {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-family: Inter, system-ui, sans-serif;
 }
-.suntltest-grade--green  { background:rgba(52,211,153,.22); color:#86efac; }
-.suntltest-grade--yellow { background:rgba(251,191,36,.22); color:#fcd34d; }
-.suntltest-grade--red    { background:rgba(244,63,94,.22);  color:#fda4af; }
-.suntltest-grade--mute   { background:rgba(255,255,255,.08); color:#cbd5e1; }
+.suntltest-grade--green {
+  background: rgba(52, 211, 153, 0.22);
+  color: #86efac;
+}
+.suntltest-grade--yellow {
+  background: rgba(251, 191, 36, 0.22);
+  color: #fcd34d;
+}
+.suntltest-grade--red {
+  background: rgba(244, 63, 94, 0.22);
+  color: #fda4af;
+}
+.suntltest-grade--mute {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
 
-@media (max-width:540px){
+@media (max-width: 540px) {
   /* Mobile · stack the two columns vertically with a subtle
      divider so the diff still reads as "side-by-side semantically"
      even when the screen forces a vertical stack. */
-  .suntltest-diff{
-    grid-template-columns:1fr;
-    gap:14px;padding:12px;
+  .suntltest-diff {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 12px;
   }
-  .suntltest-diff-col:first-child{
-    padding-bottom:12px;
-    border-bottom:1px solid rgba(255,255,255,.06);
+  .suntltest-diff-col:first-child {
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
-  .suntltest-diff-rows{grid-template-columns:108px 1fr}
+  .suntltest-diff-rows {
+    grid-template-columns: 108px 1fr;
+  }
 }
 
 /* ── Capture breakdown ──────────────────────────────────────────────
@@ -441,16 +906,52 @@
    into the user-relevant question "how many slots in the resulting
    MP4 are real content?". Stacked rows on mobile (≤ 480 px) so the
    labels stay legible without horizontal scrolling on iPhone. */
-.suntltest-breakdown{display:grid;gap:6px;margin:8px 0 4px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04)}
-.suntltest-bkd-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;line-height:1.3;min-height:28px}
-.suntltest-bkd-label{color:var(--muted)}
-.suntltest-bkd-val{font-weight:700;font-variant-numeric:tabular-nums;min-width:28px;text-align:right}
-.suntltest-bkd-val--ok{color:#7af1c1}
-.suntltest-bkd-val--mute{color:rgba(255,255,255,.62)}
-.suntltest-bkd-val--warn{color:#fbbf24}
-@media (max-width:480px){
-  .suntltest-bkd-row{flex-direction:column;align-items:flex-start;gap:2px;min-height:44px;justify-content:center}
-  .suntltest-bkd-val{text-align:left}
+.suntltest-breakdown {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.suntltest-bkd-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.3;
+  min-height: 28px;
+}
+.suntltest-bkd-label {
+  color: var(--muted);
+}
+.suntltest-bkd-val {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+}
+.suntltest-bkd-val--ok {
+  color: #7af1c1;
+}
+.suntltest-bkd-val--mute {
+  color: rgba(255, 255, 255, 0.62);
+}
+.suntltest-bkd-val--warn {
+  color: #fbbf24;
+}
+@media (max-width: 480px) {
+  .suntltest-bkd-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .suntltest-bkd-val {
+    text-align: left;
+  }
 }
 
 /* ── Profile + drift pill row ───────────────────────────────────────
@@ -460,55 +961,199 @@
    backend flagged a window > _SUN_TL_DRIFT_LIMIT_MIN from the real
    sun event. Background-tint only — no thin border lines per
    project rules. */
-.suntltest-pill-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 8px}
-.suntltest-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.04em;line-height:1.2}
-.suntltest-pill--day{background:rgba(250,204,21,0.18);color:#fde68a}
-.suntltest-pill--twilight{background:rgba(251,146,60,0.20);color:#fed7aa}
-.suntltest-pill--night{background:rgba(96,165,250,0.20);color:#bfdbfe}
-.suntltest-pill--drift{background:rgba(245,158,11,0.20);color:#fde68a;text-transform:none;letter-spacing:0;font-weight:600;font-size:11.5px;flex:1 1 100%}
-.suntltest-pill-sub{opacity:.75;font-weight:500;font-size:10.5px;text-transform:none;letter-spacing:0}
-@media (max-width:540px){
-  .suntltest-pill{min-height:24px}
-  .suntltest-pill--drift{font-size:11px}
+.suntltest-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 8px;
+}
+.suntltest-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.suntltest-pill--day {
+  background: rgba(250, 204, 21, 0.18);
+  color: #fde68a;
+}
+.suntltest-pill--twilight {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fed7aa;
+}
+.suntltest-pill--night {
+  background: rgba(96, 165, 250, 0.2);
+  color: #bfdbfe;
+}
+.suntltest-pill--drift {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  font-size: 11.5px;
+  flex: 1 1 100%;
+}
+.suntltest-pill-sub {
+  opacity: 0.75;
+  font-weight: 500;
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+@media (max-width: 540px) {
+  .suntltest-pill {
+    min-height: 24px;
+  }
+  .suntltest-pill--drift {
+    font-size: 11px;
+  }
 }
 
-.suntltest-log-box{
-  max-height:240px;overflow-y:auto;overflow-x:auto;
-  padding:10px 12px;border-radius:10px;background:rgba(0,0,0,0.35);
-  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:11.5px;line-height:1.5;
-  white-space:pre;color:#cfe7ff
+.suntltest-log-box {
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+  color: #cfe7ff;
 }
-.suntltest-log-line{white-space:pre}
-.suntltest-log-line.muted{color:var(--muted);white-space:normal}
+.suntltest-log-line {
+  white-space: pre;
+}
+.suntltest-log-line.muted {
+  color: var(--muted);
+  white-space: normal;
+}
 
-.suntltest-result-card{padding:14px;border-radius:14px;display:grid;gap:8px}
-.suntltest-result-card--ok{background:rgba(52,211,153,0.10);box-shadow:inset 4px 0 0 #34d399}
-.suntltest-result-card--err{background:rgba(251,113,133,0.10);box-shadow:inset 4px 0 0 #fb7185}
-.suntltest-result-card--mute{background:rgba(148,163,184,0.10);box-shadow:inset 4px 0 0 #94a3b8}
-.suntltest-result-title{font-weight:700;font-size:15px;color:var(--text)}
-.suntltest-result-msg{font-size:13px;color:var(--muted)}
-.suntltest-result-msg code{background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:6px;color:#cfe7ff}
-.suntltest-result-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+.suntltest-result-card {
+  padding: 14px;
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+}
+.suntltest-result-card--ok {
+  background: rgba(52, 211, 153, 0.1);
+  box-shadow: inset 4px 0 0 #34d399;
+}
+.suntltest-result-card--err {
+  background: rgba(251, 113, 133, 0.1);
+  box-shadow: inset 4px 0 0 #fb7185;
+}
+.suntltest-result-card--mute {
+  background: rgba(148, 163, 184, 0.1);
+  box-shadow: inset 4px 0 0 #94a3b8;
+}
+.suntltest-result-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+}
+.suntltest-result-msg {
+  font-size: 13px;
+  color: var(--muted);
+}
+.suntltest-result-msg code {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: #cfe7ff;
+}
+.suntltest-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
 
 /* ── Raw frames hint row (test mode only) ──────────────────────────
    Appears under the log tail when the backend has renamed the test
    capture's scratch dir to `<stem>_raw/`. Inline path + copy button;
    no popup. The copy button hits the iOS 44 px touch-target floor on
    mobile via the @media block below. */
-.suntltest-rawdir{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(56,189,248,0.10);border-radius:10px;padding:8px 12px;font-size:12.5px;color:#cfe7ff}
-.suntltest-rawdir-label{font-weight:600;color:#bae6fd}
-.suntltest-rawdir-path{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:rgba(15,23,42,0.45);padding:4px 8px;border-radius:6px;color:#e0f2fe}
-.suntltest-rawdir-copy{flex-shrink:0;background:rgba(56,189,248,0.18);color:#bae6fd;border:0;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;min-height:32px}
-.suntltest-rawdir-copy:hover{background:rgba(56,189,248,0.28);color:#e0f2fe}
-
-@media (max-width:540px){
-  .suntltest-form-row{flex-direction:column;align-items:stretch}
-  .suntltest-form-row--start{align-items:flex-end}
-  .suntltest-lbl{min-width:0}
-  .suntltest-live-grid{grid-template-columns:1fr;gap:8px}
-  .suntltest-log-box{max-height:200px;font-size:11px}
-  .suntltest-result-actions .btn-action{width:100%;text-align:center}
-  .suntltest-rawdir-copy{min-height:44px;padding:0 16px}
-  .suntltest-rawdir-path{flex-basis:100%;order:3}
+.suntltest-rawdir {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: rgba(56, 189, 248, 0.1);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #cfe7ff;
+}
+.suntltest-rawdir-label {
+  font-weight: 600;
+  color: #bae6fd;
+}
+.suntltest-rawdir-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #e0f2fe;
+}
+.suntltest-rawdir-copy {
+  flex-shrink: 0;
+  background: rgba(56, 189, 248, 0.18);
+  color: #bae6fd;
+  border: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 32px;
+}
+.suntltest-rawdir-copy:hover {
+  background: rgba(56, 189, 248, 0.28);
+  color: #e0f2fe;
 }
 
+@media (max-width: 540px) {
+  .suntltest-form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .suntltest-form-row--start {
+    align-items: flex-end;
+  }
+  .suntltest-lbl {
+    min-width: 0;
+  }
+  .suntltest-live-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .suntltest-log-box {
+    max-height: 200px;
+    font-size: 11px;
+  }
+  .suntltest-result-actions .btn-action {
+    width: 100%;
+    text-align: center;
+  }
+  .suntltest-rawdir-copy {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+  .suntltest-rawdir-path {
+    flex-basis: 100%;
+    order: 3;
+  }
+}

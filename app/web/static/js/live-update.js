@@ -9,14 +9,20 @@ import { state } from './core/state.js';
 import { byId } from './core/dom.js';
 import { j } from './core/api.js';
 import {
-  renderDashboard, showCameraReloadAnimation,
-  startPreviewRefresh, startBgLuminanceMonitor, _refreshLivePillForCard,
+  renderDashboard,
+  showCameraReloadAnimation,
+  startPreviewRefresh,
+  startBgLuminanceMonitor,
+  _refreshLivePillForCard,
   _resetFailedSnapshotIds,
 } from './dashboard.js';
 import { renderTimeline } from './timeline.js';
 import { _renderGlobalStatusRows } from './camedit/detection.js';
 import {
-  renderShell, renderCameraSettings, renderProfiles, renderAudit,
+  renderShell,
+  renderCameraSettings,
+  renderProfiles,
+  renderAudit,
   hydrateSettings,
 } from './camedit/index.js';
 import { loadMediaStorageStats } from './chrome/storage-stats.js';
@@ -34,12 +40,12 @@ const _lastFlashedAge = new Map(); // camId → Map(label → lastSeenAge)
 
 export function startLiveUpdate() {
   if (_liveUpdateInterval) clearInterval(_liveUpdateInterval);
-  state.cameras.forEach(c => _prevCamStatuses.set(c.id, c.status));
+  state.cameras.forEach((c) => _prevCamStatuses.set(c.id, c.status));
   _liveUpdateInterval = setInterval(async () => {
     try {
       const r = await j('/api/cameras');
       let needsRedraw = false;
-      (r.cameras || []).forEach(c => {
+      (r.cameras || []).forEach((c) => {
         const prev = _prevCamStatuses.get(c.id);
         _prevCamStatuses.set(c.id, c.status);
         if (prev !== c.status) {
@@ -48,11 +54,16 @@ export function startLiveUpdate() {
           if (wasActive !== nowActive) needsRedraw = true;
           if (c.status === 'starting') showCameraReloadAnimation(c.id);
           // Camera settings list badge
-          const item = byId('cameraSettingsList')?.querySelector(`[data-camid="${CSS.escape(c.id)}"]`);
+          const item = byId('cameraSettingsList')?.querySelector(
+            `[data-camid="${CSS.escape(c.id)}"]`,
+          );
           if (item) {
-            const stCol = s => s === 'active' ? 'good' : s === 'error' ? 'danger' : 'warn';
+            const stCol = (s) => (s === 'active' ? 'good' : s === 'error' ? 'danger' : 'warn');
             const b = item.querySelector('.badge');
-            if (b) { b.className = `badge ${stCol(c.status)}`; b.textContent = c.status || '—'; }
+            if (b) {
+              b.className = `badge ${stCol(c.status)}`;
+              b.textContent = c.status || '—';
+            }
           }
         }
         // Always update live pill and FPS display
@@ -70,7 +81,7 @@ export function startLiveUpdate() {
             // detail header.
             const hdr = livePill.querySelector('.cv-live-detail-header span:last-child');
             if (hdr) hdr.textContent = 'Livestream ' + (isActive ? 'aktiv' : 'inaktiv');
-            const cached = (state.cameras || []).find(x => x.id === c.id);
+            const cached = (state.cameras || []).find((x) => x.id === c.id);
             if (cached) {
               cached.preview_fps = c.preview_fps;
               cached.stream_mode = c.stream_mode;
@@ -90,8 +101,8 @@ export function startLiveUpdate() {
           // event was finalised, so absence of glow during a walk-
           // through means no event ever fired (capture/motion/confirm
           // upstream of telegram).
-          const recentSet = new Set((c.recent_detections || []).map(d => d.label));
-          card.querySelectorAll('.cv-surveil-tgt').forEach(tgt => {
+          const recentSet = new Set((c.recent_detections || []).map((d) => d.label));
+          card.querySelectorAll('.cv-surveil-tgt').forEach((tgt) => {
             const cls = tgt.dataset.cls;
             tgt.classList.toggle('is-hot', !!cls && recentSet.has(cls));
           });
@@ -102,7 +113,7 @@ export function startLiveUpdate() {
           // event. _lastFlashedAge protects against re-flashing the
           // same detection on subsequent polls.
           const detSeen = _lastFlashedAge.get(c.id) || new Map();
-          (c.recent_detections || []).forEach(det => {
+          (c.recent_detections || []).forEach((det) => {
             if (!det || !det.label || typeof det.age_s !== 'number') return;
             if (det.age_s >= 2) return;
             const prev = detSeen.get(det.label);
@@ -127,7 +138,9 @@ export function startLiveUpdate() {
       // Both are direct named imports since stages 8 + 17.
       _renderGlobalStatusRows();
       _renderAlertStatusStrip();
-    } catch { /* silent */ }
+    } catch {
+      /* silent */
+    }
   }, 3000);
 }
 
@@ -140,11 +153,13 @@ export function startLiveUpdate() {
 export async function loadAll() {
   if (typeof window._restoreEditWrapper === 'function') window._restoreEditWrapper();
   state.bootstrap = await j('/api/bootstrap');
-  state.config    = await j('/api/config');
-  state.cameras   = (await j('/api/cameras')).cameras || [];
+  state.config = await j('/api/config');
+  state.cameras = (await j('/api/cameras')).cameras || [];
   _resetFailedSnapshotIds();
   if (typeof window._updateMobileDockLiveDot === 'function') window._updateMobileDockLiveDot();
-  state.timeline = await j(`/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`);
+  state.timeline = await j(
+    `/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`,
+  );
   await loadMediaStorageStats();
   renderShell();
   renderDashboard();
@@ -156,15 +171,20 @@ export async function loadAll() {
   hydrateTelegram();
   initTelegramTabs();
   hydratePushUI();
-  if (typeof window.initWeatherTabs === 'function')       window.initWeatherTabs();
-  if (typeof window.initWeatherStats === 'function')      window.initWeatherStats();
-  if (typeof window.loadWeatherSightings === 'function')  await window.loadWeatherSightings();
+  if (typeof window.initWeatherTabs === 'function') window.initWeatherTabs();
+  if (typeof window.initWeatherStats === 'function') window.initWeatherStats();
+  if (typeof window.loadWeatherSightings === 'function') await window.loadWeatherSightings();
   if (typeof window.hydrateWeatherSettings === 'function') window.hydrateWeatherSettings();
-  if (typeof window.loadTlStatus === 'function')          window.loadTlStatus();
-  if (typeof window._updateTlActiveTags === 'function')   window._updateTlActiveTags(state.cameras || []);
+  if (typeof window.loadTlStatus === 'function') window.loadTlStatus();
+  if (typeof window._updateTlActiveTags === 'function')
+    window._updateTlActiveTags(state.cameras || []);
   if (state.bootstrap.needs_wizard && typeof window.openWizard === 'function') window.openWizard();
   const wizBtn = byId('openWizardBtn');
-  if (wizBtn) wizBtn.classList.toggle('hidden', !!state.bootstrap?.wizard_completed || !state.bootstrap?.needs_wizard);
+  if (wizBtn)
+    wizBtn.classList.toggle(
+      'hidden',
+      !!state.bootstrap?.wizard_completed || !state.bootstrap?.needs_wizard,
+    );
   startPreviewRefresh();
   startBgLuminanceMonitor();
   if (typeof window.updateMediaSectionTitle === 'function') window.updateMediaSectionTitle();

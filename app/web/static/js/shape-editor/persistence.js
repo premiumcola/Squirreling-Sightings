@@ -7,7 +7,7 @@ import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
 import { drawShapes, _maskCanvasFallback } from './canvas.js';
 
-export function loadMaskSnapshot(camId){
+export function loadMaskSnapshot(camId) {
   if (!camId) return;
   const img = byId('maskSnapshot');
   if (!img) return;
@@ -21,21 +21,24 @@ export function loadMaskSnapshot(camId){
     if (wrap) wrap.style.aspectRatio = '';
     drawShapes();
   };
-  img.onerror = () => { _maskCanvasFallback(); drawShapes(); };
+  img.onerror = () => {
+    _maskCanvasFallback();
+    drawShapes();
+  };
   img.src = `/api/camera/${camId}/snapshot.jpg?t=${Date.now()}`;
 }
 
-export function saveShapesIntoForm(){
+export function saveShapesIntoForm() {
   const f = byId('cameraForm').elements;
   f['zones_json'].value = JSON.stringify(shapeState.zones || []);
   f['masks_json'].value = JSON.stringify(shapeState.masks || []);
 }
 
-export function _nextPolyName(kind){
-  const list = kind === 'zone' ? (shapeState.zones || []) : (shapeState.masks || []);
+export function _nextPolyName(kind) {
+  const list = kind === 'zone' ? shapeState.zones || [] : shapeState.masks || [];
   const base = kind === 'zone' ? 'Zone' : 'Maske';
   const used = new Set();
-  for (const p of list){
+  for (const p of list) {
     const lbl = (p && p.label) || '';
     const m = lbl.match(new RegExp('^' + base + '\\s+(\\d+)$', 'i'));
     if (m) used.add(parseInt(m[1], 10));

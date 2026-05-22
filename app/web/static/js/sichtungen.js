@@ -25,51 +25,55 @@ let _achDrillLoading = false;
 // through a Sichtungen drilldown.
 let _achDrillSavedMedia = null;
 
-function _achDrillStashMedia(){
+function _achDrillStashMedia() {
   if (_achDrillSavedMedia === null) _achDrillSavedMedia = state.media;
   state.media = _achDrillItems;
 }
-function _achDrillRestoreMedia(){
-  if (_achDrillSavedMedia !== null){
+function _achDrillRestoreMedia() {
+  if (_achDrillSavedMedia !== null) {
     state.media = _achDrillSavedMedia;
     _achDrillSavedMedia = null;
   }
 }
 
-async function _achDrillFetch(speciesId, offset){
+async function _achDrillFetch(speciesId, offset) {
   try {
-    const r = await j(`/api/achievements/${encodeURIComponent(speciesId)}/media?limit=${_ACH_DRILL_LIMIT}&offset=${offset}`);
+    const r = await j(
+      `/api/achievements/${encodeURIComponent(speciesId)}/media?limit=${_ACH_DRILL_LIMIT}&offset=${offset}`,
+    );
     return r || { items: [], total_count: 0 };
   } catch {
     return { items: [], total_count: 0 };
   }
 }
 
-function _achDrillRenderItems(){
+function _achDrillRenderItems() {
   const grid = byId('achDrillGrid');
   if (!grid) return;
-  if (!_achDrillItems.length){
-    grid.innerHTML = '<div class="item muted" style="padding:16px;grid-column:1/-1">Noch keine archivierten Aufnahmen für diese Art.</div>';
+  if (!_achDrillItems.length) {
+    grid.innerHTML =
+      '<div class="item muted" style="padding:16px;grid-column:1/-1">Noch keine archivierten Aufnahmen für diese Art.</div>';
   } else {
     // mediaCardHTML still lives in legacy.js; resolve via window
     // until the lightbox surgery extracts the rest of mediathek.
     const cardFn = window.mediaCardHTML;
-    grid.innerHTML = (typeof cardFn === 'function')
-      ? _achDrillItems.map(cardFn).join('')
-      : '<div class="item muted">Mediathek noch nicht geladen.</div>';
+    grid.innerHTML =
+      typeof cardFn === 'function'
+        ? _achDrillItems.map(cardFn).join('')
+        : '<div class="item muted">Mediathek noch nicht geladen.</div>';
   }
   const more = byId('achDrillMore');
-  if (more){
+  if (more) {
     more.style.display = _achDrillItems.length < _achDrillTotal ? '' : 'none';
   }
   const countEl = byId('achDrillCount');
-  if (countEl){
+  if (countEl) {
     const shown = _achDrillItems.length;
     countEl.textContent = _achDrillTotal <= shown ? `${shown}` : `${shown} von ${_achDrillTotal}`;
   }
   // Cards click → openLightbox with our item list in scope.
   _achDrillStashMedia();
-  grid.querySelectorAll('.media-card').forEach(card => {
+  grid.querySelectorAll('.media-card').forEach((card) => {
     const eid = card.dataset.eventId;
     card.style.cursor = 'pointer';
     card.onclick = (ev) => {
@@ -77,15 +81,15 @@ function _achDrillRenderItems(){
       // call event.stopPropagation() in their onclick), so this only
       // fires when the card body itself is clicked.
       if (ev.target.closest('.mmc-actions, .media-confirmed-badge')) return;
-      const it = _achDrillItems.find(x => x.event_id === eid);
+      const it = _achDrillItems.find((x) => x.event_id === eid);
       if (it && typeof window.openLightbox === 'function') window.openLightbox(it);
     };
   });
 }
 
-async function toggleAchDrilldown(id, name){
+async function toggleAchDrilldown(id, name) {
   // Second click on the same card → close.
-  if (_achOpenId === id){
+  if (_achOpenId === id) {
     closeAchDrilldown();
     return;
   }
@@ -102,12 +106,16 @@ async function toggleAchDrilldown(id, name){
   const nameEl = byId('achDrillName');
   if (nameEl) nameEl.textContent = name || id;
   const grid = byId('achDrillGrid');
-  if (grid) grid.innerHTML = '<div class="field-help" style="padding:16px;grid-column:1/-1">Lade Sichtungen…</div>';
+  if (grid)
+    grid.innerHTML =
+      '<div class="field-help" style="padding:16px;grid-column:1/-1">Lade Sichtungen…</div>';
   // Expand the accordion first so the fetch result slots into a
   // visible container.
   wrap.classList.add('ach-drilldown-wrap--open');
   // Scroll the drilldown into view once the height transition starts.
-  setTimeout(() => { byId('achDrilldownWrap')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
+  setTimeout(() => {
+    byId('achDrilldownWrap')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 60);
   _achDrillLoading = true;
   const r = await _achDrillFetch(id, 0);
   _achDrillLoading = false;
@@ -119,13 +127,13 @@ async function toggleAchDrilldown(id, name){
 }
 window.toggleAchDrilldown = toggleAchDrilldown;
 
-async function loadMoreAchDrill(){
+async function loadMoreAchDrill() {
   if (!_achOpenId || _achDrillLoading) return;
   _achDrillLoading = true;
   _achDrillPage += 1;
   const r = await _achDrillFetch(_achOpenId, _achDrillPage * _ACH_DRILL_LIMIT);
   _achDrillLoading = false;
-  if (r && r.items && r.items.length){
+  if (r && r.items && r.items.length) {
     _achDrillItems = _achDrillItems.concat(r.items);
     _achDrillTotal = r.total_count || _achDrillItems.length;
     _achDrillRenderItems();
@@ -133,7 +141,7 @@ async function loadMoreAchDrill(){
 }
 window.loadMoreAchDrill = loadMoreAchDrill;
 
-function closeAchDrilldown(){
+function closeAchDrilldown() {
   const wrap = byId('achDrilldownWrap');
   if (wrap) wrap.classList.remove('ach-drilldown-wrap--open');
   _achOpenId = null;
@@ -146,41 +154,116 @@ function closeAchDrilldown(){
 window.closeAchDrilldown = closeAchDrilldown;
 
 // Legacy name kept so any lingering inline callers don't break.
-window.openAchievementDrilldown = function(id, name){ toggleAchDrilldown(id, name); };
+window.openAchievementDrilldown = function (id, name) {
+  toggleAchDrilldown(id, name);
+};
 
 // ── Achievements / Sichtungen ────────────────────────────────────────────
 // Top 20 Bavarian garden birds (LBV Stunde der Gartenvögel 2025 Bayern),
 // sorted by frequency (most common first). freq values drive rarity pills.
 const ACH_DEFS = [
-  { id: 'haussperling',     name: 'Haussperling',     icon: '🐦', cat: 'birds', freq: 'sehr haeufig',  rank: 1 },
-  { id: 'amsel',            name: 'Amsel',            icon: '🐦', cat: 'birds', freq: 'sehr haeufig',  rank: 2 },
-  { id: 'kohlmeise',        name: 'Kohlmeise',        icon: '🐦', cat: 'birds', freq: 'sehr haeufig',  rank: 3 },
-  { id: 'star',             name: 'Star',             icon: '🐦', cat: 'birds', freq: 'haeufig',       rank: 4 },
-  { id: 'feldsperling',     name: 'Feldsperling',     icon: '🐦', cat: 'birds', freq: 'haeufig',       rank: 5 },
-  { id: 'blaumeise',        name: 'Blaumeise',        icon: '🐦', cat: 'birds', freq: 'haeufig',       rank: 6 },
-  { id: 'ringeltaube',      name: 'Ringeltaube',      icon: '🐦', cat: 'birds', freq: 'haeufig',       rank: 7 },
-  { id: 'mauersegler',      name: 'Mauersegler',      icon: '🐦', cat: 'birds', freq: 'haeufig',       rank: 8 },
-  { id: 'elster',           name: 'Elster',           icon: '🐦', cat: 'birds', freq: 'regelmaessig',  rank: 9 },
-  { id: 'mehlschwalbe',     name: 'Mehlschwalbe',     icon: '🐦', cat: 'birds', freq: 'regelmaessig',  rank: 10 },
-  { id: 'buchfink',         name: 'Buchfink',         icon: '🐦', cat: 'birds', freq: 'regelmaessig',  rank: 11 },
-  { id: 'rotkehlchen',      name: 'Rotkehlchen',      icon: '🐦', cat: 'birds', freq: 'regelmaessig',  rank: 12 },
-  { id: 'gruenfink',        name: 'Grünfink',         icon: '🐦', cat: 'birds', freq: 'regelmaessig',  rank: 13 },
-  { id: 'rabenkraehe',      name: 'Rabenkrähe',       icon: '🐦', cat: 'birds', freq: 'regelmaessig',  rank: 14 },
-  { id: 'hausrotschwanz',   name: 'Hausrotschwanz',   icon: '🐦', cat: 'birds', freq: 'gelegentlich',  rank: 15 },
-  { id: 'moenchsgrasmucke', name: 'Mönchsgrasmücke',  icon: '🐦', cat: 'birds', freq: 'gelegentlich',  rank: 16 },
-  { id: 'stieglitz',        name: 'Stieglitz',        icon: '🐦', cat: 'birds', freq: 'gelegentlich',  rank: 17 },
-  { id: 'buntspecht',       name: 'Buntspecht',       icon: '🐦', cat: 'birds', freq: 'gelegentlich',  rank: 18 },
-  { id: 'kleiber',          name: 'Kleiber',          icon: '🐦', cat: 'birds', freq: 'selten',        rank: 19 },
-  { id: 'eichelhaher',      name: 'Eichelhäher',      icon: '🐦', cat: 'birds', freq: 'selten',        rank: 20 },
+  {
+    id: 'haussperling',
+    name: 'Haussperling',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'sehr haeufig',
+    rank: 1,
+  },
+  { id: 'amsel', name: 'Amsel', icon: '🐦', cat: 'birds', freq: 'sehr haeufig', rank: 2 },
+  { id: 'kohlmeise', name: 'Kohlmeise', icon: '🐦', cat: 'birds', freq: 'sehr haeufig', rank: 3 },
+  { id: 'star', name: 'Star', icon: '🐦', cat: 'birds', freq: 'haeufig', rank: 4 },
+  { id: 'feldsperling', name: 'Feldsperling', icon: '🐦', cat: 'birds', freq: 'haeufig', rank: 5 },
+  { id: 'blaumeise', name: 'Blaumeise', icon: '🐦', cat: 'birds', freq: 'haeufig', rank: 6 },
+  { id: 'ringeltaube', name: 'Ringeltaube', icon: '🐦', cat: 'birds', freq: 'haeufig', rank: 7 },
+  { id: 'mauersegler', name: 'Mauersegler', icon: '🐦', cat: 'birds', freq: 'haeufig', rank: 8 },
+  { id: 'elster', name: 'Elster', icon: '🐦', cat: 'birds', freq: 'regelmaessig', rank: 9 },
+  {
+    id: 'mehlschwalbe',
+    name: 'Mehlschwalbe',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'regelmaessig',
+    rank: 10,
+  },
+  { id: 'buchfink', name: 'Buchfink', icon: '🐦', cat: 'birds', freq: 'regelmaessig', rank: 11 },
+  {
+    id: 'rotkehlchen',
+    name: 'Rotkehlchen',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'regelmaessig',
+    rank: 12,
+  },
+  { id: 'gruenfink', name: 'Grünfink', icon: '🐦', cat: 'birds', freq: 'regelmaessig', rank: 13 },
+  {
+    id: 'rabenkraehe',
+    name: 'Rabenkrähe',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'regelmaessig',
+    rank: 14,
+  },
+  {
+    id: 'hausrotschwanz',
+    name: 'Hausrotschwanz',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'gelegentlich',
+    rank: 15,
+  },
+  {
+    id: 'moenchsgrasmucke',
+    name: 'Mönchsgrasmücke',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'gelegentlich',
+    rank: 16,
+  },
+  { id: 'stieglitz', name: 'Stieglitz', icon: '🐦', cat: 'birds', freq: 'gelegentlich', rank: 17 },
+  {
+    id: 'buntspecht',
+    name: 'Buntspecht',
+    icon: '🐦',
+    cat: 'birds',
+    freq: 'gelegentlich',
+    rank: 18,
+  },
+  { id: 'kleiber', name: 'Kleiber', icon: '🐦', cat: 'birds', freq: 'selten', rank: 19 },
+  { id: 'eichelhaher', name: 'Eichelhäher', icon: '🐦', cat: 'birds', freq: 'selten', rank: 20 },
   // Säugetiere — Eichhörnchen sind das Aushängeschild des Projekts, daher
   // pinnen wir sie über die Vögel hinweg an den Anfang.
-  { id: 'eichhoernchen_orange',  name: 'Eichhörnchen (rot)',     icon: '🐿️', cat: 'mammals', freq: 'haeufig',      rank: 1, pin: -3 },
-  { id: 'eichhoernchen_schwarz', name: 'Eichhörnchen (schwarz)', icon: '🐿️', cat: 'mammals', freq: 'selten',       rank: 2, pin: -2 },
-  { id: 'eichhoernchen_hell',    name: 'Eichhörnchen (hell)',    icon: '🐿️', cat: 'mammals', freq: 'selten',       rank: 3, pin: -1 },
-  { id: 'igel',     name: 'Igel',     icon: '🦔', cat: 'mammals', freq: 'gelegentlich', rank: 4 },
-  { id: 'feldhase', name: 'Feldhase', icon: '🐇', cat: 'mammals', freq: 'selten',       rank: 5 },
-  { id: 'reh',      name: 'Reh',      icon: '🦌', cat: 'mammals', freq: 'selten',       rank: 6 },
-  { id: 'fuchs',    name: 'Fuchs',    icon: '🦊', cat: 'mammals', freq: 'selten',       rank: 7 },
+  {
+    id: 'eichhoernchen_orange',
+    name: 'Eichhörnchen (rot)',
+    icon: '🐿️',
+    cat: 'mammals',
+    freq: 'haeufig',
+    rank: 1,
+    pin: -3,
+  },
+  {
+    id: 'eichhoernchen_schwarz',
+    name: 'Eichhörnchen (schwarz)',
+    icon: '🐿️',
+    cat: 'mammals',
+    freq: 'selten',
+    rank: 2,
+    pin: -2,
+  },
+  {
+    id: 'eichhoernchen_hell',
+    name: 'Eichhörnchen (hell)',
+    icon: '🐿️',
+    cat: 'mammals',
+    freq: 'selten',
+    rank: 3,
+    pin: -1,
+  },
+  { id: 'igel', name: 'Igel', icon: '🦔', cat: 'mammals', freq: 'gelegentlich', rank: 4 },
+  { id: 'feldhase', name: 'Feldhase', icon: '🐇', cat: 'mammals', freq: 'selten', rank: 5 },
+  { id: 'reh', name: 'Reh', icon: '🦌', cat: 'mammals', freq: 'selten', rank: 6 },
+  { id: 'fuchs', name: 'Fuchs', icon: '🦊', cat: 'mammals', freq: 'selten', rank: 7 },
 ];
 
 let _achData = {};
@@ -188,7 +271,7 @@ let _questsData = {};
 let _questsUpcoming = [];
 let _questsArchive = {};
 
-export async function loadAchievements(){
+export async function loadAchievements() {
   try {
     const r = await j('/api/achievements');
     _achData = r.achievements || {};
@@ -216,7 +299,7 @@ window.loadAchievements = loadAchievements;
 // visible for 30 days before getting filtered out, so the user has a
 // chance to celebrate before the pinboard recycles them.
 
-function _relativeTime(iso){
+function _relativeTime(iso) {
   if (!iso) return '';
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return '';
@@ -229,7 +312,7 @@ function _relativeTime(iso){
   return `vor ${d} ${d === 1 ? 'Tag' : 'Tagen'}`;
 }
 
-function _isQuestVisible(q){
+function _isQuestVisible(q) {
   // Always show active quests. Completed quests linger for 30 days as
   // a reward display, then get hidden so the pinboard doesn't keep
   // bloating with last-year's wins.
@@ -237,7 +320,7 @@ function _isQuestVisible(q){
   if (!q.completed_at) return true;
   const t = Date.parse(q.completed_at);
   if (!Number.isFinite(t)) return false;
-  return (Date.now() - t) < 30 * 24 * 3600 * 1000;
+  return Date.now() - t < 30 * 24 * 3600 * 1000;
 }
 
 // Note: the manual "Re-Eval" button used to live in the pinboard head
@@ -247,7 +330,7 @@ function _isQuestVisible(q){
 // fresh. The POST /api/achievements/quests/reevaluate route is kept
 // for ops (curl / scripts), it just no longer has a UI affordance.
 
-export function renderQuestsPinboard(){
+export function renderQuestsPinboard() {
   const wrap = byId('questsPinboard');
   if (!wrap) return;
   const all = Object.values(_questsData || {});
@@ -258,11 +341,13 @@ export function renderQuestsPinboard(){
     const bc = b.completed_at ? 1 : 0;
     if (ac !== bc) return ac - bc;
     if (ac && bc) return (b.completed_at || '').localeCompare(a.completed_at || '');
-    return (b.progress || 0) / Math.max(1, b.target || 1)
-         - (a.progress || 0) / Math.max(1, a.target || 1);
+    return (
+      (b.progress || 0) / Math.max(1, b.target || 1) -
+      (a.progress || 0) / Math.max(1, a.target || 1)
+    );
   });
 
-  if (!visible.length){
+  if (!visible.length) {
     wrap.innerHTML = `
       <div class="quests-pinboard-head">
         <h4 class="quests-pinboard-title">🎯 Saison-Quests</h4>
@@ -271,16 +356,17 @@ export function renderQuestsPinboard(){
     return;
   }
 
-  const cards = visible.map(q => {
-    const target = Math.max(1, q.target || 1);
-    const progress = Math.max(0, Math.min(target, q.progress || 0));
-    const pct = Math.round(progress / target * 100);
-    const done = !!q.completed_at;
-    const stateCls = done ? ' quest-card--done' : '';
-    const badge = done
-      ? `<span class="quest-done-badge" title="${esc(q.completed_at || '')}">✓ ${esc(_relativeTime(q.completed_at))}</span>`
-      : `<span class="quest-progress-num">${progress}/${target}</span>`;
-    return `<article class="quest-card${stateCls}">
+  const cards = visible
+    .map((q) => {
+      const target = Math.max(1, q.target || 1);
+      const progress = Math.max(0, Math.min(target, q.progress || 0));
+      const pct = Math.round((progress / target) * 100);
+      const done = !!q.completed_at;
+      const stateCls = done ? ' quest-card--done' : '';
+      const badge = done
+        ? `<span class="quest-done-badge" title="${esc(q.completed_at || '')}">✓ ${esc(_relativeTime(q.completed_at))}</span>`
+        : `<span class="quest-progress-num">${progress}/${target}</span>`;
+      return `<article class="quest-card${stateCls}">
       <div class="quest-card-head">
         <span class="quest-icon">${esc(q.icon || '🎯')}</span>
         <div class="quest-titles">
@@ -294,7 +380,8 @@ export function renderQuestsPinboard(){
              style="width:${pct}%"></div>
       </div>
     </article>`;
-  }).join('');
+    })
+    .join('');
 
   wrap.innerHTML = `
     <div class="quests-pinboard-head">
@@ -309,7 +396,7 @@ window.renderQuestsPinboard = renderQuestsPinboard;
 // only — no progress bar, no live counter, just icon + title + "öffnet
 // in X Tagen · läuft bis DD.MM.". Hidden entirely when nothing is on
 // the horizon, so the section doesn't add chrome to a quiet pinboard.
-function _fmtGermanShortDate(iso){
+function _fmtGermanShortDate(iso) {
   if (!iso) return '';
   const dt = new Date(iso);
   if (!Number.isFinite(dt.getTime())) return '';
@@ -318,20 +405,21 @@ function _fmtGermanShortDate(iso){
   return `${dd}.${mm}.`;
 }
 
-export function renderQuestsUpcoming(){
+export function renderQuestsUpcoming() {
   const wrap = byId('questsUpcoming');
   if (!wrap) return;
-  const list = (_questsUpcoming || []).slice(0, 4);  // cap at 4 cards
-  if (!list.length){
+  const list = (_questsUpcoming || []).slice(0, 4); // cap at 4 cards
+  if (!list.length) {
     wrap.innerHTML = '';
     return;
   }
-  const cards = list.map(u => {
-    const days = Number.isFinite(u.opens_in_days) ? u.opens_in_days : 0;
-    const dayLbl = days <= 0 ? 'heute' : `in ${days} ${days === 1 ? 'Tag' : 'Tagen'}`;
-    const closeLbl = u.closes_at ? `läuft bis ${_fmtGermanShortDate(u.closes_at)}` : '';
-    const sub = closeLbl ? `${dayLbl} · ${closeLbl}` : dayLbl;
-    return `<article class="quest-card quest-card--upcoming">
+  const cards = list
+    .map((u) => {
+      const days = Number.isFinite(u.opens_in_days) ? u.opens_in_days : 0;
+      const dayLbl = days <= 0 ? 'heute' : `in ${days} ${days === 1 ? 'Tag' : 'Tagen'}`;
+      const closeLbl = u.closes_at ? `läuft bis ${_fmtGermanShortDate(u.closes_at)}` : '';
+      const sub = closeLbl ? `${dayLbl} · ${closeLbl}` : dayLbl;
+      return `<article class="quest-card quest-card--upcoming">
       <div class="quest-card-head">
         <span class="quest-icon">${esc(u.icon || '🌱')}</span>
         <div class="quest-titles">
@@ -341,7 +429,8 @@ export function renderQuestsUpcoming(){
         <span class="quest-upcoming-when">${esc(sub)}</span>
       </div>
     </article>`;
-  }).join('');
+    })
+    .join('');
   wrap.innerHTML = `
     <div class="quests-pinboard-head">
       <h4 class="quests-pinboard-title">🌱 Demnächst</h4>
@@ -357,37 +446,44 @@ window.renderQuestsUpcoming = renderQuestsUpcoming;
 // entirely when archive is empty — keeps the pinboard area quiet.
 const _ARCHIVE_STORAGE_KEY = 'tamspy.questsArchiveOpen';
 
-function _archiveOpen(){
-  try { return localStorage.getItem(_ARCHIVE_STORAGE_KEY) === '1'; }
-  catch { return false; }
+function _archiveOpen() {
+  try {
+    return localStorage.getItem(_ARCHIVE_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
-function _setArchiveOpen(on){
-  try { localStorage.setItem(_ARCHIVE_STORAGE_KEY, on ? '1' : '0'); }
-  catch { /* quota / private mode — best-effort */ }
+function _setArchiveOpen(on) {
+  try {
+    localStorage.setItem(_ARCHIVE_STORAGE_KEY, on ? '1' : '0');
+  } catch {
+    /* quota / private mode — best-effort */
+  }
 }
 
 const _ARCHIVE_REASON_LABELS = {
   window_closed_incomplete: 'Fenster geschlossen',
-  catalog_removed:          'aus Katalog entfernt',
+  catalog_removed: 'aus Katalog entfernt',
 };
 
-export function renderQuestsArchive(){
+export function renderQuestsArchive() {
   const wrap = byId('questsArchive');
   if (!wrap) return;
   const entries = Object.values(_questsArchive || {});
-  if (!entries.length){
+  if (!entries.length) {
     wrap.innerHTML = '';
     return;
   }
   // Sort newest archived_at first.
   entries.sort((a, b) => (b.archived_at || '').localeCompare(a.archived_at || ''));
   const open = _archiveOpen();
-  const cards = entries.map(q => {
-    const target = Math.max(1, q.target || 1);
-    const progress = Math.max(0, Math.min(target, q.progress || 0));
-    const reasonLbl = _ARCHIVE_REASON_LABELS[q.archived_reason] || q.archived_reason || '';
-    const ageLbl = _relativeTime(q.archived_at);
-    return `<article class="quest-card quest-card--archived">
+  const cards = entries
+    .map((q) => {
+      const target = Math.max(1, q.target || 1);
+      const progress = Math.max(0, Math.min(target, q.progress || 0));
+      const reasonLbl = _ARCHIVE_REASON_LABELS[q.archived_reason] || q.archived_reason || '';
+      const ageLbl = _relativeTime(q.archived_at);
+      return `<article class="quest-card quest-card--archived">
       <div class="quest-card-head">
         <span class="quest-icon">${esc(q.icon || '📦')}</span>
         <div class="quest-titles">
@@ -401,7 +497,8 @@ export function renderQuestsArchive(){
         ${reasonLbl ? `<span class="quest-archive-reason">${esc(reasonLbl)}</span>` : ''}
       </div>
     </article>`;
-  }).join('');
+    })
+    .join('');
   wrap.innerHTML = `
     <button type="button" class="quests-archive-header${open ? ' is-open' : ''}" id="questsArchiveHeader" aria-expanded="${open ? 'true' : 'false'}">
       <span class="quests-archive-title">📦 Archiv</span>
@@ -413,7 +510,7 @@ export function renderQuestsArchive(){
     </div>`;
   const hdr = byId('questsArchiveHeader');
   const body = byId('questsArchiveBody');
-  if (hdr && body){
+  if (hdr && body) {
     hdr.addEventListener('click', () => {
       const nowOpen = !!body.hasAttribute('hidden');
       if (nowOpen) body.removeAttribute('hidden');
@@ -426,23 +523,25 @@ export function renderQuestsArchive(){
 }
 window.renderQuestsArchive = renderQuestsArchive;
 
-function _achTier(count){
+function _achTier(count) {
   if (!count || count < 1) return 'locked';
   if (count >= 20) return 'gold';
-  if (count >= 5)  return 'silver';
+  if (count >= 5) return 'silver';
   return 'bronze';
 }
 
-function _medalSVG(achId, tier, birdSvg, isUnlocked, size = 88){
+function _medalSVG(achId, tier, birdSvg, isUnlocked, size = 88) {
   const uid = achId.replaceAll(/[^a-z0-9]/g, '');
   // Locked medals are deliberately drab: two flat neutral greys, no
   // highlight arc. The silhouette is rendered faintly so the shape is
   // still recognisable without announcing itself.
-  if (!isUnlocked){
+  if (!isUnlocked) {
     let silhouette = '';
-    if (birdSvg){
-      silhouette = birdSvg.replace('<svg ',
-        '<svg x="10" y="10" width="80" height="80" style="filter:grayscale(1) brightness(0.18) opacity(0.45)" ');
+    if (birdSvg) {
+      silhouette = birdSvg.replace(
+        '<svg ',
+        '<svg x="10" y="10" width="80" height="80" style="filter:grayscale(1) brightness(0.18) opacity(0.45)" ',
+      );
     }
     return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
       <circle cx="50" cy="50" r="47" fill="rgba(255,255,255,0.06)"/>
@@ -451,13 +550,23 @@ function _medalSVG(achId, tier, birdSvg, isUnlocked, size = 88){
       ${silhouette}
     </svg>`;
   }
-  const rimC  = { bronze: ['#4a2408', '#c87840'], silver: ['#303840', '#a0b4c4'], gold: ['#402e08', '#e0c050'] };
-  const faceC = { bronze: ['#3a2010', '#1e0e04'], silver: ['#202e38', '#101820'], gold: ['#2a2010', '#140e04'] };
-  const hlC   = { bronze: '#e09860',              silver: '#c0d0e0',              gold: '#f0e060' };
+  const rimC = {
+    bronze: ['#4a2408', '#c87840'],
+    silver: ['#303840', '#a0b4c4'],
+    gold: ['#402e08', '#e0c050'],
+  };
+  const faceC = {
+    bronze: ['#3a2010', '#1e0e04'],
+    silver: ['#202e38', '#101820'],
+    gold: ['#2a2010', '#140e04'],
+  };
+  const hlC = { bronze: '#e09860', silver: '#c0d0e0', gold: '#f0e060' };
   const [rc, re] = rimC[tier];
   const [fc, fe] = faceC[tier];
   const hl = hlC[tier];
-  const bird = birdSvg ? birdSvg.replace('<svg ', `<svg x="10" y="10" width="80" height="80" `) : '';
+  const bird = birdSvg
+    ? birdSvg.replace('<svg ', `<svg x="10" y="10" width="80" height="80" `)
+    : '';
   return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <radialGradient id="rg${uid}" cx="50%" cy="40%" r="55%">
@@ -481,26 +590,26 @@ function _medalSVG(achId, tier, birdSvg, isUnlocked, size = 88){
 // medals always render rarity in a neutral gray regardless of rank so
 // the eye focuses on what's already been discovered, not what's missing.
 const _FREQ_META = {
-  'sehr haeufig':  { label: 'Sehr häufig',  color: 'rgba(150,200,150,0.7)' },
-  'haeufig':       { label: 'Häufig',       color: 'rgba(150,200,150,0.6)' },
-  'regelmaessig':  { label: 'Regelmäßig',   color: 'rgba(200,200,150,0.7)' },
-  'gelegentlich':  { label: 'Gelegentlich', color: 'rgba(210,170,100,0.7)' },
-  'selten':        { label: 'Selten',       color: 'rgba(210,120,100,0.7)' },
+  'sehr haeufig': { label: 'Sehr häufig', color: 'rgba(150,200,150,0.7)' },
+  haeufig: { label: 'Häufig', color: 'rgba(150,200,150,0.6)' },
+  regelmaessig: { label: 'Regelmäßig', color: 'rgba(200,200,150,0.7)' },
+  gelegentlich: { label: 'Gelegentlich', color: 'rgba(210,170,100,0.7)' },
+  selten: { label: 'Selten', color: 'rgba(210,120,100,0.7)' },
 };
 
-function _rarityText(freq, isUnlocked){
+function _rarityText(freq, isUnlocked) {
   const m = _FREQ_META[freq];
   if (!m) return '';
   const color = isUnlocked ? m.color : 'rgba(255,255,255,0.25)';
   return `<span class="medal-rarity" style="color:${color}">${m.label}</span>`;
 }
 
-export function renderAchievements(){
-  const unlocked = ACH_DEFS.filter(a => _achData[a.id]);
+export function renderAchievements() {
+  const unlocked = ACH_DEFS.filter((a) => _achData[a.id]);
   const total = ACH_DEFS.length;
-  const pct = Math.round(unlocked.length / total * 100);
+  const pct = Math.round((unlocked.length / total) * 100);
   const progressEl = byId('achievementsProgress');
-  if (progressEl){
+  if (progressEl) {
     progressEl.innerHTML = `
       <span class="ach-progress-text">${unlocked.length} von ${total} gesichtet</span>
       <div class="ach-progress-track"><div class="ach-progress-fill" style="width:${pct}%"></div></div>
@@ -516,11 +625,11 @@ export function renderAchievements(){
   const _renderCard = (a) => {
     const info = _achData[a.id];
     const isUnlocked = !!info;
-    const count = isUnlocked ? (info.count || 1) : 0;
+    const count = isUnlocked ? info.count || 1 : 0;
     const tier = _achTier(count);
     const isSquirrelXL = a.cat === 'mammals' && a.id.startsWith('eichhoernchen_');
     const medalSize = isSquirrelXL ? 132 : 88;
-    const iconSvg = a.cat === 'birds' ? (BIRD_SVGS[a.id] || null) : (MAMMAL_SVGS[a.id] || null);
+    const iconSvg = a.cat === 'birds' ? BIRD_SVGS[a.id] || null : MAMMAL_SVGS[a.id] || null;
     const medalHtml = _medalSVG(a.id, tier, iconSvg, isUnlocked, medalSize);
     const emojiOverlay = !iconSvg
       ? `<span class="medal-emoji${isUnlocked ? '' : ' medal-emoji-locked'}">${isUnlocked ? a.icon : '🔒'}</span>`
@@ -548,8 +657,10 @@ export function renderAchievements(){
     const nameHtml = isSquirrelXL
       ? `<div class="medal-name-base">${esc(baseName)}</div>${variantSuffix ? `<div class="medal-variant">${esc(variantSuffix)}</div>` : ''}`
       : `${esc(baseName)}${variantSuffix ? `<span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.3);font-style:italic;margin-left:3px">${esc(variantSuffix)}</span>` : ''}`;
-    const clickable = isUnlocked ? `onclick="toggleAchDrilldown('${esc(a.id)}','${esc(a.name)}')" style="cursor:pointer"` : '';
-    const activeCls = (isUnlocked && _achOpenId === a.id) ? ' ach-card--active' : '';
+    const clickable = isUnlocked
+      ? `onclick="toggleAchDrilldown('${esc(a.id)}','${esc(a.name)}')" style="cursor:pointer"`
+      : '';
+    const activeCls = isUnlocked && _achOpenId === a.id ? ' ach-card--active' : '';
     const xlCls = isSquirrelXL ? ' ach-card--xl' : '';
     return `<div class="ach-card ${tier}${activeCls}${xlCls}" ${clickable}>
       <div class="medal-wrap">
@@ -566,7 +677,8 @@ export function renderAchievements(){
   // so the Eichhörnchen variants sit at the very front. Then birds (by
   // rank), then the remaining mammals (by rank).
   const sorted = [...ACH_DEFS].sort((a, b) => {
-    const pa = a.pin ?? 0, pb = b.pin ?? 0;
+    const pa = a.pin ?? 0,
+      pb = b.pin ?? 0;
     if (pa !== pb) return pa - pb;
     const catOrder = (a.cat === 'birds' ? 0 : 1) - (b.cat === 'birds' ? 0 : 1);
     if (catOrder) return catOrder;
@@ -590,13 +702,13 @@ export function renderAchievements(){
       </div>
     </div>`;
   const grid = byId('achievementsGrid');
-  if (grid){
+  if (grid) {
     grid.innerHTML = `<div class="ach-cards-grid">${cards}</div>${drilldown}` + legend;
   }
   // If we re-rendered while a drilldown was open, re-populate the grid
   // from the in-memory cache so the user sees items immediately instead
   // of a "Lade…" placeholder on every click elsewhere.
-  if (_achOpenId && _achDrillItems.length){
+  if (_achOpenId && _achDrillItems.length) {
     _achDrillRenderItems();
   }
 }

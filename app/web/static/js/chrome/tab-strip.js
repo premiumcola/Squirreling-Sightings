@@ -12,10 +12,11 @@
 //   querySelectorAll at boot would miss the lazy ones, so the
 //   observer adopts strips as they appear.
 
-const SELECTOR = '.set-tabs, .coral-tabs, .cam-recovery-tabs, .media-filter-bar, .cam-tab-bar, .ws-filter-bar';
+const SELECTOR =
+  '.set-tabs, .coral-tabs, .cam-recovery-tabs, .media-filter-bar, .cam-tab-bar, .ws-filter-bar';
 const _adopted = new WeakSet();
 
-function _updateEndState(strip){
+function _updateEndState(strip) {
   // 1 px tolerance because Safari sometimes reports a 0.5 px delta
   // even when scrolled to the literal end. The class is also present
   // when the strip doesn't overflow at all — the mask becomes a
@@ -25,14 +26,14 @@ function _updateEndState(strip){
   strip.classList.toggle('is-end', atEnd);
 }
 
-function _adopt(strip){
+function _adopt(strip) {
   if (_adopted.has(strip)) return;
   _adopted.add(strip);
   _updateEndState(strip);
   strip.addEventListener('scroll', () => _updateEndState(strip), { passive: true });
 }
 
-function _scan(root){
+function _scan(root) {
   const strips = (root || document).querySelectorAll(SELECTOR);
   strips.forEach(_adopt);
 }
@@ -43,8 +44,8 @@ function _scan(root){
 // our selector.
 _scan(document);
 new MutationObserver((muts) => {
-  for (const m of muts){
-    for (const node of m.addedNodes){
+  for (const m of muts) {
+    for (const node of m.addedNodes) {
       if (!(node instanceof Element)) continue;
       if (node.matches?.(SELECTOR)) _adopt(node);
       _scan(node);
@@ -55,6 +56,10 @@ new MutationObserver((muts) => {
 // Window resize can change overflow status (a strip that fit in
 // landscape may now overflow in portrait). Re-evaluate every adopted
 // strip on resize without re-adopting them.
-window.addEventListener('resize', () => {
-  document.querySelectorAll(SELECTOR).forEach(_updateEndState);
-}, { passive: true });
+window.addEventListener(
+  'resize',
+  () => {
+    document.querySelectorAll(SELECTOR).forEach(_updateEndState);
+  },
+  { passive: true },
+);

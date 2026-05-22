@@ -1,18 +1,101 @@
 /* ── Reconnect button (premium green, vector icon) ───────────────────────── */
-.btn-reconnect{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:12px;border:none;background:rgba(34,197,94,.14);color:#4ade80;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;-webkit-tap-highlight-color:transparent;flex-shrink:0}
-.btn-reconnect:hover{background:rgba(34,197,94,.25)}
-.btn-reconnect:active{background:rgba(34,197,94,.4)}
-@keyframes spin-once{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-.btn-reconnect.spinning svg{animation:spin-once .5s cubic-bezier(.4,0,.2,1) both}
-.btn-cam-delete{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;border:none;background:rgba(239,68,68,.12);color:rgba(239,68,68,.7);cursor:pointer;transition:background .15s,color .15s;-webkit-tap-highlight-color:transparent;flex-shrink:0}
-.btn-cam-delete:hover{background:rgba(239,68,68,.25);color:#f87171}
-.btn-cam-delete:active{background:rgba(239,68,68,.4)}
-.btn-cam-merge{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:12px;border:none;background:rgba(56,189,248,.12);color:#7dd3fc;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s;-webkit-tap-highlight-color:transparent;flex-shrink:0}
-.btn-cam-merge:hover{background:rgba(56,189,248,.22);color:#bae6fd}
-.btn-cam-merge:active{background:rgba(56,189,248,.32)}
+.btn-reconnect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(34, 197, 94, 0.14);
+  color: #4ade80;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.btn-reconnect:hover {
+  background: rgba(34, 197, 94, 0.25);
+}
+.btn-reconnect:active {
+  background: rgba(34, 197, 94, 0.4);
+}
+@keyframes spin-once {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.btn-reconnect.spinning svg {
+  animation: spin-once 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.btn-cam-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(239, 68, 68, 0.12);
+  color: rgba(239, 68, 68, 0.7);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.btn-cam-delete:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+.btn-cam-delete:active {
+  background: rgba(239, 68, 68, 0.4);
+}
+.btn-cam-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.btn-cam-merge:hover {
+  background: rgba(56, 189, 248, 0.22);
+  color: #bae6fd;
+}
+.btn-cam-merge:active {
+  background: rgba(56, 189, 248, 0.32);
+}
 /* Archived-card merge action: full-width but contained — no overflow,
    no wrapping, the ↗ glyph signals the modal jump. */
-.btn-merge-archived{display:flex;width:100%;justify-content:center;font-size:11px;padding:6px 8px;min-height:30px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box}
-.merge-target-item:hover{background:rgba(255,255,255,.04)}
-.merge-target-item.selected{background:rgba(59,130,246,.08)}
-
+.btn-merge-archived {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  font-size: 11px;
+  padding: 6px 8px;
+  min-height: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+}
+.merge-target-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.merge-target-item.selected {
+  background: rgba(59, 130, 246, 0.08);
+}

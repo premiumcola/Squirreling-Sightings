@@ -11,7 +11,7 @@
 // ── Track payload cache + in-flight fetches ─────────────────────────────
 // Keyed by event_id so re-opens don't re-fetch unless the user explicitly
 // re-indexes.
-export const _tracksCache = new Map();    // event_id → payload | null (404)
+export const _tracksCache = new Map(); // event_id → payload | null (404)
 export const _tracksInflight = new Map(); // event_id → Promise
 
 // ── Auto-reindex bookkeeping ────────────────────────────────────────────
@@ -37,14 +37,17 @@ export const _REINDEX_MAX_RETRIES = 6;
 // floor is tentative (extends an existing track but couldn't spawn
 // one on its own). The overlay paints it dashed so the operator can
 // see why the same track id is carrying mixed-confidence frames.
-export const _TRACK_SPAWN_SCORE = 0.50;
+export const _TRACK_SPAWN_SCORE = 0.5;
 
 // ?lbdebug=1 surfaces the same diagnostics that go to console.warn in
 // a small bottom-right corner overlay. Off by default; resolved once
 // at module load so navigation inside the SPA can't flip it mid-session.
 export const _DEBUG_LB = (() => {
-  try { return new URLSearchParams(location.search).has('lbdebug'); }
-  catch { return false; }
+  try {
+    return new URLSearchParams(location.search).has('lbdebug');
+  } catch {
+    return false;
+  }
 })();
 export const _DEBUG_BUFFER = []; // last 4 lines for the corner overlay
 
@@ -58,8 +61,8 @@ export const _state = {
   // Track-timeline state captured at render time so the play cursor +
   // × tooltip handlers don't have to re-read videoEl.duration / re-parse
   // tracks.json on every event.
-  timelineDuration: 0,           // seconds
-  timelineTrackIndex: [],        // array of track objects for × tooltip
+  timelineDuration: 0, // seconds
+  timelineTrackIndex: [], // array of track objects for × tooltip
   // Time-axis drag state — track whether the scrubber drag interrupted
   // active playback so we can resume on pointerup.
   dragWasPlaying: false,

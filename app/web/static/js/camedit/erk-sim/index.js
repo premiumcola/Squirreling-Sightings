@@ -8,15 +8,14 @@
 import { byId } from '../../core/dom.js';
 import { _onErkSimulateClick, stopLive } from './live.js';
 
-
-export function bindErkSimulate(){
+export function bindErkSimulate() {
   const btn = byId('erkSimulateBtn');
   const close = byId('erkSimClose');
-  if (btn && !btn.dataset.wired){
+  if (btn && !btn.dataset.wired) {
     btn.dataset.wired = '1';
     btn.addEventListener('click', _onErkSimulateClick);
   }
-  if (close && !close.dataset.wired){
+  if (close && !close.dataset.wired) {
     close.dataset.wired = '1';
     close.addEventListener('click', () => {
       // Synchronous stop so the button label flips back the moment
@@ -24,7 +23,7 @@ export function bindErkSimulate(){
       // up to 1 s later, which feels laggy.
       stopLive();
       const wrap = byId('erkSimResult');
-      if (wrap){
+      if (wrap) {
         wrap.hidden = true;
         delete wrap.dataset.everShown;
       }
@@ -35,7 +34,7 @@ export function bindErkSimulate(){
   // into an empty pre. Click outside the log doesn't reset it;
   // closing the whole sheet (× button) re-hides everything.
   const logClear = byId('erkSimLogClear');
-  if (logClear && !logClear.dataset.wired){
+  if (logClear && !logClear.dataset.wired) {
     logClear.dataset.wired = '1';
     logClear.addEventListener('click', () => {
       const body = byId('erkSimLogBody');

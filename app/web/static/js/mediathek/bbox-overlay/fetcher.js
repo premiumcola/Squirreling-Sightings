@@ -5,12 +5,7 @@
 // set; the RAF loop kicks off via the play/loadedmetadata listeners.
 import { lbState } from '../state.js';
 import { trackColor } from '../../core/track-color.js';
-import {
-  _reindexFinalFailed,
-  _reindexInflight,
-  _tracksCache,
-  _tracksInflight,
-} from './_state.js';
+import { _reindexFinalFailed, _reindexInflight, _tracksCache, _tracksInflight } from './_state.js';
 import { _logDiag } from './debug.js';
 import {
   _hideReindexBanner,
@@ -21,7 +16,7 @@ import { _lbDrawDetections } from './renderer.js';
 import { _renderConfidenceMeter } from './confidence-meter.js';
 import { lbRenderTrackTimeline } from './timeline-panel.js';
 
-export function _tracksUrlFor(item){
+export function _tracksUrlFor(item) {
   const rel = item?.video_relpath;
   if (!rel) return null;
   // The mp4 lives at <storage>/motion_detection/<cam>/<date>/<id>.mp4
@@ -31,7 +26,7 @@ export function _tracksUrlFor(item){
   return null;
 }
 
-export async function _fetchTracks(item){
+export async function _fetchTracks(item) {
   const eid = item?.event_id;
   const url = _tracksUrlFor(item);
   if (!eid || !url) return null;
@@ -41,11 +36,12 @@ export async function _fetchTracks(item){
     try {
       const bustUrl = `${url}?_t=${Date.now()}`;
       const r = await fetch(bustUrl, { cache: 'no-store' });
-      if (!r.ok){
+      if (!r.ok) {
         _tracksCache.set(eid, null);
         _logDiag(
           `event=${eid} fetch status=${r.status} url=${url} → no tracks`,
-          r.status === 404 ? 'info' : 'warn');
+          r.status === 404 ? 'info' : 'warn',
+        );
         return null;
       }
       const data = await r.json();
@@ -57,19 +53,19 @@ export async function _fetchTracks(item){
       // tr.color directly — stamping once here keeps them in lock-
       // step without each consumer running its own fallback chain.
       let _num = 0;
-      for (const tr of (data.tracks || [])){
+      for (const tr of data.tracks || []) {
         (tr.samples || []).sort((a, b) => a.f - b.f);
         _num += 1;
         tr._num = _num;
         tr.color = trackColor(tr);
       }
       _tracksCache.set(eid, data);
-      const fa = Array.isArray(data.filter_applied)
-        ? data.filter_applied.join(',') : 'none';
+      const fa = Array.isArray(data.filter_applied) ? data.filter_applied.join(',') : 'none';
       _logDiag(
-        `event=${eid} fetch status=200 schema=${data.schema ?? '?'} `
-        + `tracks=${(data.tracks || []).length} filter=${fa}`,
-        'info');
+        `event=${eid} fetch status=200 schema=${data.schema ?? '?'} ` +
+          `tracks=${(data.tracks || []).length} filter=${fa}`,
+        'info',
+      );
       return data;
     } catch (e) {
       _tracksCache.set(eid, null);
@@ -85,7 +81,7 @@ export async function _fetchTracks(item){
 
 // Reset the cached payload for an event so the next render fetches a
 // fresh tracks.json (fired after a successful re-index POST).
-export function lbInvalidateTracks(eventId){
+export function lbInvalidateTracks(eventId) {
   if (eventId) _tracksCache.delete(eventId);
 }
 
@@ -103,16 +99,16 @@ export function lbInvalidateTracks(eventId){
 // Old clips with no sidecar show a calm placeholder ("noch nicht
 // indexiert — über »Neu indexieren« erzeugen") that the user can act
 // on; the indexer never starts on its own.
-export async function lbLoadTracksForItem(item){
+export async function lbLoadTracksForItem(item) {
   if (!item) return;
   const tracks = await _fetchTracks(item);
   item._tracks = tracks;
   if (lbState.item !== item) return;
 
-  const haveAnyTracks = !!(tracks
-    && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
-  const triggerDetCount = (item.detections || [])
-    .filter(d => d && d.bbox && typeof d.bbox.x1 === 'number').length;
+  const haveAnyTracks = !!(tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
+  const triggerDetCount = (item.detections || []).filter(
+    (d) => d && d.bbox && typeof d.bbox.x1 === 'number',
+  ).length;
   // Render whatever the sidecar produced — including the empty/
   // missing case, where lbRenderTrackTimeline draws the
   // un-indexed placeholder.
@@ -122,17 +118,18 @@ export async function lbLoadTracksForItem(item){
 
   // Banner state — surface ongoing manual reindexes / prior
   // failures but never kick a new one.
-  if (_reindexFinalFailed.has(item.event_id)){
+  if (_reindexFinalFailed.has(item.event_id)) {
     _showReindexBannerError(item);
-  } else if (_reindexInflight.has(item.event_id)){
+  } else if (_reindexInflight.has(item.event_id)) {
     _showReindexBannerPending(item);
   } else {
     _hideReindexBanner();
   }
 
   _logDiag(
-    `event=${item.event_id} render path=${haveAnyTracks ? 'tracks' : 'placeholder'} `
-    + `(${haveAnyTracks ? tracks.tracks.length : 0} tracks, `
-    + `${triggerDetCount} trigger dets) — load-only`,
-    'info');
+    `event=${item.event_id} render path=${haveAnyTracks ? 'tracks' : 'placeholder'} ` +
+      `(${haveAnyTracks ? tracks.tracks.length : 0} tracks, ` +
+      `${triggerDetCount} trigger dets) — load-only`,
+    'info',
+  );
 }

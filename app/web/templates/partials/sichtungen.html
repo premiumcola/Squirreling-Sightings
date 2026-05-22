@@ -1,38 +1,42 @@
-      <section id="achievements" class="panel section" data-accent="200,120,64">
-        <div class="section-head section-head--with-icon">
-          <span class="section-head-icon" aria-hidden="true"><svg width="24" height="24"><use href="#icon-paw"/></svg></span>
-          <h3>Sichtungen</h3>
-          <span class="section-subtitle">Erkannte Gartenwildtiere · Entdeckungstagebuch</span>
-        </div>
-        <div id="questsPinboard" class="quests-pinboard"></div>
-        <!-- Upcoming-quests preview — quests whose next window opens
+<section id="achievements" class="panel section" data-accent="200,120,64">
+  <div class="section-head section-head--with-icon">
+    <span class="section-head-icon" aria-hidden="true"
+      ><svg width="24" height="24"><use href="#icon-paw" /></svg
+    ></span>
+    <h3>Sichtungen</h3>
+    <span class="section-subtitle">Erkannte Gartenwildtiere · Entdeckungstagebuch</span>
+  </div>
+  <div id="questsPinboard" class="quests-pinboard"></div>
+  <!-- Upcoming-quests preview — quests whose next window opens
              within the next 60 days. Read-only (no progress bar). -->
-        <div id="questsUpcoming" class="quests-upcoming"></div>
-        <!-- Quests archive — closed-window-incomplete + catalog-removed
+  <div id="questsUpcoming" class="quests-upcoming"></div>
+  <!-- Quests archive — closed-window-incomplete + catalog-removed
              entries with progress > 0. Hidden entirely when empty;
              collapsible header when populated. -->
-        <div id="questsArchive" class="quests-archive"></div>
-        <!-- Animal sightings section head — uses the same h4 + subtitle
+  <div id="questsArchive" class="quests-archive"></div>
+  <!-- Animal sightings section head — uses the same h4 + subtitle
              pattern as the Quests pinboard above and the Vogel-Dossiers
              below so the three sub-sections share one typographic scale.
              Without it, the medal grid started with no framing line and
              the user couldn't tell where "Quests" ended and "Tiere"
              began. -->
-        <div class="birds-section-head" id="achievementsSectionHead">
-          <h4 class="birds-section-title">🐾 Tiere</h4>
-          <span class="birds-section-subtitle">Top-20 Bayern · Bronze / Silber / Gold</span>
-        </div>
-        <div id="achievementsProgress" class="ach-progress-bar"></div>
-        <div id="achievementsGrid" class="ach-grid"></div>
-        <div id="birdDossiers">
-          <div class="birds-section-head">
-            <h4 class="birds-section-title">📖 Vogel-Dossiers</h4>
-            <span class="birds-section-subtitle">Persönlicher Bestimmungsschlüssel · auto-recherchiert</span>
-          </div>
-          <div id="birdsGallery"></div>
-        </div>
-      </section>
+  <div class="birds-section-head" id="achievementsSectionHead">
+    <h4 class="birds-section-title">🐾 Tiere</h4>
+    <span class="birds-section-subtitle">Top-20 Bayern · Bronze / Silber / Gold</span>
+  </div>
+  <div id="achievementsProgress" class="ach-progress-bar"></div>
+  <div id="achievementsGrid" class="ach-grid"></div>
+  <div id="birdDossiers">
+    <div class="birds-section-head">
+      <h4 class="birds-section-title">📖 Vogel-Dossiers</h4>
+      <span class="birds-section-subtitle"
+        >Persönlicher Bestimmungsschlüssel · auto-recherchiert</span
+      >
+    </div>
+    <div id="birdsGallery"></div>
+  </div>
+</section>
 
-      <!-- Wetter — eigene Top-Level-Sektion (war bis Phase Sun-TL ein Sub-Block
+<!-- Wetter — eigene Top-Level-Sektion (war bis Phase Sun-TL ein Sub-Block
            im #achievements panel; rausgezogen damit Tier-Sichtungen und Wetter
            thematisch sauber getrennte Welten in der Navigation sind). -->

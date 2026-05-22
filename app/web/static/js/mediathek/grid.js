@@ -9,11 +9,11 @@ import { state } from '../core/state.js';
 import { onLongPress } from '../core/gestures.js';
 import { _enterMediaSelectMode, _toggleMediaSelected } from './bulk-delete.js';
 
-(function _initMediaGridResizeObserver(){
+(function _initMediaGridResizeObserver() {
   const grid = byId('mediaGrid');
   if (!grid || typeof ResizeObserver === 'undefined') return;
   let lastW = 0;
-  const ro = new ResizeObserver(entries => {
+  const ro = new ResizeObserver((entries) => {
     const w = entries[0]?.contentRect?.width || 0;
     if (!w || Math.abs(w - lastW) < 192) return;
     lastW = w;
@@ -29,7 +29,7 @@ import { _enterMediaSelectMode, _toggleMediaSelected } from './bulk-delete.js';
     if (newCols === window._lastKnownCols) return;
     window._lastKnownCols = newCols;
     if (!state._allMedia?.length) return;
-    const ps = (typeof window.calcItemsPerPage === 'function') ? window.calcItemsPerPage() : 24;
+    const ps = typeof window.calcItemsPerPage === 'function' ? window.calcItemsPerPage() : 24;
     window._cachedPageSize = ps;
     state.mediaTotalPages = Math.max(1, Math.ceil(state._allMedia.length / ps));
     state.mediaPage = 0;
@@ -45,7 +45,7 @@ import { _enterMediaSelectMode, _toggleMediaSelected } from './bulk-delete.js';
 // existing click-to-toggle path so behaviour stays predictable. The
 // gesture lives at the grid level via event delegation so newly
 // rendered cards inherit it without per-card binding.
-(function _wireMediaCardLongPress(){
+(function _wireMediaCardLongPress() {
   const grid = byId('mediaGrid');
   if (!grid) return;
   onLongPress(grid, (evt) => {

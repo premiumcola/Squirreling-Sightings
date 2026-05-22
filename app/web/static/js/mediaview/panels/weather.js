@@ -5,4 +5,4 @@
 //
 // SKELETON — task #3 fills this in.
 
-export function renderWeatherPanel(/* host, item */){}
+export function renderWeatherPanel(/* host, item */) {}

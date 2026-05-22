@@ -15,7 +15,7 @@ import { j } from './core/api.js';
 
 let _dossiers = [];
 
-function _relDays(iso){
+function _relDays(iso) {
   if (!iso) return '';
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return '';
@@ -27,7 +27,7 @@ function _relDays(iso){
   return `vor ${Math.round(days / 30)} Monaten`;
 }
 
-export async function loadBirdDossiers(){
+export async function loadBirdDossiers() {
   try {
     const r = await j('/api/bird-dossiers');
     _dossiers = (r && r.dossiers) || [];
@@ -38,10 +38,10 @@ export async function loadBirdDossiers(){
 }
 window.loadBirdDossiers = loadBirdDossiers;
 
-export function renderBirdDossiers(){
+export function renderBirdDossiers() {
   const wrap = byId('birdsGallery');
   if (!wrap) return;
-  if (!_dossiers.length){
+  if (!_dossiers.length) {
     wrap.innerHTML = `<div class="birds-empty">
       Noch keine Vogel-Dossiers — sobald der Bird-Classifier eine neue
       Art identifiziert, wird sie hier angelegt.</div>`;
@@ -49,7 +49,7 @@ export function renderBirdDossiers(){
   }
   const tiles = _dossiers.map(_tileHtml).join('');
   wrap.innerHTML = `<div class="birds-grid">${tiles}</div>`;
-  wrap.querySelectorAll('.bird-tile').forEach(el => {
+  wrap.querySelectorAll('.bird-tile').forEach((el) => {
     el.addEventListener('click', () => {
       openBirdDossier(el.dataset.latin);
     });
@@ -57,13 +57,17 @@ export function renderBirdDossiers(){
 }
 window.renderBirdDossiers = renderBirdDossiers;
 
-function _tileHtml(d){
+function _tileHtml(d) {
   const thumb = d.wikipedia_thumb_url
     ? `<img class="bird-thumb-img" src="${esc(d.wikipedia_thumb_url)}" alt="" loading="lazy"/>`
     : `<div class="bird-thumb-placeholder">🐦</div>`;
   const nameDe = esc(d.common_name_de || d.latin);
   const latin = esc(d.latin);
-  const seen = esc(_relDays(d.first_seen_at) ? `Erstmals gesichtet ${_relDays(d.first_seen_at)}` : 'Frisch entdeckt');
+  const seen = esc(
+    _relDays(d.first_seen_at)
+      ? `Erstmals gesichtet ${_relDays(d.first_seen_at)}`
+      : 'Frisch entdeckt',
+  );
   const cnt = d.sighting_count || 1;
   return `<article class="bird-tile" data-latin="${latin}" tabindex="0" role="button">
     <div class="bird-thumb">${thumb}</div>
@@ -77,7 +81,7 @@ function _tileHtml(d){
 }
 
 // ── Detail modal ───────────────────────────────────────────────────────────
-async function openBirdDossier(latin){
+async function openBirdDossier(latin) {
   if (!latin) return;
   let payload = null;
   try {
@@ -85,7 +89,7 @@ async function openBirdDossier(latin){
   } catch {
     payload = null;
   }
-  if (!payload || !payload.dossier){
+  if (!payload || !payload.dossier) {
     return;
   }
   const d = payload.dossier;
@@ -93,8 +97,8 @@ async function openBirdDossier(latin){
   // Prefer the snapshot of the first-seen event; if we can't recover
   // it from the events list, fall back to the Wikipedia thumbnail.
   let firstSnap = null;
-  const firstEvent = evs.find(e => e.event_id === d.first_seen_event_id) || evs[0];
-  if (firstEvent && firstEvent.snapshot_url){
+  const firstEvent = evs.find((e) => e.event_id === d.first_seen_event_id) || evs[0];
+  if (firstEvent && firstEvent.snapshot_url) {
     firstSnap = firstEvent.snapshot_url;
   }
   const heroImg = firstSnap || d.wikipedia_thumb_url || '';
@@ -104,22 +108,28 @@ async function openBirdDossier(latin){
   // single-clip `audio_url` field for older dossiers that haven't
   // been refetched yet.
   const audioBlock = _renderAudioBlock(d);
-  const wikiBlock = d.wikipedia_summary ? `
-    <p class="bird-modal-summary">${esc(d.wikipedia_summary)}</p>` : `
+  const wikiBlock = d.wikipedia_summary
+    ? `
+    <p class="bird-modal-summary">${esc(d.wikipedia_summary)}</p>`
+    : `
     <p class="bird-modal-summary bird-modal-summary--missing">
       Keine Wikipedia-Daten verfügbar — der nächste Re-Fetch versucht es erneut.
     </p>`;
-  const eventsBlock = evs.length ? `
+  const eventsBlock = evs.length
+    ? `
     <div class="bird-modal-events">
       <div class="bird-modal-events-title">Letzte Sichtungen</div>
       <div class="bird-modal-events-grid">
         ${evs.slice(0, 10).map(_eventThumbHtml).join('')}
       </div>
-    </div>` : '';
-  const wikiLink = d.wikipedia_url ? `
+    </div>`
+    : '';
+  const wikiLink = d.wikipedia_url
+    ? `
     <a class="bird-modal-wiki-link" href="${esc(d.wikipedia_url)}" target="_blank" rel="noopener noreferrer">
       Auf Wikipedia ansehen ↗
-    </a>` : '';
+    </a>`
+    : '';
   // Re-fetch button removed from the visible UI: the auto-fetch on
   // first species sighting (bird_dossiers.on_new_species) covers the
   // happy path, and stale-cache cases are rare enough that an
@@ -155,10 +165,10 @@ async function openBirdDossier(latin){
 }
 window.openBirdDossier = openBirdDossier;
 
-function _eventThumbHtml(ev){
+function _eventThumbHtml(ev) {
   const url = ev.snapshot_url || ev.thumb_url || '';
   const time = ev.time ? esc(ev.time.replace('T', ' ').slice(0, 16)) : '';
-  if (!url){
+  if (!url) {
     return `<div class="bird-event-thumb bird-event-thumb--missing"><span>${time}</span></div>`;
   }
   // onerror: drop the <img> entirely if the snapshot 404s so a
@@ -177,22 +187,28 @@ function _eventThumbHtml(ev){
 // older dossiers that haven't been re-fetched still play their one
 // known clip. Returns an empty string when nothing is available so
 // the modal renders cleanly without an audio block (no error UI).
-function _renderAudioBlock(d){
-  const list = Array.isArray(d.recordings) && d.recordings.length
-    ? d.recordings.slice(0, 3)
-    : (d.audio_url ? [{
-        file_url: d.audio_url,
-        type_de: 'Aufnahme',
-        recordist: d.audio_attribution,
-        license_url: d.audio_license,
-      }] : []);
+function _renderAudioBlock(d) {
+  const list =
+    Array.isArray(d.recordings) && d.recordings.length
+      ? d.recordings.slice(0, 3)
+      : d.audio_url
+        ? [
+            {
+              file_url: d.audio_url,
+              type_de: 'Aufnahme',
+              recordist: d.audio_attribution,
+              license_url: d.audio_license,
+            },
+          ]
+        : [];
   if (!list.length) return '';
-  const rows = list.map(r => {
-    const recordist = esc(r.recordist || 'unbekannt');
-    const license = r.license_url
-      ? ` · <a href="${esc(r.license_url)}" target="_blank" rel="noopener noreferrer">Lizenz</a>`
-      : '';
-    return `
+  const rows = list
+    .map((r) => {
+      const recordist = esc(r.recordist || 'unbekannt');
+      const license = r.license_url
+        ? ` · <a href="${esc(r.license_url)}" target="_blank" rel="noopener noreferrer">Lizenz</a>`
+        : '';
+      return `
       <div class="bird-audio-row">
         <div class="bird-audio-row-head">
           <span class="bird-audio-type">${esc(r.type_de || 'Aufnahme')}</span>
@@ -202,7 +218,8 @@ function _renderAudioBlock(d){
           ♪ ${recordist}${license}
         </div>
       </div>`;
-  }).join('');
+    })
+    .join('');
   return `
     <div class="bird-modal-audio">
       ${rows}

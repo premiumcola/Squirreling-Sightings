@@ -5,25 +5,29 @@
 // only the per-cam key is touched, the rest of localStorage is
 // untouched).
 
-function _hiddenStorageKey(camId){
+function _hiddenStorageKey(camId) {
   return `tamspy.lb.bboxClasses.hidden.${camId || ''}`;
 }
 
-export function _getHiddenClassesForCam(camId){
+export function _getHiddenClassesForCam(camId) {
   if (!camId) return new Set();
   try {
     const raw = localStorage.getItem(_hiddenStorageKey(camId));
     if (!raw) return new Set();
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr : []);
-  } catch { return new Set(); }
+  } catch {
+    return new Set();
+  }
 }
 
-export function _setHiddenClassesForCam(camId, hiddenSet){
+export function _setHiddenClassesForCam(camId, hiddenSet) {
   if (!camId) return;
   try {
     const arr = [...hiddenSet];
     if (arr.length === 0) localStorage.removeItem(_hiddenStorageKey(camId));
     else localStorage.setItem(_hiddenStorageKey(camId), JSON.stringify(arr));
-  } catch { /* quota / private mode — fall through silently */ }
+  } catch {
+    /* quota / private mode — fall through silently */
+  }
 }

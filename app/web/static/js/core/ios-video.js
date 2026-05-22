@@ -14,20 +14,18 @@
 //      `visibilitychange` → visible so subscribers can re-init streams
 //      with a cache-busted URL or a fresh play().catch() pair.
 
-const _ua = (typeof navigator !== 'undefined') ? (navigator.userAgent || '') : '';
-const _platform = (typeof navigator !== 'undefined') ? (navigator.platform || '') : '';
-const _maxTouch = (typeof navigator !== 'undefined') ? (navigator.maxTouchPoints || 0) : 0;
+const _ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+const _platform = typeof navigator !== 'undefined' ? navigator.platform || '' : '';
+const _maxTouch = typeof navigator !== 'undefined' ? navigator.maxTouchPoints || 0 : 0;
 
-export const isIOS = (
+export const isIOS =
   // Classic iPhone / iPad / iPod UA token, but only when the browser
   // isn't IE/WebView (window.MSStream check rules out the rare false
   // positive in old WebView shells that mimic the iOS UA).
-  /iPad|iPhone|iPod/.test(_ua) && !(typeof window !== 'undefined' && window.MSStream)
+  (/iPad|iPhone|iPod/.test(_ua) && !(typeof window !== 'undefined' && window.MSStream)) ||
   // iPadOS 13+ reports "MacIntel" with maxTouchPoints > 1; disambiguate
   // a real Mac (no touch) from an iPad pretending to be one.
-  || (_platform === 'MacIntel' && _maxTouch > 1)
-);
-
+  (_platform === 'MacIntel' && _maxTouch > 1);
 
 // Fire the resume event after a small grace period — iOS sometimes
 // reports `visible` while the GPU is still spinning up, and an
@@ -37,16 +35,18 @@ export const isIOS = (
 const _RESUME_DELAY_MS = 80;
 let _scheduled = false;
 
-function _onVisibilityChange(){
+function _onVisibilityChange() {
   if (typeof document === 'undefined') return;
   if (document.visibilityState !== 'visible') return;
   if (_scheduled) return;
   _scheduled = true;
   setTimeout(() => {
     _scheduled = false;
-    document.dispatchEvent(new CustomEvent('tamspy:viewport-resumed', {
-      detail: { isIOS },
-    }));
+    document.dispatchEvent(
+      new CustomEvent('tamspy:viewport-resumed', {
+        detail: { isIOS },
+      }),
+    );
   }, _RESUME_DELAY_MS);
 }
 
@@ -54,19 +54,17 @@ if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', _onVisibilityChange);
 }
 
-
 // Cap on simultaneously-running MJPEG / video streams. iOS Safari
 // crashes around 4 concurrent MJPEGs on real devices; desktop has no
 // practical limit at the small counts the dashboard renders.
 export const MAX_CONCURRENT_STREAMS = isIOS ? 2 : 6;
-
 
 // Cross-browser fullscreen entry on a <video> element. Apple ships
 // `webkitEnterFullscreen` (only callable on a video, not on its
 // container), Chrome/Firefox ship `requestFullscreen` (callable on
 // any element). Returns whatever the underlying API returns so the
 // caller can chain `.catch` if needed.
-export function enterVideoFullscreen(videoEl){
+export function enterVideoFullscreen(videoEl) {
   if (!videoEl) return null;
   if (videoEl.requestFullscreen) return videoEl.requestFullscreen();
   if (videoEl.webkitEnterFullscreen) return videoEl.webkitEnterFullscreen();

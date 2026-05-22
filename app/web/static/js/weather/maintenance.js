@@ -36,9 +36,13 @@ byId('weatherRescanBtn')?.addEventListener('click', async () => {
       : `Nichts neues — ${r.scanned || 0} Dateien geprüft`;
     showToast(`Wetter-Scan: ${summary}`, r.errors ? 'error' : 'success');
     if (typeof window.loadWeatherSightings === 'function') {
-      try { await window.loadWeatherSightings(); } catch { /* ignore */ }
+      try {
+        await window.loadWeatherSightings();
+      } catch {
+        /* ignore */
+      }
     }
-  } catch (e){
+  } catch (e) {
     showToast('Wetter-Scan fehlgeschlagen: ' + (e.message || e), 'error');
   } finally {
     btn.disabled = false;
@@ -55,14 +59,16 @@ byId('weatherRescanBtn')?.addEventListener('click', async () => {
 byId('weatherMaintForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target.elements;
-  const payload = { weather: {
-    retention_days:        Number(f['retention_days'].value || 90),
-    auto_cleanup_enabled:  !!(f['auto_cleanup_enabled']?.checked),
-  }};
+  const payload = {
+    weather: {
+      retention_days: Number(f['retention_days'].value || 90),
+      auto_cleanup_enabled: !!f['auto_cleanup_enabled']?.checked,
+    },
+  };
   try {
     await apiPost('/api/settings/app', payload);
     showToast('Wetter-Aufbewahrung gespeichert.', 'success');
-  } catch (err){
+  } catch (err) {
     showToast('Speichern fehlgeschlagen: ' + (err.message || err), 'error');
   }
 });
@@ -72,19 +78,27 @@ byId('weatherMaintForm')?.addEventListener('submit', async (e) => {
 // persisted (defaults to 90 d / auto-cleanup ON the very first time). Same
 // approach as camedit/index.js for the mediathek slider — best-effort,
 // silent on failure.
-(async function _initWeatherMaintFromSettings(){
+(async function _initWeatherMaintFromSettings() {
   try {
     const data = await apiGet('/api/bootstrap');
     const w = (data && data.app && data.app.weather) || {};
     const days = Number(w.retention_days || 90);
     const auto = w.auto_cleanup_enabled !== false;
     const sl = byId('ws_retention_days');
-    if (sl){ sl.value = days; }
+    if (sl) {
+      sl.value = days;
+    }
     const lbl = byId('ws_retention_days_val');
-    if (lbl){ lbl.textContent = days + ' Tage'; }
+    if (lbl) {
+      lbl.textContent = days + ' Tage';
+    }
     const tog = byId('ws_auto_cleanup');
-    if (tog){ tog.checked = auto; }
-  } catch { /* silent */ }
+    if (tog) {
+      tog.checked = auto;
+    }
+  } catch {
+    /* silent */
+  }
 })();
 
 byId('weatherThumbRegenBtn')?.addEventListener('click', async () => {
@@ -101,9 +115,13 @@ byId('weatherThumbRegenBtn')?.addEventListener('click', async () => {
     const summary = parts.length ? parts.join(', ') : 'keine Thumbs gefunden';
     showToast(`Wetter-Thumbs: ${summary}`, r.errors ? 'error' : 'success');
     if (typeof window.loadWeatherSightings === 'function') {
-      try { await window.loadWeatherSightings(); } catch { /* ignore */ }
+      try {
+        await window.loadWeatherSightings();
+      } catch {
+        /* ignore */
+      }
     }
-  } catch (e){
+  } catch (e) {
     showToast('Thumb-Erzeugung fehlgeschlagen: ' + (e.message || e), 'error');
   } finally {
     btn.disabled = false;

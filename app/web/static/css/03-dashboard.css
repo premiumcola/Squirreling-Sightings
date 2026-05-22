@@ -1,14 +1,31 @@
 /* ── Camera video-grid ──────────────────────────────────────────────────────── */
-.camera-grid{display:grid;gap:12px}
+.camera-grid {
+  display: grid;
+  gap: 12px;
+}
 /* minmax(0, 1fr) — without it Safari treats grid-child min-width as
    auto (= content intrinsic size), and a freshly-loaded camera <img>
    pushes the column past viewport width. That was the root cause of
    the "page jumps to desktop layout once streams load" regression. */
-.cam-grid-1{grid-template-columns:minmax(0,1fr)}
-.cam-grid-2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-.cam-grid-4{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-.cam-grid-n{grid-template-columns:repeat(3,minmax(0,1fr))}
-@media(max-width:900px){.cam-grid-2,.cam-grid-4,.cam-grid-n{grid-template-columns:minmax(0,1fr)}}
+.cam-grid-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cam-grid-2 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.cam-grid-4 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.cam-grid-n {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .cam-grid-2,
+  .cam-grid-4,
+  .cam-grid-n {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 /* Card = just the video frame. --cv-overlay-inset (8 px) is the
    one-and-only chrome gap from each tile edge to its nearest chrome
@@ -25,12 +42,19 @@
    over interior dark, etc.). Buttons stay dark in both modes —
    their elevation comes from a static filter:drop-shadow, not the
    region palette. */
-.cv-card{
-  border-radius:18px;overflow:hidden;cursor:pointer;
-  background:#0a0a0a;transition:transform .18s,box-shadow .18s;
-  position:relative;min-width:0;contain:paint;
-  --cv-overlay-inset:8px;
-  --class-stroke-w:    2.4px;
+.cv-card {
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #0a0a0a;
+  transition:
+    transform 0.18s,
+    box-shadow 0.18s;
+  position: relative;
+  min-width: 0;
+  contain: paint;
+  --cv-overlay-inset: 8px;
+  --class-stroke-w: 2.4px;
 }
 
 /* Per-region overlay palette. Each .cv-overlay-region carries its
@@ -41,10 +65,10 @@
    snapshot. Per-region modifiers (identity / telegram) layer
    their own variables on top so the live-pill + channel-cluster
    palettes stay in sync with their region. */
-.cv-overlay-region{
-  --overlay-fg:        #fff;
-  --overlay-fg-soft:   #cbd5e1;
-  --overlay-halo:      rgba(255,255,255,.55);
+.cv-overlay-region {
+  --overlay-fg: #fff;
+  --overlay-fg-soft: #cbd5e1;
+  --overlay-halo: rgba(255, 255, 255, 0.55);
   --overlay-halo-blur: 1.4px;
   /* Complementary title shadow. White text gets a heavy BLACK stack
      so the camera name still reads on a near-white sky / daylight
@@ -54,21 +78,16 @@
      filter:drop-shadow for this var so the multi-layer effect lands
      crisply on text. */
   --overlay-title-shadow:
-    1px 0 0 rgba(0,0,0,.92),
-    -1px 0 0 rgba(0,0,0,.92),
-    0 1px 0 rgba(0,0,0,.92),
-    0 -1px 0 rgba(0,0,0,.92),
-    0 0 5px rgba(0,0,0,.65);
+    1px 0 0 rgba(0, 0, 0, 0.92), -1px 0 0 rgba(0, 0, 0, 0.92), 0 1px 0 rgba(0, 0, 0, 0.92),
+    0 -1px 0 rgba(0, 0, 0, 0.92), 0 0 5px rgba(0, 0, 0, 0.65);
   /* A4 · lighter-weight cousin for the channel-cluster sched/status
      rows (10-11 px text). Same shape as the title shadow but lower
      opacity on the soft falloff — too heavy and the small font
      blurs; just enough to guarantee readability on a daylight
      frame where the pill tint alone isn't sufficient. */
   --overlay-text-shadow:
-    1px 0 0 rgba(0,0,0,.72),
-    -1px 0 0 rgba(0,0,0,.72),
-    0 1px 0 rgba(0,0,0,.72),
-    0 -1px 0 rgba(0,0,0,.72);
+    1px 0 0 rgba(0, 0, 0, 0.72), -1px 0 0 rgba(0, 0, 0, 0.72), 0 1px 0 rgba(0, 0, 0, 0.72),
+    0 -1px 0 rgba(0, 0, 0, 0.72);
   /* B2 · title-icon drop-shadow stack. text-shadow can be multi-
      layered with commas; drop-shadow's filter equivalent is to
      CHAIN drop-shadow() calls inside the same filter expression.
@@ -76,137 +95,505 @@
      falloff carries the broader bloom — same complementary logic
      as A2 (black on dark-bg, white on light-bg). The chained
      filter consumes the variable verbatim. */
-  --overlay-icon-shadow:
-    drop-shadow(0 0 0.5px rgba(0,0,0,1))
-    drop-shadow(0 0 2px rgba(0,0,0,.92))
-    drop-shadow(0 0 7px rgba(0,0,0,.45));
+  --overlay-icon-shadow: drop-shadow(0 0 0.5px rgba(0, 0, 0, 1))
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 7px rgba(0, 0, 0, 0.45));
 }
-.cv-overlay-region[data-bg="light"]{
-  --overlay-fg:        #0f0f0f;
-  --overlay-fg-soft:   #1a1a1a;
-  --overlay-halo:      rgba(0,0,0,.6);
+.cv-overlay-region[data-bg='light'] {
+  --overlay-fg: #0f0f0f;
+  --overlay-fg-soft: #1a1a1a;
+  --overlay-halo: rgba(0, 0, 0, 0.6);
   --overlay-halo-blur: 0.8px;
   /* Light-snapshot mirror: dark text needs a WHITE halo to survive
      a momentarily-dark patch (shaded corner of an otherwise-bright
      frame). Same tight ring + soft falloff shape, complementary
      tone. */
   --overlay-title-shadow:
-    1px 0 0 rgba(255,255,255,.95),
-    -1px 0 0 rgba(255,255,255,.95),
-    0 1px 0 rgba(255,255,255,.95),
-    0 -1px 0 rgba(255,255,255,.95),
-    0 0 5px rgba(255,255,255,.7);
+    1px 0 0 rgba(255, 255, 255, 0.95), -1px 0 0 rgba(255, 255, 255, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.95), 0 -1px 0 rgba(255, 255, 255, 0.95),
+    0 0 5px rgba(255, 255, 255, 0.7);
   --overlay-text-shadow:
-    1px 0 0 rgba(255,255,255,.85),
-    -1px 0 0 rgba(255,255,255,.85),
-    0 1px 0 rgba(255,255,255,.85),
-    0 -1px 0 rgba(255,255,255,.85);
-  --overlay-icon-shadow:
-    drop-shadow(0 0 0.5px rgba(255,255,255,1))
-    drop-shadow(0 0 2px rgba(255,255,255,.95))
-    drop-shadow(0 0 7px rgba(255,255,255,.6));
+    1px 0 0 rgba(255, 255, 255, 0.85), -1px 0 0 rgba(255, 255, 255, 0.85),
+    0 1px 0 rgba(255, 255, 255, 0.85), 0 -1px 0 rgba(255, 255, 255, 0.85);
+  --overlay-icon-shadow: drop-shadow(0 0 0.5px rgba(255, 255, 255, 1))
+    drop-shadow(0 0 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 0 7px rgba(255, 255, 255, 0.6));
 }
 /* Identity region — owns the live-pill palette. */
-.cv-overlay-region[data-region="identity"]{
-  --live-pill-bg:      rgba(34,197,94,.22);
-  --live-pill-bd:      rgba(34,197,94,.55);
-  --live-pill-fg:      #86efac;
-  --live-pill-fps:     #9ca3af;
+.cv-overlay-region[data-region='identity'] {
+  --live-pill-bg: rgba(34, 197, 94, 0.22);
+  --live-pill-bd: rgba(34, 197, 94, 0.55);
+  --live-pill-fg: #86efac;
+  --live-pill-fps: #9ca3af;
 }
-.cv-overlay-region[data-region="identity"][data-bg="light"]{
-  --live-pill-bg:      #15803d;
-  --live-pill-bd:      transparent;
-  --live-pill-fg:      #fff;
-  --live-pill-fps:     rgba(255,255,255,.9);
+.cv-overlay-region[data-region='identity'][data-bg='light'] {
+  --live-pill-bg: #15803d;
+  --live-pill-bd: transparent;
+  --live-pill-fg: #fff;
+  --live-pill-fps: rgba(255, 255, 255, 0.9);
 }
 /* Telegram region — owns the channel-cluster icon + dot palette. */
-.cv-overlay-region[data-region="telegram"]{
-  --tg-fg:             #5DB7E8;
-  --tg-active:         #229ED9;
-  --mqtt-fg:           #d6b4ff;
-  --mqtt-active:       #a78bfa;
+.cv-overlay-region[data-region='telegram'] {
+  --tg-fg: #5db7e8;
+  --tg-active: #229ed9;
+  --mqtt-fg: #d6b4ff;
+  --mqtt-active: #a78bfa;
 }
-.cv-overlay-region[data-region="telegram"][data-bg="light"]{
-  --tg-fg:             #0E6BA8;
-  --tg-active:         #0E6BA8;
-  --mqtt-fg:           #5b35a8;
-  --mqtt-active:       #5b35a8;
+.cv-overlay-region[data-region='telegram'][data-bg='light'] {
+  --tg-fg: #0e6ba8;
+  --tg-active: #0e6ba8;
+  --mqtt-fg: #5b35a8;
+  --mqtt-active: #5b35a8;
 }
-.cv-card:hover{transform:scale(1.012);box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:1}
+.cv-card:hover {
+  transform: scale(1.012);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  z-index: 1;
+}
 /* Frame aspect-ratio is per-card via the --cv-aspect var. JS sets
    the var to the stream's reported width/height once the snapshot
    has decoded — until then we use 16/9 so the placeholder doesn't
    look squashed during connect. With object-fit:contain (below)
    the full frame is always visible; cropping is never used. */
-.cv-frame{position:relative;aspect-ratio:var(--cv-aspect, 16/9);overflow:hidden;contain:paint;transform:translateZ(0)}
-.cv-img-wrap{position:relative;width:100%;height:100%}.cv-img{width:100%;height:100%;object-fit:contain;display:block;background:#0a0a0a;opacity:0;transition:opacity .4s;position:absolute;inset:0}.cv-img.loaded{opacity:1}.cv-loading-placeholder{position:absolute;inset:0;height:100%;background:#0a0a0a}@keyframes spin{to{transform:rotate(360deg)}}
+.cv-frame {
+  position: relative;
+  aspect-ratio: var(--cv-aspect, 16/9);
+  overflow: hidden;
+  contain: paint;
+  transform: translateZ(0);
+}
+.cv-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.cv-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #0a0a0a;
+  opacity: 0;
+  transition: opacity 0.4s;
+  position: absolute;
+  inset: 0;
+}
+.cv-img.loaded {
+  opacity: 1;
+}
+.cv-loading-placeholder {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  background: #0a0a0a;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* ── Monitoring-style camera placeholders (offline / connecting) ────────── */
-.cv-ph{position:absolute;inset:0;overflow:hidden;background:#0a0a0a;color:rgba(255,255,255,.8);font-family:ui-monospace,Menlo,Consolas,monospace}
-.cv-ph-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);background-size:40px 40px;opacity:.05;animation:fadeGrid 8s ease-in-out infinite;pointer-events:none}
-.cv-ph-brackets{position:absolute;inset:22px;width:calc(100% - 44px);height:calc(100% - 44px);overflow:visible;pointer-events:none}
-.cv-ph-brackets polyline{stroke:rgba(255,255,255,0.15);stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.cv-ph {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0a0a0a;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.cv-ph-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.05;
+  animation: fadeGrid 8s ease-in-out infinite;
+  pointer-events: none;
+}
+.cv-ph-brackets {
+  position: absolute;
+  inset: 22px;
+  width: calc(100% - 44px);
+  height: calc(100% - 44px);
+  overflow: visible;
+  pointer-events: none;
+}
+.cv-ph-brackets polyline {
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
 /* Every 6 s one diagonal pair jitters a single pixel (signal-interference feel) */
-.cv-ph-brackets .cv-ph-br--tl,.cv-ph-brackets .cv-ph-br--br{animation:bracketJitter 6s ease-in-out infinite}
-.cv-ph-brackets .cv-ph-br--tr,.cv-ph-brackets .cv-ph-br--bl{animation:bracketJitter 6s ease-in-out infinite;animation-delay:3s}
-.cv-ph-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:1}
+.cv-ph-brackets .cv-ph-br--tl,
+.cv-ph-brackets .cv-ph-br--br {
+  animation: bracketJitter 6s ease-in-out infinite;
+}
+.cv-ph-brackets .cv-ph-br--tr,
+.cv-ph-brackets .cv-ph-br--bl {
+  animation: bracketJitter 6s ease-in-out infinite;
+  animation-delay: 3s;
+}
+.cv-ph-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 1;
+}
 /* Fixed square stage centers rings, crosshair and icon on one point so the
    geometry is independent of card aspect ratio and flex-label height. */
-.cv-ph-stage{position:relative;width:180px;height:180px;display:flex;align-items:center;justify-content:center}
-.cv-ph-icon{position:relative;z-index:3;line-height:0;margin:0 auto;animation:iconPulse 3s ease-in-out infinite}
-.cv-ph-icon--red{filter:drop-shadow(0 0 15px rgba(239,68,68,0.2))}
-.cv-ph-icon--glitch{animation:iconPulse 3s ease-in-out infinite, glitch 10s linear infinite}
-.cv-ph-label{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:800}
-.cv-ph-label--flicker{animation:textFlicker 6s linear infinite}
-.cv-ph-label--red{text-shadow:0 0 20px rgba(239,68,68,0.15)}
-.cv-ph-label--blue{color:rgba(59,130,246,0.55)}
+.cv-ph-stage {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cv-ph-icon {
+  position: relative;
+  z-index: 3;
+  line-height: 0;
+  margin: 0 auto;
+  animation: iconPulse 3s ease-in-out infinite;
+}
+.cv-ph-icon--red {
+  filter: drop-shadow(0 0 15px rgba(239, 68, 68, 0.2));
+}
+.cv-ph-icon--glitch {
+  animation:
+    iconPulse 3s ease-in-out infinite,
+    glitch 10s linear infinite;
+}
+.cv-ph-label {
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 800;
+}
+.cv-ph-label--flicker {
+  animation: textFlicker 6s linear infinite;
+}
+.cv-ph-label--red {
+  text-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+.cv-ph-label--blue {
+  color: rgba(59, 130, 246, 0.55);
+}
 
 /* Offline (red): expanding rings + crosshair. 3 px ring border + soft
    halo via box-shadow so the line never thins to a hairline under
    transform:scale; 2 px crosshair as flat solid lines (no gradient
    fade) so they don't disappear at odd resolutions. */
-.cv-ph-ring{position:absolute;top:50%;left:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border:3px solid rgba(239,68,68,0.45);border-radius:50%;box-shadow:0 0 14px 2px rgba(239,68,68,0.18);animation:ring1 4s ease-out infinite;pointer-events:none}
-.cv-ph-crosshair{position:absolute;top:50%;left:50%;width:55%;height:55%;transform:translate(-50%,-50%);pointer-events:none;background:
-  linear-gradient(rgba(239,68,68,0.32),rgba(239,68,68,0.32)) center/100% 2px no-repeat,
-  linear-gradient(rgba(239,68,68,0.32),rgba(239,68,68,0.32)) center/2px 100% no-repeat}
+.cv-ph-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border: 3px solid rgba(239, 68, 68, 0.45);
+  border-radius: 50%;
+  box-shadow: 0 0 14px 2px rgba(239, 68, 68, 0.18);
+  animation: ring1 4s ease-out infinite;
+  pointer-events: none;
+}
+.cv-ph-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 55%;
+  height: 55%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(239, 68, 68, 0.32), rgba(239, 68, 68, 0.32)) center/100% 2px no-repeat,
+    linear-gradient(rgba(239, 68, 68, 0.32), rgba(239, 68, 68, 0.32)) center/2px 100% no-repeat;
+}
 
 /* Connecting (blue): radar sweep + filled-disc backdrop + orbiting
    dots. Guides are two flat translucent discs (no stroke); the radar
    wedge is a filled translucent path with a pulsing dot at the tip
    (no thin line — would alias under rotation). */
-.cv-ph-guides,.cv-ph-radar{position:absolute;top:50%;left:50%;width:200px;height:200px;transform:translate(-50%,-50%);pointer-events:none}
-.cv-ph-radar{animation:radarSpin 3s linear infinite;transform-origin:100px 100px;transform:translate(-50%,-50%)}
-.cv-ph-radar-dot{transform-origin:85px 49px;animation:radarDotPulse 1.6s ease-in-out infinite}
-.cv-ph-orbit{position:absolute;top:50%;left:50%;border-radius:50%;pointer-events:none;transform-origin:0 0}
-.cv-ph-orbit--1{width:4px;height:4px;margin:-2px 0 0 -2px;background:rgba(59,130,246,0.8);box-shadow:0 0 6px rgba(59,130,246,0.8);animation:orbitDot 4s linear infinite}
-.cv-ph-orbit--2{width:5px;height:5px;margin:-2.5px 0 0 -2.5px;background:rgba(59,130,246,0.7);box-shadow:0 0 8px rgba(59,130,246,0.7);animation:orbitDot2 6s linear infinite}
-.cv-ph-orbit--3{width:3px;height:3px;margin:-1.5px 0 0 -1.5px;background:rgba(59,130,246,0.6);box-shadow:0 0 5px rgba(59,130,246,0.6);animation:orbitDot3 3s linear infinite}
+.cv-ph-guides,
+.cv-ph-radar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.cv-ph-radar {
+  animation: radarSpin 3s linear infinite;
+  transform-origin: 100px 100px;
+  transform: translate(-50%, -50%);
+}
+.cv-ph-radar-dot {
+  transform-origin: 85px 49px;
+  animation: radarDotPulse 1.6s ease-in-out infinite;
+}
+.cv-ph-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+.cv-ph-orbit--1 {
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  background: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.8);
+  animation: orbitDot 4s linear infinite;
+}
+.cv-ph-orbit--2 {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  background: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
+  animation: orbitDot2 6s linear infinite;
+}
+.cv-ph-orbit--3 {
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  background: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 0 5px rgba(59, 130, 246, 0.6);
+  animation: orbitDot3 3s linear infinite;
+}
 
-@keyframes fadeGrid{0%,100%{opacity:.04}50%{opacity:.07}}
-@keyframes bracketPulseRed{0%,100%{stroke:rgba(255,255,255,0.15)}50%{stroke:rgba(239,68,68,0.6)}}
-@keyframes bracketPulseBlue{0%,100%{stroke:rgba(255,255,255,0.15)}50%{stroke:rgba(59,130,246,0.6)}}
+@keyframes fadeGrid {
+  0%,
+  100% {
+    opacity: 0.04;
+  }
+  50% {
+    opacity: 0.07;
+  }
+}
+@keyframes bracketPulseRed {
+  0%,
+  100% {
+    stroke: rgba(255, 255, 255, 0.15);
+  }
+  50% {
+    stroke: rgba(239, 68, 68, 0.6);
+  }
+}
+@keyframes bracketPulseBlue {
+  0%,
+  100% {
+    stroke: rgba(255, 255, 255, 0.15);
+  }
+  50% {
+    stroke: rgba(59, 130, 246, 0.6);
+  }
+}
 /* 200 ms wobble at the 6-second mark — one pair of corners shifts 1 px */
-@keyframes bracketJitter{0%,95%,100%{transform:translate(0,0)}96%{transform:translate(1px,0)}97%{transform:translate(0,1px)}98%{transform:translate(-1px,0)}99%{transform:translate(0,0)}}
-@keyframes ring1{0%{transform:scale(0.3);opacity:.6}100%{transform:scale(2.8);opacity:0}}
-@keyframes radarSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
-@keyframes radarDotPulse{0%,100%{opacity:.55;transform:scale(.85)}50%{opacity:1;transform:scale(1.2)}}
-@keyframes orbitDot{from{transform:rotate(0deg) translateX(40px)}to{transform:rotate(360deg) translateX(40px)}}
-@keyframes orbitDot2{from{transform:rotate(0deg) translateX(52px)}to{transform:rotate(-360deg) translateX(52px)}}
-@keyframes orbitDot3{from{transform:rotate(0deg) translateX(28px)}to{transform:rotate(360deg) translateX(28px)}}
-@keyframes iconPulse{0%,100%{opacity:.25;transform:scale(1)}50%{opacity:.4;transform:scale(1.04)}}
-@keyframes glitch{0%,88%,100%{transform:translate(0,0)}89%{transform:translate(-2px,1px)}90%{transform:translate(3px,-1px)}91%{transform:translate(-1px,2px)}92%{transform:translate(1px,-2px)}}
-@keyframes textFlicker{0%,84%,100%{opacity:1}85%{opacity:.25}86%{opacity:1}87%{opacity:.5}88%{opacity:1}89%{opacity:.3}90%{opacity:1}91%{opacity:.6}92%{opacity:1}}
+@keyframes bracketJitter {
+  0%,
+  95%,
+  100% {
+    transform: translate(0, 0);
+  }
+  96% {
+    transform: translate(1px, 0);
+  }
+  97% {
+    transform: translate(0, 1px);
+  }
+  98% {
+    transform: translate(-1px, 0);
+  }
+  99% {
+    transform: translate(0, 0);
+  }
+}
+@keyframes ring1 {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.8);
+    opacity: 0;
+  }
+}
+@keyframes radarSpin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+@keyframes radarDotPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+@keyframes orbitDot {
+  from {
+    transform: rotate(0deg) translateX(40px);
+  }
+  to {
+    transform: rotate(360deg) translateX(40px);
+  }
+}
+@keyframes orbitDot2 {
+  from {
+    transform: rotate(0deg) translateX(52px);
+  }
+  to {
+    transform: rotate(-360deg) translateX(52px);
+  }
+}
+@keyframes orbitDot3 {
+  from {
+    transform: rotate(0deg) translateX(28px);
+  }
+  to {
+    transform: rotate(360deg) translateX(28px);
+  }
+}
+@keyframes iconPulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.04);
+  }
+}
+@keyframes glitch {
+  0%,
+  88%,
+  100% {
+    transform: translate(0, 0);
+  }
+  89% {
+    transform: translate(-2px, 1px);
+  }
+  90% {
+    transform: translate(3px, -1px);
+  }
+  91% {
+    transform: translate(-1px, 2px);
+  }
+  92% {
+    transform: translate(1px, -2px);
+  }
+}
+@keyframes textFlicker {
+  0%,
+  84%,
+  100% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 0.25;
+  }
+  86% {
+    opacity: 1;
+  }
+  87% {
+    opacity: 0.5;
+  }
+  88% {
+    opacity: 1;
+  }
+  89% {
+    opacity: 0.3;
+  }
+  90% {
+    opacity: 1;
+  }
+  91% {
+    opacity: 0.6;
+  }
+  92% {
+    opacity: 1;
+  }
+}
 
 /* Bottom gradient is the only overlay now (cv-grad-top retired in B1
    — there's no chrome at the top-left after the identity cluster
    moved down). 40% tall + .75 opacity gives the bottom chrome — name,
    location, Live-pill, class pills, channel pills, Sim/Cog — a calm
    dark backing without darkening the action area in the middle. */
-.cv-grad-bot{position:absolute;bottom:0;left:0;right:0;height:40%;background:linear-gradient(to top,rgba(0,0,0,.75) 0%,transparent 100%);pointer-events:none;opacity:.85;transition:opacity .2s}
-@media (hover: hover) and (pointer: fine){
-  .cv-grad-bot{opacity:.6}
-  .cv-card:hover .cv-grad-bot{opacity:1}
-}.cv-live-dot{position:absolute;bottom:10px;left:10px;width:10px;height:10px;border-radius:50%;z-index:3}.cv-live-green{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}.cv-live-amber{background:#f59e0b;animation:cv-pulse-amber 2s ease-in-out infinite}.cv-live-red{background:#ef4444}@keyframes cv-pulse-green{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}50%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}@keyframes cv-pulse-amber{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
+.cv-grad-bot {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, transparent 100%);
+  pointer-events: none;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cv-grad-bot {
+    opacity: 0.6;
+  }
+  .cv-card:hover .cv-grad-bot {
+    opacity: 1;
+  }
+}
+.cv-live-dot {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  z-index: 3;
+}
+.cv-live-green {
+  background: #22c55e;
+  animation: cv-pulse-green 2s ease-in-out infinite;
+}
+.cv-live-amber {
+  background: #f59e0b;
+  animation: cv-pulse-amber 2s ease-in-out infinite;
+}
+.cv-live-red {
+  background: #ef4444;
+}
+@keyframes cv-pulse-green {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(34, 197, 94, 0);
+  }
+}
+@keyframes cv-pulse-amber {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0);
+  }
+}
 
 /* v17 four-zone tile chrome — strict 8 px inset to every tile edge.
    Each zone is absolute-positioned inside .cv-img-wrap (the FS root)
@@ -214,8 +601,10 @@
    none on the wrappers + auto on direct children stops the gradient
    overlay from swallowing video taps while keeping the chrome
    interactive. */
-.cv-chrome-top-left{
-  position:absolute;top:var(--cv-overlay-inset);left:var(--cv-overlay-inset);
+.cv-chrome-top-left {
+  position: absolute;
+  top: var(--cv-overlay-inset);
+  left: var(--cv-overlay-inset);
   /* J2 · align-items was `center` before — when the user tapped the
      Live pill its detail panel (.cv-live-detail) expanded the stack
      downward and the camera icon re-centred against the now-taller
@@ -224,21 +613,30 @@
      stack grows downward only. The .cv-cam-title-icon margin-top
      below nudges it to line up with .cv-name's optical baseline
      instead of the absolute top edge. */
-  display:flex;align-items:flex-start;gap:4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   /* D1 · the previous `calc(50% - 110px)` reserved a 220 px middle
      strip for nothing (the timestamp strip lives at the BOTTOM, not
      top), so a 375 px card capped the title at ~78 px and chopped
      "Squirrel Town 'Nut Bar'" mid-word. New budget reserves only
      ~140 px on the right for HD / FS / cog + a 12 px gap, leaving
      the title the actual horizontal space it needs. */
-  max-width:calc(100% - 140px);
-  z-index:4;pointer-events:none;
+  max-width: calc(100% - 140px);
+  z-index: 4;
+  pointer-events: none;
 }
-.cv-chrome-top-left > *{pointer-events:auto}
-.cv-chrome-top-right{
-  position:absolute;top:var(--cv-overlay-inset);right:var(--cv-overlay-inset);
-  display:flex;align-items:center;gap:4px;
-  z-index:4;
+.cv-chrome-top-left > * {
+  pointer-events: auto;
+}
+.cv-chrome-top-right {
+  position: absolute;
+  top: var(--cv-overlay-inset);
+  right: var(--cv-overlay-inset);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 4;
 }
 /* Bottom-left v17 — stacked: TG/MQTT cluster row on top, class-icon
    row below it. align-items:flex-start so each row hugs the left edge.
@@ -250,19 +648,35 @@
    one stacked unit instead of two floating rows. The inter-cluster
    gap (TG ↔ MQTT) also tightened 14 → 10 px so the badge feels
    compact at 375 px without crowding. */
-.cv-chrome-bottom-left{
-  position:absolute;left:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);
-  display:flex;flex-direction:column;align-items:flex-start;gap:8px;
-  max-width:calc(50% - 110px);
-  z-index:3;pointer-events:none;
+.cv-chrome-bottom-left {
+  position: absolute;
+  left: var(--cv-overlay-inset);
+  bottom: var(--cv-overlay-inset);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(50% - 110px);
+  z-index: 3;
+  pointer-events: none;
 }
-.cv-chrome-bottom-left > *{pointer-events:auto}
-.cv-channel-row{display:flex;align-items:center;gap:10px}
-.cv-chrome-bottom-right{
-  position:absolute;right:var(--cv-overlay-inset);bottom:var(--cv-overlay-inset);
-  display:flex;align-items:center;gap:4px;
-  max-width:calc(50% - 110px);
-  z-index:6;
+.cv-chrome-bottom-left > * {
+  pointer-events: auto;
+}
+.cv-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cv-chrome-bottom-right {
+  position: absolute;
+  right: var(--cv-overlay-inset);
+  bottom: var(--cv-overlay-inset);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(50% - 110px);
+  z-index: 6;
 }
 
 /* Top-left identity stack — icon on the left, two stacked rows
@@ -278,9 +692,13 @@
    frame. The SVG stroke-width in core/icons.js also bumped 1.8 →
    2.4 so the line itself isn't the limiting factor at the larger
    render size. */
-.cv-cam-title-icon{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:42px;height:42px;flex-shrink:0;
+.cv-cam-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
   /* J2 · with the parent's align-items now flex-start (so the icon
      stays put when the Live-pill detail panel expands the stack
      downward), the icon's top edge meets the row's top edge. A
@@ -288,23 +706,32 @@
      the cv-name's first-line baseline, restoring the previous
      visually-aligned "icon · name" look without re-introducing the
      center-anchored slide on pill expand. */
-  margin-top:2px;
+  margin-top: 2px;
   /* tx412 — per-camera identity colour tints the icon. The
      --cam-color custom property is set inline on this span from
      getCameraColor(cam); fallback to --overlay-fg keeps the legacy
      "white on dark / dark on light" behaviour when no override is
      active. */
-  color:var(--cam-color, var(--overlay-fg));
-  filter:var(--overlay-icon-shadow);
+  color: var(--cam-color, var(--overlay-fg));
+  filter: var(--overlay-icon-shadow);
 }
-.cv-cam-title-icon svg{width:100%;height:100%;display:block}
-.cv-tl-stack{
-  display:flex;flex-direction:column;align-items:flex-start;gap:2px;
-  min-width:0;
+.cv-cam-title-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
-.cv-tl-stack .cv-name{
-  font-size:20px;font-weight:500;line-height:1.1;
-  color:var(--overlay-fg);
+.cv-tl-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.cv-tl-stack .cv-name {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--overlay-fg);
   /* A2 · complementary text-shadow replaces the legacy single-halo
      drop-shadow filter. text-shadow paints the outline glyph-by-
      glyph so the title stays sharp on any frame regardless of where
@@ -314,10 +741,15 @@
      D1 · max-width drops to 100 % — the parent .cv-chrome-top-left
      now caps the row at the right value, so an explicit pixel cap
      here would only re-introduce mid-name truncation. */
-  text-shadow:var(--overlay-title-shadow);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+  text-shadow: var(--overlay-title-shadow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
-.cv-tl-stack .cv-pill-live-wrap{align-self:flex-start}
+.cv-tl-stack .cv-pill-live-wrap {
+  align-self: flex-start;
+}
 
 /* ── Unified chrome button (v17 — 36 × 36 corner family)
    36 px height by default · radius 10 · solid dark transparent bg
@@ -327,22 +759,26 @@
    Per-instance tints (class pill icon, channel badge) come via
    inline ``--icon-tint``; padding variants via .has-text modifier.
    ::before extends the tap target to 44 × 44 px. */
-.cv-chrome-btn{
-  position:relative;
-  height:36px;
-  min-width:36px;
-  border-radius:10px;
-  border:0;outline:0;
-  background:rgba(10,10,10,.85);
-  color:#fff;
-  display:inline-flex;align-items:center;justify-content:center;
-  gap:7px;
-  font-size:12px;font-weight:500;
-  padding:0;
-  cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
-  -webkit-backdrop-filter:blur(8px);
-  backdrop-filter:blur(8px);
+.cv-chrome-btn {
+  position: relative;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 10px;
+  border: 0;
+  outline: 0;
+  background: rgba(10, 10, 10, 0.85);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   /* Elevation via a single dark drop-shadow. F1 · the second layer
      (drop-shadow(0 0 1.5px rgba(255,255,255,.25))) was meant as a
      soft "upward edge light" but on a bright sky / daylight grass
@@ -351,10 +787,11 @@
      the rendering-artifact the user flagged. The remaining dark
      drop-shadow already lifts the button off any background; we
      don't need a second layer in the opposite tone for that. */
-  filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));
-  transition:background .14s cubic-bezier(.4,0,.2,1),
-             color .14s cubic-bezier(.4,0,.2,1),
-             transform .08s cubic-bezier(.4,0,.2,1);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+  transition:
+    background 0.14s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.14s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.08s cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* bk417 — markant black-on-white hover + solid-black active. The
    previous tweak (bg .65 → .78, scale .96) was too timid against a
@@ -365,15 +802,20 @@
    @media (hover: hover) so iOS taps don't leave the inverted state
    stuck after release — touch devices see the active snap directly
    on each tap. */
-@media (hover: hover){
-  .cv-chrome-btn:hover{background:rgba(255,255,255,.92);color:#000}
+@media (hover: hover) {
+  .cv-chrome-btn:hover {
+    background: rgba(255, 255, 255, 0.92);
+    color: #000;
+  }
 }
-.cv-chrome-btn:active{
-  background:#000;
-  color:#fff;
-  transform:scale(.94);
+.cv-chrome-btn:active {
+  background: #000;
+  color: #fff;
+  transform: scale(0.94);
 }
-.cv-chrome-btn:focus{outline:none}
+.cv-chrome-btn:focus {
+  outline: none;
+}
 /* F1 · focus indicator switched from `box-shadow: inset` (painted
    INSIDE the button face — competes with the HD blue / icon glyph)
    to `outline` (painted OUTSIDE the border-box) so a stuck-after-
@@ -382,48 +824,113 @@
    tap (combined with focus state) which on iOS reads as a flash.
    Touch devices that never engage focus-visible see no ring at
    all — that's the spec-correct behaviour. */
-.cv-chrome-btn:focus-visible:not(:active){
-  outline:2px solid rgba(255,255,255,.85);
-  outline-offset:2px;
+.cv-chrome-btn:focus-visible:not(:active) {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 2px;
 }
-.cv-chrome-btn[data-state="muted"]{opacity:.38}
-.cv-chrome-btn.has-text{padding:0 12px}
-.cv-chrome-btn::before{content:"";position:absolute;inset:-7px;border-radius:14px;pointer-events:auto}
+.cv-chrome-btn[data-state='muted'] {
+  opacity: 0.38;
+}
+.cv-chrome-btn.has-text {
+  padding: 0 12px;
+}
+.cv-chrome-btn::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 14px;
+  pointer-events: auto;
+}
 /* E4 · Class icons as status glyphs. No background, no border, no
    button affordance — just a coloured glyph that drop-shadows
    against the snapshot. Hover / active states retired since the
    pills are no longer interactive. Stroke-width comes from
    --class-stroke-w on .cv-card so palette + size stays consistent. */
-.cv-class-pill{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:22px;height:22px;
-  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
+.cv-class-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
 }
-.cv-class-pill[data-state="muted"]{opacity:.38}
-.cv-class-pill svg{
-  width:22px;height:22px;display:block;
-  stroke-width:var(--class-stroke-w);
+.cv-class-pill[data-state='muted'] {
+  opacity: 0.38;
 }
-.cv-class-cluster{display:flex;align-items:center;gap:12px}
+.cv-class-pill svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  stroke-width: var(--class-stroke-w);
+}
+.cv-class-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 
 /* Detection flash — 700 ms scale + drop-shadow pulse when a new
    recent_detection matching this class's label lands in /api/cameras.
    --flash-color is set inline by the JS hook in live-update.js so
    each class's flash colour matches its own --class-<cls> palette
    token. */
-.cv-class-pill--flash{animation:cv-class-flash 700ms ease-out}
-@keyframes cv-class-flash{
-  0%   { transform:scale(1);    filter:drop-shadow(0 0 0 transparent); }
-  40%  { transform:scale(1.25); filter:drop-shadow(0 0 4px var(--flash-color, #fff)); }
-  100% { transform:scale(1);    filter:drop-shadow(0 0 0 transparent); }
+.cv-class-pill--flash {
+  animation: cv-class-flash 700ms ease-out;
 }
-.cv-group-pill{display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.55);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;width:fit-content}
+@keyframes cv-class-flash {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  40% {
+    transform: scale(1.25);
+    filter: drop-shadow(0 0 4px var(--flash-color, #fff));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+.cv-group-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+  width: fit-content;
+}
 
 /* Base pill */
-.cv-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.02em;position:relative;cursor:default;backdrop-filter:blur(8px);min-height:0;line-height:1.2;box-sizing:border-box}
+.cv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  position: relative;
+  cursor: default;
+  backdrop-filter: blur(8px);
+  min-height: 0;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
 
 /* Live dot */
-.cv-pdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.cv-pdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
 /* ── Live pill · GROUND-UP REWRITE ────────────────────────────────────────
    Three prior fixes failed because the wrap contained TWO children
@@ -438,57 +945,83 @@
    drops every width/max-width/min-width, and switches the expanded
    panel from max-height:0 to display:none so it doesn't participate
    in collapsed-state sizing at all. */
-.cv-pill-live-wrap{
-  position:relative;
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:3px 8px;
-  border-radius:999px;
-  border:1.5px solid var(--live-pill-bd);
-  background:var(--live-pill-bg);
-  color:var(--live-pill-fg);
-  font-size:10.5px;
-  font-weight:700;
-  line-height:1;
-  backdrop-filter:blur(8px);
-  -webkit-backdrop-filter:blur(8px);
-  cursor:pointer;
-  white-space:nowrap;
-  transition:background .18s,border-color .18s,padding .18s,border-radius .18s;
+.cv-pill-live-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1.5px solid var(--live-pill-bd);
+  background: var(--live-pill-bg);
+  color: var(--live-pill-fg);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    padding 0.18s,
+    border-radius 0.18s;
   /* explicitly NO width, NO max-width, NO min-width — flex hugs */
 }
 /* iOS 44 × 44 touch hitbox — same pattern as .cv-chrome-btn / channel
    pill. inset:-7px 0 grows the hit area vertically without disturbing
    the inline-flex sizing horizontally. */
-.cv-pill-live-wrap::before{content:"";position:absolute;inset:-7px 0;pointer-events:auto}
-.cv-live-off{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.35)}
+.cv-pill-live-wrap::before {
+  content: '';
+  position: absolute;
+  inset: -7px 0;
+  pointer-events: auto;
+}
+.cv-live-off {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.35);
+}
 
 /* E6 · Collapsed-state spacing. Parent gap:6 gives the baseline
    right-side gap (fps→chevron). margin-left:6 on .cv-live-fps stacks
    on top so the Live↔fps gap reads as 12 px while the fps↔chevron
    stays at the tighter 6 px the spec calls for. */
-.cv-live-label{flex-shrink:0}
-.cv-live-fps{margin-left:6px;color:var(--live-pill-fps);font-size:10px;font-weight:600;flex-shrink:0}
-.cv-live-arrow{opacity:.7;flex-shrink:0}
+.cv-live-label {
+  flex-shrink: 0;
+}
+.cv-live-fps {
+  margin-left: 6px;
+  color: var(--live-pill-fps);
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cv-live-arrow {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
 
 /* Detail panel — hidden until the wrap opens. display:none keeps the
    panel out of fit-content size calculation entirely (the third-attempt
    fix used max-height:0 which still let the panel's intrinsic width
    leak into the wrap's sizing on iOS). */
-.cv-live-detail{display:none}
+.cv-live-detail {
+  display: none;
+}
 
-.cv-pill-live-wrap.cv-lp-open{
-  flex-direction:column;
-  align-items:stretch;
-  gap:4px;
-  padding:8px 12px;
-  border-radius:14px;
-  background:rgba(15,30,20,.92);
-  -webkit-backdrop-filter:blur(12px);
-  backdrop-filter:blur(12px);
-  border-color:rgba(34,197,94,.7);
-  white-space:normal;
+.cv-pill-live-wrap.cv-lp-open {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(15, 30, 20, 0.92);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-color: rgba(34, 197, 94, 0.7);
+  white-space: normal;
 }
 /* When open, hide the collapsed-row children and show the detail panel.
    The wrap's width derives from the detail panel's natural content
@@ -497,26 +1030,65 @@
 .cv-pill-live-wrap.cv-lp-open > .cv-pdot,
 .cv-pill-live-wrap.cv-lp-open > .cv-live-label,
 .cv-pill-live-wrap.cv-lp-open > .cv-live-fps,
-.cv-pill-live-wrap.cv-lp-open > .cv-live-arrow{display:none}
-.cv-pill-live-wrap.cv-lp-open > .cv-live-detail{display:flex;flex-direction:column;gap:4px}
+.cv-pill-live-wrap.cv-lp-open > .cv-live-arrow {
+  display: none;
+}
+.cv-pill-live-wrap.cv-lp-open > .cv-live-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 /* Header row inside the detail panel — same dot pulse + "Livestream
    aktiv" title the third-attempt design had, just under the new class
    names so the rewrite is self-contained. */
-.cv-live-detail-header{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#c8f5e0;padding-bottom:4px;border-bottom:1px solid rgba(34,197,94,.2);margin-bottom:1px}
+.cv-live-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c8f5e0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(34, 197, 94, 0.2);
+  margin-bottom: 1px;
+}
 
-.cv-pill-live-wrap.cv-live-active .cv-pdot{background:#22c55e;animation:cv-pulse-green 2s ease-in-out infinite}
-.cv-pill-live-wrap.cv-live-off .cv-pdot{background:rgba(255,255,255,.3);animation:none}
+.cv-pill-live-wrap.cv-live-active .cv-pdot {
+  background: #22c55e;
+  animation: cv-pulse-green 2s ease-in-out infinite;
+}
+.cv-pill-live-wrap.cv-live-off .cv-pdot {
+  background: rgba(255, 255, 255, 0.3);
+  animation: none;
+}
 
 /* Detail-row layout — label + value side-by-side with a comfortable
    gap. No padding-left/right so the row aligns with the wrap's
    padding edge. */
-.cv-lp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:10px;line-height:1.3}
-.cv-lp-row span{color:rgba(220,252,231,.75)}
+.cv-lp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.cv-lp-row span {
+  color: rgba(220, 252, 231, 0.75);
+}
 /* Sub-labels under the row spans were dropped from the dashboard
    template — keep the rule in case a future caller re-adds them. */
-.cv-lp-row small{font-size:9px;color:rgba(220,252,231,.5);display:block}
-.cv-lp-row strong{color:#fff;font-weight:700;white-space:nowrap}
+.cv-lp-row small {
+  font-size: 9px;
+  color: rgba(220, 252, 231, 0.5);
+  display: block;
+}
+.cv-lp-row strong {
+  color: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+}
 /* tw284 — every chrome control on the tile now composes from
    .cv-chrome-btn (defined further up in this file). The per-control
    rules below carry ONLY the modifier each one needs on top of the
@@ -525,9 +1097,23 @@
 
 /* HD pill — corner-family 36 × 36 button (v17). Letter-spacing keeps
    the 2-character label legible; .active tints the bg Reolink-blue. */
-.cv-hd-badge{width:36px;min-width:36px;padding:0;font-weight:700;letter-spacing:.04em;font-size:12px;flex-shrink:0}
-.cv-hd-badge.active{background:rgba(59,130,246,.7);color:#fff;font-weight:800}
-.cv-hd-badge.active:hover{background:rgba(59,130,246,.8)}
+.cv-hd-badge {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.cv-hd-badge.active {
+  background: rgba(59, 130, 246, 0.7);
+  color: #fff;
+  font-weight: 800;
+}
+.cv-hd-badge.active:hover {
+  background: rgba(59, 130, 246, 0.8);
+}
 /* J1 · the jt719 HD auto-revert countdown bar (a 2 px line under
    the badge animating from full width → 0 over 120 s) was reading
    as a rendering artefact on iPhone — "hellblauer Streifen, geht
@@ -540,11 +1126,25 @@
 /* FS button — corner family 36 × 36 (v17). Inline expand / minimize
    spans wrap the SVGs so CSS swaps them by .cv-img-wrap.is-fs
    without touching the inline structure. */
-.cv-fs-btn{flex-shrink:0;width:36px;min-width:36px;padding:0}
-.cv-fs-btn svg{width:18px;height:18px;display:block}
+.cv-fs-btn {
+  flex-shrink: 0;
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+.cv-fs-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
 .cv-fs-btn .fs-icon-expand,
-.cv-fs-btn .fs-icon-minimize{display:inline-flex;line-height:0}
-.cv-fs-btn .fs-icon-minimize{display:none}
+.cv-fs-btn .fs-icon-minimize {
+  display: inline-flex;
+  line-height: 0;
+}
+.cv-fs-btn .fs-icon-minimize {
+  display: none;
+}
 /* J3.b · :fullscreen pseudo-class fallback so the icon swap stays
    bulletproof even when the JS is-fs class hasn't landed yet (event-
    timing edge case on some Chrome / Safari Desktop builds). The
@@ -552,19 +1152,41 @@
    that combine the prefixed and unprefixed pseudo-classes in one
    comma-list invalidate the WHOLE rule in browsers that don't
    recognise the prefix, so split them into separate rules. */
-.cv-img-wrap.is-fs .cv-fs-btn .fs-icon-expand{display:none}
-.cv-img-wrap.is-fs .cv-fs-btn .fs-icon-minimize{display:inline-flex}
-.cv-img-wrap:fullscreen .cv-fs-btn .fs-icon-expand{display:none}
-.cv-img-wrap:fullscreen .cv-fs-btn .fs-icon-minimize{display:inline-flex}
-.cv-img-wrap:-webkit-full-screen .cv-fs-btn .fs-icon-expand{display:none}
-.cv-img-wrap:-webkit-full-screen .cv-fs-btn .fs-icon-minimize{display:inline-flex}
+.cv-img-wrap.is-fs .cv-fs-btn .fs-icon-expand {
+  display: none;
+}
+.cv-img-wrap.is-fs .cv-fs-btn .fs-icon-minimize {
+  display: inline-flex;
+}
+.cv-img-wrap:fullscreen .cv-fs-btn .fs-icon-expand {
+  display: none;
+}
+.cv-img-wrap:fullscreen .cv-fs-btn .fs-icon-minimize {
+  display: inline-flex;
+}
+.cv-img-wrap:-webkit-full-screen .cv-fs-btn .fs-icon-expand {
+  display: none;
+}
+.cv-img-wrap:-webkit-full-screen .cv-fs-btn .fs-icon-minimize {
+  display: inline-flex;
+}
 
 /* SIM + cog — 36 px corner family. SIM is .has-text (~120 px wide);
    cog is icon-only at the canonical 36 × 36. */
-.cv-sim-btn{height:36px;width:auto;min-width:auto}
-.cv-sim-btn svg{flex-shrink:0}
-.cv-sim-btn.has-text{padding:0 14px}
-.cv-cog{width:36px}
+.cv-sim-btn {
+  height: 36px;
+  width: auto;
+  min-width: auto;
+}
+.cv-sim-btn svg {
+  flex-shrink: 0;
+}
+.cv-sim-btn.has-text {
+  padding: 0 14px;
+}
+.cv-cog {
+  width: 36px;
+}
 
 /* ── E3 · Channel clusters (Telegram + MQTT) ─────────────────────────
    3-column horizontal unit per cluster: paper-plane icon · 2 stacked
@@ -583,32 +1205,43 @@
    22→18, dot outer 20→16, dot fill+ring 9→7, text gap 2→1, sched
    11→10, status 12→11, line-height 1.2→1.15. Corner radius lands
    at 11 px (≥ 8 px floor per the iOS rule in CLAUDE.md). */
-.cv-channel-cluster{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:3px 8px 3px 6px;
-  border-radius:11px;
-  background:var(--channel-pill-bg);
-  border:0.5px solid var(--channel-pill-bd);
-  filter:drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
+.cv-channel-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 11px;
+  background: var(--channel-pill-bg);
+  border: 0.5px solid var(--channel-pill-bd);
+  filter: drop-shadow(0 0 var(--overlay-halo-blur) var(--overlay-halo));
 }
-.cv-channel-icon{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:18px;height:18px;flex-shrink:0;
+.cv-channel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
-.cv-channel-icon svg{width:100%;height:100%;display:block}
+.cv-channel-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 /* B3 · single-line label. The earlier .cv-channel-text two-row
    stack (sched · status) folded into one phrase ("aktiv bis HH:MM",
    "aktiv ab HH:MM", or just "aktiv"), so the cluster height halves.
    Same complementary text-shadow as A4 keeps the line readable on a
    daylight frame; --overlay-fg already resolves to real white /
    near-black via the data-bg sampler. */
-.cv-channel-label{
-  font-size:11px;font-weight:600;
-  color:var(--overlay-fg);
-  line-height:1.2;
-  letter-spacing:.01em;
-  white-space:nowrap;
-  text-shadow:var(--overlay-text-shadow);
+.cv-channel-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--overlay-fg);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-shadow: var(--overlay-text-shadow);
 }
 /* Span-based dot — SVG with animated r-attribute didn't render
    uniformly across Firefox + iOS Safari, so the active-dot pulse
@@ -616,25 +1249,35 @@
    children inside .cv-channel-dot: a solid fill on top and a
    ring that scales out from the centre via transform animation —
    bit-for-bit supported on every browser. */
-.cv-channel-dot{
-  position:relative;
-  display:inline-flex;align-items:center;justify-content:center;
-  width:16px;height:16px;flex-shrink:0;margin-left:2px;
+.cv-channel-dot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-left: 2px;
 }
-.cv-channel-dot-fill{
-  position:relative;z-index:1;
-  width:7px;height:7px;
-  border-radius:50%;
-  background:currentColor;
+.cv-channel-dot-fill {
+  position: relative;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
-.cv-channel-dot-ring{
-  position:absolute;top:50%;left:50%;
-  width:7px;height:7px;
-  border-radius:50%;
-  border:1.5px solid currentColor;
-  transform:translate(-50%,-50%) scale(1);
-  opacity:0;
-  pointer-events:none;
+.cv-channel-dot-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Telegram cluster — color via --tg-fg, dot via --tg-active. The
@@ -649,25 +1292,33 @@
    outdoor frame. Border stays subtle — the iOS rule discourages
    thick hairlines; the new background contrast is doing the work
    instead. */
-.cv-tg-cluster{
-  --channel-pill-bg:rgba(34,158,217,.28);
-  --channel-pill-bd:rgba(34,158,217,.5);
+.cv-tg-cluster {
+  --channel-pill-bg: rgba(34, 158, 217, 0.28);
+  --channel-pill-bd: rgba(34, 158, 217, 0.5);
 }
-.cv-tg-cluster .cv-channel-icon{color:var(--tg-fg)}
-.cv-tg-cluster .cv-channel-dot{color:var(--tg-active)}
-.cv-mqtt-cluster{
-  --channel-pill-bg:rgba(192,72,191,.28);
-  --channel-pill-bd:rgba(192,72,191,.5);
+.cv-tg-cluster .cv-channel-icon {
+  color: var(--tg-fg);
 }
-.cv-mqtt-cluster .cv-channel-icon{color:var(--mqtt-fg)}
-.cv-mqtt-cluster .cv-channel-dot{color:var(--mqtt-active)}
-.cv-overlay-region[data-bg="light"] .cv-tg-cluster{
-  --channel-pill-bg:rgba(14,107,168,.34);
-  --channel-pill-bd:rgba(14,107,168,.6);
+.cv-tg-cluster .cv-channel-dot {
+  color: var(--tg-active);
 }
-.cv-overlay-region[data-bg="light"] .cv-mqtt-cluster{
-  --channel-pill-bg:rgba(140,52,140,.34);
-  --channel-pill-bd:rgba(140,52,140,.6);
+.cv-mqtt-cluster {
+  --channel-pill-bg: rgba(192, 72, 191, 0.28);
+  --channel-pill-bd: rgba(192, 72, 191, 0.5);
+}
+.cv-mqtt-cluster .cv-channel-icon {
+  color: var(--mqtt-fg);
+}
+.cv-mqtt-cluster .cv-channel-dot {
+  color: var(--mqtt-active);
+}
+.cv-overlay-region[data-bg='light'] .cv-tg-cluster {
+  --channel-pill-bg: rgba(14, 107, 168, 0.34);
+  --channel-pill-bd: rgba(14, 107, 168, 0.6);
+}
+.cv-overlay-region[data-bg='light'] .cv-mqtt-cluster {
+  --channel-pill-bg: rgba(140, 52, 140, 0.34);
+  --channel-pill-bd: rgba(140, 52, 140, 0.6);
 }
 
 /* Active dot ring — pulses 1.6 s via transform:scale while
@@ -679,25 +1330,45 @@
    channel colour would still feel "live"); muted keeps its amber
    dot because that flags an operator action ("disarmed"), distinct
    from a passive schedule wait. */
-.cv-channel-cluster[data-state="on"] .cv-channel-dot-ring{
-  animation:cv-channel-pulse 1.6s ease-out infinite;
+.cv-channel-cluster[data-state='on'] .cv-channel-dot-ring {
+  animation: cv-channel-pulse 1.6s ease-out infinite;
 }
-.cv-channel-cluster[data-state="idle"]{opacity:.55}
-.cv-channel-cluster[data-state="idle"] .cv-channel-dot{color:#94a3b8}
-.cv-channel-cluster[data-state="idle"] .cv-channel-dot-ring{opacity:0}
-.cv-channel-cluster[data-state="muted"]{opacity:.55}
-.cv-channel-cluster[data-state="muted"] .cv-channel-dot{color:#f59e0b}
-.cv-channel-cluster[data-state="muted"] .cv-channel-dot-ring{opacity:0}
+.cv-channel-cluster[data-state='idle'] {
+  opacity: 0.55;
+}
+.cv-channel-cluster[data-state='idle'] .cv-channel-dot {
+  color: #94a3b8;
+}
+.cv-channel-cluster[data-state='idle'] .cv-channel-dot-ring {
+  opacity: 0;
+}
+.cv-channel-cluster[data-state='muted'] {
+  opacity: 0.55;
+}
+.cv-channel-cluster[data-state='muted'] .cv-channel-dot {
+  color: #f59e0b;
+}
+.cv-channel-cluster[data-state='muted'] .cv-channel-dot-ring {
+  opacity: 0;
+}
 
-@keyframes cv-channel-pulse{
-  0%   {transform:translate(-50%,-50%) scale(1);   opacity:.55}
-  100% {transform:translate(-50%,-50%) scale(2.6); opacity:0}
+@keyframes cv-channel-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.6);
+    opacity: 0;
+  }
 }
 
 /* Tile body must NOT show a click-pointer anymore — the article-level
    onclick is gone (cm-52 task 2). Buttons inside the tile keep their
    own cursor:pointer from the rules above. */
-.cv-card{cursor:default}
+.cv-card {
+  cursor: default;
+}
 
 /* Native fullscreen on the tile — .cv-img-wrap is the FS target. While
    in :fullscreen the wrap fills the viewport and the chrome buttons
@@ -708,7 +1379,7 @@
    <div>; same layout, viewport-covering positioning. */
 .cv-img-wrap:fullscreen,
 .cv-img-wrap:-webkit-full-screen,
-.cv-img-wrap.fake-fullscreen{
+.cv-img-wrap.fake-fullscreen {
   /* Bulletproof centring via inset:0 + margin:auto on the child —
      no flex, no transform, just a positioned anchor on the wrap
      and absolute positioning on the image. Works on every browser
@@ -716,40 +1387,44 @@
      fight the user-agent stylesheet's :fullscreen rules, and
      centres correctly even when the source resolution is unknown
      until after the first frame. */
-  position:relative !important;
-  width:100vw !important;
+  position: relative !important;
+  width: 100vw !important;
   /* iOS-safe: dvh first, vh as legacy fallback. The address-bar
      collapse on Safari changes innerHeight after first paint, so a
      plain 100vh leaves a strip of background visible at the bottom
      during the transition. */
-  height:100vh !important;
-  height:100dvh !important;
-  background:#000;
+  height: 100vh !important;
+  height: 100dvh !important;
+  background: #000;
 }
 .cv-img-wrap:fullscreen .cv-img,
 .cv-img-wrap:-webkit-full-screen .cv-img,
-.cv-img-wrap.fake-fullscreen .cv-img{
+.cv-img-wrap.fake-fullscreen .cv-img {
   /* Native pixel size centred via inset:0 + margin:auto — image
      renders at intrinsic dimensions (no upscale-blur on 32:9
      monitors), capped to viewport via max-width/max-height. */
-  position:absolute !important;
-  top:0; right:0; bottom:0; left:0;
-  margin:auto !important;
-  width:auto !important;
-  height:auto !important;
-  max-width:100% !important;
-  max-height:100% !important;
-  object-fit:contain;
-  background:transparent;
+  position: absolute !important;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  margin: auto !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain;
+  background: transparent;
 }
-.cv-img-wrap.fake-fullscreen{
-  position:fixed;inset:0;
-  width:100vw;
+.cv-img-wrap.fake-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
   /* vh fallback first so legacy WebViews still get a number, dvh
      override second so iOS Safari uses the dynamic viewport height. */
-  height:100vh;
-  height:100dvh;
-  z-index:var(--z-dropdown);
+  height: 100vh;
+  height: 100dvh;
+  z-index: var(--z-dropdown);
 }
 
 /* Mobile touch targets — chrome-btn::before already extends the
@@ -758,9 +1433,15 @@
    override bumped FS to 44 × 44 (and HD/SIM to height 44), but the
    user's spec is "all chrome pills 30 × 30 — same as the cog" — the
    visible footprint must match across the tile. */
-@media (max-width:768px){
-  .cv-hd-badge{padding:0 9px;font-size:11px}
-  .cv-sim-btn svg{width:16px;height:16px}
+@media (max-width: 768px) {
+  .cv-hd-badge {
+    padding: 0 9px;
+    font-size: 11px;
+  }
+  .cv-sim-btn svg {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 /* ── Bottom-left surveillance stack ────────────────────────────────────────
@@ -768,81 +1449,120 @@
    in cv-tr. Single source of truth for "what's this cam currently doing":
    mode label + active class targets + optional schedule window time.
    Flat design — depth via background tint and opacity, no border lines. */
-.cv-surveil{
-  position:absolute;left:10px;bottom:8px;
-  display:flex;flex-direction:column;gap:5px;
-  align-items:flex-start;
-  z-index:3;
+.cv-surveil {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  z-index: 3;
   /* leave room on the right for SIM (~120 + right offset 50) + cog
      (34 + right offset 8) → ~180 px buffer. Was 100 px when the
      bottom-right slot held the compact HD badge; the SIM label is
      wider so we need more clearance. */
-  max-width:calc(100% - 180px);
-  pointer-events:none;
+  max-width: calc(100% - 180px);
+  pointer-events: none;
 }
-.cv-surveil > *{pointer-events:auto}
-.cv-surveil-head{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:4px 10px 4px 6px;
-  border-radius:999px;
-  font-size:10.5px;font-weight:700;letter-spacing:.01em;
-  background:rgba(var(--surveil-acc),.22);
-  color:rgb(var(--surveil-acc));
+.cv-surveil > * {
+  pointer-events: auto;
 }
-.cv-surveil-eye{
-  width:18px;height:18px;border-radius:50%;
-  display:inline-flex;align-items:center;justify-content:center;
-  flex-shrink:0;
+.cv-surveil-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: rgba(var(--surveil-acc), 0.22);
+  color: rgb(var(--surveil-acc));
 }
-.cv-surveil[data-mode="notify"] .cv-surveil-eye{
-  animation:cvEyeBlink 2.4s ease-in-out infinite;
+.cv-surveil-eye {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.cv-surveil[data-mode="alarm"] .cv-surveil-head{
-  animation:cvAlarmPulse 1.8s ease-out infinite;
+.cv-surveil[data-mode='notify'] .cv-surveil-eye {
+  animation: cvEyeBlink 2.4s ease-in-out infinite;
 }
-.cv-surveil[data-mode="alarm"] .cv-surveil-eye{
-  background:rgba(252,165,165,.22);
-  animation:cvEyeBlink 1.4s ease-in-out infinite;
+.cv-surveil[data-mode='alarm'] .cv-surveil-head {
+  animation: cvAlarmPulse 1.8s ease-out infinite;
 }
-@keyframes cvEyeBlink{
-  0%,90%,100%{transform:scaleY(1);opacity:1}
-  93%{transform:scaleY(.1);opacity:.85}
+.cv-surveil[data-mode='alarm'] .cv-surveil-eye {
+  background: rgba(252, 165, 165, 0.22);
+  animation: cvEyeBlink 1.4s ease-in-out infinite;
 }
-@keyframes cvAlarmPulse{
-  0%   {box-shadow:0 0 0 0 rgba(220,38,38,.55)}
-  70%  {box-shadow:0 0 0 8px rgba(220,38,38,0)}
-  100% {box-shadow:0 0 0 0 rgba(220,38,38,0)}
+@keyframes cvEyeBlink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  93% {
+    transform: scaleY(0.1);
+    opacity: 0.85;
+  }
 }
-@media (prefers-reduced-motion: reduce){
-  .cv-surveil-eye,.cv-surveil-head{animation:none!important}
+@keyframes cvAlarmPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
 }
-.cv-surveil-targets{
-  display:flex;gap:3px;
-  background:rgba(0,0,0,.45);
-  padding:4px 5px;
-  border-radius:10px;
+@media (prefers-reduced-motion: reduce) {
+  .cv-surveil-eye,
+  .cv-surveil-head {
+    animation: none !important;
+  }
 }
-.cv-surveil-tgt{
-  width:24px;height:24px;
-  border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  background:transparent;
-  transition:background .25s ease;
+.cv-surveil-targets {
+  display: flex;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 4px 5px;
+  border-radius: 10px;
+}
+.cv-surveil-tgt {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.25s ease;
 }
 /* Live-detection 3-second flash hook. The .is-detecting class is added
    by _flashDetection(camId, cls) — JS hookup pending the backend pipe. */
-.cv-surveil-tgt.is-detecting{
-  background:rgba(var(--surveil-acc),.42);
-  animation:cvDetectFlash 3s ease-out;
+.cv-surveil-tgt.is-detecting {
+  background: rgba(var(--surveil-acc), 0.42);
+  animation: cvDetectFlash 3s ease-out;
 }
-@keyframes cvDetectFlash{
-  0%   {background:rgba(var(--surveil-acc),.65)}
-  100% {background:transparent}
+@keyframes cvDetectFlash {
+  0% {
+    background: rgba(var(--surveil-acc), 0.65);
+  }
+  100% {
+    background: transparent;
+  }
 }
-@media (prefers-reduced-motion: reduce){
-  .cv-surveil-tgt.is-detecting{
-    animation:none;
-    background:rgba(var(--surveil-acc),.35);
+@media (prefers-reduced-motion: reduce) {
+  .cv-surveil-tgt.is-detecting {
+    animation: none;
+    background: rgba(var(--surveil-acc), 0.35);
   }
 }
 /* Persistent red glow while a class was detected within the last 10 s.
@@ -853,56 +1573,170 @@
    on long sustained detections without seizure-triggering. The drop-
    shadow on the inner SVG lifts the icon glyph against the red fill
    so e.g. the dim "person" stroke stays readable. */
-.cv-surveil-tgt.is-hot{
-  background:rgba(239,68,68,.55);
-  box-shadow:0 0 8px rgba(239,68,68,.45);
-  animation:cvTgtHotPulse 1.6s ease-in-out infinite;
+.cv-surveil-tgt.is-hot {
+  background: rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
+  animation: cvTgtHotPulse 1.6s ease-in-out infinite;
 }
-.cv-surveil-tgt.is-hot svg{
-  filter:drop-shadow(0 0 1.5px rgba(255,255,255,.6));
+.cv-surveil-tgt.is-hot svg {
+  filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.6));
 }
-@keyframes cvTgtHotPulse{
-  0%, 100% {box-shadow:0 0 6px  rgba(239,68,68,.35);}
-  50%      {box-shadow:0 0 12px rgba(239,68,68,.65);}
+@keyframes cvTgtHotPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.65);
+  }
 }
-@media (prefers-reduced-motion: reduce){
-  .cv-surveil-tgt.is-hot{ animation:none; }
+@media (prefers-reduced-motion: reduce) {
+  .cv-surveil-tgt.is-hot {
+    animation: none;
+  }
 }
-.cv-surveil-time{
-  font-size:9.5px;
-  color:rgba(255,255,255,.6);
-  background:rgba(0,0,0,.45);
-  padding:2px 7px;border-radius:5px;
-  font-family:ui-monospace,"SF Mono",Menlo,monospace;
-  font-weight:600;letter-spacing:.03em;
-  white-space:nowrap;
+.cv-surveil-time {
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 /* "Stumm" card — muted across the board: card dim, small bell-off icon next
    to the name. Recording continues, only Telegram is suppressed. */
-.cv-card--muted{opacity:.85}
-@media (hover: hover) and (pointer: fine){
-  .cv-card--muted:hover{opacity:1}
+.cv-card--muted {
+  opacity: 0.85;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cv-card--muted:hover {
+    opacity: 1;
+  }
 }
 /* Timelapse pill */
-.cv-pill-tl{background:rgba(168,85,247,.32);border:1.5px solid rgba(168,85,247,.78);color:#ede0ff}
-.cv-tl-icon{position:relative;width:18px;height:13px;overflow:hidden;display:flex;gap:2px;align-items:center;flex-shrink:0}
-.cv-tl-bar{width:3.5px;height:11px;border-radius:1px}
-.cv-tl-bar.hi{height:14px;margin-top:-1px}
-.cv-tl-scan{position:absolute;top:0;left:0;width:2px;height:100%;background:rgba(216,180,254,.9);border-radius:1px;animation:cv-tl-scan 1.2s ease-in-out infinite}
-@keyframes cv-tl-scan{0%{left:0;opacity:1}80%{left:16px;opacity:1}100%{left:16px;opacity:0}}
+.cv-pill-tl {
+  background: rgba(168, 85, 247, 0.32);
+  border: 1.5px solid rgba(168, 85, 247, 0.78);
+  color: #ede0ff;
+}
+.cv-tl-icon {
+  position: relative;
+  width: 18px;
+  height: 13px;
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.cv-tl-bar {
+  width: 3.5px;
+  height: 11px;
+  border-radius: 1px;
+}
+.cv-tl-bar.hi {
+  height: 14px;
+  margin-top: -1px;
+}
+.cv-tl-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(216, 180, 254, 0.9);
+  border-radius: 1px;
+  animation: cv-tl-scan 1.2s ease-in-out infinite;
+}
+@keyframes cv-tl-scan {
+  0% {
+    left: 0;
+    opacity: 1;
+  }
+  80% {
+    left: 16px;
+    opacity: 1;
+  }
+  100% {
+    left: 16px;
+    opacity: 0;
+  }
+}
 /* Split badge */
-.cv-split-badge{display:inline-flex;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,.28);font-size:11px;font-weight:700;backdrop-filter:blur(6px)}
-.cv-sb-half{padding:5px 11px;display:flex;align-items:center;gap:5px;white-space:nowrap}
-.cv-sb-obj{background:rgba(245,158,11,.45);color:#fff;border-right:1px solid rgba(255,255,255,.18)}
-.cv-sb-obj-off{background:rgba(0,0,0,.32);color:rgba(255,255,255,.55);border-right:1px solid rgba(255,255,255,.18)}
-.cv-sb-mot{background:rgba(34,197,94,.4);color:#fff}
-.cv-sb-mot-off{background:rgba(0,0,0,.32);color:rgba(255,255,255,.55)}
-.cv-sb-label{font-size:11px;font-weight:700;white-space:nowrap}
+.cv-split-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 11px;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+.cv-sb-half {
+  padding: 5px 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.cv-sb-obj {
+  background: rgba(245, 158, 11, 0.45);
+  color: #fff;
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+}
+.cv-sb-obj-off {
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(255, 255, 255, 0.55);
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+}
+.cv-sb-mot {
+  background: rgba(34, 197, 94, 0.4);
+  color: #fff;
+}
+.cv-sb-mot-off {
+  background: rgba(0, 0, 0, 0.32);
+  color: rgba(255, 255, 255, 0.55);
+}
+.cv-sb-label {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 /* Detection-box + runner animations */
-.cv-obj-unfold{animation:cv-obj-unfold 2.6s ease-in-out infinite;transform-origin:center}
-@keyframes cv-obj-unfold{0%,100%{opacity:.85;transform:scale(1)}50%{opacity:1;transform:scale(1.13)}}
-.cv-runner-stride{animation:cv-runner-stride 1.1s ease-in-out infinite;transform-origin:50% 60%}
-@keyframes cv-runner-stride{0%,100%{transform:translateY(0) translateX(0)}30%{transform:translateY(-1.5px) translateX(1.5px)}70%{transform:translateY(0) translateX(-.5px)}}
+.cv-obj-unfold {
+  animation: cv-obj-unfold 2.6s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes cv-obj-unfold {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.13);
+  }
+}
+.cv-runner-stride {
+  animation: cv-runner-stride 1.1s ease-in-out infinite;
+  transform-origin: 50% 60%;
+}
+@keyframes cv-runner-stride {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  30% {
+    transform: translateY(-1.5px) translateX(1.5px);
+  }
+  70% {
+    transform: translateY(0) translateX(-0.5px);
+  }
+}
 
 /* ── Settings cog (bottom-right of each tile) ────────────────────────────
    xq583 — composes from .cv-chrome-btn (30 × 30, dark transparent
@@ -911,23 +1745,234 @@
    "FS == cog == 30 × 30 chrome pill", so the override was the source
    of the size mismatch the user noticed. Now the cog is just a
    chrome-btn with a slightly smaller icon glyph. */
-@media (hover: hover) and (pointer: fine){
-  .cv-card:hover .cv-grad-bot{opacity:1}
+@media (hover: hover) and (pointer: fine) {
+  .cv-card:hover .cv-grad-bot {
+    opacity: 1;
+  }
 }
-.cv-cog svg{width:16px;height:16px}
+.cv-cog svg {
+  width: 16px;
+  height: 16px;
+}
 
 /* Legacy badge (used in camera settings list, not in grid) */
-.badge{padding:7px 10px;border-radius:999px;background:var(--surface);font-size:12px}
-.badge.good{color:var(--good)}.badge.warn{color:var(--warn)}.badge.danger{color:var(--danger)}
-.legend{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.legend-item{display:flex;gap:8px;align-items:center;padding:7px 10px;border-radius:999px;background:var(--surface);font-size:12px}
-.dot{width:10px;height:10px;border-radius:50%}.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(192px,1fr));gap:10px}@media(max-width:768px){.media-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}}.media-card{border-radius:14px;overflow:hidden;background:var(--panel);position:relative;cursor:pointer}.mmc-img-wrap{position:relative;aspect-ratio:16/10;overflow:hidden}.mmc-img-wrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}.media-card:hover .mmc-img-wrap img{transform:scale(1.03)}.mmc-overlay{position:absolute;top:6px;left:6px;right:6px;display:flex;justify-content:space-between;pointer-events:none}.mmc-cam-pill{font-size:10px;padding:2px 7px;border-radius:999px;backdrop-filter:blur(4px)}.media-label-bubbles{position:absolute;top:6px;left:6px;display:flex;flex-direction:row;gap:4px;align-items:center;pointer-events:none}.media-label-bubble{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;backdrop-filter:blur(4px)}.mmc-actions{position:absolute;top:6px;right:6px;display:flex;gap:5px;opacity:.7;transition:opacity .15s;z-index:3}.media-card:hover .mmc-actions,.mmc-actions:hover,.mmc-actions:active{opacity:1}.mmc-btn{width:30px;height:30px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:transform .2s cubic-bezier(.4,0,.2,1),background .15s;-webkit-tap-highlight-color:transparent}.mmc-btn:hover{transform:scale(1.08)}.mmc-confirm{background:rgba(34,197,94,.8);color:#fff}.mmc-confirm.mmc-confirm--anim{transform:scale(1.3)}.mmc-delete{background:rgba(239,68,68,.8);color:#fff}.mmc-confirmed{box-shadow:inset 0 0 0 2px var(--good)}.mmc-confirmed .mmc-actions{display:none!important}.media-confirmed-badge{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:rgba(22,163,74,.9);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;pointer-events:none}.media-meta{padding:10px 12px;display:grid;gap:7px}.media-overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-bottom:14px}
-.moc-card{border-radius:16px;background:#2a2a2c;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;transition:background .15s,box-shadow .15s}
-.moc-card:hover{background:#34343a;box-shadow:0 4px 20px rgba(0,0,0,.4)}
-.moc-card.moc-active{background:#34343a;box-shadow:0 4px 20px rgba(0,0,0,.4),inset 0 0 0 1.5px rgba(96,165,250,.55)}
-.moc-card.moc-active:hover{background:#3a3a40}
-.moc-thumb{width:100%;aspect-ratio:16/9;overflow:hidden;flex-shrink:0;background:#0a0a0a;position:relative}
-.moc-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.badge {
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.badge.good {
+  color: var(--good);
+}
+.badge.warn {
+  color: var(--warn);
+}
+.badge.danger {
+  color: var(--danger);
+}
+.legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.legend-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
+  gap: 10px;
+}
+@media (max-width: 768px) {
+  .media-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
+}
+.media-card {
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--panel);
+  position: relative;
+  cursor: pointer;
+}
+.mmc-img-wrap {
+  position: relative;
+  aspect-ratio: 16/10;
+  overflow: hidden;
+}
+.mmc-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s;
+}
+.media-card:hover .mmc-img-wrap img {
+  transform: scale(1.03);
+}
+.mmc-overlay {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.mmc-cam-pill {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+.media-label-bubbles {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: center;
+  pointer-events: none;
+}
+.media-label-bubble {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+}
+.mmc-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 5px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  z-index: 3;
+}
+.media-card:hover .mmc-actions,
+.mmc-actions:hover,
+.mmc-actions:active {
+  opacity: 1;
+}
+.mmc-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mmc-btn:hover {
+  transform: scale(1.08);
+}
+.mmc-confirm {
+  background: rgba(34, 197, 94, 0.8);
+  color: #fff;
+}
+.mmc-confirm.mmc-confirm--anim {
+  transform: scale(1.3);
+}
+.mmc-delete {
+  background: rgba(239, 68, 68, 0.8);
+  color: #fff;
+}
+.mmc-confirmed {
+  box-shadow: inset 0 0 0 2px var(--good);
+}
+.mmc-confirmed .mmc-actions {
+  display: none !important;
+}
+.media-confirmed-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, 0.9);
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.media-meta {
+  padding: 10px 12px;
+  display: grid;
+  gap: 7px;
+}
+.media-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.moc-card {
+  border-radius: 16px;
+  background: #2a2a2c;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+}
+.moc-card:hover {
+  background: #34343a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+.moc-card.moc-active {
+  background: #34343a;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1.5px rgba(96, 165, 250, 0.55);
+}
+.moc-card.moc-active:hover {
+  background: #3a3a40;
+}
+.moc-thumb {
+  width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #0a0a0a;
+  position: relative;
+}
+.moc-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 /* Mediathek-card placeholder when the thumbnail img fails to load.
    Replaces the img element in-place via the inline onerror handler
    in mediathek/orchestration.js. Centres the .cam-ico glyph inside
@@ -935,48 +1980,159 @@
    reads as "no snapshot yet" without going completely empty. The
    surrounding ``style="color:…"`` (also set in orchestration.js)
    tints the icon to the camera's identity colour. */
-.moc-thumb .cam-ico-placeholder{
-  display:flex;align-items:center;justify-content:center;
-  width:100%;height:100%;
+.moc-thumb .cam-ico-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
-.moc-thumb .cam-ico-placeholder .cam-ico{
-  width:56px;height:56px;opacity:.25;
+.moc-thumb .cam-ico-placeholder .cam-ico {
+  width: 56px;
+  height: 56px;
+  opacity: 0.25;
 }
 /* Camera-icon glyph rendered inline next to the camera name in
    the Mediathek card body. 18 px size override on the cam-ico
    baseline; inline ``color:`` in orchestration.js sets the tint
    so the icon picks up the camera's identity colour. */
-.moc-name-icon .cam-ico{width:18px;height:18px;vertical-align:-3px;margin-right:2px}
+.moc-name-icon .cam-ico {
+  width: 18px;
+  height: 18px;
+  vertical-align: -3px;
+  margin-right: 2px;
+}
 /* "Alle Medien" tile placeholder. The aspect-ratio matches the
    per-camera tiles so the row reads as a uniform grid; padding gives
    the centred glyph generous margin to all four edges so the mark
    feels deliberately placed instead of pressed against the top.
    The MB badge is positioned absolutely (see thumbBadgeStyle in the
    orchestration module), so the padding only governs the SVG. */
-.moc-all-thumb{width:100%;aspect-ratio:16/9;min-height:88px;overflow:hidden;flex-shrink:0;background:#2a2e36;display:flex;align-items:center;justify-content:center;position:relative;padding:14px}
-.moc-all-thumb svg{opacity:.95;max-width:100%;max-height:100%}
-/* Archived cameras section */
-.moc-archive-section{margin-top:20px;padding-top:4px}
-.moc-archive-hdr{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}
-.moc-archive-count{background:var(--surface);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600;letter-spacing:0}
-.moc-archive-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-@media(max-width:768px){.moc-archive-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}}
-.moc-archived{opacity:.52;border:1px solid rgba(255,255,255,.04);font-size:12px;background:#161616;filter:saturate(.55)}
-.moc-archived .moc-body{padding:8px 10px}
-.moc-archived .moc-cam-name{font-size:12px}
-@media (hover: hover) and (pointer: fine){
-  .moc-archived:hover{opacity:.82;filter:saturate(.9);border-color:transparent}
+.moc-all-thumb {
+  width: 100%;
+  aspect-ratio: 16/9;
+  min-height: 88px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #2a2e36;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 14px;
 }
-.moc-arch-thumb{background:#0d0d0d;height:80px}
+.moc-all-thumb svg {
+  opacity: 0.95;
+  max-width: 100%;
+  max-height: 100%;
+}
+/* Archived cameras section */
+.moc-archive-section {
+  margin-top: 20px;
+  padding-top: 4px;
+}
+.moc-archive-hdr {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  margin-bottom: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.moc-archive-count {
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.moc-archive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+@media (max-width: 768px) {
+  .moc-archive-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+  }
+}
+.moc-archived {
+  opacity: 0.52;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  background: #161616;
+  filter: saturate(0.55);
+}
+.moc-archived .moc-body {
+  padding: 8px 10px;
+}
+.moc-archived .moc-cam-name {
+  font-size: 12px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .moc-archived:hover {
+    opacity: 0.82;
+    filter: saturate(0.9);
+    border-color: transparent;
+  }
+}
+.moc-arch-thumb {
+  background: #0d0d0d;
+  height: 80px;
+}
 /* Per-type label counts on overview cards */
-.moc-label-counts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
-.moc-label-count-item{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700}
+.moc-label-counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.moc-label-count-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
 /* Rescan button scan animation */
-#rescanMediaBtn.scanning svg{animation:spin 1s linear infinite;transform-origin:center}
+#rescanMediaBtn.scanning svg {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+}
 /* ── Unified category filter button ─────────────────────────────── */
 /* Flat filled filter pill — no border, bg tint of object colour, text/icon
    also in object colour. Hover/active deepen the fill; icon keeps its own
    colour so the badge reads as a tinted object chip. */
-.cat-filter-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;min-height:44px;border-radius:10px;border:none;outline:none;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:background .15s,box-shadow .15s;background:color-mix(in srgb,var(--cb,#8888aa) 15%,transparent);color:var(--cb,#94a3b8)}
-.cat-filter-btn:hover{background:color-mix(in srgb,var(--cb,#8888aa) 24%,transparent)}
-.cat-filter-btn:active{opacity:.85}
+.cat-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+  background: color-mix(in srgb, var(--cb, #8888aa) 15%, transparent);
+  color: var(--cb, #94a3b8);
+}
+.cat-filter-btn:hover {
+  background: color-mix(in srgb, var(--cb, #8888aa) 24%, transparent);
+}
+.cat-filter-btn:active {
+  opacity: 0.85;
+}

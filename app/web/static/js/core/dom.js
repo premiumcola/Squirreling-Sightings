@@ -23,3 +23,16 @@ export const esc = (s) => String(s ?? '').replaceAll(/[&<>"']/g, (m) => ({
 // every callsite chasing document.querySelector boilerplate.
 export const qs = (sel, root = document) => root.querySelector(sel);
 export const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+// Validate a hex colour string so it can be safely interpolated into
+// inline `style="color:..."` or inline JS attribute strings. Rejects
+// anything that isn't a `#RGB`, `#RRGGBB`, or `#RRGGBBAA` literal —
+// in particular, blocks the camera-color XSS vector where a user-
+// chosen colour like `'); evil(); //` would break out of an inline
+// `style.color='...'` JS string in a placeholder onerror handler.
+// Returns the input on success or a neutral fallback (#a8a8a8) on
+// failure so callsites never have to null-check.
+export const safeHexColor = (raw, fallback = '#a8a8a8') => {
+  if (typeof raw !== 'string') return fallback;
+  return /^#[0-9a-f]{3,8}$/i.test(raw) ? raw : fallback;
+};

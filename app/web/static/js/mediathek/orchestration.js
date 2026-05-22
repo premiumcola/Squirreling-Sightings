@@ -21,7 +21,7 @@
 //
 // All window.* bridges are still set at the bottom so other still-
 // resident code paths (and inline onclicks in HTML) keep resolving.
-import { byId, esc } from '../core/dom.js';
+import { byId, esc, safeHexColor } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { j } from '../core/api.js';
 import { showToast } from '../core/toast.js';
@@ -335,8 +335,15 @@ export function renderMediaOverview(){
     // inside the .moc-thumb's 16:9 box. The inline ``color:`` carries
     // the camera's identity tint so the placeholder reads as that
     // camera instead of a generic grey silhouette.
+    // P21 · camColor is user-settable via cam-edit Color-Picker — pass
+    // it through safeHexColor before interpolating into the inline JS
+    // string below. Without the gate, a malicious value like
+    // `'); evil(); //` would break out of the style.color string and
+    // execute arbitrary JS in the onerror handler. iconEsc is the
+    // already-quote-escaped SVG from a controlled icon map, safe.
     const iconEsc = icon.replace(/'/g, "\\'");
-    const replaceWithPh = `const s=document.createElement('span');s.className='cam-ico-placeholder';s.style.color='${camColor}';s.innerHTML='${iconEsc}';this.replaceWith(s)`;
+    const camColorSafe = safeHexColor(camColor);
+    const replaceWithPh = `const s=document.createElement('span');s.className='cam-ico-placeholder';s.style.color='${camColorSafe}';s.innerHTML='${iconEsc}';this.replaceWith(s)`;
     const fallback = storedSnap
       ? `this.onerror=function(){${replaceWithPh}};this.src='${liveSnap}'`
       : replaceWithPh;
@@ -344,7 +351,7 @@ export function renderMediaOverview(){
     return `<div class="moc-card" data-cam-id="${esc(c.id)}" onclick="openMediaDrilldown('${esc(c.id)}')">
       <div class="moc-thumb"><img src="${esc(thumbSrc)}" alt="${esc(c.name)}" onerror="${esc(fallback)}" loading="lazy"/><div style="${thumbBadgeStyle}">${_fmtMb(s.size_mb || 0)}</div></div>
       <div class="moc-body">
-        <div class="moc-name"><span class="moc-name-icon" style="color:${camColor}">${icon}</span> ${esc(c.name)}</div>
+        <div class="moc-name"><span class="moc-name-icon" style="color:${camColorSafe}">${icon}</span> ${esc(c.name)}</div>
         ${locationDesc}
         <div class="moc-counts">
           ${_buildMocChips(s)}

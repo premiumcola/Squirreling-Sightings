@@ -134,9 +134,20 @@ export function getCameraIcon(name){
 // preserves the legacy contract: derive a default tone from the
 // keyword regex on the display name. Existing callers (discovery
 // previews + the few cam-name-only paths) keep working unchanged.
+//
+// P21 · the user-set `.color` override is the only user-input path
+// in this function — gate it through a hex-only regex so consumers
+// that interpolate the return value into inline `style="color:…"` or
+// inline-JS attribute strings can't be tricked into running script.
+// Backend schema is set to (str, ...) without a regex check, so the
+// frontend must do the final validation. Non-hex values fall back to
+// the name-derived auto-tone, matching the "no override" semantics.
+const _HEX_RE = /^#[0-9a-f]{3,8}$/i;
 export function getCameraColor(nameOrCamera){
   if (nameOrCamera && typeof nameOrCamera === 'object'){
-    if (nameOrCamera.color) return nameOrCamera.color;
+    if (nameOrCamera.color && _HEX_RE.test(nameOrCamera.color)) {
+      return nameOrCamera.color;
+    }
     return _CAM_ICON_TONES[_resolveCamIconKey(nameOrCamera.name)] || '#a8a8a8';
   }
   return _CAM_ICON_TONES[_resolveCamIconKey(nameOrCamera)] || '#a8a8a8';

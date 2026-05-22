@@ -142,6 +142,12 @@ def default_camera(cam: dict | None = None) -> dict:
         "track_miss_grace_seconds":  float(cam.get("track_miss_grace_seconds") or 0.0),
         "track_iou_match_threshold": float(cam.get("track_iou_match_threshold") or 0.0),
         "track_postclip_precision":  (cam.get("track_postclip_precision") or "standard"),
+        # L07 — ghost-track pruning toggle. Default True so existing
+        # cams pick up the cleanup on their next save without user
+        # action. `setdefault`-style read with False fallback ONLY when
+        # explicitly stored False (the explicit-False case the user
+        # wants for debugging).
+        "track_filter_ghosts":       (False if cam.get("track_filter_ghosts") is False else True),
         # Reolink HTTP-CGI port override — same persistence hole as the
         # tracker fields above, surfaced by task vk257 when the image-
         # mode panel's port number was getting dropped on save.

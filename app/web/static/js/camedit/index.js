@@ -565,9 +565,16 @@ function editCamera(camId){
   if(f['track_iou_match_threshold']){
     f['track_iou_match_threshold'].value = parseFloat(c.track_iou_match_threshold) || 0;
   }
+  // L07 · ghost-track filter — default ON; treat explicit-false as
+  // off, anything else as on so legacy cams that pre-date the field
+  // pick up the default cleanup. The hydration mirrors the same
+  // "explicit-false-is-off" pattern the backend default uses.
+  if(f['track_filter_ghosts']){
+    f['track_filter_ghosts'].checked = (c.track_filter_ghosts !== false);
+  }
   // Wire the three "Vorlage anwenden" preset buttons. Each preset
-  // fills all four tracker inputs in one click; the form's existing
-  // Speichern still has to be pressed to persist the change.
+  // fills all four tracker inputs in one click AND auto-saves them
+  // (K12); the form's Speichern still commits any other edits.
   _wireTrackingPresets(formEl);
   // Confirmation-window step 3 sliders — confirm_n/confirm_seconds carry
   // the new global entry. Existing per-class entries (cw[person] etc.)

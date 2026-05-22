@@ -600,6 +600,12 @@ byId('cameraForm').onsubmit=async(e)=>{
     track_continue_min_score: parseFloat(f['track_continue_min_score']?.value || 0),
     track_miss_grace_seconds: parseFloat(f['track_miss_grace_seconds']?.value || 0),
     track_iou_match_threshold: parseFloat(f['track_iou_match_threshold']?.value || 0),
+    // L07 · default ON. Treat the missing-checkbox case (form re-init
+    // edge) as inheriting the stored value so a save doesn't silently
+    // flip a power user's debug-mode off back to on.
+    track_filter_ghosts: f['track_filter_ghosts']
+      ? !!f['track_filter_ghosts'].checked
+      : (existingCam?.track_filter_ghosts !== false),
     // Reolink-only HTTP-CGI port for the standalone image-mode test
     // panel; 0 means "fall back to 80". Persisted unchanged via the
     // additive settings store; runtime ignores it on non-Reolink cams.

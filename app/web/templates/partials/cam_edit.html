@@ -432,6 +432,20 @@
                       <button type="button" class="erk-track-preset" data-preset="balanced">Ausgewogen</button>
                       <button type="button" class="erk-track-preset" data-preset="robust">Robust</button>
                     </div>
+                    <!-- L07 · Ghost-track filter toggle. Default ON;
+                         persisted via track_filter_ghosts. Hides
+                         "ghost" tracks (best_score never crossed the
+                         per-label spawn threshold) from new event
+                         sidecars so the lightbox doesn't paint a
+                         labelled bbox on a stone or shadow. -->
+                    <label class="erk-track-toggle">
+                      <span class="erk-track-toggle-text">
+                        <span class="erk-track-toggle-name">Ghost-Spuren in Aufnahmen ausblenden</span>
+                        <span class="erk-track-toggle-sub">Spuren, deren beste Konfidenz nie über der Spawn-Schwelle lag, werden nach der Aufnahme aus dem Track-Sidecar entfernt. Aktiviert lassen, sofern du keinen Debug-Bedarf hast.</span>
+                      </span>
+                      <input type="checkbox" name="track_filter_ghosts" class="switch-input" checked />
+                      <span class="switch"></span>
+                    </label>
                     <div class="erk-track-grid">
                       <label class="erk-track-cell">
                         <span class="erk-track-lbl">Spawn-Schwelle</span>

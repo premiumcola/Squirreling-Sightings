@@ -214,6 +214,18 @@ CAMERA_SCHEMA: dict = {
     "track_miss_grace_seconds":   (float, 0.0),
     "track_postclip_precision":   (str,   "standard"),
     "track_iou_match_threshold":  (float, 0.0),
+    #   track_filter_ghosts        — L07. When True (default) the
+    #                                post-clip tracking worker drops any
+    #                                track whose best_score never reached
+    #                                its per-label spawn threshold AND
+    #                                was never confirmed by the
+    #                                confirmation window. These "ghost"
+    #                                tracks would otherwise paint a
+    #                                permanent labelled bbox on a stone
+    #                                or shadow in the saved event.
+    #                                Set to False to keep ghosts for
+    #                                debugging.
+    "track_filter_ghosts":        (bool,  True),
     # ── Reolink-only · HTTP CGI port for image-mode override ─────────────
     # Most Reolink cams listen on plain HTTP/80, but the user may have
     # remapped that to e.g. 8000 when port-forwarding. Treated as 80 if

@@ -514,6 +514,130 @@ def _filter_static_false_positives(state: _TrackerState, spawn_score: float):
     state.closed = survivors
 
 
+def _samples_confirm_window(samples, n: int, secs: float) -> bool:
+    """Sliding-window N-of-window confirmation check on detect samples.
+    Mirrors the logic in ``_update_event_achievement`` so a track the
+    user's confirmation_window would have promoted in the live path
+    survives the ghost prune even when its peak score sat below the
+    label spawn threshold (rare but real for big-but-faint subjects).
+    """
+    detect_samples = [s for s in (samples or []) if s.get("source") == "detect"]
+    for i, s in enumerate(detect_samples):
+        t0 = float(s.get("t", 0))
+        in_win = 1
+        for j in range(i + 1, len(detect_samples)):
+            if float(detect_samples[j].get("t", 0)) - t0 > secs:
+                break
+            in_win += 1
+        if in_win >= n:
+            return True
+    return False
+
+
+def _prune_ghost_tracks(
+    state: _TrackerState,
+    *,
+    cam_cfg: dict,
+    detection_cfg: dict,
+    camera_id: str,
+) -> int:
+    """L07 · drop tracks from the sidecar whose best_score never
+    reached the per-label spawn threshold AND that were never
+    confirmed by the confirmation window. These ghosts exist only
+    because the IoU matcher held them across frames; they would
+    never have triggered a real recording but the bbox renderer
+    paints them anyway, leading to events where a stone gets
+    labelled "Person 23%".
+
+    Per-label spawn lookup mirrors the live path:
+        1. cam_cfg.label_thresholds[label]   (non-zero)
+        2. cam_cfg.detection_min_score       (non-zero)
+        3. detection_cfg["min_score"]        (global default)
+    Per-camera ``track_spawn_min_score`` (non-zero) sets a floor for
+    the global SPAWN gate; max(per-label, per-cam-floor) is the
+    actual threshold a track must clear. Tracks with ``best_score``
+    at-or-above that threshold pass through unchanged.
+
+    Idempotent: mutates ``state.closed`` in place and returns the
+    drop count so the caller can summarise.
+    """
+    if not state.closed:
+        return 0
+    label_thresholds = cam_cfg.get("label_thresholds") or {}
+    try:
+        cam_dms = float(cam_cfg.get("detection_min_score") or 0.0)
+    except (TypeError, ValueError):
+        cam_dms = 0.0
+    try:
+        global_dms = float((detection_cfg or {}).get("min_score") or 0.55)
+    except (TypeError, ValueError):
+        global_dms = 0.55
+    try:
+        cam_spawn_floor = float(cam_cfg.get("track_spawn_min_score") or 0.0)
+    except (TypeError, ValueError):
+        cam_spawn_floor = 0.0
+
+    def _per_label(lbl: str) -> float:
+        v = label_thresholds.get(lbl)
+        try:
+            if v is not None:
+                fv = float(v)
+                if fv > 0:
+                    return fv
+        except (TypeError, ValueError):
+            pass
+        if cam_dms > 0:
+            return cam_dms
+        return global_dms
+
+    cw_cfg = cam_cfg.get("confirmation_window") or {}
+    global_cw = cw_cfg.get("global") or {}
+    default_n = int(global_cw.get("n", 3))
+    default_secs = float(global_cw.get("seconds", 5.0))
+
+    survivors = []
+    dropped = 0
+    for tr in state.closed:
+        lbl = tr.label or "unknown"
+        per_lbl = _per_label(lbl)
+        # The actual gate uses the higher of the per-label spawn and
+        # the per-cam track_spawn_min_score floor — same rule the live
+        # confirmer applies (label-specific) plus the spawn floor from
+        # _resolve_track_thresholds (cam-wide).
+        effective = max(per_lbl, cam_spawn_floor)
+        best = float(tr.best_score or 0.0)
+        if best >= effective:
+            survivors.append(tr)
+            continue
+        # Below spawn threshold — confirmation window override. A
+        # consistently-seen-but-faint subject (e.g. squirrel at dusk)
+        # that the confirmer would have promoted in the live path is
+        # NOT a ghost; keep it.
+        cw = cw_cfg.get(lbl) or {"n": default_n, "seconds": default_secs}
+        n = int(cw.get("n", default_n))
+        secs = float(cw.get("seconds", default_secs))
+        if _samples_confirm_window(tr.samples, n, secs):
+            survivors.append(tr)
+            continue
+        log.info(
+            "[tracking] cam=%s GHOST dropped: tid=%s label=%s best=%.2f < spawn=%.2f",
+            camera_id, tr.track_id, lbl, best, effective,
+        )
+        dropped += 1
+
+    if dropped:
+        state.closed = survivors
+    return dropped
+
+
+# TODO: re-index existing events to retroactively drop ghost tracks
+# from pre-L07 sidecars. Needs an admin endpoint that iterates
+# storage/motion_detection/<cam>/<date>/*.tracks.json, re-applies
+# _prune_ghost_tracks with each cam's CURRENT config, and rewrites
+# the sidecar. Out of scope for the initial L07 commit — only NEW
+# clips get the cleanup until that ships.
+
+
 def _build_payload(state: _TrackerState, fps: float, frame_count: int,
                    duration_s: float, allowed, video_path: Path,
                    storage_root: Path,
@@ -825,6 +949,36 @@ class TrackingWorker(threading.Thread):
             # with whole-clip lanes for objects that never moved.
             # Each drop emits one [tracking] INFO line.
             _filter_static_false_positives(state, spawn_score)
+
+            # L07 · ghost-track filter. Drops tracks whose best_score
+            # never reached the per-label spawn threshold AND were
+            # never confirmed by the confirmation window. Opt-out via
+            # cam_cfg.track_filter_ghosts=False; default True so
+            # existing cameras pick up the cleanup on next save.
+            # Pulls the live detection config + cam config once each
+            # since _cam_cfg_getter / _cfg_getter are cheap dict reads
+            # against the settings store.
+            try:
+                cam_cfg = self._cam_cfg_getter(job.camera_id) if self._cam_cfg_getter else {}
+            except Exception:
+                cam_cfg = {}
+            ghost_filter_on = (cam_cfg.get("track_filter_ghosts") is not False)
+            if ghost_filter_on:
+                try:
+                    det_cfg = self._cfg_getter() or {}
+                except Exception:
+                    det_cfg = {}
+                n_ghosts = _prune_ghost_tracks(
+                    state,
+                    cam_cfg=cam_cfg,
+                    detection_cfg=det_cfg,
+                    camera_id=job.camera_id,
+                )
+                if n_ghosts:
+                    log.info(
+                        "[tracking] cam=%s pruned %d ghost track(s) from sidecar",
+                        job.camera_id, n_ghosts,
+                    )
 
             # gates.min_confidence reflects the LIVE spawn threshold so
             # the timeline panel's "<spawn>% Spuren bestätigt" copy

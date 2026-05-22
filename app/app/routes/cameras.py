@@ -82,6 +82,9 @@ def api_cameras():
         s["track_continue_min_score"] = float(cam.get("track_continue_min_score") or 0.0)
         s["track_miss_grace_seconds"] = float(cam.get("track_miss_grace_seconds") or 0.0)
         s["track_iou_match_threshold"] = float(cam.get("track_iou_match_threshold") or 0.0)
+        # L07 · expose to the cam-edit form. Default True so legacy
+        # cameras without the field read as enabled on first hydrate.
+        s["track_filter_ghosts"] = (cam.get("track_filter_ghosts") is not False)
         s["zones"] = cam.get("zones", [])
         s["masks"] = cam.get("masks", [])
         s["resolution"] = cam.get("resolution", "auto")

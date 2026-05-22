@@ -52,7 +52,10 @@ def default_camera(cam: dict | None = None) -> dict:
         # at 1.0) so wildlife stays more sensitive than normal motion
         # without forcing the user to set both sliders.
         "wildlife_motion_sensitivity": cam.get("wildlife_motion_sensitivity", 0.0),
-        "wildlife_min_score": cam.get("wildlife_min_score", 0.0),
+        # wildlife_min_score lives in the track_* group below — the
+        # earlier duplicate entry here was a leftover from the first
+        # pass. Both produced the same float-or-zero result, so the
+        # removal is bit-identical.
         # Per-label confidence overrides. Defaults are tuned to be
         # forgiving — false positives are caught by the N-of-M
         # confirmation window (see schedule_action_active +

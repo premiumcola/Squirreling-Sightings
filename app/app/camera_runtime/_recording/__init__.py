@@ -20,21 +20,21 @@ import cv2
 import numpy as np
 import requests
 
-from ..detection_confirmer import DetectionConfirmer
-from ..detectors import (
+from ...detection_confirmer import DetectionConfirmer
+from ...detectors import (
     BirdSpeciesClassifier,
     CoralObjectDetector,
     Detection,
     WildlifeClassifier,
     draw_detections,
 )
-from ..event_logic import (
+from ...event_logic import (
     choose_alarm_level,
     compute_severity_from_matrix,
     is_schedule_window_active,
     schedule_action_active,
 )
-from ._consts import (
+from .._consts import (
     _FFMPEG_AVAILABLE,
     _PROFILE_PERIOD_DEFAULTS,
     _PROFILES,

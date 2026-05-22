@@ -57,9 +57,11 @@ repos:
         entry: npx eslint
         language: system
         types: [javascript]
-        # Don't fail on warnings — only errors block. The codebase has a
-        # baseline of warnings that get fixed gradually.
-        args: [--max-warnings, '999']
+        # P28 · errors block, warnings allowed up to a reasonable bound
+        # so the baseline stays grep-able. 0 max-warnings would
+        # require fixing every legacy warning first; 50 leaves room
+        # for the gradual cleanup without sliding back.
+        args: [--max-warnings, '50']
 
       # mypy is in permissive mode; it runs to catch obvious None.foo()
       # crashes during refactors but doesn't block on missing types.

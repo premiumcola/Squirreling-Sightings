@@ -1,0 +1,252 @@
+            <div class="cam-tab-panel" id="cam-tab-alerting">
+
+              <!-- Status strip — Telegram bot connection + last push.
+                   Hydrated by _renderAlertStatusStrip in a follow-up
+                   commit; renders a green dot placeholder until then. -->
+              <div id="alertStatusStrip" class="erk-status">
+                <span class="dot is-ok" id="alertStatusDot"></span>
+                <span class="lbl">Telegram-Bot</span>
+                <span class="val" id="alertStatusBot">verbunden</span>
+                <span class="sep"></span>
+                <span class="lbl">letzte Push</span>
+                <span class="val" id="alertStatusLast">—</span>
+              </div>
+
+              <!-- Conflict warning banner — JS toggles `hidden` based on
+                   the matrix + channel + master switch state. -->
+              <div id="alertConflictBanner" class="alert-conflict" hidden>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <circle cx="12" cy="17" r=".5" fill="currentColor"/>
+                </svg>
+                <span class="alert-conflict-text" id="alertConflictText"></span>
+              </div>
+
+              <div class="alert-flow">
+
+                <!-- STEP 1 — Severity matrix -->
+                <div class="alert-step">
+                  <div class="alert-step-num">1</div>
+                  <div class="alert-step-head">
+                    <svg class="alert-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="3" y="3" width="7" height="7"/>
+                      <rect x="14" y="3" width="7" height="7"/>
+                      <rect x="3" y="14" width="7" height="7"/>
+                      <rect x="14" y="14" width="7" height="7"/>
+                    </svg>
+                    <span class="alert-step-title">Was tun bei was?</span>
+                    <span class="alert-step-hint">Pro Klasse</span>
+                  </div>
+                  <!-- Legend: Aus / Info / Alarm explainer -->
+                  <div class="sev-legend">
+                    <div class="sev-legend-item">
+                      <div class="sev-legend-head is-off">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                          <path d="M10 21a2 2 0 0 0 4 0"/>
+                          <line x1="2" y1="2" x2="22" y2="22"/>
+                        </svg>
+                        Aus
+                      </div>
+                      <div class="sev-legend-desc">ignoriert · keine Push, keine Aufnahme</div>
+                    </div>
+                    <div class="sev-legend-item">
+                      <div class="sev-legend-head is-info">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                          <path d="M10 21a2 2 0 0 0 4 0"/>
+                        </svg>
+                        Info
+                      </div>
+                      <div class="sev-legend-desc">stille Push · kein Sound am Handy</div>
+                    </div>
+                    <div class="sev-legend-item">
+                      <div class="sev-legend-head is-alarm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                          <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                          <path d="M10 21a2 2 0 0 0 4 0"/>
+                          <path d="M2 5l4-3M22 5l-4-3"/>
+                        </svg>
+                        Alarm
+                      </div>
+                      <div class="sev-legend-desc">laute Push · mit Sound · Banner im Tile</div>
+                    </div>
+                  </div>
+                  <!-- Matrix rendered by JS into this container.
+                       7 rows (person/cat/bird/squirrel/car/dog/motion)
+                       × 3 columns (off/info/alarm). Click a cell to
+                       toggle that row's severity. -->
+                  <div id="alertSeverityMatrix" class="sev-matrix"></div>
+                  <button type="button" class="erk-more" id="alertCooldownToggle" aria-expanded="false">
+                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>
+                    <span id="alertCooldownToggleLbl">Cooldown pro Klasse anpassen</span>
+                  </button>
+                  <div id="alertCooldownGrid" hidden></div>
+                </div>
+
+                <!-- STEP 2 — Channels -->
+                <div class="alert-step">
+                  <div class="alert-step-num">2</div>
+                  <div class="alert-step-head">
+                    <svg class="alert-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M22 2L11 13"/>
+                      <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+                    </svg>
+                    <span class="alert-step-title">Wohin senden?</span>
+                    <span class="alert-step-hint">Kanäle</span>
+                  </div>
+                  <label class="chan-row">
+                    <span class="chan-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13M22 2L15 22L11 13L2 9z"/></svg>
+                    </span>
+                    <span class="chan-text">
+                      <span class="chan-name">Telegram</span>
+                      <span class="chan-sub">Push mit Snapshot &amp; Clip-Link</span>
+                    </span>
+                    <input type="checkbox" name="telegram_enabled" class="switch-input" checked />
+                    <span class="switch"></span>
+                  </label>
+                  <label class="chan-row">
+                    <span class="chan-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h3l3-9 6 18 3-9h3"/></svg>
+                    </span>
+                    <span class="chan-text">
+                      <span class="chan-name">MQTT (Home Assistant)</span>
+                      <span class="chan-sub">Events ans Smart-Home publizieren</span>
+                    </span>
+                    <input type="checkbox" name="mqtt_enabled" class="switch-input" />
+                    <span class="switch"></span>
+                  </label>
+                </div>
+
+                <!-- STEP 3 — Recording -->
+                <div class="alert-step">
+                  <div class="alert-step-num">3</div>
+                  <div class="alert-step-head">
+                    <svg class="alert-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10"/>
+                      <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                    </svg>
+                    <span class="alert-step-title">Aufzeichnen?</span>
+                    <span class="alert-step-hint">Archiv auf Disk</span>
+                  </div>
+                  <label class="chan-row">
+                    <span class="chan-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3"/></svg>
+                    </span>
+                    <span class="chan-text">
+                      <span class="chan-name">Events archivieren</span>
+                      <span class="chan-sub">Clip + Snapshot werden gespeichert</span>
+                    </span>
+                    <input type="checkbox" name="recording_enabled" class="switch-input" checked />
+                    <span class="switch"></span>
+                  </label>
+                </div>
+
+                <!-- STEP 4 — Two independent schedules. The split lets a
+                     user say "notify only at night, archive 24/7" or
+                     vice versa — impossible with the prior single-window
+                     UI. JS keeps a hidden legacy `schedule` field in
+                     sync so backend code that still reads the old shape
+                     keeps working until the schedule-split commit. -->
+                <div class="alert-step">
+                  <div class="alert-step-num">4</div>
+                  <div class="alert-step-head">
+                    <svg class="alert-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"/>
+                      <path d="M12 7v5l3 3"/>
+                    </svg>
+                    <span class="alert-step-title">Wann gilt das?</span>
+                    <span class="alert-step-hint">2 separate Zeitpläne</span>
+                  </div>
+                  <div class="sched-block">
+                    <label class="sched-head">
+                      <span class="sched-name">📢 Benachrichtigungen senden</span>
+                      <input type="checkbox" name="schedule_notify_enabled" class="switch-input" />
+                      <span class="switch"></span>
+                    </label>
+                    <div class="sched-times">
+                      <div class="sched-time-cell">
+                        <input type="time" name="schedule_notify_from" class="time-input" value="21:00" />
+                        <span class="lbl-tiny">von</span>
+                      </div>
+                      <span class="sched-times-sep" aria-hidden="true">–</span>
+                      <div class="sched-time-cell">
+                        <input type="time" name="schedule_notify_to" class="time-input" value="06:00" />
+                        <span class="lbl-tiny">bis</span>
+                      </div>
+                    </div>
+                    <span class="lbl-tiny" style="margin-top:6px;font-style:italic">aus = ganztags aktiv</span>
+                  </div>
+                  <div class="sched-block">
+                    <label class="sched-head">
+                      <span class="sched-name">💾 Aufzeichnen</span>
+                      <input type="checkbox" name="schedule_record_enabled" class="switch-input" />
+                      <span class="switch"></span>
+                    </label>
+                    <div class="sched-times">
+                      <div class="sched-time-cell">
+                        <input type="time" name="schedule_record_from" class="time-input" value="00:00" />
+                        <span class="lbl-tiny">von</span>
+                      </div>
+                      <span class="sched-times-sep" aria-hidden="true">–</span>
+                      <div class="sched-time-cell">
+                        <input type="time" name="schedule_record_to" class="time-input" value="23:59" />
+                        <span class="lbl-tiny">bis</span>
+                      </div>
+                    </div>
+                    <span class="lbl-tiny" style="margin-top:6px;font-style:italic">aus = ganztags aktiv</span>
+                  </div>
+                </div>
+
+                <!-- STEP 5 — Master mute -->
+                <div class="alert-step">
+                  <div class="alert-step-num">5</div>
+                  <div class="alert-step-head">
+                    <svg class="alert-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M12 2v6"/><path d="M5 8a7 7 0 1 0 14 0"/>
+                    </svg>
+                    <span class="alert-step-title">Stumm-Schalter</span>
+                    <span class="alert-step-hint">global · überstimmt alles</span>
+                  </div>
+                  <label class="chan-row">
+                    <span class="chan-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+                        <path d="M10 21a2 2 0 0 0 4 0"/>
+                      </svg>
+                    </span>
+                    <span class="chan-text">
+                      <span class="chan-name">Alerting aktiv</span>
+                      <span class="chan-sub">Aus = ALLES stumm · Aufnahme nach Plan läuft trotzdem</span>
+                    </span>
+                    <input type="checkbox" name="armed" class="switch-input" checked />
+                    <span class="switch"></span>
+                  </label>
+                </div>
+
+              </div>
+
+              <!-- Test push — fires a sample notification through every
+                   enabled channel and shows per-channel success/error
+                   inline. Lets the user validate their config without
+                   waiting for a real detection. -->
+              <div class="alert-test-row">
+                <button class="alert-test-btn" type="button" id="alertTestBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span class="alert-test-btn-lbl">Test-Push senden</span>
+                </button>
+                <div class="alert-test-hint">schickt eine Test-Nachricht an alle aktiven Kanäle</div>
+                <div class="alert-test-result" id="alertTestResult" hidden></div>
+              </div>
+
+              <!-- Hidden legacy alarm_profile field — preserved across
+                   the refactor so back-end code that still reads it (the
+                   class_severity migration falls back to it on load)
+                   keeps working until commit 3 finishes the cutover. -->
+              <input type="hidden" name="alarm_profile" id="camAlarmProfileHidden" />
+            </div>
+

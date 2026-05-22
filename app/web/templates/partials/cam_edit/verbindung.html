@@ -1,0 +1,105 @@
+            <div class="cam-tab-panel" id="cam-tab-verbindung">
+              <div style="display:grid;gap:8px">
+                <div class="row" style="grid-template-columns:1fr 70px;gap:8px">
+                  <div class="field-wrap">
+                    <input name="rtsp_ip" placeholder="192.168.X.X" readonly class="cam-readonly-input" />
+                    <span class="field-label">Kamera-IP</span>
+                    <span class="cam-readonly-hint">Zum Ändern: Kamera neu einrichten.</span>
+                  </div>
+                  <div class="field-wrap"><input name="rtsp_port" placeholder="554" value="554" /><span class="field-label">Port</span></div>
+                </div>
+                <div class="cam-userpass">
+                  <div class="field-wrap"><input name="rtsp_user" placeholder="admin" /><span class="field-label">Benutzer</span></div>
+                  <div class="field-wrap pw-wrap">
+                    <div class="pw-input-row">
+                      <input name="rtsp_pass" type="password" placeholder="Passwort" autocomplete="off" />
+                      <button type="button" class="pw-eye" onclick="togglePwField(this,'rtsp_pass')" title="Passwort anzeigen/verbergen" aria-label="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                    </div>
+                    <span class="field-label">Passwort</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Erweitert: RTSP-Pfad picker, auto-built RTSP-URL, optional
+                   Snapshot-URL. All debug/optional fields most users never
+                   touch — auto-defaults from manufacturer + credentials. -->
+              <div class="cam-rtsp-erw">
+                <button type="button" class="cam-rtsp-erw-btn" id="camRtspErwBtn"
+                        onclick="_toggleCamRtspErw()" aria-expanded="false">
+                  <svg class="cam-rtsp-erw-chev" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5,3 11,8 5,13"/></svg>
+                  <span>Erweitert · RTSP-Pfad &amp; URLs</span>
+                  <!-- Pill sits inside the surrounding button — tapping
+                       the row expands "Erweitert" which reveals the
+                       actual non-default path. aria-label exposes the
+                       meaning to AT users so iOS Safari's long-press-
+                       only title= isn't the only path to it. -->
+                  <span class="cam-rtsp-erw-pill" id="rtspPathCustomPill" hidden
+                        title="RTSP-Pfad weicht vom Hersteller-Default ab"
+                        aria-label="RTSP-Pfad weicht vom Hersteller-Default ab">manuell</span>
+                </button>
+                <div class="cam-rtsp-erw-body" id="rtspPathErwBody" hidden>
+                  <div class="field-help">Nur ändern wenn die Standard-Pfade des Herstellers nicht funktionieren (z. B. ältere Reolink mit H.264 statt H.265).</div>
+                  <div class="field-wrap"><select name="rtsp_path" id="rtspPathSelect"></select><span class="field-label">RTSP-Pfad</span></div>
+                  <div class="field-wrap url-wrap">
+                    <div class="pw-input-row">
+                      <input name="rtsp_url" readonly class="cam-readonly-input" data-mask-url="1" />
+                      <button type="button" class="url-eye" onclick="_toggleUrlMask(this)" title="Passwort anzeigen/verbergen" aria-label="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                    </div>
+                    <span class="field-label">RTSP-URL (automatisch)</span>
+                  </div>
+                  <div class="field-wrap url-wrap">
+                    <div class="pw-input-row">
+                      <input name="snapshot_url" placeholder="http://…" data-mask-url="1" />
+                      <button type="button" class="url-eye" onclick="_toggleUrlMask(this)" title="Passwort anzeigen/verbergen" aria-label="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                    </div>
+                    <span class="field-label">Snapshot-URL – optional</span>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" name="object_filter" />
+              <!-- Connection health diagnostics — collapsible; shows a one-line
+                   summary when collapsed, auto-opens on error. Populated by JS. -->
+              <div id="camDiagnostics" class="cam-diag" style="display:none;margin-top:10px">
+                <button type="button" class="cam-diag-head" onclick="_toggleCamDiag()">
+                  <span class="cam-diag-dot" id="camDiagDot"></span>
+                  <span class="cam-diag-title">Verbindungsdiagnose</span>
+                  <span class="cam-diag-summary" id="camDiagSummary">Verbindung stabil</span>
+                  <svg class="cam-diag-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5,3 11,8 5,13"/></svg>
+                </button>
+                <div class="cam-diag-body">
+                  <div class="cam-diag-grid">
+                    <div class="cam-diag-item"><span class="cam-diag-label">Stream-Alter</span><span id="diagFrameAge" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Preview-FPS</span><span id="diagPreviewFps" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Stream-Modus</span><span id="diagStreamMode" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Aktive Viewer</span><span id="diagLiveViewers" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Reconnects</span><span id="diagReconnects" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Fehler-Streak</span><span id="diagErrorStreak" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Stale Incidents</span><span id="diagStale" class="cam-diag-val">—</span></div>
+                    <div class="cam-diag-item"><span class="cam-diag-label">Stale Streak</span><span id="diagStaleStreak" class="cam-diag-val">—</span></div>
+                  </div>
+                  <div id="diagLastError" style="display:none;margin-top:5px;font-size:11px;color:var(--danger);background:rgba(239,68,68,.08);border-radius:6px;padding:5px 8px;word-break:break-all"></div>
+                </div>
+              </div>
+              <!-- Reolink-only · Bild-Modus-Test (Tag/Nacht-Override).
+                   Standalone, manuell ausgelöst — NICHT in den Timelapse-
+                   Pfad eingebunden. Wird komplett ausgeblendet wenn der
+                   Hersteller ≠ Reolink ist. Setzt SetIsp+IrLights in einem
+                   POST; Feedback-Zeile räumt sich nach 10 s selbst auf. -->
+              <div id="reolinkImageModeBox" class="reolink-imgmode" hidden>
+                <div class="reolink-imgmode-head">
+                  <span class="reolink-imgmode-title">🎚 Bild-Modus-Test</span>
+                  <span class="reolink-imgmode-sub">Reolink-Override · manueller Test, Speichern vorab nötig</span>
+                </div>
+                <div class="reolink-imgmode-row">
+                  <div class="field-wrap reolink-imgmode-port">
+                    <input name="reolink_http_port" type="number" min="1" max="65535" inputmode="numeric" placeholder="HTTP-Port · 80" aria-label="HTTP-Port" title="HTTP-Port (Default 80)" />
+                  </div>
+                  <div class="reolink-imgmode-seg" role="group" aria-label="Bild-Modus">
+                    <button type="button" class="reolink-imgmode-btn" data-mode="color"><span class="reolink-imgmode-ico" aria-hidden="true">🎨</span><span>Farbe</span></button>
+                    <button type="button" class="reolink-imgmode-btn" data-mode="auto"><span class="reolink-imgmode-ico" aria-hidden="true">⚙</span><span>Auto</span></button>
+                    <button type="button" class="reolink-imgmode-btn" data-mode="bw"><span class="reolink-imgmode-ico" aria-hidden="true">⚫</span><span>S/W</span></button>
+                  </div>
+                </div>
+                <div class="reolink-imgmode-feedback" id="reolinkImageModeFeedback" aria-live="polite" hidden></div>
+              </div>
+            </div>
+

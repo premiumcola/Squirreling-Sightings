@@ -1,0 +1,295 @@
+            <div class="cam-tab-panel" id="cam-tab-erkennung">
+              <!-- Status strip: dot variant + ms/Frame + last-update relative.
+                   Hydrated by _updateErkStatusStrip from the camera's runtime
+                   status (detection_mode, coral_available, inference_avg_ms,
+                   frame_age_s). -->
+              <div id="camGlobalStatus" class="erk-status">
+                <span class="dot is-ok"></span>
+                <span class="lbl" id="erkStatusText">Coral läuft</span>
+                <span class="val" id="erkStatusMs">— ms / Frame</span>
+                <span class="sep"></span>
+                <span class="lbl">letztes Update</span>
+                <span class="val" id="erkStatusUpdated">—</span>
+              </div>
+
+              <div class="erk-flow">
+
+                <!-- STEP 1 — Klassenfilter -->
+                <div class="erk-step">
+                  <div class="erk-step-num">1</div>
+                  <div class="erk-step-head">
+                    <svg class="erk-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span class="erk-step-title">Was suchen?</span>
+                    <span class="erk-step-hint">Klassen-Filter</span>
+                  </div>
+                  <div class="erk-card">
+                    <div id="camObjectFilter" class="cam-objfilter-bar"></div>
+                  </div>
+                </div>
+
+                <!-- STEP 2 — Konfidenz -->
+                <div class="erk-step">
+                  <div class="erk-step-num">2</div>
+                  <div class="erk-step-head">
+                    <svg class="erk-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"/>
+                      <path d="M12 7v5l3 3"/>
+                    </svg>
+                    <span class="erk-step-title">Wie sicher?</span>
+                    <span class="erk-step-hint">Konfidenz-Schwelle</span>
+                  </div>
+                  <div class="erk-card">
+                    <div class="row">
+                      <input type="range" name="detection_min_score" min="0.05" max="0.95" step="0.05" value="0.55" />
+                      <span class="val" id="erkMinScoreVal">55%</span>
+                    </div>
+                    <span class="lbl">Allgemein · für alle Klassen</span>
+                  </div>
+                  <div class="erk-card">
+                    <div class="row">
+                      <input type="range" name="label_threshold_person" min="0.20" max="0.95" step="0.01" value="0.72" />
+                      <span class="val" id="erkPersonVal">72%</span>
+                    </div>
+                    <span class="lbl">Person · überschreibt allgemein</span>
+                  </div>
+                  <button type="button" class="erk-more" id="erkPerClassToggle" aria-expanded="false">
+                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>
+                    <span id="erkPerClassToggleLbl">Pro Klasse anpassen</span>
+                  </button>
+                  <div id="erkPerClassAdvanced" hidden></div>
+                </div>
+
+                <!-- STEP 3 — Bestätigungs-Filter (N-of-M sliding window) -->
+                <div class="erk-step">
+                  <div class="erk-step-num">3</div>
+                  <div class="erk-step-head">
+                    <svg class="erk-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12"/>
+                      <polyline points="20 12 14 18" opacity=".5"/>
+                    </svg>
+                    <span class="erk-step-title">Wie oft bestätigen?</span>
+                    <span class="erk-step-hint">Anti-Fehlalarm</span>
+                  </div>
+                  <div class="erk-card">
+                    <div class="two-col">
+                      <div class="row">
+                        <span class="row-lbl">Treffer</span>
+                        <input type="range" name="confirm_n" min="1" max="10" step="1" value="3" />
+                        <span class="val" id="erkConfirmN">3 ×</span>
+                      </div>
+                      <div class="row">
+                        <span class="row-lbl">Sekunden</span>
+                        <input type="range" name="confirm_seconds" min="2" max="20" step="1" value="5" />
+                        <span class="val" id="erkConfirmS">5 s</span>
+                      </div>
+                    </div>
+                    <span class="lbl" id="erkConfirmLbl">3 Treffer in 5 Sekunden bestätigen</span>
+                  </div>
+                  <!-- Legacy per-class grid stays hidden — the save handler
+                       still reads any rows it contains for backwards-compat,
+                       but rows are no longer rendered. The new "Pro Klasse
+                       anpassen" drilldown writes into #erkConfirmPerClass. -->
+                  <div id="camConfirmGrid" hidden></div>
+                  <button type="button" class="erk-more" id="erkConfirmPerClassToggle" aria-expanded="false">
+                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>
+                    <span id="erkConfirmPerClassToggleLbl">Pro Klasse anpassen</span>
+                  </button>
+                  <div id="erkConfirmPerClass" hidden></div>
+                </div>
+
+                <!-- STEP 4 — Analyse-Intervall -->
+                <div class="erk-step">
+                  <div class="erk-step-num">4</div>
+                  <div class="erk-step-head">
+                    <svg class="erk-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                    <span class="erk-step-title">Wie schnell scannen?</span>
+                    <span class="erk-step-hint">Analyse-Intervall</span>
+                  </div>
+                  <div class="erk-card">
+                    <div class="row">
+                      <input type="range" name="frame_interval_ms" min="100" max="2000" step="50" value="350" />
+                      <span class="val" id="erkFrameIntervalVal">350 ms</span>
+                    </div>
+                    <span class="lbl" id="erkFrameIntervalLbl">≈ 3 fps · niedriger = mehr Coral-Last</span>
+                  </div>
+                </div>
+
+                <!-- STEP 5 — Bewegungs-Vortrigger -->
+                <div class="erk-step">
+                  <div class="erk-step-num">5</div>
+                  <div class="erk-step-head">
+                    <svg class="erk-step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 12h3l3-9 6 18 3-9h3"/>
+                    </svg>
+                    <span class="erk-step-title">Bewegungs-Vortrigger</span>
+                    <span class="erk-step-hint">vor der KI</span>
+                  </div>
+                  <div class="erk-card">
+                    <div class="row">
+                      <input type="range" name="motion_sensitivity" min="0.1" max="1.0" step="0.1" value="0.5" />
+                      <span class="val" id="erkMotionVal">50%</span>
+                    </div>
+                    <span class="lbl">Empfindlichkeit · niedrig = nur große Bewegung</span>
+                  </div>
+                  <div class="erk-card">
+                    <div class="row">
+                      <select name="post_motion_tail_s">
+                        <option value="0">Standard (Global-Wert)</option>
+                        <option value="3">3 Sekunden</option>
+                        <option value="5">5 Sekunden</option>
+                        <option value="8">8 Sekunden</option>
+                        <option value="10">10 Sekunden</option>
+                        <option value="15">15 Sekunden</option>
+                      </select>
+                    </div>
+                    <span class="lbl">Nachlauf-Aufnahme nach letzter Bewegung</span>
+                  </div>
+                </div>
+
+                <!-- STEP 6 — Objekt-Tracking
+                     The same two-tier algorithm runs in BOTH the live
+                     pipeline and the post-clip worker. Spawn is the
+                     score needed to START a track; continue is the
+                     low-floor a track may extend down to (between
+                     them = "tentative" — only continues, never spawns);
+                     grace is how long a track may go un-matched
+                     before it ages out. 0.00 means "use the system
+                     default" (spawn 0.50 / continue 0.20 / grace 4.0s). -->
+                <div class="erk-step" data-step="6">
+                  <div class="erk-step-head">
+                    <span class="erk-step-num">6</span>
+                    <svg class="erk-step-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M3 12h2"/><path d="M19 12h2"/>
+                      <path d="M12 3v2"/><path d="M12 19v2"/>
+                      <path d="M5.6 5.6l1.4 1.4"/><path d="M17 17l1.4 1.4"/>
+                      <path d="M5.6 18.4l1.4-1.4"/><path d="M17 7l1.4-1.4"/>
+                    </svg>
+                    <span class="erk-step-title">Objekt-Tracking</span>
+                    <span class="erk-step-hint">Verfolgung über Frames hinweg</span>
+                  </div>
+                  <div class="erk-card">
+                    <span class="field-help" style="margin-bottom:6px">Hält erkannte Objekte über kurze Konfidenz-Einbrüche hinweg auf demselben Track. 0,00 = System-Default verwenden.</span>
+                    <div class="erk-track-presets" role="group" aria-label="Tracking-Vorlagen">
+                      <span class="erk-track-presets-lbl">Vorlage anwenden:</span>
+                      <button type="button" class="erk-track-preset" data-preset="careful">Vorsichtig</button>
+                      <button type="button" class="erk-track-preset" data-preset="balanced">Ausgewogen</button>
+                      <button type="button" class="erk-track-preset" data-preset="robust">Robust</button>
+                    </div>
+                    <!-- L07 · Ghost-track filter toggle. Default ON;
+                         persisted via track_filter_ghosts. Hides
+                         "ghost" tracks (best_score never crossed the
+                         per-label spawn threshold) from new event
+                         sidecars so the lightbox doesn't paint a
+                         labelled bbox on a stone or shadow. -->
+                    <label class="erk-track-toggle">
+                      <span class="erk-track-toggle-text">
+                        <span class="erk-track-toggle-name">Ghost-Spuren in Aufnahmen ausblenden</span>
+                        <span class="erk-track-toggle-sub">Spuren, deren beste Konfidenz nie über der Spawn-Schwelle lag, werden nach der Aufnahme aus dem Track-Sidecar entfernt. Aktiviert lassen, sofern du keinen Debug-Bedarf hast.</span>
+                      </span>
+                      <input type="checkbox" name="track_filter_ghosts" class="switch-input" checked />
+                      <span class="switch"></span>
+                    </label>
+                    <div class="erk-track-grid">
+                      <label class="erk-track-cell">
+                        <span class="erk-track-lbl">Spawn-Schwelle</span>
+                        <input type="number" name="track_spawn_min_score" min="0" max="1" step="0.05" value="0" inputmode="decimal" placeholder="0,50" />
+                        <span class="erk-track-sub">Score nötig, um einen neuen Track zu starten</span>
+                      </label>
+                      <label class="erk-track-cell">
+                        <span class="erk-track-lbl">Fortsetzungs-Schwelle</span>
+                        <input type="number" name="track_continue_min_score" min="0" max="1" step="0.05" value="0" inputmode="decimal" placeholder="0,20" />
+                        <span class="erk-track-sub">Score-Floor, bis zu dem ein Track fortgesetzt wird</span>
+                      </label>
+                      <label class="erk-track-cell">
+                        <span class="erk-track-lbl">Gnadenfrist (Sek.)</span>
+                        <input type="number" name="track_miss_grace_seconds" min="0" max="30" step="0.5" value="0" inputmode="decimal" placeholder="6,0" />
+                        <span class="erk-track-sub">Wie lange darf ein Track ohne Treffer überleben</span>
+                      </label>
+                      <label class="erk-track-cell">
+                        <span class="erk-track-lbl">IoU-Schwelle</span>
+                        <input type="number" name="track_iou_match_threshold" min="0" max="0.95" step="0.05" value="0" inputmode="decimal" placeholder="0,20" />
+                        <span class="erk-track-sub">Wie ähnlich die Box-Lage frame-übergreifend sein muss, damit ein Track fortgesetzt wird statt neu zu spawnen. Niedriger = großzügiger.</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- "Erkennung jetzt simulieren" — runs the Coral inference on
+                   the camera's most-recent frame and renders the snapshot
+                   inline with bounding boxes coloured by verdict. The
+                   result panel slides into view below the button on the
+                   first click and stays open across re-runs until the
+                   user dismisses it. -->
+              <div class="erk-test-row">
+                <button class="erk-test-btn" type="button" id="erkSimulateBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span class="erk-test-btn-lbl">Erkennung jetzt simulieren</span>
+                </button>
+                <div class="erk-test-hint">prüft das aktuelle Snapshot · zeigt was Coral findet</div>
+                <div class="erk-test-result erk-sim-sheet" id="erkSimResult" hidden>
+                  <div class="erk-test-result-head">
+                    <span class="erk-test-result-title" id="erkSimTitle">Ergebnis</span>
+                    <button type="button" class="erk-test-close" id="erkSimClose" aria-label="schließen">×</button>
+                  </div>
+                  <div id="erkSimLiveBody">
+                    <div class="erk-test-result-imgwrap">
+                      <img id="erkSimImg" alt="Simulations-Snapshot" />
+                      <svg id="erkSimOverlay" preserveAspectRatio="none"></svg>
+                      <!-- Replaces the image when the backend rejects
+                           the snapshot (stale / corrupt / no_frame) so
+                           we never paint inference boxes on a broken
+                           frame. Live.js toggles `hidden` based on the
+                           503 response code. -->
+                      <div class="erk-test-result-error" id="erkSimError" hidden>
+                        <span class="erk-test-result-error-ico" aria-hidden="true">⚠</span>
+                        <span class="erk-test-result-error-msg" id="erkSimErrorMsg"></span>
+                      </div>
+                    </div>
+                    <!-- Frame-age caption: surfaces how old the captured
+                         frame was so the user is never confused about
+                         whether they're looking at a stale snapshot.
+                         Single-line, muted by default; flips to a
+                         warning variant when the backend reports
+                         >2000 ms (added by snapshot.js). -->
+                    <div class="erk-test-frame-age" id="erkSimFrameAge" hidden></div>
+                    <!-- Sliding 30-second per-class presence timeline.
+                         Populated by live.js while live mode is running;
+                         remains visible (frozen) after the user stops
+                         the loop. Hidden until live mode starts. -->
+                    <div class="erk-tl" id="erkSimTimeline" hidden></div>
+                    <div class="erk-test-result-list" id="erkSimList"></div>
+                    <!-- Decision-trace log: collapsible block walking
+                         every gate from capture → final push, plus an
+                         "active config" chip strip up top and an
+                         optional size-floor hint at the bottom.
+                         Populated from data.decision_trace by
+                         erk-sim/trace.js. -->
+                    <div class="erk-sim-log" id="erkSimLog" hidden>
+                      <div class="erk-sim-cfg" id="erkSimCfg" hidden></div>
+                      <button type="button" class="erk-sim-log-head" id="erkSimLogToggle" aria-expanded="false" aria-controls="erkSimLogBodyWrap">
+                        <span class="erk-sim-log-summary" id="erkSimLogSummary">Trace</span>
+                        <span class="erk-sim-log-chev" aria-hidden="true">⌄</span>
+                      </button>
+                      <div class="erk-sim-log-body-wrap" id="erkSimLogBodyWrap" hidden>
+                        <div class="erk-sim-log-actions">
+                          <button type="button" class="erk-sim-log-clear" id="erkSimLogClear" aria-label="Log leeren">leeren</button>
+                        </div>
+                        <div class="erk-sim-log-body" id="erkSimLogBody"></div>
+                      </div>
+                      <div class="erk-sim-size-hint" id="erkSimSizeHint" hidden></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+

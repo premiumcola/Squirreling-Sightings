@@ -11,7 +11,7 @@
 // timeline-fetch logic, paired with the dashboard-section slider.
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
-import { j } from "../core/api.js";
+import { j, apiGet, apiPost } from "../core/api.js";
 import { showToast } from "../core/toast.js";
 import { loadAll } from "../live-update.js";
 // _renderTlCameraList + _updateTlActiveTags use getCameraIcon to
@@ -21,8 +21,9 @@ import { loadAll } from "../live-update.js";
 import { getCameraIcon } from "../core/icons.js";
 
 async function loadTimelapse(camId){
-  const res=await fetch(`/api/camera/${encodeURIComponent(camId)}/timelapse`);
-  const r=await res.json();
+  let r;
+  try { r = await apiGet(`/api/camera/${encodeURIComponent(camId)}/timelapse`); }
+  catch { showToast('Timelapse-Anfrage fehlgeschlagen.','error'); return; }
   if(r.ok&&r.url){window.open(r.url,'_blank');return;}
   if(r.error==='building'){showToast('Timelapse wird gerade gebaut – bitte in ~15 Sekunden nochmal klicken.','info');return;}
   if(r.error==='no_frames'){showToast('Noch keine Bilder für heute aufgezeichnet.','warn');return;}
@@ -38,9 +39,8 @@ async function toggleTimelapse(camId,currentlyEnabled){
   const newEnabled=!currentlyEnabled;
   const payload={...cam,timelapse:{...(cam.timelapse||{}),enabled:newEnabled}};
   try{
-    const res=await fetch('/api/settings/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const r=await res.json();
-    if(!r.ok){showToast('Error: '+(r.error||'unknown'),'error');return;}
+    const r=await apiPost('/api/settings/cameras', payload);
+    if(!r?.ok){showToast('Error: '+(r?.error||'unknown'),'error');return;}
     showToast(newEnabled?'Timelapse enabled.':'Timelapse disabled.','success');
     await loadAll();
   }catch(e){showToast('Save failed: '+e.message,'error');}
@@ -356,7 +356,7 @@ window.saveTlCameraProfiles=async function(camId){
   const anyEnabled=Object.values(profiles).some(p=>p.enabled);
   // Keep a camera-level fps too (most recently edited) for legacy readers.
   const payload={...cam,timelapse:{...(cam.timelapse||{}),enabled:anyEnabled,fps:latestFps,profiles}};
-  await fetch('/api/settings/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  await apiPost('/api/settings/cameras', payload);
   showToast(`Timelapse für ${cam.name} gespeichert.`,'success');
   await loadAll();
   _updateTlActiveTags(state.cameras||[]);

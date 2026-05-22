@@ -22,7 +22,7 @@
 // because hydrateSettings (still in legacy.js) calls it.
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
-import { j } from "../core/api.js";
+import { j, apiPost } from "../core/api.js";
 import { showToast } from "../core/toast.js";
 import { loadAll } from "../live-update.js";
 import { _coralLabelColor } from "./coral-test/bbox.js";
@@ -47,7 +47,7 @@ window._toggleCoralSetting=async function(key,inputEl){
   const coralEnabled=key==='coral_enabled'   ?nowOn:!!(byId('coralTpuEnabled')?.checked);
   const birdEnabled =key==='bird_species_enabled'?nowOn:!!(byId('birdSpeciesEnabled')?.checked);
   const wildlifeOn  =key==='wildlife_enabled'?nowOn:!!(byId('wildlifeEnabled')?.checked);
-  await fetch('/api/settings/app',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({processing:{coral_enabled:coralEnabled,bird_species_enabled:birdEnabled,wildlife_enabled:wildlifeOn}})});
+  await apiPost('/api/settings/app', { processing: { coral_enabled: coralEnabled, bird_species_enabled: birdEnabled, wildlife_enabled: wildlifeOn } });
   showToast('Coral gespeichert · Kameras werden neu gestartet.','success');
   // Reflect the new toggle state in the pipeline tree before loadAll()
   // rebuilds everything from scratch. The wildlife-only form fields
@@ -60,7 +60,7 @@ window.reloadCoralRuntime=async function(){
   const coralEnabled=!!(byId('coralTpuEnabled')?.checked);
   const birdEnabled =!!(byId('birdSpeciesEnabled')?.checked);
   const wildlifeOn  =!!(byId('wildlifeEnabled')?.checked);
-  await fetch('/api/settings/app',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({processing:{coral_enabled:coralEnabled,bird_species_enabled:birdEnabled,wildlife_enabled:wildlifeOn}})});
+  await apiPost('/api/settings/app', { processing: { coral_enabled: coralEnabled, bird_species_enabled: birdEnabled, wildlife_enabled: wildlifeOn } });
   showToast('Coral-Runtime neu gestartet.','success');
   await loadAll();
 };

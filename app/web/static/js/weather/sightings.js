@@ -9,6 +9,7 @@
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { showToast, showConfirm } from "../core/toast.js";
+import { apiGet, apiDelete } from "../core/api.js";
 import { WEATHER_TYPES } from "../core/weather-types.js";
 import { precipitationLabel } from "../core/weather-precip.js";
 
@@ -37,8 +38,7 @@ async function loadWeatherSightings(filter){
   // doesn't trigger a network round-trip. The legacy single-string call site
   // is still tolerated: a string argument seeds a single-member Set.
   try{
-    const r = await fetch('/api/weather/sightings');
-    const data = await r.json();
+    const data = await apiGet('/api/weather/sightings');
     state.weather.items = data.items || [];
     state.weather.counts = data.counts || {};
     state.weather.total = data.total || 0;
@@ -384,7 +384,7 @@ function openWeatherLightbox(idx){
         if (cur) {
           showConfirm('Wetter-Ereignis wirklich löschen?').then(ok => {
             if (!ok) return;
-            fetch(`/api/weather/sightings/${encodeURIComponent(cur.id)}`, { method: 'DELETE' })
+            apiDelete(`/api/weather/sightings/${encodeURIComponent(cur.id)}`)
               .then(() => { closeWeatherLightbox(); loadWeatherSightings(state.weather.filter); });
           });
         }
@@ -451,8 +451,7 @@ function _renderWsLbMeta(s){
 
 async function loadWeatherRecaps(){
   try{
-    const r = await fetch('/api/weather/recaps');
-    const d = await r.json();
+    const d = await apiGet('/api/weather/recaps');
     state.weather.recaps = d.items || [];
     _renderWeatherRecaps();
   }catch(_err){ /* silent */ }

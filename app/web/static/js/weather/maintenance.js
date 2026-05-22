@@ -16,7 +16,7 @@
 // newly registered cards appear without a manual reload.
 
 import { byId } from '../core/dom.js';
-import { j } from '../core/api.js';
+import { j, apiGet, apiPost } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 
 byId('weatherRescanBtn')?.addEventListener('click', async () => {
@@ -60,11 +60,7 @@ byId('weatherMaintForm')?.addEventListener('submit', async (e) => {
     auto_cleanup_enabled:  !!(f['auto_cleanup_enabled']?.checked),
   }};
   try {
-    await fetch('/api/settings/app', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    });
+    await apiPost('/api/settings/app', payload);
     showToast('Wetter-Aufbewahrung gespeichert.', 'success');
   } catch (err){
     showToast('Speichern fehlgeschlagen: ' + (err.message || err), 'error');
@@ -78,9 +74,7 @@ byId('weatherMaintForm')?.addEventListener('submit', async (e) => {
 // silent on failure.
 (async function _initWeatherMaintFromSettings(){
   try {
-    const r = await fetch('/api/bootstrap');
-    if (!r.ok) return;
-    const data = await r.json();
+    const data = await apiGet('/api/bootstrap');
     const w = (data && data.app && data.app.weather) || {};
     const days = Number(w.retention_days || 90);
     const auto = w.auto_cleanup_enabled !== false;

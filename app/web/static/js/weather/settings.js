@@ -20,6 +20,7 @@
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { showToast } from "../core/toast.js";
+import { apiGet } from "../core/api.js";
 import { WEATHER_TYPES } from "../core/weather-types.js";
 import { _renderWeatherCamList, tickSunTlPreview } from "./settings-suntl.js";
 import { _initWeatherMap, _bindWsLocationInputs } from "./settings-location.js";
@@ -132,6 +133,10 @@ let _weatherSaveTimer = null;
 // missed the Farbmodus and Ereignis-Timelapse sliders. Returns the
 // raw Response (or null on network error) so callers can still
 // r.json() and guard state mutations on r.ok.
+// custom: returns the raw Response so callers can guard via r.ok. The
+// apiPost helper throws on non-2xx — that would break the shared
+// pattern across settings-suntl/_eventtl/_suntltest. Keep the bespoke
+// fetch here; new sites should still prefer apiPost.
 export async function _weatherPanelSave(url, payload){
   let r;
   try {
@@ -183,7 +188,7 @@ function hydrateWeatherSettings(){
   // Sun-Times preview lives next to the per-camera toggles. Fetched once
   // before the first render so window labels show the right values; the
   // _saveSunPhase handler refreshes it after each save.
-  fetch('/api/weather/sun-times').then(r => r.json()).then(st => {
+  apiGet('/api/weather/sun-times').then(st => {
     state.weather._sunTimes = st;
     _renderWeatherCamList();
   }).catch(() => _renderWeatherCamList());
@@ -228,8 +233,7 @@ let _wsStatusTimer = null;
 async function _refreshWeatherStatus(){
   const wrap = byId('weatherStatusPanel'); if (!wrap) return;
   try {
-    const r = await fetch('/api/weather/status');
-    const d = await r.json();
+    const d = await apiGet('/api/weather/status');
     const ago = d.last_poll_at
       ? Math.max(0, Math.round((Date.now() - new Date(d.last_poll_at).getTime()) / 1000))
       : null;

@@ -10,6 +10,8 @@
 // aus settings.json, nicht aus der aktuellen Form. Das ist Absicht:
 // einmal speichern, dann beliebig oft testen.
 
+import { apiPost } from '../core/api.js';
+
 const byId = (id) => document.getElementById(id);
 
 const FEEDBACK_CLEAR_MS = 10_000;
@@ -64,15 +66,7 @@ async function _onClickMode(mode) {
   _setFeedback(`… ${mode} wird gesendet`, 'info');
   let res = null;
   try {
-    const r = await fetch(
-      `/api/cameras/${encodeURIComponent(camId)}/reolink/image-mode`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ mode }),
-      },
-    );
-    res = await r.json().catch(() => null);
+    res = await apiPost(`/api/cameras/${encodeURIComponent(camId)}/reolink/image-mode`, { mode });
   } catch (e) {
     _setFeedback(`Netzwerkfehler: ${e?.message || e}`, 'error');
     buttons.forEach((b) => { b.disabled = false; });

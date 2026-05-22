@@ -9,7 +9,7 @@
 // ships the lookup becomes a direct named import.
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
-import { j } from "../core/api.js";
+import { j, apiPost } from "../core/api.js";
 import { showToast, showConfirm } from "../core/toast.js";
 import { getCameraColor } from "../core/icons.js";
 import { loadAll } from "../live-update.js";
@@ -237,6 +237,9 @@ async function _credProbeNow(ip){
   _credAbort.set(ip, ac);
   _credState.set(ip,{state:'probing',vendor:'unknown',detail:'',port:554});
   _credPaint(ip);
+  // custom: needs AbortController signal so a fast-typed second
+   // keystroke supersedes the first probe in flight. apiPost doesn't
+   // expose the signal — keep raw fetch here.
   let r;
   try{
     r=await fetch('/api/discover/test-credentials',{
@@ -621,12 +624,9 @@ byId('cameraForm').onsubmit=async(e)=>{
   // under the NEW id rather than the stale one we sent.
   let _newId=_savedId, _renamed=false, _autoDetected=[];
   try{
-    const r=await fetch('/api/settings/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(r.ok){
-      const d=await r.json();
-      if(d&&d.id){ _newId=d.id; _renamed=!!d.id_renamed_from; }
-      if(Array.isArray(d?.auto_detected)) _autoDetected=d.auto_detected;
-    }
+    const d=await apiPost('/api/settings/cameras', payload);
+    if(d&&d.id){ _newId=d.id; _renamed=!!d.id_renamed_from; }
+    if(Array.isArray(d?.auto_detected)) _autoDetected=d.auto_detected;
   }catch(_){/* fall back to old id */}
   await loadAll();
   if(_renamed) showToast('Kamera-ID aktualisiert · '+_newId,'success');
@@ -667,9 +667,8 @@ export function _bindCamProbeDeviceInfo(){
     btn.classList.add('is-busy');
     let d=null, ok=false;
     try{
-      const r=await fetch(`/api/cameras/${encodeURIComponent(camId)}/probe-device-info`,{method:'POST'});
-      d=await r.json().catch(()=>null);
-      ok=r.ok && d && d.ok;
+      d=await apiPost(`/api/cameras/${encodeURIComponent(camId)}/probe-device-info`);
+      ok=!!(d && d.ok);
     }catch(_){ /* network — handled below */ }
     btn.classList.remove('is-busy');
     if(!ok){

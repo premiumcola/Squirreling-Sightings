@@ -22,6 +22,7 @@
 import { byId, esc } from "../core/dom.js";
 import { state } from "../core/state.js";
 import { showToast } from "../core/toast.js";
+import { apiGet, apiPost } from "../core/api.js";
 
 // G1 · System-wide capture-pipeline constants. Match
 //   weather_service/_sun_tl.py (target_fps fixed at 15) and
@@ -272,18 +273,13 @@ async function _startTest(){
   if (!_selCam) { showToast('Keine Wetter-Kamera ausgewählt.', 'error'); return; }
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch('/api/weather/sun-tl/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cam_id: _selCam, phase: _selPhase,
-        duration_s: _selDuration,
-        target_duration_s: _selTargetLength,
-      }),
+    const j = await apiPost('/api/weather/sun-tl/test', {
+      cam_id: _selCam, phase: _selPhase,
+      duration_s: _selDuration,
+      target_duration_s: _selTargetLength,
     });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) {
-      showToast('Start fehlgeschlagen: ' + (j.error || r.statusText || ('HTTP ' + r.status)), 'error');
+    if (!j?.ok) {
+      showToast('Start fehlgeschlagen: ' + (j?.error || 'Fehler'), 'error');
       if (btn) btn.disabled = false;
       return;
     }
@@ -291,7 +287,7 @@ async function _startTest(){
     _setRunningUi(true);
     _startPolling();
   } catch (e) {
-    showToast('Netzwerkfehler beim Start: ' + e, 'error');
+    showToast('Netzwerkfehler beim Start: ' + (e?.message || e), 'error');
     if (btn) btn.disabled = false;
   }
 }
@@ -300,10 +296,9 @@ async function _cancelTest(){
   const btn = byId('suntltestCancel');
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch('/api/weather/sun-tl/test/cancel', { method: 'POST' });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) {
-      showToast('Abbruch fehlgeschlagen: ' + (j.error || r.statusText), 'error');
+    const j = await apiPost('/api/weather/sun-tl/test/cancel');
+    if (!j?.ok) {
+      showToast('Abbruch fehlgeschlagen: ' + (j?.error || 'Fehler'), 'error');
       if (btn) btn.disabled = false;
       return;
     }
@@ -351,8 +346,7 @@ async function _pollOnce(){
     const url = _lastEventTs > 0
       ? `/api/weather/sun-tl/test/status?since=${encodeURIComponent(_lastEventTs)}`
       : `/api/weather/sun-tl/test/status`;
-    const r = await fetch(url);
-    d = await r.json();
+    d = await apiGet(url);
   } catch (_err) {
     return;
   }
@@ -758,7 +752,7 @@ export function renderSunTlTestPanel(){
   _refreshConfigurator(root);
   // Surface any prior session immediately on tab open so the user
   // doesn't lose state if they switch tabs mid-run.
-  fetch('/api/weather/sun-tl/test/status').then(r => r.json()).then(d => {
+  apiGet('/api/weather/sun-tl/test/status').then(d => {
     if (d && d.cam_id) {
       _renderLive(d);
       // Tab-open re-render: if a test is still in flight when the user

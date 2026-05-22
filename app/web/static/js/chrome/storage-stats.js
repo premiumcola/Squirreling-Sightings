@@ -6,7 +6,7 @@
 // size badges, and filter pills always reflect server reality.
 import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { j } from '../core/api.js';
+import { j, apiPost } from '../core/api.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import { renderTimeline } from '../timeline.js';
 
@@ -83,6 +83,6 @@ byId('mediaSettingsForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target.elements;
   const payload = { storage: { retention_days: Number(f['retention_days'].value || 14), auto_cleanup_enabled: !!(f['auto_cleanup_enabled']?.checked) } };
-  await fetch('/api/settings/app', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  await apiPost('/api/settings/app', payload);
   if (typeof window.loadAll === 'function') await window.loadAll();
 });

@@ -623,6 +623,9 @@ async function _tick(){
   const controller = session.abort;
   const cycleStart = performance.now();
   try {
+    // custom: AbortController for the live-detect polling loop —
+    // each tick supersedes the previous in-flight request when the
+    // camera changes or the loop stops. apiPost has no signal hook.
     const r = await fetch(
       `/api/cameras/${encodeURIComponent(session.camId)}/test-detection?no_snapshot=1`,
       { method: 'POST', signal: controller.signal },

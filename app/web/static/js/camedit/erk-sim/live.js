@@ -253,6 +253,10 @@ async function _tick(){
   const cycleStart = performance.now();
 
   try {
+    // custom: AbortController for the simulator's adaptive-cadence
+    // polling loop — each tick supersedes the previous request when
+    // the user changes cam or stops the loop. apiPost has no signal
+    // hook so we keep the raw fetch.
     const r = await fetch(
       `/api/cameras/${encodeURIComponent(session.camId)}/test-detection`,
       { method: 'POST', signal: controller.signal },

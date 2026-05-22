@@ -16,6 +16,7 @@
 import { byId } from "../core/dom.js";
 import { renderWeatherStatsChart } from "./stats-chart.js";
 import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from "./stats-summary.js";
+import { apiGet } from "../core/api.js";
 
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
@@ -50,8 +51,7 @@ export async function loadWeatherStats(){
   if (_wsStatsState.inFlight) return;
   _wsStatsState.inFlight = true;
   try {
-    const r = await fetch('/api/weather/history?hours=' + _wsStatsState.hours);
-    _wsStatsState.data = await r.json();
+    _wsStatsState.data = await apiGet('/api/weather/history?hours=' + _wsStatsState.hours);
     renderWeatherStats();
   } catch (_err) {
     /* leave the previous render up — single transient error shouldn't blank the chart */

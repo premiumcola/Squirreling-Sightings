@@ -15,7 +15,7 @@
 // keep resolving.
 import { state } from './core/state.js';
 import { byId, esc } from './core/dom.js';
-import { j } from './core/api.js';
+import { j, apiPost } from './core/api.js';
 import { getCameraIcon, getCameraColor, OBJ_LABEL, DASHBOARD_SVG } from './core/icons.js';
 import { isIOS } from './core/ios-video.js';
 import { openLiveViewIosNative } from './chrome/live-view.js';
@@ -946,7 +946,7 @@ export function showCameraReloadAnimation(camId){
 
 export async function reloadCamera(camId){
   showCameraReloadAnimation(camId);
-  await fetch(`/api/camera/${encodeURIComponent(camId)}/reload`, { method: 'POST' }).catch(() => {});
+  await apiPost(`/api/camera/${encodeURIComponent(camId)}/reload`).catch(() => {});
 }
 
 // ── Legacy global bridges ──────────────────────────────────────────────────

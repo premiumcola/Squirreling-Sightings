@@ -284,7 +284,9 @@ async function _saveSunPhase(camId, phase, partial){
   if (r && r.ok) {
     cam.weather = updated.weather;
     // Refresh the preview line for this camera by re-fetching sun-times.
-    const st = await fetch('/api/weather/sun-times').then(x => x.json()).catch(() => null);
+    let st = null;
+    try { st = await (await import('../core/api.js')).apiGet('/api/weather/sun-times'); }
+    catch { st = null; }
     if (st) state.weather._sunTimes = st;
     _renderWeatherCamList();
   }

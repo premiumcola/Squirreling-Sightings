@@ -9,6 +9,7 @@ import { state } from './core/state.js';
 import { showToast, showConfirm } from './core/toast.js';
 import { colors, OBJ_LABEL } from './core/icons.js';
 import { WEATHER_TYPES } from './core/weather-types.js';
+import { apiPost } from './core/api.js';
 
 // Order in the "Was senden" list — matches the spec's reading order
 // (Person first, animals + person before motion).
@@ -66,7 +67,7 @@ async function savePushCfg(partial){
     state.config.telegram = state.config.telegram || {};
     state.config.telegram.push = _mergeDeep(state.config.telegram.push || {}, partial);
   }
-  await fetch('/api/settings/telegram/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(partial) });
+  await apiPost('/api/settings/telegram/push', partial);
 }
 
 function _mergeDeep(t, s){

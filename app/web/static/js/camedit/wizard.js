@@ -8,6 +8,7 @@
 // configuration.
 import { byId } from '../core/dom.js';
 import { loadAll } from '../live-update.js';
+import { apiPost } from '../core/api.js';
 
 export function openWizard(){ byId('wizard').classList.remove('hidden'); showWizardStep(1); }
 export function closeWizard(){ byId('wizard').classList.add('hidden'); }
@@ -30,7 +31,7 @@ async function finishWizard(){
     mqtt: { enabled: byId('wiz_mqtt_enabled').checked, host: byId('wiz_mqtt_host').value || '', port: Number(byId('wiz_mqtt_port').value || 1883), username: byId('wiz_mqtt_username').value || '', password: byId('wiz_mqtt_password').value || '', base_topic: byId('wiz_mqtt_topic').value || 'tam-spy' },
     cameras: camId ? [{ id: camId, name: byId('wiz_cam_name').value || camId, manufacturer: byId('wiz_cam_manufacturer')?.value || '', model: byId('wiz_cam_model')?.value || '', location: byId('wiz_cam_location').value || '', rtsp_url: byId('wiz_cam_rtsp').value || '', snapshot_url: byId('wiz_cam_snapshot').value || '', enabled: true, armed: true, object_filter: ['person','cat','bird'], timelapse: { enabled: false, fps: 25 }, zones: [], masks: [], schedule: { enabled: false, start: '22:00', end: '06:00' }, telegram_enabled: true, mqtt_enabled: true, whitelist_names: [] }] : [],
   };
-  await fetch('/api/wizard/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  await apiPost('/api/wizard/complete', payload);
   closeWizard();
   await loadAll();
 }

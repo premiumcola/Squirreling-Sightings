@@ -139,6 +139,8 @@ async function _lvDetectTick(){
   _lvDetectAbort = new AbortController();
   const start = performance.now();
   try {
+    // custom: AbortController lets a fast cam-switch supersede the
+    // in-flight live-detect probe. apiPost has no signal hook.
     const r = await fetch(
       `/api/cameras/${encodeURIComponent(_liveViewCamId)}/test-detection?no_snapshot=1`,
       { method: 'POST', signal: _lvDetectAbort.signal },

@@ -19,7 +19,7 @@
 // hydrateSettings.
 import { state, shapeState } from '../core/state.js';
 import { byId, esc } from '../core/dom.js';
-import { j } from '../core/api.js';
+import { j, apiPost } from '../core/api.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import { getCameraIcon, getCameraColor } from '../core/icons.js';
 import { loadAll } from '../live-update.js';
@@ -125,12 +125,7 @@ async function _saveTrackingPresetPatch(formEl, presetLabel, fields){
   if (!stored) return false;
   const payload = { ...stored, ...fields };
   try {
-    const r = await fetch('/api/settings/cameras', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await apiPost('/api/settings/cameras', payload);
     showToast(`Vorlage gespeichert · ${presetLabel}`, 'success');
     // Mutate the in-memory cam record so the next state-read (e.g. a
     // later partial save from another control) sees the new values.
@@ -238,7 +233,7 @@ window._flashDetection = function(camId, cls){
 window.toggleCameraEnabled=async function(camId,enabled){
   const cam=(state.cameras||[]).find(x=>x.id===camId);
   if(!cam) return;
-  await fetch('/api/settings/cameras',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...cam,enabled})});
+  await apiPost('/api/settings/cameras', {...cam, enabled});
   await loadAll();
 };
 export function renderCameraSettings(){
@@ -593,7 +588,7 @@ export async function renderProfiles(){
 }
 export async function renderAudit(){ const actions=await j('/api/telegram/actions'); byId('auditPanel').innerHTML=actions.items.map(a=>`<div class="audit-item"><strong>${esc(a.action)}</strong><div class="small">${esc(a.time)}${a.camera_id?` · ${esc(a.camera_id)}`:''}</div></div>`).join('')||'<div class="audit-item">Noch keine Telegram-Aktionen.</div>'; }
 
-async function toggleArm(camId,armed){ await fetch(`/api/camera/${camId}/arm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({armed})}); await loadAll(); }
+async function toggleArm(camId,armed){ await apiPost(`/api/camera/${camId}/arm`, {armed}); await loadAll(); }
 window.toggleArm=toggleArm;
 // _cvCardClick now lives in dashboard.js (Stage 3b). Its window
 
@@ -780,7 +775,7 @@ window.saveMqttSettings=async function(){
       base_topic:byId('mqtt_base_topic')?.value||'tam-spy'
     }
   };
-  await fetch('/api/settings/app',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  await apiPost('/api/settings/app', payload);
   showToast('MQTT gespeichert · Verbindungen werden neu gestartet.','success');
   await loadAll();
 };

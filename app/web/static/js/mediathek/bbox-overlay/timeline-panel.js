@@ -6,6 +6,7 @@
 // seek the video; tap the badge to hide that class's bboxes.
 import { byId } from '../../core/dom.js';
 import { colors, OBJ_LABEL, OBJ_SVG } from '../../core/icons.js';
+import { apiPost } from '../../core/api.js';
 import { lbState } from '../state.js';
 import { _state } from './_state.js';
 import {
@@ -555,13 +556,15 @@ async function _onTimelineRescanClick(ev){
   if (label) label.textContent = 'Erkennung läuft …';
   host.dataset.state = 'running';
   try {
-    const r = await fetch(
-      `/api/events/${encodeURIComponent(eid)}/rescan?camera_id=${encodeURIComponent(cid)}`,
-      { method: 'POST' },
-    );
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.ok){
-      if (label) label.textContent = `Fehler: ${d.error || r.statusText}`;
+    let d;
+    try {
+      d = await apiPost(`/api/events/${encodeURIComponent(eid)}/rescan?camera_id=${encodeURIComponent(cid)}`);
+    } catch (e) {
+      if (label) label.textContent = `Fehler: ${e?.message || e}`;
+      throw e;
+    }
+    if (!d?.ok){
+      if (label) label.textContent = `Fehler: ${d?.error || 'Fehler'}`;
       host.dataset.state = 'err';
       btn.disabled = false;
       return;

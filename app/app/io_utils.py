@@ -13,8 +13,47 @@ import contextlib
 import json
 import os
 import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+
+# P30 · cache for static Path.exists() checks on hot paths.
+#
+# IMPORTANT — only use for paths that do NOT change during the
+# process lifetime. Safe:
+#   • model files in /app/models/*.tflite
+#   • static assets baked into the image
+#   • config.yaml (read-only at boot)
+# UNSAFE — these change at runtime and the cache will go stale:
+#   • settings.json (atomic rename → new inode each save)
+#   • storage/motion_detection/** (events created/deleted live)
+#   • storage/timelapse/** (cron-built mp4s appear during runtime)
+#   • any path under storage/
+#
+# The cache is in-process; no inter-worker invalidation. A test
+# that mutates a "static" path mid-run must call
+# ``path_exists_cached.cache_clear()`` to reset.
+@lru_cache(maxsize=512)
+def path_exists_cached(p: str) -> bool:
+    """Cached existence check for paths that don't change at
+    runtime. Pass a string (not a Path) so the LRU key stays
+    hashable across Path identity quirks. See module docstring
+    for the "what is safe to cache" rules."""
+    return Path(p).exists()
+
+
+def path_cache_invalidate(p: str | None = None) -> None:
+    """Drop one entry (when ``p`` is given) or the whole cache.
+    Migrations that rename many files at once should call this
+    with no arg so the next exists-check sees the new layout."""
+    if p is None:
+        path_exists_cached.cache_clear()
+    else:
+        # functools.lru_cache has no per-key delete — re-prime by
+        # clearing the whole cache. Cheap (rare-call) so we don't
+        # bother with a custom cache implementation.
+        path_exists_cached.cache_clear()
 
 
 def atomic_write_json(

@@ -17,6 +17,7 @@ from flask import Blueprint, Response, jsonify, render_template, request, send_f
 
 from .. import app_state
 from ..discovery import discover_hosts, discover_hosts_stream
+from ..io_utils import path_exists_cached
 from ._camera_helpers import _auto_detect_device_info
 
 bp = Blueprint("bootstrap", __name__)
@@ -97,7 +98,11 @@ def api_config():
     bird_model_path = bird_cfg.get("model_path")
     bird_cpu_path = bird_cfg.get("cpu_model_path")
     bird_labels_path = bird_cfg.get("labels_path")
-    bird_model_available = any(p and Path(p).exists() for p in (bird_model_path, bird_cpu_path))
+    # P30 · model paths live in /app/models and don't change at
+    # runtime, so the LRU-cached existence check skips the syscall
+    # on the second-and-later /api/config hit (the dashboard polls
+    # this endpoint every few seconds).
+    bird_model_available = any(p and path_exists_cached(p) for p in (bird_model_path, bird_cpu_path))
     # Wildlife block — must mirror the four fields surfaced by
     # /api/settings/app, otherwise hydrateAppSettings reads
     # proc.wildlife_enabled as undefined → false and flips the toggle
@@ -109,8 +114,8 @@ def api_config():
     wl_model_path = wl_cfg.get("model_path")
     wl_cpu_path = wl_cfg.get("cpu_model_path")
     wl_labels_path = wl_cfg.get("labels_path")
-    wl_model_available = any(p and Path(p).exists() for p in (wl_model_path, wl_cpu_path))
-    wl_labels_available = bool(wl_labels_path and Path(wl_labels_path).exists())
+    wl_model_available = any(p and path_exists_cached(p) for p in (wl_model_path, wl_cpu_path))
+    wl_labels_available = bool(wl_labels_path and path_exists_cached(wl_labels_path))
     if not wl_model_available:
         from ..detectors import discover_wildlife_paths
 
@@ -142,7 +147,7 @@ def api_config():
                 "detection": proc.get("detection", {}),
                 "bird_species_enabled": bool(bird_cfg.get("enabled")),
                 "bird_model_available": bird_model_available,
-                "bird_labels_available": bool(bird_labels_path and Path(bird_labels_path).exists()),
+                "bird_labels_available": bool(bird_labels_path and path_exists_cached(bird_labels_path)),
                 "bird_model_path": bird_model_path,
                 "wildlife_enabled": bool(wl_cfg.get("enabled", False)),
                 "wildlife_model_available": wl_model_available,

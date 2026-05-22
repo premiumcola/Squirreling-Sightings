@@ -96,7 +96,7 @@ class TimelapseBuilder:
         # cheaper and produces a clearer log line.
         if len(valid_paths) < 2:
             log.warning(
-                "timelapse: _write_video_ffmpeg refused — only %d input frame(s) for %s",
+                "[timelapse] _write_video_ffmpeg refused — only %d input frame(s) for %s",
                 len(valid_paths),
                 out_path.name,
             )
@@ -151,7 +151,7 @@ class TimelapseBuilder:
             ok_size = out_path.exists() and out_path.stat().st_size >= 50_000
             if result.returncode == 0 and ok_size:
                 log.debug(
-                    "timelapse: ffmpeg encoded %s (%d frames → H.264 %dx%d, %d bytes)",
+                    "[timelapse] ffmpeg encoded %s (%d frames → H.264 %dx%d, %d bytes)",
                     out_path.name,
                     len(valid_paths),
                     out_w,
@@ -161,18 +161,18 @@ class TimelapseBuilder:
                 return str(out_path)
             if result.returncode == 0 and out_path.exists() and not ok_size:
                 log.warning(
-                    "timelapse: ffmpeg wrote %s but file is %d B < 50 KB · treating as failure",
+                    "[timelapse] ffmpeg wrote %s but file is %d B < 50 KB · treating as failure",
                     out_path.name,
                     out_path.stat().st_size,
                 )
             if result.returncode != 0:
                 log.warning(
-                    "timelapse: ffmpeg failed for %s: %s",
+                    "[timelapse] ffmpeg failed for %s: %s",
                     out_path.name,
                     result.stderr.decode(errors="replace")[-300:],
                 )
         except Exception as e:
-            log.warning("timelapse: ffmpeg exception for %s: %s", out_path.name, e)
+            log.warning("[timelapse] ffmpeg exception for %s: %s", out_path.name, e)
         finally:
             with contextlib.suppress(Exception):
                 os.unlink(concat_path)
@@ -284,7 +284,7 @@ class TimelapseBuilder:
         try:
             diag_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         except Exception as e:
-            log.debug("timelapse: encode-diag write failed for %s: %s", diag_path.name, e)
+            log.debug("[timelapse] encode-diag write failed for %s: %s", diag_path.name, e)
 
     def _write_video_opencv(
         self, valid_paths: list, out_path: Path, fps: float, ref_size: tuple[int, int]
@@ -318,7 +318,7 @@ class TimelapseBuilder:
             return str(out_path)
         if out_path.exists():
             log.warning(
-                "timelapse: opencv wrote %s but file is %d B < 50 KB · treating as failure",
+                "[timelapse] opencv wrote %s but file is %d B < 50 KB · treating as failure",
                 out_path.name,
                 out_path.stat().st_size,
             )
@@ -336,9 +336,9 @@ class TimelapseBuilder:
                 img = cv2.resize(img, (640, int(th * scale)))
             thumb_path = out_path.with_suffix(".jpg")
             cv2.imwrite(str(thumb_path), img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-            log.debug("timelapse: thumbnail written: %s", thumb_path.name)
+            log.debug("[timelapse] thumbnail written: %s", thumb_path.name)
         except Exception as e:
-            log.debug("timelapse: thumbnail write failed: %s", e)
+            log.debug("[timelapse] thumbnail write failed: %s", e)
 
     def _write_video(
         self,
@@ -402,7 +402,7 @@ class TimelapseBuilder:
             img = cv2.imread(str(img_path))
             ok, reason = self._is_valid_frame(img)
             if not ok:
-                log.debug("timelapse: skip corrupt frame %s — %s", img_path.name, reason)
+                log.debug("[timelapse] skip corrupt frame %s — %s", img_path.name, reason)
                 skipped += 1
                 if (
                     reason.startswith("patterned_magenta")
@@ -490,7 +490,7 @@ class TimelapseBuilder:
             )
         if skipped > 0:
             log.info(
-                "timelapse: skipped %d/%d corrupt frames for %s",
+                "[timelapse] skipped %d/%d corrupt frames for %s",
                 skipped,
                 total_input,
                 out_path.name,
@@ -510,7 +510,7 @@ class TimelapseBuilder:
             )
             if dup_ratio > 0.6:
                 log.warning(
-                    "timelapse: %.0f%% duplicate frames in %s (%d) — "
+                    "[timelapse] %.0f%% duplicate frames in %s (%d) — "
                     "stuck stream during capture window?",
                     dup_ratio * 100,
                     out_path.name,
@@ -519,7 +519,7 @@ class TimelapseBuilder:
 
         if len(valid_paths) < 2:
             log.warning(
-                "timelapse: only %d valid frames (of %d total) — " "skipping encode for %s",
+                "[timelapse] only %d valid frames (of %d total) — " "skipping encode for %s",
                 len(valid_paths),
                 total_input,
                 out_path.name,
@@ -536,7 +536,7 @@ class TimelapseBuilder:
         actual_duration = n / fps
         if fps < 15.0:
             log.warning(
-                "timelapse: %s will play at %.1f fps (< 15) — video will look "
+                "[timelapse] %s will play at %.1f fps (< 15) — video will look "
                 "choppy; only %d frames for a %ds target. Lower target_seconds "
                 "or capture more frequently (shorter interval).",
                 out_path.name,
@@ -549,7 +549,7 @@ class TimelapseBuilder:
         coverage_pct = min(100.0, 100.0 * frames_on_disk / expected_frames)
         shorter = actual_duration < target_duration_s * 0.95
         log.info(
-            "timelapse: %s\n"
+            "[timelapse] %s\n"
             "  config   : %ds @ %dfps = %d frames expected\n"
             "  on disk  : %d frames (%.0f%% of expected%s)\n"
             "  corrupt  : %d frames dropped (%.1f%%)\n"
@@ -571,12 +571,12 @@ class TimelapseBuilder:
         path = self._write_video_ffmpeg(valid_paths, out_path, fps, ref_size)
         if path is None:
             log.debug(
-                "timelapse: ffmpeg unavailable/failed, falling back to OpenCV for %s", out_path.name
+                "[timelapse] ffmpeg unavailable/failed, falling back to OpenCV for %s", out_path.name
             )
             path = self._write_video_opencv(valid_paths, out_path, fps, ref_size)
 
         if path is None:
-            log.warning("timelapse: encode failed for %s", out_path.name)
+            log.warning("[timelapse] encode failed for %s", out_path.name)
             return None
 
         # ── Pass 3: validate the encoded MP4 ──────────────────────────────────
@@ -589,7 +589,7 @@ class TimelapseBuilder:
         ok, reason, probe_info = self._ffprobe_validate(out_path)
         if not ok:
             log.warning(
-                "timelapse: encode produced invalid MP4 %s — %s · deleting + writing diag",
+                "[timelapse] encode produced invalid MP4 %s — %s · deleting + writing diag",
                 out_path.name,
                 reason,
             )
@@ -608,7 +608,7 @@ class TimelapseBuilder:
             try:
                 out_path.unlink()
             except Exception as e:
-                log.debug("timelapse: unlink of bad mp4 %s failed: %s", out_path.name, e)
+                log.debug("[timelapse] unlink of bad mp4 %s failed: %s", out_path.name, e)
             return None
 
         # ── Thumbnail from middle valid frame ─────────────────────────────────

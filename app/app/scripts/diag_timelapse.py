@@ -194,7 +194,7 @@ def main(argv=None) -> int:
         try:
             records.append(json.loads(qa_path.read_text(encoding="utf-8")))
         except Exception as e:
-            log.warning("skipping unreadable sidecar %s: %s", qa_path, e)
+            log.warning("[diag] skipping unreadable sidecar %s: %s", qa_path, e)
     records = _filter_by_date(records, date_filter)
     records = _filter_by_profile(records, args.profile)
     if args.last is not None and args.last > 0:

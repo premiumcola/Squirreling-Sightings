@@ -174,13 +174,13 @@ def migrate_class_severity(data: dict) -> None:
         cam["class_severity"] = dict(mapping)
         migrated += 1
         log.info(
-            "class_severity-Migration: %s ← alarm_profile=%s → %s",
+            "[migration] class_severity: %s ← alarm_profile=%s → %s",
             cam.get("id", "?"),
             profile,
             mapping,
         )
     if migrated:
-        log.info("class_severity-Migration: %d Kameras migriert", migrated)
+        log.info("[migration] class_severity: %d Kameras migriert", migrated)
 
 
 def migrate_alerting_schedules(data: dict) -> None:
@@ -225,14 +225,14 @@ def migrate_alerting_schedules(data: dict) -> None:
             }
         migrated += 1
         log.info(
-            "Alerting-Schedule-Migration: %s ← legacy=%s → notify=%s record=%s",
+            "[migration] alerting-schedule: %s ← legacy=%s → notify=%s record=%s",
             cam.get("id", "?"),
             sch,
             cam["schedule_notify"],
             cam["schedule_record"],
         )
     if migrated:
-        log.info("Alerting-Schedule-Migration: %d Kameras migriert", migrated)
+        log.info("[migration] alerting-schedule: %d Kameras migriert", migrated)
 
 
 def migrate_timelapse_settings(data: dict) -> None:

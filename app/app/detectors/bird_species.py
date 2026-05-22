@@ -47,7 +47,7 @@ class BirdSpeciesClassifier:
             cpu_alt = self.cfg.get("cpu_model_path")
             if not (cpu_alt and Path(cpu_alt).exists()):
                 self.reason = f"model file not found: {model_path}"
-                log.warning("Bird classifier: %s", self.reason)
+                log.warning("[det] Bird classifier: %s", self.reason)
                 return
 
         # ── Tier 1: pycoral ───────────────────────────────────────────────
@@ -62,10 +62,10 @@ class BirdSpeciesClassifier:
             self.available = True
             self.mode = "coral"
             self.reason = "ok"
-            log.info("Bird classifier (Coral) aktiv: %s", model_path)
+            log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
             return
         except Exception as e:
-            log.warning("Bird classifier pycoral unavailable (%s) – CPU-Fallback…", e)
+            log.warning("[det] Bird classifier pycoral unavailable (%s) – CPU-Fallback…", e)
             coral_error = str(e)
 
         # ── Tier 2: tflite-runtime ────────────────────────────────────────
@@ -86,13 +86,13 @@ class BirdSpeciesClassifier:
                 self.available = True
                 self.mode = "cpu"
                 self.reason = f"cpu_fallback (coral: {coral_error})"
-                log.info("Bird classifier (CPU) aktiv: %s", try_path)
+                log.info("[det] Bird classifier (CPU) aktiv: %s", try_path)
                 return
             except Exception as e2:
-                log.warning("Bird classifier CPU fehlgeschlagen für %s: %s", try_path, e2)
+                log.warning("[det] Bird classifier CPU fehlgeschlagen für %s: %s", try_path, e2)
 
         self.reason = f"classifier unavailable: {coral_error}"
-        log.warning("Bird species classifier nicht verfügbar")
+        log.warning("[det] Bird species classifier nicht verfügbar")
 
     def classify_crop(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
         """Return (display_name, latin_binomial, score).

@@ -62,7 +62,7 @@ class WildlifeClassifier:
                 continue
             if not Path(self.cfg[k]).exists():
                 log.warning(
-                    "Wildlife classifier: configured %s=%s does not exist; "
+                    "[det] Wildlife classifier: configured %s=%s does not exist; "
                     "leaving config as-is. Discovered alternative was %s.",
                     k,
                     self.cfg[k],
@@ -102,7 +102,7 @@ class WildlifeClassifier:
             cpu_alt = self.cfg.get("cpu_model_path")
             if not (cpu_alt and Path(cpu_alt).exists()):
                 self.reason = f"model file not found: {model_path}"
-                log.warning("Wildlife classifier: %s", self.reason)
+                log.warning("[det] Wildlife classifier: %s", self.reason)
                 return
 
         coral_error = ""
@@ -119,12 +119,12 @@ class WildlifeClassifier:
             self.mode = "coral"
             self.reason = "ok"
             log.info(
-                "Wildlife classifier (Coral) aktiv: %s — %d labels", model_path, len(self.labels)
+                "[det] Wildlife classifier (Coral) aktiv: %s — %d labels", model_path, len(self.labels)
             )
             self._load_inat_backend()
             return
         except Exception as e:
-            log.warning("Wildlife classifier pycoral unavailable (%s) – CPU-Fallback…", e)
+            log.warning("[det] Wildlife classifier pycoral unavailable (%s) – CPU-Fallback…", e)
             coral_error = str(e)
 
         # ── Tier 2: tflite-runtime ────────────────────────────────────────
@@ -146,17 +146,17 @@ class WildlifeClassifier:
                 self.mode = "cpu"
                 self.reason = f"cpu_fallback (coral: {coral_error})" if coral_error else "ok"
                 log.info(
-                    "Wildlife classifier (CPU) aktiv: %s — %d labels", try_path, len(self.labels)
+                    "[det] Wildlife classifier (CPU) aktiv: %s — %d labels", try_path, len(self.labels)
                 )
                 self._load_inat_backend()
                 return
             except Exception as e2:
-                log.warning("Wildlife classifier CPU fehlgeschlagen für %s: %s", try_path, e2)
+                log.warning("[det] Wildlife classifier CPU fehlgeschlagen für %s: %s", try_path, e2)
 
         self.reason = (
             f"classifier unavailable: {coral_error}" if coral_error else "classifier unavailable"
         )
-        log.warning("Wildlife classifier nicht verfügbar")
+        log.warning("[det] Wildlife classifier nicht verfügbar")
 
     def _load_inat_backend(self) -> None:
         """Try to load the iNaturalist tflite second-stage classifier from
@@ -182,7 +182,7 @@ class WildlifeClassifier:
             self._inat_interpreter = make_interpreter(model_path, device=cfg.get("device"))
             self._inat_interpreter.allocate_tensors()
             log.info(
-                "Wildlife · iNat-Backend (Coral) aktiv: %s — %d labels",
+                "[det] Wildlife · iNat-Backend (Coral) aktiv: %s — %d labels",
                 model_path,
                 len(self._inat_labels),
             )
@@ -198,12 +198,12 @@ class WildlifeClassifier:
             self._inat_interpreter.allocate_tensors()
             self._inat_cpu_mode = True
             log.info(
-                "Wildlife · iNat-Backend (CPU) aktiv: %s — %d labels",
+                "[det] Wildlife · iNat-Backend (CPU) aktiv: %s — %d labels",
                 cpu_path,
                 len(self._inat_labels),
             )
         except Exception as e:
-            log.info("Wildlife · iNat-Backend nicht geladen: %s", e)
+            log.info("[det] Wildlife · iNat-Backend nicht geladen: %s", e)
             self._inat_interpreter = None
 
     def classify_crop(

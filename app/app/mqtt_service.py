@@ -63,4 +63,4 @@ class MQTTService:
                         mqtt.error_string(rc),
                     )
         except Exception as e:
-            log.warning("MQTT publish failed: %s", e)
+            log.warning("[mqtt] publish failed: %s", e)

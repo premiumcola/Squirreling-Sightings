@@ -145,13 +145,13 @@ class SettingsStore:
                     if base.get("rtsp_url"):
                         cam["rtsp_url"] = base["rtsp_url"]
                     log.warning(
-                        "settings: restored snapshot_url/rtsp_url for camera '%s' from base config",
+                        "[settings] restored snapshot_url/rtsp_url for camera '%s' from base config",
                         cam_id,
                     )
                 else:
                     cam["snapshot_url"] = ""
                     log.warning(
-                        "settings: cleared corrupted snapshot_url for camera '%s' (not in base config; re-enter URL)",
+                        "[settings] cleared corrupted snapshot_url for camera '%s' (not in base config; re-enter URL)",
                         cam_id,
                     )
                 count += 1
@@ -178,7 +178,7 @@ class SettingsStore:
             if self.path.exists():
                 shutil.copy2(str(self.path), str(bak))
         except Exception as e:
-            log.warning("settings: backup rotation failed: %s (continuing with save)", e)
+            log.warning("[settings] backup rotation failed: %s (continuing with save)", e)
         # Atomic write via temp file + os.replace, so a partial write never
         # leaves settings.json truncated.
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")

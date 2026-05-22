@@ -115,10 +115,10 @@ class CoralObjectDetector:
             self.available = True
             self.mode = "coral"
             self.reason = "ok"
-            log.info("Coral TPU aktiv: %s", model_path)
+            log.info("[det] Coral TPU aktiv: %s", model_path)
             return
         except Exception as e:
-            log.warning("Coral TPU nicht verfügbar (%s) – versuche CPU-Fallback…", e)
+            log.warning("[det] Coral TPU nicht verfügbar (%s) – versuche CPU-Fallback…", e)
             coral_error = str(e)
 
         # ── Tier 2: tflite-runtime CPU fallback ────────────────────────────
@@ -140,13 +140,13 @@ class CoralObjectDetector:
                 self.available = True
                 self.mode = "cpu"
                 self.reason = f"cpu_fallback (coral: {coral_error})"
-                log.info("CPU-Fallback aktiv: %s", try_path)
+                log.info("[det] CPU-Fallback aktiv: %s", try_path)
                 return
             except Exception as e2:
-                log.warning("CPU-Fallback fehlgeschlagen für %s: %s", try_path, e2)
+                log.warning("[det] CPU-Fallback fehlgeschlagen für %s: %s", try_path, e2)
 
         self.reason = f"pycoral: {coral_error}"
-        log.warning("Kein Detektor verfügbar – nur Bewegungserkennung aktiv")
+        log.warning("[det] Kein Detektor verfügbar – nur Bewegungserkennung aktiv")
 
     # Per-label minimum bounding-box constraints. Surveillance cameras at
     # fixed positions almost never see a real person at <15% frame height

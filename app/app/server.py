@@ -173,6 +173,52 @@ from .routes import register_blueprints as _register_blueprints
 
 _register_blueprints(app)
 
+
+def _log_route_inventory(_app):
+    """P26 · one INFO line summarising registered routes at boot.
+    Anything that drops the count by ≥ 5 between deploys is a sign
+    a blueprint failed to register silently. The DEBUG branch dumps
+    each route so operators can grep for a specific path when
+    diagnosing a 404."""
+    log = logging.getLogger(__name__)
+    routes = sorted(
+        (str(r), sorted(r.methods - {"HEAD", "OPTIONS"}))
+        for r in _app.url_map.iter_rules()
+        if not str(r).startswith("/static")
+    )
+    log.info("[boot] %d routes registered", len(routes))
+    if log.isEnabledFor(logging.DEBUG):
+        for path, methods in routes:
+            log.debug("[boot]   %s  %s", ",".join(methods), path)
+
+
+_log_route_inventory(app)
+# Capture boot time so /api/health can report uptime.
+_BOOT_TS = time.time()
+
+
+@app.get("/api/health")
+def _api_health():
+    """External monitoring endpoint. Stable JSON shape — bots and
+    Telegram cron-pings poll this. Cheap: only reads in-memory
+    counters, no settings/disk I/O."""
+    from flask import jsonify
+    try:
+        from . import buildinfo as _bi  # type: ignore[no-redef]
+        commit = getattr(_bi, "commit", "dev")
+    except Exception:
+        commit = "dev"
+    routes_n = sum(
+        1 for r in app.url_map.iter_rules() if not str(r).startswith("/static")
+    )
+    return jsonify({
+        "ok": True,
+        "build": commit,
+        "uptime_seconds": int(time.time() - _BOOT_TS),
+        "routes_registered": routes_n,
+        "runtimes_active": len(runtimes),
+    })
+
 # Single-flight lock + last-applied snapshot for telegram reloads. The lock
 # prevents two HTTP saves landing simultaneously from each starting a fresh
 # polling thread; the snapshot avoids a 3 s slot-wait on every camera-config

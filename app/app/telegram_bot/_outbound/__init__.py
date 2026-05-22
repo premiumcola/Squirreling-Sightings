@@ -31,7 +31,7 @@ from telegram.ext import (
     filters,
 )
 
-from ..telegram_helpers import (
+from ...telegram_helpers import (
     DULL_BIRDS,
     LABEL_DE,
     LABEL_WEIGHT,
@@ -41,7 +41,7 @@ from ..telegram_helpers import (
     most_specific_label,
     truncate_caption,
 )
-from ._consts import (
+from .._consts import (
     _MUTE_DEFAULT_S,
     _MUTE_EXTEND_S,
     _NOTIFY_COOLDOWN_DEFAULTS,

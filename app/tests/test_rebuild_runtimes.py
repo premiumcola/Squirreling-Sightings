@@ -330,8 +330,12 @@ class TestRestartSingleCamera:
         server.restart_single_camera("cam1")
         assert server._runtime_cfgs.get("cam1") == cam_cfg
 
-    def test_disabled_camera_not_started(self, monkeypatch):
-        cam_cfg = {"id": "cam1", "enabled": False}
+    def test_disabled_flag_is_ignored(self, monkeypatch):
+        """Per server.py:363-370 every configured camera is bound
+        regardless of ``enabled``. A stranded ``enabled=False`` from
+        an older settings.json must NOT leave the camera dark with no
+        way back. If someone re-introduces gating, this test flags it."""
+        cam_cfg = {"id": "cam1", "enabled": False, "rtsp_url": "rtsp://x"}
         _setup(monkeypatch, existing={}, new_cameras=[cam_cfg])
         server.restart_single_camera("cam1")
-        assert "cam1" not in server.runtimes
+        assert "cam1" in server.runtimes

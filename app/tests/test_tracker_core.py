@@ -245,12 +245,14 @@ def test_module_constants_match_defaults():
     them. 2026-05: IoU lowered 0.30 → 0.20 and miss-grace 4 → 6 after
     garden-cam testing showed one-walking-person breaking into 3-4
     fresh track ids; track #9 of the migration plan captures the
-    rationale in tracker_core.py's comment."""
+    rationale in tracker_core.py's comment. 2026-07: miss-grace bumped
+    6 → 8 after walking-person tests showed breakage from short ducks
+    behind shrubs (occlusion + post-direction-reversal blind spot)."""
     assert TRACK_FLOOR_SCORE == 0.20
     assert TRACK_SPAWN_SCORE == 0.50
     assert IOU_MATCH_THRESHOLD == 0.20
-    assert TRACK_MISS_WINDOWS == 6
-    assert MISS_GRACE_DEFAULT_SECONDS == 6.0
+    assert TRACK_MISS_WINDOWS == 8
+    assert MISS_GRACE_DEFAULT_SECONDS == 8.0
 
 
 # ── Predicted-sample emission during miss-grace ────────────────────────────

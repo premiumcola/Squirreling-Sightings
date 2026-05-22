@@ -718,7 +718,12 @@
      until after the first frame. */
   position:relative !important;
   width:100vw !important;
+  /* iOS-safe: dvh first, vh as legacy fallback. The address-bar
+     collapse on Safari changes innerHeight after first paint, so a
+     plain 100vh leaves a strip of background visible at the bottom
+     during the transition. */
   height:100vh !important;
+  height:100dvh !important;
   background:#000;
 }
 .cv-img-wrap:fullscreen .cv-img,
@@ -739,8 +744,12 @@
 }
 .cv-img-wrap.fake-fullscreen{
   position:fixed;inset:0;
-  width:100vw;height:100vh;height:100dvh;
-  z-index:1000;
+  width:100vw;
+  /* vh fallback first so legacy WebViews still get a number, dvh
+     override second so iOS Safari uses the dynamic viewport height. */
+  height:100vh;
+  height:100dvh;
+  z-index:var(--z-dropdown);
 }
 
 /* Mobile touch targets — chrome-btn::before already extends the

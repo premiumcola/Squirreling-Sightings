@@ -1,0 +1,43 @@
+/* ── Elevation / z-index token system ──────────────────────────────────────
+   Centralised stack-order tokens. Before this file every CSS partial
+   used raw z-index numbers (0, 1, 2, …, 9999) without a system; a
+   layering bug cost a debug round trip every time. Tokens give every
+   future contributor a vocabulary instead of magic numbers.
+
+   Use the highest-level token a use-case calls for; sub-100 values
+   stay raw inside the same layer when fine-tuning is needed (e.g.
+   bbox-canvas sits between trails and labels, both inside --z-overlay).
+
+   Layer order (low → high):
+     --z-base         in-flow content (no stacking)
+     --z-overlay      in-flow overlays — bbox canvases, trail layers,
+                      zone/mask SVGs
+     --z-sticky       sticky headers / footers
+     --z-dock         mobile bottom-dock
+     --z-toolbar      fixed top-bar / floating action bar
+     --z-tooltip      hover / tap tooltips (timeline pills, etc.)
+     --z-dropdown     <select>-style popovers
+     --z-modal        lightbox + dialog content
+     --z-modal-top    special "above lightbox but below fullscreen"
+                      band — used by the live-preview attachment that
+                      historically sat at z-index:9990
+     --z-modal-action floating CTAs inside modals (close × etc.)
+     --z-toast        user-feedback toasts (always-on-top, system-level)
+     --z-fullscreen   native HTML5 fullscreen overlay
+     --z-debug        dev-only diagnostic overlays
+*/
+:root {
+  --z-base:         0;
+  --z-overlay:      1;
+  --z-sticky:       10;
+  --z-dock:         90;
+  --z-toolbar:      100;
+  --z-tooltip:      200;
+  --z-dropdown:     1000;
+  --z-modal:        1100;
+  --z-modal-action: 1200;
+  --z-toast:        1300;
+  --z-fullscreen:   2000;
+  --z-modal-top:    9990;
+  --z-debug:        9999;
+}

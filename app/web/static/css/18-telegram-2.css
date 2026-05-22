@@ -88,7 +88,7 @@
    canonical .cat-filter-btn rule above produces clear contrast in each
    label's --cb tone, so the per-label overrides are gone. */
 /* ── Fullscreen button ───────────────────────────────────────────────────── */
-.fake-fullscreen{position:fixed!important;inset:0!important;z-index:9999!important;width:100vw!important;height:100dvh!important;border-radius:0!important;background:#000!important;margin:0!important}
+.fake-fullscreen{position:fixed!important;inset:0!important;z-index:var(--z-debug)!important;width:100vw!important;height:100dvh!important;border-radius:0!important;background:#000!important;margin:0!important}
 
 /* ── Push-Settings UI (Phase 2) ──────────────────────────────────────────── */
 .tg-push-block{display:grid;gap:6px;padding:10px 12px 12px;border-radius:12px;background:rgba(56,189,248,0.04)}

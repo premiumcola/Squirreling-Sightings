@@ -306,7 +306,7 @@
 .stat-dc-empty svg{opacity:.6}
 
 /* Floating tooltip (position:fixed so overflow:hidden on the wrap doesn't clip). */
-.stat-dc-tip{position:fixed;z-index:9999;display:flex;gap:10px;background:#0d1422;color:#edf4fb;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.08);pointer-events:none;max-width:260px}
+.stat-dc-tip{position:fixed;z-index:var(--z-debug);display:flex;gap:10px;background:#0d1422;color:#edf4fb;border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.08);pointer-events:none;max-width:260px}
 .stat-dc-tip-body{display:flex;flex-direction:column;gap:4px;min-width:0}
 .stat-dc-tip-row{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.2;min-width:0}
 .stat-dc-tip-dot{display:inline-block;width:8px;height:8px;border-radius:3px;flex-shrink:0}

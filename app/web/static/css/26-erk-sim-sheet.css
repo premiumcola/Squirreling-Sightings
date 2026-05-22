@@ -180,7 +180,7 @@
    timeline.js. Fixed-positioned so layout reflows in the panel
    below don't shift it. Compact, dark surface, rounded corners. */
 .erk-tl-tooltip{
-  position:fixed;z-index:1300;
+  position:fixed;z-index:var(--z-toast);
   padding:6px 10px;
   background:rgba(15,23,42,.96);
   color:#e2e8f0;

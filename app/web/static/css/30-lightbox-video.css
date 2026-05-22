@@ -742,7 +742,7 @@
 
 /* ── Track-loss × tooltip ──────────────────────────────────────────────── */
 .lbtt-end-tip{
-  position:fixed;z-index:1300;
+  position:fixed;z-index:var(--z-toast);
   padding:8px 12px;
   background:rgba(15,23,42,.96);
   color:#e2e8f0;
@@ -1815,7 +1815,7 @@
    own bounds. */
 .mv-live-toggle-tip{
   position:fixed;
-  z-index:1300;
+  z-index:var(--z-toast);
   max-width:240px;
   padding:7px 10px;
   border-radius:8px;

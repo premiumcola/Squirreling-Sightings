@@ -22,6 +22,10 @@ from pathlib import Path
 # override anything they need to. Domain partials in the middle can be in any
 # order — CSS specificity, not source order, decides the cascade for them.
 LOAD_ORDER = [
+    # Elevation / z-index tokens — load FIRST so every later partial
+    # can reference --z-modal / --z-toast etc. Pure variables, no
+    # selectors yet.
+    "00-elevation-tokens.css",
     # Class-colour tokens — load FIRST so every later partial can
     # reference --class-person / --class-cat etc. Mirrors
     # core/class-colors.js.

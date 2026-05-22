@@ -1,5 +1,5 @@
 /* ── Lightbox ──────────────────────────────────────────────────────────── */
-.ws-lb{position:fixed;inset:0;z-index:9990;display:none;align-items:center;justify-content:center;padding:24px}
+.ws-lb{position:fixed;inset:0;z-index:var(--z-modal-top);display:none;align-items:center;justify-content:center;padding:24px}
 .ws-lb.open{display:flex}
 .ws-lb-backdrop{position:absolute;inset:0;background:rgba(8,5,16,0.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);cursor:zoom-out}
 .ws-lb-shell{position:relative;display:grid;grid-template-rows:1fr auto auto;gap:14px;width:min(960px,100%);max-height:calc(100dvh - 48px);background:#0d141d;border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.5);overflow:hidden}

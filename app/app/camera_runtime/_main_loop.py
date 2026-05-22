@@ -487,7 +487,6 @@ class MainLoopMixin:
                         self.cfg.get("post_motion_tail_s")
                         or self.global_cfg.get("processing", {}).get("post_motion_tail_s", 3.0)
                     )
-                    ffmpeg_mode = bool(self._ffmpeg_proc) or (_FFMPEG_AVAILABLE and not self._recording)
                     # Pre-buffer only matters for the OpenCV fallback path
                     if not _FFMPEG_AVAILABLE:
                         self._pre_buffer.append((proc_frame.copy(), time.time()))

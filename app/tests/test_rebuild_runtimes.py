@@ -6,18 +6,20 @@ All three diff cases are covered:
   - add:    camera enabled in new config but no runtime yet
   - restart: runtime exists and camera still enabled, but config changed
   - no-op:  runtime exists, config unchanged → must NOT be touched
+
+sys.modules stubs (cv2, flask, app.* heavy deps) live inside the
+module-scope autouse fixture below so they're torn down after this
+file finishes. Earlier versions installed them at import time, which
+leaked into every test_*.py loaded afterwards in the same session.
 """
 import sys
 import copy
 import tempfile
 import types
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Pre-stub all heavy deps BEFORE importing server.py
-# (server.py runs module-level code on import; mocks prevent real I/O)
-# ─────────────────────────────────────────────────────────────────────────────
+import pytest
 
 _tmpdir = tempfile.mkdtemp(prefix="tam-test-")
 
@@ -34,78 +36,120 @@ _BASE_CFG = {
     "ui": {},
 }
 
+# Module names we patch into sys.modules. Listed once so the
+# install + restore loops below stay in sync; adding a stub in the
+# future means appending here only.
+_STUB_NAMES = [
+    "cv2", "requests", "numpy", "flask",
+    "app.config_loader", "app.settings_store", "app.storage",
+    "app.camera_runtime", "app.telegram_bot", "app.cat_identity",
+    "app.timelapse", "app.discovery", "app.mqtt_service",
+    "app.detectors", "app.event_logic",
+]
+
+# Set inside the module-scope fixture; tests reference this module
+# attribute as ``server`` instead of holding a local copy.
+server = None
+
 
 def _make_stub(name: str) -> MagicMock:
     m = MagicMock()
     m.__name__ = name
     m.__file__ = f"<stub:{name}>"
     m.__spec__ = types.SimpleNamespace(name=name)
-    sys.modules[name] = m
     return m
 
 
-for _pkg in ("cv2", "requests", "numpy"):
-    sys.modules.setdefault(_pkg, _make_stub(_pkg))
+@pytest.fixture(scope="module", autouse=True)
+def _stub_sys_modules():
+    # Snapshot whatever was already in sys.modules under these names
+    # — anything we displace must be put back so later test files
+    # don't see the stubs.
+    _original: dict[str, object] = {}
+    _MISSING = object()
+    for name in _STUB_NAMES + ["app.server"]:
+        _original[name] = sys.modules.get(name, _MISSING)
 
-# Flask: app.jinja_env must support attribute assignment
-if "flask" not in sys.modules:
+    for _pkg in ("cv2", "requests", "numpy"):
+        sys.modules[_pkg] = _make_stub(_pkg)
+
     _flask = _make_stub("flask")
     _flask_app_inst = MagicMock()
     _flask_app_inst.jinja_env = MagicMock()
     _flask.Flask.return_value = _flask_app_inst
+    sys.modules["flask"] = _flask
 
-# app.config_loader
-_cl_mod = _make_stub("app.config_loader")
-_cl_mod.load_config = MagicMock(return_value=copy.deepcopy(_BASE_CFG))
+    _cl_mod = _make_stub("app.config_loader")
+    _cl_mod.load_config = MagicMock(return_value=copy.deepcopy(_BASE_CFG))
+    sys.modules["app.config_loader"] = _cl_mod
 
-# app.settings_store
-_ss_inst = MagicMock()
-_ss_inst.export_effective_config.return_value = copy.deepcopy(_BASE_CFG)
-_ss_inst.data = {"cameras": [], "telegram_actions": []}
-_ss_inst.bootstrap_state.return_value = {"needs_wizard": False}
-_ss_inst.get_camera.return_value = None
-_ss_mod = _make_stub("app.settings_store")
-_ss_mod.SettingsStore.return_value = _ss_inst
+    _ss_inst = MagicMock()
+    _ss_inst.export_effective_config.return_value = copy.deepcopy(_BASE_CFG)
+    _ss_inst.data = {"cameras": [], "telegram_actions": []}
+    _ss_inst.bootstrap_state.return_value = {"needs_wizard": False}
+    _ss_inst.get_camera.return_value = None
+    _ss_mod = _make_stub("app.settings_store")
+    _ss_mod.SettingsStore.return_value = _ss_inst
+    sys.modules["app.settings_store"] = _ss_mod
 
-# app.storage
-_ev_store_inst = MagicMock()
-_ev_store_inst.events_dir = Path(_tmpdir) / "events"
-_st_mod = _make_stub("app.storage")
-_st_mod.EventStore.return_value = _ev_store_inst
+    _ev_store_inst = MagicMock()
+    _ev_store_inst.events_dir = Path(_tmpdir) / "events"
+    _st_mod = _make_stub("app.storage")
+    _st_mod.EventStore.return_value = _ev_store_inst
+    sys.modules["app.storage"] = _st_mod
 
-# app.camera_runtime
-_cr_mod = _make_stub("app.camera_runtime")
-_cr_mod._PROFILES = ("daily", "weekly", "monthly", "custom")
-_cr_mod._PROFILE_PERIOD_DEFAULTS = {"daily": 86400, "weekly": 604800, "monthly": 2592000, "custom": 600}
+    _cr_mod = _make_stub("app.camera_runtime")
+    _cr_mod._PROFILES = ("daily", "weekly", "monthly", "custom")
+    _cr_mod._PROFILE_PERIOD_DEFAULTS = {
+        "daily": 86400, "weekly": 604800, "monthly": 2592000, "custom": 600,
+    }
+    sys.modules["app.camera_runtime"] = _cr_mod
 
-# app.telegram_bot
-_tg_inst = MagicMock()
-_tg_inst.enabled = False
-_tb_mod = _make_stub("app.telegram_bot")
-_tb_mod.TelegramService.return_value = _tg_inst
+    _tg_inst = MagicMock()
+    _tg_inst.enabled = False
+    _tb_mod = _make_stub("app.telegram_bot")
+    _tb_mod.TelegramService.return_value = _tg_inst
+    sys.modules["app.telegram_bot"] = _tb_mod
 
-# app.cat_identity
-_ci_mod = _make_stub("app.cat_identity")
-_ci_mod.IdentityRegistry.return_value = MagicMock()
+    _ci_mod = _make_stub("app.cat_identity")
+    _ci_mod.IdentityRegistry.return_value = MagicMock()
+    sys.modules["app.cat_identity"] = _ci_mod
 
-# app.timelapse
-_tl_mod = _make_stub("app.timelapse")
-_tl_mod.TimelapseBuilder.return_value = MagicMock()
+    _tl_mod = _make_stub("app.timelapse")
+    _tl_mod.TimelapseBuilder.return_value = MagicMock()
+    sys.modules["app.timelapse"] = _tl_mod
 
-# remaining app sub-modules
-for _m in ("app.discovery", "app.mqtt_service", "app.detectors", "app.event_logic"):
-    _make_stub(_m)
+    for _m in ("app.discovery", "app.mqtt_service", "app.detectors", "app.event_logic"):
+        sys.modules[_m] = _make_stub(_m)
 
-_mq_inst = MagicMock()
-sys.modules["app.mqtt_service"].MQTTService.return_value = _mq_inst
+    _mq_inst = MagicMock()
+    sys.modules["app.mqtt_service"].MQTTService.return_value = _mq_inst
 
-# Ensure D:\…\tam-spy\app is on sys.path so `import app.server` resolves
-_pkg_root = str(Path(__file__).parent.parent)
-if _pkg_root not in sys.path:
-    sys.path.insert(0, _pkg_root)
+    # Ensure D:\…\tam-spy\app is on sys.path so `import app.server` resolves
+    _pkg_root = str(Path(__file__).parent.parent)
+    if _pkg_root not in sys.path:
+        sys.path.insert(0, _pkg_root)
 
-# Import server — module-level rebuild_runtimes() runs with empty cameras (no-op)
-import app.server as server  # noqa: E402
+    # Drop any cached app.server so it picks up the stubs we just set.
+    sys.modules.pop("app.server", None)
+    import app.server as _server
+
+    global server
+    server = _server
+
+    yield
+
+    # Restore sys.modules so subsequent test files don't see the
+    # stubs. Re-install original entries; drop anything that was
+    # added by us (sentinel _MISSING).
+    server = None
+    for name in _STUB_NAMES + ["app.server"]:
+        orig = _original.get(name, _MISSING)
+        if orig is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = orig
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers

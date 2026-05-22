@@ -4,6 +4,7 @@ unchanged."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -237,7 +238,7 @@ class CaptureStats:
         # Per-flush log line so docker logs surface which cluster is
         # dominating an in-progress capture without waiting for the
         # window to close. Compact format keeps it grep-friendly.
-        try:
+        with contextlib.suppress(Exception):
             log.info(
                 "[capture-stats] %s · captured=%d retries=%d invalid=%d rejected=%s scene_skips=%s",
                 Path(self.out_dir).name,
@@ -247,8 +248,6 @@ class CaptureStats:
                 dict(self.rejected_by_reason),
                 dict(self.scene_skips_by_reason),
             )
-        except Exception:
-            pass
 
 
 def read_capture_stats(frames_dir: Path) -> dict:

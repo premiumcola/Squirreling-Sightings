@@ -23,6 +23,7 @@ Tag conventions (placed in the message body, not the logger name):
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import sys
@@ -44,7 +45,7 @@ class _LogBuffer(logging.Handler):
         self._records: deque = deque(maxlen=maxlen)
 
     def emit(self, record: logging.LogRecord):
-        try:
+        with contextlib.suppress(Exception):
             self._records.append(
                 {
                     "ts": datetime.fromtimestamp(record.created).strftime("%H:%M:%S"),
@@ -53,8 +54,6 @@ class _LogBuffer(logging.Handler):
                     "msg": self.format(record),
                 }
             )
-        except Exception:
-            pass
 
     def get(self, min_level: int = logging.DEBUG) -> list:
         return [r for r in self._records if logging.getLevelName(r["level"]) >= min_level]

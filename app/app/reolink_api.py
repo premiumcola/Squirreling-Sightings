@@ -13,6 +13,7 @@ in one short burst (the function signatures encourage exactly that).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 import requests
@@ -443,15 +444,13 @@ def set_image_mode(
 
     # Best-effort token release — failure here does NOT flip the
     # operation result.
-    try:
+    with contextlib.suppress(Exception):
         _session.post(
             _make_url(host, port, https=https),
             params={"cmd": "Logout", "token": token},
             json=[{"cmd": "Logout", "action": 0, "param": {}}],
             timeout=timeout,
         )
-    except Exception:
-        pass
 
     log.info("[reolink] %s set_image_mode → %s (rc=%s)", host, mode_norm, rc)
     if not ok and not detail and isinstance(rc, int):

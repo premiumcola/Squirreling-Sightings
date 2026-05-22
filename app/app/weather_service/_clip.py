@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 # ruff: noqa: F401
 # Comprehensive per-mixin import block — some symbols are unused in this
 # mixin but kept identical across mixins so methods can move between them
@@ -256,10 +258,8 @@ class ClipMixin:
             v = snap.get(key)
             if v is None:
                 continue
-            try:
+            with contextlib.suppress(Exception):
                 parts.append(f"{fmt % float(v)} {unit} {label}")
-            except Exception:
-                pass
         return " · ".join(parts[:3]) if parts else "—"
 
     def _dashboard_url(self, suffix: str = "") -> str:

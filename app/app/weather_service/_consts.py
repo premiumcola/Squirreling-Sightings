@@ -106,6 +106,8 @@ def _safe_dt(s: str) -> datetime | None:
 # Re-export from the shared helper — every weather-service sibling
 # (`from ._consts import _atomic_write_json`) keeps working without
 # touching its import line.
+import contextlib
+
 from ..io_utils import atomic_write_json as _atomic_write_json  # noqa: F401
 
 
@@ -194,10 +196,8 @@ def migrate_sun_timelapse_layout(storage_root: Path) -> dict:
                     if not src.exists():
                         continue
                     if dst.exists():
-                        try:
+                        with contextlib.suppress(Exception):
                             src.unlink()
-                        except Exception:
-                            pass
                         continue
                     try:
                         os.replace(str(src), str(dst))
@@ -207,10 +207,8 @@ def migrate_sun_timelapse_layout(storage_root: Path) -> dict:
                         )
                 # Source manifest no longer needed — destination is
                 # authoritative now.
-                try:
+                with contextlib.suppress(Exception):
                     jf.unlink()
-                except Exception:
-                    pass
                 log.info("[migration] sun_timelapse: %s → %s/", jf.name, target_dir_name)
                 summary["moved"] += 1
             except Exception as e:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 # ruff: noqa: F401
 # Comprehensive import block — some symbols are unused in this mixin
 # but kept for parity so methods can be moved between mixins without
@@ -324,10 +326,8 @@ class RecordingMixin:
             )
             video_relpath = rel.as_posix()
             # Delete raw on success
-            try:
+            with contextlib.suppress(Exception):
                 raw_path.unlink()
-            except Exception:
-                pass
             log.info(
                 "[%s] Re-encode complete: %s (%.1fs %dKB)",
                 self.camera_id,
@@ -396,7 +396,7 @@ class RecordingMixin:
 
         # MQTT + Telegram (best-effort, only when we actually produced a video)
         if video_url and self.mqtt and self.cfg.get("mqtt_enabled", True):
-            try:
+            with contextlib.suppress(Exception):
                 self.mqtt.publish(
                     f"events/{self.camera_id}",
                     {
@@ -407,8 +407,6 @@ class RecordingMixin:
                         "snapshot_url": thumb_url,
                     },
                 )
-            except Exception:
-                pass
 
         # Tracking sidecar — enqueue once per finalized clip so the
         # next Mediathek open finds <event>.tracks.json on disk. The
@@ -669,10 +667,8 @@ class RecordingMixin:
                     vid_path.unlink()
             except Exception as fe:
                 log.error("[%s] Fallback read failed: %s", self.camera_id, fe)
-                try:
+                with contextlib.suppress(Exception):
                     vid_path.unlink()
-                except Exception:
-                    pass
 
         # Resolve thumbnail path (may have been created above after a successful encode)
         thumb_rel = None

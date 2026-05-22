@@ -28,6 +28,7 @@ be reconstructible from the event_id alone."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import shutil
@@ -302,8 +303,6 @@ def cleanup_expired() -> int:
                     removed += 1
                 except Exception as e:
                     log.warning("[trash] expired sweep %s failed: %s", ev_dir, e)
-        try:
+        with contextlib.suppress(OSError):
             cam_dir.rmdir()
-        except OSError:
-            pass
     return removed

@@ -9,6 +9,7 @@ land here so we don't grow a third.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -48,10 +49,8 @@ def atomic_write_json(
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=indent)
             fh.flush()
-            try:
+            with contextlib.suppress(OSError):
                 os.fsync(fh.fileno())
-            except OSError:
-                pass
     else:
         tmp.write_text(
             json.dumps(payload, ensure_ascii=False, indent=indent),

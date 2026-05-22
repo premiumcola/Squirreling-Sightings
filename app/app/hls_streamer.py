@@ -34,6 +34,7 @@ Threading model:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import shutil
 import subprocess
@@ -136,10 +137,8 @@ class HLSStreamer:
                         self.proc.wait(timeout=3)
                     except subprocess.TimeoutExpired:
                         self.proc.kill()
-                        try:
+                        with contextlib.suppress(Exception):
                             self.proc.wait(timeout=2)
-                        except Exception:
-                            pass
                 except Exception as e:
                     log.warning("[hls_streamer] %s stop failed: %s", self.cam_id, e)
                 self.proc = None

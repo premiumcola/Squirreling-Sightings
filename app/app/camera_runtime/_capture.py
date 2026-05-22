@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 # ruff: noqa: F401
 # Comprehensive import block — some symbols are unused in this mixin
 # but kept for parity so methods can be moved between mixins without
@@ -128,10 +130,8 @@ class CaptureMixin:
                             self.preview_cap = None
                     # Release old handle outside the lock to avoid blocking _preview_loop
                     if old is not None:
-                        try:
+                        with contextlib.suppress(Exception):
                             old.release()
-                        except Exception:
-                            pass
                 except Exception as e:
                     log_cam.warning("[%s] Sub-stream open failed: %s", self.camera_id, e)
                     with self._preview_cap_lock:

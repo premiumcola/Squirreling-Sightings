@@ -6,6 +6,7 @@ Carved out of `_legacy_classes.py` during R02.2.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import threading
@@ -191,10 +192,8 @@ class CoralObjectDetector:
             threshold,
         )
         if cam_id and log.isEnabledFor(logging.INFO):
-            try:
+            with contextlib.suppress(Exception):
                 self._log_decision(cam_id, kept, drops)
-            except Exception:
-                pass
         return kept
 
     def _apply_label_filters_with_reasons(

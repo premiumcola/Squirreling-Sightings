@@ -9,6 +9,7 @@ flow.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 
@@ -413,10 +414,8 @@ def _classify_rtsp_open_fail(ip: str, port: int, timeout: float = 1.5) -> str:
     except Exception:
         return "timeout"
     finally:
-        try:
+        with contextlib.suppress(Exception):
             s.close()
-        except Exception:
-            pass
 
 
 # German user-facing strings for each (vendor, reason) pair.

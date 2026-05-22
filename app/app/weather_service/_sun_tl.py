@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 # ruff: noqa: F401
 # Comprehensive per-mixin import block — some symbols are unused in this
 # mixin but kept identical across mixins so methods can move between them
@@ -324,10 +326,8 @@ class SunTimelapseMixin:
         # takes effect (and so we don't keep yesterday's jobs after the
         # daily recompute).
         for k in self._sun_jobs_keys():
-            try:
+            with contextlib.suppress(Exception):
                 self._scheduler.remove_job(k)
-            except Exception:
-                pass
         loc = self.server_cfg.get("location") or {}
         if loc.get("lat") is None or loc.get("lon") is None:
             log.info("[weather] Standort fehlt — keine Sun-Jobs registriert")
@@ -1602,10 +1602,8 @@ class SunTimelapseMixin:
 
     @staticmethod
     def _cleanup_sun_scratch(scratch: Path):
-        try:
+        with contextlib.suppress(Exception):
             shutil.rmtree(scratch, ignore_errors=True)
-        except Exception:
-            pass
 
     # ── Sun-Timelapse TEST runner (Settings → Wetter-Ereignisse → Test) ──
     # The user fires a 60-s … 40-min capture from the UI to reproduce the
@@ -1718,10 +1716,8 @@ class SunTimelapseMixin:
         # across runs.
         with _test_session_lock:
             if _active_test_handler is not None:
-                try:
+                with contextlib.suppress(Exception):
                     logging.getLogger().removeHandler(_active_test_handler)
-                except Exception:
-                    pass
             logging.getLogger().addHandler(handler)
             _active_test_session = session
             _active_test_handler = handler
@@ -1788,10 +1784,8 @@ class SunTimelapseMixin:
             # Detach the log handler so a fresh test starts clean.
             with _test_session_lock:
                 if _active_test_handler is not None:
-                    try:
+                    with contextlib.suppress(Exception):
                         logging.getLogger().removeHandler(_active_test_handler)
-                    except Exception:
-                        pass
                     _active_test_handler = None
 
     def cancel_sun_tl_test(self) -> dict:

@@ -7,6 +7,7 @@ handles atomic writes since B08.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from datetime import datetime
 
@@ -43,10 +44,8 @@ def api_event_delete(cam_id, event_id):
                 for suffix in (".json", ".jpg"):
                     companion = tl_dir / f"{stem}{suffix}"
                     if companion.exists():
-                        try:
+                        with contextlib.suppress(Exception):
                             companion.unlink()
-                        except Exception:
-                            pass
     if not result["json_deleted"] and not tl_cleaned:
         return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
     return jsonify({"ok": True, "tl_cleaned": tl_cleaned, **result})

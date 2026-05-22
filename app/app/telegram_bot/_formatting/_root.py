@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -79,12 +80,10 @@ class _RootMixin:
             today_iso = datetime.now().strftime("%Y-%m-%d")
             total = 0
             for info in cams:
-                try:
+                with contextlib.suppress(Exception):
                     total += len(
                         self.store.list_events(info["cam_id"], start=today_iso, limit=5000)
                     )
-                except Exception:
-                    pass
             kam = "Kamera" if n_cams == 1 else "Kameras"
             summary = f"{n_cams} {kam} · {total} Events heute"
             if len(summary) <= 40:

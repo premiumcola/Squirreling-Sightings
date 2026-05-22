@@ -10,6 +10,7 @@ config changes that affect runtime behaviour.
 
 from __future__ import annotations
 
+import contextlib
 import json as _json
 import shutil as _shutil
 import time as _time
@@ -591,10 +592,8 @@ def api_camera_merge(source_id, target_id):
             moved_files += 1
 
         # Drop empty directories from the source tree
-        try:
+        with contextlib.suppress(Exception):
             _shutil.rmtree(src_events)
-        except Exception:
-            pass
 
     # ── Timelapse: simple file move, no metadata to rewrite ───────────────────
     if src_tl.exists():
@@ -609,10 +608,8 @@ def api_camera_merge(source_id, target_id):
             f.rename(dest)
             moved_files += 1
             moved_timelapses += 1
-        try:
+        with contextlib.suppress(Exception):
             _shutil.rmtree(src_tl)
-        except Exception:
-            pass
 
     # ── Drop the source camera entry + stop its runtime ───────────────────────
     if settings.get_camera(source_id):

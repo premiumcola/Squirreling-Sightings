@@ -11,6 +11,7 @@ back in for any in-file callers; external callers reach
 from __future__ import annotations
 
 import atexit
+import contextlib
 import hashlib as _hashlib
 import logging
 import os
@@ -390,7 +391,7 @@ def _emit_shutdown_bilanz(reason: str = "signal"):
             st = rt.status() or {}
         except Exception:
             st = {}
-        try:
+        with contextlib.suppress(Exception):
             log.info(
                 "[cam:%s] session: today_events=%s reconnects=%s reconnects_24h=%s uptime=%s",
                 cam_id,
@@ -399,8 +400,6 @@ def _emit_shutdown_bilanz(reason: str = "signal"):
                 st.get("reconnect_count_24h", "?"),
                 _format_uptime(time.time() - _BOOT_TS),
             )
-        except Exception:
-            pass
     log.info("[boot] ── stopped cleanly ──")
 
 

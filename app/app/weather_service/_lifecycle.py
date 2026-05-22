@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 # ruff: noqa: F401
 # Comprehensive per-mixin import block — some symbols are unused in this
 # mixin but kept identical across mixins so methods can move between them
@@ -281,10 +283,8 @@ class LifecycleMixin:
 
     def _detach_prebuffers(self):
         for rt in (self.runtimes or {}).values():
-            try:
+            with contextlib.suppress(Exception):
                 rt.weather_prebuffer = None
-            except Exception:
-                pass
 
     # ── Polling ─────────────────────────────────────────────────────────────
 

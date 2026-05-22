@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import os
@@ -173,10 +174,8 @@ class TimelapseBuilder:
         except Exception as e:
             log.warning("timelapse: ffmpeg exception for %s: %s", out_path.name, e)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 os.unlink(concat_path)
-            except Exception:
-                pass
         return None
 
     @staticmethod

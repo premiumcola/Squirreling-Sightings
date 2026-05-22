@@ -23,6 +23,7 @@ Design:
 from __future__ import annotations
 
 import collections
+import contextlib
 import json
 import logging
 import os
@@ -785,10 +786,8 @@ class TrackingWorker(threading.Thread):
         # Lower nice value so this thread doesn't compete with the camera
         # capture loops. Best-effort — Windows/macOS containers ignore
         # this silently which is fine.
-        try:
+        with contextlib.suppress(OSError, AttributeError):
             os.nice(10)
-        except (OSError, AttributeError):
-            pass
         log.info("[tracking] worker started")
         while not self._stop.is_set():
             try:

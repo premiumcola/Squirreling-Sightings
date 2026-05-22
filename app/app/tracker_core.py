@@ -16,6 +16,7 @@ and ``camera_runtime._main_loop`` (live).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from collections.abc import Callable
@@ -983,10 +984,8 @@ def associate_detections(
             continue
         revived = _try_reidentify(state, d, t_s)
         if revived is not None:
-            try:
+            with contextlib.suppress(ValueError):
                 state.closed.remove(revived)
-            except ValueError:
-                pass
             revived.active = True
             revived.end_reason = None
             revived.missed_windows = 0

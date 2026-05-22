@@ -8,6 +8,7 @@ no caching here.
 
 from __future__ import annotations
 
+import contextlib
 import json as _json
 import threading as _thr
 from datetime import datetime, timedelta
@@ -209,10 +210,8 @@ def api_camera_timelapse_list(cam_id):
         meta: dict = {}
         sidecar = tl_dir / f"{mp4.stem}.json"
         if sidecar.exists():
-            try:
+            with contextlib.suppress(Exception):
                 meta = _json.loads(sidecar.read_text(encoding="utf-8"))
-            except Exception:
-                pass
         # Fallback: derive from filename
         # Filename patterns: "2026-04-14_020435_custom.mp4" or "2026-04-14_020435_custom_1min-to-10s.mp4"
         parts = mp4.stem.split("_", 2)
@@ -261,15 +260,11 @@ def api_camera_timelapse_delete(cam_id, filename):
     for companion_suffix in (".json", ".jpg"):
         companion = mp4.with_suffix(companion_suffix)
         if companion.exists():
-            try:
+            with contextlib.suppress(Exception):
                 companion.unlink()
-            except Exception:
-                pass
     # And remove the unified EventStore entry so the media grid stays in sync
-    try:
+    with contextlib.suppress(Exception):
         store.delete_event_by_id(cam_id, f"tl_{mp4.stem}")
-    except Exception:
-        pass
     return jsonify({"ok": True})
 
 

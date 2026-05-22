@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -181,10 +182,8 @@ class _CamMixin:
                 try:
                     for f in p.rglob("*"):
                         if f.is_file():
-                            try:
+                            with contextlib.suppress(OSError):
                                 bs += f.stat().st_size
-                            except OSError:
-                                pass
                 except Exception:
                     pass
             row_total += bs

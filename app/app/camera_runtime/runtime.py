@@ -8,6 +8,7 @@ _recording / _timelapse / _status / _main_loop. Only __init__ stays here.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 from collections import deque
@@ -106,10 +107,8 @@ class WeatherPrebuffer:
         """Detach a post-roll session from the buffer and return its frames.
         Safe to call before or after the deadline."""
         with self._lock:
-            try:
+            with contextlib.suppress(ValueError):
                 self._postroll_sessions.remove(session)
-            except ValueError:
-                pass
         return list(session.get("frames", []))
 
 

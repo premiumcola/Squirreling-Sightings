@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -113,10 +114,8 @@ class _AnchorMixin:
     def _drop_anchor(self):
         if not self.settings_store:
             return
-        try:
+        with contextlib.suppress(Exception):
             self.settings_store.runtime_set(ANCHOR_KEY, {})
-        except Exception:
-            pass
 
     async def _ensure_persistent_kb(self, bot, chat_id: int):
         """Attach the persistent reply keyboard to this chat exactly once.

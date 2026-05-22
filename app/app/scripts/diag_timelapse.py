@@ -28,6 +28,7 @@ Output (excerpt):
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import sys
@@ -134,10 +135,8 @@ def _emit_report(camera_id: str, sidecars: list[dict], date_filter: str | None) 
     reason_totals: Counter[str] = Counter()
     for s in sidecars:
         for k, v in ((s.get("capture") or {}).get("reject_reasons") or {}).items():
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 reason_totals[k] += int(v)
-            except (TypeError, ValueError):
-                pass
     dominant = reason_totals.most_common(1)[0][0] if reason_totals else "(none recorded)"
     lines.append(f"## Aggregate ({len(sidecars)} build" f"{'s' if len(sidecars) != 1 else ''})")
     lines.append(f"- mean unique_fps: {mean_unique:.2f}")

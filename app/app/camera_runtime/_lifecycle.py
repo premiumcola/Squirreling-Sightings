@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+
 # ruff: noqa: F401
 # Comprehensive import block — some symbols are unused in this mixin
 # but kept for parity so methods can be moved between mixins without
@@ -145,16 +147,12 @@ class LifecycleMixin:
         self.running = False
         # Release main capture (only _loop touches this, so safe after running=False)
         if self.capture is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.capture.release()
-            except Exception:
-                pass
             self.capture = None
         # Release sub-stream capture under its dedicated lock
         with self._preview_cap_lock:
             if self.preview_cap is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self.preview_cap.release()
-                except Exception:
-                    pass
                 self.preview_cap = None

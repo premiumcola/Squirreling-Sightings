@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -296,10 +297,8 @@ class LifecycleMixin:
         except Exception as e:
             log.error("[tg] send loop crashed: %s", e)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 self._loop.close()
-            except Exception:
-                pass
 
     def _run_polling(self):
         """Owns its own asyncio loop and runs Application's full lifecycle
@@ -314,10 +313,8 @@ class LifecycleMixin:
         except Exception as e:
             log.error("[tg] polling thread crashed: %s", e, exc_info=True)
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 loop.close()
-            except Exception:
-                pass
             self._polling_active_since = None
             log.info("[tg] Polling thread exited")
 

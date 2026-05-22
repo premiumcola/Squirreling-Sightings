@@ -34,6 +34,7 @@ restore from the timestamped backup.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -153,10 +154,8 @@ def _merge_folder(src: Path, target: Path) -> int:
         moved += 1
     # rmdir empty subdirs deepest-first, then the source itself.
     for d in sorted((p for p in src.rglob("*") if p.is_dir()), reverse=True):
-        try:
+        with contextlib.suppress(OSError):
             d.rmdir()
-        except OSError:
-            pass
     try:
         src.rmdir()
     except OSError as e:
@@ -305,10 +304,8 @@ def _promote_or_discard_partial(
             )
             # Best-effort cleanup of the orphaned partial — leaving it
             # behind would defeat the whole point of the refactor.
-            try:
+            with contextlib.suppress(Exception):
                 partial.unlink()
-            except Exception:
-                pass
             return None
     # No mutations OR no `final` path → discard the partial.
     try:

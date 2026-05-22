@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -208,10 +209,8 @@ class _StatusMixin:
             try:
                 for f in p.rglob("*"):
                     if f.is_file():
-                        try:
+                        with contextlib.suppress(OSError):
                             total += f.stat().st_size
-                        except OSError:
-                            pass
             except Exception:
                 pass
         cache[cam_id] = (now, total)
@@ -320,10 +319,8 @@ class _StatusMixin:
             except Exception as e:
                 log.warning("[tg] cam block render failed for %s: %s", info.get("cam_id"), e)
                 continue
-            try:
+            with contextlib.suppress(Exception):
                 cam_disk_total += self._cam_disk_usage_bytes(info["cam_id"])
-            except Exception:
-                pass
         if not cams_info:
             lines.append("(keine Kameras konfiguriert)")
             lines.append("")
@@ -439,10 +436,8 @@ class _StatusMixin:
                         try:
                             for f in p.rglob("*"):
                                 if f.is_file():
-                                    try:
+                                    with contextlib.suppress(OSError):
                                         bs += f.stat().st_size
-                                    except OSError:
-                                        pass
                         except Exception:
                             pass
                     row_total += bs

@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -583,12 +584,10 @@ class InboundMixin:
         # lands on the same control surface they just acted from. The
         # delivered photo is a separate message; the anchor is edited
         # in place and stays at top of the chat-state.
-        try:
+        with contextlib.suppress(Exception):
             await self._anchor_send_or_edit(
                 context.bot, q.message.chat_id, self._cam_drilldown_view(cam_id)
             )
-        except Exception:
-            pass
 
     async def _cam_send_clip(self, q, context, cam_id, rt, cam_name, sec):
         await q.answer(f"🎬 {sec}-s Clip wird aufgenommen…")
@@ -641,12 +640,10 @@ class InboundMixin:
             await q.message.reply_text(f"Senden fehlgeschlagen: {e}")
         # Anchor snaps back to the cam drilldown — same UX rule as the
         # snapshot path so the user keeps a single control surface.
-        try:
+        with contextlib.suppress(Exception):
             await self._anchor_send_or_edit(
                 context.bot, q.message.chat_id, self._cam_drilldown_view(cam_id)
             )
-        except Exception:
-            pass
 
     async def _cam_toggle_armed(self, q, cam_id, cam_name):
         if not self.settings_store:
@@ -805,10 +802,8 @@ class InboundMixin:
             # anchor and snaps back to root afterwards.
             until = time.time() + _MUTE_DEFAULT_S
             if self.settings_store:
-                try:
+                with contextlib.suppress(Exception):
                     self.settings_store.runtime_set("global_mute_until", until)
-                except Exception:
-                    pass
             end_local = datetime.fromtimestamp(until).strftime("%H:%M")
             log.info("[tg] mute_all activated until %s via menu", end_local)
             await self._render_view(q, self._root_view())

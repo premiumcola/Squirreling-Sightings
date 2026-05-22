@@ -256,16 +256,25 @@ class LifecycleMixin:
         """Snapshot of the polling state for /api/telegram/status.
 
         States:
-          off       — service disabled or polling not running
-          starting  — thread alive, getUpdates not yet confirmed
-          active    — getUpdates running, no recent conflict
-          conflict  — Telegram returned Conflict in the last 30s
-          stale     — stop() left an orphan polling thread; start() is
-                      refusing to spawn a second one until restart
+          off                  — service disabled or polling not running
+          starting             — thread alive, getUpdates not yet confirmed
+          active               — getUpdates running, no recent conflict
+          conflict             — Telegram returned Conflict in the last 30s
+          conflict_quarantine  — 3 Conflicts in 60 s tripped the kill-switch;
+                                 polling stays down until a manual restart
+          stale                — stop() left an orphan polling thread; start() is
+                                 refusing to spawn a second one until restart
         """
         if not self.enabled:
             return {"state": "off", "since_seconds": 0, "enabled": False}
         now = time.time()
+        if getattr(self, "_conflict_quarantine", False):
+            ts = self._last_conflict_ts or now
+            return {
+                "state": "conflict_quarantine",
+                "since_seconds": int(now - ts),
+                "enabled": True,
+            }
         stale = getattr(self, "_stale_poll_thread", None)
         if stale is not None and stale.is_alive():
             since = getattr(self, "_stale_since", None) or now
@@ -376,7 +385,10 @@ class LifecycleMixin:
     async def _on_polling_error(self, update, context):
         """Catches polling errors and decides log severity.
 
-        - Conflict: stale-instance race; log warn + back off 10 s.
+        - Conflict: stale-instance race; log warn + back off 10 s. After
+          three Conflicts within 60 s, signal quarantine — the polling
+          thread tears down and stays down until a manual restart so we
+          don't fight Telegram in a tight retry loop.
         - NetworkError / TimedOut (and their subclasses): transient httpx
           drops, DNS hiccups, ``Server disconnected without sending a
           response``. PTB retries internally — we just log a one-liner at
@@ -385,7 +397,24 @@ class LifecycleMixin:
         - Anything else: keep the ERROR + stack trace (real bug)."""
         err = context.error
         if isinstance(err, Conflict):
-            self._last_conflict_ts = time.time()
+            now = time.time()
+            self._last_conflict_ts = now
+            # T61.3c · drop entries older than 60 s, then push and check.
+            self._conflict_history = [t for t in self._conflict_history if now - t < 60]
+            self._conflict_history.append(now)
+            if len(self._conflict_history) >= 3:
+                self._conflict_quarantine = True
+                log.error(
+                    "[tg] Polling quarantined — 3 Conflicts in %.0fs. "
+                    "Stopping polling thread; restart the service to retry.",
+                    now - self._conflict_history[0],
+                )
+                if self._polling_loop is not None and self._polling_stop_event is not None:
+                    try:
+                        self._polling_loop.call_soon_threadsafe(self._polling_stop_event.set)
+                    except Exception as e:
+                        log.warning("[tg] quarantine stop-signal failed: %s", e)
+                return
             log.warning("[tg] Polling conflict (likely stale instance). Backing off 10 s.")
             try:
                 await asyncio.sleep(10)

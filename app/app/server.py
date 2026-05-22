@@ -221,10 +221,14 @@ def _api_health():
 
 # Single-flight lock + last-applied snapshot for telegram reloads. The lock
 # prevents two HTTP saves landing simultaneously from each starting a fresh
-# polling thread; the snapshot avoids a 3 s slot-wait on every camera-config
-# save when nothing telegram-related has actually changed.
+# polling thread; the snapshot avoids a 10 s slot-wait on every camera-config
+# save when nothing telegram-related has actually changed. The timestamp
+# debounce (T61) catches double-fires that slip past the snapshot guard —
+# e.g. when a migration mutates the telegram cfg in a no-op-but-different
+# way between two close-in-time reloads.
 _telegram_reload_lock = threading.Lock()
 _last_telegram_cfg_snapshot: dict | None = None
+_last_telegram_reload_at: float = 0.0
 
 
 # Single source of truth for both helpers lives in app_state; these
@@ -276,9 +280,26 @@ def _reload_telegram_service():
                 )
         except Exception as _e:
             log.warning("[tg] snapshot diff failed: %s", _e)
+    global _last_telegram_reload_at
     with _telegram_reload_lock:
         new_cfg = get_effective_config()
         new_tg_cfg = new_cfg.get("telegram", {}) or {}
+        # T61.3b · timestamp debounce. Snapshot equality is the primary
+        # guard, but on boot a migration may rewrite the telegram
+        # section between two close calls — fields stay semantically
+        # the same but the dict comparison flips. Within 30 s of the
+        # last successful reload AND with the same cfg, debounce.
+        _now = time.time()
+        if (
+            telegram_service is not None
+            and _now - _last_telegram_reload_at < 30
+            and _last_telegram_cfg_snapshot == new_tg_cfg
+        ):
+            log.info(
+                "[tg] Reload debounced (%.1fs since last, same cfg)",
+                _now - _last_telegram_reload_at,
+            )
+            return
         if telegram_service is not None and _last_telegram_cfg_snapshot == new_tg_cfg:
             log.debug("[tg] Reload skipped — config unchanged")
             return
@@ -298,12 +319,15 @@ def _reload_telegram_service():
                 log.warning("[tg] Stop during reload failed: %s", e)
             telegram_service = None
             app_state.telegram_service = None
-            # Telegram's getUpdates slot can stay reserved for a couple of
-            # seconds after we close it; without this pause the new bot's
-            # first poll collides with the tail of the old long-poll and
-            # trips the Conflict error in a tight loop.
+            # T61.3a · Telegram's server-side getUpdates slot can hold for
+            # up to ~10 s after a long-poll is interrupted mid-cycle. The
+            # python-telegram-bot maintainers recommend a 10 s pause for
+            # forced restarts — anything shorter risks the new bot's first
+            # poll colliding with the tail of the old long-poll and
+            # tripping Conflict in a tight loop.
             if was_polling:
-                time.sleep(3)
+                log.info("[tg] Waiting 10 s for Telegram to release the getUpdates slot")
+                time.sleep(10)
         log.info("[tg] Starting fresh service after reload")
         telegram_service = TelegramService(
             new_tg_cfg,
@@ -316,6 +340,7 @@ def _reload_telegram_service():
         app_state.telegram_service = telegram_service
         telegram_service.start()
         _last_telegram_cfg_snapshot = _copy.deepcopy(new_tg_cfg)
+        _last_telegram_reload_at = _now
         # Camera runtimes hold their own per-runtime ref to the notifier;
         # push the new service into them so alerts don't keep flowing
         # through the dead instance.

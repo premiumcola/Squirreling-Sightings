@@ -109,6 +109,13 @@ class TelegramService(
         self._polling_stop_event: asyncio.Event | None = None
         self._polling_active_since: float | None = None
         self._last_conflict_ts: float | None = None
+        # T61.3c · ring of recent Conflict timestamps. Three within 60 s
+        # trips quarantine — _on_polling_error signals the stop event
+        # and get_polling_status reports "conflict_quarantine". Without
+        # this guard, PTB's network_retry_loop keeps re-firing
+        # getUpdates against the still-held slot forever.
+        self._conflict_history: list[float] = []
+        self._conflict_quarantine: bool = False
         # If stop()'s join times out, capture the orphan thread here so
         # start() can refuse a fresh polling thread (a second
         # getUpdates loop against the same token = sustained Conflict

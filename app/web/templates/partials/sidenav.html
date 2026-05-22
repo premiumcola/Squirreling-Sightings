@@ -15,17 +15,17 @@
         <div class="nav-section-label">System</div>
         <div class="nav-group" id="navSettingsGroup">
           <div class="nav-settings-row">
-            <a href="#settings" data-target="settings" data-accent="143,158,181" class="nav-settings-link" onclick="return navScrollToSettings(event)"><span class="nav-icon"><svg width="15" height="15"><use href="#icon-settings"/></svg></span><span class="nav-label">Einstellungen</span></a>
-            <button type="button" class="nav-settings-chev" aria-expanded="false" aria-controls="navSettingsSub" title="Unterpunkte ein-/ausklappen" onclick="return toggleSettingsNav(event)"><svg class="nav-chev" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5,3 11,8 5,13"/></svg></button>
+            <a href="#settings" data-target="settings" data-accent="143,158,181" class="nav-settings-link" data-action="navScrollToSettings"><span class="nav-icon"><svg width="15" height="15"><use href="#icon-settings"/></svg></span><span class="nav-label">Einstellungen</span></a>
+            <button type="button" class="nav-settings-chev" aria-expanded="false" aria-controls="navSettingsSub" title="Unterpunkte ein-/ausklappen" data-action="toggleSettingsNav"><svg class="nav-chev" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5,3 11,8 5,13"/></svg></button>
           </div>
           <div class="nav-sub" id="navSettingsSub" role="group">
-            <a href="#set-app" onclick="return navJumpToSetting(event,'set-app')"><span class="nav-sub-bullet"></span><span class="nav-label">App &amp; Server</span></a>
-            <a href="#set-timelapse" onclick="return navJumpToSetting(event,'set-timelapse')"><span class="nav-sub-bullet"></span><span class="nav-label">Timelapse</span></a>
-            <a href="#set-telegram" onclick="return navJumpToSetting(event,'set-telegram')"><span class="nav-sub-bullet"></span><span class="nav-label">Telegram</span></a>
-            <a href="#set-coral" onclick="return navJumpToSetting(event,'set-coral')"><span class="nav-sub-bullet"></span><span class="nav-label">Objekterkennung</span></a>
-            <a href="#set-profiles" onclick="return navJumpToSetting(event,'set-profiles')"><span class="nav-sub-bullet"></span><span class="nav-label">Identitäten <em class="nav-tag">beta</em></span></a>
-            <a href="#set-importexport" onclick="return navJumpToSetting(event,'set-importexport')"><span class="nav-sub-bullet"></span><span class="nav-label">Import &amp; Export <em class="nav-tag">beta</em></span></a>
-            <a href="#set-mqtt" onclick="return navJumpToSetting(event,'set-mqtt')"><span class="nav-sub-bullet"></span><span class="nav-label">MQTT <em class="nav-tag">bald</em></span></a>
+            <a href="#set-app" data-action="navJumpToSetting" data-setting="set-app"><span class="nav-sub-bullet"></span><span class="nav-label">App &amp; Server</span></a>
+            <a href="#set-timelapse" data-action="navJumpToSetting" data-setting="set-timelapse"><span class="nav-sub-bullet"></span><span class="nav-label">Timelapse</span></a>
+            <a href="#set-telegram" data-action="navJumpToSetting" data-setting="set-telegram"><span class="nav-sub-bullet"></span><span class="nav-label">Telegram</span></a>
+            <a href="#set-coral" data-action="navJumpToSetting" data-setting="set-coral"><span class="nav-sub-bullet"></span><span class="nav-label">Objekterkennung</span></a>
+            <a href="#set-profiles" data-action="navJumpToSetting" data-setting="set-profiles"><span class="nav-sub-bullet"></span><span class="nav-label">Identitäten <em class="nav-tag">beta</em></span></a>
+            <a href="#set-importexport" data-action="navJumpToSetting" data-setting="set-importexport"><span class="nav-sub-bullet"></span><span class="nav-label">Import &amp; Export <em class="nav-tag">beta</em></span></a>
+            <a href="#set-mqtt" data-action="navJumpToSetting" data-setting="set-mqtt"><span class="nav-sub-bullet"></span><span class="nav-label">MQTT <em class="nav-tag">bald</em></span></a>
           </div>
         </div>
         <div class="nav-divider"></div>

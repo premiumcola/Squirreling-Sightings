@@ -104,7 +104,7 @@
       <div class="lvm-top">
         <span id="liveViewTitle" class="lvm-title"></span>
         <button class="lvm-close-btn" type="button"
-                onclick="closeLiveView()" aria-label="Schließen">
+                data-action="closeLiveView" aria-label="Schließen">
           <svg viewBox="0 0 24 24" width="18" height="18"
                stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none">
             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -115,7 +115,7 @@
       <!-- Bottom bar — HD + fullscreen left, safe-area aware. -->
       <div class="lvm-bot">
         <button id="liveViewHdBtn" class="lvm-hd-btn" type="button"
-                onclick="_setLiveViewStream(!_liveViewHd)">HD</button>
+                data-action="toggleLiveViewHd">HD</button>
         <button id="liveViewFsBtn" class="lvm-fs-btn" type="button"
                 aria-label="Vollbild">
           <svg class="fs-icon-expand" viewBox="0 0 24 24" width="18" height="18"
@@ -199,7 +199,7 @@
       </div>
       <div class="cam-recovery-tab-content" id="rec-discovery" hidden>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <button type="button" class="btn-action" onclick="loadCamRecoveryDiscovery()" id="camRecoveryDiscoverBtn">🔍 Subnetz scannen</button>
+          <button type="button" class="btn-action" data-action="loadCamRecoveryDiscovery" id="camRecoveryDiscoverBtn">🔍 Subnetz scannen</button>
           <span id="camRecoveryDiscoverStatus" class="small muted"></span>
         </div>
         <div id="camRecoveryDiscoveryList" class="cam-recovery-list"></div>
@@ -208,7 +208,7 @@
         </div>
       </div>
       <div class="modal-actions" style="margin-top:14px">
-        <button type="button" class="btn-action" onclick="closeCamRecoveryModal()">Schließen</button>
+        <button type="button" class="btn-action" data-action="closeCamRecoveryModal">Schließen</button>
       </div>
     </div>
   </div>

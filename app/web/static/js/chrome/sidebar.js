@@ -22,28 +22,33 @@ function _setSettingsNavOpen(isOpen){
   try { localStorage.setItem(_NAV_OPEN_KEY, isOpen ? '1' : '0'); } catch {}
 }
 
+// O11 · sidenav handlers registered via data-action delegation.
+// window.* bridges retired — every callsite now triggers via the
+// matching <a data-action="..."> / <button data-action="..."> markup.
+import { registerAction } from '../core/action-registry.js';
+
 // Chevron click → toggle sub-list, never scroll.
-window.toggleSettingsNav = function(ev){
-  if (ev){ ev.preventDefault?.(); ev.stopPropagation?.(); }
+registerAction('toggleSettingsNav', (_el, ev) => {
+  ev.stopPropagation?.();
   const isOpen = !byId('navSettingsGroup')?.classList.contains('nav--open');
   _setSettingsNavOpen(isOpen);
   return false;
-};
+});
 
 // Main link click → scroll to #settings, never toggle the accordion.
-window.navScrollToSettings = function(ev){
-  ev?.preventDefault?.();
+registerAction('navScrollToSettings', (_el, _ev) => {
   const sec = byId('settings');
   if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
   _setActiveNav('settings');
   return false;
-};
+});
 
 // Sub-item click → scroll AND open the matching set-section. Accordion
-// stays open (we never close it from sub-item interactions).
-window.navJumpToSetting = function(ev, secId){
-  ev?.preventDefault?.();
-  const sec = byId(secId);
+// stays open (we never close it from sub-item interactions). The
+// target set-section id is carried via `data-setting`.
+registerAction('navJumpToSetting', (el, _ev) => {
+  const secId = el.dataset.setting;
+  const sec = secId ? byId(secId) : null;
   if (!sec) return false;
   if (!sec.classList.contains('open') && typeof window.toggleSetSection === 'function'){
     window.toggleSetSection(secId);
@@ -54,7 +59,7 @@ window.navJumpToSetting = function(ev, secId){
   sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
   _setActiveNav('settings');
   return false;
-};
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   let open = false;

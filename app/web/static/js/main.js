@@ -14,6 +14,9 @@
 // listeners.
 import { byId } from './core/dom.js';
 import { bindConfirmModal } from './core/toast.js';
+// O11 · global data-action delegator — mounted on import so any
+// later registerAction() call is live as soon as the template loads.
+import './core/action-registry.js';
 // PWA / iOS-Standalone detection — adds `is-standalone` to <body> when
 // the app is launched from the home-screen so CSS can pull stronger
 // safe-area paddings without affecting the in-browser experience.

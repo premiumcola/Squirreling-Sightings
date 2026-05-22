@@ -969,6 +969,39 @@ byId('lightboxConfirm').onclick = async () => {
 
 byId('lightboxDelete').onclick = async () => {
   if (!lbState.item) return;
+  // Weather-sighting deletion (S04). `_openSightingInLightbox` in
+  // weather/sightings.js synthesises a timelapse-shaped item with an
+  // explicit `source: 'weather'` marker. The camera-timelapse DELETE
+  // endpoint 404s on sighting ids, so route to the weather endpoint
+  // and refresh the weather grid afterwards.
+  if (lbState.item.source === 'weather') {
+    if (!lbState.deletePending) {
+      lbState.deletePending = true;
+      const btn = byId('lightboxDelete');
+      if (btn) {
+        btn.classList.add('confirm-delete');
+        btn.innerHTML =
+          '<span style="font-size:15px;line-height:1;opacity:.75">↓</span><span style="font-size:11px">nochmal</span>';
+      }
+      return;
+    }
+    try {
+      await j(`/api/weather/sightings/${encodeURIComponent(lbState.item.event_id)}`, {
+        method: 'DELETE',
+      });
+      closeLightbox();
+      if (typeof window.loadWeatherSightings === 'function') {
+        try {
+          await window.loadWeatherSightings();
+        } catch {
+          /* non-critical: grid will refresh on next user nav */
+        }
+      }
+    } catch (e) {
+      showToast('Löschen fehlgeschlagen: ' + e.message, 'error');
+    }
+    return;
+  }
   // Timelapse deletion
   if (lbState.item.type === 'timelapse') {
     if (!lbState.deletePending) {

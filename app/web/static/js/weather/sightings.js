@@ -368,6 +368,10 @@ function _openSightingInLightbox(idx) {
     // header reads like an ordinary timelapse.
     profile: s.event_type || 'weather',
     window_key: s.started_at,
+    // Explicit source marker so the lightbox delete handler can
+    // route DELETE to the weather-sightings endpoint instead of the
+    // camera-timelapse endpoint (which would 404 for sighting ids).
+    source: 'weather',
   };
   open(synth);
 }

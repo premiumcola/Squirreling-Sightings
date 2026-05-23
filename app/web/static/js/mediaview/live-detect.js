@@ -62,7 +62,15 @@ const _TRACE_CAP = 80;
 // bboxes vanish the instant the 1 Hz detector misses a frame —
 // which on a fluttering bird or jittery score → "blinky" UX and
 // the user assumes the renderer is broken.
-const _HOLD_MS = 1500;
+// C84 · upper bound for the dynamic bbox hold-time. The hold is
+// derived per-cycle from the EMA of recent tick wall-times:
+//   hold_ms = clamp(2 * EMA, 800, _HOLD_MS_CEILING)
+// so on a healthy sub-stream path (~500-700 ms ticks) the hold
+// converges around ~1000-1400 ms — long enough to bridge a single
+// missed tick, short enough that a moving subject's box doesn't
+// ghost behind it.
+const _HOLD_MS_CEILING = 1500;
+const _HOLD_MS_FLOOR = 800;
 // gp384 — "no detection on screen" hint banner threshold. Shows
 // only when the bboxes layer is enabled, no live OR held bbox is
 // visible, AND the detector has missed for this long.
@@ -135,6 +143,13 @@ export function openLiveDetect({ camId, cameraName }) {
   _tickState.lastDropReason = null;
   _tickState.tornDownPrev = tornDownPrev;
   _tickState.lastTickError = null;
+  _tickState.lastCycleMs = NaN;
+  _tickState.lastFloorMs = NaN;
+  _tickState.lastDelayMs = NaN;
+  // C84 · reset hold-time state per session so a fresh cam-open
+  // doesn't inherit the previous camera's cadence as the seed EMA.
+  _cycleEmaMs = NaN;
+  _holdMsActive = NaN;
   // B12' · always-on MOUNT row. Tracks every step of the mount path
   // so a screenshot tells us at a glance whether chrome rendered,
   // whether _tick() threw, and whether a first-tick setTimeout was
@@ -870,6 +885,18 @@ function _scheduleNext(session, lastCycleMs) {
   _tickState.lastCycleMs = cycleMs;
   _tickState.lastFloorMs = floor;
   _tickState.lastDelayMs = delay;
+  // C84 · EMA over recent cycle wall-times. First observation seeds
+  // the EMA so the hold isn't 0-initialised on the very first tick;
+  // subsequent ticks pull the average toward the new cycle at factor
+  // 0.4 (a 5-tick effective window). Hold = clamp(2 * EMA, 800,
+  // 1500): two cycles of slack absorbs one missed tick at the
+  // current cadence without lingering across multiple.
+  if (!Number.isFinite(_cycleEmaMs)) {
+    _cycleEmaMs = cycleMs;
+  } else {
+    _cycleEmaMs = 0.4 * cycleMs + 0.6 * _cycleEmaMs;
+  }
+  _holdMsActive = Math.min(_HOLD_MS_CEILING, Math.max(_HOLD_MS_FLOOR, 2 * _cycleEmaMs));
   session.tickHandle = setTimeout(_tick, delay);
   _refreshCadenceRow();
 }
@@ -1532,14 +1559,17 @@ function _renderBboxOverlay() {
     _diagState.posFail = null;
     _renderDiagStrip();
   }
-  // gp384 — hold-time merge. Prefer the live tick's detections
+  // gp384 / C84 — hold-time merge. Prefer the live tick's detections
   // (full opacity, _holdAge=0). If the tick is empty, fall back to
   // the most recent detection per label from _detBuffer — each
   // entry carries its age so the render can fade the bbox out over
-  // _HOLD_MS instead of vanishing instantly. One entry per label is
-  // enough; older entries on the same label are dominated by the
-  // most-recent one's opacity anyway.
+  // the active hold-time (dynamic per cadence — see C84). One entry
+  // per label is enough; older entries on the same label are
+  // dominated by the most-recent one's opacity anyway. holdMs falls
+  // back to the legacy 1500 ms ceiling until the first cycle EMA
+  // observation lands, so the first tick still gets a sensible hold.
   const now = Date.now();
+  const holdMs = Number.isFinite(_holdMsActive) ? _holdMsActive : _HOLD_MS_CEILING;
   const liveDets = _session.lastDetections || [];
   let renderDets;
   if (liveDets.length) {
@@ -1550,7 +1580,7 @@ function _renderBboxOverlay() {
     for (let i = _detBuffer.length - 1; i >= 0; i--) {
       const e = _detBuffer[i];
       const age = now - e.ms;
-      if (age > _HOLD_MS) break; // _detBuffer is push-order → older entries follow
+      if (age > holdMs) break; // _detBuffer is push-order → older entries follow
       if (seen.has(e.label)) continue; // one bbox per label, most-recent wins
       seen.add(e.label);
       held.push({
@@ -1584,7 +1614,7 @@ function _renderBboxOverlay() {
       if (!isPass) _hasSuppressed = true;
       const c = isFiltered ? '#94a3b8' : baseC; // slate-grey for class-filtered
       const verdictOp = isPass ? 1 : isBelow ? 0.55 : 0.45;
-      const holdMul = d._holdAge > 0 ? Math.max(0, 1 - d._holdAge / _HOLD_MS) : 1;
+      const holdMul = d._holdAge > 0 ? Math.max(0, 1 - d._holdAge / holdMs) : 1;
       const op = verdictOp * holdMul;
       const dash = isFiltered ? '12 8' : isBelow ? '6 6' : 'none';
       const [x, y, bw, bh] = d.bbox;

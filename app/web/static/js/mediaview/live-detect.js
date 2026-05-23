@@ -98,6 +98,18 @@ export function openLiveDetect({ camId, cameraName }) {
   _diagState.trails = null;
   _diagState.zonemask = null;
   _diagState.posFail = null;
+  _diagState.paintFail = null;
+  _diagState.tick = null;
+  // B7 · reset tick lifecycle state. Keep startedAt fresh on every
+  // open so the strip's started_at field matches the user's last
+  // action — not some half-finished prior session.
+  _tickState.lastTickAt = 0;
+  _tickState.lastRespAt = 0;
+  _tickState.lastStatus = '—';
+  _tickState.nextTickAt = 0;
+  _tickState.startedAt = Date.now();
+  _tickState.startedWithCamId = camId;
+  _tickState.ticksDroppedLate = 0;
   _setupLiveChrome(camId, cameraName);
   _mountPanels();
   _tick();
@@ -170,6 +182,12 @@ function _startHoldRefresh() {
   _session.holdHandle = setInterval(() => {
     if (!_session) return;
     _renderBboxOverlay();
+    // B7 · piggyback the tick-row refresh on the existing 250 ms
+    // hold loop so the on-screen deltas stay current even when the
+    // tick loop is wedged (no _renderFrame call would otherwise
+    // drive _renderDiagStrip). Cheap — _renderDiagStrip is a no-op
+    // when the Debug pill is OFF.
+    if (_debugDiagOn()) _renderDiagStrip();
   }, _HOLD_REFRESH_MS);
 }
 
@@ -681,6 +699,7 @@ function _mountPanels() {
 async function _tick() {
   const session = _session;
   if (!session) return;
+  _tickState.lastTickAt = Date.now();
   try {
     session.abort?.abort();
   } catch {
@@ -697,6 +716,7 @@ async function _tick() {
       `/api/cameras/${encodeURIComponent(session.camId)}/test-detection?no_snapshot=1`,
       { method: 'POST', signal: controller.signal },
     );
+    _tickState.lastStatus = r.status;
     if (_session !== session) return;
     let data = null;
     try {
@@ -704,9 +724,16 @@ async function _tick() {
     } catch {
       /* keep null */
     }
-    if (data?.ok) _renderFrame(data);
+    if (data?.ok) {
+      _tickState.lastRespAt = Date.now();
+      _renderFrame(data);
+    }
   } catch (err) {
-    if (err?.name === 'AbortError') return;
+    if (err?.name === 'AbortError') {
+      _tickState.lastStatus = 'abort';
+      return;
+    }
+    _tickState.lastStatus = 'neterr';
   }
   _scheduleNext(session, performance.now() - cycleStart);
 }
@@ -717,6 +744,7 @@ function _scheduleNext(session, lastCycleMs) {
     (Number.isFinite(lastCycleMs) ? lastCycleMs : _TICK_MIN_MS) * _TICK_FACTOR,
   );
   const delay = Math.min(_TICK_MAX_MS, Math.max(_TICK_MIN_MS, projected));
+  _tickState.nextTickAt = Date.now() + delay;
   session.tickHandle = setTimeout(_tick, delay);
 }
 
@@ -903,6 +931,13 @@ const _diagState = {
   trails: null,
   zonemask: null,
   media: null,
+  // B7 · tick lifecycle row. Built from the raw _tickState numbers
+  // below so the strip never has to query setTimeout / AbortController
+  // internals; just reads the timestamps we wrote on entry/response/
+  // schedule. _refreshTickRow() computes the ms-ago deltas every
+  // hold-refresh tick so the row stays current even when the tick
+  // loop is wedged (i.e. exactly when the user needs the answer).
+  tick: null,
   posFail: null,
   // A4 · sticky "SVG sized but child collapsed" diagnostic. Separate
   // from posFail because the two failure modes look identical on
@@ -910,6 +945,18 @@ const _diagState = {
   // means the SVG layout never happened, paintFail means the
   // children rendered but landed off-canvas or with 0×0 geometry.
   paintFail: null,
+};
+
+// B7 · raw tick-loop state. Owned by the tick lifecycle, read by the
+// debug strip. Reset on every openLiveDetect call.
+const _tickState = {
+  lastTickAt: 0, // _tick() entered
+  lastRespAt: 0, // last successful fetch resolved
+  lastStatus: '—', // HTTP status code (200/503) or 'abort'/'neterr'
+  nextTickAt: 0, // setTimeout deadline
+  startedAt: 0, // openLiveDetect wall-clock
+  startedWithCamId: '', // camId we attempted to start against
+  tornDownPrev: false, // openLiveDetect torn down a prior session
 };
 
 function _debugDiagOn() {
@@ -980,7 +1027,12 @@ function _renderDiagStripLine(kind, fields, opts = {}) {
 function _renderDiagStrip() {
   const strip = _ensureDiagStrip();
   if (!strip) return;
+  // B7 · refresh the tick row on every paint so the deltas stay
+  // truthful even when the rest of the strip is updating for other
+  // reasons. Cheap (date math + computed status flag).
+  _refreshTickRow();
   const rows = [
+    _renderDiagStripLine('tick', _diagState.tick?.fields, _diagState.tick?.opts || {}),
     _renderDiagStripLine('bbox', _diagState.bbox?.fields, _diagState.bbox?.opts || {}),
     _renderDiagStripLine('trails', _diagState.trails?.fields, _diagState.trails?.opts || {}),
     _renderDiagStripLine('zonemask', _diagState.zonemask?.fields, _diagState.zonemask?.opts || {}),
@@ -1071,6 +1123,66 @@ function _collectBboxDiagFields(svg, fs) {
   };
   const opts = mismatch ? { flag: 'space-mismatch', trailing: 'SPACE MISMATCH' } : {};
   return { fields, opts };
+}
+
+// B7 · paint the tick lifecycle row from the raw _tickState numbers.
+// Always runs (no-ops when debug strip is OFF). The row carries the
+// single primary signal: STUCK in red means the loop is wedged. The
+// values themselves let the user tell apart "never started" (Infinity
+// since last tick) from "started but request hangs" (lastTickAt
+// recent but no lastRespAt) from "ticking but each tick errors"
+// (lastTickAt+lastRespAt both recent, lastStatus 503/neterr).
+function _refreshTickRow() {
+  if (!_debugDiagOn()) return;
+  const now = Date.now();
+  const sessionOn = !!_session;
+  const sinceTick = _tickState.lastTickAt ? now - _tickState.lastTickAt : Infinity;
+  const sinceResp = _tickState.lastRespAt ? now - _tickState.lastRespAt : Infinity;
+  const nextIn = _tickState.nextTickAt ? Math.max(0, _tickState.nextTickAt - now) : null;
+  const abortPending = !!(
+    _session &&
+    _session.abort &&
+    _session.abort.signal &&
+    !_session.abort.signal.aborted
+  );
+  // STUCK rules: session mounted but the loop hasn't entered in 15 s
+  // OR has never produced a successful response. Amber threshold 5 s
+  // so a single slow request lights up before it becomes a full
+  // outage. Both apply only while a session is supposed to be
+  // running — idle session = clean grey row.
+  let flag = null;
+  let trailing = '';
+  if (sessionOn) {
+    if (sinceTick > 15_000 || !Number.isFinite(sinceResp)) {
+      flag = 'tick-stuck';
+      trailing = 'STUCK';
+    } else if (sinceTick > 5_000) {
+      flag = 'tick-warn';
+    }
+  }
+  const fmtMs = (v) => (Number.isFinite(v) ? String(Math.round(v)) : '∞');
+  const fields = {
+    session: sessionOn ? 'mounted' : 'idle',
+    camId: _tickState.startedWithCamId || '—',
+    last_tick_ms_ago: fmtMs(sinceTick),
+    last_resp_ms_ago: fmtMs(sinceResp),
+    last_status: String(_tickState.lastStatus ?? '—'),
+    next_in_ms: nextIn == null ? '—' : String(nextIn),
+    abort_pending: abortPending ? 'true' : 'false',
+  };
+  if (_tickState.startedAt) {
+    fields.started_at = new Date(_tickState.startedAt).toISOString();
+  }
+  if (_tickState.tornDownPrev) {
+    fields.torn_down_prev = 'true';
+  }
+  // B31 · only surface the late-drop counter when non-zero so the
+  // healthy case stays clean. Wired in B31 commit.
+  if ((_tickState.ticksDroppedLate || 0) > 0) {
+    fields.ticks_dropped_late = String(_tickState.ticksDroppedLate);
+  }
+  const opts = flag ? { flag, trailing } : {};
+  _diagState.tick = { fields, opts };
 }
 
 // Pull current wrap/img/video geometry into the "media" row. Called

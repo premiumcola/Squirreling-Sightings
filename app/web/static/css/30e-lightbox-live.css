@@ -288,13 +288,26 @@
 }
 /* A3 · amber tint when bbox coords are in a different coord space
    from the SVG viewBox — the textbook "boxes painted but invisible"
-   regression. */
-.mv-sim-diag-row[data-flag='space-mismatch'] {
+   regression. B7 · tick-warn / tick-stuck share the same palette
+   (amber for "loop is slow", red for "loop is dead") so the user's
+   eye lands on the bad row immediately. */
+.mv-sim-diag-row[data-flag='space-mismatch'],
+.mv-sim-diag-row[data-flag='tick-warn'] {
   border-left-color: #fbbf24;
   background: rgba(245, 158, 11, 0.08);
 }
-.mv-sim-diag-row[data-flag='space-mismatch'] .mv-sim-diag-kind {
+.mv-sim-diag-row[data-flag='space-mismatch'] .mv-sim-diag-kind,
+.mv-sim-diag-row[data-flag='tick-warn'] .mv-sim-diag-kind {
   color: #fcd34d;
+}
+.mv-sim-diag-row[data-flag='tick-stuck'] {
+  border-left-color: #f43f5e;
+  background: rgba(239, 68, 68, 0.12);
+}
+.mv-sim-diag-row[data-flag='tick-stuck'] .mv-sim-diag-kind,
+.mv-sim-diag-row[data-flag='tick-stuck'] .mv-sim-diag-tag {
+  color: #fda4af;
+  background: rgba(239, 68, 68, 0.22);
 }
 
 /* Debug pill — same visual base as the other overlay pills but

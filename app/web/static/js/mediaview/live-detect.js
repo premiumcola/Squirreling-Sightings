@@ -261,6 +261,10 @@ export function closeLiveDetect() {
   if (livePill) livePill.remove();
   const emptyHint = byId('mvLdEmptyHint');
   if (emptyHint) emptyHint.remove();
+  // D52 · the "<n> verworfen — antippen für Details" hint sits
+  // outside the toggle row; remove it on session teardown.
+  const suppressedHint = byId('mvLiveSuppressedHint');
+  if (suppressedHint) suppressedHint.remove();
 }
 
 // gp384 — bbox hold + empty-banner refresh. Drives the per-frame
@@ -520,25 +524,56 @@ function _ensureZoneMaskOverlay() {
 // translates the visual language. Auto-hides when every visible
 // bbox is in the pass state so the row stays quiet in the common
 // case. Mount lives next to the overlay toggle row.
-function _updateVerdictLegend(visible) {
+// D52 · the verdict legend (three switches: solid/dashed/filtered)
+// was removed because the same semantics now live in the Detections
+// panel rows themselves (PASS / unter Schwelle / gefiltert badges).
+// Replaced with a single muted "<n> verworfen — antippen für
+// Details" line that appears only when at least one non-pass det
+// is on the canvas, and tapping it toggles the detections panel
+// between "pass-only" (the default) and "all detections" view.
+// State persists in localStorage so the user's preference survives.
+const _DETECTIONS_EXPAND_KEY = 'tam.livedetect.detections.expanded';
+
+function _detectionsExpanded() {
+  try {
+    return localStorage.getItem(_DETECTIONS_EXPAND_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function _setDetectionsExpanded(v) {
+  try {
+    localStorage.setItem(_DETECTIONS_EXPAND_KEY, v ? '1' : '0');
+  } catch {
+    /* private-mode / quota — silent */
+  }
+}
+
+function _updateSuppressedHint(nonPassCount) {
   const toggleRow = byId('mvLiveToggles');
   if (!toggleRow) return;
-  let legend = byId('mvLiveVerdictLegend');
-  if (!visible) {
-    if (legend) legend.remove();
+  let hint = byId('mvLiveSuppressedHint');
+  if (!nonPassCount) {
+    if (hint) hint.remove();
     return;
   }
-  if (!legend) {
-    legend = document.createElement('div');
-    legend.id = 'mvLiveVerdictLegend';
-    legend.className = 'mv-live-verdict-legend';
-    legend.innerHTML =
-      '' +
-      '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--pass"></span>solid: gepasst</span>' +
-      '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--below"></span>schwach: unter Schwelle</span>' +
-      '<span class="mv-vl-key"><span class="mv-vl-sw mv-vl-sw--filtered"></span>dashed grau: gefiltert</span>';
-    toggleRow.insertAdjacentElement('afterend', legend);
+  if (!hint) {
+    hint = document.createElement('button');
+    hint.id = 'mvLiveSuppressedHint';
+    hint.type = 'button';
+    hint.className = 'mv-live-suppressed-hint';
+    toggleRow.insertAdjacentElement('afterend', hint);
+    hint.addEventListener('click', () => {
+      const next = !_detectionsExpanded();
+      _setDetectionsExpanded(next);
+      // Re-render the panel immediately so the expand/collapse flips
+      // without waiting for the next tick. _session.lastFullData
+      // (set in _renderFrame) carries the most recent backend reply.
+      if (_session?.lastFullData) _renderDetectionsPanel(_session.lastFullData);
+    });
   }
+  hint.textContent = `${nonPassCount} verworfen (unter Schwelle oder gefiltert) — antippen für Details`;
 }
 
 // vh729 — one-shot diagnostic. Prints the state of every visual
@@ -928,6 +963,10 @@ function _renderFrame(data) {
   // Frame state for the bbox + zone/mask overlays.
   _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
   _session.lastDetections = data.detections || [];
+  // D52 · cache the full backend response so an out-of-band toggle
+  // (e.g. tapping the "<n> verworfen" hint) can re-render the panel
+  // without waiting for the next tick.
+  _session.lastFullData = data;
   // A3 · explicit coord-space disclosure from the backend (added in
   // diag by routes/coral_test_detection.py). The debug strip's bbox
   // row reads these to surface bbox_space + source/snap dims; if
@@ -1544,7 +1583,7 @@ function _renderBboxOverlay() {
   svg.style.display = _overlays.bboxes ? 'block' : 'none';
   if (!_overlays.bboxes) {
     svg.innerHTML = '';
-    _updateVerdictLegend(false);
+    _updateSuppressedHint(0);
     _renderEmptyHint(false);
     return;
   }
@@ -1650,7 +1689,11 @@ function _renderBboxOverlay() {
     </g>`;
     })
     .join('');
-  _updateVerdictLegend(_hasSuppressed && renderDets.length > 0);
+  // D52 · count non-pass dets currently on the canvas so the
+  // muted "<n> verworfen — antippen" line can show. _hasSuppressed
+  // already flagged the existence; the count is the bare arithmetic.
+  const _nonPass = renderDets.reduce((n, d) => n + (d.verdict === 'pass' ? 0 : 1), 0);
+  _updateSuppressedHint(_nonPass);
   _renderEmptyHint(renderDets.length === 0);
   // A4 · paint-fail check. The SVG itself has size > 0 (we'd have
   // hit the position-fail branch above otherwise), but the painted

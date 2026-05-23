@@ -61,42 +61,30 @@
   }
 }
 
-/* wv612 — verdict legend under the toggle row. Renders only when a
-   non-pass bbox is visible on the canvas; live-detect.js mounts /
-   removes the element on each tick. Single-line, muted, doesn't
-   compete with the chrome above. */
-.mv-live-verdict-legend {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 4px 14px 8px 14px;
-  background: #0a0e1a;
-  font-size: 10px;
-  color: rgba(226, 232, 240, 0.45);
-  letter-spacing: 0.02em;
+/* D52 · the old three-switch verdict legend was deleted — same info
+   now lives on the Detections-panel verdict badges. Replaced by a
+   single tappable muted line that surfaces only when at least one
+   non-pass bbox is visible. Tap toggles the Detections panel between
+   pass-only and all-detections (state in localStorage). Touch
+   target ≥44 px via tall vertical padding; visible text 14 px so it
+   reads at arm's length on a 375 px iPhone. */
+.mv-live-suppressed-hint {
+  display: block;
+  width: 100%;
+  padding: 14px 12px;
+  min-height: 44px;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: rgba(226, 232, 240, 0.55);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.mv-vl-key {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.mv-vl-sw {
-  width: 18px;
-  height: 0;
-  border-top-width: 2px;
-  border-top-style: solid;
-  flex-shrink: 0;
-}
-.mv-vl-sw--pass {
-  border-top-color: #86efac;
-}
-.mv-vl-sw--below {
-  border-top-color: rgba(253, 224, 71, 0.7);
-}
-.mv-vl-sw--filtered {
-  border-top-color: #94a3b8;
-  border-top-style: dashed;
+.mv-live-suppressed-hint:hover {
+  color: rgba(226, 232, 240, 0.85);
 }
 
 /* gp384 — empty-state banner. Sits at the top of the media wrap

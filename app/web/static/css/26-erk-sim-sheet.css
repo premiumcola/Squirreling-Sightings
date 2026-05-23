@@ -130,6 +130,15 @@
   color: rgba(255, 255, 255, 0.45);
   font-style: italic;
 }
+/* W92 · suppressed-classes footer for the LiveTimeline. Surfaces
+   that the simulator IS detecting other classes (COCO false-pos on
+   tools, etc.) without giving each its own swimlane row. */
+.erk-tl-suppressed {
+  padding: 4px 8px 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
 .erk-tl-row {
   display: flex;
   align-items: center;

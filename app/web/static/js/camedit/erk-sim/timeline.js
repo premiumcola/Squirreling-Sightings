@@ -20,6 +20,29 @@ export class LiveTimeline {
   constructor() {
     this._slices = new Map(); // label -> Array<{ t, ids:Set<number>, peak:number }>
     this._lost = new Map(); // label -> Array<{ t }>
+    // W92 · class filter. Set of labels the cam owner has armed in
+    // the matrix above the simulator (object_filter). When non-null,
+    // observe() drops any track whose label isn't in the set — so
+    // COCO false-positives on workshop tools (keyboard=drill,
+    // chair=workbench) never paint a swimlane row. Null = no filter
+    // configured → show everything (the original behavior, used as a
+    // fallback when the form input is absent or empty).
+    this._enabledLabels = null;
+    // Suppression diagnostic: counts of dropped tracks per label
+    // while the filter is active. Used by render() to footer-line a
+    // muted "N weitere Klassen unterdrückt" hint so the operator
+    // knows the simulator IS detecting them, just hiding the rows.
+    this._suppressed = new Map();
+  }
+
+  // W92 · update the active filter set. Pass a Set<string> of labels;
+  // pass null / empty set to disable filtering (show everything).
+  setEnabledLabels(labels) {
+    if (!labels || (labels.size != null && labels.size === 0)) {
+      this._enabledLabels = null;
+      return;
+    }
+    this._enabledLabels = labels instanceof Set ? labels : new Set(labels);
   }
 
   // Append the latest tick into the rolling history. `confirmed` is
@@ -27,6 +50,21 @@ export class LiveTimeline {
   // is tracker.lastDropped() — newly-stale confirmed tracks. Trims
   // every entry older than the 30 s window to keep memory bounded.
   observe(confirmed, dropped, now_ms) {
+    // W92 · drop tracks whose label isn't armed. Count them by label
+    // so render() can footer the "N weitere Klassen unterdrückt"
+    // hint without recomputing.
+    if (this._enabledLabels) {
+      const filteredConfirmed = [];
+      for (const tr of confirmed) {
+        if (this._enabledLabels.has(tr.label)) {
+          filteredConfirmed.push(tr);
+        } else {
+          this._suppressed.set(tr.label, (this._suppressed.get(tr.label) || 0) + 1);
+        }
+      }
+      confirmed = filteredConfirmed;
+      dropped = (dropped || []).filter((tr) => this._enabledLabels.has(tr.label));
+    }
     const sliceT = Math.floor(now_ms / _SLICE_MS) * _SLICE_MS;
 
     const byLabel = new Map();
@@ -84,10 +122,19 @@ export class LiveTimeline {
 
     const windowStart = now_ms - _WINDOW_MS;
     const rows = labels.map((label) => this._renderRow(label, windowStart, now_ms)).join('');
+    // W92 · suppressed-classes footer. Only renders when the filter
+    // dropped at least one track; otherwise stays silent so the
+    // panel doesn't grow a permanent extra line.
+    const suppressedLabels = Array.from(this._suppressed.keys()).sort();
+    const footer =
+      suppressedLabels.length > 0
+        ? `<div class="erk-tl-suppressed">${suppressedLabels.length} weitere Klasse${suppressedLabels.length === 1 ? '' : 'n'} unterdrückt (${suppressedLabels.map((l) => esc(OBJ_LABEL[l] || l)).join(', ')})</div>`
+        : '';
     host.innerHTML = `
       <div class="erk-tl-grid" role="group" aria-label="Erkennungs-Timeline der letzten 30 Sekunden">
         ${rows}
-      </div>`;
+      </div>
+      ${footer}`;
     _wireTooltips(host);
   }
 
@@ -97,6 +144,7 @@ export class LiveTimeline {
   reset() {
     this._slices.clear();
     this._lost.clear();
+    this._suppressed.clear();
   }
 
   _renderRow(label, windowStart, now_ms) {

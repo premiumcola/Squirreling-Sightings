@@ -351,6 +351,21 @@ async function _tick() {
     const confirmed = session.tracker.tick(dets, now_ms);
     const dropped = session.tracker.lastDropped();
     _renderTrails(confirmed, data.frame_size);
+    // W92 · read the live class filter from the hidden object_filter
+    // input (the matrix above the simulator mirrors its checkbox
+    // state into that field via setCamObjectFilterState). Empty value
+    // → null filter → show everything. Non-empty → restrict the
+    // timeline to the armed classes only.
+    const _objFilterRaw = fF?.['object_filter']?.value || '';
+    const _objFilterSet = _objFilterRaw
+      ? new Set(
+          _objFilterRaw
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        )
+      : null;
+    session.timeline.setEnabledLabels(_objFilterSet);
     session.timeline.observe(confirmed, dropped, now_ms);
     const tlHost = byId('erkSimTimeline');
     if (tlHost) session.timeline.render(tlHost, now_ms, session.startedAt);

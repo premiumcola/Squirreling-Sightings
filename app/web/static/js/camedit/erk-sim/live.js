@@ -157,7 +157,14 @@ function _mountToggleBar() {
   }
   return renderOverlayToggles(row, {
     available: ['bboxes', 'trails', 'zones', 'masks'],
-    contextKey: 'erk-sim',
+    // W91 · bumped 'erk-sim' → 'erk-sim-v2'. Earlier dev sessions
+    // persisted bboxes:false in localStorage under the old key; with
+    // bboxes hidden the live-sim looks broken even though the
+    // renderer paints them every tick. The v2 key starts fresh with
+    // the declared defaults (bboxes:true, trails:true). Users who
+    // genuinely prefer bboxes off can toggle the pill again — their
+    // new preference persists under v2 and survives future reloads.
+    contextKey: 'erk-sim-v2',
     hintText: 'Lange drücken für Beschreibung',
     onChange: (id, on, _all) => {
       if (!(id in _layerVisible)) return;

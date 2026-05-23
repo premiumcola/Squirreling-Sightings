@@ -199,64 +199,94 @@
   }
 }
 
-/* H2.a · in-modal sim diagnostic strip. Mounted under the toggle
-   pills while live-detect is open; one row per overlay (bbox /
-   trails / zonemask) plus a sticky position-fail row when any
-   render call ends up with a 0×0 SVG. Compact mono, low-contrast
-   so the strip never competes with the live frame for attention.
-   Horizontally scrollable on mobile when a row overflows. */
+/* A1 · in-modal debug strip — opt-in via the Debug pill in the
+   toggle row, persisted in localStorage. When ON, every overlay
+   render writes its current state into the strip and the operator
+   can screenshot it on iPhone (375 CSS px) and send the values back
+   to support without DevTools. One key/value per line; labels at
+   10 px, values at 11 px; wraps freely; no horizontal scroll.
+   Position-fail / paint-fail / space-mismatch get amber tinting so
+   the smoking-gun row pops out at a glance. */
 .mv-sim-diag-strip {
   background: #0a0e1a;
-  padding: 6px 14px 8px;
+  padding: 6px 12px 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  color: rgba(226, 232, 240, 0.55);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
+  color: rgba(226, 232, 240, 0.7);
+  /* No overflow-x scroll — wrap on width instead so the user can
+     screenshot the strip from an iPhone width without the right-
+     edge cropping. */
+  overflow-x: hidden;
 }
 .mv-sim-diag-row {
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid rgba(165, 243, 252, 0.45);
   letter-spacing: 0.01em;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 .mv-sim-diag-kind {
-  display: inline-block;
-  min-width: 80px;
-  color: rgba(165, 243, 252, 0.85);
+  font-size: 10px;
+  color: rgba(165, 243, 252, 0.95);
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
 }
-.mv-sim-diag-row[data-kind='position-fail'] {
-  color: #fda4af;
-}
-.mv-sim-diag-row[data-kind='position-fail'] .mv-sim-diag-kind {
-  color: #f43f5e;
+.mv-sim-diag-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px;
 }
 .mv-sim-diag-k {
-  color: rgba(226, 232, 240, 0.45);
+  font-size: 10px;
+  color: rgba(226, 232, 240, 0.55);
   font-weight: 600;
+}
+.mv-sim-diag-eq {
+  font-size: 10px;
+  color: rgba(226, 232, 240, 0.3);
 }
 .mv-sim-diag-v {
-  color: #e2e8f0;
+  font-size: 11px;
+  color: #f1f5f9;
   font-weight: 600;
+  word-break: break-all;
 }
-@media (max-width: 480px) {
-  /* Mobile · same content, smaller text, tighter min-width on the
-     kind tag so the strip doesn't horizontal-scroll until the row
-     actually overflows. */
-  .mv-sim-diag-strip {
-    font-size: 10px;
-    padding: 5px 12px;
-  }
-  .mv-sim-diag-kind {
-    min-width: 70px;
-  }
+/* Trailing alert badge — used by A3 mismatch + A4 paint-fail. */
+.mv-sim-diag-tag {
+  margin-top: 3px;
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.22);
+  color: #fcd34d;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+/* Failure-mode tints — left border + kind colour shift. Cheap
+   visual: the operator scrolls the strip and the bad row pops. */
+.mv-sim-diag-row[data-kind='position-fail'] {
+  border-left-color: #f43f5e;
+}
+.mv-sim-diag-row[data-kind='position-fail'] .mv-sim-diag-kind {
+  color: #fda4af;
+}
+
+/* Debug pill — same visual base as the other overlay pills but
+   slightly muted while OFF so it doesn't look like another always-
+   on toggle. Inherits font + spacing from .mv-live-toggle. */
+.mv-live-toggle--debug[data-on='0'] {
+  opacity: 0.55;
 }
 
 /* ── LIVE pill pinned to scrubber right edge ────────────────────────── */

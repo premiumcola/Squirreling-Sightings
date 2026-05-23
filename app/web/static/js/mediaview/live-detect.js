@@ -527,13 +527,20 @@ function _mountOverlayToggles() {
   // browser will show its own bubble after ~700 ms). Touch devices
   // never trigger ``title`` — they get the long-press popover
   // below instead.
+  // A1 · trailing Debug pill — opt-in. Mirrors the overlay-toggle
+  // visual so it reads as part of the same row, but flips the
+  // separate _debugDiagOn() state (persisted in localStorage)
+  // instead of an _overlays.* key.
+  const debugOn = _debugDiagOn();
   row.innerHTML =
     _TOGGLES
       .map(
         (t) =>
           `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-desc="${esc(t.desc)}" data-on="${_overlays[t.id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${t.label}</button>`,
       )
-      .join('') + '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
+      .join('') +
+    `<button type="button" class="mv-live-toggle mv-live-toggle--debug" data-tog="debug" data-desc="On-screen debug diagnostic strip (geometry + bbox space)" data-on="${debugOn ? '1' : '0'}" title="Debug diagnostic strip" aria-label="Debug diagnostic strip">Debug</button>` +
+    '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
   row.querySelectorAll('.mv-live-toggle').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       // Suppress click after a long-press touch: the long-press
@@ -545,6 +552,16 @@ function _mountOverlayToggles() {
         return;
       }
       const id = btn.dataset.tog;
+      // A1 · Debug pill flips its own localStorage-backed flag,
+      // NOT _overlays. Toggling it doesn't re-render the overlay
+      // SVGs — only the diag strip's presence changes.
+      if (id === 'debug') {
+        const next = btn.dataset.on !== '1';
+        btn.dataset.on = next ? '1' : '0';
+        _setDebugDiag(next);
+        _hideToggleTip();
+        return;
+      }
       _overlays[id] = !_overlays[id];
       btn.dataset.on = _overlays[id] ? '1' : '0';
       if (_DEBUG_TOGGLE) {
@@ -857,19 +874,64 @@ function _renderDiagPanel(diag) {
   }
 }
 
-// H2.a · in-modal diagnostic strip. Surfaces the same data the
-// [sim-bbox] / [sim-zonemask] one-shot console.warn lines carry
-// — but as a visible row under the toggle pills, so the operator
-// can answer "is the SVG zero-sized" / "are dets reaching me" /
-// "is the z-index inverted" without DevTools. Updates on every
-// render call (not one-shot). Three rows: bbox / trails /
-// zonemask, plus a sticky "position-fail" warning row that
-// surfaces when any _renderXOverlay call ends up with a 0×0 SVG.
-// Mounted lazily on the first _updateDiagStrip call and torn down
-// alongside the toggle row in closeLiveDetect.
-const _diagState = { bbox: null, trails: null, zonemask: null, posFail: null };
+// A1 · in-modal debug strip — opt-in via the "Debug" pill in the
+// toggle row, persisted in localStorage so it stays sticky across
+// sessions. When OFF the strip is fully removed from the DOM
+// (no hidden offscreen renders, no extra rAF work). When ON, every
+// _renderBboxOverlay/_renderTrailsOverlay/_renderZoneMaskOverlay
+// call piggybacks on the existing render path and writes its
+// state into the strip — no new timers. Rich fields per row so
+// the operator can screenshot the strip on iPhone and read the
+// failure mode without DevTools (see A1 spec).
+//
+// Rows: bbox / trails / zonemask / media (always-on geometry dump)
+// + position-fail (sticky when an SVG ends up 0×0)
+// + paint-fail   (sticky when SVG sized but first child collapsed).
+const _DEBUG_LS_KEY = 'tam.livedetect.debug';
+const _diagState = {
+  bbox: null,
+  trails: null,
+  zonemask: null,
+  media: null,
+  posFail: null,
+};
+
+function _debugDiagOn() {
+  try {
+    return localStorage.getItem(_DEBUG_LS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function _setDebugDiag(on) {
+  try {
+    if (on) localStorage.setItem(_DEBUG_LS_KEY, '1');
+    else localStorage.removeItem(_DEBUG_LS_KEY);
+  } catch {
+    /* private-mode / quota — silent */
+  }
+  if (!on) {
+    const strip = byId('mvSimDiagStrip');
+    if (strip) strip.remove();
+    _diagState.bbox = null;
+    _diagState.trails = null;
+    _diagState.zonemask = null;
+    _diagState.media = null;
+    _diagState.posFail = null;
+  } else {
+    // Render now if we have any state from the in-progress render
+    // cycle; otherwise the next overlay-render tick will paint it.
+    _renderDiagStrip();
+    // Force a media-row immediately so the strip isn't empty on
+    // first activation.
+    _refreshMediaRow();
+    _renderDiagStrip();
+  }
+}
 
 function _ensureDiagStrip() {
+  if (!_debugDiagOn()) return null;
   let strip = byId('mvSimDiagStrip');
   if (strip) return strip;
   const toggleRow = byId('mvLiveToggles');
@@ -881,34 +943,115 @@ function _ensureDiagStrip() {
   return strip;
 }
 
-function _renderDiagStripLine(kind, fields) {
+// One row per kind. Block layout (NOT flex/inline) so on iPhone
+// width each k=v pair sits on its own line; CSS handles font sizes
+// (key 10 px, value 11 px) and wrap-free overflow. Mismatch flag
+// surfaces an amber border so the user spots it at a glance.
+function _renderDiagStripLine(kind, fields, opts = {}) {
   if (!fields) return '';
   const pairs = Object.entries(fields)
     .map(
       ([k, v]) =>
-        `<span class="mv-sim-diag-k">${esc(k)}</span>=<span class="mv-sim-diag-v">${esc(String(v))}</span>`,
+        `<div class="mv-sim-diag-pair"><span class="mv-sim-diag-k">${esc(k)}</span><span class="mv-sim-diag-eq">=</span><span class="mv-sim-diag-v">${esc(String(v))}</span></div>`,
     )
-    .join(' · ');
-  return `<div class="mv-sim-diag-row" data-kind="${esc(kind)}"><span class="mv-sim-diag-kind">${esc(kind)}</span> · ${pairs}</div>`;
+    .join('');
+  const trailing = opts.trailing ? `<div class="mv-sim-diag-tag">${esc(opts.trailing)}</div>` : '';
+  const flagAttr = opts.flag ? ` data-flag="${esc(opts.flag)}"` : '';
+  return `<div class="mv-sim-diag-row" data-kind="${esc(kind)}"${flagAttr}><div class="mv-sim-diag-kind">${esc(kind)}</div>${pairs}${trailing}</div>`;
 }
 
-function _updateDiagStrip(kind, fields) {
+function _renderDiagStrip() {
   const strip = _ensureDiagStrip();
   if (!strip) return;
-  if (kind === 'position-fail') {
-    _diagState.posFail = fields;
-  } else if (kind in _diagState) {
-    _diagState[kind] = fields;
-  }
   const rows = [
-    _renderDiagStripLine('bbox', _diagState.bbox),
-    _renderDiagStripLine('trails', _diagState.trails),
-    _renderDiagStripLine('zonemask', _diagState.zonemask),
+    _renderDiagStripLine('bbox', _diagState.bbox?.fields, _diagState.bbox?.opts || {}),
+    _renderDiagStripLine('trails', _diagState.trails?.fields, _diagState.trails?.opts || {}),
+    _renderDiagStripLine('zonemask', _diagState.zonemask?.fields, _diagState.zonemask?.opts || {}),
+    _renderDiagStripLine('media', _diagState.media?.fields, _diagState.media?.opts || {}),
   ].filter(Boolean);
   if (_diagState.posFail) {
     rows.push(_renderDiagStripLine('position-fail', _diagState.posFail));
   }
   strip.innerHTML = rows.join('');
+}
+
+function _updateDiagStrip(kind, fields, opts = {}) {
+  if (!_debugDiagOn()) return;
+  if (kind === 'position-fail') {
+    _diagState.posFail = fields;
+  } else if (kind in _diagState) {
+    _diagState[kind] = { fields, opts };
+  }
+  _renderDiagStrip();
+}
+
+// A1 · gather the rich bbox-row fields used by the debug strip.
+// Reads SVG geometry + computed style + the mediaEl
+// _positionSvgOverImage would pick + fittedRect(). A3 extends this
+// with bbox_space / source / snap and the space-mismatch flag.
+function _collectBboxDiagFields(svg, fs) {
+  const wrap = byId('lightboxMediaWrap');
+  const videoEl = byId('lightboxVideo');
+  const imgEl = byId('lightboxImg');
+  const usingVideo = videoEl && videoEl.style.display !== 'none' && videoEl.videoWidth > 0;
+  const mediaEl = usingVideo ? videoEl : imgEl && imgEl.style.display !== 'none' ? imgEl : null;
+  const mediaTag = mediaEl ? (mediaEl === videoEl ? 'video' : 'img') : 'null';
+  const wrapBox = wrap?.getBoundingClientRect();
+  const svgRect = svg.getBoundingClientRect();
+  const cs = window.getComputedStyle(svg);
+  let mediaDims = 'n/a';
+  let fitDims = 'n/a';
+  if (mediaEl) {
+    const nW = mediaEl.naturalWidth || 0;
+    const nH = mediaEl.naturalHeight || 0;
+    const vW = mediaEl.videoWidth || 0;
+    const vH = mediaEl.videoHeight || 0;
+    const cW = mediaEl.clientWidth || 0;
+    const cH = mediaEl.clientHeight || 0;
+    mediaDims = `nat=${nW}×${nH} vid=${vW}×${vH} cli=${cW}×${cH}`;
+    try {
+      const fit = fittedRect(mediaEl);
+      fitDims = `${Math.round(fit.w)}×${Math.round(fit.h)}@${Math.round(fit.x)},${Math.round(fit.y)}`;
+    } catch {
+      fitDims = 'err';
+    }
+  }
+  const fields = {
+    dets: (_session.lastDetections || []).length,
+    raw: _session.lastRawCount ?? '?',
+    viewBox: `${fs.w}×${fs.h}`,
+    svgRect: `${Math.round(svgRect.width)}×${Math.round(svgRect.height)}@${Math.round(svgRect.left - (wrapBox?.left || 0))},${Math.round(svgRect.top - (wrapBox?.top || 0))}`,
+    zIndex: cs.zIndex,
+    display: cs.display,
+    bboxesOn: _overlays.bboxes ? 'true' : 'false',
+    media: mediaTag,
+    mediaDims,
+    fit: fitDims,
+  };
+  return { fields, opts: {} };
+}
+
+// Pull current wrap/img/video geometry into the "media" row. Called
+// from each overlay render path so the row stays in sync with the
+// other three. Cheap (three getBoundingClientRect calls).
+function _refreshMediaRow() {
+  if (!_debugDiagOn()) return;
+  const wrap = byId('lightboxMediaWrap');
+  const imgEl = byId('lightboxImg');
+  const videoEl = byId('lightboxVideo');
+  const _box = (el) => {
+    if (!el) return 'n/a';
+    const r = el.getBoundingClientRect();
+    return `${Math.round(r.width)}×${Math.round(r.height)}@${Math.round(r.left)},${Math.round(r.top)}`;
+  };
+  _diagState.media = {
+    fields: {
+      wrap: _box(wrap),
+      img: imgEl ? `${_box(imgEl)} disp=${window.getComputedStyle(imgEl).display}` : 'n/a',
+      video: videoEl ? `${_box(videoEl)} disp=${window.getComputedStyle(videoEl).display}` : 'n/a',
+    },
+    opts: {},
+  };
 }
 
 function _renderBboxOverlay() {
@@ -924,18 +1067,16 @@ function _renderBboxOverlay() {
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
-  // H2.b · refresh the visible diag strip on every render so the
-  // user can SEE svgRect / viewBox / dets without DevTools. Pulled
-  // out of console.warn (which the user can't open). Falls back to
-  // a [sim-position-fail] line in the strip if rect still ends up
-  // 0×0 even after the wrap-fallback in _positionSvgOverImage.
+  // A1/A3 · refresh the debug strip on every render so the user
+  // can screenshot it on iPhone without DevTools. No-op when the
+  // Debug pill is off — _updateDiagStrip / _refreshMediaRow gate on
+  // _debugDiagOn() so non-debug sessions pay zero cost.
+  _refreshMediaRow();
+  if (_debugDiagOn()) {
+    const fields = _collectBboxDiagFields(svg, fs);
+    _updateDiagStrip('bbox', fields.fields, fields.opts);
+  }
   const rect = svg.getBoundingClientRect();
-  _updateDiagStrip('bbox', {
-    dets: (_session.lastDetections || []).length,
-    viewBox: `${fs.w}×${fs.h}`,
-    svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
-    zIndex: window.getComputedStyle(svg).zIndex,
-  });
   if (rect.width <= 0 || rect.height <= 0) {
     _updateDiagStrip('position-fail', {
       svg: svg.id,
@@ -943,6 +1084,13 @@ function _renderBboxOverlay() {
     });
     svg.innerHTML = '';
     return;
+  }
+  // A1 · clear any sticky position-fail from the last cycle now
+  // that the SVG has a real size again. Same for paint-fail
+  // (rebuilt below if needed).
+  if (_diagState.posFail) {
+    _diagState.posFail = null;
+    _renderDiagStrip();
   }
   // gp384 — hold-time merge. Prefer the live tick's detections
   // (full opacity, _holdAge=0). If the tick is empty, fall back to
@@ -1173,13 +1321,26 @@ function _renderTrailsOverlay() {
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
+  _refreshMediaRow();
   const rect = svg.getBoundingClientRect();
-  _updateDiagStrip('trails', {
-    dets: _detBuffer.length,
-    viewBox: `${fs.w}×${fs.h}`,
-    svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
-    zIndex: window.getComputedStyle(svg).zIndex,
-  });
+  if (_debugDiagOn()) {
+    // A1 · same-shape rich row for trails. _detBuffer length is the
+    // number of buffered detection samples in the rolling window
+    // (one entry per detection per tick, dropped after _LIVE_WINDOW_MS).
+    const cs = window.getComputedStyle(svg);
+    const wrap = byId('lightboxMediaWrap');
+    const wrapBox = wrap?.getBoundingClientRect();
+    const left = wrapBox ? Math.round(rect.left - wrapBox.left) : Math.round(rect.left);
+    const top = wrapBox ? Math.round(rect.top - wrapBox.top) : Math.round(rect.top);
+    _updateDiagStrip('trails', {
+      buffer: _detBuffer.length,
+      viewBox: `${fs.w}×${fs.h}`,
+      svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}@${left},${top}`,
+      zIndex: cs.zIndex,
+      display: cs.display,
+      trailsOn: _overlays.trails ? 'true' : 'false',
+    });
+  }
   // Same 0×0 guard as the bbox layer — wait for the image to size
   // before paint so the polylines don't land in a sub-pixel corner.
   if (rect.width <= 0 || rect.height <= 0) {
@@ -1247,15 +1408,25 @@ function _renderZoneMaskOverlay() {
   // the live-detect overlays (bbox, trails) already use.
   const liveImg = byId('lightboxImg');
   renderZoneLayerForMediaEl(canvas, liveImg, { zones, masks }, { srcW: fs.w, srcH: fs.h });
-  // Diag strip update — same fields the legacy SVG path emitted so
-  // operators can still read "did the polygons survive the toggle".
+  _refreshMediaRow();
   const rect = canvas.getBoundingClientRect();
-  _updateDiagStrip('zonemask', {
-    zones: (cam.zones || []).length,
-    masks: (cam.masks || []).length,
-    svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
-    zIndex: window.getComputedStyle(canvas).zIndex,
-  });
+  if (_debugDiagOn()) {
+    const cs = window.getComputedStyle(canvas);
+    const wrap = byId('lightboxMediaWrap');
+    const wrapBox = wrap?.getBoundingClientRect();
+    const left = wrapBox ? Math.round(rect.left - wrapBox.left) : Math.round(rect.left);
+    const top = wrapBox ? Math.round(rect.top - wrapBox.top) : Math.round(rect.top);
+    _updateDiagStrip('zonemask', {
+      zones: (cam.zones || []).length,
+      masks: (cam.masks || []).length,
+      viewBox: `${fs.w}×${fs.h}`,
+      svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}@${left},${top}`,
+      zIndex: cs.zIndex,
+      display: cs.display,
+      zonesOn: _overlays.zones ? 'true' : 'false',
+      masksOn: _overlays.masks ? 'true' : 'false',
+    });
+  }
   if (rect.width <= 0 || rect.height <= 0) {
     _updateDiagStrip('position-fail', {
       svg: canvas.id,

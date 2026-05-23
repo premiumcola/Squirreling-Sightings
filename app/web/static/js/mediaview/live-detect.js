@@ -754,7 +754,17 @@ async function _tick() {
       { method: 'POST', signal: controller.signal },
     );
     _tickState.lastStatus = r.status;
-    if (_session !== session) return;
+    // B31 · late-tick guard. The session can be replaced or nulled
+    // by a concurrent stopLive / cam switch between fetch-issue and
+    // fetch-resolve. The original code silently dropped the result;
+    // we count it instead so a STUCK-looking tick row + a non-zero
+    // ticks_dropped_late field tells the user "responses ARE
+    // arriving, they're just landing too late for the current
+    // session" — a very different fix from "loop isn't running".
+    if (_session !== session) {
+      _tickState.ticksDroppedLate = (_tickState.ticksDroppedLate || 0) + 1;
+      return;
+    }
     let data = null;
     try {
       data = await r.json();

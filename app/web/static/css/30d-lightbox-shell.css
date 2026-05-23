@@ -497,22 +497,42 @@
   flex-direction: column;
   gap: 6px;
 }
-.mv-ld-empty {
-  font-size: 11.5px;
-  color: rgba(226, 232, 240, 0.45);
-  font-style: italic;
-  padding: 4px 0;
+/* D67 · empty-state row removed entirely — the panel collapses to
+   zero height when there are no detections. Keeping the rule deleted
+   so any stray .mv-ld-empty element wouldn't reintroduce vertical
+   padding by accident. */
+.mv-ld-detections {
+  display: flex;
+  flex-direction: column;
 }
+/* D67 · tighter row, no surrounding card, 1 px contrast-only
+   separator between rows. The row itself is a <button> so the
+   touch hit area covers the full row width × ≥44 px (8 px outer
+   padding above + below the 28 px visible row makes 44 px). */
 .mv-ld-row {
   display: grid;
   grid-template-columns: 4px 1fr auto auto;
   gap: 8px;
   align-items: center;
-  padding: 6px 10px 6px 6px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  width: 100%;
+  padding: 8px 10px 8px 6px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
   font-size: 12px;
   letter-spacing: 0.01em;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-ld-row + .mv-ld-row {
+  /* Contrast-only separator — depth via colour delta, never a
+     hairline border (per CLAUDE.md). */
+  background-image: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: top;
 }
 .mv-ld-row-bar {
   width: 4px;
@@ -534,23 +554,32 @@
   font-size: 11.5px;
 }
 .mv-ld-row-verdict {
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 8px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
+/* D67 · verdict badges:
+   PASS         — solid green pill, white text
+   unter Schwelle — outlined amber pill
+   gefiltert    — outlined grey pill
+   Outline drawn via inset box-shadow (1.5 px) so the badge width
+   matches the solid PASS variant without 1 px shift. */
 .mv-ld-row[data-tone='ok'] .mv-ld-row-verdict {
-  background: rgba(34, 197, 94, 0.18);
-  color: #86efac;
+  background: rgba(34, 197, 94, 0.85);
+  color: #fff;
 }
 .mv-ld-row[data-tone='warn'] .mv-ld-row-verdict {
-  background: rgba(245, 158, 11, 0.18);
+  background: transparent;
   color: #fbbf24;
+  box-shadow: inset 0 0 0 1.5px rgba(251, 191, 36, 0.7);
 }
 .mv-ld-row[data-tone='mute'] .mv-ld-row-verdict {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
   color: rgba(226, 232, 240, 0.55);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.18);
 }
 /* Live-detect modal class — the same lb-fs-video chrome stays in
    place, with a couple of small overrides: the live "● Live" marker

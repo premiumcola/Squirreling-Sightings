@@ -24,7 +24,6 @@ import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { OBJ_LABEL, OBJ_SVG, colors, objIconSvg } from '../core/icons.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
-import { renderPanelTabs } from './panel-tabs.js';
 import { normalizePolygon } from '../core/polygon-source.js';
 import { renderZoneLayerForMediaEl } from './canvas/zone-layer.js';
 import { fittedRect } from '../core/video-fit.js';
@@ -812,38 +811,24 @@ function _mountPanels() {
   // bfcache restores without extra JS). Collapsed by default so the
   // panel doesn't dominate the layout the first time the user opens
   // Simulieren; one tap expands.
+  // D67 · the Detections "tab" header was redundant — only one tab,
+  // and the panel IS the detections. Render the rows directly.
+  // D78 · the Diagnose <details> + Fein-Analyse fold get merged into
+  // a single Trace fold. The Diagnose summary's "raw=N · pass=N"
+  // pulse is now part of the Trace fold's summary line.
   host.innerHTML = `
     <div class="mv-recorded-panels">
-      <div class="mv-recorded-tabs"></div>
-      <details class="mv-ld-diag" id="mvLdDiag">
-        <summary class="mv-ld-diag-head">
-          <span class="mv-ld-diag-chev" aria-hidden="true">▸</span>
-          <span class="mv-ld-diag-title">Diagnose</span>
-          <span class="mv-ld-diag-pulse" id="mvLdDiagPulse">—</span>
-        </summary>
-        <div class="mv-ld-diag-body" id="mvLdDiagBody"></div>
-      </details>
+      <div id="mvLdDetections" class="mv-ld-detections"></div>
       <div class="mv-recorded-fafold"></div>
     </div>`;
-  const tabsHost = host.querySelector('.mv-recorded-tabs');
   const faHost = host.querySelector('.mv-recorded-fafold');
-  const tabs = [
-    {
-      id: 'detections',
-      label: 'Detections',
-      render: (h) => {
-        h.innerHTML = `<div id="mvLdDetections" class="mv-ld-detections"><div class="mv-ld-empty">Noch keine Detektion …</div></div>`;
-      },
-    },
-  ];
-  renderPanelTabs(tabsHost, tabs, { initialId: 'detections' });
   // B23 · live: true so the empty-state copy reads "Warte auf
   // ersten Tick …" instead of the recorded-clip "Kein Server-Trace
   // gespeichert" string. Subsequent setLines() calls (via the tick
   // loop's _appendTrace path) replace the empty state with the real
   // decision_trace; if the loop is stuck the muted "Warte" line
   // serves as a downstream tell-tale for the B7/B12 STUCK row.
-  const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: true, live: true });
+  const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: false, live: true });
   if (_session) _session.fold = fold;
 }
 
@@ -2065,11 +2050,27 @@ function _renderDetectionsPanel(data) {
   const detHost = byId('mvLdDetections');
   if (!detHost) return;
   const dets = data.detections || [];
-  if (!dets.length) {
-    detHost.innerHTML = `<div class="mv-ld-empty">Keine Objekte erkannt</div>`;
+  // D67 · no header, no empty-state row. When there are no rows the
+  // panel collapses to zero height; the suppressed-hint above the
+  // panel already tells the user about non-pass items.
+  // Sort: pass first, then belowthresh, then filtered; within each
+  // bucket descending by score. Backed by the D52 detections-expanded
+  // toggle — pass-only by default, expanded shows everything.
+  const verdictRank = { pass: 0, belowthresh: 1, filtered: 2 };
+  const expanded = _detectionsExpanded();
+  const visible = (expanded ? dets : dets.filter((d) => d.verdict === 'pass'))
+    .slice()
+    .sort((a, b) => {
+      const ra = verdictRank[a.verdict] ?? 3;
+      const rb = verdictRank[b.verdict] ?? 3;
+      if (ra !== rb) return ra - rb;
+      return (b.score || 0) - (a.score || 0);
+    });
+  if (!visible.length) {
+    detHost.innerHTML = '';
     return;
   }
-  detHost.innerHTML = dets
+  detHost.innerHTML = visible
     .map((d) => {
       const c = colors[d.label] || colors.unknown;
       const lblText = OBJ_LABEL[d.label] || d.label;
@@ -2082,12 +2083,12 @@ function _renderDetectionsPanel(data) {
             : d.verdict === 'filtered'
               ? 'gefiltert'
               : '—';
-      return `<div class="mv-ld-row" data-tone="${tone}" data-label="${esc(d.label)}">
+      return `<button type="button" class="mv-ld-row" data-tone="${tone}" data-label="${esc(d.label)}">
       <span class="mv-ld-row-bar" style="background:${c}"></span>
       <span class="mv-ld-row-label">${esc(lblText)}</span>
       <span class="mv-ld-row-score">${Math.round((d.score || 0) * 100)} %</span>
       <span class="mv-ld-row-verdict">${esc(verdictText)}</span>
-    </div>`;
+    </button>`;
     })
     .join('');
   detHost.querySelectorAll('.mv-ld-row').forEach((row) => {

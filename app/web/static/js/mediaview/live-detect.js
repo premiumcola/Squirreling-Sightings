@@ -105,6 +105,7 @@ export function openLiveDetect({ camId, cameraName }) {
   _diagState.paintFail = null;
   _diagState.tick = null;
   _diagState.mount = null;
+  _diagState.cadence = null;
   // B7/B12 · reset tick lifecycle state. Keep startedAt fresh on
   // every open so the strip's mounted_ms_ago matches the user's
   // last action — not some half-finished prior session.
@@ -1049,6 +1050,11 @@ const _diagState = {
   // first_tick_scheduled, error). Painted muted on success, red on
   // error. Cleared on next openLiveDetect.
   mount: null,
+  // C73/C84 · cadence row. Tracks the adaptive floor (500 ms on
+  // sub-stream, 1000 ms on main_fallback), the most recent cycle
+  // wall time, and the dynamic bbox hold derived from the EMA of
+  // recent cycles. Single line, always-on while debug is enabled.
+  cadence: null,
 };
 
 // B7 · raw tick-loop state. Owned by the tick lifecycle, read by the
@@ -1089,6 +1095,11 @@ function _setDebugDiag(on) {
     _diagState.paintFail = null;
     _diagState.mount = null;
     _diagState.tick = null;
+    _diagState.cadence = null;
+    // C56 · when the user toggles Debug OFF, reset to the
+    // "compact next time" default per the spec. The next ON
+    // shows the one-line summary first.
+    _setDebugCollapsed(true);
   } else {
     // Render now if we have any state from the in-progress render
     // cycle; otherwise the next overlay-render tick will paint it.
@@ -1100,16 +1111,63 @@ function _setDebugDiag(on) {
   }
 }
 
+// C56 · debug strip is now an absolute-positioned element pinned to
+// the bottom edge of #lightboxMediaWrap so sibling growth (e.g. the
+// Detections panel expanding) can never compress it below
+// readability. Stacking order: above the SVG overlays (z=14/15/16).
+// The strip is a 2-piece container: a tappable header (collapsed
+// summary) + a scrollable body (full multi-row dump). Collapse state
+// persists in localStorage so the user's preference survives across
+// sessions.
+const _DEBUG_COLLAPSE_KEY = 'tam.livedetect.debug.collapsed';
+
+function _debugCollapsed() {
+  try {
+    // Default collapsed on first enable — the user has to opt into
+    // the verbose dump. Stored as a string so a missing key reads
+    // as collapsed (the safe default).
+    return localStorage.getItem(_DEBUG_COLLAPSE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+function _setDebugCollapsed(v) {
+  try {
+    localStorage.setItem(_DEBUG_COLLAPSE_KEY, v ? '1' : '0');
+  } catch {
+    /* private-mode / quota — silent */
+  }
+}
+
 function _ensureDiagStrip() {
   if (!_debugDiagOn()) return null;
   let strip = byId('mvSimDiagStrip');
   if (strip) return strip;
-  const toggleRow = byId('mvLiveToggles');
-  if (!toggleRow) return null;
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return null;
   strip = document.createElement('div');
   strip.id = 'mvSimDiagStrip';
   strip.className = 'mv-sim-diag-strip';
-  toggleRow.insertAdjacentElement('afterend', strip);
+  // Initial collapse state mirrors localStorage so a returning user
+  // sees the strip in the same shape they left it.
+  strip.dataset.collapsed = _debugCollapsed() ? '1' : '0';
+  strip.innerHTML = `
+    <button type="button" class="mv-sim-diag-head" aria-expanded="${_debugCollapsed() ? 'false' : 'true'}">
+      <span class="mv-sim-diag-summary" id="mvSimDiagSummary"></span>
+      <span class="mv-sim-diag-chevron" aria-hidden="true">▾</span>
+    </button>
+    <div class="mv-sim-diag-body" id="mvSimDiagBody"></div>`;
+  wrap.appendChild(strip);
+  // Header click toggles collapsed/expanded + persists.
+  const header = strip.querySelector('.mv-sim-diag-head');
+  header?.addEventListener('click', () => {
+    const collapsed = strip.dataset.collapsed === '1';
+    const next = !collapsed;
+    strip.dataset.collapsed = next ? '1' : '0';
+    header.setAttribute('aria-expanded', next ? 'false' : 'true');
+    _setDebugCollapsed(next);
+  });
   return strip;
 }
 
@@ -1159,6 +1217,7 @@ function _renderDiagStrip() {
   const rows = [
     mountRow,
     _renderDiagStripLine('tick', _diagState.tick?.fields, _diagState.tick?.opts || {}),
+    _renderDiagStripLine('cadence', _diagState.cadence?.fields, _diagState.cadence?.opts || {}),
     _renderDiagStripLine('bbox', _diagState.bbox?.fields, _diagState.bbox?.opts || {}),
     _renderDiagStripLine('trails', _diagState.trails?.fields, _diagState.trails?.opts || {}),
     _renderDiagStripLine('zonemask', _diagState.zonemask?.fields, _diagState.zonemask?.opts || {}),
@@ -1170,7 +1229,33 @@ function _renderDiagStrip() {
   if (_diagState.paintFail) {
     rows.push(_renderDiagStripLine('paint-fail', _diagState.paintFail));
   }
-  strip.innerHTML = rows.join('');
+  // C56 · the body holds the full multi-row dump; the summary line
+  // at the top is the one-glance "TICK <status> · BBOX dets=<n> ·
+  // MEDIA <branch> · MOUNT <ok|err>" the user sees when the strip is
+  // collapsed. Both are written here so they stay synced on every
+  // tick refresh.
+  const body = strip.querySelector('.mv-sim-diag-body') || strip;
+  body.innerHTML = rows.join('');
+  const summaryEl = strip.querySelector('.mv-sim-diag-summary');
+  if (summaryEl) summaryEl.textContent = _buildDebugSummary();
+}
+
+// C56 · compact summary string for the collapsed header. Order is
+// fixed (TICK · BBOX · MEDIA · MOUNT) so a screenshot reader knows
+// where to look for the primary signal. Truncation handled by CSS
+// (text-overflow: ellipsis).
+function _buildDebugSummary() {
+  const parts = [];
+  const tickFields = _diagState.tick?.fields || {};
+  const tickFlag = _diagState.tick?.opts?.flag;
+  const tickStatus = tickFlag === 'tick-stuck' ? 'STUCK' : tickFlag === 'tick-warn' ? 'WARN' : 'ok';
+  parts.push(`TICK ${tickStatus}`);
+  const bboxFields = _diagState.bbox?.fields || {};
+  if ('dets' in bboxFields) parts.push(`BBOX dets=${bboxFields.dets}`);
+  const mediaFields = _diagState.media?.fields || {};
+  if ('branch' in mediaFields) parts.push(`MEDIA ${mediaFields.branch}`);
+  if (_diagState.mount) parts.push(`MOUNT ${_diagState.mount._err ? 'err' : 'ok'}`);
+  return parts.join(' · ');
 }
 
 function _updateDiagStrip(kind, fields, opts = {}) {

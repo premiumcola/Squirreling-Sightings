@@ -189,6 +189,14 @@
 .mv-live-toggle-tip[hidden] {
   display: none;
 }
+@media (max-width: 768px) {
+  /* C56 · mobile · strip stays edge-to-edge inside the media-wrap.
+     No horizontal padding around the strip itself; the inner head/
+     body retain their padding so text doesn't touch the edge. */
+  .mv-sim-diag-strip {
+    border-radius: 0;
+  }
+}
 @media (max-width: 480px) {
   .mv-live-toggle {
     min-height: 44px;
@@ -208,18 +216,70 @@
    Position-fail / paint-fail / space-mismatch get amber tinting so
    the smoking-gun row pops out at a glance. */
 .mv-sim-diag-strip {
-  background: #0a0e1a;
-  padding: 6px 12px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  /* C56 · pinned to the bottom edge of the media-wrap so a growing
+     Detections panel (or anything else stacked below the strip
+     in normal flow) can no longer compress it. Above the SVG
+     overlays (z=14/15/16) but below the modal chrome (z>=100). */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  background: rgba(10, 14, 26, 0.92);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px 8px 0 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: rgba(226, 232, 240, 0.7);
+  display: flex;
+  flex-direction: column;
+}
+.mv-sim-diag-head {
+  /* Tappable header; ≥44 px touch target per iOS rule. Edge-to-edge
+     so an off-target tap on the strip still expands it. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  color: rgba(226, 232, 240, 0.85);
+  text-align: left;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-sim-diag-summary {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mv-sim-diag-chevron {
+  display: inline-block;
+  transform: rotate(0deg);
+  transition: transform 0.15s ease;
+  color: rgba(226, 232, 240, 0.55);
+}
+.mv-sim-diag-strip[data-collapsed='1'] .mv-sim-diag-chevron {
+  transform: rotate(-90deg);
+}
+.mv-sim-diag-strip[data-collapsed='1'] .mv-sim-diag-body {
+  display: none;
+}
+.mv-sim-diag-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  color: rgba(226, 232, 240, 0.7);
-  /* No overflow-x scroll — wrap on width instead so the user can
-     screenshot the strip from an iPhone width without the right-
-     edge cropping. */
-  overflow-x: hidden;
+  padding: 0 12px 10px;
+  max-height: 50dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 .mv-sim-diag-row {
   display: flex;

@@ -421,3 +421,33 @@
     flex: 0 0 auto;
   }
 }
+
+/* W93 · iPhone-width polish for the K13 strip. The 640 px breakpoint
+   above handles the layout reflow; below 480 px the row text was
+   still drifting toward unreadable. Hold every label/value at ≥11 px
+   per CLAUDE.md and tighten spacing so the strip doesn't horizontally
+   overflow the cam-edit modal at 375 px. */
+@media (max-width: 480px) {
+  .erk-thr-strip {
+    padding: 6px 8px;
+  }
+  .erk-thr-row {
+    min-height: 44px;
+    padding: 6px 8px;
+    gap: 4px 6px;
+  }
+  .erk-thr-lbl {
+    font-size: 12px;
+  }
+  .erk-thr-limit,
+  .erk-thr-actual {
+    font-size: 12.5px;
+  }
+  .erk-thr-actual-lbl {
+    font-size: 11px;
+  }
+  .erk-thr-tag {
+    font-size: 11px;
+    padding: 2px 7px;
+  }
+}

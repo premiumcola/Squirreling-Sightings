@@ -78,7 +78,7 @@ let _selectedLabel = null; // for detail-pill pin
 export function openLiveDetect({ camId, cameraName }) {
   if (!camId) return;
   // B12 · capture whether a prior session was mounted BEFORE
-  // closeLiveDetect nulls it. Surfaced on the tick row as
+  // closeLiveDetect nulls it. Surfaced on the MOUNT row as
   // torn_down_prev so a back-to-back cam switch is visible.
   const tornDownPrev = !!_session;
   closeLiveDetect();
@@ -104,10 +104,10 @@ export function openLiveDetect({ camId, cameraName }) {
   _diagState.posFail = null;
   _diagState.paintFail = null;
   _diagState.tick = null;
-  _diagState.mountFail = null;
+  _diagState.mount = null;
   // B7/B12 · reset tick lifecycle state. Keep startedAt fresh on
-  // every open so the strip's started_at matches the user's last
-  // action — not some half-finished prior session.
+  // every open so the strip's mounted_ms_ago matches the user's
+  // last action — not some half-finished prior session.
   _tickState.lastTickAt = 0;
   _tickState.lastRespAt = 0;
   _tickState.lastStatus = '—';
@@ -115,35 +115,65 @@ export function openLiveDetect({ camId, cameraName }) {
   _tickState.startedAt = Date.now();
   _tickState.startedWithCamId = camId;
   _tickState.ticksDroppedLate = 0;
+  _tickState.lastDropReason = null;
   _tickState.tornDownPrev = tornDownPrev;
-  _setupLiveChrome(camId, cameraName);
-  _mountPanels();
-  // B12 · wrap the first _tick() call so a thrown exception (camId
-  // resolution, fetch availability, an _ensureXyzOverlay early
-  // return that propagated) lands on a visible mount-fail row
-  // instead of stranding the user in a half-mounted state.
+  _tickState.lastTickError = null;
+  // B12' · always-on MOUNT row. Tracks every step of the mount path
+  // so a screenshot tells us at a glance whether chrome rendered,
+  // whether _tick() threw, and whether a first-tick setTimeout was
+  // actually scheduled. Healthy mounts paint muted; any error flips
+  // the row red and persists until the next successful mount.
+  const mountRecord = {
+    started_at: new Date(_tickState.startedAt).toISOString(),
+    started_with_camId: camId,
+    torn_down_prev: tornDownPrev ? 'true' : 'false',
+    chrome_mounted: 'false',
+    first_tick_scheduled: 'false',
+    error: '',
+  };
+  let chromeOk = false;
+  let mountErr = null;
   try {
-    _tick();
+    _setupLiveChrome(camId, cameraName);
+    _mountPanels();
+    chromeOk = true;
   } catch (err) {
-    _diagState.mountFail = {
-      reason: `tick threw: ${(err && (err.message || String(err))) || 'unknown'}`,
-    };
-    _renderDiagStrip();
+    mountErr = err;
   }
+  mountRecord.chrome_mounted = chromeOk ? 'true' : 'false';
+  if (chromeOk) {
+    try {
+      _tick();
+    } catch (err) {
+      mountErr = err;
+    }
+  }
+  if (mountErr) {
+    mountRecord.error = (mountErr && (mountErr.message || String(mountErr))) || 'unknown';
+  }
+  // Initial paint of the MOUNT row — success-muted or error-red.
+  // first_tick_scheduled stays "false" here; the 250 ms watchdog
+  // below promotes it to "true" once we observe a tickHandle.
+  _diagState.mount = { ...mountRecord, _err: !!mountErr };
+  _renderDiagStrip();
   _startHoldRefresh();
   document.body.style.overflow = 'hidden';
-  // B12 · 250 ms watchdog. If _tick never reached _scheduleNext (no
-  // tickHandle written), the loop didn't actually start — the
-  // try/catch above caught only synchronous throws; an async swallow
-  // (a fetch that resolved into _session-mismatch and dropped the
-  // schedule) would otherwise still slip past. The watchdog fires
-  // ONCE and writes a mount-fail row that says "no first-tick
-  // scheduled".
+  // B12' · 250 ms watchdog. ONE-SHOT — fires once, then cleared.
+  // Two outcomes: tickHandle present → mark first_tick_scheduled
+  // true (success path); tickHandle still null → promote MOUNT row
+  // to error with "no first-tick scheduled within 250ms".
+  const expectedSessionStart = _tickState.startedAt;
   setTimeout(() => {
-    if (!_session) return;
-    if (_session.tickHandle) return;
-    if (_diagState.mountFail) return; // already flagged a sync throw
-    _diagState.mountFail = { reason: 'no first-tick scheduled within 250 ms' };
+    // Different session by now → leave its own MOUNT row alone.
+    if (!_session || _tickState.startedAt !== expectedSessionStart) return;
+    const scheduled = !!_session.tickHandle;
+    const rec = _diagState.mount || {};
+    rec.first_tick_scheduled = scheduled ? 'true' : 'false';
+    if (!scheduled && !rec.error) {
+      rec.error = 'no first-tick scheduled within 250ms';
+      rec._err = true;
+    }
+    _diagState.mount = rec;
     _renderDiagStrip();
   }, 250);
 }
@@ -992,10 +1022,11 @@ const _diagState = {
   // means the SVG layout never happened, paintFail means the
   // children rendered but landed off-canvas or with 0×0 geometry.
   paintFail: null,
-  // B12 · sticky "tick loop never started" diagnostic. Written by
-  // openLiveDetect's try/catch (synchronous throw) or its 250 ms
-  // watchdog (no first-tick scheduled). Cleared on next mount.
-  mountFail: null,
+  // B12' · always-on MOUNT row. Holds the most recent
+  // openLiveDetect lifecycle record (chrome_mounted,
+  // first_tick_scheduled, error). Painted muted on success, red on
+  // error. Cleared on next openLiveDetect.
+  mount: null,
 };
 
 // B7 · raw tick-loop state. Owned by the tick lifecycle, read by the
@@ -1034,7 +1065,7 @@ function _setDebugDiag(on) {
     _diagState.media = null;
     _diagState.posFail = null;
     _diagState.paintFail = null;
-    _diagState.mountFail = null;
+    _diagState.mount = null;
     _diagState.tick = null;
   } else {
     // Render now if we have any state from the in-progress render
@@ -1084,16 +1115,33 @@ function _renderDiagStrip() {
   // truthful even when the rest of the strip is updating for other
   // reasons. Cheap (date math + computed status flag).
   _refreshTickRow();
+  // B12' · MOUNT row split out from the inline fields so the row can
+  // appear at the TOP of the strip even on the success path (muted)
+  // — drawing the eye first to "did the mount succeed" before
+  // anything else. The _err flag picked from the record promotes
+  // the row to red without using the trailing-tag mechanism.
+  let mountRow = '';
+  if (_diagState.mount) {
+    const m = _diagState.mount;
+    const fields = {
+      started_at: m.started_at,
+      started_with_camId: m.started_with_camId,
+      torn_down_prev: m.torn_down_prev,
+      chrome_mounted: m.chrome_mounted,
+      first_tick_scheduled: m.first_tick_scheduled,
+    };
+    if (m.error) fields.error = m.error;
+    const opts = m._err ? { flag: 'mount-fail' } : {};
+    mountRow = _renderDiagStripLine('mount', fields, opts);
+  }
   const rows = [
+    mountRow,
     _renderDiagStripLine('tick', _diagState.tick?.fields, _diagState.tick?.opts || {}),
     _renderDiagStripLine('bbox', _diagState.bbox?.fields, _diagState.bbox?.opts || {}),
     _renderDiagStripLine('trails', _diagState.trails?.fields, _diagState.trails?.opts || {}),
     _renderDiagStripLine('zonemask', _diagState.zonemask?.fields, _diagState.zonemask?.opts || {}),
     _renderDiagStripLine('media', _diagState.media?.fields, _diagState.media?.opts || {}),
   ].filter(Boolean);
-  if (_diagState.mountFail) {
-    rows.push(_renderDiagStripLine('mount-fail', _diagState.mountFail));
-  }
   if (_diagState.posFail) {
     rows.push(_renderDiagStripLine('position-fail', _diagState.posFail));
   }

@@ -280,13 +280,13 @@
    svgRect), and the user reads the strip to differentiate them. */
 .mv-sim-diag-row[data-kind='position-fail'],
 .mv-sim-diag-row[data-kind='paint-fail'],
-.mv-sim-diag-row[data-kind='mount-fail'] {
+.mv-sim-diag-row[data-flag='mount-fail'] {
   border-left-color: #f43f5e;
   background: rgba(239, 68, 68, 0.1);
 }
 .mv-sim-diag-row[data-kind='position-fail'] .mv-sim-diag-kind,
 .mv-sim-diag-row[data-kind='paint-fail'] .mv-sim-diag-kind,
-.mv-sim-diag-row[data-kind='mount-fail'] .mv-sim-diag-kind {
+.mv-sim-diag-row[data-flag='mount-fail'] .mv-sim-diag-kind {
   color: #fda4af;
 }
 /* A3 · amber tint when bbox coords are in a different coord space

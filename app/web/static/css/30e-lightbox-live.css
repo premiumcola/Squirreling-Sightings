@@ -2,6 +2,57 @@
 /* Sits ABOVE the playbar (between #lightboxMediaWrap and
    #lightboxBottomStack) when live-detect is mounted. Five toggle
    pills + a hint line. 44 × 44 px touch target on mobile. */
+/* F12 · single ordered stacking container for the live-detect mount.
+   Inside #lightboxMediaWrap; replaces every prior ad-hoc child of
+   the wrap with five named slots. DOM order = visual order. */
+.mv-livedetect-stack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100dvh;
+  gap: 0;
+  background: #080510;
+}
+.mv-ld-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.mv-ld-video {
+  /* The persistent #lightboxImg / #lightboxVideo elements live here
+     (moved in by _setupLiveDetectStack). position:relative so the
+     SVG overlays (Bboxes / Trails / Zone / Mask) anchor to the
+     video slot, not to the wrap. */
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #080510;
+}
+.mv-ld-controls {
+  display: block;
+  flex-shrink: 0;
+}
+.mv-ld-timeline {
+  flex-shrink: 0;
+}
+.mv-ld-detail {
+  /* All debug / trace / log surfaces stack here in DOM order:
+     Detections → Trace fold → Debug fold. Each is a collapsible
+     accordion (F45). */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+/* F12 · while live-detect is mounted, the legacy lightbox top bar
+   is hidden — the new .mv-ld-titlebar slot owns the title surface
+   inside the stack so it's safe-area-aware. */
+#lightboxModal.lb-live-detect #lightboxTopBar {
+  display: none !important;
+}
+
 .mv-live-toggles {
   /* D34 · row sits flush against the video — 6 px above (gap with
      the wrap), 6 px below (gap with the timeline). The wrapper itself

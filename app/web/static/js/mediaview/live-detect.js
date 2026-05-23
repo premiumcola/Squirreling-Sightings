@@ -98,6 +98,64 @@ let _detBuffer = []; // [{ms, label, score, bbox, verdict}, …]
 let _overlays = { bboxes: true, trails: true, zones: false, masks: false };
 let _selectedLabel = null; // for detail-pill pin
 
+// F12 · single ordered stacking container for the live-detect mount.
+// Five named slots (titlebar / video / controls / timeline / detail)
+// inside #lightboxMediaWrap. Every prior wrap.appendChild call site
+// is now routed through _slot(name) so the slot DOM order is the
+// single source of truth — no element from the detail slot can ever
+// render above the video slot, regardless of which subsystem mounted
+// it. The stack is built once per openLiveDetect and torn down by
+// closeLiveDetect (children of the video slot — the persistent
+// <img id="lightboxImg"> + <video id="lightboxVideo"> — get moved
+// back to the wrap so recorded-clip mode reuses them unchanged).
+const _STACK_CLASS = 'mv-livedetect-stack';
+const _SLOTS = ['titlebar', 'video', 'controls', 'timeline', 'detail'];
+
+function _setupLiveDetectStack() {
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return null;
+  let stack = wrap.querySelector(`.${_STACK_CLASS}`);
+  if (stack) return stack;
+  stack = document.createElement('div');
+  stack.className = _STACK_CLASS;
+  stack.innerHTML = `
+    <header class="mv-ld-titlebar" data-slot="titlebar"></header>
+    <section class="mv-ld-video" data-slot="video"></section>
+    <nav class="mv-ld-controls" data-slot="controls"></nav>
+    <section class="mv-ld-timeline" data-slot="timeline"></section>
+    <section class="mv-ld-detail" data-slot="detail"></section>`;
+  const videoSlot = stack.querySelector('[data-slot="video"]');
+  // Move existing wrap children (the persistent #lightboxImg +
+  // #lightboxVideo elements from modals.html) into the video slot
+  // BEFORE appending the stack — otherwise appending the stack
+  // child detaches and re-attaches them in the wrong order.
+  const moved = Array.from(wrap.childNodes);
+  for (const c of moved) videoSlot.appendChild(c);
+  wrap.appendChild(stack);
+  return stack;
+}
+
+function _slot(name) {
+  if (!_SLOTS.includes(name)) return null;
+  const wrap = byId('lightboxMediaWrap');
+  return wrap?.querySelector(`.${_STACK_CLASS} [data-slot="${name}"]`) || null;
+}
+
+function _teardownLiveDetectStack() {
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return;
+  const stack = wrap.querySelector(`.${_STACK_CLASS}`);
+  if (!stack) return;
+  // Move the persistent media elements back to the wrap so the
+  // recorded-clip path finds them where modals.html declared them.
+  const videoSlot = stack.querySelector('[data-slot="video"]');
+  if (videoSlot) {
+    const moved = Array.from(videoSlot.childNodes);
+    for (const c of moved) wrap.appendChild(c);
+  }
+  stack.remove();
+}
+
 export function openLiveDetect({ camId, cameraName }) {
   if (!camId) return;
   // B12 · capture whether a prior session was mounted BEFORE
@@ -165,6 +223,10 @@ export function openLiveDetect({ camId, cameraName }) {
   let chromeOk = false;
   let mountErr = null;
   try {
+    // F12 · build the slot scaffold FIRST so every subsequent
+    // overlay / pill / accordion mount sees its slot and routes
+    // there instead of falling back to the bare wrap.
+    _setupLiveDetectStack();
     _setupLiveChrome(camId, cameraName);
     _mountPanels();
     chromeOk = true;
@@ -264,6 +326,10 @@ export function closeLiveDetect() {
   // outside the toggle row; remove it on session teardown.
   const suppressedHint = byId('mvLiveSuppressedHint');
   if (suppressedHint) suppressedHint.remove();
+  // F12 · tear down the slot scaffold and return the persistent
+  // media elements (<img id="lightboxImg">, <video id="lightboxVideo">)
+  // to the wrap so recorded-clip mode reuses them unchanged.
+  _teardownLiveDetectStack();
 }
 
 // gp384 — bbox hold + empty-banner refresh. Drives the per-frame
@@ -413,6 +479,12 @@ function _setupLiveChrome(camId, cameraName) {
   _ensureTrailsOverlay();
   _ensureZoneMaskOverlay();
   _mountOverlayToggles();
+  // F12/F23 · paint the live-detect titlebar slot. The legacy
+  // #lightboxTopBar is hidden via .lb-live-detect; this new slot
+  // is safe-area-aware and stays inside the stack so DOM order
+  // matches visual order. Close button delegates to the existing
+  // #lightboxClose handler via a click-forward.
+  _mountLiveTitlebar(cameraName, camId);
   _pinScrubberRight();
   // dn487 — paint zones + masks BEFORE the first detection tick
   // arrives. _renderZoneMaskOverlay falls back to {w:1920, h:1080}
@@ -466,53 +538,46 @@ function _installLiveOverlayRefresh(mediaEl) {
 function _ensureBboxOverlay() {
   let svg = byId('lightboxLiveOverlay');
   if (svg) return svg;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  // F12 · overlays now mount into the dedicated video slot inside
+  // the live-detect stack so they sit over the media element only,
+  // never above the title or below the timeline. Fallback to the
+  // bare wrap covers a hypothetical mount before the stack scaffold
+  // exists (defensive — openLiveDetect builds the stack first).
+  const host = _slot('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveOverlay';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  // H2.b Fix 3 · z-indexes bumped 4/5/6 → 14/15/16. The wrap is a
-  // sticky element (z-index:4 itself) which forms a stacking
-  // context; inside that context, an explicit #lightboxImg
-  // z-index:1 + position:relative (CSS) puts the image at a known
-  // floor and these SVGs at 14/15/16 sit above it regardless of
-  // ancestor stacking. Stacking order WITHIN: zones+masks bottom
-  // (14), trails middle (15), bboxes top (16) — bboxes always win
-  // so the user sees the live verdict over the historical trail.
   svg.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:16';
-  wrap.appendChild(svg);
+  host.appendChild(svg);
   return svg;
 }
 
 function _ensureTrailsOverlay() {
   let svg = byId('lightboxLiveTrails');
   if (svg) return svg;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  const host = _slot('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveTrails';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:15';
-  wrap.appendChild(svg);
+  host.appendChild(svg);
   return svg;
 }
 
 function _ensureZoneMaskOverlay() {
   let canvas = byId('lightboxLiveZoneMask');
   if (canvas) return canvas;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
-  // Canvas (not SVG) so the SAME shared zone-layer the recorded
-  // Mediathek lightbox uses can paint it — single source of truth
-  // for the letterbox math and polygon source-resolution handling
-  // (see mediaview/canvas/zone-layer.js + core/polygon-source.js).
+  const host = _slot('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   canvas = document.createElement('canvas');
   canvas.id = 'lightboxLiveZoneMask';
   canvas.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
-  wrap.appendChild(canvas);
+  host.appendChild(canvas);
   return canvas;
 }
 
@@ -673,16 +738,56 @@ function _hideToggleTip() {
   clearTimeout(_toggleTipLongPressTimer);
 }
 
+// F12/F23 · populate the titlebar slot. Renders camera name + Live
+// dot inline, plus a close button wired to the existing #lightboxClose
+// click handler (which closeLightbox already binds in lightbox.js).
+// Idempotent — innerHTML is rebuilt on every call so a re-open
+// with a different camera doesn't leak the previous name.
+function _mountLiveTitlebar(cameraName, camId) {
+  const slot = _slot('titlebar');
+  if (!slot) return;
+  const name = cameraName || camId || '';
+  slot.innerHTML = `
+    <span class="mv-ld-titlebar-name" title="${esc(name)}">${esc(name)}</span>
+    <span class="mv-ld-titlebar-live"><span class="mv-ld-titlebar-livedot" aria-hidden="true"></span>Live</span>
+    <button type="button" class="mv-ld-titlebar-close" aria-label="Schließen">
+      <svg viewBox="0 0 18 18" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <line x1="3" y1="3" x2="15" y2="15"/><line x1="15" y1="3" x2="3" y2="15"/>
+      </svg>
+    </button>`;
+  const closeBtn = slot.querySelector('.mv-ld-titlebar-close');
+  closeBtn?.addEventListener('click', () => {
+    // Delegate to the existing close button so all teardown paths
+    // (closeLightbox → closeLiveDetect via window bridge) run in
+    // the same order they would for an X-button click.
+    byId('lightboxClose')?.click();
+  });
+}
+
 function _mountOverlayToggles() {
-  const inner = byId('lightboxInner');
-  const stack = byId('lightboxBottomStack');
-  if (!inner || !stack) return;
+  // F12 · toggles live in the controls slot of the live-detect stack
+  // (between the video and the timeline). Fallback to the legacy
+  // inner-before-stack position only when the stack isn't built
+  // yet — defensive for any pre-F12 caller.
+  const controlsSlot = _slot('controls');
   let row = byId('mvLiveToggles');
   if (!row) {
     row = document.createElement('div');
     row.id = 'mvLiveToggles';
     row.className = 'mv-live-toggles';
-    inner.insertBefore(row, stack);
+    if (controlsSlot) {
+      controlsSlot.appendChild(row);
+    } else {
+      const inner = byId('lightboxInner');
+      const stack = byId('lightboxBottomStack');
+      if (!inner || !stack) return;
+      inner.insertBefore(row, stack);
+    }
+  } else if (controlsSlot && row.parentElement !== controlsSlot) {
+    // Move an existing row into the controls slot if it ended up
+    // anywhere else (e.g. a re-open after a teardown that left
+    // the row dangling in the inner).
+    controlsSlot.appendChild(row);
   }
   // ``title`` carries the desktop-native tooltip fallback for
   // platforms where the custom hover bubble doesn't engage (the
@@ -802,32 +907,26 @@ function _pinScrubberRight() {
 }
 
 function _mountPanels() {
-  const host = byId('lightboxSettings');
+  // F12 · panels move into the detail slot of the live-detect
+  // stack so they sit BELOW the video, controls, and timeline in
+  // DOM order — no chance of rendering above the video. The legacy
+  // #lightboxSettings host is still mounted by _setupVideoChrome
+  // for recorded clips; we hide it in live mode so its empty body
+  // doesn't add vertical whitespace.
+  const settings = byId('lightboxSettings');
+  if (settings) settings.hidden = true;
+  const host = _slot('detail');
   if (!host) return;
-  host.hidden = false;
-  // C3 · the Diagnose panel sits between the Detections tab and the
-  // Fein-Analyse fold. It's a native <details> with class hooks so
-  // collapse state is browser-managed (and persists across iOS Safari
-  // bfcache restores without extra JS). Collapsed by default so the
-  // panel doesn't dominate the layout the first time the user opens
-  // Simulieren; one tap expands.
-  // D67 · the Detections "tab" header was redundant — only one tab,
-  // and the panel IS the detections. Render the rows directly.
-  // D78 · the Diagnose <details> + Fein-Analyse fold get merged into
-  // a single Trace fold. The Diagnose summary's "raw=N · pass=N"
-  // pulse is now part of the Trace fold's summary line.
+  // D67 · Detections rows render directly (no tabs strip header).
+  // D78 · the Diagnose accordion + Fein-Analyse fold merge into a
+  // single Trace fold; D52's "<n> verworfen" hint lives in the
+  // controls slot, not here. F45 · the Trace fold opens collapsed.
   host.innerHTML = `
     <div class="mv-recorded-panels">
       <div id="mvLdDetections" class="mv-ld-detections"></div>
       <div class="mv-recorded-fafold"></div>
     </div>`;
   const faHost = host.querySelector('.mv-recorded-fafold');
-  // B23 · live: true so the empty-state copy reads "Warte auf
-  // ersten Tick …" instead of the recorded-clip "Kein Server-Trace
-  // gespeichert" string. Subsequent setLines() calls (via the tick
-  // loop's _appendTrace path) replace the empty state with the real
-  // decision_trace; if the loop is stuck the muted "Warte" line
-  // serves as a downstream tell-tale for the B7/B12 STUCK row.
   const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: false, live: true });
   if (_session) _session.fold = fold;
 }
@@ -1206,10 +1305,6 @@ function _setDebugDiag(on) {
     _diagState.mount = null;
     _diagState.tick = null;
     _diagState.cadence = null;
-    // C56 · when the user toggles Debug OFF, reset to the
-    // "compact next time" default per the spec. The next ON
-    // shows the one-line summary first.
-    _setDebugCollapsed(true);
   } else {
     // Render now if we have any state from the in-progress render
     // cycle; otherwise the next overlay-render tick will paint it.
@@ -1221,62 +1316,48 @@ function _setDebugDiag(on) {
   }
 }
 
-// C56 · debug strip is now an absolute-positioned element pinned to
-// the bottom edge of #lightboxMediaWrap so sibling growth (e.g. the
-// Detections panel expanding) can never compress it below
-// readability. Stacking order: above the SVG overlays (z=14/15/16).
-// The strip is a 2-piece container: a tappable header (collapsed
-// summary) + a scrollable body (full multi-row dump). Collapse state
-// persists in localStorage so the user's preference survives across
-// sessions.
-const _DEBUG_COLLAPSE_KEY = 'tam.livedetect.debug.collapsed';
-
-function _debugCollapsed() {
-  try {
-    // Default collapsed on first enable — the user has to opt into
-    // the verbose dump. Stored as a string so a missing key reads
-    // as collapsed (the safe default).
-    return localStorage.getItem(_DEBUG_COLLAPSE_KEY) !== '0';
-  } catch {
-    return true;
-  }
-}
-
-function _setDebugCollapsed(v) {
-  try {
-    localStorage.setItem(_DEBUG_COLLAPSE_KEY, v ? '1' : '0');
-  } catch {
-    /* private-mode / quota — silent */
-  }
-}
+// F12/F45 · debug strip is now an in-flow child of the .mv-ld-detail
+// slot (no absolute positioning, no localStorage persistence). It
+// flows after the Detections summary + the Trace fold in the detail
+// stack at the bottom of the live-detect mount, and is always
+// collapsed on each mount. The user can expand it within the
+// session; closing live-detect resets the state.
 
 function _ensureDiagStrip() {
   if (!_debugDiagOn()) return null;
   let strip = byId('mvSimDiagStrip');
   if (strip) return strip;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  // F12 · debug strip moves into the .mv-ld-detail slot at the
+  // bottom of the live-detect stack. Previously it was absolutely
+  // positioned inside the wrap (C56), which on iOS Safari ended up
+  // rendering ABOVE the live video — the strip was the first
+  // painted child and the wrap's flex layout pushed the video
+  // below it. As an in-flow child of the detail slot, the strip
+  // flows naturally after the Detections panel + Trace fold.
+  // F45 · always collapsed on mount; the C56 persistence is gone.
+  const host = _slot('detail') || byId('lightboxMediaWrap');
+  if (!host) return null;
   strip = document.createElement('div');
   strip.id = 'mvSimDiagStrip';
   strip.className = 'mv-sim-diag-strip';
-  // Initial collapse state mirrors localStorage so a returning user
-  // sees the strip in the same shape they left it.
-  strip.dataset.collapsed = _debugCollapsed() ? '1' : '0';
+  strip.dataset.collapsed = '1';
   strip.innerHTML = `
-    <button type="button" class="mv-sim-diag-head" aria-expanded="${_debugCollapsed() ? 'false' : 'true'}">
+    <button type="button" class="mv-sim-diag-head" aria-expanded="false">
       <span class="mv-sim-diag-summary" id="mvSimDiagSummary"></span>
       <span class="mv-sim-diag-chevron" aria-hidden="true">▾</span>
     </button>
     <div class="mv-sim-diag-body" id="mvSimDiagBody"></div>`;
-  wrap.appendChild(strip);
-  // Header click toggles collapsed/expanded + persists.
+  host.appendChild(strip);
+  // F45 · header click toggles collapsed/expanded within the
+  // current session ONLY — no localStorage persistence. Re-opening
+  // live-detect starts collapsed again so the chrome stays quiet
+  // unless the operator explicitly drills in this session.
   const header = strip.querySelector('.mv-sim-diag-head');
   header?.addEventListener('click', () => {
     const collapsed = strip.dataset.collapsed === '1';
     const next = !collapsed;
     strip.dataset.collapsed = next ? '1' : '0';
     header.setAttribute('aria-expanded', next ? 'false' : 'true');
-    _setDebugCollapsed(next);
   });
   return strip;
 }
@@ -1749,7 +1830,8 @@ function _renderBboxOverlay() {
 // nothing for this frame". Removes itself when any condition
 // flips back. Idempotent.
 function _renderEmptyHint(noBboxes) {
-  const wrap = byId('lightboxMediaWrap');
+  // F12 · banner overlays the video slot only.
+  const wrap = _slot('video') || byId('lightboxMediaWrap');
   if (!wrap) return;
   let banner = byId('mvLdEmptyHint');
   const remove = () => {
@@ -2171,7 +2253,9 @@ function _renderLiveSwimlane() {
 }
 
 function _renderDetailPill() {
-  const wrap = byId('lightboxMediaWrap');
+  // F12 · detail pill overlays the video slot (anchored absolutely
+  // inside it) so it never escapes the media region.
+  const wrap = _slot('video') || byId('lightboxMediaWrap');
   if (!wrap) return;
   let pill = byId('mvLiveDetailPill');
   if (!_selectedLabel) {

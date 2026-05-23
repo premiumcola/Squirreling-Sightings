@@ -93,21 +93,37 @@ export function renderFineAnalysisFold(host, lines, opts = {}) {
   // B23' · also remember the last error so a tick that returned ok=
   // false replaces the empty state with "Letzter Tick: <code> · …"
   // without losing the live mode.
+  // D78 · live-detect mode now uses this fold as the single "Trace"
+  // accordion replacing both the standalone Diagnose <details> AND
+  // the old Fein-Analyse fold. The structured Diagnose block sits
+  // ABOVE the terminal log inside the body; a summary suffix shows
+  // the "raw=N · pass=N · verdict" pulse next to the title without
+  // opening the fold.
   const live = !!opts.live;
   let lastError = null;
   let lastLines = lines;
+  let summaryExtra = '';
+  let headerHtml = '';
   const repaint = () => {
-    if (body) body.innerHTML = _renderLines(lastLines, { live, lastError });
+    if (!body) return;
+    const linesHtml = _renderLines(lastLines, { live, lastError });
+    body.innerHTML = headerHtml + `<div class="mv-fafold-trace">${linesHtml}</div>`;
+  };
+  const repaintSummary = () => {
+    const title = host.querySelector('.mv-fafold-title');
+    if (!title) return;
+    const base = live ? 'Trace' : 'Fein-Analyse · Trace-Log';
+    title.textContent = summaryExtra ? `${base} · ${summaryExtra}` : base;
   };
   host.innerHTML = `
     <div class="mv-fafold-root" data-open="${open0 ? '1' : '0'}"${live ? ' data-mode="live"' : ''}>
       <button type="button" class="mv-fafold-header" aria-expanded="${open0 ? 'true' : 'false'}">
         <span class="mv-fafold-chevron" aria-hidden="true">${_CHEVRON_SVG}</span>
         <span class="mv-fafold-icon" aria-hidden="true">${_TERM_SVG}</span>
-        <span class="mv-fafold-title">Fein-Analyse · Trace-Log</span>
-        <span class="mv-fafold-sub">capture · coral · verdict · matrix · armed · telegram · schedule · final</span>
+        <span class="mv-fafold-title">${live ? 'Trace' : 'Fein-Analyse · Trace-Log'}</span>
+        ${live ? '' : '<span class="mv-fafold-sub">capture · coral · verdict · matrix · armed · telegram · schedule · final</span>'}
       </button>
-      <div class="mv-fafold-body" ${open0 ? '' : 'hidden'}>${_renderLines(lines, { live })}</div>
+      <div class="mv-fafold-body" ${open0 ? '' : 'hidden'}></div>
     </div>`;
   const root = host.querySelector('.mv-fafold-root');
   const header = host.querySelector('.mv-fafold-header');
@@ -121,6 +137,9 @@ export function renderFineAnalysisFold(host, lines, opts = {}) {
       _saveOpen(willOpen);
     });
   }
+  // Initial paint
+  repaint();
+  repaintSummary();
   return {
     setLines(newLines) {
       lastLines = newLines;
@@ -141,6 +160,20 @@ export function renderFineAnalysisFold(host, lines, opts = {}) {
       // lines yet (the lastLines guard inside _renderLines handles
       // the "show trace if available, else error" branch).
       repaint();
+    },
+    setHeader(html) {
+      // D78 · structured Diagnose block painted above the terminal
+      // log when the fold is open. Live-detect calls this with the
+      // formatted "Quelle / Coral / Gates / Top / Filter / Profil /
+      // Schwellen" HTML; null or '' clears it.
+      headerHtml = html || '';
+      repaint();
+    },
+    setSummaryExtra(text) {
+      // D78 · summary suffix appended to "Trace" on the collapsed
+      // line — e.g. "raw=2 · pass=1 · alarm".
+      summaryExtra = text || '';
+      repaintSummary();
     },
   };
 }

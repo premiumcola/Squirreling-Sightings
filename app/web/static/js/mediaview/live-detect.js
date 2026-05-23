@@ -1034,12 +1034,16 @@ function _renderFrame(data) {
 // muted "Coral lieferte keine Detektion" so the absence is a positive
 // signal, not a blank panel.
 function _renderDiagPanel(diag) {
-  const body = byId('mvLdDiagBody');
-  const pulse = byId('mvLdDiagPulse');
-  if (!body) return;
+  // D78 · the Diagnose accordion is gone — content now lives inside
+  // the merged "Trace" fold. We push the structured HTML through
+  // _session.fold.setHeader() and update the summary suffix on
+  // _session.fold.setSummaryExtra() so the collapsed line carries
+  // "raw=N · pass=N · <verdict>".
+  const fold = _session?.fold;
+  if (!fold) return;
   if (!diag) {
-    body.innerHTML = `<div class="mv-ld-diag-empty">Noch keine Antwort vom Endpunkt …</div>`;
-    if (pulse) pulse.textContent = '—';
+    fold.setHeader?.('');
+    fold.setSummaryExtra?.('');
     return;
   }
   const fs = diag.frame_size || { w: 0, h: 0 };
@@ -1062,53 +1066,60 @@ function _renderDiagPanel(diag) {
         })
         .join('')
     : `<span class="mv-ld-diag-top-empty">Coral lieferte keine Detektion für diesen Frame</span>`;
-  // H1 · object_filter + validator_profile surfaced as two extra rows.
-  // Stage 3 (filter eats everything) is now one glance away in the
-  // panel — an empty filter renders as "(alle Klassen)" so the user
-  // can tell the difference between "no filter configured" and "all
-  // dets filtered out" (where the gate counts will show pass=0
-  // filtered=N).
   const objFilter = Array.isArray(diag.object_filter) ? diag.object_filter : [];
   const objFilterStr = objFilter.length
     ? objFilter.map((c) => esc(String(c))).join(' · ')
     : '(alle Klassen)';
   const profStr = diag.validator_profile ? esc(String(diag.validator_profile)) : '—';
-  body.innerHTML = `
-    <div class="mv-ld-diag-row">
-      <span class="mv-ld-diag-key">Quelle</span>
-      <span class="mv-ld-diag-val">${esc(diag.frame_src || '?')} · ${fs.w}×${fs.h} · ${Math.round(Number(diag.frame_age_ms) || 0)} ms</span>
-    </div>
-    <div class="mv-ld-diag-row">
-      <span class="mv-ld-diag-key">Coral</span>
-      <span class="mv-ld-diag-val">${esc(coralStr)}</span>
-    </div>
-    <div class="mv-ld-diag-row mv-ld-diag-gates">
-      <span class="mv-ld-diag-key">Gates</span>
-      <span class="mv-ld-diag-gate" data-kind="raw">raw=${Number(gates.raw || 0)}</span>
-      <span class="mv-ld-diag-gate" data-kind="pass">pass=${Number(gates.pass || 0)}</span>
-      <span class="mv-ld-diag-gate" data-kind="belowthresh">unter Schwelle=${Number(gates.belowthresh || 0)}</span>
-      <span class="mv-ld-diag-gate" data-kind="filtered">gefiltert=${Number(gates.filtered || 0)}</span>
-    </div>
-    <div class="mv-ld-diag-row mv-ld-diag-top">
-      <span class="mv-ld-diag-key">Top 3 raw</span>
-      <div class="mv-ld-diag-top-list">${topRows}</div>
-    </div>
-    <div class="mv-ld-diag-row">
-      <span class="mv-ld-diag-key">Filter</span>
-      <span class="mv-ld-diag-val">${objFilterStr}</span>
-    </div>
-    <div class="mv-ld-diag-row">
-      <span class="mv-ld-diag-key">Profil</span>
-      <span class="mv-ld-diag-val">${profStr}</span>
-    </div>
-    <div class="mv-ld-diag-row">
-      <span class="mv-ld-diag-key">Schwellen</span>
-      <span class="mv-ld-diag-val">global=${Number(thresholds.global || 0).toFixed(2)} · ${perClassStr}</span>
+  const headerHtml = `
+    <div class="mv-ld-diag-body">
+      <div class="mv-ld-diag-row">
+        <span class="mv-ld-diag-key">Quelle</span>
+        <span class="mv-ld-diag-val">${esc(diag.frame_src || '?')} · ${fs.w}×${fs.h} · ${Math.round(Number(diag.frame_age_ms) || 0)} ms</span>
+      </div>
+      <div class="mv-ld-diag-row">
+        <span class="mv-ld-diag-key">Coral</span>
+        <span class="mv-ld-diag-val">${esc(coralStr)}</span>
+      </div>
+      <div class="mv-ld-diag-row mv-ld-diag-gates">
+        <span class="mv-ld-diag-key">Gates</span>
+        <span class="mv-ld-diag-gate" data-kind="raw">raw=${Number(gates.raw || 0)}</span>
+        <span class="mv-ld-diag-gate" data-kind="pass">pass=${Number(gates.pass || 0)}</span>
+        <span class="mv-ld-diag-gate" data-kind="belowthresh">unter Schwelle=${Number(gates.belowthresh || 0)}</span>
+        <span class="mv-ld-diag-gate" data-kind="filtered">gefiltert=${Number(gates.filtered || 0)}</span>
+      </div>
+      <div class="mv-ld-diag-row mv-ld-diag-top">
+        <span class="mv-ld-diag-key">Top 3 raw</span>
+        <div class="mv-ld-diag-top-list">${topRows}</div>
+      </div>
+      <div class="mv-ld-diag-row">
+        <span class="mv-ld-diag-key">Filter</span>
+        <span class="mv-ld-diag-val">${objFilterStr}</span>
+      </div>
+      <div class="mv-ld-diag-row">
+        <span class="mv-ld-diag-key">Profil</span>
+        <span class="mv-ld-diag-val">${profStr}</span>
+      </div>
+      <div class="mv-ld-diag-row">
+        <span class="mv-ld-diag-key">Schwellen</span>
+        <span class="mv-ld-diag-val">global=${Number(thresholds.global || 0).toFixed(2)} · ${perClassStr}</span>
+      </div>
     </div>`;
-  if (pulse) {
-    pulse.textContent = `raw=${Number(gates.raw || 0)} · pass=${Number(gates.pass || 0)}`;
-    pulse.dataset.alert = Number(gates.raw || 0) === 0 ? '1' : '0';
-  }
+  fold.setHeader?.(headerHtml);
+  // Compact verdict for the collapsed summary. Mirrors the existing
+  // Diagnose-pulse semantics: alarm = at least one pass, below = no
+  // pass but at least one belowthresh, filtered = only filtered,
+  // — = nothing at all.
+  const raw = Number(gates.raw || 0);
+  const pass = Number(gates.pass || 0);
+  const below = Number(gates.belowthresh || 0);
+  const filtered = Number(gates.filtered || 0);
+  let verdict;
+  if (pass > 0) verdict = 'alarm';
+  else if (below > 0) verdict = 'below';
+  else if (filtered > 0) verdict = 'filtered';
+  else verdict = '—';
+  fold.setSummaryExtra?.(`raw=${raw} · pass=${pass} · ${verdict}`);
 }
 
 // A1 · in-modal debug strip — opt-in via the "Debug" pill in the

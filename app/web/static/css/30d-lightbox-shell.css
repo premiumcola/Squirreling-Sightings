@@ -379,6 +379,16 @@
   font-style: italic;
   color: rgba(226, 232, 240, 0.45);
 }
+/* D78 · structured Diagnose block now sits at the top of the fold's
+   body; the terminal trace log goes below it in its own scrollable
+   container so the header stays visible even when the user scrolls
+   through a long trace. */
+.mv-fafold-trace {
+  max-height: 40dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
 /* B23' · muted-warning variant for the "Letzter Tick: <code> · <msg>"
    live-mode banner. Same italic + size as the regular empty state,
    but tinted amber so the user immediately reads it as "the loop is

@@ -281,6 +281,16 @@
 .mv-sim-diag-row[data-kind='position-fail'] .mv-sim-diag-kind {
   color: #fda4af;
 }
+/* A3 · amber tint when bbox coords are in a different coord space
+   from the SVG viewBox — the textbook "boxes painted but invisible"
+   regression. */
+.mv-sim-diag-row[data-flag='space-mismatch'] {
+  border-left-color: #fbbf24;
+  background: rgba(245, 158, 11, 0.08);
+}
+.mv-sim-diag-row[data-flag='space-mismatch'] .mv-sim-diag-kind {
+  color: #fcd34d;
+}
 
 /* Debug pill — same visual base as the other overlay pills but
    slightly muted while OFF so it doesn't look like another always-

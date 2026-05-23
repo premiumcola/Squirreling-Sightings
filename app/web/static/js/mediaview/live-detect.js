@@ -730,6 +730,16 @@ function _renderFrame(data) {
   // Frame state for the bbox + zone/mask overlays.
   _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
   _session.lastDetections = data.detections || [];
+  // A3 · explicit coord-space disclosure from the backend (added in
+  // diag by routes/coral_test_detection.py). The debug strip's bbox
+  // row reads these to surface bbox_space + source/snap dims; if
+  // bbox_space disagrees with the viewBox space (lastFrameSize),
+  // the strip flags SPACE MISMATCH so the user sees the regression
+  // immediately. All three fall back to undefined on older backends.
+  const _diag = data.diag || {};
+  _session.lastBboxSpace = _diag.bbox_space || null;
+  _session.lastSourceFrameSize = _diag.source_frame_size || null;
+  _session.lastSnapshotFrameSize = _diag.snapshot_frame_size || null;
   // F2.b · one-shot per-session payload diagnostic. Answers the
   // "did the response actually carry detections" question without
   // requiring a tcpdump or the docker logs. Counts by verdict so
@@ -1016,9 +1026,28 @@ function _collectBboxDiagFields(svg, fs) {
       fitDims = 'err';
     }
   }
+  const source = _session?.lastSourceFrameSize;
+  const snap = _session?.lastSnapshotFrameSize;
+  const bboxSpace = _session?.lastBboxSpace || '?';
+  // A3 · viewBox is set from _session.lastFrameSize, which equals
+  // the top-level data.frame_size — the backend's stated bbox-space
+  // size. bbox_space says which space the bbox tuples actually use.
+  // The two should match: "source" ↔ source == frame_size,
+  // "snapshot" ↔ snap == frame_size. If they don't, the response is
+  // internally inconsistent — flag SPACE MISMATCH so the user sees
+  // it instead of staring at invisible boxes.
+  let mismatch = false;
+  if (bboxSpace === 'source' && source && (source.w !== fs.w || source.h !== fs.h)) {
+    mismatch = true;
+  } else if (bboxSpace === 'snapshot' && snap && (snap.w !== fs.w || snap.h !== fs.h)) {
+    mismatch = true;
+  }
   const fields = {
     dets: (_session.lastDetections || []).length,
     raw: _session.lastRawCount ?? '?',
+    bbox_space: bboxSpace,
+    source: source ? `${source.w}×${source.h}` : 'n/a',
+    snap: snap ? `${snap.w}×${snap.h}` : 'n/a',
     viewBox: `${fs.w}×${fs.h}`,
     svgRect: `${Math.round(svgRect.width)}×${Math.round(svgRect.height)}@${Math.round(svgRect.left - (wrapBox?.left || 0))},${Math.round(svgRect.top - (wrapBox?.top || 0))}`,
     zIndex: cs.zIndex,
@@ -1028,7 +1057,8 @@ function _collectBboxDiagFields(svg, fs) {
     mediaDims,
     fit: fitDims,
   };
-  return { fields, opts: {} };
+  const opts = mismatch ? { flag: 'space-mismatch', trailing: 'SPACE MISMATCH' } : {};
+  return { fields, opts };
 }
 
 // Pull current wrap/img/video geometry into the "media" row. Called

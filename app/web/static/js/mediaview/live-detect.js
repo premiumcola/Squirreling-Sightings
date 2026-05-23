@@ -1314,20 +1314,22 @@ function _refreshMediaRow() {
   // B19 · include the branch _positionSvgOverImage last took so a
   // screenshot tells us instantly whether the SVG was sized off the
   // img-rect, video-rect, or one of the wrap fallbacks. videoReady
-  // surfaces the readyState gate the new validity check uses.
+  // surfaces the readyState gate the new validity check uses; B19'
+  // adds video_rejected / img_rejected as the explicit "why" string
+  // for the screenshot reader.
   const videoReady = videoEl
     ? `rs=${videoEl.readyState || 0} vW=${videoEl.videoWidth || 0}`
     : 'n/a';
-  _diagState.media = {
-    fields: {
-      wrap: _box(wrap),
-      img: imgEl ? `${_box(imgEl)} disp=${window.getComputedStyle(imgEl).display}` : 'n/a',
-      video: videoEl ? `${_box(videoEl)} disp=${window.getComputedStyle(videoEl).display}` : 'n/a',
-      videoReady,
-      branch: _lastMediaBranch || '—',
-    },
-    opts: {},
+  const fields = {
+    wrap: _box(wrap),
+    img: imgEl ? `${_box(imgEl)} disp=${window.getComputedStyle(imgEl).display}` : 'n/a',
+    video: videoEl ? `${_box(videoEl)} disp=${window.getComputedStyle(videoEl).display}` : 'n/a',
+    videoReady,
+    branch: _lastMediaBranch || '—',
   };
+  if (_lastVideoRejected) fields.video_rejected = _lastVideoRejected;
+  if (_lastImgRejected) fields.img_rejected = _lastImgRejected;
+  _diagState.media = { fields, opts: {} };
 }
 
 function _renderBboxOverlay() {
@@ -1550,34 +1552,63 @@ function _positionSvgOverImage(svg) {
   // `<img>`. Both honour object-fit:contain so the SVG must align
   // to whichever element actually carries the pixels.
   //
-  // B19 · video validity tightened. Old check was
-  //   display !== 'none' && videoWidth > 0
-  // which still picked a stale <video> after a cam-switch — display
-  // was '' (initial), videoWidth was 0 transiently, the `>0` test
-  // failed AND the function fell through to imgEl. But sometimes
-  // videoWidth had a leftover non-zero from a previous open; the new
-  // readyState>=2 (HAVE_CURRENT_DATA) gate rejects that.
+  // B19' · video valid only when display!='none' AND videoWidth>0
+  // AND readyState>=2 (HAVE_CURRENT_DATA — actual frame decoded,
+  // not just metadata). Image valid unless naturalWidth==0 AND
+  // complete==false (browser is still fetching the first byte).
+  // Rejection reasons are stashed so the MEDIA debug row can show
+  // exactly WHY a candidate was skipped on a half-mounted session.
   const videoEl = byId('lightboxVideo');
   const imgEl = byId('lightboxImg');
   const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return;
-  const videoValid =
-    !!videoEl &&
-    videoEl.style.display !== 'none' &&
-    videoEl.videoWidth > 0 &&
-    (videoEl.readyState || 0) >= 2;
-  const imgValid = !!imgEl && imgEl.style.display !== 'none';
-  const mediaEl = videoValid ? videoEl : imgValid ? imgEl : null;
-  if (!mediaEl) {
-    _setMediaBranch('no-media');
+  if (!wrap) {
+    _setMediaBranch('skipped-no-wrap');
+    _lastVideoRejected = null;
+    _lastImgRejected = null;
     return;
   }
+  // Video validity.
+  let videoValid = false;
+  let videoRejected = null;
+  if (!videoEl) {
+    videoRejected = 'no-el';
+  } else if (videoEl.style.display === 'none') {
+    videoRejected = 'display=none';
+  } else if (!videoEl.videoWidth) {
+    videoRejected = `videoWidth=0 readyState=${videoEl.readyState || 0}`;
+  } else if ((videoEl.readyState || 0) < 2) {
+    videoRejected = `readyState=${videoEl.readyState || 0}`;
+  } else {
+    videoValid = true;
+  }
+  // Image validity. B19' tightens to also reject "not loaded yet"
+  // (naturalWidth=0 AND complete=false). Note: complete is true on
+  // multipart-replace MJPEG even when naturalWidth=0, so the AND is
+  // the right join — img with complete=true is usable for layout
+  // measurement even if the natural dimensions read zero.
+  let imgValid = false;
+  let imgRejected = null;
+  if (!imgEl) {
+    imgRejected = 'no-el';
+  } else if (imgEl.style.display === 'none') {
+    imgRejected = 'display=none';
+  } else if ((imgEl.naturalWidth || 0) === 0 && !imgEl.complete) {
+    imgRejected = 'naturalWidth=0 complete=false';
+  } else {
+    imgValid = true;
+  }
+  _lastVideoRejected = videoValid ? null : videoRejected;
+  _lastImgRejected = imgValid ? null : imgRejected;
+  const mediaEl = videoValid ? videoEl : imgValid ? imgEl : null;
   const wrapBox = wrap.getBoundingClientRect();
-  const imgBox = mediaEl.getBoundingClientRect();
-  if (wrapBox.width <= 0) return;
+  if (wrapBox.width <= 0) {
+    _setMediaBranch('skipped-no-wrap');
+    return;
+  }
+  const imgBox = mediaEl ? mediaEl.getBoundingClientRect() : null;
   let dx, dy, w, h;
   let branch;
-  if (imgBox.width > 0 && imgBox.height > 0) {
+  if (mediaEl && imgBox.width > 0 && imgBox.height > 0) {
     const fit = fittedRect(mediaEl);
     // fit is relative to the img's content box; the img's content
     // box top-left = imgBox.top/left - wrapBox.top/left.
@@ -1631,11 +1662,14 @@ function _positionSvgOverImage(svg) {
   _setMediaBranch(branch);
 }
 
-// B19 · stash the branch that _positionSvgOverImage took so the
-// media debug row from A1 can surface it. Stored as a module-level
-// scratch field on _diagState.media so the next _refreshMediaRow()
-// pickup includes it without an extra plumbing arg.
+// B19 / B19' · stash the branch + per-candidate rejection reasons
+// that _positionSvgOverImage produced so the next _refreshMediaRow()
+// pickup includes them without an extra plumbing arg. Plain module-
+// level scratch — the position helper writes them, the media-row
+// builder reads them.
 let _lastMediaBranch = null;
+let _lastVideoRejected = null;
+let _lastImgRejected = null;
 function _setMediaBranch(branch) {
   _lastMediaBranch = branch;
 }

@@ -576,6 +576,23 @@ function _logSimDiag() {
   );
 }
 
+// D34 · inline 14 px glyphs for the toggle pills. Currentcolor on the
+// stroke so the active/inactive colour rules in CSS apply uniformly
+// — no SVG fill, only stroke, matching the rest of the chrome's
+// thin-line aesthetic. Debug uses a small wrench/bug hybrid that
+// reads as "tools" without pulling in a heavier icon set.
+const _TOGGLE_ICONS = {
+  bboxes:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>',
+  trails:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13 6 9 9 11 14 4"/><circle cx="14" cy="4" r="1.4" fill="currentColor" stroke="none"/></svg>',
+  zones:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/></svg>',
+  masks:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-dasharray="3 2" aria-hidden="true"><path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/></svg>',
+  debug:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="9" r="3.2"/><path d="M8 5.8V4M5 6 3.5 4.5M11 6l1.5-1.5M5 9H3M11 9h2M5.6 12 4 13.6M10.4 12 12 13.6"/></svg>',
+};
 const _TOGGLES = [
   { id: 'bboxes', label: 'Bboxes', desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
   { id: 'trails', label: 'Trails', desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
@@ -643,15 +660,15 @@ function _mountOverlayToggles() {
   // separate _debugDiagOn() state (persisted in localStorage)
   // instead of an _overlays.* key.
   const debugOn = _debugDiagOn();
+  // D34 · compact pills. The button is the 44 px touch target (outer
+  // padding lives in CSS); the inner .mv-live-toggle-chip carries the
+  // visible chip styling (background, border, ≤32 px height). Pills
+  // lead with an inline icon glyph + the German label, single line.
+  const _chip = (id, label, desc, on) =>
+    `<button type="button" class="mv-live-toggle${id === 'debug' ? ' mv-live-toggle--debug' : ''}" data-tog="${id}" data-desc="${esc(desc)}" data-on="${on ? '1' : '0'}" title="${esc(desc)}" aria-label="${esc(label)}: ${esc(desc)}"><span class="mv-live-toggle-chip"><span class="mv-live-toggle-ico" aria-hidden="true">${_TOGGLE_ICONS[id] || ''}</span><span class="mv-live-toggle-lbl">${esc(label)}</span></span></button>`;
   row.innerHTML =
-    _TOGGLES
-      .map(
-        (t) =>
-          `<button type="button" class="mv-live-toggle" data-tog="${t.id}" data-desc="${esc(t.desc)}" data-on="${_overlays[t.id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${t.label}</button>`,
-      )
-      .join('') +
-    `<button type="button" class="mv-live-toggle mv-live-toggle--debug" data-tog="debug" data-desc="On-screen debug diagnostic strip (geometry + bbox space)" data-on="${debugOn ? '1' : '0'}" title="Debug diagnostic strip" aria-label="Debug diagnostic strip">Debug</button>` +
-    '<span class="mv-live-toggles-hint">Esc · Klicke Bbox für Details</span>';
+    _TOGGLES.map((t) => _chip(t.id, t.label, t.desc, _overlays[t.id])).join('') +
+    _chip('debug', 'Debug', 'On-screen debug diagnostic strip (geometry + bbox space)', debugOn);
   row.querySelectorAll('.mv-live-toggle').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       // Suppress click after a long-press touch: the long-press

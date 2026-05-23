@@ -3,66 +3,79 @@
    #lightboxBottomStack) when live-detect is mounted. Five toggle
    pills + a hint line. 44 × 44 px touch target on mobile. */
 .mv-live-toggles {
+  /* D34 · row sits flush against the video — 6 px above (gap with
+     the wrap), 6 px below (gap with the timeline). The wrapper itself
+     sheds its old top border / large padding so the visible weight
+     drops by half. Horizontal-scroll fallback when 5 pills overflow
+     on narrow widths (375 px iPhone fits comfortably; sub-360 px
+     phones gain scroll-snap). */
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: #0a0e1a;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 10px;
+  background: transparent;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-/* C1 · OFF vs ON now reads as outline-vs-fill — the user's iPhone
-   screenshot showed all four pills looking identical because the
-   OFF state was a faint white-tint background (.06 alpha) that on a
-   dark sim modal looked almost the same as the sky-blue ON state
-   (.30 alpha). New design: OFF is a clear outline-only chip with
-   dim text, ON is a filled accent chip with a faint glow ring.
-   Border is now drawn in BOTH states (just at different colours +
-   weights) so the boundary stays crisp on iOS Safari without
-   relying on backdrop-blur. */
+.mv-live-toggles::-webkit-scrollbar {
+  display: none;
+}
 .mv-live-toggle {
-  padding: 7px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  /* D34 · invisible 44 px tall touch target. Visible chip is a child
+     span — see .mv-live-toggle-chip below. Margin-free so flex gap
+     controls inter-pill spacing. */
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  min-height: 44px;
   outline: 0;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-live-toggle-chip {
+  /* Visible chip — keep at ~28-32 px tall regardless of touch buffer
+     above/below. Inset box-shadow draws the outline-state border so
+     toggling on/off doesn't shift the chip width by 1 px. */
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  min-height: 28px;
   border-radius: 999px;
   background: transparent;
-  color: rgba(226, 232, 240, 0.55);
+  color: rgba(226, 232, 240, 0.6);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  cursor: pointer;
-  min-height: 36px;
-  -webkit-tap-highlight-color: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.16);
   transition:
     background 0.15s,
     color 0.15s,
-    border-color 0.15s,
     box-shadow 0.15s;
 }
-.mv-live-toggle:hover {
-  background: rgba(255, 255, 255, 0.06);
+.mv-live-toggle-ico {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.mv-live-toggle:hover .mv-live-toggle-chip {
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.28);
 }
-.mv-live-toggle[data-on='1'] {
-  background: rgba(56, 189, 248, 0.42);
-  border-color: rgba(56, 189, 248, 0.7);
+.mv-live-toggle[data-on='1'] .mv-live-toggle-chip {
+  background: rgba(56, 189, 248, 0.45);
   color: #f0f9ff;
-  font-weight: 700;
-  box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.25),
-    0 0 12px rgba(56, 189, 248, 0.18);
+  box-shadow: inset 0 0 0 1.5px rgba(56, 189, 248, 0.7);
 }
-.mv-live-toggle[data-on='1']:hover {
-  background: rgba(56, 189, 248, 0.52);
-  border-color: rgba(56, 189, 248, 0.85);
-}
-.mv-live-toggles-hint {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: rgba(226, 232, 240, 0.4);
-  letter-spacing: 0.02em;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+.mv-live-toggle[data-on='1']:hover .mv-live-toggle-chip {
+  background: rgba(56, 189, 248, 0.55);
 }
 
 /* Status legend — slim band right of the Bboxes/Trails/Zonen/Masken
@@ -198,12 +211,13 @@
   }
 }
 @media (max-width: 480px) {
-  .mv-live-toggle {
-    min-height: 44px;
-    padding: 9px 14px;
-  }
-  .mv-live-toggles-hint {
-    display: none;
+  /* D34 · pills stay at 28 px visible / 44 px touch even on mobile
+     — the old override bloated the chip back to 44 px tall, eating
+     screen height. Keep gap tight (4 px) so 5 pills fit on iPhone
+     SE width without horizontal scroll. */
+  .mv-live-toggles {
+    gap: 4px;
+    padding: 4px 8px;
   }
 }
 
@@ -374,9 +388,10 @@
 }
 
 /* Debug pill — same visual base as the other overlay pills but
-   slightly muted while OFF so it doesn't look like another always-
-   on toggle. Inherits font + spacing from .mv-live-toggle. */
-.mv-live-toggle--debug[data-on='0'] {
+   slightly muted while OFF so it doesn't read as another always-on
+   toggle. Opacity is applied to the chip (not the button) so the
+   44 px touch buffer stays at full opacity for accessibility tools. */
+.mv-live-toggle--debug[data-on='0'] .mv-live-toggle-chip {
   opacity: 0.55;
 }
 

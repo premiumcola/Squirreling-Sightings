@@ -723,7 +723,13 @@ function _mountPanels() {
     },
   ];
   renderPanelTabs(tabsHost, tabs, { initialId: 'detections' });
-  const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: true });
+  // B23 · live: true so the empty-state copy reads "Warte auf
+  // ersten Tick …" instead of the recorded-clip "Kein Server-Trace
+  // gespeichert" string. Subsequent setLines() calls (via the tick
+  // loop's _appendTrace path) replace the empty state with the real
+  // decision_trace; if the loop is stuck the muted "Warte" line
+  // serves as a downstream tell-tale for the B7/B12 STUCK row.
+  const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: true, live: true });
   if (_session) _session.fold = fold;
 }
 

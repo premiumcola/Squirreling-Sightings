@@ -47,8 +47,18 @@ function _saveOpen(open) {
   }
 }
 
-function _renderLines(lines) {
+function _renderLines(lines, opts = {}) {
   if (!Array.isArray(lines) || lines.length === 0) {
+    // B23 · the live-detect mount is the only producer of trace
+    // lines that's still polling — when no tick has returned yet,
+    // showing the recorded-clip "Kein Server-Trace gespeichert"
+    // copy is misleading. Render a short muted "waiting" line
+    // instead so the user knows the fold is correctly bound to a
+    // live source, just empty for now. As soon as the first tick
+    // delivers data the setLines() call below paints the real trace.
+    if (opts.live) {
+      return `<div class="mv-fafold-empty">Warte auf ersten Tick …</div>`;
+    }
     return `<div class="mv-fafold-empty">Kein Server-Trace gespeichert für diese Aufnahme — Trace ist nur im Live-Test verfügbar.</div>`;
   }
   return lines
@@ -64,15 +74,20 @@ function _renderLines(lines) {
 export function renderFineAnalysisFold(host, lines, opts = {}) {
   if (!host) return null;
   const open0 = _isOpen(opts.defaultOpen);
+  // B23 · live-detect mounts pass { live: true } so the empty-state
+  // copy reads "Warte auf ersten Tick …" instead of the recorded-
+  // clip "Kein Server-Trace gespeichert" string. Capture the flag in
+  // the closure so subsequent setLines() calls keep the same shape.
+  const live = !!opts.live;
   host.innerHTML = `
-    <div class="mv-fafold-root" data-open="${open0 ? '1' : '0'}">
+    <div class="mv-fafold-root" data-open="${open0 ? '1' : '0'}"${live ? ' data-mode="live"' : ''}>
       <button type="button" class="mv-fafold-header" aria-expanded="${open0 ? 'true' : 'false'}">
         <span class="mv-fafold-chevron" aria-hidden="true">${_CHEVRON_SVG}</span>
         <span class="mv-fafold-icon" aria-hidden="true">${_TERM_SVG}</span>
         <span class="mv-fafold-title">Fein-Analyse · Trace-Log</span>
         <span class="mv-fafold-sub">capture · coral · verdict · matrix · armed · telegram · schedule · final</span>
       </button>
-      <div class="mv-fafold-body" ${open0 ? '' : 'hidden'}>${_renderLines(lines)}</div>
+      <div class="mv-fafold-body" ${open0 ? '' : 'hidden'}>${_renderLines(lines, { live })}</div>
     </div>`;
   const root = host.querySelector('.mv-fafold-root');
   const header = host.querySelector('.mv-fafold-header');
@@ -88,7 +103,7 @@ export function renderFineAnalysisFold(host, lines, opts = {}) {
   }
   return {
     setLines(newLines) {
-      if (body) body.innerHTML = _renderLines(newLines);
+      if (body) body.innerHTML = _renderLines(newLines, { live });
     },
   };
 }

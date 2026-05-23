@@ -33,9 +33,25 @@ import { _setupVideoChrome } from '../lightbox.js';
 import { tryAttachHls } from '../core/hls-attach.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
 
-const _TICK_MIN_MS = 1000;
+// C73 · cadence floors. The original 1 Hz floor was set against the
+// main-stream cost budget (2560×1440 frame copy + JPEG encode +
+// inference ~600-1500 ms). With C41's sub-stream path the per-tick
+// cost drops to ~250 ms, so 500 ms is a safe floor on that path.
+// _scheduleNext picks the right floor based on the most recent
+// diag.frame_src; the main_fallback path keeps the 1 Hz floor so an
+// unhealthy / sub-disabled camera doesn't get hammered.
+const _TICK_FLOOR_SUB_MS = 500;
+const _TICK_FLOOR_MAIN_MS = 1000;
 const _TICK_MAX_MS = 4000;
 const _TICK_FACTOR = 1.2;
+
+// C84 · dynamic bbox hold-time scaffolding. The cycle EMA is
+// populated by _scheduleNext on every cycle, then _holdMsActive
+// is derived from it (clamp(2*EMA, 800, 1500)). Both stay valid
+// at module level so the CADENCE row from C73 can read them
+// without late-binding gymnastics.
+let _cycleEmaMs = NaN;
+let _holdMsActive = NaN;
 // 60 s sliding window for the swimlane. Detections older than this
 // age out of the visible strip.
 const _LIVE_WINDOW_MS = 60_000;
@@ -840,12 +856,22 @@ async function _tick() {
 
 function _scheduleNext(session, lastCycleMs) {
   if (_session !== session) return;
-  const projected = Math.round(
-    (Number.isFinite(lastCycleMs) ? lastCycleMs : _TICK_MIN_MS) * _TICK_FACTOR,
-  );
-  const delay = Math.min(_TICK_MAX_MS, Math.max(_TICK_MIN_MS, projected));
+  // C73 · floor depends on which stream the LAST tick used. Sub-
+  // stream ticks cost less, so 500 ms is the floor on that path.
+  // The fallback floor of 1 s keeps the unhealthy-camera case from
+  // getting hammered. Unknown (first tick) defaults to the safer
+  // 1 s floor — the second tick will tighten if sub came back.
+  const src = session.lastFrameSrc || 'unknown';
+  const floor = src === 'sub' ? _TICK_FLOOR_SUB_MS : _TICK_FLOOR_MAIN_MS;
+  const cycleMs = Number.isFinite(lastCycleMs) ? lastCycleMs : floor;
+  const projected = Math.round(cycleMs * _TICK_FACTOR);
+  const delay = Math.min(_TICK_MAX_MS, Math.max(floor, projected));
   _tickState.nextTickAt = Date.now() + delay;
+  _tickState.lastCycleMs = cycleMs;
+  _tickState.lastFloorMs = floor;
+  _tickState.lastDelayMs = delay;
   session.tickHandle = setTimeout(_tick, delay);
+  _refreshCadenceRow();
 }
 
 function _renderFrame(data) {
@@ -868,6 +894,11 @@ function _renderFrame(data) {
   _session.lastBboxSpace = _diag.bbox_space || null;
   _session.lastSourceFrameSize = _diag.source_frame_size || null;
   _session.lastSnapshotFrameSize = _diag.snapshot_frame_size || null;
+  // C73 · remember which stream the backend served this frame from
+  // so _scheduleNext can pick the right floor on the NEXT cycle.
+  // Falls back to undefined when an older backend didn't send the
+  // field — _scheduleNext treats that as 'unknown' → safe 1 s floor.
+  if (_diag.frame_src) _session.lastFrameSrc = _diag.frame_src;
   // F2.b · one-shot per-session payload diagnostic. Answers the
   // "did the response actually carry detections" question without
   // requiring a tcpdump or the docker logs. Counts by verdict so
@@ -1195,6 +1226,7 @@ function _renderDiagStrip() {
   // truthful even when the rest of the strip is updating for other
   // reasons. Cheap (date math + computed status flag).
   _refreshTickRow();
+  _refreshCadenceRow();
   // B12' · MOUNT row split out from the inline fields so the row can
   // appear at the TOP of the strip even on the success path (muted)
   // — drawing the eye first to "did the mount succeed" before
@@ -1403,6 +1435,29 @@ function _refreshTickRow() {
   }
   const opts = flag ? { flag, trailing } : {};
   _diagState.tick = { fields, opts };
+}
+
+// C73 · paint the CADENCE row from _tickState's last-scheduled
+// snapshot + the running EMA. Compact one-row dump (floor / cycle /
+// next / mode / hold) — keeps the strip readable on iPhone width.
+// Called from _scheduleNext and from _renderDiagStrip so the row
+// stays current even when the loop is wedged.
+function _refreshCadenceRow() {
+  if (!_debugDiagOn()) return;
+  const src = _session?.lastFrameSrc || 'unknown';
+  const mode = src === 'sub' ? 'sub-fast' : src === 'main_fallback' ? 'main-slow' : 'unknown';
+  const floor = _tickState.lastFloorMs;
+  const cycle = _tickState.lastCycleMs;
+  const delay = _tickState.lastDelayMs;
+  const fields = {
+    mode,
+    floor_ms: Number.isFinite(floor) ? String(Math.round(floor)) : '—',
+    last_cycle_ms: Number.isFinite(cycle) ? String(Math.round(cycle)) : '—',
+    next_in_ms: Number.isFinite(delay) ? String(Math.round(delay)) : '—',
+    hold_ms: Number.isFinite(_holdMsActive) ? String(Math.round(_holdMsActive)) : '—',
+    avg_cycle_ms: Number.isFinite(_cycleEmaMs) ? String(Math.round(_cycleEmaMs)) : '—',
+  };
+  _diagState.cadence = { fields, opts: {} };
 }
 
 // Pull current wrap/img/video geometry into the "media" row. Called

@@ -6,6 +6,7 @@ from __future__ import annotations
 # import bookkeeping. Trim later if a mixin grows enough to warrant it.
 import json as _json_mod
 import logging
+import os
 import shutil as _shutil
 import subprocess as _subprocess
 import threading
@@ -757,6 +758,26 @@ class MainLoopMixin:
             except Exception as e:
                 self._error_streak += 1
                 self.last_error = str(e)
+                # V81 · per-failure diagnostic. Env-gated so non-flapping
+                # installs pay zero log overhead. Uses the existing
+                # _last_rtsp_success_ts (set on every successful grab)
+                # as the "since last good frame" timestamp.
+                if os.getenv("FLAP_DIAG", "").lower() in ("1", "true", "yes"):
+                    _last_ok = self._last_rtsp_success_ts or 0.0
+                    _since = (time.time() - _last_ok) if _last_ok else -1.0
+                    _reconnects_24h = len(
+                        [t for t in self._reconnect_log if time.time() - t < 86400]
+                    )
+                    log.info(
+                        "[cam:%s][flap] streak=%d err=%s:%s "
+                        "since_last_ok=%.1fs reconnects_24h=%d",
+                        self.camera_id,
+                        self._error_streak,
+                        type(e).__name__,
+                        str(e)[:200],
+                        _since,
+                        _reconnects_24h,
+                    )
                 if self._error_streak == 1:
                     log.debug("[%s] Frame lesen fehlgeschlagen: %s", self.camera_id, e)
                 elif self._error_streak == 5:

@@ -42,6 +42,12 @@ services:
       # with the per-handle runtime override. Format follows OpenCV's
       # FFmpeg-options grammar (key;value pairs joined by `|`).
       - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|stimeout;5000000
+      # V81 · pass through host-side FLAP_DIAG so the per-failure
+      # diagnostic + parallel network probe in camera_runtime fire
+      # only when the operator explicitly enables them
+      # (FLAP_DIAG=1 docker compose up -d). Empty when unset → the
+      # `os.getenv("FLAP_DIAG")` check returns "" and short-circuits.
+      - FLAP_DIAG=${FLAP_DIAG:-}
 
   # Coral TPU variant — uncomment and use instead of above if you have a Coral USB TPU
   # tam-spy-coral:

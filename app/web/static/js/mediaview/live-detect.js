@@ -1192,8 +1192,15 @@ function _refreshTickRow() {
   if (!_debugDiagOn()) return;
   const now = Date.now();
   const sessionOn = !!_session;
+  // B7' · field names match the new spec exactly so the iPhone
+  // screenshot can be diffed against the prompt without translating:
+  //   sinceTick  → last_tick_started_ms_ago
+  //   sinceResp  → last_resp_ok_ms_ago (only set on ok=true responses)
+  //   mountedAt  → mounted_ms_ago      (drives the "never-resp + age"
+  //                                     STUCK trigger below)
   const sinceTick = _tickState.lastTickAt ? now - _tickState.lastTickAt : Infinity;
   const sinceResp = _tickState.lastRespAt ? now - _tickState.lastRespAt : Infinity;
+  const sinceMount = _tickState.startedAt ? now - _tickState.startedAt : Infinity;
   const nextIn = _tickState.nextTickAt ? Math.max(0, _tickState.nextTickAt - now) : null;
   const abortPending = !!(
     _session &&
@@ -1201,15 +1208,20 @@ function _refreshTickRow() {
     _session.abort.signal &&
     !_session.abort.signal.aborted
   );
-  // STUCK rules: session mounted but the loop hasn't entered in 15 s
-  // OR has never produced a successful response. Amber threshold 5 s
-  // so a single slow request lights up before it becomes a full
-  // outage. Both apply only while a session is supposed to be
-  // running — idle session = clean grey row.
+  // STUCK rules (B7'):
+  //   red  · session=="mounted" AND (
+  //             last_tick_started_ms_ago > 15000
+  //           OR last_resp_ok_ms_ago === Infinity AND mounted_ms_ago > 8000
+  //         )
+  //   amber· session=="mounted" AND last_tick_started_ms_ago > 5000
+  // The "Infinity + 8 s mount age" rule catches Session 1's pattern:
+  // chrome mounted, tick fires repeatedly, but no ok response ever
+  // — by 8 s after openLiveDetect we know that's the real fail mode.
   let flag = null;
   let trailing = '';
   if (sessionOn) {
-    if (sinceTick > 15_000 || !Number.isFinite(sinceResp)) {
+    const neverResp = !Number.isFinite(sinceResp);
+    if (sinceTick > 15_000 || (neverResp && sinceMount > 8_000)) {
       flag = 'tick-stuck';
       trailing = 'STUCK';
     } else if (sinceTick > 5_000) {
@@ -1220,22 +1232,19 @@ function _refreshTickRow() {
   const fields = {
     session: sessionOn ? 'mounted' : 'idle',
     camId: _tickState.startedWithCamId || '—',
-    last_tick_ms_ago: fmtMs(sinceTick),
-    last_resp_ms_ago: fmtMs(sinceResp),
+    last_tick_started_ms_ago: fmtMs(sinceTick),
+    last_resp_ok_ms_ago: fmtMs(sinceResp),
     last_status: String(_tickState.lastStatus ?? '—'),
     next_in_ms: nextIn == null ? '—' : String(nextIn),
+    camId_match: sessionOn && _session.camId === _tickState.startedWithCamId ? 'true' : 'false',
     abort_pending: abortPending ? 'true' : 'false',
+    mounted_ms_ago: fmtMs(sinceMount),
   };
-  if (_tickState.startedAt) {
-    fields.started_at = new Date(_tickState.startedAt).toISOString();
-  }
-  if (_tickState.tornDownPrev) {
-    fields.torn_down_prev = 'true';
-  }
-  // B31 · only surface the late-drop counter when non-zero so the
-  // healthy case stays clean. Wired in B31 commit.
+  // B31' · counter + reason for the most recent silent drop. Both
+  // hidden when N=0 so the healthy case stays clean.
   if ((_tickState.ticksDroppedLate || 0) > 0) {
-    fields.ticks_dropped_late = String(_tickState.ticksDroppedLate);
+    fields.dropped = String(_tickState.ticksDroppedLate);
+    if (_tickState.lastDropReason) fields.drop_reason = _tickState.lastDropReason;
   }
   const opts = flag ? { flag, trailing } : {};
   _diagState.tick = { fields, opts };

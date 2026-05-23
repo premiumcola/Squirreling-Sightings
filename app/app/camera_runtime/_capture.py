@@ -169,6 +169,10 @@ class CaptureMixin:
                         self._preview_resolution = f"{w}×{h}"
                         with self.lock:
                             self._preview_frame = frame
+                            # C41 · mirror of frame_ts on the main path.
+                            # Read by routes/coral_test_detection to gate
+                            # the sub-stream tier on freshness.
+                            self._preview_frame_ts = time.time()
                         # Wetter-Sichtungen prebuffer hook — only spends CPU
                         # on JPEG encoding when a WeatherService has actually
                         # attached a buffer to this camera.

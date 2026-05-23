@@ -145,6 +145,11 @@ class CameraRuntime(
         self.frame = None  # latest raw frame from main stream (main loop only writes)
         self.preview = None  # latest annotated frame (main loop only writes)
         self._preview_frame = None  # latest clean sub-stream frame (preview loop only writes)
+        # C41 · timestamp of the most recent _preview_frame write. Mirror of
+        # self.frame_ts on the main-stream path. routes/coral_test_detection
+        # reads this to verify the sub-stream candidate is fresh enough to
+        # serve as Coral inference input.
+        self._preview_frame_ts: float = 0.0
         # ── Threading ────────────────────────────────────────────────────────
         self.running = False
         self.thread = None

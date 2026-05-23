@@ -24,6 +24,12 @@ from .. import app_state
 bp = Blueprint("coral_test_detection", __name__)
 log = logging.getLogger(__name__)
 
+# C41 · per-camera last "sub-stream unavailable, fell back to main"
+# warn timestamp. Rate-limits to once per 60 s so a camera with the
+# sub-stream permanently disabled (firmware option, RTSP URL typo)
+# doesn't spam docker logs on every Simulieren tick.
+_FALLBACK_WARN_TS: dict[str, float] = {}
+
 
 @bp.post('/api/cameras/<cam_id>/test-detection')
 def api_test_detection(cam_id: str):
@@ -103,7 +109,36 @@ def api_test_detection(cam_id: str):
     # spam on a Reolink in IR-cut transition).
     last_validator_reason: str = ""
     active_profile = None
+    # C41 · "frame_src" identifies which stream the served frame came
+    # from. The sub-stream tier (640×360, H.264) is preferred because
+    # Coral SSD-MobileNet resizes its input to 300×300 internally; the
+    # extra resolution of the main stream costs cycles without any
+    # detection-quality gain for the subjects we care about. We fall
+    # back to the main stream only when the sub path is unavailable
+    # for the entire 2.5 s wait deadline. frame_src is also surfaced
+    # in diag so the operator can confirm the path live in the UI.
+    frame_src_used = ""
     while _time.monotonic() < deadline:
+        # Tier 1 · sub-stream (preferred). _preview_loop writes a clean
+        # H.264 frame here; the corrupt-strip check is skipped because
+        # that artefact is a main-stream-only failure mode.
+        with rt.lock:
+            sub_candidate = rt._preview_frame.copy() if rt._preview_frame is not None else None
+            sub_candidate_ts = float(getattr(rt, "_preview_frame_ts", 0.0) or 0.0)
+        if sub_candidate is not None:
+            if sub_candidate_ts >= request_started_at - 1.0:
+                frame = sub_candidate
+                frame_ts_accepted = sub_candidate_ts
+                last_candidate_ts = max(last_candidate_ts, sub_candidate_ts)
+                saw_frame = True
+                saw_fresh_candidate = True
+                active_profile = pick_profile_from_baseline([sub_candidate])
+                frame_src_used = "sub"
+                final_outcome = "ok"
+                break
+        # Tier 2 · main-stream fallback. Same shape as the original
+        # wait loop: poll rt.frame, gate on freshness + has_corrupt_strip,
+        # accept on first survivor.
         with rt.lock:
             candidate = rt.frame.copy() if rt.frame is not None else None
             candidate_ts = float(getattr(rt, "frame_ts", 0.0) or 0.0)
@@ -118,10 +153,6 @@ def api_test_detection(cam_id: str):
             _time.sleep(0.05)
             continue
         saw_fresh_candidate = True
-        # Profile pick stays — kept for the response payload so the
-        # diag panel can show whether the scene was classified
-        # DAY/TWILIGHT/NIGHT for context, even though no profile-
-        # specific validator runs on this path anymore.
         active_profile = pick_profile_from_baseline([candidate])
         if has_corrupt_strip(candidate):
             final_outcome = "corrupt"
@@ -132,9 +163,9 @@ def api_test_detection(cam_id: str):
             )
             _time.sleep(0.05)
             continue
-        # Accepted — fresh, no decoder-strip artefact.
         frame = candidate
         frame_ts_accepted = candidate_ts
+        frame_src_used = "main_fallback"
         final_outcome = "ok"
         break
 
@@ -188,13 +219,26 @@ def api_test_detection(cam_id: str):
             }
         ), 503
     frame_age_ms = int((_time.time() - frame_ts_accepted) * 1000)
-    # rt.frame is written by camera_runtime/_main_loop on every successful
-    # MAIN stream grab (RTSP main URL via cv2.VideoCapture). The sub-stream
-    # never touches it — so frame_src is always 'main' here. We capture the
-    # resolution explicitly so the operator-visible diag panel can flag a
-    # mis-routed sub-stream as soon as one is introduced.
+    # C41 · frame_src is now either "sub" (preferred path, written by
+    # _preview_loop into rt._preview_frame) or "main_fallback" (the
+    # rt.frame path, only when sub was unavailable for the entire
+    # 2.5 s wait). Both branches set frame_src_used above; we derive
+    # the human label here for the existing log line. A WARNING fires
+    # ONCE per 60 s per camera on fallback so a sub-stream-less cam
+    # doesn't spam the log.
     src_h_raw, src_w_raw = frame.shape[:2]
-    frame_src_label = f"main {src_w_raw}×{src_h_raw}"
+    if frame_src_used == "sub":
+        frame_src_label = f"sub {src_w_raw}×{src_h_raw}"
+    else:
+        frame_src_label = f"main_fallback {src_w_raw}×{src_h_raw}"
+        now_ts = _time.time()
+        last_warn = _FALLBACK_WARN_TS.get(cam_id, 0.0)
+        if now_ts - last_warn > 60.0:
+            _FALLBACK_WARN_TS[cam_id] = now_ts
+            log.warning(
+                "[test-detection] cam=%s sub-stream unavailable, falling back to main-stream",
+                cam_id,
+            )
     detector = getattr(rt, "detector", None)
     if not detector or not getattr(detector, "available", False):
         # WARNING level: a Coral-disabled test request is almost always
@@ -486,8 +530,15 @@ def api_test_detection(cam_id: str):
     # (and so future regression hunts have one canonical shape to
     # read against). All values either appear in the WARNING log
     # line above or extend it (per_class thresholds, inference_ms).
+    # C41 · sub_stream_available is independent of frame_src — the
+    # sub stream may exist but be too stale, in which case this tick
+    # served from main_fallback yet sub is still "available" for the
+    # next try. Frontend reads this to know whether enabling/fixing
+    # the sub stream is even a path forward.
+    sub_stream_available = bool(getattr(rt, "_preview_frame", None) is not None)
     diag = {
-        "frame_src": "main",
+        "frame_src": frame_src_used or "main_fallback",
+        "sub_stream_available": sub_stream_available,
         "frame_size": {"w": int(src_w_raw), "h": int(src_h_raw)},
         "frame_age_ms": int(frame_age_ms),
         "coral_available": bool(getattr(detector, "available", False)),

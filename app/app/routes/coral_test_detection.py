@@ -515,6 +515,21 @@ def api_test_detection(cam_id: str):
         # the single most-informative diagnostic.
         "validator_profile": (active_profile.name if active_profile else None),
         "validator_reason": last_validator_reason or None,
+        # A2 · explicit coord-space disclosure for the bbox payload.
+        # The top-level response carries `frame_size` = the bbox-space
+        # size (snap_w/snap_h, contract-stable). These additive diag
+        # fields let the frontend assert that the SVG viewBox space
+        # matches the bbox space without inferring scale from the JPEG:
+        #   - source_frame_size : raw frame Coral ran inference on
+        #   - snapshot_frame_size: encoded JPEG dims (= source when
+        #                          no_snapshot=1)
+        #   - bbox_space        : "source" when snap_scale == 1.0 (no
+        #                          rewrite happened), "snapshot" when
+        #                          the bbox coords were scaled to the
+        #                          downscaled JPEG before serialising.
+        "source_frame_size": {"w": int(src_w_raw), "h": int(src_h_raw)},
+        "snapshot_frame_size": {"w": int(snap_w), "h": int(snap_h)},
+        "bbox_space": "source" if snap_scale == 1.0 else "snapshot",
     }
     return jsonify(
         {

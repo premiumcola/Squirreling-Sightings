@@ -596,10 +596,40 @@
    in the title bar reads brighter than a recorded timestamp, and
    the SVG bbox overlay needs explicit pointer-events:none so a tap
    on the canvas selects the underlying <img> click rules (no-op). */
+/* D91 · quieter title bar in live-detect mode. Total height ≤56 px
+   (was ~80 px), no background separation from the page, no border.
+   Tight line-height so cam name + "● Live" stack without crowding
+   the 16:9 video below. Close X stays in its own 44 px touch circle
+   but the glyph shrinks to 18 px so the chrome stops dominating. */
+#lightboxModal.lb-live-detect #lightboxTopBar {
+  min-height: 0;
+  padding: 8px 8px 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+#lightboxModal.lb-live-detect #lightboxTopCam {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+#lightboxModal.lb-live-detect #lightboxTopActions > button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  background: transparent;
+}
+#lightboxModal.lb-live-detect #lightboxTopActions > button svg {
+  width: 18px;
+  height: 18px;
+}
 #lightboxModal.lb-live-detect #lightboxTopTime {
-  color: #86efac;
-  font-weight: 700;
+  color: rgba(134, 239, 172, 0.85);
+  font-weight: 500;
+  font-size: 12px;
   letter-spacing: 0.04em;
+  line-height: 1.15;
 }
 /* H2.b Fix 1 · the previous ID-rule
      #lightboxLiveOverlay { pointer-events: none; }

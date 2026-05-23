@@ -85,7 +85,12 @@ function _renderLines(lines, opts = {}) {
 
 export function renderFineAnalysisFold(host, lines, opts = {}) {
   if (!host) return null;
-  const open0 = _isOpen(opts.defaultOpen);
+  // F45 · live-detect mounts ALWAYS start with the caller's
+  // defaultOpen value (collapsed). Recorded clips keep the
+  // localStorage three-state so the user's previous toggle survives
+  // a page reload. The branch fork is intentional: live mode wants
+  // a quiet chrome on every reopen, recorded mode wants memory.
+  const open0 = opts.live ? !!opts.defaultOpen : _isOpen(opts.defaultOpen);
   // B23 · live-detect mounts pass { live: true } so the empty-state
   // copy reads "Warte auf ersten Tick …" instead of the recorded-
   // clip "Kein Server-Trace gespeichert" string. Capture the flag in
@@ -134,7 +139,11 @@ export function renderFineAnalysisFold(host, lines, opts = {}) {
       body.hidden = !willOpen;
       header.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
       root.dataset.open = willOpen ? '1' : '0';
-      _saveOpen(willOpen);
+      // F45 · live-detect mode: do NOT persist the toggle. Closing
+      // and re-opening the view should always start with the
+      // caller-declared defaultOpen, not the user's most recent
+      // session interaction.
+      if (!live) _saveOpen(willOpen);
     });
   }
   // Initial paint

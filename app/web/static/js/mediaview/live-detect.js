@@ -618,23 +618,17 @@ function _ensureZoneMaskOverlay() {
 // Details" line that appears only when at least one non-pass det
 // is on the canvas, and tapping it toggles the detections panel
 // between "pass-only" (the default) and "all detections" view.
-// State persists in localStorage so the user's preference survives.
-const _DETECTIONS_EXPAND_KEY = 'tam.livedetect.detections.expanded';
-
+// F45 · state is in-session ONLY — _session._detectionsExpanded
+// resets to false on every openLiveDetect call (the same way Trace +
+// Debug folds reset). The C56/D52 localStorage persistence was
+// removed because user feedback showed it leaves the chrome in a
+// noisy state on next open.
 function _detectionsExpanded() {
-  try {
-    return localStorage.getItem(_DETECTIONS_EXPAND_KEY) === '1';
-  } catch {
-    return false;
-  }
+  return !!_session?._detectionsExpanded;
 }
 
 function _setDetectionsExpanded(v) {
-  try {
-    localStorage.setItem(_DETECTIONS_EXPAND_KEY, v ? '1' : '0');
-  } catch {
-    /* private-mode / quota — silent */
-  }
+  if (_session) _session._detectionsExpanded = !!v;
 }
 
 function _updateSuppressedHint(nonPassCount) {
@@ -2166,14 +2160,24 @@ function _renderDetectionsPanel(data) {
   const detHost = byId('mvLdDetections');
   if (!detHost) return;
   const dets = data.detections || [];
-  // D67 · no header, no empty-state row. When there are no rows the
-  // panel collapses to zero height; the suppressed-hint above the
-  // panel already tells the user about non-pass items.
-  // Sort: pass first, then belowthresh, then filtered; within each
-  // bucket descending by score. Backed by the D52 detections-expanded
-  // toggle — pass-only by default, expanded shows everything.
+  // F45 · the Detections panel has TWO collapse states:
+  //   1. Zero pass detections, not expanded → one muted summary
+  //      line "Keine aktiven Detektionen". Tap reveals all
+  //      detections (incl. belowthresh / filtered).
+  //   2. ≥1 pass detection (or user expanded) → rows from D67.
+  // Sort: pass → belowthresh → filtered; within each desc by score.
   const verdictRank = { pass: 0, belowthresh: 1, filtered: 2 };
   const expanded = _detectionsExpanded();
+  const passCount = dets.reduce((n, d) => n + (d.verdict === 'pass' ? 1 : 0), 0);
+  if (passCount === 0 && !expanded) {
+    detHost.innerHTML = `<button type="button" class="mv-ld-detections-summary">Keine aktiven Detektionen</button>`;
+    const sum = detHost.querySelector('.mv-ld-detections-summary');
+    sum?.addEventListener('click', () => {
+      _setDetectionsExpanded(true);
+      if (_session?.lastFullData) _renderDetectionsPanel(_session.lastFullData);
+    });
+    return;
+  }
   const visible = (expanded ? dets : dets.filter((d) => d.verdict === 'pass'))
     .slice()
     .sort((a, b) => {

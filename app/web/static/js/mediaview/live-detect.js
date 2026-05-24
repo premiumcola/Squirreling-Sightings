@@ -2065,51 +2065,62 @@ function _renderZoneMaskOverlay() {
 }
 
 function _renderDetectionsPanel(data) {
+  // SIMU-04b · the Detections tab content is three sections:
+  //   1. AKTIVE TRACKS — pass-verdict dets with their track-#N badge
+  //   2. VERWORFEN     — filtered (off-filter class) dets, current tick only
+  //   3. TRACK-EREIGNISSE — last 30 s of SPAWN/CONT/DEATH/RE-ID lines
+  //                          derived from the decision_trace stream
+  // Sections render in this order, each preceded by a tiny matrix-
+  // muted mini-header. Empty states are per-section so a screenshot
+  // tells the user which signal is silent vs which has data.
   const detHost = byId('mvLdDetections');
   if (!detHost) return;
   const dets = data.detections || [];
-  // D67 · no header, no empty-state row. When there are no rows the
-  // panel collapses to zero height; the suppressed-hint above the
-  // panel already tells the user about non-pass items.
-  // Sort: pass first, then belowthresh, then filtered; within each
-  // bucket descending by score. Backed by the D52 detections-expanded
-  // toggle — pass-only by default, expanded shows everything.
-  const verdictRank = { pass: 0, belowthresh: 1, filtered: 2 };
-  const expanded = _detectionsExpanded();
-  const visible = (expanded ? dets : dets.filter((d) => d.verdict === 'pass'))
-    .slice()
-    .sort((a, b) => {
-      const ra = verdictRank[a.verdict] ?? 3;
-      const rb = verdictRank[b.verdict] ?? 3;
-      if (ra !== rb) return ra - rb;
-      return (b.score || 0) - (a.score || 0);
-    });
-  if (!visible.length) {
-    detHost.innerHTML = '';
-    return;
-  }
-  detHost.innerHTML = visible
-    .map((d) => {
-      const c = colors[d.label] || colors.unknown;
-      const lblText = OBJ_LABEL[d.label] || d.label;
-      const tone = d.verdict === 'pass' ? 'ok' : d.verdict === 'belowthresh' ? 'warn' : 'mute';
-      const verdictText =
-        d.verdict === 'pass'
-          ? 'PASS'
-          : d.verdict === 'belowthresh'
-            ? 'unter Schwelle'
-            : d.verdict === 'filtered'
-              ? 'gefiltert'
-              : '—';
-      return `<button type="button" class="mv-ld-row" data-tone="${tone}" data-label="${esc(d.label)}">
-      <span class="mv-ld-row-bar" style="background:${c}"></span>
-      <span class="mv-ld-row-label">${esc(lblText)}</span>
-      <span class="mv-ld-row-score">${Math.round((d.score || 0) * 100)} %</span>
-      <span class="mv-ld-row-verdict">${esc(verdictText)}</span>
-    </button>`;
+  const cam = (state.cameras || []).find((c) => c.id === _session?.camId) || {};
+  const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : null;
+  const objFilter = filterArr && filterArr.length > 0 ? new Set(filterArr) : null;
+  // SECTION 1 · Active tracks. "Active" here = the pass-verdict
+  // detections from the current tick, sorted by OBJ_LABEL order then
+  // score descending. age_seconds isn't surfaced by the backend yet —
+  // for SIMU-04b we omit the lifetime cell on a no-data fallback.
+  const passDets = dets.filter((d) => d.verdict === 'pass');
+  passDets.sort((a, b) => {
+    const ai = Object.keys(OBJ_LABEL).indexOf(a.label);
+    const bi = Object.keys(OBJ_LABEL).indexOf(b.label);
+    if (ai !== bi) return ai - bi;
+    return (b.score || 0) - (a.score || 0);
+  });
+  const activeRowsHtml = passDets.length
+    ? passDets.map((d) => _renderActiveTrackRow(d)).join('')
+    : '<div class="mv-ld-empty-row">Noch keine Detektion</div>';
+  // SECTION 2 · Verworfen — filtered (off-filter) detections from
+  // current tick. Only rendered when at least one such row exists.
+  const filteredDets = dets
+    .filter((d) => {
+      if (d.verdict !== 'filtered') return false;
+      if (objFilter && objFilter.has(d.label)) return false;
+      return true;
     })
-    .join('');
-  detHost.querySelectorAll('.mv-ld-row').forEach((row) => {
+    .sort((a, b) => (b.score || 0) - (a.score || 0));
+  const verworfenHtml = filteredDets.length
+    ? `<div class="mv-ld-section-head">VERWORFEN (KLASSE NICHT IM FILTER)</div>` +
+      filteredDets.map((d) => _renderVerworfenRow(d)).join('')
+    : '';
+  // SECTION 3 · Track-Ereignisse · last 30 s. Pulled from the trace
+  // log we already maintain in _traceLines. Filter to the "[det]" /
+  // "[track]" lines and stamp them with a coloured tag.
+  const trackEventsHtml = _buildTrackEventsHtml();
+  detHost.innerHTML =
+    `<div class="mv-ld-section">
+      <div class="mv-ld-section-head">AKTIVE TRACKS</div>
+      ${activeRowsHtml}
+    </div>` +
+    (verworfenHtml ? `<div class="mv-ld-section">${verworfenHtml}</div>` : '') +
+    `<div class="mv-ld-section">
+      <div class="mv-ld-section-head">TRACK-EREIGNISSE LETZTE 30 s</div>
+      ${trackEventsHtml}
+    </div>`;
+  detHost.querySelectorAll('.mv-ld-row[data-label]').forEach((row) => {
     row.addEventListener('click', () => {
       const lbl = row.dataset.label;
       _selectedLabel = _selectedLabel === lbl ? null : lbl;
@@ -2117,6 +2128,80 @@ function _renderDetectionsPanel(data) {
       _renderDetailPill();
     });
   });
+}
+
+function _renderActiveTrackRow(d) {
+  const c = colors[d.label] || colors.unknown;
+  const lblText = OBJ_LABEL[d.label] || d.label;
+  const iconRaw = OBJ_SVG[d.label] || '';
+  const iconHtml = iconRaw.replace('width="16" height="16"', 'width="14" height="14"');
+  const tn = Number.isFinite(d.track_num) ? d.track_num : null;
+  const scorePct = Math.round((d.score || 0) * 100);
+  const ageStr = d.age_seconds != null ? `${Math.round(d.age_seconds)} s` : '';
+  return `<button type="button" class="mv-ld-row mv-ld-row-active" data-label="${esc(d.label)}">
+    <span class="mv-ld-row-icon">${iconHtml}</span>
+    ${tn != null ? `<span class="mv-ld-row-num" style="background:${c}">#${tn}</span>` : '<span class="mv-ld-row-num-spacer"></span>'}
+    <span class="mv-ld-row-label">${esc(lblText)}</span>
+    ${ageStr ? `<span class="mv-ld-row-age">${esc(ageStr)}</span>` : ''}
+    <span class="mv-ld-row-verdict mv-ld-row-verdict-pass">PASS ${scorePct}%</span>
+  </button>`;
+}
+
+function _renderVerworfenRow(d) {
+  const scorePct = Math.round((d.score || 0) * 100);
+  return `<div class="mv-ld-row mv-ld-row-verworfen">
+    <span class="mv-ld-row-icon mv-ld-row-icon-andere" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <circle cx="6" cy="12" r="1.6" fill="#5a7a68"/>
+        <circle cx="12" cy="12" r="1.6" fill="#5a7a68"/>
+        <circle cx="18" cy="12" r="1.6" fill="#5a7a68"/>
+      </svg>
+    </span>
+    <span class="mv-ld-row-label">${esc(d.label)}</span>
+    <span class="mv-ld-row-score">${scorePct}%</span>
+    <span class="mv-ld-row-verdict mv-ld-row-verdict-mute">gefiltert</span>
+  </div>`;
+}
+
+// Build the last-30-s track events log from the in-memory trace
+// lines. For SIMU-04b we derive events from the existing decision_
+// trace stream (no backend ring buffer yet): [det] lines map to
+// CONT./SPAWN heuristically based on whether the bbox label has
+// been seen recently. RE-ID and explicit DEATH events come in
+// SIMU-05 when the backend adds the ring buffer.
+function _buildTrackEventsHtml() {
+  const lines = _traceLines.slice(-30).reverse();
+  if (!lines.length) {
+    return '<div class="mv-ld-empty-row">Noch keine Track-Ereignisse</div>';
+  }
+  return lines
+    .map((line) => {
+      const text = typeof line === 'string' ? line : line?.text || '';
+      const kind = _classifyTrackEvent(text);
+      const tagColor =
+        kind === 'spawn'
+          ? '#6ee7b7'
+          : kind === 'death'
+            ? '#fda4af'
+            : kind === 'reid'
+              ? '#ffcd6e'
+              : '#b6d4be';
+      const tagLabel =
+        kind === 'spawn' ? 'SPAWN' : kind === 'death' ? 'DEATH' : kind === 'reid' ? 'RE-ID' : 'CONT.';
+      return `<div class="mv-ld-track-event">
+        <span class="mv-ld-track-event-tag" style="color:${tagColor}">${tagLabel}</span>
+        <span class="mv-ld-track-event-text">${esc(text)}</span>
+      </div>`;
+    })
+    .join('');
+}
+
+function _classifyTrackEvent(text) {
+  if (!text) return 'cont';
+  if (text.indexOf('REJECTED') !== -1 || text.indexOf('grace') !== -1) return 'death';
+  if (text.indexOf('PASS') !== -1) return 'spawn';
+  if (text.indexOf('re-id') !== -1 || text.indexOf('RE-ID') !== -1) return 'reid';
+  return 'cont';
 }
 
 function _renderLiveSwimlane() {

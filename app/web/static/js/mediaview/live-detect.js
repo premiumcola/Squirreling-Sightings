@@ -71,11 +71,10 @@ const _TRACE_CAP = 80;
 // ghost behind it.
 const _HOLD_MS_CEILING = 1500;
 const _HOLD_MS_FLOOR = 800;
-// gp384 — "no detection on screen" hint banner threshold. Shows
-// only when the bboxes layer is enabled, no live OR held bbox is
-// visible, AND the detector has missed for this long.
-const _EMPTY_HINT_MS = 3000;
-// Refresh interval for the hold-time fade + empty-state banner.
+// Refresh interval for the hold-time fade. SIMU-02d removed the
+// persistent "empty state" video banner — the absence of detections
+// is now expressed via the empty Detections tab (SIMU-04+) instead
+// of an overlay element that covered ~30% of the video.
 // Fires at ~24 Hz; the actual bbox repaints are cheap (innerHTML
 // of an SVG with < 10 elements) and only run while live-detect is
 // mounted, so the cost is negligible vs. the smoothness gain.
@@ -259,8 +258,6 @@ export function closeLiveDetect() {
   if (diagStrip) diagStrip.remove();
   const livePill = byId('mvLiveScrubPill');
   if (livePill) livePill.remove();
-  const emptyHint = byId('mvLdEmptyHint');
-  if (emptyHint) emptyHint.remove();
   // D52 · the "<n> verworfen — antippen für Details" hint sits
   // outside the toggle row; remove it on session teardown.
   const suppressedHint = byId('mvLiveSuppressedHint');
@@ -1006,15 +1003,15 @@ function _renderFrame(data) {
         `outcome=${data.ok ? 'ok' : '?'}`,
     );
   }
-  // F2 · track the latest raw count from the backend's diag block so
-  // _renderEmptyHint can gate the banner on Coral-really-empty rather
-  // than render-buffer-empty. The held-buffer fallback briefly keeps
-  // dets on screen after a raw=0 tick; the banner shouldn't appear
-  // until BOTH the buffer drained AND the last tick truly had raw=0.
+  // F2 · track the latest raw count from the backend's diag block.
+  // Read by the debug strip + (later) the Detections tab summary
+  // line. SIMU-02d removed the in-video banner that used to gate on
+  // this value; the field stays for downstream consumers.
   _session.lastRawCount = Number(data.diag?.gates?.raw ?? data.detections?.length ?? 0);
-  // gp384 — last-seen marker for the empty-state hint. Reset on
-  // every tick that brings at least one detection; the banner
-  // threshold (3 s) is measured from this stamp.
+  // Last-seen marker for the no-detection state. Reset on every
+  // tick that brings at least one detection. Read by the Detections
+  // tab + Trace tab consumers; the in-video banner that used to
+  // depend on this was removed in SIMU-02d.
   if (_session.lastDetections.length) _session.lastNonEmptyTickMs = Date.now();
   // vh729 — one-shot diagnostic. Fires once per Simulieren open
   // (right after the first tick lands real data) and prints the
@@ -1602,7 +1599,6 @@ function _renderBboxOverlay() {
   if (!_overlays.bboxes) {
     svg.innerHTML = '';
     _updateSuppressedHint(0);
-    _renderEmptyHint(false);
     return;
   }
   const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
@@ -1712,7 +1708,6 @@ function _renderBboxOverlay() {
   // already flagged the existence; the count is the bare arithmetic.
   const _nonPass = renderDets.reduce((n, d) => n + (d.verdict === 'pass' ? 0 : 1), 0);
   _updateSuppressedHint(_nonPass);
-  _renderEmptyHint(renderDets.length === 0);
   // A4 · paint-fail check. The SVG itself has size > 0 (we'd have
   // hit the position-fail branch above otherwise), but the painted
   // children might still collapse to 0×0 — happens when the bbox
@@ -1751,61 +1746,6 @@ function _renderBboxOverlay() {
       _renderDetailPill();
     });
   });
-}
-
-// F2 · empty-state banner. Mounts a small dark-glass pill at the
-// top of the media wrap when:
-//   1. the bbox layer is enabled, and
-//   2. the latest BACKEND tick truly returned raw=0 from Coral
-//      (i.e. Coral found nothing — not "all dets below threshold"),
-//      and
-//   3. no held bbox is still visible from a previous tick, and
-//   4. it's been at least _EMPTY_HINT_MS since the last non-empty
-//      tick (or since live-detect mount if no tick has ever
-//      brought detections).
-// The (2) gate is the F2 tightening: previously the banner could
-// appear whenever the render buffer was empty even though backend
-// might have returned belowthresh/filtered dets in the most recent
-// tick. Reading data.diag.gates.raw directly via _session
-// .lastRawCount makes the banner's meaning exactly "Coral found
-// nothing for this frame". Removes itself when any condition
-// flips back. Idempotent.
-function _renderEmptyHint(noBboxes) {
-  // SIMU-01 · banner sits inside zone-video so it overlays the
-  // letterboxed video centre.
-  const host = zoneEl('video') || byId('lightboxMediaWrap');
-  if (!host) return;
-  let banner = byId('mvLdEmptyHint');
-  const remove = () => {
-    if (banner) banner.remove();
-  };
-  if (!noBboxes || !_overlays.bboxes || !_session) {
-    remove();
-    return;
-  }
-  // F2 · last raw count must be 0 to show the banner. A
-  // belowthresh-only tick (raw>0 pass=0) leaves lastRawCount>0;
-  // even if every bbox is currently faded out, the banner stays
-  // suppressed because Coral DID find something — the threshold
-  // just rejected it. Default 0 (no tick yet) → mount-time silence
-  // is governed by the lastSeen condition below.
-  if ((_session.lastRawCount ?? 0) > 0) {
-    remove();
-    return;
-  }
-  const now = Date.now();
-  const lastSeen = _session.lastNonEmptyTickMs || _session.startedMs || now;
-  if (now - lastSeen < _EMPTY_HINT_MS) {
-    remove();
-    return;
-  }
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'mvLdEmptyHint';
-    banner.className = 'mv-ld-empty-hint';
-    banner.textContent = 'Coral findet aktuell nichts · der Detektor analysiert weiter';
-    host.appendChild(banner);
-  }
 }
 
 // Position an overlay SVG to cover the IMAGE's visible rect, not the

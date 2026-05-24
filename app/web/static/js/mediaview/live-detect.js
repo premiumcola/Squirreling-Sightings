@@ -38,8 +38,9 @@ void _lbRenderTrackTimeline;
 import { _setupVideoChrome } from '../lightbox.js';
 import { tryAttachHls } from '../core/hls-attach.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
-import { mountLdSkeleton, unmountLdSkeleton, zoneEl } from './live-detect-skeleton.js';
+import { mountLdSkeleton, unmountLdSkeleton, zoneEl, panelEl } from './live-detect-skeleton.js';
 import { renderLiveSwimlane } from './live-swimlane.js';
+import { renderDebugPanel } from './live-detect-debug.js';
 
 // C73 · cadence floors. The original 1 Hz floor was set against the
 // main-stream cost budget (2560×1440 frame copy + JPEG encode +
@@ -1061,6 +1062,23 @@ function _renderFrame(data) {
   _renderLiveSwimlane();
   _renderDiagPanel(data.diag || null);
   _appendTrace(data.decision_trace || []);
+  _renderDebugTab(data);
+}
+
+// SIMU-05 · Debug tab content. Composes the live-status header
+// (SIMU-05a) and progressively the five problem-clusters as their
+// individual prompts land. Re-runs on every tick so the cluster
+// evidence boxes stay current.
+function _renderDebugTab(data) {
+  const host = panelEl('debug');
+  if (!host) return;
+  renderDebugPanel(host, {
+    tickState: _tickState,
+    session: _session,
+    holdMs: _holdMsActive,
+    cycleEmaMs: _cycleEmaMs,
+    fullData: data,
+  });
 }
 
 // C3 · in-modal diagnostic panel. Reads the structured ``diag`` block

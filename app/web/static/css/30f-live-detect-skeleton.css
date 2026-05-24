@@ -1111,3 +1111,76 @@
   color: #ffcd6e;
   box-shadow: inset 0 0 0 1px rgba(255, 205, 110, 0.4);
 }
+
+/* SIMU-05a · Debug-tab Live-Status header. Two rows × three cells,
+   compact mono, matrix palette. Stuck-tick + disarmed states tint
+   their cell in amber / red so a glance tells the operator where
+   the problem is. */
+.mv-ld-debug {
+  padding: 12px;
+}
+
+.mv-ld-debug-header {
+  background: rgba(8, 18, 12, 0.5);
+  border: 1px solid var(--mv-ld-divider, #1a3020);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+
+.mv-ld-debug-mini-head {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--mv-ld-muted, #5a7a68);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.mv-ld-debug-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.mv-ld-debug-cell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mv-ld-debug-k {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--mv-ld-mono, #82c79a);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.mv-ld-debug-v {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--mv-ld-text, #b6d4be);
+}
+
+.mv-ld-debug-v-bright {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.mv-ld-debug-warn .mv-ld-debug-v-bright {
+  color: #ffcd6e;
+}
+
+.mv-ld-debug-warn-red .mv-ld-debug-v-bright {
+  color: #fda4af;
+}

@@ -2115,9 +2115,18 @@ function _renderLiveSwimlane() {
   if (!_session) return;
   const now = Date.now();
   const windowStart = now - _LIVE_WINDOW_MS;
+  // SIMU-03a · enforce the camera's object_filter. Off-filter
+  // detections stay in _detBuffer (the Trace tab + "Andere" lane
+  // below still surface them) but they don't get their own
+  // swimlane row. Mirrors mediathek/bbox-overlay/timeline-panel.js
+  // line 225 — same gate, applied per detection on the live window.
+  const cam = (state.cameras || []).find((c) => c.id === _session.camId) || {};
+  const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : null;
+  const objFilter = filterArr && filterArr.length > 0 ? new Set(filterArr) : null;
   const byLabel = new Map();
   for (const e of _detBuffer) {
     if (e.ms < windowStart) continue;
+    if (objFilter && !objFilter.has(e.label)) continue;
     const t = (e.ms - windowStart) / 1000;
     if (!byLabel.has(e.label)) byLabel.set(e.label, []);
     byLabel.get(e.label).push({
@@ -2133,15 +2142,28 @@ function _renderLiveSwimlane() {
       source: 'detect',
     });
   }
+  // SIMU-03a · canonical OBJ_LABEL order for the kept lanes.
+  // OBJ_LABEL's insertion order is the canonical project sort
+  // (person · cat · bird · car · dog · squirrel · motion · alarm).
+  // Labels not in OBJ_LABEL (rare unknowns) sort to the end
+  // alphabetically.
+  const labelOrder = Object.keys(OBJ_LABEL);
+  const sortedLabels = Array.from(byLabel.keys()).sort((a, b) => {
+    const ai = labelOrder.indexOf(a);
+    const bi = labelOrder.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
   // 1-based per-render _num so the timeline-panel renders "#1", "#2"
   // bar labels instead of "#undefined". Mirrors the stamping that
   // bbox-overlay/fetcher.js does on recorded tracks at fetch time —
-  // the timeline-panel reads tr._num directly. Label-ordered via
-  // entries() insertion order; since each label gets one synthetic
-  // track in the live window, _num maps 1:1 to the visible bar.
+  // the timeline-panel reads tr._num directly.
   const tracks = [];
   let _num = 0;
-  for (const [label, samples] of byLabel.entries()) {
+  for (const label of sortedLabels) {
+    const samples = byLabel.get(label);
     _num += 1;
     tracks.push({
       track_id: `live-${label}`,
@@ -2159,7 +2181,11 @@ function _renderLiveSwimlane() {
     type: 'live-detect',
     event_id: `live-${_session.camId}`,
     camera_id: _session.camId,
-    _tracks: { tracks, filter_applied: null, duration_s: _LIVE_WINDOW_MS / 1000 },
+    _tracks: {
+      tracks,
+      filter_applied: filterArr,
+      duration_s: _LIVE_WINDOW_MS / 1000,
+    },
   };
   lbRenderTrackTimeline(liveItem);
   _pinScrubberRight();

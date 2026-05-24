@@ -547,12 +547,16 @@
   margin-right: 0;
 }
 
-/* SIMU-03e · the bar flows leftward as time passes. The renderer
-   targets EXISTING elements (matched by data-bar-key) on each tick
-   and updates only their `left` property — CSS animates the change
-   over 500 ms linear so the strip looks continuous instead of
-   jumping in tick-sized steps. New bars enter at their target
-   position without transition (no "from" state to animate). */
+/* SIMU-FIX-05b · NO CSS transition on bars. With 60+ bars per lane
+   over a 60 s window, animating `left` (a layout-property) on every
+   bar simultaneously was causing iOS Safari to spend 80+ s of main-
+   thread time per tick on forced reflows — the bbox SVG never got
+   to repaint and detections didn't reach the swimlane render.
+   The previous SIMU-03e smooth-flow visual is gone for now; bars
+   simply jump to their new positions every tick (~500 ms apart on
+   the sub-fast path, ~1 s on main-slow). A follow-up could re-add
+   smooth flow via `transform: translateX(...)` (GPU-composited,
+   not main-thread). */
 .mv-ld-swim-bar {
   position: absolute;
   top: 50%;
@@ -560,7 +564,6 @@
   height: 8px;
   border-radius: 2px;
   pointer-events: none;
-  transition: left 500ms linear;
 }
 
 /* SIMU-03f · #N track-number badge. Renders as a pseudo-element at

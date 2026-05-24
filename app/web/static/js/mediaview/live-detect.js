@@ -31,6 +31,7 @@ import { lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { _setupVideoChrome } from '../lightbox.js';
 import { tryAttachHls } from '../core/hls-attach.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
+import { mountLdSkeleton, unmountLdSkeleton, zoneEl } from './live-detect-skeleton.js';
 
 // C73 · cadence floors. The original 1 Hz floor was set against the
 // main-stream cost budget (2560×1440 frame copy + JPEG encode +
@@ -264,6 +265,11 @@ export function closeLiveDetect() {
   // outside the toggle row; remove it on session teardown.
   const suppressedHint = byId('mvLiveSuppressedHint');
   if (suppressedHint) suppressedHint.remove();
+  // SIMU-01 · tear down the 5-zone skeleton last so any remaining
+  // children get re-parented back to #lightboxMediaWrap / #lightbox
+  // Inner before the container is removed. Recorded-clip lightbox
+  // re-uses these IDs and expects them at their original parents.
+  unmountLdSkeleton();
 }
 
 // gp384 — bbox hold + empty-banner refresh. Drives the per-frame
@@ -318,6 +324,11 @@ function _setupLiveChrome(camId, cameraName) {
   // live-detect needs a Detections-only tab strip + the live
   // overlay-toggles row above the playbar.
   _setupVideoChrome(liveItem);
+  // SIMU-01 · build the 5-zone DOM skeleton inside #lightboxMediaWrap
+  // BEFORE any overlay/pill/strip mounts so subsequent appendChild
+  // calls land in the right zone. Idempotent — a back-to-back cam
+  // switch just refreshes the title text inside the existing zones.
+  mountLdSkeleton({ camId, cameraName });
   // hp651 — kill the recorded path's canvas zone overlay
   // (lightboxZoneOverlay, z-index 4). _setupVideoChrome always calls
   // mountZoneOverlayForLightbox; if the user reaches Simulieren via
@@ -466,8 +477,12 @@ function _installLiveOverlayRefresh(mediaEl) {
 function _ensureBboxOverlay() {
   let svg = byId('lightboxLiveOverlay');
   if (svg) return svg;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  // SIMU-01 · the bbox SVG belongs inside zone-video so it sits on top
+  // of the <img>/<video>. Falls back to the wrap for the rare case
+  // when the skeleton hasn't mounted yet (defensive — _setupLiveChrome
+  // always mounts the skeleton before reaching here).
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveOverlay';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
@@ -481,29 +496,29 @@ function _ensureBboxOverlay() {
   // so the user sees the live verdict over the historical trail.
   svg.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:16';
-  wrap.appendChild(svg);
+  host.appendChild(svg);
   return svg;
 }
 
 function _ensureTrailsOverlay() {
   let svg = byId('lightboxLiveTrails');
   if (svg) return svg;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'lightboxLiveTrails';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   svg.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:15';
-  wrap.appendChild(svg);
+  host.appendChild(svg);
   return svg;
 }
 
 function _ensureZoneMaskOverlay() {
   let canvas = byId('lightboxLiveZoneMask');
   if (canvas) return canvas;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   // Canvas (not SVG) so the SAME shared zone-layer the recorded
   // Mediathek lightbox uses can paint it — single source of truth
   // for the letterbox math and polygon source-resolution handling
@@ -512,7 +527,7 @@ function _ensureZoneMaskOverlay() {
   canvas.id = 'lightboxLiveZoneMask';
   canvas.style.cssText =
     'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
-  wrap.appendChild(canvas);
+  host.appendChild(canvas);
   return canvas;
 }
 
@@ -674,15 +689,19 @@ function _hideToggleTip() {
 }
 
 function _mountOverlayToggles() {
-  const inner = byId('lightboxInner');
-  const stack = byId('lightboxBottomStack');
-  if (!inner || !stack) return;
+  // SIMU-01 · the toggle row used to live between #lightboxMediaWrap
+  // and #lightboxBottomStack inside #lightboxInner. With the 5-zone
+  // layout those are no longer siblings; route the row into zone-video
+  // so it sits as a floating control strip over the bottom of the
+  // video. SIMU-02 will replace this with proper floating pills.
+  const host = zoneEl('video') || byId('lightboxInner');
+  if (!host) return;
   let row = byId('mvLiveToggles');
   if (!row) {
     row = document.createElement('div');
     row.id = 'mvLiveToggles';
     row.className = 'mv-live-toggles';
-    inner.insertBefore(row, stack);
+    host.appendChild(row);
   }
   // ``title`` carries the desktop-native tooltip fallback for
   // platforms where the custom hover bubble doesn't engage (the
@@ -1254,8 +1273,11 @@ function _ensureDiagStrip() {
   if (!_debugDiagOn()) return null;
   let strip = byId('mvSimDiagStrip');
   if (strip) return strip;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return null;
+  // SIMU-01 · route the strip into zone-video so it overlays the
+  // video bottom edge (same visual as before; new parent only).
+  // SIMU-04+ may relocate this into the Debug tab panel.
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return null;
   strip = document.createElement('div');
   strip.id = 'mvSimDiagStrip';
   strip.className = 'mv-sim-diag-strip';
@@ -1268,7 +1290,7 @@ function _ensureDiagStrip() {
       <span class="mv-sim-diag-chevron" aria-hidden="true">▾</span>
     </button>
     <div class="mv-sim-diag-body" id="mvSimDiagBody"></div>`;
-  wrap.appendChild(strip);
+  host.appendChild(strip);
   // Header click toggles collapsed/expanded + persists.
   const header = strip.querySelector('.mv-sim-diag-head');
   header?.addEventListener('click', () => {
@@ -1749,8 +1771,10 @@ function _renderBboxOverlay() {
 // nothing for this frame". Removes itself when any condition
 // flips back. Idempotent.
 function _renderEmptyHint(noBboxes) {
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return;
+  // SIMU-01 · banner sits inside zone-video so it overlays the
+  // letterboxed video centre.
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return;
   let banner = byId('mvLdEmptyHint');
   const remove = () => {
     if (banner) banner.remove();
@@ -1780,7 +1804,7 @@ function _renderEmptyHint(noBboxes) {
     banner.id = 'mvLdEmptyHint';
     banner.className = 'mv-ld-empty-hint';
     banner.textContent = 'Coral findet aktuell nichts · der Detektor analysiert weiter';
-    wrap.appendChild(banner);
+    host.appendChild(banner);
   }
 }
 
@@ -1808,7 +1832,11 @@ function _positionSvgOverImage(svg) {
   // exactly WHY a candidate was skipped on a half-mounted session.
   const videoEl = byId('lightboxVideo');
   const imgEl = byId('lightboxImg');
-  const wrap = byId('lightboxMediaWrap');
+  // SIMU-01 · the SVG's positioned ancestor is now zone-video (not
+  // #lightboxMediaWrap). Use the SVG's parent rect as the reference
+  // so dx/dy land in the right coordinate space whether the parent
+  // is the new zone or the legacy wrap.
+  const wrap = svg.parentElement || byId('lightboxMediaWrap');
   if (!wrap) {
     _setMediaBranch('skipped-no-wrap');
     _lastVideoRejected = null;
@@ -2171,8 +2199,9 @@ function _renderLiveSwimlane() {
 }
 
 function _renderDetailPill() {
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return;
+  // SIMU-01 · pill sits over the video at the bottom-left corner.
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return;
   let pill = byId('mvLiveDetailPill');
   if (!_selectedLabel) {
     if (pill) pill.remove();
@@ -2182,7 +2211,7 @@ function _renderDetailPill() {
     pill = document.createElement('div');
     pill.id = 'mvLiveDetailPill';
     pill.className = 'mv-live-detail-pill';
-    wrap.appendChild(pill);
+    host.appendChild(pill);
   }
   const c = colors[_selectedLabel] || colors.unknown;
   const lblText = OBJ_LABEL[_selectedLabel] || _selectedLabel;

@@ -81,6 +81,8 @@ LOAD_ORDER = [
     "30c-lightbox-meters.css",
     "30d-lightbox-shell.css",
     "30e-lightbox-live.css",
+    # SIMU-01 · 5-zone DOM skeleton for the Live-Detect modal.
+    "30f-live-detect-skeleton.css",
 ]
 
 _BANNER = (

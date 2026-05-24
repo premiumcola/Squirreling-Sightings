@@ -1,0 +1,333 @@
+/* ── Live-detect 5-zone skeleton (SIMU-01) ────────────────────────────────
+   The live-detect modal acquires a 5-zone vertical stack inside
+   #lightboxMediaWrap on mount:
+     zone-title    — camera name · ● Live · chevron · close X
+     zone-video    — edge-to-edge 16:9 video + SVG overlays
+     zone-timeline — swimlane (collapsible header + body)
+     zone-tabs     — cam-edit-style tab strip + expand button
+     zone-detail   — the ONLY scrollable region (tab content)
+   Skeleton lifecycle lives in live-detect-skeleton.js; this file owns
+   the visuals. All overrides scoped under #lightboxModal.lb-live-detect
+   so the recorded-clip lightbox is untouched. */
+
+/* ── Override lb-fs-video sticky/scroll model under lb-live-detect ──── */
+#lightboxModal.lb-live-detect {
+  /* fw384 placed scroll on #lightboxInner; the 5-zone layout moves
+     scroll into zone-detail, so the outer pieces lock down. */
+  overflow: hidden !important;
+}
+
+#lightboxModal.lb-live-detect #lightboxInner {
+  overflow: hidden !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: block !important;
+}
+
+/* The legacy top bar + meta block are replaced by zone-title. */
+#lightboxModal.lb-live-detect #lightboxTopBar {
+  display: none !important;
+}
+#lightboxModal.lb-live-detect #lightboxMeta {
+  display: none !important;
+}
+#lightboxModal.lb-live-detect #lightboxClose {
+  display: none !important;
+}
+
+/* lb-fs-video gave the wrap aspect-ratio + max-height. The zone
+   container now owns the full-screen layout, so the wrap is a flat
+   100dvh host. */
+#lightboxModal.lb-live-detect #lightboxMediaWrap {
+  position: relative !important;
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100dvh !important;
+  max-height: none !important;
+  min-height: 100dvh !important;
+  aspect-ratio: auto !important;
+  border-radius: 0 !important;
+  background: var(--bg, #080510);
+  margin: 0 !important;
+  overflow: hidden !important;
+  top: auto !important;
+  display: block !important;
+}
+
+/* The 5-zone container — the only direct child of the wrap. */
+.mv-ld-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--bg, #080510);
+}
+
+.mv-ld-zone {
+  flex-shrink: 0;
+  width: 100%;
+  position: relative;
+}
+
+/* ── zone-title ──────────────────────────────────────────────────────── */
+.mv-ld-zone-title {
+  background: var(--bg, #080510);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  overflow: hidden;
+  padding-top: 8px;
+  padding-bottom: 6px;
+  padding-left: 12px;
+  padding-right: 12px;
+  min-height: 32px;
+}
+
+.mv-ld-title-cam {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+  line-height: 1.2;
+}
+
+.mv-ld-title-collapsed-line {
+  display: none;
+}
+
+.mv-ld-title-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.85);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mv-ld-title-live::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6ee7b7;
+  box-shadow: 0 0 8px rgba(110, 231, 183, 0.55);
+}
+
+/* Generic 44 px touch target for chevron / close / expand buttons. */
+.mv-ld-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -6px 0;
+  border: 0;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.6);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+  border-radius: 22px;
+  padding: 0;
+  outline: 0;
+}
+
+@media (hover: hover) {
+  .mv-ld-iconbtn:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.mv-ld-iconbtn svg {
+  pointer-events: none;
+  display: block;
+}
+
+.mv-ld-close-btn {
+  color: var(--text);
+}
+
+/* ── zone-video ──────────────────────────────────────────────────────── */
+.mv-ld-zone-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mv-ld-zone-video > #lightboxImg,
+.mv-ld-zone-video > #lightboxVideo {
+  position: relative;
+  z-index: 1;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  object-fit: contain;
+  background: #000 !important;
+  border-radius: 0 !important;
+  display: block;
+  margin: 0 !important;
+}
+
+/* SIMU-01 · the live-toggles row stays inside zone-video until SIMU-02
+   redesigns it as floating pills. Pin to the bottom edge so the
+   underlying video isn't cropped; gradient backdrop keeps the chips
+   readable on bright frames. */
+.mv-ld-zone-video > #mvLiveToggles {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 22;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.6) 100%);
+}
+
+/* ── zone-timeline ───────────────────────────────────────────────────── */
+.mv-ld-zone-timeline {
+  background: var(--bg, #080510);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mv-ld-timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  min-height: 22px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.mv-ld-timeline-head-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mv-ld-timeline-body {
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+/* ── zone-tabs ───────────────────────────────────────────────────────── */
+.mv-ld-zone-tabs {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg, #080510);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+.mv-ld-tab-bar-root {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.mv-ld-tab-bar {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mv-ld-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.mv-ld-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  min-width: 80px;
+  min-height: 44px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: -1px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  outline: 0;
+}
+
+.mv-ld-tab-btn.active {
+  color: #fff;
+  font-weight: 700;
+  border-bottom-color: #fff;
+}
+
+.mv-ld-tab-ico {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+@media (max-width: 480px) {
+  .mv-ld-tab-btn {
+    min-width: 60px;
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+}
+
+/* ── zone-detail ─────────────────────────────────────────────────────── */
+.mv-ld-zone-detail {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: var(--bg, #080510);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mv-ld-tab-panel {
+  display: none;
+}
+
+.mv-ld-tab-panel.active {
+  display: block;
+}
+
+/* The existing settings host stays visible inside its tab panel even
+   though _teardownVideoChrome's reverse path sets hidden=true on
+   teardown. */
+.mv-ld-zone-detail #lightboxSettings,
+.mv-ld-zone-detail #lightboxSettings[hidden] {
+  display: block !important;
+  visibility: visible !important;
+}

@@ -801,21 +801,15 @@ function _mountOverlayToggles() {
 
 function _pinScrubberRight() {
   // Live mode has no recorded clip → no seek; pin the playhead to
-  // the right edge by writing --play-pct=1 and adding an "LIVE" pill
-  // overlay anchored to the scrubber row. lbRenderTrackTimeline
-  // rebuilds the stack on each call so this re-pins after each refresh.
+  // the right edge by writing --play-pct=1. The legacy "LIVE" pill
+  // that previously sat at the scrubber edge was removed in
+  // SIMU-FIX-01b — the SIMU-03d swimlane renderer now owns the
+  // single LIVE marker (stacked pill + vertical green line).
   const stack = document.querySelector('.lb-time-stack');
   if (stack) stack.style.setProperty('--play-pct', '1');
-  const stackHost = byId('lightboxBottomStack');
-  if (!stackHost) return;
-  let pill = byId('mvLiveScrubPill');
-  if (!pill) {
-    pill = document.createElement('span');
-    pill.id = 'mvLiveScrubPill';
-    pill.className = 'mv-live-scrub-pill';
-    pill.textContent = '● LIVE';
-    stackHost.appendChild(pill);
-  }
+  // Defensive teardown in case a previous render left a stale pill.
+  const stale = byId('mvLiveScrubPill');
+  if (stale) stale.remove();
 }
 
 function _mountPanels() {

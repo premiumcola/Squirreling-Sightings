@@ -217,27 +217,11 @@
    removed in favour of the Debug tab (SIMU-05a-f). All
    .mv-sim-diag-* and .mv-live-toggle--debug rules deleted. */
 
-/* ── LIVE pill pinned to scrubber right edge ────────────────────────── */
-/* Anchored to #lightboxBottomStack (position:relative is implicit on
-   the bottom stack via the flex layout). Sits at top:8px / right:14px
-   so it lines up visually with the scrubber row. The bottom-stack
-   already has the green scrubber-fill behind it; the LIVE pill is
-   the user-facing "we're at the live edge" marker. */
-.mv-live-scrub-pill {
-  position: absolute;
-  top: 14px;
-  right: 18px;
-  z-index: 7;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: rgba(34, 197, 94, 0.85);
-  color: #0a0e1a;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  pointer-events: none;
-}
+/* SIMU-FIX-01b · the legacy .mv-live-scrub-pill that sat at the
+   right edge of the bottom-stack scrubber was deleted; the swimlane
+   renderer's stacked LIVE pill (SIMU-03d) is now the single
+   live-now indicator. The bottom-stack itself stays position:
+   relative so any future absolute children still anchor correctly. */
 #lightboxBottomStack {
   position: relative;
 }

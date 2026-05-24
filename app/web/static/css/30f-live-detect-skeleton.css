@@ -57,6 +57,18 @@
   display: block !important;
 }
 
+/* SIMU-01b · ONE scroll region.
+   The container is height:100dvh and overflow:hidden — the outer
+   modal cannot rubber-band. The four upper zones each carry
+   flex-shrink:0 so they take their natural height and never compress
+   (a swelling swimlane below pushes the tab content out, not the
+   video). zone-detail's flex:1 1 0 absorbs the leftover space and is
+   the SOLE owner of overflow-y; -webkit-overflow-scrolling:touch
+   keeps iOS momentum-scroll, overscroll-behavior:contain stops a
+   rubber-band at its top/bottom from spilling onto the page.
+   touch-action:pan-y prevents iOS' horizontal-swipe-back gesture
+   from being eaten by the panel. */
+
 /* The 5-zone container — the only direct child of the wrap. */
 .mv-ld-container {
   display: flex;
@@ -73,6 +85,16 @@
   flex-shrink: 0;
   width: 100%;
   position: relative;
+}
+
+.mv-ld-zone-title,
+.mv-ld-zone-video,
+.mv-ld-zone-timeline,
+.mv-ld-zone-tabs {
+  /* Belt-and-suspenders: explicit shrink:0 + overflow-clip means a
+     too-tall child can't escape its zone and visually invade the
+     next one. */
+  overflow: hidden;
 }
 
 /* ── zone-title ──────────────────────────────────────────────────────── */
@@ -303,7 +325,7 @@
   }
 }
 
-/* ── zone-detail ─────────────────────────────────────────────────────── */
+/* ── zone-detail · the only scrollable region ─────────────────────────── */
 .mv-ld-zone-detail {
   flex: 1 1 0;
   min-height: 0;
@@ -311,6 +333,9 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* iOS Safari: pan-y only — no horizontal pan-back gesture from
+     inside the scroll surface. */
+  touch-action: pan-y;
   background: var(--bg, #080510);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }

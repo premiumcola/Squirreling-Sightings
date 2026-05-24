@@ -268,17 +268,80 @@
   padding: 0 !important;
 }
 
-/* SIMU-01 · the live-toggles row stays inside zone-video until SIMU-02
-   redesigns it as floating pills. Pin to the bottom edge so the
-   underlying video isn't cropped; gradient backdrop keeps the chips
-   readable on bright frames. */
+/* SIMU-02a · floating pills above the video. No container background,
+   no wrapping box — each pill is its own dark-glass surface. The
+   toggle row is just a flex container for layout; remove the strip
+   gradient and its strip padding so the chips float over the video. */
 .mv-ld-zone-video > #mvLiveToggles {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 8px;
+  left: 8px;
+  right: auto;
+  bottom: auto;
   z-index: 22;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.6) 100%);
+  background: transparent;
+  padding: 0;
+  gap: 6px;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+/* Outer wrapper carries the 44 × 44 touch target via padding around
+   the visible chip. The chip itself stays small (compact pill). */
+.mv-ld-zone-video #mvLiveToggles .mv-live-toggle {
+  padding: 6px;
+  margin: 0;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* SIMU-02a · the chip is the visible floating pill. Dark-glass
+   background when OFF, cyan-tinted glass + 1 px stroke when ON.
+   backdrop-filter degrades to a plain opaque surface on browsers
+   without support (Safari, Chrome modern: both supported). */
+.mv-ld-zone-video #mvLiveToggles .mv-live-toggle-chip {
+  background: rgba(11, 15, 20, 0.55);
+  color: #e5edf5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: normal;
+  padding: 4px 10px;
+  border-radius: 10px;
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  min-height: 0;
+  gap: 5px;
+}
+
+.mv-ld-zone-video #mvLiveToggles .mv-live-toggle[data-on='1'] .mv-live-toggle-chip {
+  background: rgba(28, 58, 82, 0.78);
+  color: #d6ecff;
+  box-shadow: inset 0 0 0 1px #6ec1ff;
+}
+
+@media (hover: hover) {
+  .mv-ld-zone-video #mvLiveToggles .mv-live-toggle:hover .mv-live-toggle-chip {
+    background: rgba(20, 30, 42, 0.7);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+  .mv-ld-zone-video
+    #mvLiveToggles
+    .mv-live-toggle[data-on='1']:hover
+    .mv-live-toggle-chip {
+    background: rgba(36, 74, 104, 0.85);
+    box-shadow: inset 0 0 0 1px #94d8ff;
+  }
+}
+
+/* The legend strip's auto-left margin (lb-legend { margin-left: auto })
+   would push it to the right of a single-row flex — with flex-wrap
+   on the pills, that's no longer the right place. Hide the inline
+   legend; SIMU-02b adds its own floating pill at the bottom of the
+   video instead. */
+.mv-ld-zone-video #mvLiveToggles .lb-legend {
+  display: none;
 }
 
 /* ── zone-timeline ───────────────────────────────────────────────────── */

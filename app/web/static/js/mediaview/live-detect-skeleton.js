@@ -217,6 +217,10 @@ export function mountLdSkeleton({ camId, cameraName } = {}) {
   }
   // Title chrome — name + ● Live + chevron + close X.
   zoneTitle.appendChild(_buildTitleBar(cameraName));
+  // SIMU-02b · floating legend at the bottom of the video. Lives
+  // inside zone-video so its visibility tracks the video; SIMU-02c
+  // ties show/hide to the tap-on-video gesture.
+  zoneVideo.appendChild(_buildFloatingLegend());
   // SIMU-01c · seed collapsed states from localStorage. Same camera
   // within the session → restore last-known state; new camera → reset
   // both zones to expanded so the user gets a fresh layout instead of
@@ -321,6 +325,26 @@ function _renderTitleText(camName) {
   const camText = camName || '';
   if (camEl) camEl.textContent = camText;
   if (collapsedEl) collapsedEl.textContent = camText ? `${camText} · Live` : 'Live';
+}
+
+// SIMU-02b · the verdict legend pill. Single dark-glass surface
+// centred 8 px above the video's bottom edge. Three swatches:
+//   #6ee7b7 pass · #ffcd6e unter Schwelle · #7a8896 striped gefiltert
+function _buildFloatingLegend() {
+  const el = document.createElement('div');
+  el.id = 'mvLdFloatingLegend';
+  el.className = 'mv-ld-floating-legend';
+  el.innerHTML =
+    '<span class="mv-ld-leg-item">' +
+    '<span class="mv-ld-leg-sw mv-ld-leg-sw-pass"></span>' +
+    '<span class="mv-ld-leg-lbl">pass</span></span>' +
+    '<span class="mv-ld-leg-item">' +
+    '<span class="mv-ld-leg-sw mv-ld-leg-sw-below"></span>' +
+    '<span class="mv-ld-leg-lbl">unter Schwelle</span></span>' +
+    '<span class="mv-ld-leg-item">' +
+    '<span class="mv-ld-leg-sw mv-ld-leg-sw-filtered"></span>' +
+    '<span class="mv-ld-leg-lbl">gefiltert</span></span>';
+  return el;
 }
 
 function _buildTimelineHeader() {

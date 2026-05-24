@@ -21,7 +21,7 @@
 // The renderer is idempotent — calling repeatedly with a fresh
 // detBuffer paints the latest snapshot. CSS handles transitions.
 
-import { byId, esc } from '../core/dom.js';
+import { esc } from '../core/dom.js';
 import { OBJ_LABEL, OBJ_SVG, colors } from '../core/icons.js';
 
 const _LANE_LABEL_ORDER = Object.keys(OBJ_LABEL);
@@ -105,9 +105,17 @@ function _buildHtml(lanes, { windowMs }) {
         `<span class="mv-ld-axis-tick" style="left:calc(${(i * 100) / (axisLabels.length - 1)}% - ${i === 0 ? 0 : i === axisLabels.length - 1 ? 24 : 12}px)">${esc(txt)}</span>`,
     )
     .join('');
+  // SIMU-03d · the LIVE marker is a stacked pill-on-top-of-line
+  // anchored to the right edge of the event column. Lives inside
+  // .mv-ld-swim-rows so its 100 % height spans every lane.
+  const liveMarker =
+    '<div class="mv-ld-swim-live" aria-hidden="true">' +
+    '<span class="mv-ld-swim-pill"><span class="mv-ld-swim-pill-dot"></span><span class="mv-ld-swim-pill-lbl">LIVE</span></span>' +
+    '<span class="mv-ld-swim-line"></span>' +
+    '</div>';
   return `
     <div class="mv-ld-swim" data-lane-count="${lanes.length}">
-      <div class="mv-ld-swim-rows">${laneRows}</div>
+      <div class="mv-ld-swim-rows">${laneRows}${liveMarker}</div>
       <div class="mv-ld-swim-axis"><div class="mv-ld-swim-axis-track">${axisHtml}</div></div>
     </div>`;
 }

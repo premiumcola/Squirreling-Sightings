@@ -453,6 +453,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  position: relative;
 }
 
 .mv-ld-swim-row {
@@ -461,6 +462,15 @@
   align-items: center;
   min-height: 22px;
   background: #0c121a;
+}
+
+/* SIMU-03d · lane hairlines between adjacent rows. The 1 px line
+   (≤ 0.5 px on retina via box-shadow) reads as a quiet divider; the
+   colour #1a2230 sits one tick brighter than the row background so
+   the line registers without screaming. Hairline lives on the event
+   cell so it doesn't cut through the label column. */
+.mv-ld-swim-row + .mv-ld-swim-row .mv-ld-swim-cell-events {
+  box-shadow: inset 0 0.5px 0 #1a2230;
 }
 
 .mv-ld-swim-row[data-andere='1'] {
@@ -509,6 +519,62 @@
    long-press tooltip (browser-native, no extra JS). */
 .mv-ld-swim-icon-andere {
   cursor: help;
+}
+
+/* SIMU-03d · LIVE marker stacked above a vertical green line that
+   runs through every lane. Anchored to the right edge of the event
+   column; the pill (36 × 12 px) is the cap, the 1.5 px line is the
+   body. Both share the right-edge anchor so they read as one
+   continuous "now" indicator. */
+.mv-ld-swim-live {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.mv-ld-swim-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 12px;
+  width: 36px;
+  padding: 0 6px 0 4px;
+  border-radius: 6px;
+  background: #1f5b3c;
+  color: #6ee7b7;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  text-align: right;
+}
+
+.mv-ld-swim-pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6ee7b7;
+  box-shadow: 0 0 4px rgba(110, 231, 183, 0.65);
+  flex-shrink: 0;
+}
+
+.mv-ld-swim-line {
+  width: 1.5px;
+  flex: 1 1 auto;
+  background: #6ee7b7;
+  margin-top: 0;
+  /* The line sits AT the right edge — half outside the event column
+     so its centre lands on the "now" timestamp. Cosmetic 0.75 px
+     offset gives the stacked-pill look the spec asks for. */
+  margin-right: 0;
 }
 
 .mv-ld-swim-bar {

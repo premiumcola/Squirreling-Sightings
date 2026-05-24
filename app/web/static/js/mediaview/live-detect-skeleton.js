@@ -134,6 +134,13 @@ const _tabChangeHandlers = [];
 // localStorage is reserved for the user's own chevron choices.
 let _fullscreen = false;
 let _fsRestore = null;
+// SIMU-02c · tap-to-reveal overlay visibility. Defaults to hidden on
+// every fresh mount (NOT persisted). Tap the video → 3 s reveal,
+// tap again → hide. Pill taps reset the timer; bbox shapes don't
+// toggle (their own click handler opens the detail pill).
+let _overlayVisible = false;
+let _hideTimer = 0;
+const _OVERLAY_HIDE_MS = 3000;
 
 // localStorage helpers — silent on private mode / quota errors.
 function _lsGet(key) {
@@ -221,6 +228,13 @@ export function mountLdSkeleton({ camId, cameraName } = {}) {
   // inside zone-video so its visibility tracks the video; SIMU-02c
   // ties show/hide to the tap-on-video gesture.
   zoneVideo.appendChild(_buildFloatingLegend());
+  // SIMU-02c · default hidden, pointerup listener handles the toggle.
+  // passive:true so the gesture doesn't block scroll on the detail
+  // panel below. pointerup (not click) for snappier response on iOS
+  // Safari (skips the legacy 300 ms tap delay).
+  zoneVideo.dataset.overlayVisible = '0';
+  _overlayVisible = false;
+  zoneVideo.addEventListener('pointerup', _onVideoPointerUp, { passive: true });
   // SIMU-01c · seed collapsed states from localStorage. Same camera
   // within the session → restore last-known state; new camera → reset
   // both zones to expanded so the user gets a fresh layout instead of
@@ -279,6 +293,47 @@ export function unmountLdSkeleton() {
   // (or last-LS-state) baseline.
   _fullscreen = false;
   _fsRestore = null;
+  // SIMU-02c · overlay visibility is per-mount; reset on teardown so
+  // the next openLiveDetect starts hidden (the spec's default).
+  clearTimeout(_hideTimer);
+  _hideTimer = 0;
+  _overlayVisible = false;
+}
+
+// SIMU-02c · tap-on-video handler. Toggles the visibility of the
+// floating pills and the legend; schedules a 3-s auto-hide on every
+// show. Skips bbox <g> shapes (they have their own click handler in
+// live-detect.js for the detail pill). Pill taps don't toggle but
+// they DO reset the hide timer so the user can flick multiple pills
+// in succession without the overlay vanishing.
+function _onVideoPointerUp(ev) {
+  if (ev?.target?.closest && ev.target.closest('[data-label]')) return;
+  if (ev?.target?.closest && ev.target.closest('.mv-live-toggle')) {
+    if (_overlayVisible) _scheduleOverlayHide();
+    return;
+  }
+  if (_overlayVisible) {
+    clearTimeout(_hideTimer);
+    _hideTimer = 0;
+    _setOverlayVisible(false);
+  } else {
+    _setOverlayVisible(true);
+    _scheduleOverlayHide();
+  }
+}
+
+function _setOverlayVisible(v) {
+  _overlayVisible = !!v;
+  const video = byId(ZONE_IDS.video);
+  if (video) video.dataset.overlayVisible = _overlayVisible ? '1' : '0';
+}
+
+function _scheduleOverlayHide() {
+  clearTimeout(_hideTimer);
+  _hideTimer = setTimeout(() => {
+    _setOverlayVisible(false);
+    _hideTimer = 0;
+  }, _OVERLAY_HIDE_MS);
 }
 
 function _makeZone(name) {

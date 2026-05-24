@@ -271,7 +271,8 @@
 /* SIMU-02a · floating pills above the video. No container background,
    no wrapping box — each pill is its own dark-glass surface. The
    toggle row is just a flex container for layout; remove the strip
-   gradient and its strip padding so the chips float over the video. */
+   gradient and its strip padding so the chips float over the video.
+   SIMU-02c · default hidden; fade in on tap, fade out after 3 s. */
 .mv-ld-zone-video > #mvLiveToggles {
   position: absolute;
   top: 8px;
@@ -284,6 +285,21 @@
   gap: 6px;
   flex-wrap: wrap;
   overflow: visible;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 220ms ease-in,
+    transform 220ms ease-in;
+}
+
+.mv-ld-zone-video[data-overlay-visible='1'] > #mvLiveToggles {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
 }
 
 /* Outer wrapper carries the 44 × 44 touch target via padding around
@@ -346,12 +362,12 @@
 
 /* SIMU-02b · floating verdict-legend pill. Same dark-glass surface
    as the toggle pills above; centred 8 px above the video's bottom
-   edge. Hugs content (width:auto). */
+   edge. Hugs content (width:auto). SIMU-02c · default hidden;
+   fade-in slides up 4 px, fade-out reverses. */
 .mv-ld-floating-legend {
   position: absolute;
   bottom: 8px;
   left: 50%;
-  transform: translateX(-50%);
   z-index: 22;
   display: inline-flex;
   align-items: center;
@@ -366,6 +382,19 @@
   white-space: nowrap;
   pointer-events: none;
   letter-spacing: 0.01em;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 220ms ease-in,
+    transform 220ms ease-in;
+}
+
+.mv-ld-zone-video[data-overlay-visible='1'] .mv-ld-floating-legend {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
 }
 
 .mv-ld-leg-item {

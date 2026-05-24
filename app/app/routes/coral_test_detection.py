@@ -744,6 +744,17 @@ def api_test_detection(cam_id: str):
     # ring-buffer state. Prunes events outside the 60-s window and
     # computes per-cluster aggregates inline.
     cluster_evidence = _build_cluster_evidence(tt, cam, obj_filter, ema_ms)
+    # SIMU-06a · cache the last tick so the debug-snapshot endpoint
+    # can serialise it without rerunning inference.
+    tt["last_tick"] = {
+        "ts": _time.time(),
+        "detections": out,
+        "trace": trace,
+        "frame_size": {"w": int(w), "h": int(h)},
+        "frame_age_ms": frame_age_ms,
+        "diag": diag,
+        "cluster_evidence": cluster_evidence,
+    }
     return jsonify(
         {
             "ok": True,
@@ -861,3 +872,270 @@ def _build_cluster_evidence(tt: dict, cam: dict, obj_filter: set, ema_ms: float)
         "cluster4": cluster4,
         "cluster5": cluster5,
     }
+
+
+# SIMU-06a · debug-snapshot endpoint. Returns a self-contained
+# Markdown document of the camera's current live state — everything
+# a debugging session needs in one paste-able blob. Reads from the
+# per-cam test-tracker state (no fresh inference) so the snapshot is
+# cheap to generate and reflects the LAST tick the user was looking
+# at. A frontend-state placeholder line is included for the frontend
+# to substitute before clipboard write.
+@bp.get('/api/cameras/<cam_id>/debug-snapshot')
+def api_debug_snapshot(cam_id: str):
+    from datetime import datetime, timezone
+    from flask import Response
+
+    settings = app_state.settings
+    runtimes = app_state.runtimes
+    cam = settings.get_camera(cam_id)
+    if not cam:
+        return Response("# Camera not found\n", mimetype="text/markdown", status=404)
+    tt = _TEST_TRACKERS.get(cam_id) or {}
+    last = tt.get("last_tick") or {}
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    diag = last.get("diag") or {}
+    fs = last.get("frame_size") or {"w": 0, "h": 0}
+    frame_age_ms = last.get("frame_age_ms") or 0
+    inference_ms = int(round(float(diag.get("inference_ms") or 0)))
+    cycle_ms = int(diag.get("frame_interval_avg_ms") or 0)
+    src = diag.get("frame_src") or "?"
+    mode = "sub-fast" if src == "sub" else "main-slow" if src == "main_fallback" else src
+    profil = diag.get("validator_profile") or "—"
+    cluster_ev = last.get("cluster_evidence") or {}
+    c4 = cluster_ev.get("cluster4") or {}
+    runtime = runtimes.get(cam_id)
+    # Tracker thresholds — read straight from the cam config (effective
+    # values after the SIMU-05g PATCH applied them).
+    spawn = float(cam.get("track_spawn_min_score") or 0.0)
+    floor = float(cam.get("track_continue_min_score") or 0.0)
+    grace = float(cam.get("track_miss_grace_seconds") or 0.0)
+    iou = float(cam.get("track_iou_match_threshold") or 0.0)
+    label_thresh = cam.get("label_thresholds") or {}
+    obj_filter = cam.get("object_filter") or []
+    excluded = cam.get("excluded_classes") or []
+    zones = cam.get("zones") or []
+    masks = cam.get("masks") or []
+    armed = bool(cam.get("armed", True))
+    # Active tracks — read from the runtime's live tracker (not the
+    # test-tracker) so the snapshot mirrors the alarm pipeline.
+    active_rows: list[str] = []
+    if runtime is not None and hasattr(runtime, "_tracker"):
+        for tr in getattr(runtime._tracker.state, "active", []) or []:
+            samples = getattr(tr, "samples", []) or []
+            best = getattr(tr, "best_score", 0.0)
+            misses = getattr(tr, "missed_windows", 0)
+            label = getattr(tr, "label", "?")
+            tid = getattr(tr, "track_id", "")
+            alive_s = len(samples)
+            active_rows.append(
+                f"#{tid} {label} · samples {alive_s} · misses {misses} · best {best:.2f}"
+            )
+    # Detections from last tick.
+    out = last.get("detections") or []
+    pass_dets = [d for d in out if d.get("verdict") == "pass"]
+    below_dets = [d for d in out if d.get("verdict") == "belowthresh"]
+    # Off-filter top 5 from cluster evidence.
+    c3 = cluster_ev.get("cluster3") or {}
+    off_filter_counts = c3.get("off_filter_60s_counts") or {}
+    top_off = sorted(off_filter_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    # Events from cluster 5.
+    c5 = cluster_ev.get("cluster5") or {}
+    events = c5.get("events_60s") or []
+    md = _build_debug_markdown(
+        cam=cam,
+        cam_id=cam_id,
+        now_iso=now_iso,
+        cycle_ms=cycle_ms,
+        inference_ms=inference_ms,
+        mode=mode,
+        fs=fs,
+        frame_age_ms=frame_age_ms,
+        profil=profil,
+        armed=armed,
+        active_rows=active_rows,
+        spawn=spawn,
+        floor=floor,
+        grace=grace,
+        iou=iou,
+        label_thresh=label_thresh,
+        obj_filter=obj_filter,
+        excluded=excluded,
+        zones=zones,
+        masks=masks,
+        events=events,
+        trace=last.get("trace") or [],
+        c4=c4,
+        pass_dets=pass_dets,
+        below_dets=below_dets,
+        top_off=top_off,
+        cluster_ev=cluster_ev,
+    )
+    return Response(md, mimetype="text/markdown; charset=utf-8")
+
+
+def _build_debug_markdown(**ctx) -> str:
+    """Assemble the snapshot Markdown body — pure string concat, no
+    template engine. Sections appear in the order spec'd by SIMU-06a;
+    sections with no data render a "(keine)" line so a diff of two
+    snapshots has a predictable layout.
+    """
+
+    def _fmt_section(title: str, body: str) -> str:
+        return f"\n## {title}\n{body.rstrip()}\n"
+
+    cam = ctx["cam"]
+    parts = [
+        "# TAM-spy Live-Detect Debug Snapshot",
+        f"Camera: {cam.get('name') or cam.get('id')} (id: {ctx['cam_id']})",
+        f"Timestamp: {ctx['now_iso']}",
+        "App-Version: (build hash from /api/system)",
+        "User-Agent: <<frontend_state_ua>>",
+    ]
+    head = "\n".join(parts) + "\n"
+    # Live-Status
+    fs = ctx["fs"]
+    ls_lines = [
+        f"TICK     ok · {ctx['cycle_ms']} ms · next ? ms",
+        f"MOUNT    ok · cam={ctx['cam_id']}",
+        f"QUELLE   {ctx['mode']} · {fs.get('w', 0)}×{fs.get('h', 0)} · age {ctx['frame_age_ms']} ms · inference {ctx['inference_ms']} ms",
+        f"CADENCE  avg_cycle {ctx['c4'].get('tick_cycle_ema_ms', 0)} · hold ? · drops {ctx['c4'].get('dropped_ticks_session', 0)}",
+        f"PROFIL   {ctx['profil']} · ARMED={'true' if ctx['armed'] else 'false'}",
+    ]
+    live_status = "```\n" + "\n".join(ls_lines) + "\n```"
+    # Active tracks
+    if ctx["active_rows"]:
+        active_md = "```\n" + "\n".join(ctx["active_rows"]) + "\n```"
+    else:
+        active_md = "(keine)"
+    # Tracker thresholds
+    ts_lines = [
+        f"track_spawn_min_score:     {ctx['spawn']:.2f}",
+        f"track_continue_min_score:  {ctx['floor']:.2f}",
+        f"track_miss_grace_seconds:  {ctx['grace']:.1f}",
+        f"track_iou_match_threshold: {ctx['iou']:.2f}",
+    ]
+    thresh_md = "```\n" + "\n".join(ts_lines) + "\n```"
+    # Per-class thresholds
+    perclass_md_lines = []
+    if ctx["label_thresh"]:
+        perclass_md_lines.append(
+            " · ".join(f"{k}: {float(v):.2f}" for k, v in ctx["label_thresh"].items())
+        )
+    else:
+        perclass_md_lines.append("(keine Overrides — global threshold gilt)")
+    perclass_md_lines.append(f"object_filter: {ctx['obj_filter']}")
+    if ctx["excluded"]:
+        perclass_md_lines.append(f"excluded_classes: {ctx['excluded']}")
+    perclass_md = "```\n" + "\n".join(perclass_md_lines) + "\n```"
+    # Motion gate (from camera config)
+    motion_lines = [
+        f"trigger_mode: {cam.get('trigger_mode', '?')}",
+        f"motion_threshold: {cam.get('motion_threshold', '?')}",
+        f"wildlife_min_score: {cam.get('wildlife_min_score', '?')}",
+    ]
+    motion_md = "```\n" + "\n".join(motion_lines) + "\n```"
+    # Zones / masks
+    zone_md_lines = [
+        f"Inklusiv-Zonen: {len(ctx['zones'])}",
+        f"Exklusiv-Masken: {len(ctx['masks'])}",
+    ]
+    zone_md = "```\n" + "\n".join(zone_md_lines) + "\n```"
+    # Events
+    if ctx["events"]:
+        ev_lines = []
+        for ev in ctx["events"]:
+            kind = (ev.get("kind") or "").upper()
+            tn = ev.get("track_num")
+            lbl = ev.get("label", "")
+            t_ago = ev.get("t_ago_seconds", 0)
+            extra = ev.get("extra", "")
+            ev_lines.append(f"-{t_ago}s  {kind:6s}  #{tn} {lbl} {extra}".rstrip())
+        events_md = "```\n" + "\n".join(ev_lines) + "\n```"
+    else:
+        events_md = "(keine)"
+    # Decision trace
+    if ctx["trace"]:
+        trace_md = "```\n" + "\n".join(ctx["trace"]) + "\n```"
+    else:
+        trace_md = "(keine — noch kein erfolgreicher Tick)"
+    # Performance
+    c4 = ctx["c4"]
+    perf_lines = [
+        f"tick_cycle_ema_ms: {c4.get('tick_cycle_ema_ms', 0)}",
+        f"dropped_ticks_session: {c4.get('dropped_ticks_session', 0)}",
+        f"sub_stream_fps: {c4.get('sub_fps', 0)} · main_stream_fps: {c4.get('main_fps', 0)}",
+    ]
+    perf_md = "```\n" + "\n".join(perf_lines) + "\n```"
+    # Frontend state — placeholder
+    frontend_md = "<<frontend_state>>"
+    # Detections
+    det_lines = []
+    if ctx["pass_dets"]:
+        det_lines.append(
+            "PASS:    "
+            + ", ".join(
+                f"#{d.get('track_num', '?')} {d['label']} {int(round((d.get('score') or 0) * 100))}%"
+                for d in ctx["pass_dets"]
+            )
+        )
+    else:
+        det_lines.append("PASS:    (keine)")
+    if ctx["below_dets"]:
+        det_lines.append(
+            "u.Schw:  "
+            + ", ".join(
+                f"{d['label']} {int(round((d.get('score') or 0) * 100))}%"
+                for d in ctx["below_dets"]
+            )
+        )
+    else:
+        det_lines.append("u.Schw:  (keine)")
+    if ctx["top_off"]:
+        det_lines.append(
+            "gefiltert (last 60s, top 5): "
+            + ", ".join(f"{lbl} {n}×" for lbl, n in ctx["top_off"])
+        )
+    else:
+        det_lines.append("gefiltert (last 60s): (keine)")
+    detections_md = "```\n" + "\n".join(det_lines) + "\n```"
+    # Detection-source audit
+    src_md = "```\n" + "\n".join([
+        f"frame_src: {ctx['mode']}",
+        f"sub_stream_fps: {c4.get('sub_fps', 0)} · main_stream_fps: {c4.get('main_fps', 0)}",
+        "camera_runtime/_main_loop frame_src: main (alarm pipeline)",
+    ]) + "\n```"
+    # Diagnose hints — pull from the cluster_evidence aggregates
+    hints: list[str] = []
+    c1 = ctx["cluster_ev"].get("cluster1") or {}
+    if int(c1.get("deaths_60s", 0)) > 0:
+        hints.append(
+            f"Cluster 1: {c1['deaths_60s']} DEATH events in 60 s · prüfen IoU/grace/floor."
+        )
+    c2 = ctx["cluster_ev"].get("cluster2") or {}
+    if c2.get("missing_classes_60s"):
+        hints.append(
+            f"Cluster 2: Klassen ohne Detection in 60 s · {c2['missing_classes_60s']}"
+        )
+    if ctx["top_off"]:
+        hints.append(
+            f"Cluster 3: Top False-Positive Klassen · {', '.join(k for k, _ in ctx['top_off'])}"
+        )
+    hint_md = "```\n" + "\n".join(hints) + "\n```" if hints else "(keine — alle Cluster im grünen Bereich)"
+    body = (
+        head
+        + _fmt_section("Live-Status", live_status)
+        + _fmt_section("Aktive Tracks", active_md)
+        + _fmt_section("Tracker-Schwellen (effektive Werte)", thresh_md)
+        + _fmt_section(f"Per-Klasse Schwellen (aktives Profil: {ctx['profil']})", perclass_md)
+        + _fmt_section("Motion-Gate", motion_md)
+        + _fmt_section("Zonen / Masken", zone_md)
+        + _fmt_section("Tracker-Ereignisse (letzte 60s)", events_md)
+        + _fmt_section("Decision-Trace (letzter Tick)", trace_md)
+        + _fmt_section("Performance", perf_md)
+        + _fmt_section("Frontend State", frontend_md)
+        + _fmt_section("Detections (Current Tick)", detections_md)
+        + _fmt_section("Detection-Source Audit", src_md)
+        + _fmt_section("Diagnose-Hinweise (automatisch)", hint_md)
+    )
+    return body

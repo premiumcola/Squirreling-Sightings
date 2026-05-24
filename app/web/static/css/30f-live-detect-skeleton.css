@@ -365,6 +365,13 @@
   display: none;
 }
 
+/* SIMU-01e · cam-edit-style tab button. Mirrors .cam-tab-btn
+   (09-telegram-1.css line 174) so the live-detect tab strip reads
+   identically to every other panel-tab strip in the app. No pill
+   background, no fill, no rounded shape — flat text + 2 px white
+   underline for the active tab, sitting on top of the tab row's
+   1 px low-contrast bottom border. 150 ms transitions on color +
+   border-color so the active tab fades over rather than snapping. */
 .mv-ld-tab-btn {
   display: inline-flex;
   align-items: center;
@@ -384,6 +391,17 @@
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
   outline: 0;
+  transition:
+    color 150ms ease-out,
+    background 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+@media (hover: hover) {
+  .mv-ld-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+  }
 }
 
 .mv-ld-tab-btn.active {

@@ -1263,38 +1263,11 @@ function _setDebugDiag(_on) {
 // name. No reader path remains.
 const _DEBUG_COLLAPSE_KEY = 'tam.livedetect.debug.collapsed';
 
+// SIMU-FIX-01a · the legacy strip is gone; this stub stays so the
+// surrounding gated callsites (_renderDiagStrip, _updateDiagStrip)
+// short-circuit cleanly. Always returns null → no DOM creation.
 function _ensureDiagStrip() {
-  if (!_debugDiagOn()) return null;
-  let strip = byId('mvSimDiagStrip');
-  if (strip) return strip;
-  // SIMU-01 · route the strip into zone-video so it overlays the
-  // video bottom edge (same visual as before; new parent only).
-  // SIMU-04+ may relocate this into the Debug tab panel.
-  const host = zoneEl('video') || byId('lightboxMediaWrap');
-  if (!host) return null;
-  strip = document.createElement('div');
-  strip.id = 'mvSimDiagStrip';
-  strip.className = 'mv-sim-diag-strip';
-  // Initial collapse state mirrors localStorage so a returning user
-  // sees the strip in the same shape they left it.
-  strip.dataset.collapsed = _debugCollapsed() ? '1' : '0';
-  strip.innerHTML = `
-    <button type="button" class="mv-sim-diag-head" aria-expanded="${_debugCollapsed() ? 'false' : 'true'}">
-      <span class="mv-sim-diag-summary" id="mvSimDiagSummary"></span>
-      <span class="mv-sim-diag-chevron" aria-hidden="true">▾</span>
-    </button>
-    <div class="mv-sim-diag-body" id="mvSimDiagBody"></div>`;
-  host.appendChild(strip);
-  // Header click toggles collapsed/expanded + persists.
-  const header = strip.querySelector('.mv-sim-diag-head');
-  header?.addEventListener('click', () => {
-    const collapsed = strip.dataset.collapsed === '1';
-    const next = !collapsed;
-    strip.dataset.collapsed = next ? '1' : '0';
-    header.setAttribute('aria-expanded', next ? 'false' : 'true');
-    _setDebugCollapsed(next);
-  });
-  return strip;
+  return null;
 }
 
 // One row per kind. Block layout (NOT flex/inline) so on iPhone

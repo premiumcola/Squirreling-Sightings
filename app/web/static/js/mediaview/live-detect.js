@@ -1658,6 +1658,11 @@ function _refreshMediaRow() {
 }
 
 function _renderBboxOverlay() {
+  // SIMU-FIX-03b · the bbox SVG's visibility is gated SOLELY by the
+  // `_overlays.bboxes` boolean. The floating-pill bar's own
+  // visibility (controlled separately via SIMU-02c's tap toggle)
+  // never affects this render path — the pill bar is a CONTROL for
+  // the boolean, never a GATE for the painting.
   const svg = _ensureBboxOverlay();
   if (!svg || !_session) return;
   svg.style.display = _overlays.bboxes ? 'block' : 'none';
@@ -1982,6 +1987,10 @@ const _LIVE_TRAIL_MAX_POINTS = 20;
 // solid head-dot) via the shared `buildTrailSvg` helper —
 // recorded clips and live simulation render trails the same way.
 function _renderTrailsOverlay() {
+  // SIMU-FIX-03b · trails visibility is gated SOLELY by
+  // `_overlays.trails`. Independent of the pill-bar's own
+  // visibility (which SIMU-02c animates in/out on tap). Persists
+  // across pill-bar fade cycles.
   const svg = _ensureTrailsOverlay();
   if (!svg || !_session) return;
   svg.style.display = _overlays.trails ? 'block' : 'none';
@@ -2050,6 +2059,10 @@ function _renderTrailsOverlay() {
 }
 
 function _renderZoneMaskOverlay() {
+  // SIMU-FIX-03b · zones + masks visibility is gated SOLELY by
+  // `_overlays.zones` / `_overlays.masks`. Independent of pill-bar
+  // visibility. The two booleans are read once per render; the
+  // canvas paints whichever combination is currently active.
   const canvas = _ensureZoneMaskOverlay();
   if (!canvas || !_session) return;
   const showZones = _overlays.zones;

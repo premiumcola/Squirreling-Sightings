@@ -718,20 +718,18 @@ function _mountOverlayToggles() {
   // browser will show its own bubble after ~700 ms). Touch devices
   // never trigger ``title`` — they get the long-press popover
   // below instead.
-  // A1 · trailing Debug pill — opt-in. Mirrors the overlay-toggle
-  // visual so it reads as part of the same row, but flips the
-  // separate _debugDiagOn() state (persisted in localStorage)
-  // instead of an _overlays.* key.
-  const debugOn = _debugDiagOn();
+  // SIMU-FIX-01a · the legacy "Debug" pill that controlled the
+  // floating mvSimDiagStrip is gone — Debug is now a TAB inside
+  // zone-detail (SIMU-05a+), not a video-overlay toggle. The four
+  // remaining pills (Bboxes / Trails / Zonen / Masken) control
+  // SVG-layer visibility on the video.
   // D34 · compact pills. The button is the 44 px touch target (outer
   // padding lives in CSS); the inner .mv-live-toggle-chip carries the
   // visible chip styling (background, border, ≤32 px height). Pills
   // lead with an inline icon glyph + the German label, single line.
   const _chip = (id, label, desc, on) =>
-    `<button type="button" class="mv-live-toggle${id === 'debug' ? ' mv-live-toggle--debug' : ''}" data-tog="${id}" data-desc="${esc(desc)}" data-on="${on ? '1' : '0'}" title="${esc(desc)}" aria-label="${esc(label)}: ${esc(desc)}"><span class="mv-live-toggle-chip"><span class="mv-live-toggle-ico" aria-hidden="true">${_TOGGLE_ICONS[id] || ''}</span><span class="mv-live-toggle-lbl">${esc(label)}</span></span></button>`;
-  row.innerHTML =
-    _TOGGLES.map((t) => _chip(t.id, t.label, t.desc, _overlays[t.id])).join('') +
-    _chip('debug', 'Debug', 'On-screen debug diagnostic strip (geometry + bbox space)', debugOn);
+    `<button type="button" class="mv-live-toggle" data-tog="${id}" data-desc="${esc(desc)}" data-on="${on ? '1' : '0'}" title="${esc(desc)}" aria-label="${esc(label)}: ${esc(desc)}"><span class="mv-live-toggle-chip"><span class="mv-live-toggle-ico" aria-hidden="true">${_TOGGLE_ICONS[id] || ''}</span><span class="mv-live-toggle-lbl">${esc(label)}</span></span></button>`;
+  row.innerHTML = _TOGGLES.map((t) => _chip(t.id, t.label, t.desc, _overlays[t.id])).join('');
   row.querySelectorAll('.mv-live-toggle').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       // Suppress click after a long-press touch: the long-press
@@ -743,16 +741,6 @@ function _mountOverlayToggles() {
         return;
       }
       const id = btn.dataset.tog;
-      // A1 · Debug pill flips its own localStorage-backed flag,
-      // NOT _overlays. Toggling it doesn't re-render the overlay
-      // SVGs — only the diag strip's presence changes.
-      if (id === 'debug') {
-        const next = btn.dataset.on !== '1';
-        btn.dataset.on = next ? '1' : '0';
-        _setDebugDiag(next);
-        _hideToggleTip();
-        return;
-      }
       _overlays[id] = !_overlays[id];
       btn.dataset.on = _overlays[id] ? '1' : '0';
       if (_DEBUG_TOGGLE) {
@@ -1245,76 +1233,35 @@ const _tickState = {
   tornDownPrev: false, // openLiveDetect torn down a prior session
 };
 
+// SIMU-FIX-01a · the legacy mvSimDiagStrip is gone. _debugDiagOn
+// returns false so every gated function in this file (the strip
+// renderer, _refreshXRow, _updateDiagStrip) becomes a no-op
+// without needing to delete every callsite. The Debug tab inside
+// zone-detail (SIMU-05a-f) now surfaces the same information in
+// a properly-scrolled scrollable panel. localStorage cleanup
+// happens once on first call so the legacy key doesn't linger.
+let _legacyDebugKeysCleaned = false;
 function _debugDiagOn() {
-  try {
-    return localStorage.getItem(_DEBUG_LS_KEY) === '1';
-  } catch {
-    return false;
+  if (!_legacyDebugKeysCleaned) {
+    _legacyDebugKeysCleaned = true;
+    try {
+      localStorage.removeItem(_DEBUG_LS_KEY);
+      localStorage.removeItem(_DEBUG_COLLAPSE_KEY);
+    } catch {
+      /* private-mode / quota — silent */
+    }
   }
+  return false;
 }
 
-function _setDebugDiag(on) {
-  try {
-    if (on) localStorage.setItem(_DEBUG_LS_KEY, '1');
-    else localStorage.removeItem(_DEBUG_LS_KEY);
-  } catch {
-    /* private-mode / quota — silent */
-  }
-  if (!on) {
-    const strip = byId('mvSimDiagStrip');
-    if (strip) strip.remove();
-    _diagState.bbox = null;
-    _diagState.trails = null;
-    _diagState.zonemask = null;
-    _diagState.media = null;
-    _diagState.posFail = null;
-    _diagState.paintFail = null;
-    _diagState.mount = null;
-    _diagState.tick = null;
-    _diagState.cadence = null;
-    // C56 · when the user toggles Debug OFF, reset to the
-    // "compact next time" default per the spec. The next ON
-    // shows the one-line summary first.
-    _setDebugCollapsed(true);
-  } else {
-    // Render now if we have any state from the in-progress render
-    // cycle; otherwise the next overlay-render tick will paint it.
-    _renderDiagStrip();
-    // Force a media-row immediately so the strip isn't empty on
-    // first activation.
-    _refreshMediaRow();
-    _renderDiagStrip();
-  }
+function _setDebugDiag(_on) {
+  /* SIMU-FIX-01a · no-op; Debug pill removed. */
 }
 
-// C56 · debug strip is now an absolute-positioned element pinned to
-// the bottom edge of #lightboxMediaWrap so sibling growth (e.g. the
-// Detections panel expanding) can never compress it below
-// readability. Stacking order: above the SVG overlays (z=14/15/16).
-// The strip is a 2-piece container: a tappable header (collapsed
-// summary) + a scrollable body (full multi-row dump). Collapse state
-// persists in localStorage so the user's preference survives across
-// sessions.
+// SIMU-FIX-01a · legacy collapse-state constant retained only so the
+// _debugDiagOn one-shot cleanup can remove the localStorage key by
+// name. No reader path remains.
 const _DEBUG_COLLAPSE_KEY = 'tam.livedetect.debug.collapsed';
-
-function _debugCollapsed() {
-  try {
-    // Default collapsed on first enable — the user has to opt into
-    // the verbose dump. Stored as a string so a missing key reads
-    // as collapsed (the safe default).
-    return localStorage.getItem(_DEBUG_COLLAPSE_KEY) !== '0';
-  } catch {
-    return true;
-  }
-}
-
-function _setDebugCollapsed(v) {
-  try {
-    localStorage.setItem(_DEBUG_COLLAPSE_KEY, v ? '1' : '0');
-  } catch {
-    /* private-mode / quota — silent */
-  }
-}
 
 function _ensureDiagStrip() {
   if (!_debugDiagOn()) return null;

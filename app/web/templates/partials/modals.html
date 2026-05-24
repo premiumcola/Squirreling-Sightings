@@ -344,13 +344,38 @@
        Matrix/logs-panel monospace aesthetic. Sibling of
        #liveViewModal (not inside) so it can be the only visible
        layer during the iOS native-player handoff — the live modal
-       chrome stays hidden the whole time. -->
+       chrome stays hidden the whole time.
+       SIMU-FIX-05a · close button so the user is never trapped on
+       a hanging connect screen. onClick = closeLiveView (window-
+       bridged from live-view.js) — tears down HLS, hides overlay,
+       restores body overflow. -->
 <div
   id="liveViewLoadingOverlay"
   class="lv-loading-overlay hidden"
   aria-live="polite"
   aria-hidden="true"
 >
+  <button
+    id="liveViewLoadingClose"
+    type="button"
+    class="lv-loading-close"
+    aria-label="Verbinden abbrechen"
+    onclick="window.closeLiveView && window.closeLiveView()"
+  >
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.4"
+      stroke-linecap="round"
+      aria-hidden="true"
+    >
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  </button>
   <div class="lv-loading-text">~/ Verbinde …</div>
 </div>
 

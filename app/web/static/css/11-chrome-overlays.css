@@ -357,3 +357,34 @@
   color: #00ff41;
   text-align: center;
 }
+
+/* SIMU-FIX-05a · emergency close button on the connect overlay.
+   Pinned top-right with safe-area respect; 44 × 44 px touch buffer
+   around the visible 18 px glyph. z-index above the overlay's own
+   stacking so it's always tappable even if HLS hangs forever. */
+.lv-loading-close {
+  position: fixed;
+  top: max(8px, calc(env(safe-area-inset-top, 0px) + 8px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid rgba(0, 255, 65, 0.35);
+  border-radius: 22px;
+  color: #00ff41;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  outline: 0;
+  z-index: 100;
+  padding: 0;
+}
+
+@media (hover: hover) {
+  .lv-loading-close:hover {
+    background: rgba(0, 255, 65, 0.16);
+    border-color: #00ff41;
+  }
+}

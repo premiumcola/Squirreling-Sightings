@@ -98,6 +98,11 @@
 }
 
 /* ── zone-title ──────────────────────────────────────────────────────── */
+/* SIMU-01f · compact bar. Background matches the page (no separate
+   fill, no shadow); visual separation from the video below is the
+   6 px padding-bottom. Safe-area-inset-top absorbs the iOS Dynamic
+   Island / notch so the camera name + Live dot sit BELOW the clock,
+   and the close X clears the battery icon on the right. */
 .mv-ld-zone-title {
   background: var(--bg, #080510);
   display: flex;
@@ -105,10 +110,10 @@
   gap: 8px;
   color: var(--text);
   overflow: hidden;
-  padding-top: 8px;
+  padding-top: max(8px, env(safe-area-inset-top, 0px));
   padding-bottom: 6px;
-  padding-left: 12px;
-  padding-right: 12px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
   min-height: 32px;
   transition:
     padding-top 180ms ease-out,
@@ -128,8 +133,10 @@
 }
 
 .mv-ld-title-cam {
+  /* SIMU-01f · weight 500 (was 600). The bar reads quieter so the
+     video below dominates the optical centre. */
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -167,7 +174,7 @@
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: rgba(226, 232, 240, 0.85);
   flex-shrink: 0;
   white-space: nowrap;
@@ -230,12 +237,17 @@
 }
 
 /* ── zone-video ──────────────────────────────────────────────────────── */
+/* SIMU-01f · edge-to-edge 16:9 video block. Width is full viewport,
+   height computed from aspect-ratio. No border, no rounded corners,
+   no padding. Black background so any letterboxing inside the
+   object-fit:contain media reads as black, not the page chrome. */
 .mv-ld-zone-video {
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #000;
   overflow: hidden;
   flex-shrink: 0;
+  border-radius: 0;
 }
 
 .mv-ld-zone-video > #lightboxImg,
@@ -249,9 +261,11 @@
   min-height: 0 !important;
   object-fit: contain;
   background: #000 !important;
+  border: 0 !important;
   border-radius: 0 !important;
   display: block;
   margin: 0 !important;
+  padding: 0 !important;
 }
 
 /* SIMU-01 · the live-toggles row stays inside zone-video until SIMU-02

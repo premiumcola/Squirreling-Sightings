@@ -331,6 +331,27 @@
   min-width: 0;
 }
 
+/* SIMU-01d · expand-to-fullscreen button at the right edge of the
+   tab bar. Muted by default, accent-cyan when fullscreen mode is
+   active. Subtle glow on press feeds back the toggle. */
+.mv-ld-fs-btn {
+  align-self: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.mv-ld-fs-btn[data-active='1'] {
+  color: #5bc8f5;
+  background: rgba(91, 200, 245, 0.12);
+}
+
+@media (hover: hover) {
+  .mv-ld-fs-btn[data-active='1']:hover {
+    color: #94deff;
+    background: rgba(91, 200, 245, 0.18);
+  }
+}
+
 .mv-ld-tab-bar {
   display: flex;
   gap: 4px;

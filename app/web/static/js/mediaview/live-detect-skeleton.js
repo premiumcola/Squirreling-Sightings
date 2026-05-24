@@ -88,6 +88,32 @@ function _iconChevron() {
   );
 }
 
+// Diagonal expand / collapse-back glyphs (top-right ↗ and bottom-left ↘
+// arrows). Used by the tab-bar fullscreen toggle.
+function _iconExpand() {
+  return (
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M14 4 H20 V10"/>' +
+    '<path d="M20 4 L13 11"/>' +
+    '<path d="M10 20 H4 V14"/>' +
+    '<path d="M4 20 L11 13"/></svg>'
+  );
+}
+
+function _iconCollapseBack() {
+  return (
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M14 10 H20 V4"/>' +
+    '<path d="M20 10 L13 3"/>' +
+    '<path d="M10 14 H4 V20"/>' +
+    '<path d="M4 14 L11 21"/></svg>'
+  );
+}
+
 const TABS = [
   { id: 'detections', label: 'Detections', icon: _iconDetections },
   { id: 'trace', label: 'Trace', icon: _iconTrace },
@@ -102,6 +128,12 @@ const DEFAULT_TAB = 'detections';
 
 let _activeTab = DEFAULT_TAB;
 const _tabChangeHandlers = [];
+// SIMU-01d · session-only fullscreen state. Snapshot of title +
+// timeline collapse values taken when the ↗ button forces both
+// collapsed, so the ↘ tap can restore them. NOT persisted —
+// localStorage is reserved for the user's own chevron choices.
+let _fullscreen = false;
+let _fsRestore = null;
 
 // localStorage helpers — silent on private mode / quota errors.
 function _lsGet(key) {
@@ -238,6 +270,11 @@ export function unmountLdSkeleton() {
     }
   }
   container.remove();
+  // SIMU-01d · session-only fullscreen state is not persisted by spec
+  // — reset on teardown so the next mount starts in the expanded
+  // (or last-LS-state) baseline.
+  _fullscreen = false;
+  _fsRestore = null;
 }
 
 function _makeZone(name) {
@@ -341,8 +378,44 @@ function _buildTabBar() {
     btn.addEventListener('click', () => setActiveTab(t.id));
     bar.appendChild(btn);
   }
+  // SIMU-01d · expand-to-fullscreen button at the right edge. Toggles
+  // BOTH title and timeline collapsed, snapshotting their prior values
+  // for restore on the next tap.
+  const fsBtn = document.createElement('button');
+  fsBtn.type = 'button';
+  fsBtn.className = 'mv-ld-iconbtn mv-ld-fs-btn';
+  fsBtn.dataset.active = '0';
+  fsBtn.setAttribute('aria-label', 'Tab-Inhalt maximieren');
+  fsBtn.innerHTML = _iconExpand();
+  fsBtn.addEventListener('click', _toggleFullscreen);
   root.appendChild(bar);
+  root.appendChild(fsBtn);
   return root;
+}
+
+function _toggleFullscreen() {
+  const btn = byId(CONTAINER_ID)?.querySelector('.mv-ld-fs-btn');
+  if (!btn) return;
+  if (!_fullscreen) {
+    _fsRestore = {
+      title: _isTitleCollapsed(),
+      timeline: _isTimelineCollapsed(),
+    };
+    _applyTitleCollapsed(true);
+    _applyTimelineCollapsed(true);
+    _fullscreen = true;
+    btn.dataset.active = '1';
+    btn.innerHTML = _iconCollapseBack();
+    btn.setAttribute('aria-label', 'Tab-Inhalt verkleinern');
+  } else {
+    _applyTitleCollapsed(!!_fsRestore?.title);
+    _applyTimelineCollapsed(!!_fsRestore?.timeline);
+    _fsRestore = null;
+    _fullscreen = false;
+    btn.dataset.active = '0';
+    btn.innerHTML = _iconExpand();
+    btn.setAttribute('aria-label', 'Tab-Inhalt maximieren');
+  }
 }
 
 export function setActiveTab(id) {

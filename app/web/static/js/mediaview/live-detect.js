@@ -47,7 +47,11 @@ import {
   onTabChange,
 } from './live-detect-skeleton.js';
 import { renderLiveSwimlane } from './live-swimlane.js';
-import { renderDebugPanel } from './live-detect-debug.js';
+import {
+  renderDebugPanel,
+  startSnapshotPrefetch,
+  stopSnapshotPrefetch,
+} from './live-detect-debug.js';
 
 // C73 · cadence floors. The original 1 Hz floor was set against the
 // main-stream cost budget (2560×1440 frame copy + JPEG encode +
@@ -362,6 +366,9 @@ export function closeLiveDetect() {
   // outside the toggle row; remove it on session teardown.
   const suppressedHint = byId('mvLiveSuppressedHint');
   if (suppressedHint) suppressedHint.remove();
+  // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it
+  // doesn't keep hitting the closed session's camId.
+  stopSnapshotPrefetch();
   // SIMU-01 · tear down the 5-zone skeleton last so any remaining
   // children get re-parented back to #lightboxMediaWrap / #lightbox
   // Inner before the container is removed. Recorded-clip lightbox
@@ -1174,11 +1181,17 @@ function _renderDebugTab(data) {
 }
 
 // Bridge a tab change INTO the debug tab to an immediate render so
-// the panel isn't blank on first show. No-op when the cached data
-// hasn't landed yet (very first tick).
+// the panel isn't blank on first show, AND start the snapshot
+// pre-fetch loop (SIMU-FIX-05c). Pre-fetch stops when the user
+// switches AWAY from Debug or when closeLiveDetect runs.
 if (typeof onTabChange === 'function') {
   onTabChange((id) => {
-    if (id === 'debug' && _lastFullDataForDebug) _renderDebugTab(_lastFullDataForDebug);
+    if (id === 'debug') {
+      if (_lastFullDataForDebug) _renderDebugTab(_lastFullDataForDebug);
+      if (_session) startSnapshotPrefetch({ session: _session });
+    } else {
+      stopSnapshotPrefetch();
+    }
   });
 }
 

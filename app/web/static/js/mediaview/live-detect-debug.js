@@ -913,9 +913,50 @@ function _ensureToastEl() {
   return _toastEl;
 }
 
-// SIMU-06c · wire the copy button. Fetch the markdown, splice in
-// a "Frontend State" block built from the live JS state, write to
-// the iOS clipboard, show a confirmation toast.
+// SIMU-FIX-05c · iOS Safari restricts navigator.clipboard.writeText
+// to handlers fired DIRECTLY from a user gesture — `await fetch(...)`
+// in between breaks that chain and the write silently fails with
+// NotAllowedError. The workaround is to PRE-FETCH the snapshot
+// while Debug tab is active and keep a fresh cache; the click
+// handler then writes the cached string SYNCHRONOUSLY without any
+// async hop between gesture-arrival and clipboard-call. The cache
+// is refreshed every 5 s so it can't go stale.
+let _snapshotCache = null;
+let _snapshotCacheTimer = 0;
+let _snapshotCacheCamId = null;
+
+function _prefetchSnapshot(ctx) {
+  const camId = (ctx.session || {}).camId || '';
+  if (!camId) return;
+  _snapshotCacheCamId = camId;
+  fetch(`/api/cameras/${encodeURIComponent(camId)}/debug-snapshot`)
+    .then((r) => (r.ok ? r.text() : null))
+    .then((md) => {
+      if (md && _snapshotCacheCamId === camId) _snapshotCache = md;
+    })
+    .catch(() => {
+      /* cache stays stale; click-handler falls back to live fetch */
+    });
+}
+
+export function startSnapshotPrefetch(ctx) {
+  _prefetchSnapshot(ctx);
+  if (_snapshotCacheTimer) clearInterval(_snapshotCacheTimer);
+  _snapshotCacheTimer = setInterval(() => _prefetchSnapshot(ctx), 5000);
+}
+
+export function stopSnapshotPrefetch() {
+  if (_snapshotCacheTimer) {
+    clearInterval(_snapshotCacheTimer);
+    _snapshotCacheTimer = 0;
+  }
+  _snapshotCache = null;
+  _snapshotCacheCamId = null;
+}
+
+// SIMU-06c · wire the copy button. Reads the cached snapshot, splices
+// in the live "Frontend State" block, writes to the iOS clipboard
+// SYNCHRONOUSLY (inside the gesture), shows confirmation toast.
 function _wireCopyBar(host, ctx) {
   const btn = host.querySelector('[data-action="copy-snapshot"]');
   if (!btn) return;
@@ -924,31 +965,80 @@ function _wireCopyBar(host, ctx) {
   // bottom-center with z-index 9999, never clipped by the modal's
   // own stacking context.
   const toast = _ensureToastEl();
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', () => {
     if (btn.dataset.busy === '1') return;
     btn.dataset.busy = '1';
     btn.classList.add('mv-ld-debug-copy-busy');
-    const camId = (ctx.session || {}).camId || '';
-    try {
-      const r = await fetch(`/api/cameras/${encodeURIComponent(camId)}/debug-snapshot`);
-      if (!r.ok) throw new Error(`status ${r.status}`);
-      let md = await r.text();
-      md = md.replace('<<frontend_state_ua>>', navigator.userAgent || '');
-      md = md.replace('<<frontend_state>>', _buildFrontendStateBlock(ctx));
-      await _writeClipboard(md);
-      _showToast(toast, 'Debug-Snapshot kopiert · paste in den Chat', 'ok', 2000);
-    } catch (err) {
+    let md = _snapshotCache;
+    if (!md) {
       _showToast(
         toast,
-        `Kopieren fehlgeschlagen — ${err?.message || 'versuche es erneut'}`,
+        'Snapshot lädt … bitte gleich erneut tippen',
+        'ok',
+        2200,
+      );
+      _prefetchSnapshot(ctx);
+      btn.dataset.busy = '0';
+      btn.classList.remove('mv-ld-debug-copy-busy');
+      return;
+    }
+    md = md.replace('<<frontend_state_ua>>', navigator.userAgent || '');
+    md = md.replace('<<frontend_state>>', _buildFrontendStateBlock(ctx));
+    // SIMU-FIX-05c · invoke clipboard write SYNCHRONOUSLY (no await
+    // before writeText). Errors fall through to the textarea +
+    // execCommand fallback, also invoked synchronously. Both calls
+    // must run inside the original gesture handler for iOS Safari
+    // to grant clipboard access.
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(md).then(
+          () => {
+            _showToast(toast, 'Debug-Snapshot kopiert · paste in den Chat', 'ok', 2000);
+          },
+          () => {
+            _execCopyFallback(md, toast);
+          },
+        );
+        ok = true;
+      } else {
+        ok = _execCopyFallback(md, toast);
+      }
+    } catch {
+      ok = _execCopyFallback(md, toast);
+    }
+    if (!ok) {
+      _showToast(
+        toast,
+        'Kopieren fehlgeschlagen — versuche es erneut',
         'error',
         3000,
       );
-    } finally {
-      btn.dataset.busy = '0';
-      btn.classList.remove('mv-ld-debug-copy-busy');
     }
+    btn.dataset.busy = '0';
+    btn.classList.remove('mv-ld-debug-copy-busy');
   });
+}
+
+function _execCopyFallback(md, toast) {
+  const ta = document.createElement('textarea');
+  ta.value = md;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:fixed;top:-9999px;left:0;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, md.length);
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  if (ok && toast) {
+    _showToast(toast, 'Debug-Snapshot kopiert · paste in den Chat', 'ok', 2000);
+  }
+  return ok;
 }
 
 function _buildFrontendStateBlock(ctx) {

@@ -888,14 +888,29 @@ function _renderCopyBar() {
     'stroke-linejoin="round" aria-hidden="true">' +
     '<rect x="9" y="9" width="12" height="12" rx="2" ry="2"/>' +
     '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  // SIMU-FIX-04d · the toast lives at document.body level (via
+  // _ensureToastEl) so it escapes any layout containment from
+  // zone-detail / the modal. Only the copy-button stays in the bar.
   return `
     <div class="mv-ld-debug-copy-bar">
       <button type="button" class="mv-ld-debug-copy" data-action="copy-snapshot">
         <span class="mv-ld-debug-copy-glyph">${iconSvg}</span>
         <span class="mv-ld-debug-copy-lbl">Alle Debug-Infos kopieren</span>
       </button>
-      <div class="mv-ld-toast" data-mv-ld-toast hidden></div>
     </div>`;
+}
+
+// SIMU-FIX-04d · shared toast element pinned to document.body so it
+// renders at the true viewport bottom-center with z-index 9999,
+// unaffected by the live-detect modal's containing-block stack.
+let _toastEl = null;
+function _ensureToastEl() {
+  if (_toastEl) return _toastEl;
+  _toastEl = document.createElement('div');
+  _toastEl.className = 'mv-ld-toast';
+  _toastEl.hidden = true;
+  document.body.appendChild(_toastEl);
+  return _toastEl;
 }
 
 // SIMU-06c · wire the copy button. Fetch the markdown, splice in
@@ -903,8 +918,12 @@ function _renderCopyBar() {
 // the iOS clipboard, show a confirmation toast.
 function _wireCopyBar(host, ctx) {
   const btn = host.querySelector('[data-action="copy-snapshot"]');
-  const toast = host.querySelector('[data-mv-ld-toast]');
-  if (!btn || !toast) return;
+  if (!btn) return;
+  // SIMU-FIX-04d · the toast lives at document.body level, not
+  // inside the copy-bar — so it always renders at the true viewport
+  // bottom-center with z-index 9999, never clipped by the modal's
+  // own stacking context.
+  const toast = _ensureToastEl();
   btn.addEventListener('click', async () => {
     if (btn.dataset.busy === '1') return;
     btn.dataset.busy = '1';

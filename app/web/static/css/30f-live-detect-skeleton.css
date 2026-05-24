@@ -1773,15 +1773,19 @@
   display: block;
 }
 
-/* SIMU-06c · Toast notification at the bottom of the modal. Mounts
-   inside the copy-bar's pointer-events:none zone but uses fixed
-   positioning so it doesn't shift layout when shown. */
+/* SIMU-FIX-04d · the toast lives at document.body level so it
+   always renders at the true viewport bottom-center, escaping any
+   layout containment from the modal / zone-detail. position:fixed
+   + z-index:9999 puts it above every live-detect chrome surface
+   (modal z-index is 1200, the toast must beat that and any
+   tooltip/popover too). Drop-shadow gives it visual weight on
+   busy backgrounds. */
 .mv-ld-toast {
   position: fixed;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  bottom: max(20px, calc(env(safe-area-inset-bottom, 0px) + 20px));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
-  z-index: 1500;
+  z-index: 9999;
   max-width: 320px;
   padding: 10px 16px;
   border-radius: 8px;
@@ -1793,9 +1797,9 @@
   pointer-events: none;
   opacity: 0;
   transition:
-    opacity 180ms ease-out,
-    transform 180ms ease-out;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    opacity 240ms ease-out,
+    transform 240ms ease-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .mv-ld-toast[data-toast-tone='error'] {

@@ -568,61 +568,56 @@ function _installLiveOverlayRefresh(mediaEl) {
   mediaEl._zoneRefreshInstalled = true;
 }
 
-function _ensureBboxOverlay() {
-  let svg = byId('lightboxLiveOverlay');
-  if (svg) return svg;
-  // SIMU-01 · the bbox SVG belongs inside zone-video so it sits on top
-  // of the <img>/<video>. Falls back to the wrap for the rare case
-  // when the skeleton hasn't mounted yet (defensive — _setupLiveChrome
-  // always mounts the skeleton before reaching here).
-  const host = zoneEl('video') || byId('lightboxMediaWrap');
+// SIMU-FIX-04a · the bbox/trails/zonemask layers ALL belong inside
+// zone-video so they sit on top of the <img>/<video>. The previous
+// implementation only routed them on FIRST creation; if any prior
+// session left the SVG in a different parent, or if the SVG was
+// inserted before mountLdSkeleton finished reparenting, the layer
+// would end up in #lightboxMediaWrap (outside zone-video) and the
+// _positionSvgOverImage delta-math landed it at viewport Y=339
+// (the BOTTOM edge of zone-video, off the visible video).
+// _ensureXxxOverlay now ALSO moves an already-existing SVG into
+// zone-video on every call — appendChild on a parented element
+// re-parents it without recreating.
+function _ensureOverlayLayer(id, type, zIndex) {
+  let el = byId(id);
+  const zoneVid = zoneEl('video');
+  if (el) {
+    if (zoneVid && el.parentNode !== zoneVid) zoneVid.appendChild(el);
+    return el;
+  }
+  const host = zoneVid || byId('lightboxMediaWrap');
   if (!host) return null;
-  svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.id = 'lightboxLiveOverlay';
-  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  // H2.b Fix 3 · z-indexes bumped 4/5/6 → 14/15/16. The wrap is a
-  // sticky element (z-index:4 itself) which forms a stacking
-  // context; inside that context, an explicit #lightboxImg
-  // z-index:1 + position:relative (CSS) puts the image at a known
-  // floor and these SVGs at 14/15/16 sit above it regardless of
-  // ancestor stacking. Stacking order WITHIN: zones+masks bottom
-  // (14), trails middle (15), bboxes top (16) — bboxes always win
-  // so the user sees the live verdict over the historical trail.
-  svg.style.cssText =
-    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:16';
-  host.appendChild(svg);
-  return svg;
+  if (type === 'svg') {
+    el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    el.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  } else {
+    el = document.createElement(type);
+  }
+  el.id = id;
+  // H2.b Fix 3 · z-indexes 14/15/16 — zones+masks bottom (14),
+  // trails middle (15), bboxes top (16). Stack order is
+  // deterministic regardless of DOM insertion order.
+  el.style.cssText =
+    `position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:${zIndex}`;
+  host.appendChild(el);
+  return el;
+}
+
+function _ensureBboxOverlay() {
+  return _ensureOverlayLayer('lightboxLiveOverlay', 'svg', 16);
 }
 
 function _ensureTrailsOverlay() {
-  let svg = byId('lightboxLiveTrails');
-  if (svg) return svg;
-  const host = zoneEl('video') || byId('lightboxMediaWrap');
-  if (!host) return null;
-  svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.id = 'lightboxLiveTrails';
-  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  svg.style.cssText =
-    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:15';
-  host.appendChild(svg);
-  return svg;
+  return _ensureOverlayLayer('lightboxLiveTrails', 'svg', 15);
 }
 
 function _ensureZoneMaskOverlay() {
-  let canvas = byId('lightboxLiveZoneMask');
-  if (canvas) return canvas;
-  const host = zoneEl('video') || byId('lightboxMediaWrap');
-  if (!host) return null;
   // Canvas (not SVG) so the SAME shared zone-layer the recorded
   // Mediathek lightbox uses can paint it — single source of truth
   // for the letterbox math and polygon source-resolution handling
   // (see mediaview/canvas/zone-layer.js + core/polygon-source.js).
-  canvas = document.createElement('canvas');
-  canvas.id = 'lightboxLiveZoneMask';
-  canvas.style.cssText =
-    'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:14';
-  host.appendChild(canvas);
-  return canvas;
+  return _ensureOverlayLayer('lightboxLiveZoneMask', 'canvas', 14);
 }
 
 // wv612 — single-line legend that appears under the toggle row only
@@ -1845,6 +1840,30 @@ function _renderBboxOverlay() {
 // same math drives the canvas zone overlay in the Mediathek +
 // Wetter-TL paths.
 function _positionSvgOverImage(svg) {
+  // SIMU-FIX-04a · fast path for the SIMU-01 layout. When the SVG
+  // sits inside zone-video (the normal case after FIX-04a's
+  // `_ensureOverlayLayer` always parents there), just fill the zone
+  // — zone-video has aspect-ratio:16/9 and the <video> element fills
+  // it identically, so dx=dy=0 / width=100% / height=100% is
+  // correct without any getBoundingClientRect math. The SVG's
+  // `preserveAspectRatio="xMidYMid meet"` handles any source-aspect
+  // mismatch INSIDE the SVG, so non-16:9 cameras (rare) still letter-
+  // box correctly. The legacy delta-math path below stays for the
+  // recorded-clip lightbox where the wrap layout differs.
+  const zoneVid = zoneEl('video');
+  if (zoneVid && svg.parentElement === zoneVid) {
+    svg.style.left = '0';
+    svg.style.top = '0';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    svg.style.right = 'auto';
+    svg.style.bottom = 'auto';
+    svg.style.inset = '0';
+    _setMediaBranch('zone-video-fill');
+    _lastVideoRejected = null;
+    _lastImgRejected = null;
+    return;
+  }
   // Pick whichever media element is currently visible. HLS path
   // uses `<video>` (iOS + desktop hls.js); MJPEG fallback uses
   // `<img>`. Both honour object-fit:contain so the SVG must align

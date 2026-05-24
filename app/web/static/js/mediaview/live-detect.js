@@ -38,7 +38,14 @@ void _lbRenderTrackTimeline;
 import { _setupVideoChrome } from '../lightbox.js';
 import { tryAttachHls } from '../core/hls-attach.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
-import { mountLdSkeleton, unmountLdSkeleton, zoneEl, panelEl } from './live-detect-skeleton.js';
+import {
+  mountLdSkeleton,
+  unmountLdSkeleton,
+  zoneEl,
+  panelEl,
+  getActiveTab,
+  onTabChange,
+} from './live-detect-skeleton.js';
 import { renderLiveSwimlane } from './live-swimlane.js';
 import { renderDebugPanel } from './live-detect-debug.js';
 
@@ -1144,10 +1151,17 @@ function _renderFrame(data) {
 }
 
 // SIMU-05 · Debug tab content. Composes the live-status header
-// (SIMU-05a) and progressively the five problem-clusters as their
-// individual prompts land. Re-runs on every tick so the cluster
-// evidence boxes stay current.
+// (SIMU-05a) + five problem-clusters. SIMU-FIX-05b · skip rendering
+// when the Debug tab isn't visible — the panel sits inside zone-
+// detail which is display:none for inactive tabs, so the user
+// can't see it anyway. Bailing here saves the per-tick cost of
+// renderDebugPanel (header + 5 clusters via 5 outerHTML swaps).
+// Subscribed to onTabChange so a switch INTO Debug fires a render
+// immediately with the latest tick data.
+let _lastFullDataForDebug = null;
 function _renderDebugTab(data) {
+  _lastFullDataForDebug = data;
+  if (typeof getActiveTab === 'function' && getActiveTab() !== 'debug') return;
   const host = panelEl('debug');
   if (!host) return;
   renderDebugPanel(host, {
@@ -1156,6 +1170,15 @@ function _renderDebugTab(data) {
     holdMs: _holdMsActive,
     cycleEmaMs: _cycleEmaMs,
     fullData: data,
+  });
+}
+
+// Bridge a tab change INTO the debug tab to an immediate render so
+// the panel isn't blank on first show. No-op when the cached data
+// hasn't landed yet (very first tick).
+if (typeof onTabChange === 'function') {
+  onTabChange((id) => {
+    if (id === 'debug' && _lastFullDataForDebug) _renderDebugTab(_lastFullDataForDebug);
   });
 }
 

@@ -2118,7 +2118,14 @@ function _renderDetectionsPanel(data) {
   // SECTION 3 · Track-Ereignisse · last 30 s. Pulled from the trace
   // log we already maintain in _traceLines. Filter to the "[det]" /
   // "[track]" lines and stamp them with a coloured tag.
+  const events = _traceLines.slice(-30);
   const trackEventsHtml = _buildTrackEventsHtml();
+  // SIMU-04d · when ALL three sections are empty, collapse to a
+  // single muted line instead of stacking three sub-empty rows.
+  if (!passDets.length && !filteredDets.length && !events.length) {
+    detHost.innerHTML = '<div class="mv-ld-empty-row">Noch keine Detektion</div>';
+    return;
+  }
   detHost.innerHTML =
     `<div class="mv-ld-section">
       <div class="mv-ld-section-head">AKTIVE TRACKS</div>

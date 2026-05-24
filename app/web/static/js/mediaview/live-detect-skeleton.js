@@ -128,6 +128,11 @@ const DEFAULT_TAB = 'detections';
 
 let _activeTab = DEFAULT_TAB;
 const _tabChangeHandlers = [];
+// SIMU-04d · per-tab scroll-top memory. Tab content lives inside
+// zone-detail (the only scrollable region); switching tabs hides
+// one panel and shows another, so without this the user's scroll
+// position is lost on every switch.
+const _tabScrollTops = new Map();
 // SIMU-01d · session-only fullscreen state. Snapshot of title +
 // timeline collapse values taken when the ↗ button forces both
 // collapsed, so the ↘ tap can restore them. NOT persisted —
@@ -298,6 +303,9 @@ export function unmountLdSkeleton() {
   clearTimeout(_hideTimer);
   _hideTimer = 0;
   _overlayVisible = false;
+  // SIMU-04d · per-tab scroll-top is per-mount. Reset so a re-open
+  // on a different camera starts at the top of each tab.
+  _tabScrollTops.clear();
 }
 
 // SIMU-02c · tap-on-video handler. Toggles the visibility of the
@@ -499,16 +507,32 @@ function _toggleFullscreen() {
 
 export function setActiveTab(id) {
   if (!TABS.find((t) => t.id === id)) return;
+  const container = byId(CONTAINER_ID);
+  if (!container) {
+    _activeTab = id;
+    _lsSet(LS_ACTIVE_TAB, id);
+    return;
+  }
+  // SIMU-04d · save the OLD tab's scroll-top before swapping panels.
+  // The detail zone is the single scroll surface; each tab's view-
+  // port snapshot lives in _tabScrollTops so switching back restores
+  // exactly where the user left off.
+  const detail = byId(ZONE_IDS.detail);
+  if (detail && _activeTab) {
+    _tabScrollTops.set(_activeTab, detail.scrollTop);
+  }
   _activeTab = id;
   _lsSet(LS_ACTIVE_TAB, id);
-  const container = byId(CONTAINER_ID);
-  if (!container) return;
   container.querySelectorAll('.mv-ld-tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tabId === id);
   });
   container.querySelectorAll('.mv-ld-tab-panel').forEach((p) => {
     p.classList.toggle('active', p.dataset.tabId === id);
   });
+  // Restore the new tab's scroll-top, defaulting to 0 on first show.
+  if (detail) {
+    detail.scrollTop = _tabScrollTops.get(id) || 0;
+  }
   for (const h of _tabChangeHandlers) {
     try {
       h(id);

@@ -251,16 +251,23 @@ export function mountLdSkeleton({ camId, cameraName } = {}) {
   setActiveTab(initialTab);
 }
 
+// SIMU-FIX-04c · title-bar collapse is gone; the title is
+// permanently compact. Only the timeline still has a collapse
+// state. The legacy `tam.ld.title.collapsed` key is purged on
+// every mount so a stale value never resurrects the toggle.
 function _applyInitialCollapsedStates(camId) {
+  try {
+    localStorage.removeItem(LS_TITLE_COLLAPSED);
+  } catch {
+    /* private-mode / quota — silent */
+  }
   const lastCam = _lsGet(LS_LAST_CAMERA);
   const sameCam = !!camId && lastCam === camId;
   if (!sameCam) {
-    _applyTitleCollapsed(false);
     _applyTimelineCollapsed(false);
     if (camId) _lsSet(LS_LAST_CAMERA, camId);
     return;
   }
-  _applyTitleCollapsed(_lsGet(LS_TITLE_COLLAPSED) === '1');
   _applyTimelineCollapsed(_lsGet(LS_TIMELINE_COLLAPSED) === '1');
 }
 
@@ -351,21 +358,18 @@ function _makeZone(name) {
   return el;
 }
 
+// SIMU-FIX-04c · the title bar is now permanently compact — single
+// muted line "<Cam> · Live" + close X. The collapse chevron + its
+// localStorage state are removed; the only collapse-control left is
+// the expand-to-fullscreen button on the tab bar (which now toggles
+// just the timeline since title is already at its smallest form).
 function _buildTitleBar(camName) {
   const titleEl = document.createElement('div');
   titleEl.className = 'mv-ld-title-row';
   titleEl.style.cssText = 'display:contents';
   titleEl.innerHTML =
-    '<span class="mv-ld-title-cam" data-mv-ld-title-cam></span>' +
-    '<span class="mv-ld-title-live" data-mv-ld-title-live>Live</span>' +
-    '<span class="mv-ld-title-collapsed-line" data-mv-ld-title-collapsed></span>' +
-    `<button type="button" class="mv-ld-iconbtn mv-ld-title-chevron" aria-label="Titel ein-/ausblenden">${_iconChevron()}</button>` +
+    '<span class="mv-ld-title-text" data-mv-ld-title-text></span>' +
     `<button type="button" class="mv-ld-iconbtn mv-ld-close-btn" aria-label="Schließen">${_iconClose()}</button>`;
-  titleEl.querySelector('.mv-ld-title-chevron')?.addEventListener('click', () => {
-    const next = !_isTitleCollapsed();
-    _applyTitleCollapsed(next);
-    _lsSet(LS_TITLE_COLLAPSED, next ? '1' : '0');
-  });
   titleEl.querySelector('.mv-ld-close-btn')?.addEventListener('click', () => {
     if (typeof window.closeLightbox === 'function') {
       window.closeLightbox();
@@ -375,19 +379,16 @@ function _buildTitleBar(camName) {
     }
   });
   const camText = camName || '';
-  titleEl.querySelector('[data-mv-ld-title-cam]').textContent = camText;
-  titleEl.querySelector('[data-mv-ld-title-collapsed]').textContent = camText
+  titleEl.querySelector('[data-mv-ld-title-text]').textContent = camText
     ? `${camText} · Live`
     : 'Live';
   return titleEl;
 }
 
 function _renderTitleText(camName) {
-  const camEl = byId(CONTAINER_ID)?.querySelector('[data-mv-ld-title-cam]');
-  const collapsedEl = byId(CONTAINER_ID)?.querySelector('[data-mv-ld-title-collapsed]');
+  const textEl = byId(CONTAINER_ID)?.querySelector('[data-mv-ld-title-text]');
   const camText = camName || '';
-  if (camEl) camEl.textContent = camText;
-  if (collapsedEl) collapsedEl.textContent = camText ? `${camText} · Live` : 'Live';
+  if (textEl) textEl.textContent = camText ? `${camText} · Live` : 'Live';
 }
 
 // SIMU-02b · the verdict legend pill. Single dark-glass surface
@@ -427,20 +428,21 @@ function _buildTimelineHeader() {
 // Collapsed-state accessors. The data-collapsed attribute on the
 // zone is the single source of truth; localStorage just seeds it on
 // mount + remembers user clicks.
+// SIMU-FIX-04c · title is permanently compact; only the timeline
+// retains a collapse state. _isTitleCollapsed/_applyTitleCollapsed
+// stay as no-op stubs so the fullscreen-toggle code paths below
+// (which historically toggled BOTH) still compile cleanly; they
+// just don't change anything visible.
 function _isTitleCollapsed() {
-  return byId(ZONE_IDS.title)?.dataset.collapsed === '1';
+  return false;
 }
 
 function _isTimelineCollapsed() {
   return byId(ZONE_IDS.timeline)?.dataset.collapsed === '1';
 }
 
-function _applyTitleCollapsed(v) {
-  const zone = byId(ZONE_IDS.title);
-  if (!zone) return;
-  zone.dataset.collapsed = v ? '1' : '0';
-  const chev = zone.querySelector('.mv-ld-title-chevron');
-  if (chev) chev.dataset.collapsed = v ? '1' : '0';
+function _applyTitleCollapsed(_v) {
+  /* no-op — title is permanently compact (SIMU-FIX-04c) */
 }
 
 function _applyTimelineCollapsed(v) {

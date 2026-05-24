@@ -1029,3 +1029,85 @@
   color: var(--mv-ld-text, #b6d4be);
   word-break: break-word;
 }
+
+/* SIMU-04c · Pipeline-Durchlauf section. Two-column key/value grid,
+   mono everywhere, matrix-mint palette. Keys at 10 px #82c79a in a
+   fixed 80 px column; values at 9 px #b6d4be flowing to the right.
+   GATES gets three inline badges so the primary signal reads at a
+   glance. SCHWELLEN supports a sub-row for per-class overrides. */
+.mv-ld-pipeline {
+  padding: 8px 0 12px;
+}
+
+.mv-ld-pipeline-head {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--mv-ld-muted, #5a7a68);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.mv-ld-pipeline-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  row-gap: 4px;
+  column-gap: 12px;
+  align-items: baseline;
+}
+
+.mv-ld-pipeline-k {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--mv-ld-mono, #82c79a);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.mv-ld-pipeline-v {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 9px;
+  color: var(--mv-ld-text, #b6d4be);
+  word-break: break-word;
+}
+
+.mv-ld-pipeline-sub {
+  font-size: 9px;
+  color: var(--mv-ld-muted, #5a7a68);
+  margin-top: 2px;
+}
+
+.mv-ld-pipeline-gates {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mv-ld-gate {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+.mv-ld-gate-raw {
+  background: rgba(91, 200, 245, 0.16);
+  color: #94d8ff;
+  box-shadow: inset 0 0 0 1px rgba(91, 200, 245, 0.4);
+}
+
+.mv-ld-gate-pass {
+  background: rgba(110, 231, 183, 0.18);
+  color: #6ee7b7;
+  box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.4);
+}
+
+.mv-ld-gate-below {
+  background: rgba(255, 205, 110, 0.14);
+  color: #ffcd6e;
+  box-shadow: inset 0 0 0 1px rgba(255, 205, 110, 0.4);
+}

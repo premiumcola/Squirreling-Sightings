@@ -1110,30 +1110,39 @@ function _renderDiagPanel(diag) {
     ? objFilter.map((c) => esc(String(c))).join(' · ')
     : '(alle Klassen)';
   const profStr = diag.validator_profile ? esc(String(diag.validator_profile)) : '—';
+  // SIMU-04c · PIPELINE-DURCHLAUF section. Two-column key/value grid
+  // in matrix-mono palette: keys 10 px #82c79a, values 9 px #b6d4be.
+  // GATES is special — three inline badges (raw/pass/u.S.) so the
+  // primary signal reads at a glance. SCHWELLEN is split into a
+  // global row + a per-class sub-row when per-class overrides exist.
+  const sourceStr = `${esc(diag.frame_src || '?')} · ${fs.w}×${fs.h} · age ${Math.round(Number(diag.frame_age_ms) || 0)} ms`;
+  const globalThresh = Number(thresholds.global || 0).toFixed(2);
   const headerHtml = `
-    <div class="mv-ld-diag-body">
-      <div class="mv-ld-diag-row">
-        <span class="mv-ld-diag-key">Quelle</span>
-        <span class="mv-ld-diag-val">${esc(diag.frame_src || '?')} · ${fs.w}×${fs.h} · ${Math.round(Number(diag.frame_age_ms) || 0)} ms</span>
+    <div class="mv-ld-pipeline">
+      <div class="mv-ld-pipeline-head">PIPELINE-DURCHLAUF (LIVE)</div>
+      <div class="mv-ld-pipeline-grid">
+        <div class="mv-ld-pipeline-k">QUELLE</div>
+        <div class="mv-ld-pipeline-v">${sourceStr}</div>
+        <div class="mv-ld-pipeline-k">CORAL</div>
+        <div class="mv-ld-pipeline-v">${esc(coralStr)}</div>
+        <div class="mv-ld-pipeline-k">GATES</div>
+        <div class="mv-ld-pipeline-v mv-ld-pipeline-gates">
+          <span class="mv-ld-gate mv-ld-gate-raw">raw=${Number(gates.raw || 0)}</span>
+          <span class="mv-ld-gate mv-ld-gate-pass">pass=${Number(gates.pass || 0)}</span>
+          <span class="mv-ld-gate mv-ld-gate-below">u.S.=${Number(gates.belowthresh || 0)}</span>
+        </div>
+        <div class="mv-ld-pipeline-k">PROFIL</div>
+        <div class="mv-ld-pipeline-v">${profStr}</div>
+        <div class="mv-ld-pipeline-k">FILTER</div>
+        <div class="mv-ld-pipeline-v">${objFilterStr}</div>
+        <div class="mv-ld-pipeline-k">SCHWELLEN</div>
+        <div class="mv-ld-pipeline-v">global ${globalThresh}${Object.keys(perClass).length ? `<div class="mv-ld-pipeline-sub">${perClassStr}</div>` : ''}</div>
       </div>
-      <div class="mv-ld-diag-row">
-        <span class="mv-ld-diag-key">Coral</span>
-        <span class="mv-ld-diag-val">${esc(coralStr)}</span>
-      </div>
-      <div class="mv-ld-diag-row mv-ld-diag-gates">
-        <span class="mv-ld-diag-key">Gates</span>
-        <span class="mv-ld-diag-gate" data-kind="raw">raw=${Number(gates.raw || 0)}</span>
-        <span class="mv-ld-diag-gate" data-kind="pass">pass=${Number(gates.pass || 0)}</span>
-        <span class="mv-ld-diag-gate" data-kind="belowthresh">unter Schwelle=${Number(gates.belowthresh || 0)}</span>
-        <span class="mv-ld-diag-gate" data-kind="filtered">gefiltert=${Number(gates.filtered || 0)}</span>
-      </div>
+    </div>
+    <div class="mv-ld-diag-body mv-ld-diag-legacy" hidden>
       <div class="mv-ld-diag-row mv-ld-diag-top">
         <span class="mv-ld-diag-key">Top 3 raw</span>
         <div class="mv-ld-diag-top-list">${topRows}</div>
-      </div>
-      <div class="mv-ld-diag-row">
-        <span class="mv-ld-diag-key">Filter</span>
-        <span class="mv-ld-diag-val">${objFilterStr}</span>
       </div>
       <div class="mv-ld-diag-row">
         <span class="mv-ld-diag-key">Profil</span>

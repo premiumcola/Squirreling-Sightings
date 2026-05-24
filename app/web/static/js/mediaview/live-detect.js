@@ -2436,3 +2436,13 @@ void OBJ_SVG;
 void objIconSvg;
 
 window.closeLiveDetect = closeLiveDetect;
+// SIMU-06c · live-detect-debug.js reads the current overlay-toggle
+// snapshot via this bridge so the debug snapshot reflects exactly
+// what the user has on screen at copy-time.
+window._mvLdOverlaysSnapshot = function () {
+  const parts = [];
+  for (const [k, v] of Object.entries(_overlays)) {
+    parts.push(`${k}=${v ? 'on' : 'off'}`);
+  }
+  return parts.join(' · ');
+};

@@ -593,6 +593,31 @@
   transition: left 500ms linear;
 }
 
+/* SIMU-03f · #N track-number badge. Renders as a pseudo-element at
+   the bar's LEFT edge — extending outward so the badge is visible
+   even when the bar itself is narrow (10 px). The badge background
+   reads from the same --bar-color custom property the bar paints,
+   keeping the track identity colour consistent. Dark text (#0b0f14)
+   on every class colour (yellow/brown/blue/etc. all bright enough). */
+.mv-ld-swim-bar[data-track-num]::before {
+  content: '#' attr(data-track-num);
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: -1px;
+  background: var(--bar-color, #4a6477);
+  color: #0b0f14;
+  font-size: 7px;
+  font-weight: 700;
+  padding: 1px 2px;
+  border-radius: 2px 0 0 2px;
+  white-space: nowrap;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 .mv-ld-swim-bar-andere {
   height: 6px;
   background: repeating-linear-gradient(

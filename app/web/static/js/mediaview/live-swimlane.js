@@ -202,7 +202,14 @@ function _syncBars(cell, lane, windowMs) {
       el.dataset.barKey = key;
       el.style.left = leftCss;
       el.style.width = `${barWidth}px`;
-      if (!isAndere) el.style.background = c;
+      // SIMU-03f · the bar carries its class colour via a CSS custom
+      // property so the ::before #N badge can paint the same fill
+      // without inheriting (background isn't inheritable). Andere
+      // bars use their striped pattern and skip the var.
+      if (!isAndere) {
+        el.style.background = c;
+        el.style.setProperty('--bar-color', c);
+      }
       if (Number.isFinite(s.track_num) && s.track_num > 0) {
         el.dataset.trackNum = String(s.track_num);
       }

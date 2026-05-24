@@ -502,11 +502,13 @@
   display: inline-block;
 }
 
-.mv-ld-swim-andere-count {
-  font-size: 9px;
-  color: rgba(226, 232, 240, 0.55);
-  font-weight: 600;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+/* SIMU-03c · the icon column is fixed at 36 px. No text labels —
+   the icon IS the label. OBJ_SVG entries carry canonical class
+   colours; unknown classes get a grey-circle fallback. The "andere"
+   three-dots glyph surfaces the per-class count via title-attr
+   long-press tooltip (browser-native, no extra JS). */
+.mv-ld-swim-icon-andere {
+  cursor: help;
 }
 
 .mv-ld-swim-bar {

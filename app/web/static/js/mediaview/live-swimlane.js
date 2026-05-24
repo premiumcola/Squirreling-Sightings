@@ -127,23 +127,40 @@ function _renderLane(lane, idx, windowMs) {
     </div>`;
 }
 
+// SIMU-03c · icon-only lane labels. The 36 px fixed-width column
+// keeps every lane's event row pinned to the same x-origin
+// regardless of class. The "andere" lane uses a three-dots glyph;
+// the N count surfaces via the long-press tooltip (SIMU-03b spec),
+// not in the visible column.
 function _renderLaneLabel(lane, isAndere) {
   if (isAndere) {
     const n = lane.andereByClass ? lane.andereByClass.size : 0;
+    const title = n > 0 ? _andereTooltip(lane.andereByClass) : 'andere · keine Detektionen';
     return (
-      '<span class="mv-ld-swim-icon mv-ld-swim-icon-andere" aria-hidden="true">' +
+      '<span class="mv-ld-swim-icon mv-ld-swim-icon-andere" aria-hidden="true" ' +
+      `title="${esc(title)}">` +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
       '<circle cx="6" cy="12" r="1.8" fill="#3d4654"/>' +
       '<circle cx="12" cy="12" r="1.8" fill="#3d4654"/>' +
       '<circle cx="18" cy="12" r="1.8" fill="#3d4654"/></svg>' +
-      `</span><span class="mv-ld-swim-andere-count">${n}</span>`
+      '</span>'
     );
   }
   const raw = OBJ_SVG[lane.label] || '';
-  const icon = raw
-    ? raw.replace('width="16" height="16"', 'width="16" height="16"')
-    : '<span class="mv-ld-swim-icon-fallback"></span>';
-  return `<span class="mv-ld-swim-icon" aria-hidden="true">${icon}</span>`;
+  if (!raw) {
+    return '<span class="mv-ld-swim-icon" aria-hidden="true"><span class="mv-ld-swim-icon-fallback"></span></span>';
+  }
+  return `<span class="mv-ld-swim-icon" aria-hidden="true">${raw}</span>`;
+}
+
+function _andereTooltip(byClass) {
+  if (!byClass || byClass.size === 0) return 'andere · keine Detektionen';
+  const parts = [];
+  const sorted = Array.from(byClass.entries()).sort((a, b) => b[1] - a[1]);
+  for (const [cls, n] of sorted) {
+    parts.push(`${cls} (${n})`);
+  }
+  return `andere · ${parts.join(' · ')}`;
 }
 
 function _renderBar(sample, windowMs, color, isAndere) {

@@ -107,10 +107,12 @@ export function renderDebugPanel(host, ctx = {}) {
     _renderLiveStatusHeader(ctx) +
     _renderCluster1(ctx, cam) +
     _renderCluster2(ctx, cam) +
+    _renderCluster3(ctx, cam) +
     '</div>';
   host.dataset.mvLdDebugFp = fp;
   _wireCluster1(host, cam, ctx);
   _wireCluster2(host, cam, ctx);
+  _wireCluster3(host, cam, ctx);
 }
 
 // Refresh the dynamic content (live-status + evidence boxes) without
@@ -623,4 +625,84 @@ function _setSliderValue(root, val) {
   if (knob) knob.style.left = `${pct.toFixed(2)}%`;
   if (fill) fill.style.width = `${pct.toFixed(2)}%`;
   if (valEl) valEl.textContent = _formatValue(val, step);
+}
+
+// SIMU-05d · Cluster 3 · False Positives. Pills only; one-tap adds
+// an off-filter class to the excluded_classes list. Zonen-editor
+// link surfaces the existing cam-edit zones view.
+function _renderCluster3(ctx, cam) {
+  const ev = ctx.fullData?.cluster_evidence?.cluster3;
+  const offFilter = ev && ev.off_filter_60s_counts ? ev.off_filter_60s_counts : {};
+  const topPills = Object.entries(offFilter)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(
+      ([lbl, n]) =>
+        `<button type="button" class="mv-ld-fp-pill" data-fp-pill="${esc(lbl)}">${esc(lbl)} <span class="mv-ld-fp-count">${n}</span> <span class="mv-ld-fp-x" aria-hidden="true">×</span></button>`,
+    )
+    .join('');
+  const zoneCount = Array.isArray(cam.zones) ? cam.zones.length : 0;
+  const maskCount = Array.isArray(cam.masks) ? cam.masks.length : 0;
+  return `
+    <div class="mv-ld-cluster mv-ld-cluster-warn" data-cluster-id="3">
+      ${_renderClusterHeader(3, '▼ Cluster 3 · Falsche Klasse / False Positives',
+        'Andere Klassen werden fälschlicherweise erkannt · z.B. „couch" oder „tv"',
+        _cluster3HeaderHint(ev))}
+      <div class="mv-ld-cluster-body">
+        <div class="mv-ld-subsection-head">SCHNELLFILTER (TOP FALSE POSITIVES)</div>
+        <div class="mv-ld-subsection-desc">Direkt aus den Top-False-Positives der letzten 60 s · ein Tap entfernt sie aus der Detection-Pipeline</div>
+        <div class="mv-ld-fp-pills" data-cluster-evidence="3">
+          ${topPills || '<div class="mv-ld-empty-row">Keine False Positives in den letzten 60 s</div>'}
+        </div>
+        <div class="mv-ld-subsection-head">ZONEN / MASKEN</div>
+        <div class="mv-ld-profil-line">
+          <span>Aktiv: <span class="mv-ld-profil-val">${zoneCount} Zone(n) · ${maskCount} Maske(n)</span></span>
+          <button type="button" class="mv-ld-link-btn" data-action="open-zone-editor">Zonen-Editor öffnen</button>
+        </div>
+        <div class="mv-ld-cluster-actions">
+          <button type="button" class="mv-ld-action-btn" data-action="defaults-cluster3">Defaults</button>
+          <span class="mv-ld-save-status" data-save-status data-save-state="idle"></span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _cluster3HeaderHint(ev) {
+  if (!ev) return { tone: 'mute', text: '· Live-Daten in Vorbereitung' };
+  const offFilter = ev.off_filter_60s_counts || {};
+  const entries = Object.entries(offFilter)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  if (!entries.length) return { tone: 'ok', text: '✓ Letzte 60 s: keine False Positives' };
+  const summary = entries.map(([k, v]) => `${k} (${v})`).join(', ');
+  return { tone: 'warn', text: `⚠ Letzte 60 s: ${summary}` };
+}
+
+function _wireCluster3(host, cam, ctx) {
+  const camId = (ctx.session || {}).camId || cam.id;
+  host.querySelectorAll('[data-fp-pill]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const lbl = btn.dataset.fpPill;
+      const existing = Array.isArray(cam.excluded_classes) ? cam.excluded_classes.slice() : [];
+      if (!existing.includes(lbl)) existing.push(lbl);
+      const statusEl = btn.closest('.mv-ld-cluster')?.querySelector('[data-save-status]');
+      _scheduleSave(camId, { excluded_classes: existing }, statusEl);
+      btn.remove();
+    });
+  });
+  host
+    .querySelector('[data-action="defaults-cluster3"]')
+    ?.addEventListener('click', () => {
+      const statusEl = host
+        .querySelector('[data-action="defaults-cluster3"]')
+        .closest('.mv-ld-cluster')
+        .querySelector('[data-save-status]');
+      _scheduleSave(camId, { excluded_classes: [] }, statusEl);
+    });
+  host
+    .querySelector('[data-action="open-zone-editor"]')
+    ?.addEventListener('click', () => {
+      const url = `/#cam-edit?cam=${encodeURIComponent(camId)}&tab=zonen`;
+      window.location.href = url;
+    });
 }

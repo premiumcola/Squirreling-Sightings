@@ -1026,7 +1026,18 @@ function _renderFrame(data) {
   // doesn't expose ids — group by label instead).
   const now = Date.now();
   for (const d of data.detections || []) {
-    _detBuffer.push({ ms: now, label: d.label, score: d.score, bbox: d.bbox, verdict: d.verdict });
+    _detBuffer.push({
+      ms: now,
+      label: d.label,
+      score: d.score,
+      bbox: d.bbox,
+      verdict: d.verdict,
+      // SIMU-02e · track_num is the monotonically-assigned display
+      // number from the backend's per-cam test-tracker. May be null
+      // on the very first detection of a fresh session if association
+      // happened to fail; the renderer then skips the badge.
+      track_num: d.track_num,
+    });
   }
   // Drop entries older than the window.
   const cutoff = now - _LIVE_WINDOW_MS;
@@ -1659,6 +1670,7 @@ function _renderBboxOverlay() {
         bbox: e.bbox,
         verdict: e.verdict,
         _holdAge: age,
+        track_num: e.track_num,
       });
     }
     renderDets = held;
@@ -1694,12 +1706,27 @@ function _renderBboxOverlay() {
         : isBelow
           ? 'unter Schwelle'
           : 'gefiltert';
-      const txt = `${lbl} · ${suffix}`;
       const stroke = _selectedLabel === d.label ? 5 : 3;
       const dashAttr = dash === 'none' ? '' : ` stroke-dasharray="${dash}"`;
+      // SIMU-02e · track-number badge anchored to the bbox top-left.
+      // When the backend hands us a track_num, the visible label
+      // drops the class word ("Person · 67 %" → "67 %") because the
+      // badge already carries identity. Without a track_num, fall
+      // back to the original "label · suffix" so nothing regresses.
+      const trackNum = Number.isFinite(d.track_num) ? d.track_num : null;
+      const hasBadge = trackNum != null && trackNum > 0;
+      const labelTxt = hasBadge ? suffix : `${lbl} · ${suffix}`;
+      const labelStartX = hasBadge ? x + 26 : x + 4;
+      const labelY = hasBadge ? y - 2 : y + 20;
+      const labelSize = hasBadge ? 11 : 14;
+      const badgeSvg = hasBadge
+        ? `<rect x="${x}" y="${y - 12}" width="22" height="12" rx="2" ry="2" fill="${c}" stroke="none"/>
+      <text x="${x + 11}" y="${y - 3}" text-anchor="middle" fill="#0b0f14" font-size="9" font-family="system-ui, sans-serif" font-weight="700">#${trackNum}</text>`
+        : '';
       return `<g opacity="${op.toFixed(2)}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">
       <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${c}" stroke-width="${stroke}" vector-effect="non-scaling-stroke"${dashAttr}/>
-      <text x="${x + 4}" y="${y + 20}" fill="${c}" font-size="14" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${esc(txt)}</text>
+      ${badgeSvg}
+      <text x="${labelStartX}" y="${labelY}" fill="${c}" font-size="${labelSize}" font-family="system-ui, sans-serif" font-weight="700" paint-order="stroke" stroke="rgba(0,0,0,0.7)" stroke-width="3">${esc(labelTxt)}</text>
     </g>`;
     })
     .join('');

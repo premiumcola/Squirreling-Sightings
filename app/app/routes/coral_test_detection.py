@@ -20,6 +20,12 @@ import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from ..tracker_core import (
+    LiveTracker,
+    associate_detections,
+    compute_miss_grace_samples,
+    resolve_track_thresholds,
+)
 
 bp = Blueprint("coral_test_detection", __name__)
 log = logging.getLogger(__name__)
@@ -29,6 +35,45 @@ log = logging.getLogger(__name__)
 # sub-stream permanently disabled (firmware option, RTSP URL typo)
 # doesn't spam docker logs on every Simulieren tick.
 _FALLBACK_WARN_TS: dict[str, float] = {}
+
+# SIMU-02e · per-camera tracker state for the test-detection endpoint.
+# Mirrors the runtime tracker config but keeps its OWN state so the
+# alarm pipeline's tracker isn't perturbed by Simulieren ticks. The
+# state carries a stable display-number map (track_id → #N) that
+# survives across ticks until the user closes Simulieren on this cam.
+_TEST_TRACKERS: dict[str, dict] = {}
+# Idle threshold — drop tracker state after 5 min of no test-detection
+# calls for this camera so a stale session doesn't keep stretching
+# display numbers across a fresh user open.
+_TEST_TRACKER_IDLE_S = 300.0
+
+
+def _get_test_tracker(cam_id: str, cam_cfg: dict) -> dict:
+    """Return the per-cam test-detection tracker state.
+
+    Lazily creates a fresh LiveTracker on first call (or after the
+    idle window expires) so the runtime tracker stays untouched.
+    """
+    now = _time.monotonic()
+    entry = _TEST_TRACKERS.get(cam_id)
+    if entry and (now - float(entry.get("last_call_ts", 0))) < _TEST_TRACKER_IDLE_S:
+        return entry
+    spawn, floor, grace, iou = resolve_track_thresholds(lambda _cid: cam_cfg, cam_id)
+    tracker = LiveTracker(
+        cam_id,
+        spawn_default=spawn,
+        floor=floor,
+        grace_seconds=grace,
+        iou_threshold=iou,
+    )
+    entry = {
+        "tracker": tracker,
+        "display_nums": {},
+        "next_num": 0,
+        "last_call_ts": now,
+    }
+    _TEST_TRACKERS[cam_id] = entry
+    return entry
 
 
 @bp.post('/api/cameras/<cam_id>/test-detection')
@@ -272,8 +317,42 @@ def api_test_detection(cam_id: str):
         global_floor = float((proc.get("detection") or {}).get("min_score") or 0.55)
     per_class = cam.get("label_thresholds") or {}
     obj_filter = set(cam.get("object_filter") or [])
+    # SIMU-02e · run the per-camera test-tracker to assign stable
+    # track_num values that the frontend renders as badges on each
+    # bbox. State persists across consecutive test-detection calls
+    # so a person walking through holds the same #N across ticks.
+    tt = _get_test_tracker(cam_id, cam)
+    tt["last_call_ts"] = _time.monotonic()
+    tracker = tt["tracker"]
+    display_nums = tt["display_nums"]
+    fps_approx = max(1.0, 1000.0 / float(cam.get("frame_interval_ms") or 350))
+    tracker._frame_idx += 1
+    grace_samples = compute_miss_grace_samples(tracker.grace_seconds, fps_approx)
+    try:
+        matches = associate_detections(
+            tracker.state,
+            list(raw),
+            frame_idx=tracker._frame_idx,
+            t_s=_time.monotonic(),
+            spawn_score=tracker.spawn_default,
+            spawn_for=lambda lbl: float(per_class.get(lbl, tracker.spawn_default)),
+            miss_grace_samples=grace_samples,
+            iou_threshold=tracker.iou_threshold,
+        )
+    except Exception as exc:
+        log.warning("[test-detection] %s tracker step failed: %s", cam_id, exc)
+        matches = []
+    di_to_num: dict[int, int] = {}
+    for di, tr in matches:
+        tid = tr.track_id
+        num = display_nums.get(tid)
+        if num is None:
+            tt["next_num"] = int(tt.get("next_num") or 0) + 1
+            num = tt["next_num"]
+            display_nums[tid] = num
+        di_to_num[di] = num
     out = []
-    for d in raw:
+    for di, d in enumerate(raw):
         cls_thresh = float(per_class.get(d.label, global_floor))
         if obj_filter and d.label not in obj_filter:
             verdict = "filtered"
@@ -292,6 +371,7 @@ def api_test_detection(cam_id: str):
                 "bbox": [int(x1), int(y1), int(max(0, x2 - x1)), int(max(0, y2 - y1))],
                 "verdict": verdict,
                 "reason": reason,
+                "track_num": di_to_num.get(di),
             }
         )
     out.sort(key=lambda r: r["score"], reverse=True)

@@ -132,10 +132,14 @@
    ~20 px; cam name + "● Live" hide, the muted "<Cam> · Live" line
    takes their place. The video below tracks the new title bottom
    edge automatically (zone-video flex-shrink:0 + container ordering),
-   no JS-driven layout sync needed. */
+   no JS-driven layout sync needed.
+   SIMU-FIX-02a · padding-top is INHERITED from .mv-ld-zone-title
+   (max(8px, env(safe-area-inset-top, 0px))) so the safe-area
+   reservation under the iOS clock + Dynamic Island is preserved in
+   BOTH expanded and collapsed states. The collapsed modifier only
+   adjusts content height (min-height + padding-bottom). */
 .mv-ld-zone-title[data-collapsed='1'] {
   min-height: 20px;
-  padding-top: 4px;
   padding-bottom: 3px;
 }
 

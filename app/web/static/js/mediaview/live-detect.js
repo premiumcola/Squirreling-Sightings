@@ -36,7 +36,6 @@ import { fittedRect } from '../core/video-fit.js';
 import { lbRenderTrackTimeline as _lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 void _lbRenderTrackTimeline;
 import { _setupVideoChrome } from '../lightbox.js';
-import { tryAttachHls } from '../core/hls-attach.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
 import {
   mountLdSkeleton,
@@ -111,7 +110,6 @@ const _HOLD_REFRESH_MS = 250;
 const _DEBUG_TOGGLE = false;
 
 let _session = null;
-let _hlsHandle = null;
 let _traceLines = [];
 let _traceTicks = []; // [{ts, lines:[…]}, …] — per-tick groups for the Trace tab
 let _detBuffer = []; // [{ms, label, score, bbox, verdict}, …]
@@ -311,20 +309,11 @@ export function closeLiveDetect() {
   _traceTicks = [];
   _detBuffer = [];
   _selectedLabel = null;
-  if (_hlsHandle) {
-    _hlsHandle.detach();
-    _hlsHandle = null;
-    const videoEl = byId('lightboxVideo');
-    if (videoEl) {
-      videoEl.style.display = 'none';
-    }
-  }
+  // Q2-4 · the snapshot <img> holds a per-tick data: URL — drop it so
+  // the decoded frame is released when the session closes. (No HLS /
+  // MJPEG stream to tear down anymore — the view is snapshot-only.)
   const imgEl = byId('lightboxImg');
-  if (imgEl && imgEl.src && imgEl.src.includes('/stream')) {
-    // Release the MJPEG fallback's HTTP connection so the server's
-    // viewer counter ticks down.
-    imgEl.removeAttribute('src');
-  }
+  if (imgEl) imgEl.removeAttribute('src');
   if (!session) return;
   try {
     session.abort?.abort();
@@ -464,61 +453,41 @@ function _setupLiveChrome(camId, cameraName) {
   // Live mode title-bar marker — replaces the recorded timestamp.
   const tsEl = byId('lightboxTopTime');
   if (tsEl) tsEl.textContent = '● Live';
-  // kr493 — Simulieren v2 continuous-stream redesign. The polling
-  // tick fetches ONLY the detection payload (no_snapshot=1, ~1 kB
-  // response); the video stays smooth at the stream's natural rate
-  // while the bbox/trail overlays update at ~1-2 fps.
+  // Q2-4 · "show what the AI sees", not live security footage.
   //
-  // ROOT CAUSE FIX (iPhone): iOS Safari does NOT render
-  // `multipart/x-mixed-replace` MJPEG streams in `<img>` tags —
-  // it shows a "broken image" placeholder no matter what bytes the
-  // server sends. The dashboard's working Live modal sidesteps this
-  // by attaching HLS to a `<video>` first (hls.js on desktop, native
-  // HLS on iOS) and only falling back to MJPEG on the rare browser
-  // that supports neither. The Simulieren view does the same now —
-  // any iOS-reachable surface MUST go through HLS for the video to
-  // paint at all.
+  // The earlier kr493 design streamed a continuous MJPEG/HLS video here
+  // and drew the bbox overlay from the 1 Hz detection tick on TOP of it.
+  // But the video element carries its own RTSP + network buffering
+  // (seconds on HLS — the only path that paints on iOS Safari), while
+  // the detector runs on a fresh sub-stream snapshot. So the overlay
+  // always ran AHEAD of the visible picture: a box framed a person
+  // several steps before they appeared there ("seeing the future").
+  //
+  // The simulation view's whole job is to show the exact frame the
+  // detector reasoned about — so we now paint the SAME snapshot
+  // inference ran on (returned per-tick as data.snapshot, with bbox
+  // coords already in that frame's space) into the <img>, and the
+  // overlay sits on identical pixels. Bbox and picture CANNOT desync
+  // because they are one frame. As a bonus, a static <img> sidesteps
+  // the iOS "MJPEG-in-<img> shows a broken image" limitation entirely
+  // without needing HLS at all — no stream, no buffering, no lead.
+  //
+  // Do NOT re-introduce a live stream here without re-reading Q2-4:
+  // any stream brings back the latency that this view exists to remove.
   const imgEl = byId('lightboxImg');
   const videoEl = byId('lightboxVideo');
-  if (_hlsHandle) {
-    _hlsHandle.detach();
-    _hlsHandle = null;
-  }
   if (videoEl) {
-    videoEl.pause();
+    videoEl.pause?.();
     videoEl.removeAttribute('src');
     videoEl.load?.();
-    videoEl.muted = true;
-    videoEl.playsInline = true;
     videoEl.style.display = 'none';
   }
   if (imgEl) {
+    // Cleared here; _renderFrame swaps in each tick's inference snapshot.
     imgEl.removeAttribute('src');
-    imgEl.style.display = 'none';
-  }
-  _hlsHandle = videoEl
-    ? tryAttachHls(camId, videoEl, {
-        onFatalError: () => {
-          // HLS spun up but died — fall back to MJPEG on the platforms
-          // that support it. On iOS this leaves the user with a broken
-          // image, but iOS shouldn't hit this branch in the first place
-          // (native HLS attach succeeds at line above).
-          if (_hlsHandle) {
-            _hlsHandle.detach();
-            _hlsHandle = null;
-          }
-          _attachLiveMjpegFallback(camId);
-        },
-      })
-    : null;
-  if (_hlsHandle) {
-    videoEl.style.display = 'block';
-    videoEl.play?.().catch(() => {
-      /* autoplay blocked — manual play still works */
-    });
-    _installLiveOverlayRefresh(videoEl);
-  } else {
-    _attachLiveMjpegFallback(camId);
+    imgEl.style.display = 'block';
+    imgEl.alt = '';
+    _installLiveOverlayRefresh(imgEl);
   }
   const confirmBtn = byId('lightboxConfirm');
   if (confirmBtn) confirmBtn.style.display = 'none';
@@ -548,17 +517,6 @@ function _setupLiveChrome(camId, cameraName) {
   // recorded chrome that _setupVideoChrome briefly drops into
   // #lightboxBottomStack is replaced before the first tick lands.
   _renderLiveSwimlane();
-}
-
-// MJPEG fallback — used when HLS isn't supported (rare desktop
-// browsers). iOS reaches HLS via the native path so this is mostly
-// dead weight on mobile, but it keeps the desktop case alive.
-function _attachLiveMjpegFallback(camId) {
-  const imgEl = byId('lightboxImg');
-  if (!imgEl) return;
-  imgEl.src = `/api/camera/${encodeURIComponent(camId)}/stream.mjpg`;
-  imgEl.style.display = 'block';
-  _installLiveOverlayRefresh(imgEl);
 }
 
 // Bind a `load` + ResizeObserver listener that re-runs the overlay
@@ -977,8 +935,12 @@ async function _tick() {
     // custom: AbortController for the live-detect polling loop —
     // each tick supersedes the previous in-flight request when the
     // camera changes or the loop stops. apiPost has no signal hook.
+    // Q2-4 · no_snapshot is intentionally OFF now: the simulation view
+    // paints the exact frame inference ran on (data.snapshot) as the
+    // background so the bbox overlay and the picture are one and the
+    // same frame. See _setupLiveChrome for the full rationale.
     const r = await fetch(
-      `/api/cameras/${encodeURIComponent(session.camId)}/test-detection?no_snapshot=1`,
+      `/api/cameras/${encodeURIComponent(session.camId)}/test-detection`,
       { method: 'POST', signal: controller.signal },
     );
     _tickState.lastStatus = r.status;
@@ -1068,12 +1030,21 @@ function _scheduleNext(session, lastCycleMs) {
 }
 
 function _renderFrame(data) {
-  // kr493 — Simulieren v2 no longer paints data.snapshot into
-  // #lightboxImg. The img element streams the continuous MJPEG
-  // (set in _setupLiveChrome on mount); this tick only updates
-  // the detection overlays + state. data.snapshot is still emitted
-  // by the backend when ?no_snapshot is unset (other callers rely
-  // on it) — Simulieren just ignores it.
+  // Q2-4 · paint the exact frame inference ran on as the background.
+  // data.snapshot is a base64 JPEG whose pixels are in the SAME
+  // coordinate space as the bbox coords + frame_size used by the SVG
+  // overlay below — so the box and the picture are guaranteed to match
+  // (see _setupLiveChrome for why we abandoned the live stream here).
+  // Setting .src fires the <img> load event → _installLiveOverlayRefresh
+  // repaints the overlays once decoded; the synchronous repaints later
+  // in this function cover the common case.
+  if (data.snapshot) {
+    const imgEl = byId('lightboxImg');
+    if (imgEl && imgEl.getAttribute('src') !== data.snapshot) {
+      imgEl.src = data.snapshot;
+      if (imgEl.style.display === 'none') imgEl.style.display = 'block';
+    }
+  }
   // Frame state for the bbox + zone/mask overlays.
   _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
   _session.lastDetections = data.detections || [];

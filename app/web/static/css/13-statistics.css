@@ -43,7 +43,9 @@
 .stat-card {
   background: var(--surface);
   border-radius: 18px;
-  padding: 16px 18px;
+  /* POLISH-01e · tighter top padding so the card title sits closer
+     to the top edge (was 16 px). */
+  padding: 12px 18px 16px;
   margin-bottom: 16px;
 }
 .stat-card:last-child {
@@ -61,7 +63,8 @@
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--muted);
-  margin-bottom: 14px;
+  /* POLISH-01e · tighter title-to-content gap (was 14 px). */
+  margin-bottom: 10px;
 }
 .stat-card-title svg {
   flex-shrink: 0;
@@ -350,8 +353,17 @@
   color: var(--muted);
   padding: 4px 0 10px;
 }
+/* POLISH-01e · the TIMELINE chooser sheds its card background and
+   sits inline on the page (same treatment as the Erkennungswolke
+   Zeitraum control). The timeline chart itself keeps its full
+   width; only the surrounding surface fill / padding / radius are
+   dropped. margin top/bottom preserve vertical breathing room. */
 .stat-tl-card {
   margin-top: 16px;
+  margin-bottom: 16px;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
 }
 .stat-tl-card-hdr {
   display: flex;

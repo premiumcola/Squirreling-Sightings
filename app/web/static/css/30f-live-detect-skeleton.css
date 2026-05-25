@@ -413,14 +413,16 @@
 }
 
 /* SIMU-03g · the swimlane is ONE CSS grid. Label column fixed at
-   36 px, event column elastic, grid-auto-rows fixed at 22 px. Per
+   44 px, event column elastic, grid-auto-rows fixed at 44 px. Per
    lane both cells carry the same explicit grid-row, which pins
    label N to event row N regardless of class. The LIVE marker uses
-   grid-row: 1 / -1 so it spans the full row range in column 2. */
+   grid-row: 1 / -1 so it spans the full row range in column 2.
+   Q2-1 · lane height bumped 22 → 44 px (+ label column 36 → 44 px)
+   so chips read large and tappable instead of compressed Morse. */
 .mv-ld-swim-grid {
   display: grid;
-  grid-template-columns: 36px 1fr;
-  grid-auto-rows: 22px;
+  grid-template-columns: 44px 1fr;
+  grid-auto-rows: 44px;
   grid-row-gap: 0;
   width: 100%;
   position: relative;
@@ -448,7 +450,7 @@
   display: flex;
   align-items: center;
   height: 100%;
-  min-height: 22px;
+  min-height: 44px;
   position: relative;
 }
 
@@ -466,8 +468,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   color: var(--text);
 }
 
@@ -578,59 +580,44 @@
    the sub-fast path, ~1 s on main-slow). A follow-up could re-add
    smooth flow via `transform: translateX(...)` (GPU-composited,
    not main-thread). */
+/* Q2-1 · the chip. Was a microscopic 8 px bar; now a readable pill
+   (20 px tall, min 20 px wide, padded) that holds its "#K ×N" label
+   INSIDE instead of a leftward-hanging pseudo-badge. Clustering in
+   live-swimlane.js guarantees ≥6 px between chips so they never
+   collide. Dark label text on the bright class colour. */
 .mv-ld-swim-bar {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  height: 8px;
-  border-radius: 2px;
-  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  box-sizing: border-box;
 }
 
-/* SIMU-03f · #N track-number badge. Renders as a pseudo-element at
-   the bar's LEFT edge — extending outward so the badge is visible
-   even when the bar itself is narrow (10 px). The badge background
-   reads from the same --bar-color custom property the bar paints,
-   keeping the track identity colour consistent. Dark text (#0b0f14)
-   on every class colour (yellow/brown/blue/etc. all bright enough). */
-.mv-ld-swim-bar[data-track-num]::before {
-  content: '#' attr(data-track-num);
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  margin-right: -1px;
-  background: var(--bar-color, #4a6477);
+/* Q2-1 · "#K ×N" label centred inside the chip. Dark text reads on
+   every class colour (yellow/brown/blue/orange all bright enough). */
+.mv-ld-swim-chip-lbl {
   color: #0b0f14;
-  font-size: 7px;
+  font-size: 10px;
   font-weight: 700;
-  padding: 1px 2px;
-  border-radius: 2px 0 0 2px;
-  white-space: nowrap;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
   line-height: 1;
   letter-spacing: 0;
-}
-
-.mv-ld-swim-bar-andere {
-  height: 6px;
-  background: repeating-linear-gradient(
-    45deg,
-    #3d4654 0,
-    #3d4654 2px,
-    transparent 2px,
-    transparent 4px
-  ) !important;
-  box-shadow: inset 0 0 0 0.5px #3d4654;
+  white-space: nowrap;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 
 .mv-ld-swim-axis {
   position: relative;
-  height: 14px;
+  height: 16px;
   padding: 0;
   margin-top: 2px;
   display: grid;
-  grid-template-columns: 36px 1fr;
+  grid-template-columns: 44px 1fr;
 }
 
 .mv-ld-swim-axis::before {
@@ -648,8 +635,8 @@
 .mv-ld-axis-tick {
   position: absolute;
   top: 2px;
-  font-size: 9px;
-  color: rgba(226, 232, 240, 0.35);
+  font-size: 10px;
+  color: rgba(226, 232, 240, 0.45);
   font-family: ui-monospace, Menlo, Consolas, monospace;
   white-space: nowrap;
   pointer-events: none;

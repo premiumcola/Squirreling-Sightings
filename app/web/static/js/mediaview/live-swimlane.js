@@ -210,58 +210,66 @@ function _andereTooltip(byClass) {
   return `andere · ${parts.join(' · ')}`;
 }
 
-// SIMU-03e · sync bars within an event cell. Existing bars (matched
-// by `data-bar-key`) get their `left` updated — CSS `transition:
-// left 500ms linear` on the bar class animates the leftward flow.
-// New bars (no match) are appended at their initial `left` (no
-// transition). Orphan bars (existed but no longer in the sample
-// list) are removed.
+// Q2-1 · render a lane's detections as CLUSTERED chips. Dense
+// detections used to stack as microscopic 10 px bars whose #N badges
+// overlapped into unreadable "compressed Morse". We now merge any two
+// chips that would sit <6 px apart into a single "#K ×N" chip, walking
+// right→left so each cluster anchors at its newest member and the
+// strip still reads "now" on the right. The cell is rebuilt each tick
+// (no CSS transition — see the .mv-ld-swim-bar note in 30f); clustering
+// caps the chip count per lane so the rebuild stays cheap.
+const _CHIP_W = 24; // nominal chip width (px) for the merge heuristic
+const _MERGE_GAP_PX = 6; // spec: merge when the gap would be <6 px
 function _syncBars(cell, lane, windowMs) {
   const now = Date.now();
-  const isAndere = lane.id === _ANDERE_ID;
-  const c = isAndere ? '#3d4654' : colors[lane.label] || colors.unknown;
-  const existing = new Map();
-  cell.querySelectorAll('.mv-ld-swim-bar').forEach((el) => {
-    const key = el.dataset.barKey;
-    if (key) existing.set(key, el);
-  });
-  const used = new Set();
-  // SIMU-03f track-num badge geometry — 14 × 6 px, dark text on the
-  // bar's class colour. Only rendered at the bar's LEFT end (spawn
-  // point); CSS keeps the badge fixed at the bar's left edge even
-  // as the bar slides leftward.
-  const barWidth = isAndere ? 6 : 10;
+  const c = colors[lane.label] || colors.unknown;
+  // Event-column pixel width turns the <6 px heuristic into a real
+  // distance. 0 before first layout → one chip per sample (coarse but
+  // never crashes).
+  const cellW = cell.clientWidth || 0;
+  const items = [];
   for (const s of lane.samples) {
     const ageMs = now - s.ms;
     if (ageMs < 0 || ageMs > windowMs) continue;
-    const key = `${s.ms}:${s.label}`;
-    used.add(key);
-    const pct = 100 - (ageMs / windowMs) * 100;
-    const leftCss = `calc(${pct.toFixed(2)}% - ${barWidth}px)`;
-    let el = existing.get(key);
-    if (el) {
-      el.style.left = leftCss;
+    items.push({ pct: 100 - (ageMs / windowMs) * 100, track_num: s.track_num });
+  }
+  // Newest (rightmost) first so the greedy walk absorbs older
+  // neighbours leftward into the most-recent member.
+  items.sort((a, b) => b.pct - a.pct);
+  const chips = [];
+  let cur = null;
+  for (const it of items) {
+    const rightPx = cellW > 0 ? (it.pct / 100) * cellW : null;
+    // Merge when this (older) chip's right edge lands within _MERGE_GAP_PX
+    // of the current cluster's left edge — i.e. the gap between "previous
+    // chip ends" and "next chip starts" is <6 px.
+    if (cur && rightPx != null && cur.leftPx != null && cur.leftPx - rightPx < _MERGE_GAP_PX) {
+      cur.count += 1;
     } else {
-      el = document.createElement('span');
-      el.className = isAndere ? 'mv-ld-swim-bar mv-ld-swim-bar-andere' : 'mv-ld-swim-bar';
-      el.dataset.barKey = key;
-      el.style.left = leftCss;
-      el.style.width = `${barWidth}px`;
-      // SIMU-03f · the bar carries its class colour via a CSS custom
-      // property so the ::before #N badge can paint the same fill
-      // without inheriting (background isn't inheritable). Andere
-      // bars use their striped pattern and skip the var.
-      if (!isAndere) {
-        el.style.background = c;
-        el.style.setProperty('--bar-color', c);
-      }
-      if (Number.isFinite(s.track_num) && s.track_num > 0) {
-        el.dataset.trackNum = String(s.track_num);
-      }
-      cell.appendChild(el);
+      if (cur) chips.push(cur);
+      cur = {
+        rightPct: it.pct,
+        leftPx: rightPx != null ? rightPx - _CHIP_W : null,
+        count: 1,
+        track_num: it.track_num, // newest member = representative #K
+      };
     }
   }
-  for (const [key, el] of existing) {
-    if (!used.has(key)) el.remove();
-  }
+  if (cur) chips.push(cur);
+  cell.innerHTML = chips
+    .map((ch) => {
+      const hasTrack = Number.isFinite(ch.track_num) && ch.track_num > 0;
+      let label = '';
+      if (hasTrack && ch.count > 1) label = `#${ch.track_num} ×${ch.count}`;
+      else if (hasTrack) label = `#${ch.track_num}`;
+      else if (ch.count > 1) label = `×${ch.count}`;
+      const left = `calc(${ch.rightPct.toFixed(2)}% - ${_CHIP_W}px)`;
+      const title = ch.count > 1 ? `${ch.count} Detektionen` : '1 Detektion';
+      return (
+        `<span class="mv-ld-swim-bar" style="left:${left};background:${c}" title="${esc(title)}">` +
+        (label ? `<span class="mv-ld-swim-chip-lbl">${esc(label)}</span>` : '') +
+        '</span>'
+      );
+    })
+    .join('');
 }

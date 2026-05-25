@@ -18,6 +18,80 @@ import { state } from '../core/state.js';
 
 const _STUCK_MS = 5000;
 
+// Q2-2 · per-cluster collapse state. Every cluster BODY (sliders,
+// evidence, perf grid, event log — the long blocks the user scrolls
+// past) starts collapsed so the Debug tab fits roughly one screenful:
+// only the always-on LIVE-STATUS strip + the five cluster headers
+// (each carrying its live "what's wrong right now" hint) show. Tapping
+// a header expands that cluster. State persists across ticks + reopens.
+const _CLUSTER_COLLAPSE_KEY = 'tam.ld.debug.clusters';
+const _clusterCollapsed = _loadClusterCollapse();
+// Down-chevron; CSS rotates it -90° (points right) when collapsed.
+const _CLUSTER_CHEVRON =
+  '<svg class="mv-ld-cluster-chevron" viewBox="0 0 24 24" width="14" height="14" ' +
+  'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" ' +
+  'stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+function _loadClusterCollapse() {
+  // Default: every cluster collapsed. A stored map overrides per id.
+  const def = { 1: true, 2: true, 3: true, 4: true, 5: true };
+  try {
+    const raw = JSON.parse(localStorage.getItem(_CLUSTER_COLLAPSE_KEY) || '{}');
+    for (const k of Object.keys(def)) {
+      if (typeof raw[k] === 'boolean') def[k] = raw[k];
+    }
+  } catch {
+    /* private mode / corrupt — keep all-collapsed default */
+  }
+  return def;
+}
+
+function _saveClusterCollapse() {
+  try {
+    localStorage.setItem(_CLUSTER_COLLAPSE_KEY, JSON.stringify(_clusterCollapsed));
+  } catch {
+    /* private mode / quota — silent */
+  }
+}
+
+// Apply the collapse state to every rendered cluster + start the
+// delegated header-click toggle (once per host). Re-applied after the
+// per-tick dynamic refresh too, since clusters 4/5 are swapped wholesale.
+function _applyClusterCollapse(host) {
+  host.querySelectorAll('[data-cluster-id]').forEach((root) => {
+    const id = root.dataset.clusterId;
+    const collapsed = _clusterCollapsed[id] !== false;
+    root.dataset.collapsed = collapsed ? '1' : '0';
+    const head = root.querySelector('.mv-ld-cluster-head');
+    if (head) head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  });
+  if (!host.dataset.mvLdCollapseWired) {
+    host.dataset.mvLdCollapseWired = '1';
+    const toggle = (head) => {
+      const root = head.closest('[data-cluster-id]');
+      if (!root) return;
+      const id = root.dataset.clusterId;
+      const next = root.dataset.collapsed !== '1'; // toggle → next collapsed?
+      _clusterCollapsed[id] = next;
+      root.dataset.collapsed = next ? '1' : '0';
+      head.setAttribute('aria-expanded', next ? 'false' : 'true');
+      _saveClusterCollapse();
+    };
+    host.addEventListener('click', (ev) => {
+      const head = ev.target.closest?.('.mv-ld-cluster-head');
+      if (head && host.contains(head)) toggle(head);
+    });
+    host.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      const head = ev.target.closest?.('.mv-ld-cluster-head');
+      if (head && host.contains(head)) {
+        ev.preventDefault();
+        toggle(head);
+      }
+    });
+  }
+}
+
 // SIMU-05b · default + recommended tuning values for Cluster 1.
 const _CLUSTER1_DEFAULTS = {
   track_iou_match_threshold: 0.2,
@@ -117,6 +191,7 @@ export function renderDebugPanel(host, ctx = {}) {
   _wireCluster2(host, cam, ctx);
   _wireCluster3(host, cam, ctx);
   _wireCopyBar(host, ctx);
+  _applyClusterCollapse(host);
 }
 
 // Refresh the dynamic content (live-status + evidence boxes) without
@@ -135,6 +210,9 @@ function _refreshDynamic(host, ctx, cam) {
   if (c4) c4.outerHTML = _renderCluster4(ctx);
   const c5 = host.querySelector('[data-cluster-id="5"]');
   if (c5) c5.outerHTML = _renderCluster5(ctx);
+  // Clusters 4/5 were swapped wholesale (fresh nodes) → re-stamp their
+  // collapse state so a tick refresh can't silently re-expand them.
+  _applyClusterCollapse(host);
 }
 
 // Per-class default thresholds — keep aligned with the project's
@@ -224,7 +302,7 @@ function _renderCluster1(ctx, cam) {
   const floor = _readField(cam, 'track_continue_min_score', _CLUSTER1_DEFAULTS.track_continue_min_score);
   return `
     <div class="mv-ld-cluster mv-ld-cluster-warn" data-cluster-id="1">
-      ${_renderClusterHeader(1, '▼ Cluster 1 · Person/Objekt reißt ab beim Bewegen',
+      ${_renderClusterHeader(1, 'Cluster 1 · Person/Objekt reißt ab beim Bewegen',
         'Track stirbt obwohl Subjekt noch im Bild ist · neue Person-ID nach Drehung',
         _cluster1HeaderHint(ctx))}
       <div class="mv-ld-cluster-body">
@@ -270,8 +348,12 @@ function _renderCluster1(ctx, cam) {
 }
 
 function _renderClusterHeader(num, title, sub, hint) {
+  // Q2-2 · the head is the collapse toggle (tap to expand the body).
+  // role=button + aria-expanded for a11y; the leading chevron rotates
+  // via the root's data-collapsed attribute.
   return `
-    <div class="mv-ld-cluster-head">
+    <div class="mv-ld-cluster-head" role="button" tabindex="0" aria-expanded="false">
+      ${_CLUSTER_CHEVRON}
       <div class="mv-ld-cluster-head-text">
         <div class="mv-ld-cluster-head-title">${esc(title)}</div>
         <div class="mv-ld-cluster-head-sub">${esc(sub)}</div>
@@ -510,7 +592,7 @@ function _renderCluster2(ctx, cam) {
   const profil = ctx.fullData?.diag?.validator_profile || '—';
   return `
     <div class="mv-ld-cluster mv-ld-cluster-warn" data-cluster-id="2">
-      ${_renderClusterHeader(2, '▼ Cluster 2 · Objekt wird gar nicht erkannt',
+      ${_renderClusterHeader(2, 'Cluster 2 · Objekt wird gar nicht erkannt',
         'Coral findet die Klasse nicht · oder Score landet unter der Schwelle',
         _cluster2HeaderHint(ctx, sortedClasses))}
       <div class="mv-ld-cluster-body">
@@ -653,7 +735,7 @@ function _renderCluster3(ctx, cam) {
   const maskCount = Array.isArray(cam.masks) ? cam.masks.length : 0;
   return `
     <div class="mv-ld-cluster mv-ld-cluster-warn" data-cluster-id="3">
-      ${_renderClusterHeader(3, '▼ Cluster 3 · Falsche Klasse / False Positives',
+      ${_renderClusterHeader(3, 'Cluster 3 · Falsche Klasse / False Positives',
         'Andere Klassen werden fälschlicherweise erkannt · z.B. „couch" oder „tv"',
         _cluster3HeaderHint(ev))}
       <div class="mv-ld-cluster-body">
@@ -774,9 +856,10 @@ function _renderCluster4(ctx) {
     : '';
   return `
     <div class="mv-ld-cluster ${healthy ? 'mv-ld-cluster-ok' : 'mv-ld-cluster-warn'}" data-cluster-id="4">
-      <div class="mv-ld-cluster-head mv-ld-cluster-head-${healthy ? 'ok' : 'warn'}">
+      <div class="mv-ld-cluster-head mv-ld-cluster-head-${healthy ? 'ok' : 'warn'}" role="button" tabindex="0" aria-expanded="false">
+        ${_CLUSTER_CHEVRON}
         <div class="mv-ld-cluster-head-text">
-          <div class="mv-ld-cluster-head-title">▼ Cluster 4 · Performance / Hänger</div>
+          <div class="mv-ld-cluster-head-title">Cluster 4 · Performance / Hänger</div>
           <div class="mv-ld-cluster-head-sub">${healthy ? 'aktuell unauffällig · Detection läuft flüssig' : '⚠ Tick-Cycle oder Inference über Schwelle'}</div>
         </div>
         <div class="mv-ld-cluster-head-hint" data-hint-tone="${hint.tone}">${esc(hint.text)}</div>
@@ -826,9 +909,10 @@ function _renderCluster5(ctx) {
     : _renderFromTrace(traceLines);
   return `
     <div class="mv-ld-cluster" data-cluster-id="5">
-      <div class="mv-ld-cluster-head mv-ld-cluster-head-neutral">
+      <div class="mv-ld-cluster-head mv-ld-cluster-head-neutral" role="button" tabindex="0" aria-expanded="false">
+        ${_CLUSTER_CHEVRON}
         <div class="mv-ld-cluster-head-text">
-          <div class="mv-ld-cluster-head-title">▶ TRACKER-EREIGNISSE LETZTE 60 s</div>
+          <div class="mv-ld-cluster-head-title">Cluster 5 · Tracker-Ereignisse letzte 60 s</div>
           <div class="mv-ld-cluster-head-sub">Pure Beobachtung · keine Steuerung</div>
         </div>
       </div>

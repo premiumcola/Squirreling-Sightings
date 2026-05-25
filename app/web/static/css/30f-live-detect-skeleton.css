@@ -1179,9 +1179,40 @@
 .mv-ld-cluster-head {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   padding: 10px 12px;
   background: linear-gradient(180deg, #2a1818 0%, #1a0e0e 100%);
+  /* Q2-2 · the whole header is the collapse toggle. */
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .mv-ld-cluster-head:hover {
+    filter: brightness(1.12);
+  }
+}
+
+/* Q2-2 · collapse chevron — points down when expanded, rotates to
+   point right when the cluster body is collapsed. Nudged down a hair
+   so it lines up with the title baseline. */
+.mv-ld-cluster-chevron {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: rgba(226, 232, 240, 0.55);
+  transition: transform 150ms ease-out;
+}
+
+.mv-ld-cluster[data-collapsed='1'] .mv-ld-cluster-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Q2-2 · collapsed body is hidden; only the header (with its live
+   diagnosis hint) stays on screen. */
+.mv-ld-cluster[data-collapsed='1'] .mv-ld-cluster-body {
+  display: none;
 }
 
 .mv-ld-cluster-head-text {

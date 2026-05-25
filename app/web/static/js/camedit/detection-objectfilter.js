@@ -36,7 +36,7 @@ export function _renderCamObjectPills() {
   host.innerHTML = _CAM_OBJ_OPTIONS
     .map((o) => {
       const on = active.has(o.k);
-      return `<button type="button" class="cam-obj-pill${on ? ' active' : ''}" data-obj="${o.k}" style="--cb:${o.cb}"><span class="cop-ico">${objIconSvg(o.k, 16) || ''}</span><span>${o.label}</span></button>`;
+      return `<button type="button" class="cam-obj-pill${on ? ' active' : ''}" data-obj="${o.k}" style="--cb:${o.cb}"><span class="cop-ico">${objIconSvg(o.k, 46) || ''}</span><span>${o.label}</span></button>`;
     })
     .join('');
   host.querySelectorAll('.cam-obj-pill').forEach((btn) => {

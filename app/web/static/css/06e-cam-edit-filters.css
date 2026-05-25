@@ -6,16 +6,22 @@
   flex-wrap: wrap;
   margin-top: 6px;
 }
+/* K9-3 · icon-forward pill. The redesigned 46 px object icon goes
+   nearly edge-to-edge (tight 5 px vertical padding inside the 60 px
+   touch target); the label rides beside it. Inactive pills read quiet
+   (transparent, faint border, dimmed greyscale icon); the active state
+   is a soft halo tinted by --cb rather than the old heavy 40 %/55 %
+   fill that swallowed the icon. */
 .cam-obj-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  min-height: 44px;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 14px;
+  min-height: 60px;
   min-width: 64px;
-  border: 1.5px solid rgba(255, 255, 255, 0.09);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
   background: transparent;
   color: var(--muted);
   font-size: 13px;
@@ -24,27 +30,56 @@
   transition:
     background 0.15s,
     color 0.15s,
-    border-color 0.15s;
+    border-color 0.15s,
+    box-shadow 0.15s;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
 }
-.cam-obj-pill:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-  border-color: rgba(255, 255, 255, 0.18);
+@media (hover: hover) {
+  .cam-obj-pill:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+  .cam-obj-pill:hover .cop-ico {
+    opacity: 0.8;
+    filter: grayscale(0.2);
+  }
 }
-/* Active state uses --cb (content-base) set inline per object from the same
-   colour palette as the media filter bar. */
+/* Active state uses --cb (content-base) set inline per object from the
+   same palette as the media filter bar. Soft, readable: a light tinted
+   wash + clear border + an inset elevation ring + a faint outer halo. */
 .cam-obj-pill.active {
-  background: color-mix(in srgb, var(--cb, #8888aa) 40%, transparent);
+  background: color-mix(in srgb, var(--cb, #8888aa) 25%, transparent);
   color: #fff;
-  border-color: color-mix(in srgb, var(--cb, #8888aa) 55%, transparent);
-  box-shadow: inset 0 0 12px color-mix(in srgb, var(--cb, #8888aa) 18%, transparent);
+  border-color: color-mix(in srgb, var(--cb, #8888aa) 62%, transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--cb, #8888aa) 30%, transparent),
+    0 0 14px color-mix(in srgb, var(--cb, #8888aa) 14%, transparent);
 }
 .cam-obj-pill .cop-ico {
   display: inline-flex;
   align-items: center;
   line-height: 0;
+  /* Inactive: dimmed + desaturated so the colour pops only when on. */
+  opacity: 0.55;
+  filter: grayscale(0.5);
+  transition:
+    opacity 0.15s,
+    filter 0.15s;
+}
+.cam-obj-pill.active .cop-ico {
+  opacity: 1;
+  filter: none;
+}
+
+/* K9-4 · squirrel pill tints with the light belly/tail cream (#e8a06a),
+   NOT the rust CLASS_COLORS.squirrel (#c8651a) — the rust read too close
+   to the cat pill's orange. Local override only; every other surface
+   (bbox, timeline, donut) keeps the rust. !important beats the inline
+   style="--cb:#c8651a" the renderer stamps on each pill. */
+.cam-obj-pill[data-obj='squirrel'] {
+  --cb: #e8a06a !important;
 }
 
 /* ── Erkennung & Aufnahme grouped block (motion / trigger / tail) ───────── */

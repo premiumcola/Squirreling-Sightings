@@ -104,6 +104,20 @@ const _HOLD_MS_FLOOR = 800;
 // mounted, so the cost is negligible vs. the smoothness gain.
 const _HOLD_REFRESH_MS = 250;
 
+// Q2-5 · stall detection. The background is now the per-tick inference
+// snapshot (Q2-4), so "no new frame for a while" == "no successful tick
+// for a while". The threshold is ADAPTIVE: a healthy camera ticks fast
+// but a slow twilight camera can legitimately take many seconds per
+// cycle (the user's "Nut Bar" cam runs ~7.8 s avg), so a fixed 4-5 s
+// would false-fire constantly there. We flag a stall only when the gap
+// since the last frame exceeds max(5 s floor, 2.2 × the camera's own
+// recent cadence) — responsive on fast cams, quiet on slow ones.
+const _STALL_FLOOR_MS = 5000;
+const _STALL_FACTOR = 2.2;
+// Auto-retry backoff while stalled: 1 s → 2 s → 4 s → 8 s (capped).
+const _STALL_BACKOFF_START = 1000;
+const _STALL_BACKOFF_MAX = 8000;
+
 // hp651 — debug-only one-liner inside the toggle click handler.
 // Off by default; flip to true in the source file when chasing a
 // toggle regression so a single console.warn fires on each click.
@@ -113,6 +127,9 @@ let _session = null;
 let _traceLines = [];
 let _traceTicks = []; // [{ts, lines:[…]}, …] — per-tick groups for the Trace tab
 let _detBuffer = []; // [{ms, label, score, bbox, verdict}, …]
+// Q2-5 · stall watchdog state. `active` flips on when the frame gap
+// crosses the adaptive threshold; `nextRetryAt` paces the backoff.
+let _stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
 // C1 · sim modal opens with detection layers ON, surveillance layers
 // OFF — the operator wants to see what Coral is finding, not have
 // the preview cluttered with green zone polygons and red mask fills
@@ -191,6 +208,7 @@ export function openLiveDetect({ camId, cameraName }) {
   _traceTicks = [];
   _detBuffer = [];
   _selectedLabel = null;
+  _stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
   // SIMU-FIX-03 · seed overlays from the user's persisted preference
   // (localStorage tam.ld.overlays). First-time users get the defaults
   // from _OVERLAYS_DEFAULT — Bboxes ON, Trails ON, Zonen OFF, Masken
@@ -363,6 +381,8 @@ export function closeLiveDetect() {
   // outside the toggle row; remove it on session teardown.
   const suppressedHint = byId('mvLiveSuppressedHint');
   if (suppressedHint) suppressedHint.remove();
+  // Q2-5 · drop the stall banner if a teardown happens while stalled.
+  _hideStallBanner();
   // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it
   // doesn't keep hitting the closed session's camId.
   stopSnapshotPrefetch();
@@ -391,7 +411,107 @@ function _startHoldRefresh() {
     // drive _renderDiagStrip). Cheap — _renderDiagStrip is a no-op
     // when the Debug pill is OFF.
     if (_debugDiagOn()) _renderDiagStrip();
+    // Q2-5 · piggyback the stall watchdog on the same fixed-rate loop.
+    _checkStall();
   }, _HOLD_REFRESH_MS);
+}
+
+// Q2-5 · adaptive stall watchdog. Runs every _HOLD_REFRESH_MS. Compares
+// the time since the last painted frame against the camera's own recent
+// cadence; on a genuine stall it surfaces the reconnect banner, logs a
+// console diagnostic (visible in mobile-Safari Web Inspector), and
+// re-kicks the tick loop on a 1/2/4/8 s backoff. Recovery (a fresh
+// frame) clears the banner and resets the backoff.
+function _checkStall() {
+  if (!_session) return;
+  const now = Date.now();
+  const t = _tickState;
+  // Reference = last successful frame; before the first frame lands,
+  // fall back to mount time so a never-connecting open also surfaces.
+  const ref = t.lastRespAt || t.startedAt || now;
+  const gap = now - ref;
+  const expected = Math.max(_cycleEmaMs || 0, t.lastDelayMs || 0);
+  const stallMs = Math.max(_STALL_FLOOR_MS, Math.round(_STALL_FACTOR * expected));
+  const stalled = gap > stallMs;
+  if (stalled && !_stallState.active) {
+    _stallState.active = true;
+    _stallState.sinceMs = ref;
+    _stallState.backoffMs = _STALL_BACKOFF_START;
+    // console.warn is the lint-allowed diagnostic escape hatch.
+    console.warn(
+      `[sim-stall] no frame for ${gap} ms (threshold ${stallMs} ms) · ` +
+        `lastFrame=${t.lastRespAt ? new Date(t.lastRespAt).toISOString() : 'none'} · ` +
+        `now=${new Date(now).toISOString()}`,
+    );
+    _showStallBanner();
+    _retryTickNow();
+    _stallState.nextRetryAt = now + _stallState.backoffMs;
+  } else if (stalled && _stallState.active) {
+    if (now >= _stallState.nextRetryAt) {
+      _stallState.backoffMs = Math.min(_STALL_BACKOFF_MAX, _stallState.backoffMs * 2);
+      _retryTickNow();
+      _stallState.nextRetryAt = now + _stallState.backoffMs;
+    }
+  } else if (!stalled && _stallState.active) {
+    console.warn(
+      `[sim-stall] recovered after ${now - _stallState.sinceMs} ms · ` +
+        `frame=${new Date(t.lastRespAt || now).toISOString()}`,
+    );
+    _stallState.active = false;
+    _stallState.backoffMs = _STALL_BACKOFF_START;
+    _hideStallBanner();
+  }
+}
+
+// Abort a possibly-hung in-flight fetch and fire a fresh tick now. The
+// hung tick's fetch rejects with AbortError and returns without
+// rescheduling, so we don't end up with two live loops.
+function _retryTickNow() {
+  if (!_session) return;
+  try {
+    _session.abort?.abort();
+  } catch {
+    /* ignore */
+  }
+  if (_session.tickHandle) {
+    clearTimeout(_session.tickHandle);
+    _session.tickHandle = null;
+  }
+  _tick();
+}
+
+function _showStallBanner() {
+  const host = zoneEl('video') || byId('lightboxMediaWrap');
+  if (!host) return;
+  let banner = byId('mvLiveStallBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'mvLiveStallBanner';
+    banner.className = 'mv-ld-stall-banner';
+    banner.innerHTML =
+      '<div class="mv-ld-stall-inner">' +
+      '<div class="mv-ld-stall-spinner" aria-hidden="true"></div>' +
+      '<div class="mv-ld-stall-text">Verbindung zur Kamera unterbrochen — ' +
+      'versuche erneut zu verbinden …</div>' +
+      '<button type="button" class="mv-ld-stall-retry" data-action="stall-retry">' +
+      'Erneut versuchen</button>' +
+      '</div>';
+    banner
+      .querySelector('[data-action="stall-retry"]')
+      ?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        console.warn('[sim-stall] manual retry');
+        _stallState.backoffMs = _STALL_BACKOFF_START;
+        _retryTickNow();
+      });
+    host.appendChild(banner);
+  }
+  banner.style.display = 'flex';
+}
+
+function _hideStallBanner() {
+  const banner = byId('mvLiveStallBanner');
+  if (banner) banner.remove();
 }
 
 function _setupLiveChrome(camId, cameraName) {

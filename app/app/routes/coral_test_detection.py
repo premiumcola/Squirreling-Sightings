@@ -52,6 +52,61 @@ _TEST_TRACKERS: dict[str, dict] = {}
 # display numbers across a fresh user open.
 _TEST_TRACKER_IDLE_S = 300.0
 
+# Q2-5 · per-(cam, client) request-gap tracking. The Simulieren view
+# polls this endpoint continuously while open; when the user's device
+# loses connectivity (home-WLAN ↔ 5G handoff, brief signal drop) the
+# polling simply stops, then resumes when the network is back. We log
+# ONE INFO line on resume so a user-reported "preview went black" can be
+# correlated with server-side evidence. The threshold is ADAPTIVE — a
+# slow twilight camera's normal cadence is many seconds, so a fixed 5 s
+# would spam the log every cycle; we only report a gap well above this
+# client's own recent request cadence (EMA), floored at 5 s.
+_CLIENT_GAP_FLOOR_S = 5.0
+_CLIENT_GAP_FACTOR = 2.5
+_CLIENT_GAP_IDLE_S = 600.0  # treat a >10-min silence as a fresh session, not a drop
+_CLIENT_GAP_MAX_ENTRIES = 128
+# key (cam_id, client_ip) → {"last": wall_ts, "ema": gap_seconds}
+_CLIENT_GAP_STATE: dict[tuple[str, str], dict] = {}
+
+
+def _note_client_request(cam_id: str) -> None:
+    """Record this client's request time; log one INFO line when the gap
+    since its previous request is abnormally large (a likely drop).
+
+    Detection is retroactive — the gap is measured on the request that
+    ENDS it, which is exactly the moment it becomes knowable.
+    """
+    fwd = request.headers.get("X-Forwarded-For")
+    client_ip = (fwd or request.remote_addr or "?").split(",")[0].strip()
+    key = (cam_id, client_ip)
+    now = _time.time()
+    state = _CLIENT_GAP_STATE.get(key)
+    if state is None:
+        _CLIENT_GAP_STATE[key] = {"last": now, "ema": 0.0}
+    else:
+        gap = now - float(state.get("last", now))
+        ema = float(state.get("ema", 0.0)) or gap
+        threshold = max(_CLIENT_GAP_FLOOR_S, _CLIENT_GAP_FACTOR * ema)
+        if threshold < gap < _CLIENT_GAP_IDLE_S:
+            log.info(
+                "[http] test-detection client gap · cam=%s client=%s "
+                "last_request_at=%s gap=%.1fs (cadence≈%.1fs)",
+                cam_id,
+                client_ip,
+                _time.strftime("%H:%M:%S", _time.localtime(float(state["last"]))),
+                gap,
+                ema,
+            )
+        # Don't let a one-off drop dominate the cadence EMA.
+        state["ema"] = (0.3 * gap + 0.7 * ema) if gap < _CLIENT_GAP_IDLE_S else ema
+        state["last"] = now
+    # Light prune so the dict can't grow unbounded across many client
+    # IPs over a long uptime.
+    if len(_CLIENT_GAP_STATE) > _CLIENT_GAP_MAX_ENTRIES:
+        cutoff = now - _CLIENT_GAP_IDLE_S
+        for stale in [k for k, v in _CLIENT_GAP_STATE.items() if float(v.get("last", 0)) < cutoff]:
+            _CLIENT_GAP_STATE.pop(stale, None)
+
 
 def _get_test_tracker(cam_id: str, cam_cfg: dict) -> dict:
     """Return the per-cam test-detection tracker state.
@@ -125,6 +180,9 @@ def api_test_detection(cam_id: str):
     cam = settings.get_camera(cam_id)
     if not cam:
         return jsonify({"error": "camera not found"}), 404
+    # Q2-5 · note this poll so a connectivity drop (gap in the client's
+    # request stream) gets one correlatable INFO line on resume.
+    _note_client_request(cam_id)
     rt = runtimes.get(cam_id)
     if rt is None:
         return jsonify({"error": "Kamera-Runtime nicht aktiv (deaktiviert?)"}), 503

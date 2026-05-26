@@ -106,9 +106,8 @@ class WeatherPrebuffer:
     def collect_postroll(self, session: dict) -> list[tuple[float, bytes]]:
         """Detach a post-roll session from the buffer and return its frames.
         Safe to call before or after the deadline."""
-        with self._lock:
-            with contextlib.suppress(ValueError):
-                self._postroll_sessions.remove(session)
+        with self._lock, contextlib.suppress(ValueError):
+            self._postroll_sessions.remove(session)
         return list(session.get("frames", []))
 
 

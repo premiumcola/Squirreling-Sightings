@@ -16,6 +16,7 @@ from __future__ import annotations
 import collections
 import logging
 import time as _time
+from datetime import UTC
 
 import cv2
 from flask import Blueprint, jsonify, request
@@ -941,7 +942,8 @@ def _build_cluster_evidence(tt: dict, cam: dict, obj_filter: set, ema_ms: float)
 # to substitute before clipboard write.
 @bp.get('/api/cameras/<cam_id>/debug-snapshot')
 def api_debug_snapshot(cam_id: str):
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from flask import Response
 
     settings = app_state.settings
@@ -951,7 +953,7 @@ def api_debug_snapshot(cam_id: str):
         return Response("# Camera not found\n", mimetype="text/markdown", status=404)
     tt = _TEST_TRACKERS.get(cam_id) or {}
     last = tt.get("last_tick") or {}
-    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now_iso = datetime.now(UTC).isoformat(timespec="seconds")
     diag = last.get("diag") or {}
     fs = last.get("frame_size") or {"w": 0, "h": 0}
     frame_age_ms = last.get("frame_age_ms") or 0

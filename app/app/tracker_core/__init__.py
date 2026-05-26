@@ -24,22 +24,22 @@ from dataclasses import dataclass, field
 
 from ..bbox_utils import bbox_centroid_dist, iou
 from ._consts import (  # noqa: F401 — public API re-export
-    IOU_MATCH_THRESHOLD,
-    TRACK_FLOOR_SCORE,
-    TRACK_SPAWN_SCORE,
-    TRACK_MISS_WINDOWS,
-    MISS_GRACE_DEFAULT_SECONDS,
-    TRACK_REID_MAX_SECONDS,
-    TRACK_REID_DIST_FACTOR,
-    TRACK_REID_SIZE_RATIO,
-    SAMPLE_BBOX_DELTA_PX,
-    NMS_IOU,
-    EDGE_MARGIN_PX,
     EDGE_GRACE_SAMPLES,
-    SPAWN_BLOCK_IOU,
+    EDGE_MARGIN_PX,
+    IOU_MATCH_THRESHOLD,
     MERGE_IOU,
     MERGE_SUSTAIN,
+    MISS_GRACE_DEFAULT_SECONDS,
+    NMS_IOU,
     REID_OCCUPIED_IOU,
+    SAMPLE_BBOX_DELTA_PX,
+    SPAWN_BLOCK_IOU,
+    TRACK_FLOOR_SCORE,
+    TRACK_MISS_WINDOWS,
+    TRACK_REID_DIST_FACTOR,
+    TRACK_REID_MAX_SECONDS,
+    TRACK_REID_SIZE_RATIO,
+    TRACK_SPAWN_SCORE,
 )
 
 log = logging.getLogger(__name__)

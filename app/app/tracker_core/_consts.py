@@ -13,7 +13,6 @@ resolving.
 
 from __future__ import annotations
 
-
 # ── Tunables ────────────────────────────────────────────────────────────────
 # Track-association tuning. The live runtime and the post-clip worker
 # both read these defaults; per-camera overrides flow through

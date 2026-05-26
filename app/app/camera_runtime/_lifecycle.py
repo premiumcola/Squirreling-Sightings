@@ -14,10 +14,10 @@ import shutil as _shutil
 import subprocess as _subprocess
 import threading
 import time
-from urllib.parse import urlparse
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import cv2
 import numpy as np

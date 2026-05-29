@@ -171,10 +171,13 @@ export const DASHBOARD_SVG = {
   cog: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   // Simulation glyph — dashed circle + play triangle
   sim: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7.5" stroke-dasharray="2.5 2.5"/><path d="M 10 8 L 16 12 L 10 16 Z" fill="currentColor" stroke="none"/></svg>`,
-  // Expand · two diagonal arrows pointing away from centre
-  expand: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4 L20 4 L20 9"/><path d="M20 4 L12 12"/><path d="M9 20 L4 20 L4 15"/><path d="M4 20 L12 12"/></svg>`,
-  // Minimize · mirror of expand
-  minimize: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 12 L20 12 L20 17"/><path d="M20 12 L12 4"/><path d="M9 12 L4 12 L4 7"/><path d="M4 12 L12 20"/></svg>`,
+  // Enter fullscreen · four corner brackets, diagonals to the corners.
+  // Path data mirrors modals.html .fs-icon-expand so the tile FS button
+  // and the live-view modal share one icon.
+  expand: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 14v7h7"/><path d="M21 10V3h-7"/><path d="M3 21l8-8"/><path d="M21 3l-8 8"/></svg>`,
+  // Exit fullscreen · corner brackets, diagonals pointing inward.
+  // Path data mirrors modals.html .fs-icon-minimize.
+  minimize: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v7H3"/><path d="M14 21v-7h7"/><path d="M10 10L3 3"/><path d="M14 14l7 7"/></svg>`,
   // Telegram paper-plane
   telegram: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 L11 13"/><path d="M22 2 L15 22 L11 13 L2 9 Z"/></svg>`,
   // MQTT antenna broadcast

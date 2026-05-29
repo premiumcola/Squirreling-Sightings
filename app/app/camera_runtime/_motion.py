@@ -55,17 +55,21 @@ class MotionMixin:
     """
 
     def _motion_detect(self, frame):
-        """Returns (labels: list[str], motion_bbox: tuple|None).
-        motion_bbox is (x, y, w, h) bounding rect of all motion combined.
+        """Returns (labels, motion_bbox, wildlife_motion_low, wl_blobs).
+        - labels: ["motion"] when normal-threshold motion fired, else [].
+        - motion_bbox: (x, y, w, h) union rect of normal-motion contours, or None.
+        - wildlife_motion_low: True when only the lower wildlife area floor fired.
+        - wl_blobs: per-blob [{bbox, solidity}] for the wildlife-low contours,
+          fed to the D1 MotionBlobTracker for coherent-motion escalation.
         Applies per-camera exclusion masks and motion_sensitivity threshold.
         Brightness-normalises both frames before diff to suppress cloud/sun transitions."""
         # Per-camera kill-switch — skips all motion work (saves CPU when
         # the camera is in objects-only mode).
         if not self.cfg.get("motion_enabled", True):
-            return [], None, False
+            return [], None, False, []
         proc = self.global_cfg.get("processing", {}).get("motion", {})
         if not proc.get("enabled", True):
-            return [], None, False
+            return [], None, False, []
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur_size = int(proc.get("blur_size", 15))
         if blur_size % 2 == 0:
@@ -76,7 +80,7 @@ class MotionMixin:
             self.prev_gray = None
         if self.prev_gray is None:
             self.prev_gray = gray
-            return [], None, False
+            return [], None, False, []
         # Brightness normalisation: scale current frame to match previous mean so that
         # gradual global illumination changes (clouds, day/night) don't produce diff.
         mean_prev = float(np.mean(self.prev_gray))
@@ -126,16 +130,21 @@ class MotionMixin:
         else:
             min_area = int(proc.get("min_area", 3000))
         # Wildlife uses a parallel, more sensitive threshold so small animals
-        # (squirrel/fox/hedgehog) can wake the wildlife classifier even when
-        # the normal motion gate doesn't fire. 0.0 = "auto" → 1.4× the normal
-        # sensitivity, capped at 1.0.
+        # (squirrel/fox/hedgehog/distant cat+dog) can wake the wildlife stage
+        # even when the normal motion gate doesn't fire. 0.0 = "auto" → 1.4×
+        # the normal sensitivity. D1 · the base fraction is now 0.001 (was
+        # 0.005) so animal-sized blobs (~11 k px ≈ 0.3 % of a 2560×1440 frame,
+        # B4) clear the floor — the old ~18 k floor missed them. A LOW area
+        # floor is safe because the D1 motion-blob tracker (coherent net
+        # translation) is the real wind filter, not area. The cap is 3.0 so a
+        # per-camera wildlife_motion_sensitivity can push the floor lower.
         wl_sens = self.cfg.get("wildlife_motion_sensitivity")
         if wl_sens is None or float(wl_sens) <= 0.0:
             base_sens = float(sensitivity) if sensitivity is not None else 0.5
-            wl_sens = min(1.0, base_sens * 1.4)
+            wl_sens = min(3.0, base_sens * 1.4)
         else:
-            wl_sens = float(wl_sens)
-        wl_min_area = int(base_min_area / max(0.1, wl_sens))
+            wl_sens = min(3.0, max(0.1, float(wl_sens)))
+        wl_min_area = int(frame_area * 0.001 / max(0.1, wl_sens))
         # Minimum changed-pixel count: a global brightness shift produces many small
         # changed pixels but no large contour. We use a 0.5% floor (down from 1%)
         # so a single squirrel/fox can still trigger the wildlife threshold —
@@ -143,20 +152,35 @@ class MotionMixin:
         # for real motion vs. noise.
         h_f2, w_f2 = thresh.shape[:2]
         if int(np.sum(thresh > 0)) < int(h_f2 * w_f2 * 0.005):
-            return [], None, False
+            return [], None, False, []
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         # Two parallel checks against the same contour set — cheap.
         big_normal = [c for c in contours if cv2.contourArea(c) >= min_area]
         big_wl = [c for c in contours if cv2.contourArea(c) >= wl_min_area]
         wildlife_motion_low = bool(big_wl) and not big_normal
+        # D1 · per-blob features for the wildlife-low blobs, fed to the
+        # cross-frame MotionBlobTracker so it can measure net translation
+        # (animal) vs in-place shimmer (wind). solidity = area / convex-hull
+        # area is carried as a cheap support signal.
+        wl_blobs = []
+        for c in big_wl:
+            a = float(cv2.contourArea(c))
+            ha = float(cv2.contourArea(cv2.convexHull(c))) or 1.0
+            wl_blobs.append(
+                {
+                    "bbox": tuple(int(v) for v in cv2.boundingRect(c)),
+                    "solidity": round(a / ha, 3),
+                }
+            )
         if not big_normal:
             # Normal motion didn't trigger — but tell the caller whether the
-            # lower wildlife threshold did so the wildlife stage can still
-            # run. No labels/bbox returned in this case (no event).
-            return [], None, wildlife_motion_low
+            # lower wildlife threshold did (+ the wildlife blobs) so the
+            # wildlife stage + the D1/D2 escalation can still run. No
+            # labels/bbox returned in this case (no normal-motion event).
+            return [], None, wildlife_motion_low, wl_blobs
         all_pts = np.concatenate(big_normal)
         bbox = cv2.boundingRect(all_pts)
-        return ["motion"], bbox, wildlife_motion_low
+        return ["motion"], bbox, wildlife_motion_low, wl_blobs
 
     def _crop(self, frame, bbox):
         x1, y1, x2, y2 = bbox

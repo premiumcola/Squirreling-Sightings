@@ -73,6 +73,11 @@ class Detection:
     # like {"save_photo": True, "save_video": False, "send_telegram": True}
     # means the matching zone explicitly opted in/out for the listed actions.
     zone_flags: dict | None = None
+    # D4 · provenance. True when this detection was recovered by the D2
+    # ROI/tiling re-detection pass (small/distant subject the full-frame
+    # detect missed) rather than the normal full-frame pass. Surfaced in
+    # the event JSON + UI so a tiling-found hit is distinguishable.
+    via_roi: bool = False
 
     def to_dict(self):
         x1, y1, x2, y2 = self.bbox
@@ -87,4 +92,5 @@ class Detection:
             else None,
             "identity": self.identity,
             "raw_cls_id": int(self.raw_cls_id),
+            "via_roi": bool(self.via_roi),
         }

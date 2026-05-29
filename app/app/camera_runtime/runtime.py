@@ -208,6 +208,12 @@ class CameraRuntime(
             grace_seconds=_t_grace,
             iou_threshold=_t_iou,
         )
+        # D1 · per-camera motion-blob tracker for the wind-tolerant gate. Feeds
+        # on the raw wildlife-low motion blobs and reports coherent net
+        # translation (animal) vs in-place shimmer (wind) to gate D2 ROI.
+        from ..motion_blob_tracker import MotionBlobTracker
+
+        self._blob_tracker = MotionBlobTracker()
         from ._consts import log as _log
 
         _log.info(

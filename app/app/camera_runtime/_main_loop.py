@@ -20,6 +20,7 @@ import numpy as np
 import requests
 
 from ..detection_confirmer import DetectionConfirmer
+from ..detection_tiling import tiled_detect
 from ..detectors import (
     BirdSpeciesClassifier,
     CoralObjectDetector,
@@ -202,7 +203,24 @@ class MainLoopMixin:
                 if self.connect_time and time.time() - self.connect_time < 3.0:
                     time.sleep(interval)
                     continue
-                motion_labels, motion_bbox, wildlife_motion_low = self._motion_detect(proc_frame)
+                motion_labels, motion_bbox, wildlife_motion_low, wl_blobs = self._motion_detect(
+                    proc_frame
+                )
+                # D1 · feed the wildlife-low blobs to the cross-frame
+                # MotionBlobTracker and ask whether any shows COHERENT net
+                # translation (a real animal crossing) vs in-place shimmer
+                # (wind). Only a coherent blob is allowed to escalate to the
+                # D2 ROI/tiling re-detection further down. Per-camera tunable
+                # min net-displacement fraction (D3); falls back to the
+                # conservative module default when unset.
+                self._blob_tracker.update(wl_blobs)
+                _min_net = self.cfg.get("roi_min_net_disp_frac")
+                if _min_net:
+                    _coherent_blob = self._blob_tracker.coherent_track(
+                        proc_frame.shape[1], min_net_frac=float(_min_net)
+                    )
+                else:
+                    _coherent_blob = self._blob_tracker.coherent_track(proc_frame.shape[1])
                 # Multi-frame confirmation: only trigger on motion in ≥2 of last 3 frames.
                 # Two parallel deques — one for the regular threshold (which gates
                 # event recording + COCO) and one for the lower wildlife threshold
@@ -251,6 +269,48 @@ class MainLoopMixin:
                 # Masks + zones compose: detect inside zones BUT exclude
                 # masked areas within zones.
                 detections = self._filter_zoned_detections(proc_frame, detections)
+                # ── D2 · ROI / tiling rescue ─────────────────────────────
+                # When the full-frame HD detect found NO kept object but D1
+                # saw a coherent moving blob, re-detect with the camera's
+                # tiling/ROI mode on the SAME main frame, NMS-merge with a
+                # full-frame pass, then re-apply object_filter + masks +
+                # zones so the merged hits flow through the EXISTING tracker
+                # + confirmer + recording path unchanged. cat→"dog" is
+                # accepted as "animal present". COST GUARD: this fires only
+                # on the escalated wildlife-low + coherent-motion case —
+                # never every frame.
+                det_mode = (self.cfg.get("roi_mode") or "off").strip().lower()
+                if (
+                    not detections
+                    and _coherent_blob is not None
+                    and det_mode in ("roi", "2x2", "3x3")
+                ):
+                    mbox = _coherent_blob.last_bbox if det_mode == "roi" else None
+                    roi_dets, _sahi = tiled_detect(
+                        self.detector,
+                        proc_frame,
+                        det_mode,
+                        threshold=self._tracker.floor,
+                        motion_box=mbox,
+                    )
+                    if allowed:
+                        roi_dets = [d for d in roi_dets if d.label in allowed]
+                    roi_dets = self._filter_masked_detections(proc_frame, roi_dets)
+                    roi_dets = self._filter_zoned_detections(proc_frame, roi_dets)
+                    for _d in roi_dets:
+                        _d.via_roi = True  # D4 provenance
+                    if roi_dets:
+                        log.info(
+                            "[%s] D2 ROI rescue (%s): %d hit(s) on coherent blob "
+                            "net=%.0fpx straight=%.2f → %s",
+                            self.camera_id,
+                            det_mode,
+                            len(roi_dets),
+                            _coherent_blob.net_displacement,
+                            _coherent_blob.straightness,
+                            ",".join(sorted({d.label for d in roi_dets})),
+                        )
+                    detections = roi_dets
                 # ── Two-tier tracker ────────────────────────────────────
                 # Classifies each surviving detection into confirmed
                 # (≥ per-label spawn threshold) vs tentative (above floor,
@@ -262,8 +322,8 @@ class MainLoopMixin:
                 if label_thresholds:
                     _lt = dict(label_thresholds)
                     _default = self._tracker.spawn_default
-                    spawn_for = (
-                        lambda lbl, _lt=_lt, _d=_default: float(_lt[lbl]) if lbl in _lt else _d
+                    spawn_for = lambda lbl, _lt=_lt, _d=_default: (
+                        float(_lt[lbl]) if lbl in _lt else _d
                     )
                 # Effective fps for grace-window math. Falls back to a
                 # conservative 3 Hz when the rolling measurement hasn't
@@ -769,8 +829,7 @@ class MainLoopMixin:
                         [t for t in self._reconnect_log if time.time() - t < 86400]
                     )
                     log.info(
-                        "[cam:%s][flap] streak=%d err=%s:%s "
-                        "since_last_ok=%.1fs reconnects_24h=%d",
+                        "[cam:%s][flap] streak=%d err=%s:%s since_last_ok=%.1fs reconnects_24h=%d",
                         self.camera_id,
                         self._error_streak,
                         type(e).__name__,

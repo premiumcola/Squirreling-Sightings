@@ -281,15 +281,15 @@ function _renderWeatherPagination(totalItems, pageSize) {
   const winEnd = Math.min(pageCount, winStart + 5);
   const pills = [];
   pills.push(
-    `<button type="button" class="page-pill" data-act="prev" ${cur === 0 ? 'disabled' : ''} aria-label="Vorherige Seite">‹</button>`,
+    `<button type="button" class="page-pill" data-act="prev" ${cur === 0 ? 'disabled' : ''} aria-label="Vorherige Seite"><span class="page-pill-chip">‹</span></button>`,
   );
   for (let i = winStart; i < winEnd; i++) {
     pills.push(
-      `<button type="button" class="page-pill${i === cur ? ' active' : ''}" data-go="${i}">${i + 1}</button>`,
+      `<button type="button" class="page-pill${i === cur ? ' active' : ''}" data-go="${i}"><span class="page-pill-chip">${i + 1}</span></button>`,
     );
   }
   pills.push(
-    `<button type="button" class="page-pill" data-act="next" ${cur >= pageCount - 1 ? 'disabled' : ''} aria-label="Nächste Seite">›</button>`,
+    `<button type="button" class="page-pill" data-act="next" ${cur >= pageCount - 1 ? 'disabled' : ''} aria-label="Nächste Seite"><span class="page-pill-chip">›</span></button>`,
   );
   pag.innerHTML = pills.join('');
   pag.querySelectorAll('button').forEach((btn) => {

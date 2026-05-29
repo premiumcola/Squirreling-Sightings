@@ -126,8 +126,16 @@ export async function lbLoadTracksForItem(item) {
     _hideReindexBanner();
   }
 
+  // Render path: real sidecar tracks > auto-populated from trigger
+  // detections (C1) > calm empty placeholder. Timelapses never auto-
+  // populate (no trigger detections) so they stay on the placeholder.
+  const renderPath = haveAnyTracks
+    ? 'tracks'
+    : triggerDetCount > 0 && item.type !== 'timelapse'
+      ? 'auto-dets'
+      : 'placeholder';
   _logDiag(
-    `event=${item.event_id} render path=${haveAnyTracks ? 'tracks' : 'placeholder'} ` +
+    `event=${item.event_id} render path=${renderPath} ` +
       `(${haveAnyTracks ? tracks.tracks.length : 0} tracks, ` +
       `${triggerDetCount} trigger dets) — load-only`,
     'info',

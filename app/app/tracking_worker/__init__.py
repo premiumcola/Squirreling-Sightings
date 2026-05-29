@@ -829,7 +829,7 @@ class TrackingWorker(threading.Thread):
             cfg = {}
         sig = self._detector_signature(cfg)
         if self._detector is None or sig != self._detector_cfg_id:
-            from .detectors import CoralObjectDetector
+            from ..detectors import CoralObjectDetector
 
             # Strip device hint so make_interpreter doesn't race the
             # camera runtimes for the TPU. The CPU fallback path inside
@@ -1058,7 +1058,7 @@ class TrackingWorker(threading.Thread):
         event store, missing event, or write failure is logged at INFO
         and the tracks.json we just produced is unaffected."""
         try:
-            from . import app_state
+            from .. import app_state
         except Exception:
             return
         store = getattr(app_state, "store", None)

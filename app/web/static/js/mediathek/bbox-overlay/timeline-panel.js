@@ -7,6 +7,7 @@
 import { byId } from '../../core/dom.js';
 import { colors, OBJ_LABEL, OBJ_SVG } from '../../core/icons.js';
 import { apiPost } from '../../core/api.js';
+import { trackColor } from '../../core/track-color.js';
 import { lbState } from '../state.js';
 import { _state } from './_state.js';
 import { _getHiddenClassesForCam, _setHiddenClassesForCam } from './hidden-classes.js';
@@ -199,6 +200,46 @@ function _renderTrackBar(tr, duration, fallbackC, threshold, natW, natH, masks, 
   </button>`;
 }
 
+// C1 · Auto-populate the swimlane from the event's stored TRIGGER
+// detections (item.detections — class + bbox + score, written by the
+// recording pipeline) when no tracks.json sidecar exists yet. Builds a
+// minimal tracks-shaped object — one single-sample track per detection,
+// dropped at the pre-roll boundary (where the motion that started the
+// clip occurred; ffmpeg clips have 0 pre-roll → the very start). The
+// result feeds the SAME strip renderer as a real sidecar, so a freshly
+// opened clip shows its class-coloured lanes with zero clicks. The
+// manual "Neu indexieren" pill still REFINES this into full multi-frame
+// tracks. Returns null when there are no usable detections (caller then
+// falls back to the calm empty placeholder).
+//
+// NOTE: this stays local to the timeline panel — it is NOT written back
+// to item._tracks, so the canvas bbox overlay (_lbDrawDetections) keeps
+// its own conservative trigger-frame fallback unchanged.
+function _synthTracksFromDetections(item) {
+  const dets = (item.detections || []).filter((d) => d && d.bbox && typeof d.bbox.x1 === 'number');
+  if (!dets.length) return null;
+  const rs = item.recording_settings || {};
+  const t0 = Math.max(0, Number(rs.pre_motion_seconds) || 0);
+  const tracks = dets.map((d, i) => {
+    const tr = {
+      label: d.label || 'unknown',
+      best_score: typeof d.score === 'number' ? d.score : 0,
+      // end_reason set to a non-timeout sentinel so _renderTrackBar
+      // never paints a misleading "× lost" marker on a synthetic
+      // single-point trigger marker.
+      end_reason: 'auto',
+      samples: [{ t: t0, f: 0, bbox: d.bbox, score: d.score, source: 'detect' }],
+      _auto: true,
+    };
+    tr._num = i + 1;
+    tr.color = trackColor(tr);
+    return tr;
+  });
+  const g = Number(rs.conf_thresh_general);
+  const gates = Number.isFinite(g) && g > 0 ? { min_confidence: g } : undefined;
+  return { tracks, gates, _auto: true };
+}
+
 // Master renderer for the entire bottom-stack chrome — sidebar (play
 // button + class badges + tick spacer) and time column (scrubber bar
 // + per-class strips + tick row + play cursor). One column owns the
@@ -216,8 +257,19 @@ export function lbRenderTrackTimeline(item) {
   }
 
   const isTimelapse = item.type === 'timelapse';
-  const tracks = item._tracks;
-  const haveTracks = !!(tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
+  let tracks = item._tracks;
+  let haveTracks = !!(tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0);
+  // C1 · no real sidecar tracks → fall back to the stored trigger
+  // detections so the swimlane is populated on first open (zero
+  // clicks). Timelapses carry no trigger detections, so they keep
+  // their "Nach-Erkennung starten" empty state below.
+  if (!haveTracks && !isTimelapse) {
+    const synth = _synthTracksFromDetections(item);
+    if (synth) {
+      tracks = synth;
+      haveTracks = true;
+    }
+  }
   // Camera-side allowed-labels filter (same as the canvas render
   // path). Only classes that pass the filter get a row; hidden-classes
   // are still rendered as a row (with the badge dimmed) so the user

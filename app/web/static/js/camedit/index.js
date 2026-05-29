@@ -43,7 +43,6 @@ import {
   _bindErkPerClassToggle,
   _renderErkPerClassConfirm,
   _bindErkConfirmPerClassToggle,
-  _bindErkSimulate,
   _renderCamObjectPills,
   getCamObjectFilterState,
   setCamObjectFilterState,
@@ -565,11 +564,6 @@ function editCamera(camId) {
     _bindErkPerClassToggle();
     _renderErkPerClassConfirm(byId('cameraForm'), c);
     _bindErkConfirmPerClassToggle();
-    // "Erkennung jetzt simulieren" — bind once per session. Result panel
-    // starts hidden; reopens automatically on each successful run.
-    _bindErkSimulate();
-    const simResult = byId('erkSimResult');
-    if (simResult) simResult.hidden = true;
     setWhitelistState(c.whitelist_names || []);
     _updateWhitelistHidden();
     shapeState.camera = camId;

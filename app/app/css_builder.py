@@ -41,7 +41,7 @@ LOAD_ORDER = [
     "03-dashboard.css",
     "04-coral-1.css",
     "05-chrome-dock.css",
-    # 06-cam-edit-1.css was split into 7 topical partials in the
+    # 06-cam-edit-1.css was split into 6 topical partials in the
     # modular refactor. Order is alphabetical within the 06 family,
     # matching the original byte-by-byte concatenation.
     "06a-cam-edit-zones-masks.css",
@@ -50,7 +50,6 @@ LOAD_ORDER = [
     "06d-cam-edit-alerting.css",
     "06e-cam-edit-filters.css",
     "06f-cam-edit-erkennung-aufnahme.css",
-    "06g-cam-edit-simulator.css",
     "07-timelapse-1.css",
     "08-settings.css",
     "09-telegram-1.css",
@@ -70,7 +69,6 @@ LOAD_ORDER = [
     "23-weather-3.css",
     "24-cam-edit-4.css",
     "25-mobile.css",
-    "26-erk-sim-sheet.css",
     "27-coral-test-modes.css",
     "28-quests.css",
     "29-birds.css",

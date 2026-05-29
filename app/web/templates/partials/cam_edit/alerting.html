@@ -117,6 +117,12 @@
                        7 rows (person/cat/bird/squirrel/car/dog/motion)
                        × 3 columns (off/info/alarm). Click a cell to
                        toggle that row's severity. -->
+      <!-- B2 · shown by JS when ≥1 object class is disabled in the
+                       Erkennung object-filter (its matrix row is then locked). -->
+      <div id="alertSeverityLockHint" class="sev-lock-hint" hidden>
+        Ausgegraute Klassen sind in der <strong>Erkennung</strong> deaktiviert — dort
+        aktivieren, um sie hier zu konfigurieren.
+      </div>
       <div id="alertSeverityMatrix" class="sev-matrix"></div>
       <button type="button" class="erk-more" id="alertCooldownToggle" aria-expanded="false">
         <svg

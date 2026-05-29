@@ -191,6 +191,59 @@
   background: rgba(220, 38, 38, 0.22);
   color: #fecaca;
 }
+/* B2 · project SVG icon in the matrix row label (replaces the old emoji). */
+.sev-row-label .sev-row-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.sev-row-label .sev-row-ico svg {
+  width: 18px;
+  height: 18px;
+}
+/* B2 · cooldown drilldown row icon — inline before the label text. */
+.cd-row-ico {
+  display: inline-flex;
+  vertical-align: -3px;
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+}
+.cd-row-ico svg {
+  width: 16px;
+  height: 16px;
+}
+/* B2 · locked rows — class disabled in the Erkennung object-filter. The
+   whole row (icon + label + the three cells) greys out; the radios become
+   inert (no pointer events) and forced to "Aus". Depth via opacity, no
+   border. */
+.sev-cell.is-locked {
+  opacity: 0.4;
+}
+.sev-row-label.is-locked {
+  color: rgba(255, 255, 255, 0.45);
+}
+.sev-radio.is-locked {
+  pointer-events: none;
+  cursor: default;
+}
+/* B2 · one-line hint above the matrix when ≥1 row is locked. */
+.sev-lock-hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.5);
+}
+.sev-lock-hint[hidden] {
+  display: none;
+}
+.sev-lock-hint strong {
+  color: #cbd5e1;
+  font-weight: 700;
+}
 
 /* Channel rows (Telegram, MQTT, Recording, Master) — flat row with an
    icon, label/sub, and a custom switch on the right. The whole row is

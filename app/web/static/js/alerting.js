@@ -10,20 +10,95 @@
 import { byId, esc } from './core/dom.js';
 import { apiGet, apiPost } from './core/api.js';
 import { _fmtRelativeAgeS } from './camedit/detection.js';
+import { objIconSvg } from './core/icons.js';
+import { getCamObjectFilterState } from './camedit/detection-objectfilter.js';
 
+// Object-class order MIRRORS camedit/detection-objectfilter.js
+// _CAM_OBJ_OPTIONS (person, cat, bird, car, dog, squirrel) so the Alerting
+// matrix reads in the same sequence as the Erkennung object-filter pills,
+// with the project SVG icons (not emoji). `motion` is NOT an object-filter
+// class — it's a separate trigger, always shown LAST and NEVER locked.
+// `obj:true` marks the rows the object-filter lock applies to.
 const _ALERT_SEV_CLASSES = [
-  { key: 'person', label: 'Person', em: '👤' },
-  { key: 'cat', label: 'Katze', em: '🐈' },
-  { key: 'bird', label: 'Vogel', em: '🐦' },
-  { key: 'squirrel', label: 'Eichhörnchen', em: '🐿' },
-  { key: 'car', label: 'Auto', em: '🚗' },
-  { key: 'dog', label: 'Hund', em: '🐕' },
-  { key: 'motion', label: 'Bewegung', em: '〰️' },
+  { key: 'person', label: 'Person', obj: true },
+  { key: 'cat', label: 'Katze', obj: true },
+  { key: 'bird', label: 'Vogel', obj: true },
+  { key: 'car', label: 'Auto', obj: true },
+  { key: 'dog', label: 'Hund', obj: true },
+  { key: 'squirrel', label: 'Eichhörnchen', obj: true },
+  { key: 'motion', label: 'Bewegung', obj: false },
 ];
+
+// Module refs to the last-rendered form/cam so a live object-filter change
+// (or an Alerting-tab activation) can re-evaluate the lock state without a
+// full re-render that would drop the user's in-progress selections.
+let _sevForm = null;
+let _sevCam = null;
+
+// Current object-filter, live-first: read the Erkennung pills' live state
+// (mirrored as the user toggles), falling back to the saved cam.object_filter
+// on the very first render before the pills initialise. An EMPTY filter means
+// "no filter — all classes detected" (matches the runtime), so nothing locks.
+function _currentObjFilter() {
+  const live = getCamObjectFilterState();
+  if (live && live.length) return live;
+  return (_sevCam && _sevCam.object_filter) || [];
+}
+
+// Grey out + force-off + de-interactivate the rows whose class is NOT in the
+// current object-filter (motion is exempt). Mutates the existing DOM so an
+// unlocked row's in-progress selection survives. Toggles the one-line hint.
+function _applySeverityLocks() {
+  const wrap = byId('alertSeverityMatrix');
+  if (!wrap) return;
+  const allowed = _currentObjFilter();
+  const lockActive = allowed.length > 0;
+  const allowedSet = new Set(allowed);
+  let lockedCount = 0;
+  for (const c of _ALERT_SEV_CLASSES) {
+    if (!c.obj) continue; // motion is never locked
+    const locked = lockActive && !allowedSet.has(c.key);
+    wrap
+      .querySelectorAll(`[data-cls="${c.key}"]`)
+      .forEach((el) => el.classList.toggle('is-locked', locked));
+    const radios = wrap.querySelectorAll(`.sev-radio[data-cls="${c.key}"]`);
+    radios.forEach((r) => {
+      if (locked) r.dataset.locked = '1';
+      else delete r.dataset.locked;
+    });
+    const lbl = wrap.querySelector(`.sev-row-label[data-cls="${c.key}"]`);
+    if (locked) {
+      lockedCount++;
+      // Force the row to OFF — a deselected class must never carry alarm/info.
+      radios.forEach((r) => {
+        const isOff = r.dataset.val === 'off';
+        r.classList.remove('is-on', 'is-off-mode', 'is-info-mode', 'is-alarm-mode');
+        if (isOff) r.classList.add('is-on', 'is-off-mode');
+        r.setAttribute('aria-checked', isOff ? 'true' : 'false');
+        r.textContent = isOff ? '●' : '○';
+      });
+      if (lbl) lbl.title = 'In Erkennung aktivieren, um Alerting zu konfigurieren';
+    } else if (lbl) {
+      lbl.removeAttribute('title');
+    }
+  }
+  const hint = byId('alertSeverityLockHint');
+  if (hint) hint.hidden = lockedCount === 0;
+}
+
+// Re-evaluate locks against the LIVE object-filter — called when the
+// Erkennung pills toggle and when the Alerting tab is (re)activated.
+export function _refreshSeverityLockState() {
+  if (!byId('alertSeverityMatrix')) return;
+  _applySeverityLocks();
+  if (_sevForm) _checkAlertingConflicts(_sevForm);
+}
 
 export function _renderSeverityMatrix(form, cam) {
   const wrap = byId('alertSeverityMatrix');
   if (!wrap) return;
+  _sevForm = form;
+  _sevCam = cam;
   const cs = cam?.class_severity || {};
   // Header row (Klasse | Aus | Info | Alarm).
   let html = `
@@ -49,7 +124,7 @@ export function _renderSeverityMatrix(form, cam) {
       return `<div class="${cls}" data-cls="${c.key}" data-val="${val}" role="radio" aria-checked="${on}" tabindex="0">${on ? '●' : '○'}</div>`;
     };
     html += `
-      <div class="sev-cell sev-row-label"><span class="em">${c.em}</span>${esc(c.label)}</div>
+      <div class="sev-cell sev-row-label" data-cls="${c.key}"><span class="sev-row-ico" aria-hidden="true">${objIconSvg(c.key, 18) || ''}</span>${esc(c.label)}</div>
       ${cell('off', 'off')}
       ${cell('info', 'info')}
       ${cell('alarm', 'alarm')}
@@ -57,10 +132,11 @@ export function _renderSeverityMatrix(form, cam) {
   }
   wrap.innerHTML = html;
   // Single delegated click handler per render (innerHTML wipes prior
-  // listeners). Touch + mouse + pen all share the same path.
+  // listeners). Touch + mouse + pen all share the same path. Locked
+  // (object-filter-disabled) cells are inert.
   wrap.addEventListener('click', (e) => {
     const cell = e.target.closest('.sev-radio');
-    if (!cell) return;
+    if (!cell || cell.dataset.locked === '1') return;
     const cls = cell.dataset.cls;
     const val = cell.dataset.val;
     wrap.querySelectorAll(`.sev-radio[data-cls="${cls}"]`).forEach((r) => {
@@ -73,6 +149,8 @@ export function _renderSeverityMatrix(form, cam) {
     cell.textContent = '●';
     _checkAlertingConflicts(form);
   });
+  // Lock rows for classes not in the current object-filter.
+  _applySeverityLocks();
 }
 
 // Read the matrix back into the dict shape settings.json expects.
@@ -83,7 +161,10 @@ export function _collectClassSeverity(_form) {
   const out = {};
   if (!wrap) return out;
   wrap.querySelectorAll('.sev-radio.is-on').forEach((r) => {
-    out[r.dataset.cls] = r.dataset.val;
+    // Data safety: a locked (object-filter-disabled) class must NEVER
+    // persist alarm/info — coerce to 'off' regardless of DOM state so a
+    // class deselected in Erkennung can't carry a stale alarm to disk.
+    out[r.dataset.cls] = r.dataset.locked === '1' ? 'off' : r.dataset.val;
   });
   return out;
 }
@@ -127,13 +208,15 @@ export function _checkAlertingConflicts(form) {
 // #alertCooldownGrid when "Cooldown pro Klasse anpassen ▾" is opened.
 // Defaults match _NOTIFY_COOLDOWN_DEFAULTS in telegram_bot so the
 // surfaced values reflect the actual runtime fallback.
+// Same object-class order as _ALERT_SEV_CLASSES / the Erkennung pills,
+// motion last; project SVG icons (not emoji) added in the renderer.
 const _ALERT_COOLDOWN_CLASSES = [
   { key: 'person', label: 'Person', def: 60 },
   { key: 'cat', label: 'Katze', def: 120 },
   { key: 'bird', label: 'Vogel', def: 300 },
-  { key: 'squirrel', label: 'Eichhörnchen', def: 300 },
-  { key: 'dog', label: 'Hund', def: 120 },
   { key: 'car', label: 'Auto', def: 30 },
+  { key: 'dog', label: 'Hund', def: 120 },
+  { key: 'squirrel', label: 'Eichhörnchen', def: 300 },
   { key: 'motion', label: 'Bewegung', def: 30 },
 ];
 
@@ -159,7 +242,7 @@ export function _renderAlertCooldownGrid(form, cam) {
           <input type="range" name="cooldown_${c.key}" min="0" max="600" step="15" value="${v}" />
           <span class="val" id="erkCD_${c.key}_val">${esc(_fmtCooldownVal(v))}</span>
         </div>
-        <span class="lbl">${esc(c.label)} · min. Abstand zwischen zwei Pushes</span>
+        <span class="lbl"><span class="cd-row-ico" aria-hidden="true">${objIconSvg(c.key, 16) || ''}</span>${esc(c.label)} · min. Abstand zwischen zwei Pushes</span>
       </div>`;
     })
     .join('');
@@ -335,3 +418,9 @@ window._updateAlarmProfileHint = function () {
 // the bridge means live-update doesn't need a re-edit when alerting
 // itself changes shape.)
 window._renderAlertStatusStrip = _renderAlertStatusStrip;
+
+// B2 · re-evaluate the matrix lock state whenever the Erkennung object-
+// filter changes (a pill is toggled). detection-objectfilter.js dispatches
+// this event; using an event (not an import) avoids a module cycle. Wired
+// once at module load — idempotent for the single matrix instance.
+document.addEventListener('cam-objfilter-change', () => _refreshSeverityLockState());

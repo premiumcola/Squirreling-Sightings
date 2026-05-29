@@ -66,6 +66,7 @@ import {
   _bindAlertTestButton,
   _bindAlertingConflictWatch,
   _renderAlertStatusStrip,
+  _refreshSeverityLockState,
 } from '../alerting.js';
 import { hydrateErkennungFields } from './hydration/erkennung.js';
 import { hydrateAlertingFields } from './hydration/alerting.js';
@@ -872,6 +873,10 @@ function initCameraEditTabs() {
       btn.classList.add('active');
       const panel = byId(btn.dataset.tab);
       if (panel) panel.classList.add('active');
+      // B2 · when the Alerting tab becomes active, re-evaluate the
+      // severity-matrix locks against the LIVE object-filter so a class
+      // deselected on the Erkennung tab shows as locked here right away.
+      if (btn.dataset.tab === 'cam-tab-alerting') _refreshSeverityLockState();
     });
   });
 }

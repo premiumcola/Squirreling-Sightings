@@ -52,6 +52,10 @@ export function _renderCamObjectPills() {
       _camObjectFilterState = [..._CAM_OBJ_OPTIONS.map((o) => o.k).filter((x) => active.has(x))];
       const hidden = byId('cameraForm').elements['object_filter'];
       if (hidden) hidden.value = _camObjectFilterState.join(',');
+      // B2 · notify the Alerting matrix so it locks/unlocks this class's
+      // row immediately (no save needed). Decoupled via event to avoid a
+      // module import cycle (alerting.js → detection-objectfilter.js).
+      document.dispatchEvent(new CustomEvent('cam-objfilter-change'));
     });
   });
 }

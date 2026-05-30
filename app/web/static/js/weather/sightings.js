@@ -12,6 +12,9 @@ import { showToast, showConfirm } from '../core/toast.js';
 import { apiGet, apiDelete } from '../core/api.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
 import { precipitationLabel } from '../core/weather-precip.js';
+// Reuse the Library card's trash glyph so the weather cards' hover-reveal
+// delete reads identically to the Mediathek media-card.
+import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 
 // Pick the right human-readable label for a sighting badge. For
 // `heavy_rain` we band the actual current precipitation reading
@@ -141,6 +144,115 @@ function _weatherPageSize() {
   return 9;
 }
 
+// ── Mediathek-style card chrome ───────────────────────────────────────────
+// The two inline-style strings below are copied verbatim from mediaCardHTML()
+// in mediathek/orchestration.js so the badge font / blur / radius match the
+// Library cards 1:1 without re-exporting private constants. _WS_SUB_BADGE_BASE
+// gets the event's own colour appended per card at build time.
+const _WS_BADGE_STYLE =
+  'font-size:10px;font-weight:700;color:#e2e8f0;background:rgba(0,0,0,.68);backdrop-filter:blur(3px);padding:2px 6px;border-radius:4px;line-height:1.45;white-space:nowrap';
+const _WS_SUB_BADGE_BASE =
+  'font-size:10px;background:none;backdrop-filter:blur(3px);padding:0 6px;border-radius:4px;line-height:1.45;white-space:nowrap;margin-top:1px;opacity:0.85';
+
+// Duration m:ss + byte→KB/MB formatters — mirror Mediathek's fmtDur / fmtByt
+// so the bottom-right stack reads identically to the Library cards.
+function _wsFmtDur(s) {
+  if (!s || s <= 0) return '';
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+function _wsFmtBytes(b) {
+  if (!b || b <= 0) return '';
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  return Math.round(b / 1024) + ' KB';
+}
+
+// Build one weather-sighting card, mirroring the Mediathek media-card:
+// type badge + score top-left, hover-reveal delete top-right, date/time
+// bottom-left, duration/size bottom-right. `idx` is the absolute index into
+// the filtered list (data-idx → lightbox prev/next); `isActive` is false
+// when the camera was removed — that dims the card and swaps the thumb for
+// the striped orphan placeholder.
+function _weatherSightingCardHTML(s, idx, isActive) {
+  const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8', icon: '' };
+  // Sun-timelapse cards prefer the real sunrise/sunset time over the
+  // window-end timestamp; older records without sun_event_at fall back.
+  const t = new Date(s.sun_event_at || s.started_at);
+  const dateLabel = t.toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  });
+  const timeLabel = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const sevPct = Math.round((s.score || s.severity || 0) * 100);
+  // The percentage means different things per type; the same text feeds the
+  // tap-to-explain toast since title= doesn't surface on touch.
+  const isSunTl = typeof s.event_type === 'string' && s.event_type.startsWith('sun_timelapse');
+  const scoreTip = isSunTl
+    ? 'Himmelsqualität · 100% = klarer Himmel, 50% = stark bewölkt'
+    : 'Stärke des Wetterereignisses';
+  const color = meta.color || '#94a3b8';
+  const subBadge = `${_WS_SUB_BADGE_BASE};color:${color}`;
+  const displayLabel = _weatherSightingLabel(s, meta);
+  const durLabel = _wsFmtDur(s.duration_s);
+  const sizeLabel = _wsFmtBytes(s.file_size_bytes);
+  const thumbHtml = isActive
+    ? `<img class="ws-card-thumb" loading="lazy" src="/api/weather/sightings/${encodeURIComponent(s.id)}/thumb" alt="${esc(displayLabel)}" onerror="this.style.opacity=0.2"/>`
+    : `<div class="ws-card-thumb ws-card-thumb--orphan" aria-hidden="true"></div>`;
+  const scoreChip =
+    sevPct > 0
+      ? `<span class="ws-score-chip" role="button" tabindex="0" style="pointer-events:auto" title="${esc(scoreTip)}" aria-label="${sevPct} Prozent, ${esc(scoreTip)}" data-score-tip="${esc(scoreTip)}">${sevPct}%<span class="ws-score-info" aria-hidden="true">ⓘ</span></span>`
+      : '';
+  const rightStack =
+    durLabel || sizeLabel
+      ? `<div class="ws-card-stack ws-card-stack--r">${durLabel ? `<div style="${_WS_BADGE_STYLE}">${durLabel}</div>` : ''}${sizeLabel ? `<div style="${subBadge}">${sizeLabel}</div>` : ''}</div>`
+      : '';
+  return `
+      <div class="ws-card${isActive ? '' : ' ws-card--orphan'}" data-idx="${idx}" data-id="${esc(s.id)}">
+        <div class="ws-card-thumb-wrap">
+          ${thumbHtml}
+          <span class="ws-card-play">
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          </span>
+          <div class="ws-card-cluster">
+            <span class="mmc-tl-badge ws-type-badge" style="border-color:${color}b3;color:${color}"><span class="ws-card-badge-icon">${meta.icon}</span>${esc(displayLabel)}</span>
+            ${scoreChip}
+          </div>
+          <div class="ws-card-stack ws-card-stack--l">
+            <div style="${_WS_BADGE_STYLE}">${dateLabel}</div>
+            <div style="${subBadge}">${timeLabel}</div>
+          </div>
+          ${rightStack}
+          <div class="mmc-actions">
+            <button type="button" class="mmc-btn mmc-delete" title="Löschen" aria-label="Löschen">${_LB_TRASH_ICON_ONLY}</button>
+          </div>
+        </div>
+      </div>`;
+}
+
+// Delete a sighting straight from its card (Mediathek-style hover trash —
+// no confirm modal; the heavier confirm lives in the lightbox). Fades the
+// card, hits the same DELETE endpoint the lightbox uses, then re-fetches so
+// the grid, filter pills and counts all reflect the removal.
+function _deleteSightingCard(id, cardEl) {
+  if (!id) return;
+  if (cardEl) {
+    cardEl.style.transition = 'opacity .2s, transform .2s';
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'scale(0.96)';
+  }
+  apiDelete(`/api/weather/sightings/${encodeURIComponent(id)}`)
+    .then(() => loadWeatherSightings(state.weather.filter))
+    .catch((err) => {
+      showToast('Löschen fehlgeschlagen: ' + (err?.message || err), 'error');
+      if (cardEl) {
+        cardEl.style.opacity = '';
+        cardEl.style.transform = '';
+      }
+    });
+}
+
 function _renderWeatherGrid() {
   const grid = byId('weatherSightingsGrid');
   if (!grid) return;
@@ -187,63 +299,27 @@ function _renderWeatherGrid() {
   // carries the absolute index in `items` (filtered list) so the
   // lightbox can navigate prev/next across the whole filtered set.
   grid.innerHTML = visibleItems
-    .map((s, localIdx) => {
-      const idx = sliceStart + localIdx;
-      const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8', icon: '' };
-      // For sun-timelapse sightings the user wants the actual sunrise /
-      // sunset time on the card, not the window-end timestamp. sun_event_at
-      // is the manifest field added in this commit; fall back to started_at
-      // for older records that don't carry it.
-      const tsRaw = s.sun_event_at || s.started_at;
-      const t = new Date(tsRaw);
-      const dateLabel = t.toLocaleDateString('de-DE', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-      });
-      const timeLabel = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      const sevPct = Math.round((s.score || s.severity || 0) * 100);
-      // The percentage badge means different things per event type and
-      // users were asking what it stood for. sun_timelapse_* uses a
-      // sky-quality metric (100% = clear sky, ~50% = overcast); all
-      // other event types use a generic severity score. The same text
-      // is mirrored into the click-to-toast handler below for touch
-      // devices since title= doesn't surface on tap.
-      const isSunTl = typeof s.event_type === 'string' && s.event_type.startsWith('sun_timelapse');
-      const scoreTip = isSunTl
-        ? 'Himmelsqualität · 100% = klarer Himmel, 50% = stark bewölkt'
-        : 'Stärke des Wetterereignisses';
-      const camName = esc(s.cam_name || s.cam_id || '');
-      const camActive = _activeCamIds.has(s.cam_id);
-      const displayLabel = _weatherSightingLabel(s, meta);
-      const thumbHtml = camActive
-        ? `<img class="ws-card-thumb" loading="lazy" src="/api/weather/sightings/${encodeURIComponent(s.id)}/thumb" alt="${esc(displayLabel)}" onerror="this.style.opacity=0.2"/>`
-        : `<div class="ws-card-thumb ws-card-thumb--orphan" aria-hidden="true"></div>`;
-      return `
-      <div class="ws-card${camActive ? '' : ' ws-card--orphan'}" data-idx="${idx}" data-id="${esc(s.id)}">
-        <div class="ws-card-thumb-wrap">
-          ${thumbHtml}
-          <span class="ws-card-badge ws-card-badge--type" style="background:${meta.color}cc">
-            <span class="ws-card-badge-icon">${meta.icon}</span>${esc(displayLabel)}
-          </span>
-          ${sevPct > 0 ? `<span class="ws-card-badge ws-card-badge--score" role="button" tabindex="0" title="${esc(scoreTip)}" aria-label="${sevPct} Prozent, ${esc(scoreTip)}" data-score-tip="${esc(scoreTip)}">${sevPct}%<span class="ws-score-info" aria-hidden="true">ⓘ</span></span>` : ''}
-          <span class="ws-card-play">
-            <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-          </span>
-          <span class="ws-card-bottom-l">${dateLabel} · ${timeLabel}</span>
-          <span class="ws-card-bottom-r">${camName}</span>
-        </div>
-      </div>`;
-    })
+    .map((s, localIdx) =>
+      _weatherSightingCardHTML(s, sliceStart + localIdx, _activeCamIds.has(s.cam_id)),
+    )
     .join('');
   grid.querySelectorAll('.ws-card').forEach((card) => {
     card.addEventListener('click', () => _openSightingInLightbox(parseInt(card.dataset.idx, 10)));
   });
-  _renderWeatherPagination(items.length, pageSize);
-  // Score badges fire a toast with the metric explanation on tap —
-  // title= alone is desktop-only. stopPropagation keeps the badge tap
+  // Hover-reveal delete (top-right) mirrors the Mediathek media-card:
+  // stopPropagation so the trash tap removes the event instead of opening
+  // the lightbox, then a re-fetch refreshes grid + filter counts.
+  grid.querySelectorAll('.mmc-delete').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const card = btn.closest('.ws-card');
+      if (card) _deleteSightingCard(card.dataset.id, card);
+    });
+  });
+  // Score chips fire a toast with the metric explanation on tap —
+  // title= alone is desktop-only. stopPropagation keeps the chip tap
   // from also opening the card lightbox.
-  grid.querySelectorAll('.ws-card-badge--score').forEach((b) => {
+  grid.querySelectorAll('.ws-score-chip').forEach((b) => {
     const tip = b.getAttribute('data-score-tip');
     if (!tip) return;
     const fire = (e) => {
@@ -258,6 +334,7 @@ function _renderWeatherGrid() {
       }
     });
   });
+  _renderWeatherPagination(items.length, pageSize);
 }
 
 // Pagination strip underneath the grid. Copied 1:1 from the Mediathek

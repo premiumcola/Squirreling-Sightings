@@ -125,7 +125,8 @@ def _synth_sun_manifest(cam_id: str, phase_dir: str, mp4_path: Path) -> dict:
     fills (api_snapshot, sun_snapshot, fps) get sensible defaults."""
     stem = mp4_path.stem
     sun_phase, phase_suffix = _phase_from_dir_and_stem(phase_dir, stem)
-    started = datetime.fromtimestamp(mp4_path.stat().st_mtime).isoformat(timespec="seconds")
+    st = mp4_path.stat()
+    started = datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")
     width = height = 0
     duration_s = 0
     try:
@@ -160,6 +161,7 @@ def _synth_sun_manifest(cam_id: str, phase_dir: str, mp4_path: Path) -> dict:
         "clip_path": rel,
         "thumb_path": thumb_rel,
         "duration_s": duration_s,
+        "file_size_bytes": st.st_size,
         "width": width,
         "height": height,
         "rescanned": True,
@@ -169,7 +171,8 @@ def _synth_sun_manifest(cam_id: str, phase_dir: str, mp4_path: Path) -> dict:
 def _synth_event_manifest(cam_id: str, mp4_path: Path) -> dict:
     """Minimal manifest for an orphan event_timelapse mp4."""
     stem = mp4_path.stem
-    started = datetime.fromtimestamp(mp4_path.stat().st_mtime).isoformat(timespec="seconds")
+    st = mp4_path.stat()
+    started = datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")
     rel = f"weather/{cam_id}/event_timelapse/{mp4_path.name}"
     thumb_rel = rel[: -len(".mp4")] + ".jpg"
     return {
@@ -183,6 +186,7 @@ def _synth_event_manifest(cam_id: str, mp4_path: Path) -> dict:
         "severity": 0.5,
         "clip_path": rel,
         "thumb_path": thumb_rel,
+        "file_size_bytes": st.st_size,
         "rescanned": True,
     }
 
@@ -381,15 +385,18 @@ def api_weather_sightings():
     # Flask's type=int parser swallows non-int values into None;
     # the explicit `or 0` matches the prior try/except default.
     page = request.args.get('page', type=int, default=0) or 0
-    return jsonify(
-        ws.list_sightings(
-            cam_id=request.args.get('cam_id') or None,
-            event_type=request.args.get('event_type') or None,
-            since_iso=request.args.get('from') or None,
-            until_iso=request.args.get('to') or None,
-            page=page,
-        )
+    result = ws.list_sightings(
+        cam_id=request.args.get('cam_id') or None,
+        event_type=request.args.get('event_type') or None,
+        since_iso=request.args.get('from') or None,
+        until_iso=request.args.get('to') or None,
+        page=page,
     )
+    # Additive: stat each clip so the gallery card can render a size badge
+    # (mirrors the Mediathek media-card's file_size_bytes). Never writes.
+    for it in result.get("items") or []:
+        _attach_clip_size(it)
+    return jsonify(result)
 
 
 @bp.get('/api/weather/sightings/<sighting_id>')
@@ -400,6 +407,7 @@ def api_weather_sighting_get(sighting_id: str):
     m = ws.get_sighting(sighting_id)
     if not m:
         return jsonify({"error": "not found"}), 404
+    _attach_clip_size(m)
     return jsonify(m)
 
 
@@ -442,6 +450,29 @@ def _tolerant_resolve(stored_full: Path, storage_root: Path, ext: str) -> Path |
     except (OSError, RuntimeError):
         return None
     return picked
+
+
+def _attach_clip_size(item: dict) -> None:
+    """Stat the sighting's mp4 and attach ``file_size_bytes`` (additive,
+    in bytes) so the gallery card can render a size badge mirroring the
+    Mediathek media-card. Best-effort + read-only — any failure leaves the
+    field absent and the card omits the size line. Uses the same tolerant
+    same-dir glob as the clip route so legacy manifests whose stored path
+    drifted after the cam-slug migration still resolve to a real file."""
+    storage_root = app_state.storage_root
+    rel = item.get("clip_path") or ""
+    if storage_root is None or not rel:
+        return
+    try:
+        full = storage_root / rel
+        if not full.exists():
+            alt = _tolerant_resolve(full, storage_root, "mp4")
+            if alt is None:
+                return
+            full = alt
+        item["file_size_bytes"] = full.stat().st_size
+    except (OSError, RuntimeError):
+        return
 
 
 @bp.get('/api/weather/sightings/<sighting_id>/clip')
@@ -609,7 +640,7 @@ def api_weather_sun_tl_test_start():
         duration_s = int(raw_duration)
     except (TypeError, ValueError):
         return jsonify(
-            {"ok": False, "error": f"duration_s must be an integer " f"(got {raw_duration!r})"}
+            {"ok": False, "error": f"duration_s must be an integer (got {raw_duration!r})"}
         ), 400
     raw_target = body.get("target_duration_s")
     target_duration_s = None
@@ -620,8 +651,7 @@ def api_weather_sun_tl_test_start():
             return jsonify(
                 {
                     "ok": False,
-                    "error": f"target_duration_s must be an integer "
-                    f"or null (got {raw_target!r})",
+                    "error": f"target_duration_s must be an integer or null (got {raw_target!r})",
                 }
             ), 400
     if not cam_id or not phase:

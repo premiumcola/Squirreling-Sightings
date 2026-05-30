@@ -120,42 +120,43 @@
   opacity: 0.65;
 }
 
-/* Top-Left type badge with icon — blur background like Mediathek */
-.ws-card-badge {
+/* Top-left badge cluster — mirrors the Mediathek media-card. The type
+   badge reuses .mmc-tl-badge (recoloured to the event colour inline) and
+   the score % is folded in underneath as a chip. pointer-events:none lets
+   a tap on the badge fall through to open the card; the score chip re-
+   enables its own pointer-events so it can fire the explanation toast. */
+.ws-card-cluster {
   position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+.ws-score-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
+  gap: 3px;
+  padding: 2px 7px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  color: #fff;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  line-height: 1;
-}
-.ws-card-badge--type {
-  top: 8px;
-  left: 8px;
-}
-.ws-card-badge--score {
-  top: 8px;
-  right: 8px;
-  background: rgba(0, 0, 0, 0.55);
-  font-variant-numeric: tabular-nums;
   cursor: help;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
 }
-/* Info-dot inside the score badge — signals to touch users that the
-   percentage is tappable for an explanation toast. Slightly muted vs
-   the digits so it doesn't fight the value. */
-.ws-card-badge--score .ws-score-info {
-  margin-left: 3px;
+.ws-score-chip .ws-score-info {
   opacity: 0.7;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  line-height: 1;
 }
 .ws-card-badge-icon {
   display: inline-flex;
@@ -192,29 +193,23 @@
   background: rgba(127, 174, 201, 0.65);
 }
 
-/* Bottom row: date left, camera right */
-.ws-card-bottom-l,
-.ws-card-bottom-r {
+/* Bottom corner stacks — date/time (left) and duration/size (right), each
+   a two-line stack like the Mediathek media-card. The badge fonts are
+   inline (copied from mediaCardHTML); only positioning lives here. */
+.ws-card-stack {
   position: absolute;
-  bottom: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  line-height: 1;
+  bottom: 7px;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
 }
-.ws-card-bottom-l {
+.ws-card-stack--l {
   left: 8px;
+  align-items: flex-start;
 }
-.ws-card-bottom-r {
+.ws-card-stack--r {
   right: 8px;
-  max-width: 60%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-items: flex-end;
+  gap: 2px;
 }

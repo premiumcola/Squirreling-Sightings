@@ -52,6 +52,7 @@ import {
 } from '../mediathek/bbox-overlay/index.js';
 import { openLiveDetect } from './live-detect.js';
 import { openWeatherMode } from './weather-mode.js';
+import { openRecorded } from './recorded-mode.js';
 
 // ── Public surface ─────────────────────────────────────────────────────────
 // Verbatim back-compat exports — every name the old bbox-overlay
@@ -77,29 +78,18 @@ export {
 //     panels:  { detections, tracksList, settings, weather },
 //     actions: { onConfirm, onDelete, onDownload, onPrev, onNext, onClose } }
 //
-// Recorded mode delegates to the legacy lightbox renderer pinned at
-// `window._lbLegacyRender` — that's lightbox.js's existing composition
-// body, unchanged for this commit. Tasks #4-#6 progressively lift
-// pieces of that body into the mediaview/ tree (playhead line, gauge
-// pill, panel tabs, fine-analysis fold, keyboard handler). Until then
-// the visible behaviour matches what users see today; the indirection
-// is what lets the later tasks land piece-by-piece without a single
-// breaking flip.
-//
-// Other modes (live, live-detect, timelapse) currently throw — the
-// cam-edit, dashboard, and timelapse player callsites still go through
-// their own legacy paths. Migrating them lands in a follow-up prompt.
+// Recorded mode renders via mediaview/recorded-mode.js (H) — the
+// full-screen video chrome (top bar, playbar, grey panel tabs,
+// fine-analysis fold) driven by the existing #lightboxModal DOM.
+// Weather rides its own MediaView modal (G); live-detect mounts the
+// 1 Hz test-detection player (I).
 export function openMediaView(config) {
   if (!config || typeof config !== 'object') {
     throw new Error('openMediaView: config object required');
   }
   const mode = config.mode;
   if (mode === 'recorded') {
-    const render = typeof window !== 'undefined' && window._lbLegacyRender;
-    if (typeof render !== 'function') {
-      throw new Error('openMediaView(recorded): legacy renderer not loaded');
-    }
-    return render(config.item);
+    return openRecorded(config.item);
   }
   if (mode === 'weather') {
     // G · Weather opens in its own MediaView modal (the recorded /

@@ -14,7 +14,10 @@
 // kept (a second click hides the body again) so muscle-memory still
 // works.
 import { byId } from '../../core/dom.js';
-import { lbRenderSettingsPanel } from '../../mediathek/bbox-overlay/settings-panel.js';
+// Single named owner of the recording-settings renderer — re-exported
+// by recording-settings.js so this composer and any future caller
+// import it from one place (CLAUDE.md · no parallel implementations).
+import { lbRenderSettingsPanel } from './recording-settings.js';
 import { renderPanelTabs } from '../panel-tabs.js';
 import { renderFineAnalysisFold } from '../fine-analysis-fold.js';
 import { renderWeatherPanel } from './weather.js';
@@ -84,7 +87,9 @@ export function mountRecordedPanels(item) {
   if (isTimelapse && hasWeather) initialId = 'weather';
   else if (!isTimelapse) initialId = 'settings';
   if (tabs.length) {
-    renderPanelTabs(tabsHost, tabs, { initialId });
+    // H3 · grey panel-tab accent for the recorded/timelapse player
+    // (gelb=live · grau=recorded · blau=weather — F4 colour scheme).
+    renderPanelTabs(tabsHost, tabs, { initialId, mode: 'recorded' });
   }
   // Recorded clips don't carry a server-side decision trace today —
   // the fold renders the standard "Trace nur im Live-Test verfügbar"

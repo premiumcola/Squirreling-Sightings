@@ -15,6 +15,7 @@ Usage:
 Exit 0 = every relative import resolves and every named import has a
 matching export. Exit 1 = at least one dangling path or missing export.
 """
+
 from __future__ import annotations
 
 import os

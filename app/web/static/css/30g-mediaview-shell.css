@@ -1,0 +1,363 @@
+/* ── MediaView shell chrome (F) ───────────────────────────────────────────
+   Config-driven shell composed by mediaview/shell.js. Layout +
+   styling for the shared pieces that every mode (recorded / weather /
+   live) renders through: title bar, stage (frame + grid + mode
+   indicator + floating legend), chrome row (overlay toggles + class
+   legend + re-trigger), and the colour-coded panel tabs.
+
+   The interactive mode segmented control reuses the .mv-sim-* chrome
+   already styled in 30f, so only the read-only badge + the new pieces
+   live here. */
+
+/* ── Shell container ─────────────────────────────────────────────── */
+.mv-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  color: #e2e8f0;
+}
+
+/* ── Title bar ───────────────────────────────────────────────────── */
+.mv-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: max(8px, env(safe-area-inset-top, 0)) 8px 8px 8px;
+  min-height: 52px;
+  background: #000;
+  border-radius: 8px 8px 0 0;
+}
+.mv-tb-titles {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.mv-tb-cam {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mv-tb-time {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.55);
+}
+.mv-tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mv-tb-nav,
+.mv-tb-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-tb-nav[disabled] {
+  opacity: 0.25;
+  cursor: default;
+}
+@media (hover: hover) {
+  .mv-tb-nav:not([disabled]):hover,
+  .mv-tb-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+  }
+}
+
+/* ── Stage (frame + overlays) ────────────────────────────────────── */
+.mv-shell-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #05070d;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.mv-shell-frame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Tiling-grid overlay — fixed region split, toggled by the mode badge. */
+.mv-shell-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.mv-shell-grid[hidden] {
+  display: none;
+}
+.mv-grid-line {
+  stroke: rgba(56, 189, 248, 0.7);
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+.mv-grid-roi {
+  fill: none;
+  stroke: rgba(250, 204, 21, 0.85);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+/* Mode indicator — top-left of the stage (matches live-detect). */
+.mv-shell-modeind {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 18;
+}
+
+/* Read-only "angewandt: X" badge. */
+.mv-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 16, 26, 0.74);
+  color: #e2e8f0;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-mode-badge-k {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(226, 232, 240, 0.55);
+}
+.mv-mode-badge-v {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.mv-mode-badge[data-on='1'] {
+  background: rgba(56, 189, 248, 0.45);
+  color: #f0f9ff;
+}
+@media (hover: hover) {
+  .mv-mode-badge:hover {
+    background: rgba(56, 189, 248, 0.3);
+  }
+}
+
+/* ── Unified status legend (F1) ──────────────────────────────────── */
+.mv-legend {
+  display: flex;
+  align-items: center;
+}
+/* Floating over the frame — auto-positioned opposite the OSD band so
+   the two never overlap. */
+.mv-legend[data-float='1'] {
+  position: absolute;
+  right: 10px;
+  z-index: 17;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: rgba(8, 18, 28, 0.66);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.mv-legend[data-float='1'][data-osd-avoid='top'] {
+  top: 10px;
+}
+.mv-legend[data-float='1'][data-osd-avoid='bottom'] {
+  bottom: 10px;
+}
+.mv-legend-desktop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mv-legend-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.78);
+  white-space: nowrap;
+}
+.mv-legend-swatch {
+  display: inline-flex;
+  width: 28px;
+  height: 8px;
+  align-items: center;
+  justify-content: center;
+}
+.mv-legend-swatch svg {
+  display: block;
+}
+.mv-legend-label {
+  line-height: 1;
+}
+.mv-legend-tail {
+  font-size: 10.5px;
+  color: rgba(226, 232, 240, 0.5);
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  margin-left: 4px;
+}
+.mv-legend-chip {
+  display: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(8, 18, 28, 0.74);
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.mv-legend-tip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 140px;
+}
+.mv-legend-tip-body .mv-legend-row {
+  font-size: 12px;
+  color: #e2e8f0;
+}
+.mv-legend-tip-tail {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.6);
+  margin-top: 4px;
+  padding-top: 6px;
+  background: linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)) top / 100% 1px no-repeat;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+/* Mobile: collapse the inline rows to a single "?" chip + popover. */
+@media (max-width: 768px) {
+  .mv-legend-desktop {
+    display: none;
+  }
+  .mv-legend-chip {
+    display: inline-flex;
+  }
+  .mv-legend[data-float='1'] {
+    background: transparent;
+    padding: 0;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ── Class-colour legend (F2) ────────────────────────────────────── */
+.mv-class-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 10px;
+}
+.mv-class-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.75);
+  white-space: nowrap;
+}
+.mv-class-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ── Chrome row ──────────────────────────────────────────────────── */
+.mv-shell-chrome {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.mv-shell-actions {
+  margin-left: auto;
+}
+
+/* ── Re-trigger "Neu erkennen" (F4) ──────────────────────────────── */
+.mv-retrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.22);
+  color: #e0f2fe;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-retrigger[data-busy='1'] {
+  opacity: 0.6;
+  cursor: default;
+}
+@media (hover: hover) {
+  .mv-retrigger:not([data-busy='1']):hover {
+    background: rgba(56, 189, 248, 0.34);
+    color: #f0f9ff;
+  }
+}
+
+/* ── Panel-tab per-mode accent (F4) ──────────────────────────────── */
+/* gelb = live · grau = recorded · blau = weather. Accent rides the
+   active tab as a 2 px under-bar (depth via colour, no border line). */
+.mv-tabs-root[data-mode='live'] .mv-tab[data-active='1'] {
+  background: rgba(250, 204, 21, 0.14);
+  box-shadow: inset 0 -2px 0 var(--class-person, #facc15);
+}
+.mv-tabs-root[data-mode='recorded'] .mv-tab[data-active='1'] {
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.5);
+}
+.mv-tabs-root[data-mode='weather'] .mv-tab[data-active='1'] {
+  background: rgba(56, 189, 248, 0.16);
+  box-shadow: inset 0 -2px 0 #38bdf8;
+}
+.mv-tab-placeholder {
+  padding: 10px 2px;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(226, 232, 240, 0.5);
+}
+
+/* ── Panels wrapper ──────────────────────────────────────────────── */
+.mv-shell-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 10px;
+  overflow: hidden;
+}

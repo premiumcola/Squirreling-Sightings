@@ -81,6 +81,9 @@ LOAD_ORDER = [
     "30e-lightbox-live.css",
     # SIMU-01 · 5-zone DOM skeleton for the Live-Detect modal.
     "30f-live-detect-skeleton.css",
+    # F · MediaView shared shell chrome (title bar, stage, mode
+    # indicator, unified + class legends, re-trigger, panel-tab accents).
+    "30g-mediaview-shell.css",
 ]
 
 _BANNER = (

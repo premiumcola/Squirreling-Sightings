@@ -15,15 +15,31 @@
 // CSS classes the renderer emits (styled by 30-lightbox-video.css when
 // the shell becomes the active mode):
 //   .mv-tabs-root   — outer container
+//   .mv-tabs-root[data-mode] — per-mode accent colour for the active
+//                    tab (live=gelb · recorded=grau · weather=blau)
 //   .mv-tabs-strip  — the tab strip
 //   .mv-tab         — one tab pill
 //   .mv-tab[data-active="1"] — the active tab
 //   .mv-tabs-content — the active-tab content block
 
+// MediaView mode → tab-strip accent. F4 colour-codes the panel tabs so
+// the operator reads which player they're in at a glance: live is
+// yellow, recorded grey, weather blue. Live-detect rides on 'live'.
+const _MODE_ACCENT = {
+  live: 'live',
+  'live-detect': 'live',
+  recorded: 'recorded',
+  timelapse: 'recorded',
+  weather: 'weather',
+};
+
 export function renderPanelTabs(host, tabs, opts = {}) {
   if (!host) return null;
   const initialId = opts.initialId || (tabs[0] && tabs[0].id);
   let activeId = initialId;
+  // F4 · colour-code by mode. Unknown modes fall back to the neutral
+  // 'recorded' grey rather than an un-themed strip.
+  const accent = _MODE_ACCENT[opts.mode] || 'recorded';
   const tabsHtml = tabs
     .map(
       (t) =>
@@ -31,7 +47,7 @@ export function renderPanelTabs(host, tabs, opts = {}) {
     )
     .join('');
   host.innerHTML = `
-    <div class="mv-tabs-root">
+    <div class="mv-tabs-root" data-mode="${accent}">
       <div class="mv-tabs-strip" role="tablist">${tabsHtml}</div>
       <div class="mv-tabs-content" data-tab-content></div>
     </div>`;

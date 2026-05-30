@@ -26,6 +26,8 @@ export const OBJ_LABEL = {
   car: 'Auto',
   dog: 'Hund',
   squirrel: 'Eichhörnchen',
+  fox: 'Fuchs',
+  hedgehog: 'Igel',
   motion: 'Bewegung',
   alarm: 'Alarm',
   timelapse: 'Timelapse',

@@ -21,6 +21,7 @@
 // closeLightbox() in lightbox.js fires closeLiveDetect via the
 // window bridge so any modal-close path tears the session down.
 import { byId, esc } from '../core/dom.js';
+import { S } from './live-detect-state.js';
 import { state } from '../core/state.js';
 import { OBJ_LABEL, OBJ_SVG, colors, objIconSvg } from '../core/icons.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
@@ -72,12 +73,10 @@ const _TICK_MAX_MS = 4000;
 const _TICK_FACTOR = 1.2;
 
 // C84 · dynamic bbox hold-time scaffolding. The cycle EMA is
-// populated by _scheduleNext on every cycle, then _holdMsActive
+// populated by _scheduleNext on every cycle, then S.holdMsActive
 // is derived from it (clamp(2*EMA, 800, 1500)). Both stay valid
 // at module level so the CADENCE row from C73 can read them
 // without late-binding gymnastics.
-let _cycleEmaMs = NaN;
-let _holdMsActive = NaN;
 // 60 s sliding window for the swimlane. Detections older than this
 // age out of the visible strip.
 const _LIVE_WINDOW_MS = 60_000;
@@ -124,29 +123,22 @@ const _STALL_FACTOR = 2.2;
 const _STALL_BACKOFF_START = 1000;
 const _STALL_BACKOFF_MAX = 8000;
 
-let _session = null;
-let _traceLines = [];
-let _traceTicks = []; // [{ts, lines:[…]}, …] — per-tick groups for the Trace tab
-let _detBuffer = []; // [{ms, label, score, bbox, verdict}, …]
 // Q2-5 · stall watchdog state. `active` flips on when the frame gap
 // crosses the adaptive threshold; `nextRetryAt` paces the backoff.
-let _stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
 // L1 · overlay-layer visibility booleans. The shared overlay-toggles
 // bar (overlay-toggles.js) owns the pills + their localStorage
 // persistence; live seeds this mirror from the bar's getState() at
 // mount (_setupLiveChrome) and the bar's onChange keeps it in sync.
 // The SVG render code reads ONLY these booleans, never the pill DOM.
-let _overlays = { bboxes: true, trails: true, zones: false, masks: false };
-let _selectedLabel = null; // for detail-pill pin
 
 export function openLiveDetect({ camId, cameraName }) {
   if (!camId) return;
   // B12 · capture whether a prior session was mounted BEFORE
   // closeLiveDetect nulls it. Surfaced on the MOUNT row as
   // torn_down_prev so a back-to-back cam switch is visible.
-  const tornDownPrev = !!_session;
+  const tornDownPrev = !!S.session;
   closeLiveDetect();
-  _session = {
+  S.session = {
     camId,
     cameraName,
     abort: null,
@@ -161,50 +153,50 @@ export function openLiveDetect({ camId, cameraName }) {
     stream: 'main',
     detMode: 'off',
   };
-  _traceLines = [];
-  _traceTicks = [];
-  _detBuffer = [];
-  _selectedLabel = null;
-  _stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
+  S.traceLines = [];
+  S.traceTicks = [];
+  S.detBuffer = [];
+  S.selectedLabel = null;
+  S.stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
   // L1 · overlays are seeded from the shared toggle bar at mount
   // (_setupLiveChrome → renderOverlayToggles().getState()).
   // H2.a · reset the diag-strip state per session so the previous
   // open's last-known SVG dims don't bleed into the new one.
-  _diagState.bbox = null;
-  _diagState.trails = null;
-  _diagState.zonemask = null;
-  _diagState.posFail = null;
-  _diagState.paintFail = null;
-  _diagState.tick = null;
-  _diagState.mount = null;
-  _diagState.cadence = null;
+  S.diagState.bbox = null;
+  S.diagState.trails = null;
+  S.diagState.zonemask = null;
+  S.diagState.posFail = null;
+  S.diagState.paintFail = null;
+  S.diagState.tick = null;
+  S.diagState.mount = null;
+  S.diagState.cadence = null;
   // B7/B12 · reset tick lifecycle state. Keep startedAt fresh on
   // every open so the strip's mounted_ms_ago matches the user's
   // last action — not some half-finished prior session.
-  _tickState.lastTickAt = 0;
-  _tickState.lastRespAt = 0;
-  _tickState.lastStatus = '—';
-  _tickState.nextTickAt = 0;
-  _tickState.startedAt = Date.now();
-  _tickState.startedWithCamId = camId;
-  _tickState.ticksDroppedLate = 0;
-  _tickState.lastDropReason = null;
-  _tickState.tornDownPrev = tornDownPrev;
-  _tickState.lastTickError = null;
-  _tickState.lastCycleMs = NaN;
-  _tickState.lastFloorMs = NaN;
-  _tickState.lastDelayMs = NaN;
+  S.tickState.lastTickAt = 0;
+  S.tickState.lastRespAt = 0;
+  S.tickState.lastStatus = '—';
+  S.tickState.nextTickAt = 0;
+  S.tickState.startedAt = Date.now();
+  S.tickState.startedWithCamId = camId;
+  S.tickState.ticksDroppedLate = 0;
+  S.tickState.lastDropReason = null;
+  S.tickState.tornDownPrev = tornDownPrev;
+  S.tickState.lastTickError = null;
+  S.tickState.lastCycleMs = NaN;
+  S.tickState.lastFloorMs = NaN;
+  S.tickState.lastDelayMs = NaN;
   // C84 · reset hold-time state per session so a fresh cam-open
   // doesn't inherit the previous camera's cadence as the seed EMA.
-  _cycleEmaMs = NaN;
-  _holdMsActive = NaN;
+  S.cycleEmaMs = NaN;
+  S.holdMsActive = NaN;
   // B12' · always-on MOUNT row. Tracks every step of the mount path
   // so a screenshot tells us at a glance whether chrome rendered,
   // whether _tick() threw, and whether a first-tick setTimeout was
   // actually scheduled. Healthy mounts paint muted; any error flips
   // the row red and persists until the next successful mount.
   const mountRecord = {
-    started_at: new Date(_tickState.startedAt).toISOString(),
+    started_at: new Date(S.tickState.startedAt).toISOString(),
     started_with_camId: camId,
     torn_down_prev: tornDownPrev ? 'true' : 'false',
     chrome_mounted: 'false',
@@ -234,21 +226,21 @@ export function openLiveDetect({ camId, cameraName }) {
   // Initial paint of the MOUNT row — success-muted or error-red.
   // first_tick_scheduled stays "false" here; the 250 ms watchdog
   // below promotes it to "true" once we observe a tickHandle.
-  _diagState.mount = { ...mountRecord, _err: !!mountErr };
+  S.diagState.mount = { ...mountRecord, _err: !!mountErr };
   _renderDiagStrip();
   _startHoldRefresh();
   // SIMU-FIX-01c · lock both <html> and <body> overflow + height
   // for the lifetime of the live-detect session so the viewport
   // itself never scrolls — only zone-detail does. Previous values
-  // are saved on _session so closeLiveDetect can restore them
+  // are saved on S.session so closeLiveDetect can restore them
   // verbatim (a recorded-clip lightbox might rely on body overflow:
   // scroll, for example). Explicit height:100dvh on both belt-and-
   // suspenders against iOS Safari's address-bar-collapse viewport
   // changes leaving body taller than the new viewport.
-  _session.prevBodyOverflow = document.body.style.overflow;
-  _session.prevHtmlOverflow = document.documentElement.style.overflow;
-  _session.prevBodyHeight = document.body.style.height;
-  _session.prevHtmlHeight = document.documentElement.style.height;
+  S.session.prevBodyOverflow = document.body.style.overflow;
+  S.session.prevHtmlOverflow = document.documentElement.style.overflow;
+  S.session.prevBodyHeight = document.body.style.height;
+  S.session.prevHtmlHeight = document.documentElement.style.height;
   document.body.style.overflow = 'hidden';
   document.documentElement.style.overflow = 'hidden';
   document.body.style.height = '100dvh';
@@ -257,29 +249,29 @@ export function openLiveDetect({ camId, cameraName }) {
   // Two outcomes: tickHandle present → mark first_tick_scheduled
   // true (success path); tickHandle still null → promote MOUNT row
   // to error with "no first-tick scheduled within 250ms".
-  const expectedSessionStart = _tickState.startedAt;
+  const expectedSessionStart = S.tickState.startedAt;
   setTimeout(() => {
     // Different session by now → leave its own MOUNT row alone.
-    if (!_session || _tickState.startedAt !== expectedSessionStart) return;
-    const scheduled = !!_session.tickHandle;
-    const rec = _diagState.mount || {};
+    if (!S.session || S.tickState.startedAt !== expectedSessionStart) return;
+    const scheduled = !!S.session.tickHandle;
+    const rec = S.diagState.mount || {};
     rec.first_tick_scheduled = scheduled ? 'true' : 'false';
     if (!scheduled && !rec.error) {
       rec.error = 'no first-tick scheduled within 250ms';
       rec._err = true;
     }
-    _diagState.mount = rec;
+    S.diagState.mount = rec;
     _renderDiagStrip();
   }, 250);
 }
 
 export function closeLiveDetect() {
-  const session = _session;
-  _session = null;
-  _traceLines = [];
-  _traceTicks = [];
-  _detBuffer = [];
-  _selectedLabel = null;
+  const session = S.session;
+  S.session = null;
+  S.traceLines = [];
+  S.traceTicks = [];
+  S.detBuffer = [];
+  S.selectedLabel = null;
   // Q2-4 · the snapshot <img> holds a per-tick data: URL — drop it so
   // the decoded frame is released when the session closes. (No HLS /
   // MJPEG stream to tear down anymore — the view is snapshot-only.)
@@ -362,10 +354,10 @@ export function closeLiveDetect() {
 // 1 Hz anyway — animating at 60 Hz would just burn CPU without
 // any visible benefit).
 function _startHoldRefresh() {
-  if (!_session) return;
-  if (_session.holdHandle) clearInterval(_session.holdHandle);
-  _session.holdHandle = setInterval(() => {
-    if (!_session) return;
+  if (!S.session) return;
+  if (S.session.holdHandle) clearInterval(S.session.holdHandle);
+  S.session.holdHandle = setInterval(() => {
+    if (!S.session) return;
     _renderBboxOverlay();
     // B7 · piggyback the tick-row refresh on the existing 250 ms
     // hold loop so the on-screen deltas stay current even when the
@@ -385,20 +377,20 @@ function _startHoldRefresh() {
 // re-kicks the tick loop on a 1/2/4/8 s backoff. Recovery (a fresh
 // frame) clears the banner and resets the backoff.
 function _checkStall() {
-  if (!_session) return;
+  if (!S.session) return;
   const now = Date.now();
-  const t = _tickState;
+  const t = S.tickState;
   // Reference = last successful frame; before the first frame lands,
   // fall back to mount time so a never-connecting open also surfaces.
   const ref = t.lastRespAt || t.startedAt || now;
   const gap = now - ref;
-  const expected = Math.max(_cycleEmaMs || 0, t.lastDelayMs || 0);
+  const expected = Math.max(S.cycleEmaMs || 0, t.lastDelayMs || 0);
   const stallMs = Math.max(_STALL_FLOOR_MS, Math.round(_STALL_FACTOR * expected));
   const stalled = gap > stallMs;
-  if (stalled && !_stallState.active) {
-    _stallState.active = true;
-    _stallState.sinceMs = ref;
-    _stallState.backoffMs = _STALL_BACKOFF_START;
+  if (stalled && !S.stallState.active) {
+    S.stallState.active = true;
+    S.stallState.sinceMs = ref;
+    S.stallState.backoffMs = _STALL_BACKOFF_START;
     // console.warn is the lint-allowed diagnostic escape hatch.
     console.warn(
       `[sim-stall] no frame for ${gap} ms (threshold ${stallMs} ms) · ` +
@@ -407,20 +399,20 @@ function _checkStall() {
     );
     _showStallBanner();
     _retryTickNow();
-    _stallState.nextRetryAt = now + _stallState.backoffMs;
-  } else if (stalled && _stallState.active) {
-    if (now >= _stallState.nextRetryAt) {
-      _stallState.backoffMs = Math.min(_STALL_BACKOFF_MAX, _stallState.backoffMs * 2);
+    S.stallState.nextRetryAt = now + S.stallState.backoffMs;
+  } else if (stalled && S.stallState.active) {
+    if (now >= S.stallState.nextRetryAt) {
+      S.stallState.backoffMs = Math.min(_STALL_BACKOFF_MAX, S.stallState.backoffMs * 2);
       _retryTickNow();
-      _stallState.nextRetryAt = now + _stallState.backoffMs;
+      S.stallState.nextRetryAt = now + S.stallState.backoffMs;
     }
-  } else if (!stalled && _stallState.active) {
+  } else if (!stalled && S.stallState.active) {
     console.warn(
-      `[sim-stall] recovered after ${now - _stallState.sinceMs} ms · ` +
+      `[sim-stall] recovered after ${now - S.stallState.sinceMs} ms · ` +
         `frame=${new Date(t.lastRespAt || now).toISOString()}`,
     );
-    _stallState.active = false;
-    _stallState.backoffMs = _STALL_BACKOFF_START;
+    S.stallState.active = false;
+    S.stallState.backoffMs = _STALL_BACKOFF_START;
     _hideStallBanner();
   }
 }
@@ -429,15 +421,15 @@ function _checkStall() {
 // hung tick's fetch rejects with AbortError and returns without
 // rescheduling, so we don't end up with two live loops.
 function _retryTickNow() {
-  if (!_session) return;
+  if (!S.session) return;
   try {
-    _session.abort?.abort();
+    S.session.abort?.abort();
   } catch {
     /* ignore */
   }
-  if (_session.tickHandle) {
-    clearTimeout(_session.tickHandle);
-    _session.tickHandle = null;
+  if (S.session.tickHandle) {
+    clearTimeout(S.session.tickHandle);
+    S.session.tickHandle = null;
   }
   _tick();
 }
@@ -461,7 +453,7 @@ function _showStallBanner() {
     banner.querySelector('[data-action="stall-retry"]')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       console.warn('[sim-stall] manual retry');
-      _stallState.backoffMs = _STALL_BACKOFF_START;
+      S.stallState.backoffMs = _STALL_BACKOFF_START;
       _retryTickNow();
     });
     host.appendChild(banner);
@@ -595,27 +587,27 @@ function _setupLiveChrome(camId, cameraName) {
   if (_togHost && _togZone && _togHost.parentNode !== _togZone) {
     _togZone.appendChild(_togHost);
   }
-  if (_togHost && _session) {
+  if (_togHost && S.session) {
     const _tog = renderOverlayToggles(_togHost, {
       available: ['bboxes', 'trails', 'zones', 'masks'],
       contextKey: 'live',
       onChange: (id, on) => {
-        _overlays[id] = on;
+        S.overlays[id] = on;
         _renderBboxOverlay();
         _renderTrailsOverlay();
         _renderZoneMaskOverlay();
       },
     });
     if (_tog) {
-      _overlays = _tog.getState();
-      _session.overlayToggles = _tog;
+      S.overlays = _tog.getState();
+      S.session.overlayToggles = _tog;
     }
   }
   _mountSimControls();
   _pinScrubberRight();
   // dn487 — paint zones + masks BEFORE the first detection tick
   // arrives. _renderZoneMaskOverlay falls back to {w:1920, h:1080}
-  // when _session.lastFrameSize isn't set yet; the first tick
+  // when S.session.lastFrameSize isn't set yet; the first tick
   // (~1 s later) repaints with the real frame_size so polygon
   // positions converge. Without this paint-before-tick the user
   // sees a 1 s window of no zone visuals after opening Simulieren.
@@ -757,9 +749,9 @@ function _updateSuppressedHint(nonPassCount) {
       const next = !_detectionsExpanded();
       _setDetectionsExpanded(next);
       // Re-render the panel immediately so the expand/collapse flips
-      // without waiting for the next tick. _session.lastFullData
+      // without waiting for the next tick. S.session.lastFullData
       // (set in _renderFrame) carries the most recent backend reply.
-      if (_session?.lastFullData) _renderDetectionsPanel(_session.lastFullData);
+      if (S.session?.lastFullData) _renderDetectionsPanel(S.session.lastFullData);
     });
   }
   hint.textContent = `${nonPassCount} verworfen (unter Schwelle oder gefiltert) — antippen für Details`;
@@ -767,13 +759,13 @@ function _updateSuppressedHint(nonPassCount) {
 
 // vh729 — one-shot diagnostic. Prints the state of every visual
 // layer the user can't see when Simulieren looks black. Gated by
-// _session._diagLogged so the line fires exactly once per open.
+// S.session._diagLogged so the line fires exactly once per open.
 // One console.warn per line so the lines stay readable in DevTools
 // instead of folding into a single multi-line entry that's harder
 // to copy-paste.
 function _logSimDiag() {
-  if (!_session || _session._diagLogged) return;
-  _session._diagLogged = true;
+  if (!S.session || S.session._diagLogged) return;
+  S.session._diagLogged = true;
   const imgEl = byId('lightboxImg');
   const wrap = byId('lightboxMediaWrap');
   const bboxSvg = byId('lightboxLiveOverlay');
@@ -796,7 +788,7 @@ function _logSimDiag() {
   );
   console.warn(`[sim-diag] wrap: rect=${_rect(wrap)}`);
   console.warn(
-    `[sim-diag] _session.lastDetections.length=${(_session.lastDetections || []).length}`,
+    `[sim-diag] S.session.lastDetections.length=${(S.session.lastDetections || []).length}`,
   );
 }
 
@@ -809,7 +801,7 @@ function _logSimDiag() {
 // the new stream / mode takes visible effect on the next frame instead of
 // waiting out the current cadence delay.
 function _forceImmediateTick() {
-  const session = _session;
+  const session = S.session;
   if (!session) return;
   if (session.tickHandle) {
     clearTimeout(session.tickHandle);
@@ -830,7 +822,7 @@ function _forceImmediateTick() {
 // the active-state highlight.
 function _mountSimControls() {
   const host = zoneEl('video') || byId('lightboxInner');
-  if (!host || !_session) return;
+  if (!host || !S.session) return;
   let row = byId('mvSimControls');
   if (!row) {
     row = document.createElement('div');
@@ -838,8 +830,8 @@ function _mountSimControls() {
     row.className = 'mv-sim-controls';
   }
   if (row.parentNode !== host) host.appendChild(row);
-  const stream = _session.stream || 'main';
-  const mode = _session.detMode || 'off';
+  const stream = S.session.stream || 'main';
+  const mode = S.session.detMode || 'off';
   const MODES = MV_DETECTION_MODES;
   const streamBtn =
     `<button type="button" class="mv-sim-ctl" data-ctl="stream" data-val="${esc(stream)}" ` +
@@ -858,11 +850,11 @@ function _mountSimControls() {
     `<span class="mv-sim-seg-group" role="group" aria-label="Erkennungsmodus">${modeBtns}</span>`;
   row.querySelectorAll('button[data-ctl]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (!_session) return;
+      if (!S.session) return;
       if (btn.dataset.ctl === 'stream') {
-        _session.stream = _session.stream === 'sub' ? 'main' : 'sub';
+        S.session.stream = S.session.stream === 'sub' ? 'main' : 'sub';
       } else {
-        _session.detMode = btn.dataset.val;
+        S.session.detMode = btn.dataset.val;
       }
       _mountSimControls();
       _forceImmediateTick();
@@ -911,13 +903,13 @@ function _mountPanels() {
   // decision_trace; if the loop is stuck the muted "Warte" line
   // serves as a downstream tell-tale for the B7/B12 STUCK row.
   const fold = renderFineAnalysisFold(faHost, null, { defaultOpen: false, live: true });
-  if (_session) _session.fold = fold;
+  if (S.session) S.session.fold = fold;
 }
 
 async function _tick() {
-  const session = _session;
+  const session = S.session;
   if (!session) return;
-  _tickState.lastTickAt = Date.now();
+  S.tickState.lastTickAt = Date.now();
   try {
     session.abort?.abort();
   } catch {
@@ -944,7 +936,7 @@ async function _tick() {
       `/api/cameras/${encodeURIComponent(session.camId)}/test-detection?${_params}`,
       { method: 'POST', signal: controller.signal },
     );
-    _tickState.lastStatus = r.status;
+    S.tickState.lastStatus = r.status;
     // B31 / B31' · late-tick guard. The session can be replaced
     // or nulled by a concurrent stopLive / cam switch between
     // fetch-issue and fetch-resolve. We count the drop and stash
@@ -953,9 +945,9 @@ async function _tick() {
     // so a STUCK-looking TICK row + dropped=N + drop_reason tells
     // the user "responses ARE arriving, they're just landing too
     // late" — a very different fix from "loop isn't running".
-    if (_session !== session) {
-      _tickState.ticksDroppedLate = (_tickState.ticksDroppedLate || 0) + 1;
-      _tickState.lastDropReason = _session === null ? 'session_null' : 'cam_mismatch';
+    if (S.session !== session) {
+      S.tickState.ticksDroppedLate = (S.tickState.ticksDroppedLate || 0) + 1;
+      S.tickState.lastDropReason = S.session === null ? 'session_null' : 'cam_mismatch';
       return;
     }
     let data = null;
@@ -965,13 +957,13 @@ async function _tick() {
       /* keep null */
     }
     if (data?.ok) {
-      _tickState.lastRespAt = Date.now();
-      _tickState.lastTickError = null;
+      S.tickState.lastRespAt = Date.now();
+      S.tickState.lastTickError = null;
       // B23' · a successful tick clears any error banner the fold
       // may have been showing. _renderFrame's _appendTrace path
       // will repopulate the trace lines anyway, but the explicit
       // clear protects against an empty-trace ok=true response.
-      _session?.fold?.setLastError?.(null);
+      S.session?.fold?.setLastError?.(null);
       _renderFrame(data);
     } else {
       // B23' · ok=false response. Stash the code+message for the
@@ -982,24 +974,24 @@ async function _tick() {
       const code = data?.code || (r ? r.status : '?');
       const msg = data?.error || data?.message || '';
       const text = msg ? `${code} · ${msg}` : String(code);
-      _tickState.lastTickError = text;
-      _session?.fold?.setLastError?.(text);
+      S.tickState.lastTickError = text;
+      S.session?.fold?.setLastError?.(text);
     }
   } catch (err) {
     if (err?.name === 'AbortError') {
-      _tickState.lastStatus = 'abort';
+      S.tickState.lastStatus = 'abort';
       return;
     }
-    _tickState.lastStatus = 'neterr';
+    S.tickState.lastStatus = 'neterr';
     const text = `neterr · ${(err && (err.message || String(err))) || 'unknown'}`;
-    _tickState.lastTickError = text;
-    _session?.fold?.setLastError?.(text);
+    S.tickState.lastTickError = text;
+    S.session?.fold?.setLastError?.(text);
   }
   _scheduleNext(session, performance.now() - cycleStart);
 }
 
 function _scheduleNext(session, lastCycleMs) {
-  if (_session !== session) return;
+  if (S.session !== session) return;
   // C73 · floor depends on which stream the LAST tick used. Sub-
   // stream ticks cost less, so 500 ms is the floor on that path.
   // The fallback floor of 1 s keeps the unhealthy-camera case from
@@ -1010,22 +1002,22 @@ function _scheduleNext(session, lastCycleMs) {
   const cycleMs = Number.isFinite(lastCycleMs) ? lastCycleMs : floor;
   const projected = Math.round(cycleMs * _TICK_FACTOR);
   const delay = Math.min(_TICK_MAX_MS, Math.max(floor, projected));
-  _tickState.nextTickAt = Date.now() + delay;
-  _tickState.lastCycleMs = cycleMs;
-  _tickState.lastFloorMs = floor;
-  _tickState.lastDelayMs = delay;
+  S.tickState.nextTickAt = Date.now() + delay;
+  S.tickState.lastCycleMs = cycleMs;
+  S.tickState.lastFloorMs = floor;
+  S.tickState.lastDelayMs = delay;
   // C84 · EMA over recent cycle wall-times. First observation seeds
   // the EMA so the hold isn't 0-initialised on the very first tick;
   // subsequent ticks pull the average toward the new cycle at factor
   // 0.4 (a 5-tick effective window). Hold = clamp(2 * EMA, 800,
   // 1500): two cycles of slack absorbs one missed tick at the
   // current cadence without lingering across multiple.
-  if (!Number.isFinite(_cycleEmaMs)) {
-    _cycleEmaMs = cycleMs;
+  if (!Number.isFinite(S.cycleEmaMs)) {
+    S.cycleEmaMs = cycleMs;
   } else {
-    _cycleEmaMs = 0.4 * cycleMs + 0.6 * _cycleEmaMs;
+    S.cycleEmaMs = 0.4 * cycleMs + 0.6 * S.cycleEmaMs;
   }
-  _holdMsActive = Math.min(_HOLD_MS_CEILING, Math.max(_HOLD_MS_FLOOR, 2 * _cycleEmaMs));
+  S.holdMsActive = Math.min(_HOLD_MS_CEILING, Math.max(_HOLD_MS_FLOOR, 2 * S.cycleEmaMs));
   session.tickHandle = setTimeout(_tick, delay);
   _refreshCadenceRow();
 }
@@ -1047,12 +1039,12 @@ function _renderFrame(data) {
     }
   }
   // Frame state for the bbox + zone/mask overlays.
-  _session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
-  _session.lastDetections = data.detections || [];
+  S.session.lastFrameSize = data.frame_size || { w: 1920, h: 1080 };
+  S.session.lastDetections = data.detections || [];
   // D52 · cache the full backend response so an out-of-band toggle
   // (e.g. tapping the "<n> verworfen" hint) can re-render the panel
   // without waiting for the next tick.
-  _session.lastFullData = data;
+  S.session.lastFullData = data;
   // A3 · explicit coord-space disclosure from the backend (added in
   // diag by routes/coral_test_detection.py). The debug strip's bbox
   // row reads these to surface bbox_space + source/snap dims; if
@@ -1060,27 +1052,27 @@ function _renderFrame(data) {
   // the strip flags SPACE MISMATCH so the user sees the regression
   // immediately. All three fall back to undefined on older backends.
   const _diag = data.diag || {};
-  _session.lastBboxSpace = _diag.bbox_space || null;
-  _session.lastSourceFrameSize = _diag.source_frame_size || null;
-  _session.lastSnapshotFrameSize = _diag.snapshot_frame_size || null;
+  S.session.lastBboxSpace = _diag.bbox_space || null;
+  S.session.lastSourceFrameSize = _diag.source_frame_size || null;
+  S.session.lastSnapshotFrameSize = _diag.snapshot_frame_size || null;
   // C73 · remember which stream the backend served this frame from
   // so _scheduleNext can pick the right floor on the NEXT cycle.
   // Falls back to undefined when an older backend didn't send the
   // field — _scheduleNext treats that as 'unknown' → safe 1 s floor.
-  if (_diag.frame_src) _session.lastFrameSrc = _diag.frame_src;
+  if (_diag.frame_src) S.session.lastFrameSrc = _diag.frame_src;
   // F2.b · one-shot per-session payload diagnostic. Answers the
   // "did the response actually carry detections" question without
   // requiring a tcpdump or the docker logs. Counts by verdict so
   // the user can spot a serialisation drop between Flask and the
   // frontend (rare but possible if response shaping went sideways).
   // Single-line console.warn (lint-allowed escape hatch).
-  if (_session && !_session._frameDiagLogged) {
-    _session._frameDiagLogged = true;
-    const dets = _session.lastDetections;
+  if (S.session && !S.session._frameDiagLogged) {
+    S.session._frameDiagLogged = true;
+    const dets = S.session.lastDetections;
     const np = dets.filter((d) => d.verdict === 'pass').length;
     const nb = dets.filter((d) => d.verdict === 'belowthresh').length;
     const nf = dets.filter((d) => d.verdict === 'filtered').length;
-    const fs = _session.lastFrameSize;
+    const fs = S.session.lastFrameSize;
     const gates = data.diag?.gates || {};
     console.warn(
       `[sim-frame] dets=${dets.length} pass=${np} below=${nb} filtered=${nf} ` +
@@ -1092,12 +1084,12 @@ function _renderFrame(data) {
   // Read by the debug strip + (later) the Detections tab summary
   // line. SIMU-02d removed the in-video banner that used to gate on
   // this value; the field stays for downstream consumers.
-  _session.lastRawCount = Number(data.diag?.gates?.raw ?? data.detections?.length ?? 0);
+  S.session.lastRawCount = Number(data.diag?.gates?.raw ?? data.detections?.length ?? 0);
   // Last-seen marker for the no-detection state. Reset on every
   // tick that brings at least one detection. Read by the Detections
   // tab + Trace tab consumers; the in-video banner that used to
   // depend on this was removed in SIMU-02d.
-  if (_session.lastDetections.length) _session.lastNonEmptyTickMs = Date.now();
+  if (S.session.lastDetections.length) S.session.lastNonEmptyTickMs = Date.now();
   // vh729 — one-shot diagnostic. Fires once per Simulieren open
   // (right after the first tick lands real data) and prints the
   // state of every visual layer the user can't see when the
@@ -1111,7 +1103,7 @@ function _renderFrame(data) {
   // doesn't expose ids — group by label instead).
   const now = Date.now();
   for (const d of data.detections || []) {
-    _detBuffer.push({
+    S.detBuffer.push({
       ms: now,
       label: d.label,
       score: d.score,
@@ -1126,13 +1118,13 @@ function _renderFrame(data) {
   }
   // Drop entries older than the window.
   const cutoff = now - _LIVE_WINDOW_MS;
-  _detBuffer = _detBuffer.filter((e) => e.ms >= cutoff);
+  S.detBuffer = S.detBuffer.filter((e) => e.ms >= cutoff);
   _renderBboxOverlay();
   _renderTrailsOverlay();
   _renderZoneMaskOverlay();
   // SIMU-FIX-05d · append trace lines BEFORE rendering the
   // Detections tab — its Track-Ereignisse section reads from
-  // `_traceLines` and was previously seeing the PREVIOUS tick's
+  // `S.traceLines` and was previously seeing the PREVIOUS tick's
   // trace (empty on the very first tick → "Noch keine Track-
   // Ereignisse" while the Trace tab simultaneously showed SPAWN
   // events from the same response).
@@ -1151,17 +1143,16 @@ function _renderFrame(data) {
 // renderDebugPanel (header + 5 clusters via 5 outerHTML swaps).
 // Subscribed to onTabChange so a switch INTO Debug fires a render
 // immediately with the latest tick data.
-let _lastFullDataForDebug = null;
 function _renderDebugTab(data) {
-  _lastFullDataForDebug = data;
+  S.lastFullDataForDebug = data;
   if (typeof getActiveTab === 'function' && getActiveTab() !== 'debug') return;
   const host = panelEl('debug');
   if (!host) return;
   renderDebugPanel(host, {
-    tickState: _tickState,
-    session: _session,
-    holdMs: _holdMsActive,
-    cycleEmaMs: _cycleEmaMs,
+    tickState: S.tickState,
+    session: S.session,
+    holdMs: S.holdMsActive,
+    cycleEmaMs: S.cycleEmaMs,
     fullData: data,
   });
 }
@@ -1173,8 +1164,8 @@ function _renderDebugTab(data) {
 if (typeof onTabChange === 'function') {
   onTabChange((id) => {
     if (id === 'debug') {
-      if (_lastFullDataForDebug) _renderDebugTab(_lastFullDataForDebug);
-      if (_session) startSnapshotPrefetch({ session: _session });
+      if (S.lastFullDataForDebug) _renderDebugTab(S.lastFullDataForDebug);
+      if (S.session) startSnapshotPrefetch({ session: S.session });
     } else {
       stopSnapshotPrefetch();
     }
@@ -1196,10 +1187,10 @@ if (typeof onTabChange === 'function') {
 function _renderDiagPanel(diag) {
   // D78 · the Diagnose accordion is gone — content now lives inside
   // the merged "Trace" fold. We push the structured HTML through
-  // _session.fold.setHeader() and update the summary suffix on
-  // _session.fold.setSummaryExtra() so the collapsed line carries
+  // S.session.fold.setHeader() and update the summary suffix on
+  // S.session.fold.setSummaryExtra() so the collapsed line carries
   // "raw=N · pass=N · <verdict>".
-  const fold = _session?.fold;
+  const fold = S.session?.fold;
   if (!fold) return;
   if (!diag) {
     fold.setHeader?.('');
@@ -1305,48 +1296,9 @@ function _renderDiagPanel(diag) {
 // + position-fail (sticky when an SVG ends up 0×0)
 // + paint-fail   (sticky when SVG sized but first child collapsed).
 const _DEBUG_LS_KEY = 'tam.livedetect.debug';
-const _diagState = {
-  bbox: null,
-  trails: null,
-  zonemask: null,
-  media: null,
-  // B7 · tick lifecycle row. Built from the raw _tickState numbers
-  // below so the strip never has to query setTimeout / AbortController
-  // internals; just reads the timestamps we wrote on entry/response/
-  // schedule. _refreshTickRow() computes the ms-ago deltas every
-  // hold-refresh tick so the row stays current even when the tick
-  // loop is wedged (i.e. exactly when the user needs the answer).
-  tick: null,
-  posFail: null,
-  // A4 · sticky "SVG sized but child collapsed" diagnostic. Separate
-  // from posFail because the two failure modes look identical on
-  // screen (no bbox visible) but need different fixes — posFail
-  // means the SVG layout never happened, paintFail means the
-  // children rendered but landed off-canvas or with 0×0 geometry.
-  paintFail: null,
-  // B12' · always-on MOUNT row. Holds the most recent
-  // openLiveDetect lifecycle record (chrome_mounted,
-  // first_tick_scheduled, error). Painted muted on success, red on
-  // error. Cleared on next openLiveDetect.
-  mount: null,
-  // C73/C84 · cadence row. Tracks the adaptive floor (500 ms on
-  // sub-stream, 1000 ms on main_fallback), the most recent cycle
-  // wall time, and the dynamic bbox hold derived from the EMA of
-  // recent cycles. Single line, always-on while debug is enabled.
-  cadence: null,
-};
 
 // B7 · raw tick-loop state. Owned by the tick lifecycle, read by the
 // debug strip. Reset on every openLiveDetect call.
-const _tickState = {
-  lastTickAt: 0, // _tick() entered
-  lastRespAt: 0, // last successful fetch resolved
-  lastStatus: '—', // HTTP status code (200/503) or 'abort'/'neterr'
-  nextTickAt: 0, // setTimeout deadline
-  startedAt: 0, // openLiveDetect wall-clock
-  startedWithCamId: '', // camId we attempted to start against
-  tornDownPrev: false, // openLiveDetect torn down a prior session
-};
 
 // SIMU-FIX-01a · the legacy mvSimDiagStrip is gone. _debugDiagOn
 // returns false so every gated function in this file (the strip
@@ -1355,10 +1307,9 @@ const _tickState = {
 // zone-detail (SIMU-05a-f) now surfaces the same information in
 // a properly-scrolled scrollable panel. localStorage cleanup
 // happens once on first call so the legacy key doesn't linger.
-let _legacyDebugKeysCleaned = false;
 function _debugDiagOn() {
-  if (!_legacyDebugKeysCleaned) {
-    _legacyDebugKeysCleaned = true;
+  if (!S.legacyDebugKeysCleaned) {
+    S.legacyDebugKeysCleaned = true;
     try {
       localStorage.removeItem(_DEBUG_LS_KEY);
       localStorage.removeItem(_DEBUG_COLLAPSE_KEY);
@@ -1416,8 +1367,8 @@ function _renderDiagStrip() {
   // anything else. The _err flag picked from the record promotes
   // the row to red without using the trailing-tag mechanism.
   let mountRow = '';
-  if (_diagState.mount) {
-    const m = _diagState.mount;
+  if (S.diagState.mount) {
+    const m = S.diagState.mount;
     const fields = {
       started_at: m.started_at,
       started_with_camId: m.started_with_camId,
@@ -1431,18 +1382,18 @@ function _renderDiagStrip() {
   }
   const rows = [
     mountRow,
-    _renderDiagStripLine('tick', _diagState.tick?.fields, _diagState.tick?.opts || {}),
-    _renderDiagStripLine('cadence', _diagState.cadence?.fields, _diagState.cadence?.opts || {}),
-    _renderDiagStripLine('bbox', _diagState.bbox?.fields, _diagState.bbox?.opts || {}),
-    _renderDiagStripLine('trails', _diagState.trails?.fields, _diagState.trails?.opts || {}),
-    _renderDiagStripLine('zonemask', _diagState.zonemask?.fields, _diagState.zonemask?.opts || {}),
-    _renderDiagStripLine('media', _diagState.media?.fields, _diagState.media?.opts || {}),
+    _renderDiagStripLine('tick', S.diagState.tick?.fields, S.diagState.tick?.opts || {}),
+    _renderDiagStripLine('cadence', S.diagState.cadence?.fields, S.diagState.cadence?.opts || {}),
+    _renderDiagStripLine('bbox', S.diagState.bbox?.fields, S.diagState.bbox?.opts || {}),
+    _renderDiagStripLine('trails', S.diagState.trails?.fields, S.diagState.trails?.opts || {}),
+    _renderDiagStripLine('zonemask', S.diagState.zonemask?.fields, S.diagState.zonemask?.opts || {}),
+    _renderDiagStripLine('media', S.diagState.media?.fields, S.diagState.media?.opts || {}),
   ].filter(Boolean);
-  if (_diagState.posFail) {
-    rows.push(_renderDiagStripLine('position-fail', _diagState.posFail));
+  if (S.diagState.posFail) {
+    rows.push(_renderDiagStripLine('position-fail', S.diagState.posFail));
   }
-  if (_diagState.paintFail) {
-    rows.push(_renderDiagStripLine('paint-fail', _diagState.paintFail));
+  if (S.diagState.paintFail) {
+    rows.push(_renderDiagStripLine('paint-fail', S.diagState.paintFail));
   }
   // C56 · the body holds the full multi-row dump; the summary line
   // at the top is the one-glance "TICK <status> · BBOX dets=<n> ·
@@ -1461,26 +1412,26 @@ function _renderDiagStrip() {
 // (text-overflow: ellipsis).
 function _buildDebugSummary() {
   const parts = [];
-  const tickFields = _diagState.tick?.fields || {};
-  const tickFlag = _diagState.tick?.opts?.flag;
+  const tickFields = S.diagState.tick?.fields || {};
+  const tickFlag = S.diagState.tick?.opts?.flag;
   const tickStatus = tickFlag === 'tick-stuck' ? 'STUCK' : tickFlag === 'tick-warn' ? 'WARN' : 'ok';
   parts.push(`TICK ${tickStatus}`);
-  const bboxFields = _diagState.bbox?.fields || {};
+  const bboxFields = S.diagState.bbox?.fields || {};
   if ('dets' in bboxFields) parts.push(`BBOX dets=${bboxFields.dets}`);
-  const mediaFields = _diagState.media?.fields || {};
+  const mediaFields = S.diagState.media?.fields || {};
   if ('branch' in mediaFields) parts.push(`MEDIA ${mediaFields.branch}`);
-  if (_diagState.mount) parts.push(`MOUNT ${_diagState.mount._err ? 'err' : 'ok'}`);
+  if (S.diagState.mount) parts.push(`MOUNT ${S.diagState.mount._err ? 'err' : 'ok'}`);
   return parts.join(' · ');
 }
 
 function _updateDiagStrip(kind, fields, opts = {}) {
   if (!_debugDiagOn()) return;
   if (kind === 'position-fail') {
-    _diagState.posFail = fields;
+    S.diagState.posFail = fields;
   } else if (kind === 'paint-fail') {
-    _diagState.paintFail = fields;
-  } else if (kind in _diagState) {
-    _diagState[kind] = { fields, opts };
+    S.diagState.paintFail = fields;
+  } else if (kind in S.diagState) {
+    S.diagState[kind] = { fields, opts };
   }
   _renderDiagStrip();
 }
@@ -1516,10 +1467,10 @@ function _collectBboxDiagFields(svg, fs) {
       fitDims = 'err';
     }
   }
-  const source = _session?.lastSourceFrameSize;
-  const snap = _session?.lastSnapshotFrameSize;
-  const bboxSpace = _session?.lastBboxSpace || '?';
-  // A3 · viewBox is set from _session.lastFrameSize, which equals
+  const source = S.session?.lastSourceFrameSize;
+  const snap = S.session?.lastSnapshotFrameSize;
+  const bboxSpace = S.session?.lastBboxSpace || '?';
+  // A3 · viewBox is set from S.session.lastFrameSize, which equals
   // the top-level data.frame_size — the backend's stated bbox-space
   // size. bbox_space says which space the bbox tuples actually use.
   // The two should match: "source" ↔ source == frame_size,
@@ -1533,8 +1484,8 @@ function _collectBboxDiagFields(svg, fs) {
     mismatch = true;
   }
   const fields = {
-    dets: (_session.lastDetections || []).length,
-    raw: _session.lastRawCount ?? '?',
+    dets: (S.session.lastDetections || []).length,
+    raw: S.session.lastRawCount ?? '?',
     bbox_space: bboxSpace,
     source: source ? `${source.w}×${source.h}` : 'n/a',
     snap: snap ? `${snap.w}×${snap.h}` : 'n/a',
@@ -1542,7 +1493,7 @@ function _collectBboxDiagFields(svg, fs) {
     svgRect: `${Math.round(svgRect.width)}×${Math.round(svgRect.height)}@${Math.round(svgRect.left - (wrapBox?.left || 0))},${Math.round(svgRect.top - (wrapBox?.top || 0))}`,
     zIndex: cs.zIndex,
     display: cs.display,
-    bboxesOn: _overlays.bboxes ? 'true' : 'false',
+    bboxesOn: S.overlays.bboxes ? 'true' : 'false',
     media: mediaTag,
     mediaDims,
     fit: fitDims,
@@ -1551,7 +1502,7 @@ function _collectBboxDiagFields(svg, fs) {
   return { fields, opts };
 }
 
-// B7 · paint the tick lifecycle row from the raw _tickState numbers.
+// B7 · paint the tick lifecycle row from the raw S.tickState numbers.
 // Always runs (no-ops when debug strip is OFF). The row carries the
 // single primary signal: STUCK in red means the loop is wedged. The
 // values themselves let the user tell apart "never started" (Infinity
@@ -1561,22 +1512,22 @@ function _collectBboxDiagFields(svg, fs) {
 function _refreshTickRow() {
   if (!_debugDiagOn()) return;
   const now = Date.now();
-  const sessionOn = !!_session;
+  const sessionOn = !!S.session;
   // B7' · field names match the new spec exactly so the iPhone
   // screenshot can be diffed against the prompt without translating:
   //   sinceTick  → last_tick_started_ms_ago
   //   sinceResp  → last_resp_ok_ms_ago (only set on ok=true responses)
   //   mountedAt  → mounted_ms_ago      (drives the "never-resp + age"
   //                                     STUCK trigger below)
-  const sinceTick = _tickState.lastTickAt ? now - _tickState.lastTickAt : Infinity;
-  const sinceResp = _tickState.lastRespAt ? now - _tickState.lastRespAt : Infinity;
-  const sinceMount = _tickState.startedAt ? now - _tickState.startedAt : Infinity;
-  const nextIn = _tickState.nextTickAt ? Math.max(0, _tickState.nextTickAt - now) : null;
+  const sinceTick = S.tickState.lastTickAt ? now - S.tickState.lastTickAt : Infinity;
+  const sinceResp = S.tickState.lastRespAt ? now - S.tickState.lastRespAt : Infinity;
+  const sinceMount = S.tickState.startedAt ? now - S.tickState.startedAt : Infinity;
+  const nextIn = S.tickState.nextTickAt ? Math.max(0, S.tickState.nextTickAt - now) : null;
   const abortPending = !!(
-    _session &&
-    _session.abort &&
-    _session.abort.signal &&
-    !_session.abort.signal.aborted
+    S.session &&
+    S.session.abort &&
+    S.session.abort.signal &&
+    !S.session.abort.signal.aborted
   );
   // STUCK rules (B7'):
   //   red  · session=="mounted" AND (
@@ -1601,46 +1552,46 @@ function _refreshTickRow() {
   const fmtMs = (v) => (Number.isFinite(v) ? String(Math.round(v)) : '∞');
   const fields = {
     session: sessionOn ? 'mounted' : 'idle',
-    camId: _tickState.startedWithCamId || '—',
+    camId: S.tickState.startedWithCamId || '—',
     last_tick_started_ms_ago: fmtMs(sinceTick),
     last_resp_ok_ms_ago: fmtMs(sinceResp),
-    last_status: String(_tickState.lastStatus ?? '—'),
+    last_status: String(S.tickState.lastStatus ?? '—'),
     next_in_ms: nextIn == null ? '—' : String(nextIn),
-    camId_match: sessionOn && _session.camId === _tickState.startedWithCamId ? 'true' : 'false',
+    camId_match: sessionOn && S.session.camId === S.tickState.startedWithCamId ? 'true' : 'false',
     abort_pending: abortPending ? 'true' : 'false',
     mounted_ms_ago: fmtMs(sinceMount),
   };
   // B31' · counter + reason for the most recent silent drop. Both
   // hidden when N=0 so the healthy case stays clean.
-  if ((_tickState.ticksDroppedLate || 0) > 0) {
-    fields.dropped = String(_tickState.ticksDroppedLate);
-    if (_tickState.lastDropReason) fields.drop_reason = _tickState.lastDropReason;
+  if ((S.tickState.ticksDroppedLate || 0) > 0) {
+    fields.dropped = String(S.tickState.ticksDroppedLate);
+    if (S.tickState.lastDropReason) fields.drop_reason = S.tickState.lastDropReason;
   }
   const opts = flag ? { flag, trailing } : {};
-  _diagState.tick = { fields, opts };
+  S.diagState.tick = { fields, opts };
 }
 
-// C73 · paint the CADENCE row from _tickState's last-scheduled
+// C73 · paint the CADENCE row from S.tickState's last-scheduled
 // snapshot + the running EMA. Compact one-row dump (floor / cycle /
 // next / mode / hold) — keeps the strip readable on iPhone width.
 // Called from _scheduleNext and from _renderDiagStrip so the row
 // stays current even when the loop is wedged.
 function _refreshCadenceRow() {
   if (!_debugDiagOn()) return;
-  const src = _session?.lastFrameSrc || 'unknown';
+  const src = S.session?.lastFrameSrc || 'unknown';
   const mode = src === 'sub' ? 'sub-fast' : src === 'main_fallback' ? 'main-slow' : 'unknown';
-  const floor = _tickState.lastFloorMs;
-  const cycle = _tickState.lastCycleMs;
-  const delay = _tickState.lastDelayMs;
+  const floor = S.tickState.lastFloorMs;
+  const cycle = S.tickState.lastCycleMs;
+  const delay = S.tickState.lastDelayMs;
   const fields = {
     mode,
     floor_ms: Number.isFinite(floor) ? String(Math.round(floor)) : '—',
     last_cycle_ms: Number.isFinite(cycle) ? String(Math.round(cycle)) : '—',
     next_in_ms: Number.isFinite(delay) ? String(Math.round(delay)) : '—',
-    hold_ms: Number.isFinite(_holdMsActive) ? String(Math.round(_holdMsActive)) : '—',
-    avg_cycle_ms: Number.isFinite(_cycleEmaMs) ? String(Math.round(_cycleEmaMs)) : '—',
+    hold_ms: Number.isFinite(S.holdMsActive) ? String(Math.round(S.holdMsActive)) : '—',
+    avg_cycle_ms: Number.isFinite(S.cycleEmaMs) ? String(Math.round(S.cycleEmaMs)) : '—',
   };
-  _diagState.cadence = { fields, opts: {} };
+  S.diagState.cadence = { fields, opts: {} };
 }
 
 // Pull current wrap/img/video geometry into the "media" row. Called
@@ -1670,28 +1621,28 @@ function _refreshMediaRow() {
     img: imgEl ? `${_box(imgEl)} disp=${window.getComputedStyle(imgEl).display}` : 'n/a',
     video: videoEl ? `${_box(videoEl)} disp=${window.getComputedStyle(videoEl).display}` : 'n/a',
     videoReady,
-    branch: _lastMediaBranch || '—',
+    branch: S.lastMediaBranch || '—',
   };
-  if (_lastVideoRejected) fields.video_rejected = _lastVideoRejected;
-  if (_lastImgRejected) fields.img_rejected = _lastImgRejected;
-  _diagState.media = { fields, opts: {} };
+  if (S.lastVideoRejected) fields.video_rejected = S.lastVideoRejected;
+  if (S.lastImgRejected) fields.img_rejected = S.lastImgRejected;
+  S.diagState.media = { fields, opts: {} };
 }
 
 function _renderBboxOverlay() {
   // SIMU-FIX-03b · the bbox SVG's visibility is gated SOLELY by the
-  // `_overlays.bboxes` boolean. The floating-pill bar's own
+  // `S.overlays.bboxes` boolean. The floating-pill bar's own
   // visibility (controlled separately via SIMU-02c's tap toggle)
   // never affects this render path — the pill bar is a CONTROL for
   // the boolean, never a GATE for the painting.
   const svg = _ensureBboxOverlay();
-  if (!svg || !_session) return;
-  svg.style.display = _overlays.bboxes ? 'block' : 'none';
-  if (!_overlays.bboxes) {
+  if (!svg || !S.session) return;
+  svg.style.display = S.overlays.bboxes ? 'block' : 'none';
+  if (!S.overlays.bboxes) {
     svg.innerHTML = '';
     _updateSuppressedHint(0);
     return;
   }
-  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+  const fs = S.session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
   // A1/A3 · refresh the debug strip on every render so the user
@@ -1715,13 +1666,13 @@ function _renderBboxOverlay() {
   // A1 · clear any sticky position-fail from the last cycle now
   // that the SVG has a real size again. Same for paint-fail
   // (rebuilt below if needed).
-  if (_diagState.posFail) {
-    _diagState.posFail = null;
+  if (S.diagState.posFail) {
+    S.diagState.posFail = null;
     _renderDiagStrip();
   }
   // gp384 / C84 — hold-time merge. Prefer the live tick's detections
   // (full opacity, _holdAge=0). If the tick is empty, fall back to
-  // the most recent detection per label from _detBuffer — each
+  // the most recent detection per label from S.detBuffer — each
   // entry carries its age so the render can fade the bbox out over
   // the active hold-time (dynamic per cadence — see C84). One entry
   // per label is enough; older entries on the same label are
@@ -1729,18 +1680,18 @@ function _renderBboxOverlay() {
   // back to the legacy 1500 ms ceiling until the first cycle EMA
   // observation lands, so the first tick still gets a sensible hold.
   const now = Date.now();
-  const holdMs = Number.isFinite(_holdMsActive) ? _holdMsActive : _HOLD_MS_CEILING;
-  const liveDets = _session.lastDetections || [];
+  const holdMs = Number.isFinite(S.holdMsActive) ? S.holdMsActive : _HOLD_MS_CEILING;
+  const liveDets = S.session.lastDetections || [];
   let renderDets;
   if (liveDets.length) {
     renderDets = liveDets.map((d) => ({ ...d, _holdAge: 0 }));
   } else {
     const seen = new Set();
     const held = [];
-    for (let i = _detBuffer.length - 1; i >= 0; i--) {
-      const e = _detBuffer[i];
+    for (let i = S.detBuffer.length - 1; i >= 0; i--) {
+      const e = S.detBuffer[i];
       const age = now - e.ms;
-      if (age > holdMs) break; // _detBuffer is push-order → older entries follow
+      if (age > holdMs) break; // S.detBuffer is push-order → older entries follow
       if (seen.has(e.label)) continue; // one bbox per label, most-recent wins
       seen.add(e.label);
       held.push({
@@ -1785,7 +1736,7 @@ function _renderBboxOverlay() {
         : isBelow
           ? 'unter Schwelle'
           : 'gefiltert';
-      const stroke = _selectedLabel === d.label ? 5 : 3;
+      const stroke = S.selectedLabel === d.label ? 5 : 3;
       const dashAttr = dash === 'none' ? '' : ` stroke-dasharray="${dash}"`;
       // SIMU-02e · track-number badge anchored to the bbox top-left.
       // When the backend hands us a track_num, the visible label
@@ -1826,19 +1777,19 @@ function _renderBboxOverlay() {
     const childRect = firstG ? firstG.getBoundingClientRect() : null;
     if (childRect && childRect.width === 0 && childRect.height === 0) {
       const first = renderDets[0];
-      const fs = _session.lastFrameSize || { w: 0, h: 0 };
+      const fs = S.session.lastFrameSize || { w: 0, h: 0 };
       _updateDiagStrip('paint-fail', {
         childRect: '0×0',
         parentRect: `${Math.round(rect.width)}×${Math.round(rect.height)}`,
         viewBox: `${fs.w}×${fs.h}`,
         bboxRaw: `[${(first.bbox || []).join(',')}]`,
       });
-    } else if (_diagState.paintFail) {
-      _diagState.paintFail = null;
+    } else if (S.diagState.paintFail) {
+      S.diagState.paintFail = null;
       _renderDiagStrip();
     }
-  } else if (_diagState.paintFail) {
-    _diagState.paintFail = null;
+  } else if (S.diagState.paintFail) {
+    S.diagState.paintFail = null;
     _renderDiagStrip();
   }
   // Click handler — toggle detail-pill selection.
@@ -1847,7 +1798,7 @@ function _renderBboxOverlay() {
     g.addEventListener('click', (ev) => {
       ev.stopPropagation();
       const lbl = g.dataset.label;
-      _selectedLabel = _selectedLabel === lbl ? null : lbl;
+      S.selectedLabel = S.selectedLabel === lbl ? null : lbl;
       _renderBboxOverlay();
       _renderDetailPill();
     });
@@ -1885,8 +1836,8 @@ function _positionSvgOverImage(svg) {
     svg.style.bottom = 'auto';
     svg.style.inset = '0';
     _setMediaBranch('zone-video-fill');
-    _lastVideoRejected = null;
-    _lastImgRejected = null;
+    S.lastVideoRejected = null;
+    S.lastImgRejected = null;
     return;
   }
   // Pick whichever media element is currently visible. HLS path
@@ -1909,8 +1860,8 @@ function _positionSvgOverImage(svg) {
   const wrap = svg.parentElement || byId('lightboxMediaWrap');
   if (!wrap) {
     _setMediaBranch('skipped-no-wrap');
-    _lastVideoRejected = null;
-    _lastImgRejected = null;
+    S.lastVideoRejected = null;
+    S.lastImgRejected = null;
     return;
   }
   // Video validity.
@@ -1943,8 +1894,8 @@ function _positionSvgOverImage(svg) {
   } else {
     imgValid = true;
   }
-  _lastVideoRejected = videoValid ? null : videoRejected;
-  _lastImgRejected = imgValid ? null : imgRejected;
+  S.lastVideoRejected = videoValid ? null : videoRejected;
+  S.lastImgRejected = imgValid ? null : imgRejected;
   const mediaEl = videoValid ? videoEl : imgValid ? imgEl : null;
   const wrapBox = wrap.getBoundingClientRect();
   if (wrapBox.width <= 0) {
@@ -1981,7 +1932,7 @@ function _positionSvgOverImage(svg) {
     // know the source aspect (fs.w / fs.h), so we compute the SVG
     // height as wrap.width * fs.h / fs.w, pin to top:0, and let the
     // SVG's preserveAspectRatio:meet finish the letterbox math.
-    const fs = _session?.lastFrameSize;
+    const fs = S.session?.lastFrameSize;
     dx = 0;
     dy = 0;
     w = wrapBox.width;
@@ -2013,11 +1964,8 @@ function _positionSvgOverImage(svg) {
 // pickup includes them without an extra plumbing arg. Plain module-
 // level scratch — the position helper writes them, the media-row
 // builder reads them.
-let _lastMediaBranch = null;
-let _lastVideoRejected = null;
-let _lastImgRejected = null;
 function _setMediaBranch(branch) {
-  _lastMediaBranch = branch;
+  S.lastMediaBranch = branch;
 }
 
 // Per-label trail cap — newest N centroids drawn behind the bbox.
@@ -2026,29 +1974,29 @@ function _setMediaBranch(branch) {
 const _LIVE_TRAIL_MAX_POINTS = 20;
 
 // Trails layer. Connects per-label bbox centroids from the 60 s
-// _detBuffer window into a fading polyline. Visual matches the
+// S.detBuffer window into a fading polyline. Visual matches the
 // batch-A Mediathek trail (last N points, linear opacity ramp,
 // solid head-dot) via the shared `buildTrailSvg` helper —
 // recorded clips and live simulation render trails the same way.
 function _renderTrailsOverlay() {
   // SIMU-FIX-03b · trails visibility is gated SOLELY by
-  // `_overlays.trails`. Independent of the pill-bar's own
+  // `S.overlays.trails`. Independent of the pill-bar's own
   // visibility (which SIMU-02c animates in/out on tap). Persists
   // across pill-bar fade cycles.
   const svg = _ensureTrailsOverlay();
-  if (!svg || !_session) return;
-  svg.style.display = _overlays.trails ? 'block' : 'none';
-  if (!_overlays.trails) {
+  if (!svg || !S.session) return;
+  svg.style.display = S.overlays.trails ? 'block' : 'none';
+  if (!S.overlays.trails) {
     svg.innerHTML = '';
     return;
   }
-  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+  const fs = S.session.lastFrameSize || { w: 1920, h: 1080 };
   svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
   _positionSvgOverImage(svg);
   _refreshMediaRow();
   const rect = svg.getBoundingClientRect();
   if (_debugDiagOn()) {
-    // A1 · same-shape rich row for trails. _detBuffer length is the
+    // A1 · same-shape rich row for trails. S.detBuffer length is the
     // number of buffered detection samples in the rolling window
     // (one entry per detection per tick, dropped after _LIVE_WINDOW_MS).
     const cs = window.getComputedStyle(svg);
@@ -2057,12 +2005,12 @@ function _renderTrailsOverlay() {
     const left = wrapBox ? Math.round(rect.left - wrapBox.left) : Math.round(rect.left);
     const top = wrapBox ? Math.round(rect.top - wrapBox.top) : Math.round(rect.top);
     _updateDiagStrip('trails', {
-      buffer: _detBuffer.length,
+      buffer: S.detBuffer.length,
       viewBox: `${fs.w}×${fs.h}`,
       svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}@${left},${top}`,
       zIndex: cs.zIndex,
       display: cs.display,
-      trailsOn: _overlays.trails ? 'true' : 'false',
+      trailsOn: S.overlays.trails ? 'true' : 'false',
     });
   }
   // Same 0×0 guard as the bbox layer — wait for the image to size
@@ -2080,7 +2028,7 @@ function _renderTrailsOverlay() {
   // detBuffer is push-order but a polling-cadence change could
   // technically interleave entries from one to the next.
   const byLabel = new Map();
-  for (const e of _detBuffer) {
+  for (const e of S.detBuffer) {
     if (!byLabel.has(e.label)) byLabel.set(e.label, []);
     byLabel.get(e.label).push(e);
   }
@@ -2104,13 +2052,13 @@ function _renderTrailsOverlay() {
 
 function _renderZoneMaskOverlay() {
   // SIMU-FIX-03b · zones + masks visibility is gated SOLELY by
-  // `_overlays.zones` / `_overlays.masks`. Independent of pill-bar
+  // `S.overlays.zones` / `S.overlays.masks`. Independent of pill-bar
   // visibility. The two booleans are read once per render; the
   // canvas paints whichever combination is currently active.
   const canvas = _ensureZoneMaskOverlay();
-  if (!canvas || !_session) return;
-  const showZones = _overlays.zones;
-  const showMasks = _overlays.masks;
+  if (!canvas || !S.session) return;
+  const showZones = S.overlays.zones;
+  const showMasks = S.overlays.masks;
   if (!showZones && !showMasks) {
     const ctx = canvas.getContext('2d');
     if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2118,8 +2066,8 @@ function _renderZoneMaskOverlay() {
     return;
   }
   canvas.style.display = 'block';
-  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
-  const cam = (state.cameras || []).find((c) => c.id === _session.camId) || {};
+  const fs = S.session.lastFrameSize || { w: 1920, h: 1080 };
+  const cam = (state.cameras || []).find((c) => c.id === S.session.camId) || {};
   // Normalise polygons through the shared resolver so source_w/h
   // are always present (modern stamp wins, legacy fall back to
   // preview_resolution / 1280×720 default).
@@ -2151,8 +2099,8 @@ function _renderZoneMaskOverlay() {
       svgRect: `${Math.round(rect.width)}×${Math.round(rect.height)}@${left},${top}`,
       zIndex: cs.zIndex,
       display: cs.display,
-      zonesOn: _overlays.zones ? 'true' : 'false',
-      masksOn: _overlays.masks ? 'true' : 'false',
+      zonesOn: S.overlays.zones ? 'true' : 'false',
+      masksOn: S.overlays.masks ? 'true' : 'false',
     });
   }
   if (rect.width <= 0 || rect.height <= 0) {
@@ -2175,7 +2123,7 @@ function _renderDetectionsPanel(data) {
   const detHost = byId('mvLdDetections');
   if (!detHost) return;
   const dets = data.detections || [];
-  const cam = (state.cameras || []).find((c) => c.id === _session?.camId) || {};
+  const cam = (state.cameras || []).find((c) => c.id === S.session?.camId) || {};
   const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : null;
   const objFilter = filterArr && filterArr.length > 0 ? new Set(filterArr) : null;
   // SECTION 1 · Active tracks. "Active" here = the pass-verdict
@@ -2206,9 +2154,9 @@ function _renderDetectionsPanel(data) {
       filteredDets.map((d) => _renderVerworfenRow(d)).join('')
     : '';
   // SECTION 3 · Track-Ereignisse · last 30 s. Pulled from the trace
-  // log we already maintain in _traceLines. Filter to the "[det]" /
+  // log we already maintain in S.traceLines. Filter to the "[det]" /
   // "[track]" lines and stamp them with a coloured tag.
-  const events = _traceLines.slice(-30);
+  const events = S.traceLines.slice(-30);
   const trackEventsHtml = _buildTrackEventsHtml();
   // SIMU-04d · when ALL three sections are empty, collapse to a
   // single muted line instead of stacking three sub-empty rows.
@@ -2229,7 +2177,7 @@ function _renderDetectionsPanel(data) {
   detHost.querySelectorAll('.mv-ld-row[data-label]').forEach((row) => {
     row.addEventListener('click', () => {
       const lbl = row.dataset.label;
-      _selectedLabel = _selectedLabel === lbl ? null : lbl;
+      S.selectedLabel = S.selectedLabel === lbl ? null : lbl;
       _renderBboxOverlay();
       _renderDetailPill();
     });
@@ -2276,7 +2224,7 @@ function _renderVerworfenRow(d) {
 // been seen recently. RE-ID and explicit DEATH events come in
 // SIMU-05 when the backend adds the ring buffer.
 function _buildTrackEventsHtml() {
-  const lines = _traceLines.slice(-30).reverse();
+  const lines = S.traceLines.slice(-30).reverse();
   if (!lines.length) {
     return '<div class="mv-ld-empty-row">Noch keine Track-Ereignisse</div>';
   }
@@ -2321,19 +2269,19 @@ function _renderLiveSwimlane() {
   // synthetic track per label) and ask the recorded swimlane to
   // render it. Sample timestamps are shifted into [0, 60] so the
   // existing rendering treats the window as a 60-second "clip".
-  if (!_session) return;
+  if (!S.session) return;
   const now = Date.now();
   const windowStart = now - _LIVE_WINDOW_MS;
   // SIMU-03a · enforce the camera's object_filter. Off-filter
-  // detections stay in _detBuffer (the Trace tab + "Andere" lane
+  // detections stay in S.detBuffer (the Trace tab + "Andere" lane
   // below still surface them) but they don't get their own
   // swimlane row. Mirrors mediathek/bbox-overlay/timeline-panel.js
   // line 225 — same gate, applied per detection on the live window.
-  const cam = (state.cameras || []).find((c) => c.id === _session.camId) || {};
+  const cam = (state.cameras || []).find((c) => c.id === S.session.camId) || {};
   const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : null;
   const objFilter = filterArr && filterArr.length > 0 ? new Set(filterArr) : null;
   const byLabel = new Map();
-  for (const e of _detBuffer) {
+  for (const e of S.detBuffer) {
     if (e.ms < windowStart) continue;
     if (objFilter && !objFilter.has(e.label)) continue;
     const t = (e.ms - windowStart) / 1000;
@@ -2394,18 +2342,18 @@ function _renderLiveSwimlane() {
   const stackHost = byId('lightboxBottomStack');
   if (stackHost) {
     renderLiveSwimlane(stackHost, {
-      camId: _session.camId,
-      detBuffer: _detBuffer,
+      camId: S.session.camId,
+      detBuffer: S.detBuffer,
       windowMs: _LIVE_WINDOW_MS,
       objectFilter: objFilter,
     });
   }
   // The synthetic liveItem is still surfaced for any callers that
-  // index off _session.lastTracks (e.g. SIMU-04+ panel renderers).
-  _session.lastTracksItem = {
+  // index off S.session.lastTracks (e.g. SIMU-04+ panel renderers).
+  S.session.lastTracksItem = {
     type: 'live-detect',
-    event_id: `live-${_session.camId}`,
-    camera_id: _session.camId,
+    event_id: `live-${S.session.camId}`,
+    camera_id: S.session.camId,
     _tracks: {
       tracks,
       filter_applied: filterArr,
@@ -2420,7 +2368,7 @@ function _renderDetailPill() {
   const host = zoneEl('video') || byId('lightboxMediaWrap');
   if (!host) return;
   let pill = byId('mvLiveDetailPill');
-  if (!_selectedLabel) {
+  if (!S.selectedLabel) {
     if (pill) pill.remove();
     return;
   }
@@ -2430,22 +2378,22 @@ function _renderDetailPill() {
     pill.className = 'mv-live-detail-pill';
     host.appendChild(pill);
   }
-  const c = colors[_selectedLabel] || colors.unknown;
-  const lblText = OBJ_LABEL[_selectedLabel] || _selectedLabel;
+  const c = colors[S.selectedLabel] || colors.unknown;
+  const lblText = OBJ_LABEL[S.selectedLabel] || S.selectedLabel;
   // Find the live detection for this label (most recent).
-  const det = (_session?.lastDetections || []).find((d) => d.label === _selectedLabel);
+  const det = (S.session?.lastDetections || []).find((d) => d.label === S.selectedLabel);
   if (!det) {
     // L5 · shared renderer's empty-state so the "not in frame" copy
     // matches every mode.
     renderDetailPill(pill, { tracks: [], emptyText: `${lblText} · aktuell nicht im Bild` });
     return;
   }
-  const cam = (state.cameras || []).find((x) => x.id === _session.camId) || {};
+  const cam = (state.cameras || []).find((x) => x.id === S.session.camId) || {};
   const perCls = cam.label_thresholds || {};
   const generalThresh = Number(cam.detection_min_score) || 0.55;
   const scoreThresh =
-    perCls[_selectedLabel] != null ? Number(perCls[_selectedLabel]) : generalThresh;
-  const fs = _session.lastFrameSize || { w: 1920, h: 1080 };
+    perCls[S.selectedLabel] != null ? Number(perCls[S.selectedLabel]) : generalThresh;
+  const fs = S.session.lastFrameSize || { w: 1920, h: 1080 };
   const bh = det.bbox?.[3] || 0;
   const bw = det.bbox?.[2] || 0;
   // L5 · the ONE shared gauge renderer (detail-pill.js) — single-track
@@ -2467,16 +2415,16 @@ function _renderDetailPill() {
 }
 
 function _appendTrace(lines) {
-  if (!Array.isArray(lines) || !_session) return;
+  if (!Array.isArray(lines) || !S.session) return;
   for (const line of lines) {
-    _traceLines.push({ kind: _classifyTrace(line), text: line });
+    S.traceLines.push({ kind: _classifyTrace(line), text: line });
   }
-  while (_traceLines.length > _TRACE_CAP) _traceLines.shift();
+  while (S.traceLines.length > _TRACE_CAP) S.traceLines.shift();
   // Detections-tab fold (flat running log + diag header).
-  if (_session.fold) {
+  if (S.session.fold) {
     const body = document.querySelector('#lightboxSettings .mv-fafold-body');
     const wasAtBottom = body ? body.scrollHeight - body.scrollTop - body.clientHeight < 24 : true;
-    _session.fold.setLines(_traceLines);
+    S.session.fold.setLines(S.traceLines);
     if (body && wasAtBottom) {
       body.scrollTop = body.scrollHeight;
     }
@@ -2485,11 +2433,11 @@ function _appendTrace(lines) {
   // view. Each _appendTrace call is exactly one backend tick's
   // decision_trace, so one push == one block, newest-on-top in the tab.
   if (lines.length) {
-    _traceTicks.push({
+    S.traceTicks.push({
       ts: Date.now(),
       lines: lines.map((l) => ({ prefix: tracePrefix(l), text: l })),
     });
-    while (_traceTicks.length > _TRACE_TICK_CAP) _traceTicks.shift();
+    while (S.traceTicks.length > _TRACE_TICK_CAP) S.traceTicks.shift();
   }
   _renderTraceTab();
 }
@@ -2501,7 +2449,7 @@ function _appendTrace(lines) {
 function _renderTraceTab() {
   if (typeof getActiveTab === 'function' && getActiveTab() !== 'trace') return;
   const host = panelEl('trace');
-  if (host) renderLiveTrace(host, _traceTicks);
+  if (host) renderLiveTrace(host, S.traceTicks);
 }
 
 function _classifyTrace(line) {
@@ -2526,7 +2474,7 @@ window.closeLiveDetect = closeLiveDetect;
 // what the user has on screen at copy-time.
 window._mvLdOverlaysSnapshot = function () {
   const parts = [];
-  for (const [k, v] of Object.entries(_overlays)) {
+  for (const [k, v] of Object.entries(S.overlays)) {
     parts.push(`${k}=${v ? 'on' : 'off'}`);
   }
   return parts.join(' · ');

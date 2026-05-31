@@ -13,12 +13,12 @@ import { renderDetailPill } from './detail-pill.js';
 import { zoneEl, getActiveTab, panelEl } from './live-detect-skeleton.js';
 import { S } from './live-detect-state.js';
 import {
-  _renderBboxOverlay,
   _pinScrubberRight,
   _LIVE_WINDOW_MS,
   _TRACE_CAP,
   _TRACE_TICK_CAP,
 } from './live-detect.js';
+import { _renderBboxOverlay } from './live-detect-bbox.js';
 
 export function _renderDetectionsPanel(data) {
   // SIMU-04b · the Detections tab content is three sections:

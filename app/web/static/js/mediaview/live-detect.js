@@ -57,7 +57,7 @@ import {
   renderDebugPanel,
   startSnapshotPrefetch,
   stopSnapshotPrefetch,
-} from './live-detect-debug.js';
+} from './live-detect-debug/index.js';
 
 // C73 · cadence floors. The original 1 Hz floor was set against the
 // main-stream cost budget (2560×1440 frame copy + JPEG encode +

@@ -60,92 +60,6 @@
 #lightboxConfidenceMeter[hidden] {
   display: none !important;
 }
-#lightboxConfidenceMeter .lbcm-track {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-#lightboxConfidenceMeter .lbcm-track + .lbcm-track {
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-#lightboxConfidenceMeter .lbcm-track-head {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-#lightboxConfidenceMeter .lbcm-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-#lightboxConfidenceMeter .lbcm-row-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-#lightboxConfidenceMeter .lbcm-row-label {
-  font-size: 12px;
-  color: rgba(226, 232, 240, 0.85);
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-#lightboxConfidenceMeter .lbcm-row-pct {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 12px;
-  font-weight: 500;
-  color: #f1f5f9;
-  font-variant-numeric: tabular-nums;
-}
-#lightboxConfidenceMeter .lbcm-row-bar {
-  position: relative;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2.5px;
-  margin-top: 10px; /* room for the threshold number above */
-}
-#lightboxConfidenceMeter .lbcm-row-fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  border-radius: 2.5px;
-  opacity: 1;
-}
-#lightboxConfidenceMeter .lbcm-row-tick {
-  position: absolute;
-  /* Tick extends 2 px above and below the bar so the cross-hair
-     reads as a separate mark, not a sliver inside the rail. */
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background: #fff;
-  pointer-events: none;
-  transform: translateX(-1px);
-}
-#lightboxConfidenceMeter .lbcm-row-tick-num {
-  position: absolute;
-  top: -14px;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 9px;
-  font-weight: 500;
-  color: #fff;
-  letter-spacing: 0.02em;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-/* Older clips have no recording_settings — Score tick is hidden and
-   this subtitle explains why. Same graceful-fallback pattern the
-   settings-panel uses. */
-#lightboxConfidenceMeter .lbcm-missing {
-  font-size: 9.5px;
-  color: rgba(226, 232, 240, 0.45);
-  font-style: italic;
-  margin: 0 0 4px;
-  letter-spacing: 0.02em;
-}
 /* J6 · narrow viewports — keep the flush bottom-left anchor but
    shrink the footprint + cap height to ~38 % so the typical 1–3
    entry list still fits without scroll and the card never covers
@@ -159,44 +73,6 @@
     inset: auto auto 0 0 !important;
     border-radius: 0 12px 0 0;
   }
-  #lightboxConfidenceMeter .lbcm-track-head {
-    font-size: 11px;
-  }
-  #lightboxConfidenceMeter .lbcm-row-label {
-    font-size: 11px;
-  }
-  #lightboxConfidenceMeter .lbcm-row-pct {
-    font-size: 11px;
-  }
-}
-/* Legend strip — sits below the last gauge row. The glyphs (▍ ▪)
-   mirror the visual language of the gauge bar (vertical tick + filled
-   block) so the operator can read it at a glance without
-   second-guessing. */
-#lightboxConfidenceMeter .lbcm-legend {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 4px 0 0;
-  font-size: 9.5px;
-  color: rgba(226, 232, 240, 0.55);
-  letter-spacing: 0.02em;
-}
-#lightboxConfidenceMeter .lbcm-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-#lightboxConfidenceMeter .lbcm-legend-tick {
-  color: rgba(255, 255, 255, 0.85);
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1;
-}
-#lightboxConfidenceMeter .lbcm-legend-fill {
-  color: rgba(226, 232, 240, 0.85);
-  font-size: 11px;
-  line-height: 1;
 }
 
 /* ── Settings panel — wizard mirror ────────────────────────────────────── */

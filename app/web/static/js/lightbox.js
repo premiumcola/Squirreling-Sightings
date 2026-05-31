@@ -24,7 +24,6 @@ import { showToast } from './core/toast.js';
 import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from './core/icons.js';
 import { lbState } from './mediathek/state.js';
 import {
-  lbLoadTracksForItem,
   lbStopTrackingPlayback,
   lbRenderTrackTimeline,
   lbClearTrackTimeline,
@@ -226,14 +225,6 @@ export function _teardownVideoChrome() {
   // open doesn't show a stale "Bboxes / Trails / …" row.
   const togRow = byId('mvLiveToggles');
   if (togRow) togRow.remove();
-  // L2 · drop the recorded read-only mode-indicator badge + tiling grid
-  // so they can't linger into a photo open or get re-parented into the
-  // live-detect view (which re-homes #lightboxMediaWrap children).
-  try {
-    window._clearRecordedModeBadge?.();
-  } catch {
-    /* ignore */
-  }
   // Buttons return to the media wrap so the photo branch's existing
   // absolute-positioned CSS rules apply.
   _relocateActionsTo('lightboxMediaWrap');
@@ -455,105 +446,12 @@ function _tlNavItems() {
   // Timelapse + motion events share state._allMedia now — navigation is uniform.
   return state._allMedia || [];
 }
-function _tlPeriodLabel(item) {
-  if (item.period_s > 0) {
-    const p = item.period_s,
-      d = item.target_s || 0;
-    const pl =
-      p < 3600
-        ? Math.round(p / 60) + 'min'
-        : p < 86400
-          ? Math.round(p / 3600) + 'h'
-          : p < 604800
-            ? 'daily'
-            : p < 2592000
-              ? 'weekly'
-              : 'monthly';
-    const dl = d < 60 ? d + 'sec' : Math.floor(d / 60) + 'min';
-    return `${pl}→${dl}`;
-  }
-  const raw = item.profile || item.period || '';
-  if (raw === 'rolling_10min') return '10 min';
-  if (raw === 'hour') return 'Stunde';
-  if (raw === 'custom') return 'Custom';
-  if (raw === 'daily' || raw === 'day') return 'Tag';
-  if (raw === 'weekly') return 'Woche';
-  if (raw === 'monthly') return 'Monat';
-  return raw || 'Timelapse';
-}
+// E · Timelapse now rides the SAME MediaView shell as motion clips —
+// openRecorded (mode:'timelapse') handles the nav, page-jump, video src,
+// scrubber, panel tabs + fold. openTLPlayer stays as the public entry
+// (window.openTLPlayer + the openLightbox dispatch) and just delegates.
 export function openTLPlayer(item) {
-  const navItems = _tlNavItems();
-  lbState.index = navItems.findIndex((x) => x.event_id === item.event_id);
-  lbState.item = lbState.index >= 0 ? navItems[lbState.index] : item;
-  // Jump the grid page when this item lives outside the current page
-  // window, so the thumbnails behind the lightbox match the lightbox
-  // content — same rule as openLightbox above.
-  const ps = window._cachedPageSize || calcItemsPerPage();
-  if (lbState.index >= 0 && window._cachedPageSize && navItems.length > 0) {
-    const targetPage = Math.floor(lbState.index / ps);
-    if (targetPage !== state.mediaPage) {
-      state.mediaPage = targetPage;
-      const offset = targetPage * ps;
-      state.media = navItems.slice(offset, offset + ps);
-      try {
-        renderMediaGrid();
-        renderMediaPagination();
-      } catch (_) {}
-    }
-  }
-  lbState.deletePending = false;
-  _lbClearDetections();
-  // Timelapse now uses the SAME shell as motion clips — full-screen
-  // video chrome, scrubber, time-axis ticks, panel-tab strip
-  // (Wetter · Nach-Erkennung), fine-analysis fold, Space / ← →
-  // keyboard. The timeline panel renders the scrubber row even when
-  // tracks.json is absent (an inline "Nach-Erkennung starten" button
-  // sits in the empty placeholder row). When the worker produces a
-  // sidecar, the swimlane fills in via the existing fetcher loop.
-  _setupVideoChrome(lbState.item);
-  const imgEl = byId('lightboxImg');
-  imgEl.style.display = 'none';
-  const videoEl = byId('lightboxVideo');
-  const videoSrc =
-    (item.video_relpath ? '/media/' + item.video_relpath : '') ||
-    item.video_url ||
-    item.url ||
-    (item.relpath ? '/media/' + item.relpath : '');
-  videoEl.style.display = 'block';
-  videoEl.src = videoSrc;
-  videoEl.load();
-  videoEl.play().catch(() => {});
-  const confirmBtn = byId('lightboxConfirm');
-  if (confirmBtn) confirmBtn.style.display = 'none';
-  byId('lightboxLabels').innerHTML = '';
-  const delBtn = byId('lightboxDelete');
-  if (delBtn) {
-    delBtn.classList.remove('confirm-delete');
-    delBtn.innerHTML = _LB_TRASH_HTML;
-    delBtn.title = 'Timelapse löschen';
-  }
-  const period = _tlPeriodLabel(item);
-  const sizeBadge = item.size_mb != null ? `<span class="badge">${item.size_mb} MB</span>` : '';
-  byId('lightboxMeta').innerHTML = `
-    <span class="badge">${esc(item.camera_id || '')}</span>
-    <span class="badge">Timelapse · ${esc(period)}</span>
-    <span class="badge">${esc(item.window_key || item.day || '')}</span>
-    ${sizeBadge}`;
-  // _setupVideoChrome already calls lbRenderTrackTimeline +
-  // mountRecordedPanels for us — calling them again here would
-  // double-mount and produced the duplicated "0s ... 1s" playbar +
-  // the two empty red-bordered placeholder cards in the
-  // weather/sunrise lightbox bug. lbLoadTracksForItem still has to
-  // fire so the swimlane fills in when a sidecar exists for this
-  // timelapse (post Nach-Erkennung worker run).
-  const setHost = byId('lightboxSettings');
-  if (setHost) setHost.hidden = false;
-  lbLoadTracksForItem(lbState.item);
-  const total = navItems.length;
-  byId('lightboxPrev').style.opacity = lbState.index > 0 ? '1' : '0.2';
-  byId('lightboxNext').style.opacity = lbState.index < total - 1 ? '1' : '0.2';
-  byId('lightboxModal').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
+  return openMediaView({ mode: 'recorded', item });
 }
 
 export function closeLightbox() {
@@ -583,6 +481,15 @@ export function closeLightbox() {
   // above so this file needn't import the weather module directly.
   try {
     window.closeWeatherMode?.();
+  } catch {
+    /* ignore */
+  }
+  // E · recorded/timelapse now ride the shared shell too — tear it down so
+  // the reparented media wrap + relocated buttons are restored to their DOM
+  // home before the next open / photo render. Idempotent; no-op when no
+  // recorded shell is up.
+  try {
+    window.closeRecordedMode?.();
   } catch {
     /* ignore */
   }

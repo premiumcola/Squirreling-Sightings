@@ -30,8 +30,21 @@ import { _wireBarEndTooltips } from './track-loss-tooltip.js';
 // caller keeps working unchanged; the MediaView shell passes its own
 // playbar slot so the same renderer can mount into the shared shell
 // (D · migration enabler) without a fork.
+// Active host override for the MediaView shell. When the recorded/timelapse
+// player rides the shell, it pins EVERY host-less lbRenderTrackTimeline call
+// (the async tracks-fetch / loadedmetadata / manual-reindex / rescan-poll
+// re-renders, none of which thread a host through) to the shell's playbar
+// slot instead of the legacy #lightboxBottomStack — otherwise the populated
+// swimlane + the scrubber wiring (.lb-time-stack / #lbScrubPlay, which
+// time-axis.js resolves globally) would land in the off-screen legacy stack.
+// recorded-mode.js sets this on shell mount and clears it (null) on teardown.
+let _activeTimelineHost = null;
+export function setLbTimelineHost(host) {
+  _activeTimelineHost = host || null;
+}
+
 export function lbClearTrackTimeline(host) {
-  const el = host || byId('lightboxBottomStack');
+  const el = host || _activeTimelineHost || byId('lightboxBottomStack');
   if (!el) return;
   el.innerHTML = '';
 }
@@ -258,8 +271,11 @@ export function lbRenderTrackTimeline(item, opts = {}) {
   // into its own playbar slot (D). All existing callers pass item only →
   // unchanged behaviour. The play/scrub WIRING (time-axis.js) still binds
   // to the global #lightboxVideo / .lb-time-stack; E wires the shell's
-  // video element into that path.
-  const host = opts.host || byId('lightboxBottomStack');
+  // video element into that path. ``_activeTimelineHost`` redirects the
+  // host-less re-renders (tracks-fetch / loadedmetadata / reindex / rescan)
+  // to the shell playbar while the recorded shell is up — see
+  // setLbTimelineHost.
+  const host = opts.host || _activeTimelineHost || byId('lightboxBottomStack');
   if (!host) return;
   if (!item) {
     host.innerHTML = '';

@@ -73,10 +73,16 @@ export function openWeatherMode(config = {}) {
     closeWeatherMode();
     // Defensive: if a recorded clip or live-detect session is still
     // open in this shared container, tear it down first (stop the live
-    // polling loop + the recorded <video>, drop the foreign mode
+    // polling loop + the recorded <video>, restore the recorded shell's
+    // reparented DOM + reset the timeline host, drop the foreign mode
     // classes) so two modes can never coexist on one #lightboxModal.
     try {
       window.closeLiveDetect?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      window.closeRecordedMode?.();
     } catch {
       /* ignore */
     }

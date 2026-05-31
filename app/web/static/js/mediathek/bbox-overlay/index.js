@@ -27,7 +27,11 @@ import { _lbDrawDetections, setBboxOverlayVisibility } from './renderer.js';
 import { _renderConfidenceMeter } from './confidence-meter.js';
 import { _refreshPlayButtonGlyph, _updatePlayPct } from './time-axis.js';
 import { _startRafLoop, _stopRafLoop } from './raf.js';
-import { lbClearTrackTimeline, lbRenderTrackTimeline } from './timeline-panel.js';
+import {
+  lbClearTrackTimeline,
+  lbRenderTrackTimeline,
+  setLbTimelineHost,
+} from './timeline-panel.js';
 import { lbRenderSettingsPanel } from './settings-panel.js';
 import { lbStopTrackingPlayback } from './cleanup.js';
 
@@ -41,6 +45,7 @@ export {
   lbRenderTrackTimeline,
   lbStopTrackingPlayback,
   setBboxOverlayVisibility,
+  setLbTimelineHost,
   _lbDrawDetections,
 };
 

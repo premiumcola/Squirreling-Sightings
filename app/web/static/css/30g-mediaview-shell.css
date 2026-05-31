@@ -483,7 +483,8 @@
    iOS-safe: 100dvh, safe-area inset, momentum scroll. !important on the
    inner overrides beats #lightboxInner's inline width (mirrors how
    .lb-live-detect re-purposes the same node, 30f). */
-#lightboxModal.lb-weather #lightboxInner {
+#lightboxModal.lb-weather #lightboxInner,
+#lightboxModal.lb-recorded #lightboxInner {
   width: 100vw !important;
   max-width: none !important;
   height: 100dvh !important;
@@ -493,15 +494,51 @@
   padding: 0 0 env(safe-area-inset-bottom, 0px) 0 !important;
   margin: 0 !important;
 }
-/* Hide every legacy recorded child — only the mounted shell shows. */
-#lightboxModal.lb-weather #lightboxInner > :not(.mv-shell) {
+/* Hide every legacy recorded child — only the mounted shell shows. The
+   reparented #lightboxMediaWrap is NOT a direct child here (it lives inside
+   the shell frame in recorded mode), so this rule never hides it. */
+#lightboxModal.lb-weather #lightboxInner > :not(.mv-shell),
+#lightboxModal.lb-recorded #lightboxInner > :not(.mv-shell) {
   display: none !important;
 }
-#lightboxModal.lb-weather .mv-shell {
+#lightboxModal.lb-weather .mv-shell,
+#lightboxModal.lb-recorded .mv-shell {
   width: 100%;
   max-width: 980px;
   min-height: 100dvh;
   margin: 0 auto;
+}
+
+/* ── #lightboxModal · recorded/timelapse mode (E · shared shell) ──────
+   The recorded player reuses the legacy media wrap (with #lightboxVideo /
+   #lightboxImg / #lightboxDetections + the zone overlay + the painter all
+   intact) by reparenting it into the shell's frame slot. These rules make
+   the reused wrap fill the 16:9 stage and drop the legacy in-wrap nav (the
+   shell title bar provides prev/next/close; Behalten/Löschen are relocated
+   into the title-bar action cluster). */
+#lightboxModal.lb-recorded .mv-shell-frame #lightboxMediaWrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+}
+#lightboxModal.lb-recorded .mv-shell-frame #lightboxVideo,
+#lightboxModal.lb-recorded .mv-shell-frame #lightboxImg {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+#lightboxModal.lb-recorded #lightboxClose,
+#lightboxModal.lb-recorded #lightboxPrev,
+#lightboxModal.lb-recorded #lightboxNext,
+#lightboxModal.lb-recorded #lightboxLabels {
+  display: none !important;
 }
 
 /* ── Shared gauge pill content (.mvdp-* · L5 detail-pill) ─────────────

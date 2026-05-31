@@ -28,6 +28,7 @@ import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 // mode-indicator owns it; _mountSimControls renders from the same
 // array so the live chips and the shell badge can never drift.
 import { MV_DETECTION_MODES } from './mode-indicator.js';
+import { renderOverlayToggles } from './overlay-toggles.js';
 import { normalizePolygon } from '../core/polygon-source.js';
 import { renderZoneLayerForMediaEl } from './canvas/zone-layer.js';
 import { fittedRect } from '../core/video-fit.js';
@@ -122,11 +123,6 @@ const _STALL_FACTOR = 2.2;
 const _STALL_BACKOFF_START = 1000;
 const _STALL_BACKOFF_MAX = 8000;
 
-// hp651 — debug-only one-liner inside the toggle click handler.
-// Off by default; flip to true in the source file when chasing a
-// toggle regression so a single console.warn fires on each click.
-const _DEBUG_TOGGLE = false;
-
 let _session = null;
 let _traceLines = [];
 let _traceTicks = []; // [{ts, lines:[…]}, …] — per-tick groups for the Trace tab
@@ -134,61 +130,12 @@ let _detBuffer = []; // [{ms, label, score, bbox, verdict}, …]
 // Q2-5 · stall watchdog state. `active` flips on when the frame gap
 // crosses the adaptive threshold; `nextRetryAt` paces the backoff.
 let _stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
-// C1 · sim modal opens with detection layers ON, surveillance layers
-// OFF — the operator wants to see what Coral is finding, not have
-// the preview cluttered with green zone polygons and red mask fills
-// every time they enter the modal. Mirrors the same defaults in the
-// shared overlay-toggles.js _TOGGLES dict so the two callsites stay
-// consistent.
-//
-// SIMU-FIX-03 · the four toggle booleans drive every overlay's
-// render condition. The render code reads ONLY _overlays[key]; it
-// never gates on whether the pill-bar element is currently visible.
-// Persistence lives in localStorage under tam.ld.overlays so a user
-// who turns Trails off keeps it off across re-opens.
-const _OVERLAYS_LS_KEY = 'tam.ld.overlays';
-const _OVERLAYS_DEFAULT = Object.freeze({
-  bboxes: true,
-  trails: true,
-  zones: false,
-  masks: false,
-});
-
-function _loadOverlayPrefs() {
-  try {
-    const raw = localStorage.getItem(_OVERLAYS_LS_KEY);
-    if (!raw) return { ..._OVERLAYS_DEFAULT };
-    const parsed = JSON.parse(raw);
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.bboxes !== 'boolean' ||
-      typeof parsed.trails !== 'boolean' ||
-      typeof parsed.zones !== 'boolean' ||
-      typeof parsed.masks !== 'boolean'
-    ) {
-      return { ..._OVERLAYS_DEFAULT };
-    }
-    return {
-      bboxes: !!parsed.bboxes,
-      trails: !!parsed.trails,
-      zones: !!parsed.zones,
-      masks: !!parsed.masks,
-    };
-  } catch {
-    return { ..._OVERLAYS_DEFAULT };
-  }
-}
-
-function _saveOverlayPrefs() {
-  try {
-    localStorage.setItem(_OVERLAYS_LS_KEY, JSON.stringify(_overlays));
-  } catch {
-    /* private-mode / quota — silent */
-  }
-}
-
-let _overlays = _loadOverlayPrefs();
+// L1 · overlay-layer visibility booleans. The shared overlay-toggles
+// bar (overlay-toggles.js) owns the pills + their localStorage
+// persistence; live seeds this mirror from the bar's getState() at
+// mount (_setupLiveChrome) and the bar's onChange keeps it in sync.
+// The SVG render code reads ONLY these booleans, never the pill DOM.
+let _overlays = { bboxes: true, trails: true, zones: false, masks: false };
 let _selectedLabel = null; // for detail-pill pin
 
 export function openLiveDetect({ camId, cameraName }) {
@@ -218,12 +165,8 @@ export function openLiveDetect({ camId, cameraName }) {
   _detBuffer = [];
   _selectedLabel = null;
   _stallState = { active: false, backoffMs: _STALL_BACKOFF_START, nextRetryAt: 0, sinceMs: 0 };
-  // SIMU-FIX-03 · seed overlays from the user's persisted preference
-  // (localStorage tam.ld.overlays). First-time users get the defaults
-  // from _OVERLAYS_DEFAULT — Bboxes ON, Trails ON, Zonen OFF, Masken
-  // OFF — so a person walking into frame draws a #1 badge + bounding
-  // rect on the live video without requiring any tap.
-  _overlays = _loadOverlayPrefs();
+  // L1 · overlays are seeded from the shared toggle bar at mount
+  // (_setupLiveChrome → renderOverlayToggles().getState()).
   // H2.a · reset the diag-strip state per session so the previous
   // open's last-known SVG dims don't bleed into the new one.
   _diagState.bbox = null;
@@ -380,6 +323,13 @@ export function closeLiveDetect() {
   if (trails) trails.remove();
   const zoneMask = byId('lightboxLiveZoneMask');
   if (zoneMask) zoneMask.remove();
+  // L1 · tear down the shared overlay-toggle bar (its document
+  // touch-dismiss listener) before removing the row node.
+  try {
+    session.overlayToggles?.teardown?.();
+  } catch {
+    /* ignore */
+  }
   const toggleRow = byId('mvLiveToggles');
   if (toggleRow) toggleRow.remove();
   const simControls = byId('mvSimControls');
@@ -633,7 +583,33 @@ function _setupLiveChrome(camId, cameraName) {
   _ensureBboxOverlay();
   _ensureTrailsOverlay();
   _ensureZoneMaskOverlay();
-  _mountOverlayToggles();
+  // L1 · the ONE shared overlay-toggle bar (overlay-toggles.js). The row
+  // (#mvLiveToggles) was created by _setupVideoChrome's
+  // mountWeatherToggleBar; re-home it into zone-video so the floating
+  // pill strip sits over the video, then let the shared renderer own the
+  // pills + their persistence. onChange drives the SVG layers; the
+  // initial layer state is seeded from the bar's getState().
+  const _togHost = byId('mvLiveToggles');
+  const _togZone = zoneEl('video');
+  if (_togHost && _togZone && _togHost.parentNode !== _togZone) {
+    _togZone.appendChild(_togHost);
+  }
+  if (_togHost && _session) {
+    const _tog = renderOverlayToggles(_togHost, {
+      available: ['bboxes', 'trails', 'zones', 'masks'],
+      contextKey: 'live',
+      onChange: (id, on) => {
+        _overlays[id] = on;
+        _renderBboxOverlay();
+        _renderTrailsOverlay();
+        _renderZoneMaskOverlay();
+      },
+    });
+    if (_tog) {
+      _overlays = _tog.getState();
+      _session.overlayToggles = _tog;
+    }
+  }
   _mountSimControls();
   _pinScrubberRight();
   // dn487 — paint zones + masks BEFORE the first detection tick
@@ -823,68 +799,10 @@ function _logSimDiag() {
   );
 }
 
-// D34 · inline 14 px glyphs for the toggle pills. Currentcolor on the
-// stroke so the active/inactive colour rules in CSS apply uniformly
-// — no SVG fill, only stroke, matching the rest of the chrome's
-// thin-line aesthetic. Debug uses a small wrench/bug hybrid that
-// reads as "tools" without pulling in a heavier icon set.
-const _TOGGLE_ICONS = {
-  bboxes:
-    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>',
-  trails:
-    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13 6 9 9 11 14 4"/><circle cx="14" cy="4" r="1.4" fill="currentColor" stroke="none"/></svg>',
-  zones:
-    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/></svg>',
-  masks:
-    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-dasharray="3 2" aria-hidden="true"><path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/></svg>',
-  debug:
-    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="9" r="3.2"/><path d="M8 5.8V4M5 6 3.5 4.5M11 6l1.5-1.5M5 9H3M11 9h2M5.6 12 4 13.6M10.4 12 12 13.6"/></svg>',
-};
-const _TOGGLES = [
-  { id: 'bboxes', label: 'Bboxes', desc: 'Erkannte Objekte als Rahmen über dem Video einblenden' },
-  { id: 'trails', label: 'Trails', desc: 'Bewegungspfade jeder erkannten Spur einzeichnen' },
-  { id: 'zones', label: 'Zonen', desc: 'Erkennungs-Zonen (grün) anzeigen' },
-  { id: 'masks', label: 'Masken', desc: 'Ausschluss-Masken (rot) anzeigen' },
-];
-
-// Shared tooltip popover state — one element, reused. Created lazily
-// on the first hover / long-press. Same dark surface the rest of
-// the lightbox uses, no new colours.
-let _toggleTipEl = null;
-let _toggleTipHoverTimer = 0;
-let _toggleTipLongPressTimer = 0;
-
-function _ensureToggleTip() {
-  if (_toggleTipEl) return _toggleTipEl;
-  _toggleTipEl = document.createElement('div');
-  _toggleTipEl.className = 'mv-live-toggle-tip';
-  _toggleTipEl.setAttribute('role', 'tooltip');
-  _toggleTipEl.hidden = true;
-  document.body.appendChild(_toggleTipEl);
-  return _toggleTipEl;
-}
-
-function _showToggleTip(target, text) {
-  const tip = _ensureToggleTip();
-  tip.textContent = text;
-  tip.hidden = false;
-  // Position above the pill when there's room, below otherwise.
-  const r = target.getBoundingClientRect();
-  const tipR = tip.getBoundingClientRect();
-  const above = r.top - tipR.height - 10;
-  const top = above >= 8 ? above : r.bottom + 10;
-  const vw = window.innerWidth || document.documentElement.clientWidth;
-  let left = r.left + r.width / 2 - tipR.width / 2;
-  left = Math.max(8, Math.min(vw - tipR.width - 8, left));
-  tip.style.top = `${Math.round(top)}px`;
-  tip.style.left = `${Math.round(left)}px`;
-}
-
-function _hideToggleTip() {
-  if (_toggleTipEl) _toggleTipEl.hidden = true;
-  clearTimeout(_toggleTipHoverTimer);
-  clearTimeout(_toggleTipLongPressTimer);
-}
+// L1 · the toggle-pill glyphs, _TOGGLES dict and the hover/long-press
+// tooltip popover were lifted into the shared overlay-toggles.js (which
+// uses core/tooltip.js for the popover). Live now mounts that one bar in
+// _setupLiveChrome — see the renderOverlayToggles call there.
 
 // C2/C3 · re-tick immediately when the operator changes a sim control so
 // the new stream / mode takes visible effect on the next frame instead of
@@ -949,124 +867,6 @@ function _mountSimControls() {
       _forceImmediateTick();
     });
   });
-}
-
-function _mountOverlayToggles() {
-  // SIMU-01 · the toggle row used to live between #lightboxMediaWrap
-  // and #lightboxBottomStack inside #lightboxInner. With the 5-zone
-  // layout those are no longer siblings; route the row into zone-video
-  // so it sits as a floating control strip over the bottom of the
-  // video. SIMU-02a · the row IS the floating-pills container — its
-  // visibility tracks the zone-video[data-overlay-visible='1']
-  // attribute set by SIMU-02c's tap handler.
-  //
-  // SIMU-FIX-02b · _setupVideoChrome runs BEFORE mountLdSkeleton and
-  // calls mountWeatherToggleBar which creates `#mvLiveToggles` as a
-  // child of `#lightboxInner`. Without an explicit move, the row
-  // ends up outside zone-video and the CSS selector
-  // `.mv-ld-zone-video[data-overlay-visible='1'] > #mvLiveToggles`
-  // never matches → pills stay hidden. `host.appendChild(row)` on
-  // every mount also MOVES an already-parented element, so this
-  // guarantees the row lives inside zone-video regardless of who
-  // created it first.
-  const host = zoneEl('video') || byId('lightboxInner');
-  if (!host) return;
-  let row = byId('mvLiveToggles');
-  if (!row) {
-    row = document.createElement('div');
-    row.id = 'mvLiveToggles';
-    row.className = 'mv-live-toggles';
-  }
-  if (row.parentNode !== host) host.appendChild(row);
-  // ``title`` carries the desktop-native tooltip fallback for
-  // platforms where the custom hover bubble doesn't engage (the
-  // browser will show its own bubble after ~700 ms). Touch devices
-  // never trigger ``title`` — they get the long-press popover
-  // below instead.
-  // SIMU-FIX-01a · the legacy "Debug" pill that controlled the
-  // floating mvSimDiagStrip is gone — Debug is now a TAB inside
-  // zone-detail (SIMU-05a+), not a video-overlay toggle. The four
-  // remaining pills (Bboxes / Trails / Zonen / Masken) control
-  // SVG-layer visibility on the video.
-  // D34 · compact pills. The button is the 44 px touch target (outer
-  // padding lives in CSS); the inner .mv-live-toggle-chip carries the
-  // visible chip styling (background, border, ≤32 px height). Pills
-  // lead with an inline icon glyph + the German label, single line.
-  const _chip = (id, label, desc, on) =>
-    `<button type="button" class="mv-live-toggle" data-tog="${id}" data-desc="${esc(desc)}" data-on="${on ? '1' : '0'}" title="${esc(desc)}" aria-label="${esc(label)}: ${esc(desc)}"><span class="mv-live-toggle-chip"><span class="mv-live-toggle-ico" aria-hidden="true">${_TOGGLE_ICONS[id] || ''}</span><span class="mv-live-toggle-lbl">${esc(label)}</span></span></button>`;
-  row.innerHTML = _TOGGLES.map((t) => _chip(t.id, t.label, t.desc, _overlays[t.id])).join('');
-  row.querySelectorAll('.mv-live-toggle').forEach((btn) => {
-    btn.addEventListener('click', (ev) => {
-      // Suppress click after a long-press touch: the long-press
-      // already opened the tooltip, the user didn't intend to
-      // toggle. Detect via a flag set by touchstart below.
-      if (btn._suppressClick) {
-        btn._suppressClick = false;
-        ev.preventDefault();
-        return;
-      }
-      const id = btn.dataset.tog;
-      _overlays[id] = !_overlays[id];
-      btn.dataset.on = _overlays[id] ? '1' : '0';
-      if (_DEBUG_TOGGLE) {
-        console.warn(`[sim-toggle] ${id} → ${_overlays[id] ? 'ON' : 'OFF'}`);
-      }
-      // SIMU-FIX-03c · persist the new boolean immediately so the
-      // user's preference survives a session close + re-open. No
-      // debounce — these are rare events (a user toggling Bboxes
-      // off and on a few times per session at most).
-      _saveOverlayPrefs();
-      _hideToggleTip();
-      _renderBboxOverlay();
-      _renderTrailsOverlay();
-      _renderZoneMaskOverlay();
-    });
-    // Desktop hover — 300 ms before the tooltip appears.
-    btn.addEventListener('pointerenter', (ev) => {
-      if (ev.pointerType !== 'mouse') return;
-      clearTimeout(_toggleTipHoverTimer);
-      _toggleTipHoverTimer = setTimeout(() => _showToggleTip(btn, btn.dataset.desc || ''), 300);
-    });
-    btn.addEventListener('pointerleave', _hideToggleTip);
-    // Touch long-press — ≥ 500 ms. Short-press still toggles via
-    // the click handler above (touchend → click in the standard
-    // event cycle); long-press shows the tooltip and suppresses
-    // the synthetic click via the _suppressClick flag.
-    btn.addEventListener(
-      'touchstart',
-      () => {
-        clearTimeout(_toggleTipLongPressTimer);
-        _toggleTipLongPressTimer = setTimeout(() => {
-          btn._suppressClick = true;
-          _showToggleTip(btn, btn.dataset.desc || '');
-        }, 500);
-      },
-      { passive: true },
-    );
-    btn.addEventListener(
-      'touchend',
-      () => {
-        clearTimeout(_toggleTipLongPressTimer);
-        // Don't hide instantly — the user may want to read the
-        // tooltip after lifting their finger. Auto-dismiss on the
-        // next document touchstart.
-      },
-      { passive: true },
-    );
-    btn.addEventListener('touchcancel', () => {
-      clearTimeout(_toggleTipLongPressTimer);
-    });
-  });
-  // Outside-tap dismiss for the touch path.
-  document.addEventListener(
-    'touchstart',
-    (ev) => {
-      if (!_toggleTipEl || _toggleTipEl.hidden) return;
-      if (ev.target.closest && ev.target.closest('.mv-live-toggle')) return;
-      _hideToggleTip();
-    },
-    { passive: true },
-  );
 }
 
 function _pinScrubberRight() {

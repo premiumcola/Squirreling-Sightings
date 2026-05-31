@@ -73,6 +73,21 @@ const _TOGGLES = {
   },
 };
 
+// L1 · inline 14 px glyphs (lifted from live-detect.js so the sim-player
+// pill look is the shared one — recorded gains the icons too). currentColor
+// stroke so the active/inactive colour rules in CSS apply uniformly; stroke
+// only, no fill, matching the thin-line chrome aesthetic.
+const _TOGGLE_ICONS = {
+  bboxes:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>',
+  trails:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13 6 9 9 11 14 4"/><circle cx="14" cy="4" r="1.4" fill="currentColor" stroke="none"/></svg>',
+  zones:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/></svg>',
+  masks:
+    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-dasharray="3 2" aria-hidden="true"><path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/></svg>',
+};
+
 // K1 · one-shot migration on module load. Walks every contextKey
 // stored under tamspy.overlayToggles.v1 and drops keys whose
 // _TOGGLES entry has persist:false (zones, masks). Silent — no
@@ -208,7 +223,7 @@ export function renderOverlayToggles(host, opts = {}) {
     available
       .map((id) => {
         const t = _TOGGLES[id];
-        return `<button type="button" class="mv-live-toggle" data-tog="${id}" data-desc="${esc(t.desc)}" data-on="${state[id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}">${esc(t.label)}</button>`;
+        return `<button type="button" class="mv-live-toggle" data-tog="${id}" data-desc="${esc(t.desc)}" data-on="${state[id] ? '1' : '0'}" title="${esc(t.desc)}" aria-label="${esc(t.label)}: ${esc(t.desc)}"><span class="mv-live-toggle-chip"><span class="mv-live-toggle-ico" aria-hidden="true">${_TOGGLE_ICONS[id] || ''}</span><span class="mv-live-toggle-lbl">${esc(t.label)}</span></span></button>`;
       })
       .join('') +
     (opts.hintText ? `<span class="mv-live-toggles-hint">${esc(opts.hintText)}</span>` : '');

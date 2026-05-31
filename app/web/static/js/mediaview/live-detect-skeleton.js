@@ -26,6 +26,7 @@ import { _makeZone, _buildTitleBar, _renderTitleText, _buildTimelineHeader, _isT
 
 import { byId } from '../core/dom.js';
 import { renderStatusLegend } from './status-legend.js';
+import { renderPanelTabs } from './panel-tabs.js';
 
 
 // Three fixed tabs, always in this order. Icons rendered inline so
@@ -39,18 +40,19 @@ const TABS = [
 ];
 
 
-let _activeTab = DEFAULT_TAB;
-const _tabChangeHandlers = [];
-// SIMU-04d · per-tab scroll-top memory. Tab content lives inside
-// zone-detail (the only scrollable region); switching tabs hides
-// one panel and shows another, so without this the user's scroll
-// position is lost on every switch.
-const _tabScrollTops = new Map();
-// SIMU-01d · session-only fullscreen state. Snapshot of title +
-// timeline collapse values taken when the ↗ button forces both
-// collapsed, so the ↘ tap can restore them. NOT persisted —
-// localStorage is reserved for the user's own chevron choices.
-let _fullscreen = false;
+// L5 · the tab strip + persistent panels are now one renderPanelTabs
+// instance (variant 'ld'). It owns the active tab, per-tab scroll-top
+// memory, the fullscreen button's on/off state, and LS persistence; this
+// module keeps only the cross-mount bridges + the timeline-collapse
+// target the ↗ button drives. Recreated per mount, torn down on unmount.
+let _tabsInst = null;
+// onTabChange handlers registered before the first mount (live-detect-
+// tabs.js subscribes at module-eval time) buffer here, then replay into
+// every instance — so the subscription survives across re-opens.
+const _pendingHandlers = [];
+// SIMU-01d · the ↗ button collapses the timeline zone; snapshot its prior
+// collapse state so the ↘ tap restores exactly what the user had. NOT
+// persisted — localStorage is reserved for the user's own chevron choice.
 let _fsRestore = null;
 // SIMU-02c · tap-to-reveal overlay visibility. Defaults to hidden on
 // every fresh mount (NOT persisted). Tap the video → 3 s reveal,
@@ -108,17 +110,30 @@ export function mountLdSkeleton({ camId, cameraName } = {}) {
     body.appendChild(bottomStack);
     zoneTimeline.appendChild(body);
   }
-  // Build the tab bar + tab content panels. The Detections panel
-  // hosts #lightboxSettings for now; SIMU-04+ will redistribute its
-  // children into the right tab panels.
-  zoneTabs.appendChild(_buildTabBar());
-  for (const t of TABS) {
-    const panel = document.createElement('div');
-    panel.id = PANEL_PREFIX + t.id;
-    panel.className = 'mv-ld-tab-panel';
-    panel.dataset.tabId = t.id;
-    zoneDetail.appendChild(panel);
-  }
+  // L5 · one renderPanelTabs (variant 'ld') owns the strip in zone-tabs
+  // + the persistent tab panels in zone-detail. It reads LS_ACTIVE_TAB
+  // for the remembered tab (falling back to DEFAULT_TAB), wires the ↗
+  // fullscreen button to the timeline collapse, and replays any pre-mount
+  // onTabChange subscriptions. The Detections panel hosts #lightboxSettings
+  // (moved in below); Trace/Debug are caller-painted by the tick bridges.
+  _tabsInst = renderPanelTabs(zoneTabs, TABS, {
+    variant: 'ld',
+    contentHost: zoneDetail,
+    persistentPanels: true,
+    panelIdPrefix: PANEL_PREFIX,
+    scrollMemory: true,
+    persistKey: LS_ACTIVE_TAB,
+    initialId: DEFAULT_TAB,
+    onChange: _pendingHandlers,
+    fullscreen: {
+      expandIcon: _iconExpand,
+      collapseIcon: _iconCollapseBack,
+      expandLabel: 'Timeline ausblenden',
+      collapseLabel: 'Timeline einblenden',
+      btnClass: 'mv-ld-iconbtn mv-ld-fs-btn',
+      onToggle: _onFullscreenToggle,
+    },
+  });
   const settings = byId('lightboxSettings');
   if (settings) {
     settings.dataset.ldOrigParent = 'lightboxInner';
@@ -144,11 +159,10 @@ export function mountLdSkeleton({ camId, cameraName } = {}) {
   // within the session → restore last-known state; new camera → reset
   // both zones to expanded so the user gets a fresh layout instead of
   // inheriting some other camera's preference.
+  // The renderPanelTabs instance already selected the initial tab (from
+  // LS_ACTIVE_TAB or DEFAULT_TAB) + fired the replayed onChange handlers
+  // during construction, so no setActiveTab call is needed here.
   _applyInitialCollapsedStates(camId);
-  // Restore active tab from localStorage, default to "detections".
-  const remembered = _lsGet(LS_ACTIVE_TAB);
-  const initialTab = TABS.find((t) => t.id === remembered) ? remembered : DEFAULT_TAB;
-  setActiveTab(initialTab);
 }
 
 // SIMU-FIX-04c · title-bar collapse is gone; the title is
@@ -207,20 +221,24 @@ export function unmountLdSkeleton() {
       wrap.appendChild(child);
     }
   }
+  // L5 · drop the tab-strip instance (removes the strip + panels, clears
+  // its scroll-top + handler copies). _pendingHandlers is NOT cleared —
+  // it re-seeds the next mount's instance so onTabChange survives.
+  try {
+    _tabsInst?.teardown();
+  } catch {
+    /* already detached */
+  }
+  _tabsInst = null;
   container.remove();
-  // SIMU-01d · session-only fullscreen state is not persisted by spec
-  // — reset on teardown so the next mount starts in the expanded
-  // (or last-LS-state) baseline.
-  _fullscreen = false;
+  // SIMU-01d · session-only fullscreen snapshot is per-mount — reset so
+  // the next mount starts from the expanded (or last-LS-state) baseline.
   _fsRestore = null;
   // SIMU-02c · overlay visibility is per-mount; reset on teardown so
   // the next openLiveDetect starts hidden (the spec's default).
   clearTimeout(_hideTimer);
   _hideTimer = 0;
   _overlayVisible = false;
-  // SIMU-04d · per-tab scroll-top is per-mount. Reset so a re-open
-  // on a different camera starts at the top of each tab.
-  _tabScrollTops.clear();
 }
 
 // SIMU-02c · tap-on-video handler. Toggles the visibility of the
@@ -259,97 +277,35 @@ function _scheduleOverlayHide() {
   }, _OVERLAY_HIDE_MS);
 }
 
-function _buildTabBar() {
-  const root = document.createElement('div');
-  root.className = 'mv-ld-tab-bar-root';
-  const bar = document.createElement('div');
-  bar.className = 'mv-ld-tab-bar';
-  for (const t of TABS) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'mv-ld-tab-btn';
-    btn.dataset.tabId = t.id;
-    btn.innerHTML = `${t.icon()}<span>${t.label}</span>`;
-    btn.addEventListener('click', () => setActiveTab(t.id));
-    bar.appendChild(btn);
-  }
-  // SIMU-01d · expand-to-fullscreen button at the right edge.
-  // POLISH-01f · since the title is permanently compact (SIMU-FIX-
-  // 04c), this now toggles ONLY the timeline collapse — the title
-  // has no collapse state left to flip.
-  const fsBtn = document.createElement('button');
-  fsBtn.type = 'button';
-  fsBtn.className = 'mv-ld-iconbtn mv-ld-fs-btn';
-  fsBtn.dataset.active = '0';
-  fsBtn.setAttribute('aria-label', 'Timeline ausblenden');
-  fsBtn.innerHTML = _iconExpand();
-  fsBtn.addEventListener('click', _toggleFullscreen);
-  root.appendChild(bar);
-  root.appendChild(fsBtn);
-  return root;
-}
-
-function _toggleFullscreen() {
-  const btn = byId(CONTAINER_ID)?.querySelector('.mv-ld-fs-btn');
-  if (!btn) return;
-  if (!_fullscreen) {
+// SIMU-01d · the ↗ tab-strip button (owned by renderPanelTabs) toggles
+// ONLY the timeline collapse — the title is permanently compact
+// (SIMU-FIX-04c), so there's no title state left to flip. Snapshot the
+// timeline's prior collapse on the way in, restore it on the way out;
+// renderPanelTabs owns the button's own on/off state + icon swap.
+function _onFullscreenToggle(active) {
+  if (active) {
     _fsRestore = { timeline: _isTimelineCollapsed() };
     _applyTimelineCollapsed(true);
-    _fullscreen = true;
-    btn.dataset.active = '1';
-    btn.innerHTML = _iconCollapseBack();
-    btn.setAttribute('aria-label', 'Timeline einblenden');
   } else {
     _applyTimelineCollapsed(!!_fsRestore?.timeline);
     _fsRestore = null;
-    _fullscreen = false;
-    btn.dataset.active = '0';
-    btn.innerHTML = _iconExpand();
-    btn.setAttribute('aria-label', 'Timeline ausblenden');
   }
 }
 
+// SIMU-04d · public tab API — thin bridges over the current
+// renderPanelTabs instance. panelEl (above) stays a plain byId since the
+// instance builds panels with stable ids (PANEL_PREFIX + tab id), so it
+// resolves them without going through the instance.
 export function setActiveTab(id) {
-  if (!TABS.find((t) => t.id === id)) return;
-  const container = byId(CONTAINER_ID);
-  if (!container) {
-    _activeTab = id;
-    _lsSet(LS_ACTIVE_TAB, id);
-    return;
-  }
-  // SIMU-04d · save the OLD tab's scroll-top before swapping panels.
-  // The detail zone is the single scroll surface; each tab's view-
-  // port snapshot lives in _tabScrollTops so switching back restores
-  // exactly where the user left off.
-  const detail = byId(ZONE_IDS.detail);
-  if (detail && _activeTab) {
-    _tabScrollTops.set(_activeTab, detail.scrollTop);
-  }
-  _activeTab = id;
-  _lsSet(LS_ACTIVE_TAB, id);
-  container.querySelectorAll('.mv-ld-tab-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tabId === id);
-  });
-  container.querySelectorAll('.mv-ld-tab-panel').forEach((p) => {
-    p.classList.toggle('active', p.dataset.tabId === id);
-  });
-  // Restore the new tab's scroll-top, defaulting to 0 on first show.
-  if (detail) {
-    detail.scrollTop = _tabScrollTops.get(id) || 0;
-  }
-  for (const h of _tabChangeHandlers) {
-    try {
-      h(id);
-    } catch (err) {
-      console.warn('[mv-ld] tab handler error', err);
-    }
-  }
+  _tabsInst?.setActive(id);
 }
 
 export function getActiveTab() {
-  return _activeTab;
+  return _tabsInst ? _tabsInst.getActive() : DEFAULT_TAB;
 }
 
 export function onTabChange(handler) {
-  if (typeof handler === 'function') _tabChangeHandlers.push(handler);
+  if (typeof handler !== 'function') return;
+  if (_tabsInst) _tabsInst.onChange(handler);
+  else _pendingHandlers.push(handler);
 }

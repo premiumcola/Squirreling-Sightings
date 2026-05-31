@@ -125,6 +125,15 @@
   left: 8px;
   z-index: 18;
 }
+/* L2 · recorded read-only mode badge — top-right over the clip (matches
+   the live STREAM+mode cluster's corner); its #lbRecModeGrid reuses
+   .mv-shell-grid for the absolute-over-frame tiling overlay. */
+.lb-rec-modeind {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 18;
+}
 
 /* Read-only "angewandt: X" badge. */
 .mv-mode-badge {

@@ -226,6 +226,14 @@ export function _teardownVideoChrome() {
   // open doesn't show a stale "Bboxes / Trails / …" row.
   const togRow = byId('mvLiveToggles');
   if (togRow) togRow.remove();
+  // L2 · drop the recorded read-only mode-indicator badge + tiling grid
+  // so they can't linger into a photo open or get re-parented into the
+  // live-detect view (which re-homes #lightboxMediaWrap children).
+  try {
+    window._clearRecordedModeBadge?.();
+  } catch {
+    /* ignore */
+  }
   // Buttons return to the media wrap so the photo branch's existing
   // absolute-positioned CSS rules apply.
   _relocateActionsTo('lightboxMediaWrap');

@@ -35,6 +35,7 @@ import {
   _renderLbLabels,
 } from '../lightbox.js';
 import { _LB_TRASH_HTML, _updateLbConfirmBtn, _lbResetToPhoto } from './panels/lb-helpers.js';
+import { renderModeIndicator, renderTilingGrid } from './mode-indicator.js';
 
 // Render a recorded motion-clip / photo event into the lightbox modal.
 // Photo path: centred-modal layout (chrome torn down, labels bubble row).
@@ -111,6 +112,7 @@ export function openRecorded(item) {
   // layout returns intact.
   if (_isFullscreenVideoItem(lbState.item)) {
     _setupVideoChrome(lbState.item);
+    _mountRecordedModeBadge(lbState.item.camera_id);
   } else {
     _teardownVideoChrome();
   }
@@ -173,4 +175,61 @@ export function openRecorded(item) {
     lbState.index < (state._allMedia || []).length - 1 ? '1' : '0.2';
   byId('lightboxModal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+}
+
+// L2/L4 · read-only mode-indicator for recorded clips — the top-right
+// "angewandt: Aus / Motion-ROI / 2×2 / 3×3" badge; tapping it overlays the
+// fixed tiling grid on the frame. The per-event tiling isn't stamped, so we
+// read the camera's current roi_mode as the best available proxy. Mounted
+// over #lightboxMediaWrap; torn down by _teardownVideoChrome (so it can
+// never leak into the live-detect view, which re-parents the same wrap).
+let _recModeInd = null;
+
+function _clearRecordedModeBadge() {
+  try {
+    _recModeInd?.teardown();
+  } catch {
+    /* ignore */
+  }
+  _recModeInd = null;
+  byId('lbRecModeGrid')?.remove();
+  byId('lbRecModeHost')?.remove();
+}
+
+function _mountRecordedModeBadge(camId) {
+  _clearRecordedModeBadge();
+  const wrap = byId('lightboxMediaWrap');
+  if (!wrap) return;
+  const cam = (state.cameras || []).find((c) => c.id === camId) || {};
+  const mode = (cam.roi_mode || 'off').toLowerCase();
+  const grid = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  grid.id = 'lbRecModeGrid';
+  grid.setAttribute('class', 'mv-shell-grid');
+  grid.setAttribute('viewBox', '0 0 100 100');
+  grid.setAttribute('preserveAspectRatio', 'none');
+  grid.setAttribute('aria-hidden', 'true');
+  grid.setAttribute('hidden', '');
+  wrap.appendChild(grid);
+  const host = document.createElement('div');
+  host.id = 'lbRecModeHost';
+  host.className = 'lb-rec-modeind';
+  wrap.appendChild(host);
+  _recModeInd = renderModeIndicator(host, {
+    interactive: false,
+    value: mode,
+    onToggleGrid: (show, id) => {
+      if (show) {
+        renderTilingGrid(grid, id);
+        grid.removeAttribute('hidden');
+      } else {
+        grid.setAttribute('hidden', '');
+      }
+    },
+  });
+}
+
+// Bridge so lightbox.js's _teardownVideoChrome can drop the badge + grid
+// on every chrome teardown (close / photo / mode switch).
+if (typeof window !== 'undefined') {
+  window._clearRecordedModeBadge = _clearRecordedModeBadge;
 }

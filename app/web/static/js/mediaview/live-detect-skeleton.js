@@ -1,3 +1,6 @@
+import { CONTAINER_ID, ZONE_IDS, PANEL_PREFIX, LS_ACTIVE_TAB, LS_TITLE_COLLAPSED, LS_TIMELINE_COLLAPSED, LS_LAST_CAMERA, DEFAULT_TAB, _OVERLAY_HIDE_MS, _lsGet, _lsSet } from './live-detect-skeleton-consts.js';
+import { _iconDetections, _iconTrace, _iconDebug, _iconExpand, _iconCollapseBack } from './live-detect-skeleton-icons.js';
+import { _makeZone, _buildTitleBar, _renderTitleText, _buildTimelineHeader, _isTimelineCollapsed, _applyTimelineCollapsed } from './live-detect-skeleton-chrome.js';
 // ─── mediaview/live-detect-skeleton.js ────────────────────────────────────
 // SIMU-01 · the 5-zone DOM skeleton for the Live-Detect view.
 //
@@ -24,96 +27,10 @@
 import { byId } from '../core/dom.js';
 import { renderStatusLegend } from './status-legend.js';
 
-const CONTAINER_ID = 'mvLdContainer';
-const ZONE_IDS = {
-  title: 'mvLdZoneTitle',
-  video: 'mvLdZoneVideo',
-  timeline: 'mvLdZoneTimeline',
-  tabs: 'mvLdZoneTabs',
-  detail: 'mvLdZoneDetail',
-};
-const PANEL_PREFIX = 'mvLdPanel-';
 
 // Three fixed tabs, always in this order. Icons rendered inline so
 // the skeleton has no asset dependency. currentColor inheritance
 // matches the .active / muted state colours from CSS.
-function _iconDetections() {
-  return (
-    '<svg class="mv-ld-tab-ico" width="13" height="13" viewBox="0 0 24 24" ' +
-    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<rect x="3" y="3" width="18" height="18" rx="3"/>' +
-    '<circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>'
-  );
-}
-
-function _iconTrace() {
-  return (
-    '<svg class="mv-ld-tab-ico" width="13" height="13" viewBox="0 0 24 24" ' +
-    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<polyline points="3 18 9 12 13 14 21 6"/>' +
-    '<circle cx="21" cy="6" r="1.6" fill="currentColor" stroke="none"/></svg>'
-  );
-}
-
-function _iconDebug() {
-  return (
-    '<svg class="mv-ld-tab-ico" width="13" height="13" viewBox="0 0 24 24" ' +
-    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<polyline points="9 6 4 12 9 18"/>' +
-    '<polyline points="15 6 20 12 15 18"/>' +
-    '<line x1="13.5" y1="4" x2="10.5" y2="20"/></svg>'
-  );
-}
-
-function _iconClose() {
-  return (
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" ' +
-    'stroke="currentColor" stroke-width="2.4" stroke-linecap="round" ' +
-    'aria-hidden="true">' +
-    '<line x1="6" y1="6" x2="18" y2="18"/>' +
-    '<line x1="18" y1="6" x2="6" y2="18"/></svg>'
-  );
-}
-
-// Down-chevron. CSS rotates 180° when data-collapsed="1" on the
-// wrapping zone, so the icon points UP when the zone is collapsed.
-function _iconChevron() {
-  return (
-    '<svg class="mv-ld-chevron-glyph" width="14" height="14" ' +
-    'viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" ' +
-    'aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>'
-  );
-}
-
-// Diagonal expand / collapse-back glyphs (top-right ↗ and bottom-left ↘
-// arrows). Used by the tab-bar fullscreen toggle.
-function _iconExpand() {
-  return (
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
-    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M14 4 H20 V10"/>' +
-    '<path d="M20 4 L13 11"/>' +
-    '<path d="M10 20 H4 V14"/>' +
-    '<path d="M4 20 L11 13"/></svg>'
-  );
-}
-
-function _iconCollapseBack() {
-  return (
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
-    'stroke="currentColor" stroke-width="2.2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M14 10 H20 V4"/>' +
-    '<path d="M20 10 L13 3"/>' +
-    '<path d="M10 14 H4 V20"/>' +
-    '<path d="M4 14 L11 21"/></svg>'
-  );
-}
 
 const TABS = [
   { id: 'detections', label: 'Detections', icon: _iconDetections },
@@ -121,11 +38,6 @@ const TABS = [
   { id: 'debug', label: 'Debug', icon: _iconDebug },
 ];
 
-const LS_ACTIVE_TAB = 'tam.ld.activetab';
-const LS_TITLE_COLLAPSED = 'tam.ld.title.collapsed';
-const LS_TIMELINE_COLLAPSED = 'tam.ld.timeline.collapsed';
-const LS_LAST_CAMERA = 'tam.ld.lastcamera';
-const DEFAULT_TAB = 'detections';
 
 let _activeTab = DEFAULT_TAB;
 const _tabChangeHandlers = [];
@@ -146,27 +58,9 @@ let _fsRestore = null;
 // toggle (their own click handler opens the detail pill).
 let _overlayVisible = false;
 let _hideTimer = 0;
-const _OVERLAY_HIDE_MS = 3000;
 // L3 · handle for the ONE shared status legend mounted over the video;
 // kept so unmountLdSkeleton can tear down its document listeners.
 let _legendHandle = null;
-
-// localStorage helpers — silent on private mode / quota errors.
-function _lsGet(key) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function _lsSet(key, val) {
-  try {
-    localStorage.setItem(key, val);
-  } catch {
-    /* private mode / quota — silent */
-  }
-}
 
 // Public: locate a zone or panel by name.
 export function zoneEl(name) {
@@ -363,78 +257,6 @@ function _scheduleOverlayHide() {
     _setOverlayVisible(false);
     _hideTimer = 0;
   }, _OVERLAY_HIDE_MS);
-}
-
-function _makeZone(name) {
-  const el = document.createElement('div');
-  el.id = ZONE_IDS[name];
-  el.className = `mv-ld-zone mv-ld-zone-${name}`;
-  return el;
-}
-
-// SIMU-FIX-04c · the title bar is now permanently compact — single
-// muted line "<Cam> · Live" + close X. The collapse chevron + its
-// localStorage state are removed; the only collapse-control left is
-// the expand-to-fullscreen button on the tab bar (which now toggles
-// just the timeline since title is already at its smallest form).
-function _buildTitleBar(camName) {
-  const titleEl = document.createElement('div');
-  titleEl.className = 'mv-ld-title-row';
-  titleEl.style.cssText = 'display:contents';
-  titleEl.innerHTML =
-    '<span class="mv-ld-title-text" data-mv-ld-title-text></span>' +
-    `<button type="button" class="mv-ld-iconbtn mv-ld-close-btn" aria-label="Schließen">${_iconClose()}</button>`;
-  titleEl.querySelector('.mv-ld-close-btn')?.addEventListener('click', () => {
-    if (typeof window.closeLightbox === 'function') {
-      window.closeLightbox();
-    } else {
-      const closeBtn = byId('lightboxClose');
-      if (closeBtn) closeBtn.click();
-    }
-  });
-  const camText = camName || '';
-  titleEl.querySelector('[data-mv-ld-title-text]').textContent = camText
-    ? `${camText} · Live`
-    : 'Live';
-  return titleEl;
-}
-
-function _renderTitleText(camName) {
-  const textEl = byId(CONTAINER_ID)?.querySelector('[data-mv-ld-title-text]');
-  const camText = camName || '';
-  if (textEl) textEl.textContent = camText ? `${camText} · Live` : 'Live';
-}
-
-function _buildTimelineHeader() {
-  const head = document.createElement('div');
-  head.className = 'mv-ld-timeline-head';
-  head.innerHTML =
-    '<span class="mv-ld-timeline-head-label" data-mv-ld-timeline-label>Timeline · letzte 60 s</span>' +
-    `<button type="button" class="mv-ld-iconbtn mv-ld-timeline-chevron" aria-label="Timeline ein-/ausblenden">${_iconChevron()}</button>`;
-  head.querySelector('.mv-ld-timeline-chevron')?.addEventListener('click', () => {
-    const next = !_isTimelineCollapsed();
-    _applyTimelineCollapsed(next);
-    _lsSet(LS_TIMELINE_COLLAPSED, next ? '1' : '0');
-  });
-  return head;
-}
-
-// Collapsed-state accessors. The data-collapsed attribute on the
-// timeline zone is the single source of truth; localStorage seeds
-// it on mount + remembers user clicks.
-// POLISH-01f · the title-collapse stubs (_isTitleCollapsed /
-// _applyTitleCollapsed) were removed — the title is permanently
-// compact (SIMU-FIX-04c) and nothing flips its state anymore.
-function _isTimelineCollapsed() {
-  return byId(ZONE_IDS.timeline)?.dataset.collapsed === '1';
-}
-
-function _applyTimelineCollapsed(v) {
-  const zone = byId(ZONE_IDS.timeline);
-  if (!zone) return;
-  zone.dataset.collapsed = v ? '1' : '0';
-  const chev = zone.querySelector('.mv-ld-timeline-chevron');
-  if (chev) chev.dataset.collapsed = v ? '1' : '0';
 }
 
 function _buildTabBar() {

@@ -74,9 +74,12 @@ export function renderTilingGrid(svg, modeId) {
 }
 
 function _segHtml(value) {
+  // The label sits inside .mv-sim-ctl-chip — that inner span is the
+  // visible pill 30f styles (#mvSimControls .mv-sim-seg is only the 44 px
+  // touch target; the active highlight is .mv-sim-seg[data-on='1'] .chip).
   return MV_DETECTION_MODES.map(
     ([id, label]) =>
-      `<button type="button" class="mv-sim-seg" data-val="${id}" data-on="${id === value ? '1' : '0'}" aria-pressed="${id === value}">${esc(label)}</button>`,
+      `<button type="button" class="mv-sim-seg" data-val="${id}" data-on="${id === value ? '1' : '0'}" aria-pressed="${id === value}"><span class="mv-sim-ctl-chip">${esc(label)}</span></button>`,
   ).join('');
 }
 

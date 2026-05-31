@@ -5,7 +5,7 @@
 // pin, and the Detections/Trace panel hosts. Reads state via S.
 import { byId, esc } from '../core/dom.js';
 import { S } from './live-detect-state.js';
-import { MV_DETECTION_MODES } from './mode-indicator.js';
+import { renderModeIndicator } from './mode-indicator.js';
 import { renderOverlayToggles } from './overlay-toggles.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { _setupVideoChrome } from '../lightbox.js';
@@ -198,10 +198,14 @@ export function _forceImmediateTick() {
 }
 
 // C2/C3 · always-visible controls row pinned top-right over the video:
-// a Sub/Main stream toggle + an Aus/Motion-ROI/2×2/3×3 detection-mode
-// segmented control. Ephemeral (session-scoped) — no persistence here
-// (per-camera persistence is D3). Re-rendered on each change to refresh
-// the active-state highlight.
+// a Sub/Main stream toggle (live-only) + the SHARED Aus/Motion-ROI/2×2/
+// 3×3 detection-mode segmented control. The mode chips are now
+// renderModeIndicator (interactive variant) — the same component the
+// read-only recorded/weather "angewandt: X" badge derives from, so the
+// mode chrome has one owner across modes. Ephemeral (session-scoped) —
+// no persistence here (per-camera persistence is D3). The stream toggle
+// rebuilds the row to refresh its label; the mode control owns its own
+// active-state highlight via the shared renderer.
 export function _mountSimControls() {
   const host = zoneEl('video') || byId('lightboxInner');
   if (!host || !S.session) return;
@@ -213,34 +217,26 @@ export function _mountSimControls() {
   }
   if (row.parentNode !== host) host.appendChild(row);
   const stream = S.session.stream || 'main';
-  const mode = S.session.detMode || 'off';
-  const MODES = MV_DETECTION_MODES;
-  const streamBtn =
+  row.innerHTML =
     `<button type="button" class="mv-sim-ctl" data-ctl="stream" data-val="${esc(stream)}" ` +
     `title="Welchen Stream der Simulator prüft (Main = Produktions-Pipeline, Sub = 640×360)" ` +
     `aria-label="Stream umschalten, aktuell ${esc(stream)}">` +
     `<span class="mv-sim-ctl-chip"><span class="mv-sim-ctl-k">Stream</span>` +
     `<span class="mv-sim-ctl-v">${stream === 'sub' ? 'Sub' : 'Main'}</span></span></button>`;
-  const modeBtns = MODES.map(
-    ([id, lbl]) =>
-      `<button type="button" class="mv-sim-seg" data-ctl="mode" data-val="${id}" ` +
-      `data-on="${id === mode ? '1' : '0'}" aria-pressed="${id === mode ? 'true' : 'false'}" ` +
-      `aria-label="Erkennungsmodus ${esc(lbl)}"><span class="mv-sim-ctl-chip">${esc(lbl)}</span></button>`,
-  ).join('');
-  row.innerHTML =
-    streamBtn +
-    `<span class="mv-sim-seg-group" role="group" aria-label="Erkennungsmodus">${modeBtns}</span>`;
-  row.querySelectorAll('button[data-ctl]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+  row.querySelector('button[data-ctl="stream"]')?.addEventListener('click', () => {
+    if (!S.session) return;
+    S.session.stream = S.session.stream === 'sub' ? 'main' : 'sub';
+    _mountSimControls();
+    _forceImmediateTick();
+  });
+  renderModeIndicator(row, {
+    interactive: true,
+    value: S.session.detMode || 'off',
+    onChange: (id) => {
       if (!S.session) return;
-      if (btn.dataset.ctl === 'stream') {
-        S.session.stream = S.session.stream === 'sub' ? 'main' : 'sub';
-      } else {
-        S.session.detMode = btn.dataset.val;
-      }
-      _mountSimControls();
+      S.session.detMode = id;
       _forceImmediateTick();
-    });
+    },
   });
 }
 

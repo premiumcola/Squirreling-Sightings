@@ -20,59 +20,25 @@
 //   closeLiveDetect()                    — abort + stop + teardown.
 // closeLightbox() in lightbox.js fires closeLiveDetect via the
 // window bridge so any modal-close path tears the session down.
-import { byId, esc } from '../core/dom.js';
+// L5 · live-detect.js is now the thin ENTRY: openLiveDetect / closeLiveDetect
+// + the window bridges. The render/poll/chrome/overlay/panel/stall/diag
+// bodies live in the sibling modules below; this file just orchestrates the
+// session lifecycle.
+import { byId } from '../core/dom.js';
 import { S } from './live-detect-state.js';
-import { _renderDetectionsPanel, _renderLiveSwimlane, _renderDetailPill, _appendTrace, _renderTraceTab } from './live-detect-panels.js';
-import { _renderBboxOverlay } from './live-detect-bbox.js';
-import {
-  _installLiveOverlayRefresh,
-  _ensureBboxOverlay,
-  _ensureTrailsOverlay,
-  _ensureZoneMaskOverlay,
-  _renderTrailsOverlay,
-  _renderZoneMaskOverlay,
-} from './live-detect-overlays.js';
 import { _tick } from './live-detect-poll.js';
 import { _setupLiveChrome, _mountPanels } from './live-detect-chrome.js';
 import { _startHoldRefresh, _hideStallBanner } from './live-detect-stall.js';
-import { _debugDiagOn, _renderDiagStrip, _updateDiagStrip, _refreshMediaRow, _refreshCadenceRow, _collectBboxDiagFields } from './live-detect-diag.js';
-import { state } from '../core/state.js';
-import { OBJ_LABEL, OBJ_SVG, colors, objIconSvg } from '../core/icons.js';
-import { renderFineAnalysisFold } from './fine-analysis-fold.js';
-// I1 · single source of the Aus/Motion-ROI/2×2/3×3 list — the F
-// mode-indicator owns it; _mountSimControls renders from the same
-// array so the live chips and the shell badge can never drift.
-import { MV_DETECTION_MODES } from './mode-indicator.js';
-import { renderOverlayToggles } from './overlay-toggles.js';
-import { renderDetailPill } from './detail-pill.js';
-import { normalizePolygon } from '../core/polygon-source.js';
-import { renderZoneLayerForMediaEl } from './canvas/zone-layer.js';
-import { fittedRect } from '../core/video-fit.js';
-// SIMU-03 · lbRenderTrackTimeline is fired indirectly by
-// _setupVideoChrome on mount (it paints recorded chrome into
-// #lightboxBottomStack before our renderer takes over). Imported
-// only for the type/back-compat hint; no direct call site remains
-// after SIMU-03b — the live-swimlane.js renderer replaces it on
-// every tick.
+import { _renderDiagStrip } from './live-detect-diag.js';
+// SIMU-03 · lbRenderTrackTimeline is fired indirectly by _setupVideoChrome
+// on mount (it paints recorded chrome into #lightboxBottomStack before our
+// renderer takes over). Imported only for the type/back-compat hint; no
+// direct call site remains — the live-swimlane.js renderer replaces it.
 import { lbRenderTrackTimeline as _lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 void _lbRenderTrackTimeline;
 import { _setupVideoChrome } from '../lightbox.js';
-import { buildTrailSvg } from './canvas/trail-layer.js';
-import {
-  mountLdSkeleton,
-  unmountLdSkeleton,
-  zoneEl,
-  panelEl,
-  getActiveTab,
-  onTabChange,
-} from './live-detect-skeleton.js';
-import { renderLiveSwimlane } from './live-swimlane.js';
-import { renderLiveTrace, tracePrefix } from './live-trace.js';
-import {
-  renderDebugPanel,
-  startSnapshotPrefetch,
-  stopSnapshotPrefetch,
-} from './live-detect-debug/index.js';
+import { unmountLdSkeleton } from './live-detect-skeleton.js';
+import { stopSnapshotPrefetch } from './live-detect-debug/index.js';
 
 // C73 · cadence floors. The original 1 Hz floor was set against the
 // main-stream cost budget (2560×1440 frame copy + JPEG encode +

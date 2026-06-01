@@ -13,7 +13,7 @@
 .mv-shell {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   color: #e2e8f0;
 }
@@ -23,8 +23,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: max(8px, env(safe-area-inset-top, 0)) 8px 8px 8px;
-  min-height: 52px;
+  padding: max(4px, env(safe-area-inset-top, 0)) 8px 4px 8px;
+  min-height: 40px;
   background: #000;
   border-radius: 8px 8px 0 0;
 }
@@ -36,7 +36,7 @@
   flex: 1 1 auto;
 }
 .mv-tb-cam {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
   color: #f1f5f9;
   white-space: nowrap;
@@ -58,8 +58,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  position: relative;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
@@ -67,6 +68,14 @@
   cursor: pointer;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
+}
+/* I1 · 36 px visible button, 44 px touch target via an invisible inset
+   overlay so the slimmer title bar still meets the iOS hit-area minimum. */
+.mv-tb-nav::before,
+.mv-tb-close::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
 }
 .mv-tb-nav[disabled] {
   opacity: 0.25;
@@ -113,16 +122,36 @@
 }
 .mv-grid-roi {
   fill: none;
-  stroke: rgba(250, 204, 21, 0.85);
+  /* I3 · neutral grey (was person-yellow) so the Motion-ROI scan box is not
+     confused with a Person detection box. Stays dashed. */
+  stroke: #cbd5e1;
   stroke-width: 1;
   stroke-dasharray: 3 2;
   vector-effect: non-scaling-stroke;
+}
+/* I3 · ROI scan-box caption — HTML span over the stage (the grid svg is
+   preserveAspectRatio="none", so SVG text would stretch). Pinned at the box's
+   top-left; mounted/removed by shell.js _setRoiLabel only while ROI is active. */
+.mv-grid-roi-label {
+  position: absolute;
+  left: 25%;
+  top: 24%;
+  z-index: 16;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(5, 7, 13, 0.72);
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
 }
 /* Overlay-toggle pills — pinned top-LEFT inside the stage (sim-player
    layout). Wraps on narrow stages; collapses when a mode mounts none. */
 .mv-shell-toggles {
   position: absolute;
-  top: 8px;
+  top: 6px;
   left: 8px;
   z-index: 18;
   display: flex;
@@ -138,7 +167,7 @@
    F); :empty collapses it so the gap doesn't show before then. */
 .mv-shell-topright {
   position: absolute;
-  top: 8px;
+  top: 6px;
   right: 8px;
   z-index: 18;
   display: flex;
@@ -174,9 +203,10 @@
   gap: 5px;
   background: rgba(11, 15, 20, 0.82);
   color: #e5edf5;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  padding: 4px 10px;
+  padding: 3px 9px;
+  min-height: 0;
   border-radius: 10px;
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
@@ -292,6 +322,28 @@
 .mv-legend[data-float='1'][data-osd-avoid='bottom'] {
   bottom: 10px;
 }
+/* I4 · live floats the line-type legend as a full-width bar across the stage's
+   bottom edge, with a bottom-up dark gradient so the neutral swatches read over
+   bright video. Desktop only — on mobile the rows collapse to the "?" chip, so
+   the compact corner float is kept there. */
+@media (min-width: 769px) {
+  .mv-legend[data-float='1'][data-osd-avoid='bottom'] {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    padding: 16px 10px 7px;
+    justify-content: center;
+    background: linear-gradient(
+      to top,
+      rgba(5, 7, 13, 0.88) 0%,
+      rgba(5, 7, 13, 0.5) 55%,
+      rgba(5, 7, 13, 0) 100%
+    );
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 /* Inline in the recorded/live overlay-toggle row (#mvLiveToggles):
    push the legend to the right edge so the pills sit left and the
    legend right — mirrors the retired .lb-legend { margin-left:auto }.
@@ -385,34 +437,11 @@
   }
 }
 
-/* ── Class-colour legend (F2) ────────────────────────────────────── */
-.mv-class-legend {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 4px 10px;
-}
-.mv-class-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(226, 232, 240, 0.75);
-  white-space: nowrap;
-}
-.mv-class-legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
 /* ── Status-legend band (below the stage, above the playbar) ─────────
-   Inline status legend + class-colour legend share this band; the
-   "Neu erkennen" pill pins to the right. Collapses when a mode mounts
-   none of them (weather), so no empty gap shows. */
+   Recorded/weather mount the inline status legend here, plus the "Neu
+   erkennen" pill (pinned right). Live floats its legend over the stage and
+   drops the retrigger, so this band collapses (:empty) for live. The
+   class-colour legend was removed (I4) — colour now encodes the track Nr. */
 .mv-shell-legendband {
   display: flex;
   align-items: center;

@@ -18,7 +18,6 @@ import { byId } from '../core/dom.js';
 import { renderTitleBar } from './title-bar.js';
 import { renderModeIndicator, renderTilingGrid } from './mode-indicator.js';
 import { renderStatusLegend } from './status-legend.js';
-import { renderClassLegend } from './class-legend.js';
 import { renderOverlayToggles } from './overlay-toggles.js';
 import { renderRetriggerButton } from './retrigger-button.js';
 import { renderPanelTabs } from './panel-tabs.js';
@@ -56,14 +55,14 @@ const _MODE_FLAGS = {
     interactiveMode: true,
     osdBand: 'top',
     contextKey: 'live',
-    retrigger: true,
+    retrigger: false,
     fineFold: true,
   },
   'live-detect': {
     interactiveMode: true,
     osdBand: 'top',
     contextKey: 'live',
-    retrigger: true,
+    retrigger: false,
     fineFold: true,
   },
 };
@@ -126,6 +125,25 @@ const _SHELL_HTML =
   `<div class="mv-shell-tabs" data-slot="tabs"></div>` +
   `<div class="mv-shell-fafold" data-slot="fafold"></div></div>`;
 
+// I3 · Motion-ROI scan-box caption. The tiling-grid svg is
+// preserveAspectRatio="none" (text inside would distort), so the label is a
+// plain HTML span pinned over the stage at the box's top-left. Created on
+// demand and removed whenever the ROI box isn't drawn.
+function _setRoiLabel(stage, on) {
+  if (!stage) return;
+  const existing = stage.querySelector('.mv-grid-roi-label');
+  if (on) {
+    if (!existing) {
+      const lbl = document.createElement('span');
+      lbl.className = 'mv-grid-roi-label';
+      lbl.textContent = 'Motion-ROI';
+      stage.appendChild(lbl);
+    }
+  } else if (existing) {
+    existing.remove();
+  }
+}
+
 /**
  * Build the MediaView shell from a config and (optionally) mount it.
  *
@@ -162,6 +180,9 @@ export function mountMediaView(config = {}) {
   const gridVisible = () => gridSvg && !gridSvg.hasAttribute('hidden');
   const setGridVisible = (show, id) => {
     if (!gridSvg) return;
+    // I3 · the ROI scan-box caption rides with the box (HTML span over the
+    // stage — the grid svg can't hold undistorted text).
+    _setRoiLabel(gridSvg.parentNode, show && id === 'roi');
     if (show) {
       renderTilingGrid(gridSvg, id);
       gridSvg.removeAttribute('hidden');
@@ -218,15 +239,16 @@ export function mountMediaView(config = {}) {
   // 30g); the band collapses via :empty when a mode mounts none of them.
   const legendBand = slot('legendband');
   if (overlays.bboxes) {
-    const sl = renderStatusLegend(legendBand, { float: false, osdBand });
+    // I4 · status legend = the LINE-TYPE legend (Bestätigt / Schwach / Ghost /
+    // Maskiert · "Farbe = Person-Nr."). Colour now encodes the track number,
+    // so the class-colour legend is gone. Live floats it over the stage's
+    // bottom edge; recorded/weather keep it inline in the band below the stage.
+    const sl = flags.interactiveMode
+      ? renderStatusLegend(slot('stage'), { float: true, osdBand })
+      : renderStatusLegend(legendBand, { float: false, osdBand });
     if (sl) {
       components.statusLegend = sl;
       teardowns.push(sl.teardown);
-    }
-    const cl = renderClassLegend(legendBand, { classes: config.classes });
-    if (cl) {
-      components.classLegend = cl;
-      teardowns.push(cl.teardown);
     }
   }
   if (flags.retrigger || typeof actions.onRetrigger === 'function') {

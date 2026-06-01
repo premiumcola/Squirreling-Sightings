@@ -56,11 +56,11 @@ export const MV_LIVE_VERDICT_CAT = {
   filtered: 'masked',
 };
 
-const _MASKED_COLOR = '#94a3b8';
-// Representative per-track hue for the legend swatch — the muted
-// "Farbe = Person-Nr." tail makes the identity-colour story explicit,
-// so the swatch only needs visual weight, not a claimed meaning.
-const _SWATCH_COLOR = '#22c55e';
+const _MASKED_COLOR = '#64748b';
+// I4 · NEUTRAL swatch — colour now encodes the track number (see the
+// "Farbe = Person-Nr." tail), so the legend swatch conveys only LINE STYLE
+// (solid / dashed / dotted), never a hue meaning. Not green.
+const _SWATCH_COLOR = '#e2e8f0';
 
 /**
  * Map any verdict/status token onto a canonical MV_STATUS_STYLE key.

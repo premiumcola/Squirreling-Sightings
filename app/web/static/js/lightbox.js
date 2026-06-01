@@ -5,7 +5,7 @@
 // _lbClearDetections, _lbResetToPhoto, _lbShowError) — those live below.
 // Stage 23 grew this module to own the cross-domain orchestration too:
 //   * openLightbox / closeLightbox + photo/video player switch
-//   * openTLPlayer / _tlNavItems / _tlPeriodLabel for timelapse playback
+//   * openTLPlayer / _tlNavItems for timelapse playback (now shell-routed)
 //   * _lbHandleDeleteKey / _lbNavList / _lbShowSeekOverlay / _renderLbLabels
 //   * the document keydown handler (Esc / arrow keys / 'd' / space / 'f')
 //   * lightbox prev/next/close button wiring + the touchstart swipe handler
@@ -23,21 +23,9 @@ import { j } from './core/api.js';
 import { showToast } from './core/toast.js';
 import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from './core/icons.js';
 import { lbState } from './mediathek/state.js';
-import {
-  lbStopTrackingPlayback,
-  lbRenderTrackTimeline,
-  lbClearTrackTimeline,
-  setBboxOverlayVisibility,
-} from './mediathek/bbox-overlay/index.js';
+import { lbStopTrackingPlayback, lbClearTrackTimeline } from './mediathek/bbox-overlay/index.js';
 import { openMediaView } from './mediaview/index.js';
-import { mountRecordedPanels } from './mediaview/panels/orchestration.js';
-import {
-  mountZoneOverlayForLightbox,
-  unmountZoneOverlayForLightbox,
-} from './mediaview/canvas/zone-overlay-mount.js';
-import { mountWeatherToggleBar } from './mediaview/overlay-toggles.js';
-import { renderStatusLegend } from './mediaview/status-legend.js';
-import { mountReindexButton } from './mediathek/bbox-overlay/reindex-button.js';
+import { unmountZoneOverlayForLightbox } from './mediaview/canvas/zone-overlay-mount.js';
 import { _iosNativeVideoOpen } from './mediathek/ios-video.js';
 import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
@@ -104,109 +92,13 @@ function _relocateActionsTo(parentId) {
   });
 }
 
-// Apply the full-screen video chrome for `item`. Idempotent — calling
-// it twice in a row leaves the DOM in the same state.
-// "2026-05-10T21:10:26" → "10.05.2026 · 21:10:26". Falls back to the
-// raw string when parsing fails so a malformed timestamp still shows
-// _something_ instead of an empty bar.
-function _fmtVideoTimeDE(raw) {
-  if (!raw) return '';
-  const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
-  if (!m) return String(raw);
-  const [, y, mo, d, h, mi, s] = m;
-  const time = s ? `${h}:${mi}:${s}` : `${h}:${mi}`;
-  return `${d}.${mo}.${y} · ${time}`;
-}
-
-// Exported (was: file-local) so mediaview/live-detect.js can reuse
-// the SAME chrome the recorded path produces — top bar, action-button
-// relocation, scrubber+swimlane mount, panel-tabs strip, fold. Live
-// mode passes a synthetic item; the recorded path is unchanged.
-export function _setupVideoChrome(item) {
-  const modal = byId('lightboxModal');
-  if (!modal) return;
-  modal.classList.add('lb-fs-video');
-  // Top bar text — camera display name (falls back to camera_id only
-  // when the event JSON predates the camera_name field) + a formatted
-  // German timestamp. The raw ISO never reaches the UI.
-  const camEl = byId('lightboxTopCam');
-  const tsEl = byId('lightboxTopTime');
-  if (camEl) camEl.textContent = item?.camera_name || item?.camera_id || '';
-  if (tsEl) tsEl.textContent = _fmtVideoTimeDE(item?.time || '');
-  byId('lightboxTopBar').hidden = false;
-  // Move the action buttons into the top bar.
-  _relocateActionsTo('lightboxTopActions');
-  // bbox-overlay.js owns the entire bottom-stack rendering (sidebar
-  // play button + class badges + tick spacer; time column scrubber
-  // bar + class strips + tick row + play cursor). Call it here so
-  // the chrome populates even before tracks.json lands; tracks-fetch
-  // will re-render when the worker responds.
-  lbRenderTrackTimeline(item);
-  // mediaview-shell mount: wraps the legacy settings renderer in a
-  // dark tab strip ("Aufnahme-Settings" · "Nach-Erkennung" + Wetter
-  // when present) and adds the fine-analysis fold below. The
-  // settings tab still calls lbRenderSettingsPanel under the hood,
-  // just into the tab's body host instead of #lightboxSettings.
-  // Timelapses never reach this branch — openLightbox routes them
-  // to openTLPlayer before _lbLegacyRender runs.
-  const setHost = byId('lightboxSettings');
-  if (setHost) setHost.hidden = false;
-  mountRecordedPanels(item);
-  // Read-only zone + mask overlay — green inclusion polygons + red
-  // exclusion polygons, sourced from the camera's settings. Timelapse
-  // playback hides masks (sped-up overview gets visually cluttered);
-  // motion clips show both. ResizeObserver inside the helper keeps
-  // the polygons aligned with the video element through every
-  // layout change (fullscreen enter/exit, address-bar collapse).
-  mountZoneOverlayForLightbox(item, { hideMasks: item?.type === 'timelapse' });
-  // Overlay-toggles pill bar — Mediathek motion clips get all four
-  // pills (bboxes/trails/zones/masks), weather timelapses get just
-  // zones+masks. Each pill flips its corresponding layer's visibility
-  // live on the current viewport — zones/masks reach into the zone
-  // overlay, bboxes/trails reach into the bbox-overlay renderer.
-  const _toggleHandle = mountWeatherToggleBar(item, (id, on, _all) => {
-    if (id === 'zones' || id === 'masks') {
-      window._setZoneOverlayVisibility?.({
-        showZones: id === 'zones' ? on : undefined,
-        showMasks: id === 'masks' ? on : undefined,
-      });
-    } else if (id === 'bboxes') {
-      setBboxOverlayVisibility({ showBboxes: on });
-    } else if (id === 'trails') {
-      setBboxOverlayVisibility({ showTrails: on });
-    }
-  });
-  // Regenerate-tracking action — sits next to the Masken pill so the
-  // operator can re-run the post-clip tracker without paging into a
-  // tab (the retired Nach-Erkennung tab's only purpose).
-  if (item.type !== 'timelapse') {
-    mountReindexButton('mvLiveToggles');
-  }
-  // Status legend — appended to the toggle row so the same band
-  // explains both "what layers are on" and "what each track stroke
-  // style means". The ONE shared legend (mediaview/status-legend.js)
-  // serves recorded + weather + live; popover handles mobile collapse.
-  renderStatusLegend('mvLiveToggles');
-  // Sync ALL four layers' initial visibility to whatever the toggle
-  // bar resolved (persisted localStorage values for bboxes/trails;
-  // declared defaults for zones/masks). Without this the layer
-  // renderers' own defaults could diverge from a remembered
-  // "user turned X off last time" preference.
-  const _initial = _toggleHandle?.getState?.() || {};
-  if ('zones' in _initial || 'masks' in _initial) {
-    window._setZoneOverlayVisibility?.({
-      showZones: !!_initial.zones,
-      showMasks: !!_initial.masks,
-    });
-  }
-  if ('bboxes' in _initial || 'trails' in _initial) {
-    setBboxOverlayVisibility({
-      showBboxes: !!_initial.bboxes,
-      showTrails: !!_initial.trails,
-    });
-  }
-}
-
+// F5 · _setupVideoChrome + _fmtVideoTimeDE removed. The full-screen video
+// chrome they built (top bar, action relocation, scrubber+swimlane, panel
+// tabs, fold) was the LEGACY recorded + live-detect path; both now ride the
+// shared MediaView shell (recorded-mode.js · live-detect-chrome.js → E/F), so
+// this DOM-mutating chrome builder has no callers left. _teardownVideoChrome
+// stays — recorded-mode's photo branch + closeLightbox still use it to drop
+// any lingering legacy chrome.
 // Reverse _setupVideoChrome — called when navigating to a photo or
 // closing the lightbox entirely. Exported so mediaview/recorded-mode.js
 // can drive the same teardown the recorded open path needs.

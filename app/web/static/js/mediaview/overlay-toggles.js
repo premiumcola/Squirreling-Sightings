@@ -303,34 +303,7 @@ export function renderOverlayToggles(host, opts = {}) {
     },
   };
 }
-
-/**
- * Convenience entry that mounts a zones+masks-only bar for the
- * weather / timelapse lightbox path. The Mediathek motion-clip
- * lightbox would call the full ``renderOverlayToggles`` directly
- * once its overlay layers are wired through this state path —
- * pending the bbox-overlay refactor for show/hide toggles.
- */
-export function mountWeatherToggleBar(item, onChange) {
-  const inner = byId('lightboxInner');
-  const stack = byId('lightboxBottomStack');
-  if (!inner || !stack) return null;
-  let row = byId('mvLiveToggles');
-  if (!row) {
-    row = document.createElement('div');
-    row.id = 'mvLiveToggles';
-    inner.insertBefore(row, stack);
-  }
-  const isTL = item?.type === 'timelapse';
-  return renderOverlayToggles(row, {
-    available: isTL ? ['zones', 'masks'] : ['bboxes', 'trails', 'zones', 'masks'],
-    contextKey: isTL ? 'timelapse' : 'mediathek',
-    onChange,
-    // No hintText — the status legend mounted right after this bar
-    // owns the "what does the dash style mean" affordance now. The
-    // long-press tip on each pill still fires for the per-pill
-    // description.
-  });
-}
-
-window.mountWeatherToggleBar = mountWeatherToggleBar;
+// F5 · mountWeatherToggleBar removed — it served the legacy _setupVideoChrome
+// recorded/timelapse path (now retired; recorded + live ride the shared shell,
+// which mounts renderOverlayToggles directly into the stage). The shell is the
+// only caller of renderOverlayToggles now.

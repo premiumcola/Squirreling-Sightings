@@ -1,159 +1,107 @@
 // ─── mediaview/live-swimlane.js ───────────────────────────────────────────
-// SIMU-03 · Live-Detect timeline renderer.
+// SIMU-03 / J · Live-Detect timeline renderer.
 //
 // The recorded-clip swimlane renderer in mediathek/bbox-overlay/
-// timeline-panel.js is built around a scrubber bar + ticks + per-
-// class strips + play cursor. Live-Detect doesn't have a scrubber
-// (the window is always "live 60 s ago → now"), the visual language
-// is icon-only lanes, the LIVE marker sits stacked above a single
-// vertical green line spanning all lanes, bars flow right → left
-// and drop off the left edge after 60 s. Trying to bend the recorded
-// renderer to all of that would compromise both code paths; this
-// dedicated renderer keeps the recorded one untouched.
+// timeline-panel.js is built around a scrubber bar + ticks + per-class
+// strips + play cursor. Live-Detect has no scrubber (the window is always
+// "live 60 s ago → now"). J reworks the lanes from per-CLASS to per-TRACK:
+// one lane per active track, coloured by the track number (matching the
+// bbox), with bars flowing right → now and dropping off the left edge after
+// 60 s. Motion-only detections (no track number) collapse into one neutral
+// grey lane so an unfiltered room can't flood the strip.
 //
 // Caller contract:
-//   renderLiveSwimlane(host, {
-//     camId, detBuffer, windowMs, objectFilter,
-//   })
+//   renderLiveSwimlane(host, { camId, detBuffer, windowMs })
 //
-// SIMU-03e · the renderer does TARGETED bar updates between ticks
-// (existing bar's `left` is updated, CSS transitions over 500 ms)
-// so the strip flows leftward smoothly instead of jumping in
-// discrete tick-sized steps. Lane structure rebuilds only when the
-// set of lanes changes (a new class appears, andere lane toggles).
+// Lane structure rebuilds only when the set of lanes (or their colours)
+// changes; between rebuilds each event cell's bars are re-synced so the strip
+// flows leftward.
 
 import { esc } from '../core/dom.js';
-import { OBJ_LABEL, OBJ_SVG, colors } from '../core/icons.js';
+import { OBJ_LABEL, OBJ_SVG } from '../core/icons.js';
+import { liveTrackColor, LIVE_MOTION_COLOR } from '../core/track-color.js';
 
-const _LANE_LABEL_ORDER = Object.keys(OBJ_LABEL);
-const _ANDERE_ID = '__andere__';
+// Lane id for the catch-all motion lane (detections without a track number).
+const _MOTION_ID = '__motion__';
+const _MASKED_COLOR = '#64748b';
 
 export function renderLiveSwimlane(host, opts = {}) {
   if (!host) return;
   const detBuffer = Array.isArray(opts.detBuffer) ? opts.detBuffer : [];
   const windowMs = Number(opts.windowMs) || 60_000;
-  const objectFilter = opts.objectFilter instanceof Set ? opts.objectFilter : null;
-  const lanes = _computeLanes(detBuffer, windowMs, objectFilter);
-  // Lane-structure fingerprint — rebuild only when lane membership
-  // changes so bar elements survive across ticks (CSS `left`
-  // transition then animates the leftward flow).
-  const fp = lanes.map((l) => l.id).join('|');
+  const lanes = _computeLanes(detBuffer, windowMs);
+  // Lane-structure fingerprint — rebuild only when lane membership or colour
+  // changes so bar elements survive across ticks.
+  const fp = lanes.map((l) => `${l.id}:${l.color}`).join('|');
   if (host.dataset.mvLdFp !== fp) {
     host.innerHTML = _buildStructure(lanes);
     host.dataset.mvLdFp = fp;
   }
   for (let i = 0; i < lanes.length; i++) {
-    const lane = lanes[i];
-    // SIMU-FIX-04b · SIMU-03g refactored the swimlane into a single
-    // CSS grid, removing the `.mv-ld-swim-row` wrapper. The bar-sync
-    // query was never updated to match the new structure → no cell
-    // was ever found → no bars were ever appended. Query the event
-    // cell directly by its lane-idx data attribute.
-    const cell = host.querySelector(
-      `.mv-ld-swim-cell-events[data-lane-idx="${i}"]`,
-    );
+    const cell = host.querySelector(`.mv-ld-swim-cell-events[data-lane-idx="${i}"]`);
     if (!cell) continue;
-    // POLISH-01b · the Andere lane is a STATUS COUNTER, not a
-    // visualisation. Render a single "Andere · N" pill instead of a
-    // bar per off-filter detection (which flooded the lane with grey
-    // dashed hash-noise + meaningless track-num badges on a TV-heavy
-    // room). Per-class lanes keep their flowing bars.
-    if (lane.id === _ANDERE_ID) {
-      _renderAndereCounter(cell, lane);
-    } else {
-      _syncBars(cell, lane, windowMs);
-    }
+    _syncBars(cell, lanes[i], windowMs);
   }
 }
 
-// POLISH-01b · render the Andere lane's counter pill. N = total
-// off-filter detections in the 60 s window. The pill carries a
-// title attr with the top-3 class breakdown (browser-native
-// long-press tooltip on iOS, hover on desktop) so the user can see
-// WHAT was filtered without the lane screaming.
-function _renderAndereCounter(cell, lane) {
-  const byClass = lane.andereByClass || new Map();
-  let total = 0;
-  for (const n of byClass.values()) total += n;
-  const top = Array.from(byClass.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([cls, n]) => `${cls} ${n}×`)
-    .join(' · ');
-  const title = total > 0 ? top : 'keine off-filter Detektionen';
-  cell.innerHTML =
-    `<span class="mv-ld-andere-counter" title="${esc(title)}">andere · ${total}</span>`;
-}
-
-function _computeLanes(detBuffer, windowMs, objectFilter) {
+// J3 · group the 60 s detection window into per-TRACK lanes. Detections with a
+// positive track_num bucket by that number; everything else collapses into one
+// neutral motion lane. Lane colour matches the bbox: a normal track uses its
+// track colour, an off-filter (masked) track uses slate, motion uses grey.
+function _computeLanes(detBuffer, windowMs) {
   const now = Date.now();
   const cutoff = now - windowMs;
-  const byLabel = new Map();
-  const andereByClass = new Map();
+  const byKey = new Map();
   for (const e of detBuffer) {
     if (!e || e.ms < cutoff) continue;
-    if (objectFilter && !objectFilter.has(e.label)) {
-      andereByClass.set(e.label, (andereByClass.get(e.label) || 0) + 1);
-      _bucket(byLabel, _ANDERE_ID, e);
-      continue;
+    const hasTrack = Number.isFinite(e.track_num) && e.track_num > 0;
+    const key = hasTrack ? `t${e.track_num}` : _MOTION_ID;
+    let lane = byKey.get(key);
+    if (!lane) {
+      lane = { id: key, num: hasTrack ? e.track_num : null, label: e.label, samples: [] };
+      byKey.set(key, lane);
     }
-    _bucket(byLabel, e.label, e);
+    lane.samples.push(e);
+    lane.label = e.label; // push-order ≈ chronological → most-recent class wins
+    lane.lastVerdict = e.verdict;
   }
-  const labels = _sortedLabels(byLabel.keys());
-  const lanes = [];
-  for (const lbl of labels) {
-    if (lbl === _ANDERE_ID) continue;
-    lanes.push({ id: lbl, label: lbl, samples: byLabel.get(lbl) || [] });
-  }
-  if (objectFilter) {
-    lanes.push({
-      id: _ANDERE_ID,
-      label: 'andere',
-      samples: byLabel.get(_ANDERE_ID) || [],
-      andereByClass,
-    });
+  const lanes = Array.from(byKey.values());
+  lanes.sort((a, b) => {
+    if (a.id === _MOTION_ID) return 1;
+    if (b.id === _MOTION_ID) return -1;
+    return (a.num || 0) - (b.num || 0);
+  });
+  for (const lane of lanes) {
+    lane.color =
+      lane.id === _MOTION_ID
+        ? LIVE_MOTION_COLOR
+        : lane.lastVerdict === 'filtered'
+          ? _MASKED_COLOR
+          : liveTrackColor(lane.num);
   }
   return lanes;
 }
 
-function _bucket(map, key, entry) {
-  if (!map.has(key)) map.set(key, []);
-  map.get(key).push(entry);
-}
-
-function _sortedLabels(iter) {
-  const arr = Array.from(iter);
-  arr.sort((a, b) => {
-    if (a === _ANDERE_ID) return 1;
-    if (b === _ANDERE_ID) return -1;
-    const ai = _LANE_LABEL_ORDER.indexOf(a);
-    const bi = _LANE_LABEL_ORDER.indexOf(b);
-    if (ai === -1 && bi === -1) return a.localeCompare(b);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-  return arr;
-}
-
-// SIMU-03g · single CSS-grid layout for the entire swimlane. The
-// container is `display: grid; grid-template-columns: 36px 1fr;
-// grid-auto-rows: 22px`. Per lane we emit BOTH the label cell and
-// the event cell in a single pass with the SAME `grid-row`, which
-// is the spec's guarantee against label ↔ event drift. The LIVE
-// pill + vertical line span the full row range via grid-row: 1/-1
-// and live in column 2 (right of the label band).
+// J5 · the swimlane is a labelled panel: "Timeline · letzte 60 s" heading, a
+// CSS-grid of per-track lanes (44 px label column + elastic event column),
+// vertical time gridlines behind the lanes, and the green LIVE marker pinned
+// to the right edge that bars flow into.
 function _buildStructure(lanes) {
   const cells = [];
   for (let i = 0; i < lanes.length; i++) {
     cells.push(_renderLaneCells(lanes[i], i, i + 1));
   }
   const axisLabels = ['60 s', '45 s', '30 s', '15 s', 'jetzt'];
+  const lastIdx = axisLabels.length - 1;
   const axisHtml = axisLabels
     .map(
       (txt, i) =>
-        `<span class="mv-ld-axis-tick" style="left:calc(${(i * 100) / (axisLabels.length - 1)}% - ${i === 0 ? 0 : i === axisLabels.length - 1 ? 24 : 12}px)">${esc(txt)}</span>`,
+        `<span class="mv-ld-axis-tick" style="left:calc(${(i * 100) / lastIdx}% - ${i === 0 ? 0 : i === lastIdx ? 24 : 12}px)">${esc(txt)}</span>`,
     )
+    .join('');
+  // Vertical time gridlines at the same ticks, behind the lanes.
+  const gridlines = axisLabels
+    .map((_, i) => `<span class="mv-ld-swim-gridline" style="left:${(i * 100) / lastIdx}%"></span>`)
     .join('');
   const liveMarker =
     '<div class="mv-ld-swim-live" aria-hidden="true">' +
@@ -162,114 +110,89 @@ function _buildStructure(lanes) {
     '</div>';
   return `
     <div class="mv-ld-swim" data-lane-count="${lanes.length}">
-      <div class="mv-ld-swim-grid" data-rows="${lanes.length}">${cells.join('')}${liveMarker}</div>
+      <div class="mv-ld-swim-heading">Timeline<span class="mv-ld-swim-heading-sub"> · letzte 60 s</span></div>
+      <div class="mv-ld-swim-grid" data-rows="${lanes.length}">
+        <div class="mv-ld-swim-gridlines" aria-hidden="true">${gridlines}</div>
+        ${cells.join('')}${liveMarker}
+      </div>
       <div class="mv-ld-swim-axis"><div class="mv-ld-swim-axis-track">${axisHtml}</div></div>
     </div>`;
 }
 
 function _renderLaneCells(lane, idx, gridRow) {
-  const isAndere = lane.id === _ANDERE_ID;
-  const labelCell = _renderLaneLabel(lane, isAndere);
-  const andereAttr = isAndere ? ' data-andere="1"' : '';
-  // Wrapped in a fragment-style pair so the renderer signals the
-  // label and the event row together — same grid-row stamp on both.
+  const labelCell = _renderLaneLabel(lane);
   return (
-    `<div class="mv-ld-swim-cell mv-ld-swim-cell-label" data-lane-idx="${idx}" data-label="${esc(lane.label)}"${andereAttr} style="grid-row:${gridRow};grid-column:1">${labelCell}</div>` +
-    `<div class="mv-ld-swim-cell mv-ld-swim-cell-events" data-lane-idx="${idx}" data-label="${esc(lane.label)}"${andereAttr} style="grid-row:${gridRow};grid-column:2"></div>`
+    `<div class="mv-ld-swim-cell mv-ld-swim-cell-label" data-lane-idx="${idx}" style="grid-row:${gridRow};grid-column:1">${labelCell}</div>` +
+    `<div class="mv-ld-swim-cell mv-ld-swim-cell-events" data-lane-idx="${idx}" style="grid-row:${gridRow};grid-column:2"></div>`
   );
 }
 
-function _renderLaneLabel(lane, isAndere) {
-  if (isAndere) {
-    const n = lane.andereByClass ? lane.andereByClass.size : 0;
-    const title = n > 0 ? _andereTooltip(lane.andereByClass) : 'andere · keine Detektionen';
-    return (
-      '<span class="mv-ld-swim-icon mv-ld-swim-icon-andere" aria-hidden="true" ' +
-      `title="${esc(title)}">` +
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-      '<circle cx="6" cy="12" r="1.8" fill="#3d4654"/>' +
-      '<circle cx="12" cy="12" r="1.8" fill="#3d4654"/>' +
-      '<circle cx="18" cy="12" r="1.8" fill="#3d4654"/></svg>' +
-      '</span>'
-    );
-  }
-  const raw = OBJ_SVG[lane.label] || '';
-  if (!raw) {
-    return '<span class="mv-ld-swim-icon" aria-hidden="true"><span class="mv-ld-swim-icon-fallback"></span></span>';
-  }
-  return `<span class="mv-ld-swim-icon" aria-hidden="true">${raw}</span>`;
+// J4 · the lane's object-class icon, flat-tinted in the lane's track colour
+// (one per lane), so the colour reads as the track and the glyph as the class.
+function _renderLaneLabel(lane) {
+  const isMotion = lane.id === _MOTION_ID;
+  const title = isMotion
+    ? 'Bewegung (ohne Track)'
+    : `${OBJ_LABEL[lane.label] || lane.label} · Track #${lane.num}`;
+  return `<span class="mv-ld-swim-icon" title="${esc(title)}">${_tintedIcon(lane.label, lane.color)}</span>`;
 }
 
-function _andereTooltip(byClass) {
-  if (!byClass || byClass.size === 0) return 'andere · keine Detektionen';
-  const parts = [];
-  const sorted = Array.from(byClass.entries()).sort((a, b) => b[1] - a[1]);
-  for (const [cls, n] of sorted) {
-    parts.push(`${cls} (${n})`);
-  }
-  return `andere · ${parts.join(' · ')}`;
+// Flat-tint an OBJ_SVG glyph to a single colour — the class hue no longer
+// carries meaning (colour = track number), so every hex fill/stroke becomes
+// the track colour. fill="none" + rgba shading are left intact so stroke-only
+// icons (e.g. motion) still draw rather than collapsing into solid blobs.
+// `color` is always an internal palette constant, never user input.
+function _tintedIcon(label, color) {
+  const raw = OBJ_SVG[label] || OBJ_SVG.motion;
+  return raw.replaceAll(/(fill|stroke)="#[0-9a-fA-F]{3,8}"/g, `$1="${color}"`);
 }
 
-// Q2-1 · render a lane's detections as CLUSTERED chips. Dense
-// detections used to stack as microscopic 10 px bars whose #N badges
-// overlapped into unreadable "compressed Morse". We now merge any two
-// chips that would sit <6 px apart into a single "#K ×N" chip, walking
-// right→left so each cluster anchors at its newest member and the
-// strip still reads "now" on the right. The cell is rebuilt each tick
-// (no CSS transition — see the .mv-ld-swim-bar note in 30f); clustering
-// caps the chip count per lane so the rebuild stays cheap.
+// Q2-1 / J · cluster a lane's detections into chips so dense strips stay
+// readable, then paint every chip in the lane (track) colour with a thin
+// connector line behind them. Walk right → left so each cluster anchors at its
+// newest member and the strip reads "now" on the right. The cell rebuilds each
+// tick (no CSS transition); clustering caps the chip count so it stays cheap.
 const _CHIP_W = 24; // nominal chip width (px) for the merge heuristic
-const _MERGE_GAP_PX = 6; // spec: merge when the gap would be <6 px
+const _MERGE_GAP_PX = 6; // merge when the gap would be < 6 px
 function _syncBars(cell, lane, windowMs) {
   const now = Date.now();
-  const c = colors[lane.label] || colors.unknown;
-  // Event-column pixel width turns the <6 px heuristic into a real
-  // distance. 0 before first layout → one chip per sample (coarse but
-  // never crashes).
+  const c = lane.color;
   const cellW = cell.clientWidth || 0;
   const items = [];
   for (const s of lane.samples) {
     const ageMs = now - s.ms;
     if (ageMs < 0 || ageMs > windowMs) continue;
-    items.push({ pct: 100 - (ageMs / windowMs) * 100, track_num: s.track_num });
+    items.push({ pct: 100 - (ageMs / windowMs) * 100 });
   }
-  // Newest (rightmost) first so the greedy walk absorbs older
-  // neighbours leftward into the most-recent member.
+  // Newest (rightmost) first so the greedy walk absorbs older neighbours.
   items.sort((a, b) => b.pct - a.pct);
   const chips = [];
   let cur = null;
   for (const it of items) {
     const rightPx = cellW > 0 ? (it.pct / 100) * cellW : null;
-    // Merge when this (older) chip's right edge lands within _MERGE_GAP_PX
-    // of the current cluster's left edge — i.e. the gap between "previous
-    // chip ends" and "next chip starts" is <6 px.
     if (cur && rightPx != null && cur.leftPx != null && cur.leftPx - rightPx < _MERGE_GAP_PX) {
       cur.count += 1;
     } else {
       if (cur) chips.push(cur);
-      cur = {
-        rightPct: it.pct,
-        leftPx: rightPx != null ? rightPx - _CHIP_W : null,
-        count: 1,
-        track_num: it.track_num, // newest member = representative #K
-      };
+      cur = { rightPct: it.pct, leftPx: rightPx != null ? rightPx - _CHIP_W : null, count: 1 };
     }
   }
   if (cur) chips.push(cur);
-  cell.innerHTML = chips
-    .map((ch) => {
-      const hasTrack = Number.isFinite(ch.track_num) && ch.track_num > 0;
-      let label = '';
-      if (hasTrack && ch.count > 1) label = `#${ch.track_num} ×${ch.count}`;
-      else if (hasTrack) label = `#${ch.track_num}`;
-      else if (ch.count > 1) label = `×${ch.count}`;
-      const left = `calc(${ch.rightPct.toFixed(2)}% - ${_CHIP_W}px)`;
-      const title = ch.count > 1 ? `${ch.count} Detektionen` : '1 Detektion';
-      return (
-        `<span class="mv-ld-swim-bar" style="left:${left};background:${c}" title="${esc(title)}">` +
-        (label ? `<span class="mv-ld-swim-chip-lbl">${esc(label)}</span>` : '') +
-        '</span>'
-      );
-    })
-    .join('');
+  // J4 · connector line in the lane colour through the vertical centre, behind
+  // the bars, spanning the event column up to the LIVE marker on the right.
+  const conn = `<span class="mv-ld-swim-conn" style="background:${c}"></span>`;
+  cell.innerHTML =
+    conn +
+    chips
+      .map((ch) => {
+        const label = ch.count > 1 ? `×${ch.count}` : '';
+        const left = `calc(${ch.rightPct.toFixed(2)}% - ${_CHIP_W}px)`;
+        const title = ch.count > 1 ? `${ch.count} Detektionen` : '1 Detektion';
+        return (
+          `<span class="mv-ld-swim-bar" style="left:${left};background:${c}" title="${esc(title)}">` +
+          (label ? `<span class="mv-ld-swim-chip-lbl">${esc(label)}</span>` : '') +
+          '</span>'
+        );
+      })
+      .join('');
 }

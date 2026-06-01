@@ -5,14 +5,23 @@
 // circular). Reads state via S.
 import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { colors } from '../core/icons.js';
+import { liveTrackColor } from '../core/track-color.js';
 import { normalizePolygon } from '../core/polygon-source.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
 import { renderZoneLayerForMediaEl } from './canvas/zone-layer.js';
 import { zoneEl } from './live-detect-skeleton.js';
 import { S } from './live-detect-state.js';
-import { _debugDiagOn, _updateDiagStrip, _refreshMediaRow, _renderDiagStrip } from './live-detect-diag.js';
-import { _renderBboxOverlay, _positionSvgOverImage, _LIVE_TRAIL_MAX_POINTS } from './live-detect-bbox.js';
+import {
+  _debugDiagOn,
+  _updateDiagStrip,
+  _refreshMediaRow,
+  _renderDiagStrip,
+} from './live-detect-diag.js';
+import {
+  _renderBboxOverlay,
+  _positionSvgOverImage,
+  _LIVE_TRAIL_MAX_POINTS,
+} from './live-detect-bbox.js';
 import { _renderDetectionsPanel } from './live-detect-panels.js';
 
 export function _installLiveOverlayRefresh(mediaEl) {
@@ -198,18 +207,21 @@ export function _renderTrailsOverlay() {
     svg.innerHTML = '';
     return;
   }
-  // Group buffered detections by label so each label gets its own
-  // contiguous trail. Pre-sort by ms inside each group; the
-  // detBuffer is push-order but a polling-cadence change could
-  // technically interleave entries from one to the next.
-  const byLabel = new Map();
+  // J2 · one trail per TRACK (not per class) so a trail matches that track's
+  // bbox colour. Detections without a track number (motion-only) group by
+  // label and render neutral grey via liveTrackColor's fallback. Pre-sort by
+  // ms inside each group; detBuffer is push-order but a polling-cadence change
+  // could technically interleave entries.
+  const byTrack = new Map();
   for (const e of S.detBuffer) {
-    if (!byLabel.has(e.label)) byLabel.set(e.label, []);
-    byLabel.get(e.label).push(e);
+    const key =
+      Number.isFinite(e.track_num) && e.track_num > 0 ? `t${e.track_num}` : `m:${e.label}`;
+    if (!byTrack.has(key)) byTrack.set(key, []);
+    byTrack.get(key).push(e);
   }
   const strokeW = Math.max(2, Math.round(fs.w / 720));
   const parts = [];
-  for (const [label, entries] of byLabel) {
+  for (const entries of byTrack.values()) {
     if (entries.length < 2) continue;
     entries.sort((a, b) => a.ms - b.ms);
     // Keep only the newest N centroids — same cap the recorded
@@ -219,7 +231,7 @@ export function _renderTrailsOverlay() {
       x: e.bbox[0] + e.bbox[2] / 2,
       y: e.bbox[1] + e.bbox[3] / 2,
     }));
-    const c = colors[label] || colors.unknown;
+    const c = liveTrackColor(entries[entries.length - 1].track_num);
     parts.push(buildTrailSvg(points, c, strokeW));
   }
   svg.innerHTML = parts.join('');
@@ -285,5 +297,3 @@ export function _renderZoneMaskOverlay() {
     });
   }
 }
-
-

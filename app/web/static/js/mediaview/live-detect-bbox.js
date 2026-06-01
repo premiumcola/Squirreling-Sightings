@@ -3,11 +3,18 @@
 // every overlay layer to the visible image rect. Its own file (the renderer is
 // large); trails/zone reuse _positionSvgOverImage from here. Reads state via S.
 import { byId, esc } from '../core/dom.js';
-import { OBJ_LABEL, colors } from '../core/icons.js';
+import { OBJ_LABEL } from '../core/icons.js';
+import { liveTrackColor } from '../core/track-color.js';
 import { fittedRect } from '../core/video-fit.js';
 import { zoneEl } from './live-detect-skeleton.js';
 import { S } from './live-detect-state.js';
-import { _debugDiagOn, _updateDiagStrip, _refreshMediaRow, _collectBboxDiagFields, _renderDiagStrip } from './live-detect-diag.js';
+import {
+  _debugDiagOn,
+  _updateDiagStrip,
+  _refreshMediaRow,
+  _collectBboxDiagFields,
+  _renderDiagStrip,
+} from './live-detect-diag.js';
 import { _ensureBboxOverlay, _updateSuppressedHint } from './live-detect-overlays.js';
 import { _renderDetailPill } from './live-detect-panels.js';
 import { _HOLD_MS_CEILING } from './live-detect.js';
@@ -103,16 +110,18 @@ export function _renderBboxOverlay() {
   let _hasSuppressed = false;
   svg.innerHTML = renderDets
     .map((d) => {
-      const baseC = colors[d.label] || colors.unknown;
       const isPass = d.verdict === 'pass';
       const isBelow = d.verdict === 'belowthresh';
-      const isFiltered = !isPass && !isBelow; // 'filtered' or absent
+      const isFiltered = !isPass && !isBelow; // 'filtered'/masked or absent
       if (!isPass) _hasSuppressed = true;
-      const c = isFiltered ? '#94a3b8' : baseC; // slate-grey for class-filtered
+      // J2 · colour encodes the TRACK number (class is read from the #-badge,
+      // the lane icon + the detail panels — not the hue). State is the line
+      // STYLE: bestätigt = solid · schwach = dashed · maskiert = solid slate.
+      const c = isFiltered ? '#64748b' : liveTrackColor(d.track_num);
       const verdictOp = isPass ? 1 : isBelow ? 0.55 : 0.45;
       const holdMul = d._holdAge > 0 ? Math.max(0, 1 - d._holdAge / holdMs) : 1;
       const op = verdictOp * holdMul;
-      const dash = isFiltered ? '12 8' : isBelow ? '6 6' : 'none';
+      const dash = isBelow ? '6 4' : 'none';
       const [x, y, bw, bh] = d.bbox;
       const lbl = OBJ_LABEL[d.label] || d.label;
       const suffix = isPass

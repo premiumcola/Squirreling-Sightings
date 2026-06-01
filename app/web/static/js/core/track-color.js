@@ -51,3 +51,33 @@ export function trackColor(track) {
   if (!id) return _PALETTE[0];
   return _PALETTE[_hashTrackId(id) % _PALETTE.length];
 }
+
+// J · live-detect per-track palette. Here colour encodes the track NUMBER
+// (not the class — the class is shown by the lane / label icon), assigned by
+// `track_num` and cycled. Deliberately excludes green (#22c55e) so a track
+// colour can never be confused with the green LIVE marker. Distinct from
+// trackColor() above, which serves recorded clips (sidecar-stamped / hashed).
+const _LIVE_PALETTE = [
+  '#a78bfa',
+  '#f6b73c',
+  '#2dd4bf',
+  '#fb7185',
+  '#38bdf8',
+  '#a3e635',
+  '#e879f9',
+  '#fb923c',
+];
+
+// Neutral grey for motion-only / unclassified detections (no track number).
+export const LIVE_MOTION_COLOR = '#cbd5e1';
+
+/**
+ * Stable colour for a live track number, cycled through _LIVE_PALETTE. The
+ * same track_num always maps to the same colour for the track's lifetime.
+ * A missing / non-positive number (motion-only, unassociated) → neutral grey.
+ */
+export function liveTrackColor(trackNum) {
+  const n = Number(trackNum);
+  if (!Number.isFinite(n) || n <= 0) return LIVE_MOTION_COLOR;
+  return _LIVE_PALETTE[(n - 1) % _LIVE_PALETTE.length];
+}

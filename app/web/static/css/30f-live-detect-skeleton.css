@@ -305,10 +305,7 @@
     color: #fff;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
   }
-  .mv-ld-zone-video
-    #mvLiveToggles
-    .mv-live-toggle[data-on='1']:hover
-    .mv-live-toggle-chip {
+  .mv-ld-zone-video #mvLiveToggles .mv-live-toggle[data-on='1']:hover .mv-live-toggle-chip {
     background: rgba(36, 74, 104, 0.85);
     box-shadow: inset 0 0 0 1px #94d8ff;
   }
@@ -412,8 +409,27 @@
   display: block;
   position: relative;
   width: 100%;
-  padding: 4px 0 0;
-  background: var(--bg, #080510);
+  padding: 4px 0 6px;
+  /* J5 · lift the timeline onto a lighter surface so it reads as a distinct
+     panel; top divider via inset box-shadow (depth by colour, no border). */
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+/* J5 · timeline heading — "Timeline · letzte 60 s". */
+.mv-ld-swim-heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(226, 232, 240, 0.6);
+  padding: 6px 10px 4px;
+}
+.mv-ld-swim-heading-sub {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.4);
 }
 
 /* SIMU-03g · the swimlane is ONE CSS grid. Label column fixed at
@@ -432,12 +448,30 @@
   position: relative;
 }
 
-.mv-ld-swim-cell-events {
-  background: #0c121a;
+/* J5 · vertical time gridlines at the 60/45/30/15/jetzt ticks, behind the
+   lanes. Absolutely positioned over the event column (offset past the 44 px
+   label column); the transparent cells let them show through. */
+.mv-ld-swim-gridlines {
+  position: absolute;
+  left: 44px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.mv-ld-swim-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(-0.5px);
 }
 
-.mv-ld-swim-cell-events[data-andere='1'] {
-  background: #0a0e15;
+.mv-ld-swim-cell-events {
+  /* J5 · transparent so the panel surface + time gridlines show through. */
+  background: transparent;
 }
 
 /* SIMU-03d · lane hairlines between adjacent event rows. The 0.5 px
@@ -459,9 +493,11 @@
 }
 
 .mv-ld-swim-cell-label {
-  justify-content: center;
+  /* J4 · icon right-aligned so the track connector line starts flush at it. */
+  justify-content: flex-end;
+  padding-right: 4px;
   gap: 4px;
-  background: var(--bg, #080510);
+  background: transparent;
 }
 
 .mv-ld-swim-cell-events {
@@ -477,43 +513,9 @@
   color: var(--text);
 }
 
-.mv-ld-swim-icon-fallback {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4a6477;
-  display: inline-block;
-}
-
-/* SIMU-03c · the icon column is fixed at 36 px. No text labels —
-   the icon IS the label. OBJ_SVG entries carry canonical class
-   colours; unknown classes get a grey-circle fallback. The "andere"
-   three-dots glyph surfaces the per-class count via title-attr
-   long-press tooltip (browser-native, no extra JS). */
-.mv-ld-swim-icon-andere {
-  cursor: help;
-}
-
-/* POLISH-01b · Andere-lane counter pill. Replaces the per-detection
-   grey dashed bars (which flooded the lane). Sits at the right edge
-   of the event cell, clearing the 36 px LIVE-marker column. Muted
-   so it reads as a quiet status, not an alert. title-attr surfaces
-   the top-3 class breakdown via long-press / hover. */
-.mv-ld-andere-counter {
-  position: absolute;
-  right: 42px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: #1a1f28;
-  color: #7a8896;
-  font-size: 9px;
-  padding: 2px 6px;
-  border-radius: 5px;
-  white-space: nowrap;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  cursor: help;
-  letter-spacing: 0.02em;
-}
+/* J · the swimlane icon column carries the per-track class glyph (flat-tinted
+   in the track colour by live-swimlane._tintedIcon); the old per-class colour
+   icon / "andere" counter lane were retired with the per-track rework. */
 
 /* SIMU-03d · LIVE marker stacked above a vertical green line that
    runs through every lane. With the new single-grid layout
@@ -558,19 +560,20 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #6ee7b7;
-  box-shadow: 0 0 4px rgba(110, 231, 183, 0.65);
+  /* J5 · pure green "now" dot with a soft glow. */
+  background: #22c55e;
+  box-shadow: 0 0 5px rgba(34, 197, 94, 0.8);
   flex-shrink: 0;
 }
 
 .mv-ld-swim-line {
-  width: 1.5px;
+  /* J5 · thicker, glowing green "now" line that bars flow right → into. */
+  width: 3px;
   flex: 1 1 auto;
-  background: #6ee7b7;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.55);
   margin-top: 0;
-  /* The line sits AT the right edge — half outside the event column
-     so its centre lands on the "now" timestamp. Cosmetic 0.75 px
-     offset gives the stacked-pill look the spec asks for. */
+  /* The line sits AT the right edge so its centre lands on "now". */
   margin-right: 0;
 }
 
@@ -589,10 +592,25 @@
    INSIDE instead of a leftward-hanging pseudo-badge. Clustering in
    live-swimlane.js guarantees ≥6 px between chips so they never
    collide. Dark label text on the bright class colour. */
+/* J4 · per-lane connector — a thin track-coloured line through the lane's
+   vertical centre, BEHIND the bars, spanning the event column to the LIVE
+   marker so the eye follows a track left → right. Colour is set inline. */
+.mv-ld-swim-conn {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1.5px;
+  transform: translateY(-50%);
+  opacity: 0.5;
+  z-index: 0;
+  pointer-events: none;
+}
 .mv-ld-swim-bar {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;

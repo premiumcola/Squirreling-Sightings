@@ -484,7 +484,8 @@
    inner overrides beats #lightboxInner's inline width (mirrors how
    .lb-live-detect re-purposes the same node, 30f). */
 #lightboxModal.lb-weather #lightboxInner,
-#lightboxModal.lb-recorded #lightboxInner {
+#lightboxModal.lb-recorded #lightboxInner,
+#lightboxModal.lb-live-detect #lightboxInner {
   width: 100vw !important;
   max-width: none !important;
   height: 100dvh !important;
@@ -494,11 +495,18 @@
   padding: 0 0 env(safe-area-inset-bottom, 0px) 0 !important;
   margin: 0 !important;
 }
-/* Hide every legacy recorded child — only the mounted shell shows. The
-   reparented #lightboxMediaWrap is NOT a direct child here (it lives inside
-   the shell frame in recorded mode), so this rule never hides it. */
+/* Live-detect keeps the viewport itself fixed (the shell owns one inner
+   scroll region — the detail panel below the tabs) so the live frame never
+   scrolls off; overflow:hidden overrides the auto above for this mode. */
+#lightboxModal.lb-live-detect #lightboxInner {
+  overflow: hidden !important;
+}
+/* Hide every legacy child — only the mounted shell shows. The reparented
+   #lightboxMediaWrap is NOT a direct child here (it lives inside the shell
+   frame), so this rule never hides it. */
 #lightboxModal.lb-weather #lightboxInner > :not(.mv-shell),
-#lightboxModal.lb-recorded #lightboxInner > :not(.mv-shell) {
+#lightboxModal.lb-recorded #lightboxInner > :not(.mv-shell),
+#lightboxModal.lb-live-detect #lightboxInner > :not(.mv-shell) {
   display: none !important;
 }
 #lightboxModal.lb-weather .mv-shell,
@@ -538,6 +546,65 @@
 #lightboxModal.lb-recorded #lightboxPrev,
 #lightboxModal.lb-recorded #lightboxNext,
 #lightboxModal.lb-recorded #lightboxLabels {
+  display: none !important;
+}
+
+/* ── #lightboxModal · live-detect mode (F · shared shell) ─────────────
+   The live simulator reuses the snapshot <img> + its SVG/canvas overlays
+   by reparenting #lightboxMediaWrap into the shell stage frame; the live
+   'ld' tab system + swimlane move into the shell panels + playbar. Unlike
+   recorded (a 980 px scrolling column), live is full-width + fixed-height:
+   the stage / legend band / playbar / tab strip stick, and only the detail
+   panel below the tabs scrolls — so the live frame never scrolls away. */
+#lightboxModal.lb-live-detect .mv-shell {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  min-height: 0;
+}
+/* The panels block grows to fill the leftover height; its detail host is
+   the sole scroll region (mirrors the retired 5-zone zone-detail). */
+#lightboxModal.lb-live-detect .mv-shell-panels {
+  flex: 1 1 0;
+  min-height: 0;
+}
+#lightboxModal.lb-live-detect .mv-ld-shell-detail {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+/* Override 30f's legacy 5-zone wrap rule (!important, 100vw/100dvh,
+   aspect-ratio:auto) so the reused wrap fills the shell's 16:9 stage
+   instead. Higher specificity + !important beats the 30f rule. */
+#lightboxModal.lb-live-detect .mv-shell-frame #lightboxMediaWrap {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  aspect-ratio: auto !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+#lightboxModal.lb-live-detect .mv-shell-frame #lightboxImg {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+/* The snapshot view has no neighbour nav + no per-clip confirm/delete —
+   hide the legacy in-wrap chrome (the shell title bar owns close). */
+#lightboxModal.lb-live-detect #lightboxClose,
+#lightboxModal.lb-live-detect #lightboxPrev,
+#lightboxModal.lb-live-detect #lightboxNext,
+#lightboxModal.lb-live-detect #lightboxLabels,
+#lightboxModal.lb-live-detect #lightboxConfirm,
+#lightboxModal.lb-live-detect #lightboxDelete {
   display: none !important;
 }
 

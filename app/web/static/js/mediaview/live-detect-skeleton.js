@@ -1,6 +1,31 @@
-import { CONTAINER_ID, ZONE_IDS, PANEL_PREFIX, LS_ACTIVE_TAB, LS_TITLE_COLLAPSED, LS_TIMELINE_COLLAPSED, LS_LAST_CAMERA, DEFAULT_TAB, _OVERLAY_HIDE_MS, _lsGet, _lsSet } from './live-detect-skeleton-consts.js';
-import { _iconDetections, _iconTrace, _iconDebug, _iconExpand, _iconCollapseBack } from './live-detect-skeleton-icons.js';
-import { _makeZone, _buildTitleBar, _renderTitleText, _buildTimelineHeader, _isTimelineCollapsed, _applyTimelineCollapsed } from './live-detect-skeleton-chrome.js';
+import {
+  CONTAINER_ID,
+  ZONE_IDS,
+  PANEL_PREFIX,
+  LS_ACTIVE_TAB,
+  LS_TITLE_COLLAPSED,
+  LS_TIMELINE_COLLAPSED,
+  LS_LAST_CAMERA,
+  DEFAULT_TAB,
+  _OVERLAY_HIDE_MS,
+  _lsGet,
+  _lsSet,
+} from './live-detect-skeleton-consts.js';
+import {
+  _iconDetections,
+  _iconTrace,
+  _iconDebug,
+  _iconExpand,
+  _iconCollapseBack,
+} from './live-detect-skeleton-icons.js';
+import {
+  _makeZone,
+  _buildTitleBar,
+  _renderTitleText,
+  _buildTimelineHeader,
+  _isTimelineCollapsed,
+  _applyTimelineCollapsed,
+} from './live-detect-skeleton-chrome.js';
 // ─── mediaview/live-detect-skeleton.js ────────────────────────────────────
 // SIMU-01 · the 5-zone DOM skeleton for the Live-Detect view.
 //
@@ -28,7 +53,6 @@ import { byId } from '../core/dom.js';
 import { renderStatusLegend } from './status-legend.js';
 import { renderPanelTabs } from './panel-tabs.js';
 
-
 // Three fixed tabs, always in this order. Icons rendered inline so
 // the skeleton has no asset dependency. currentColor inheritance
 // matches the .active / muted state colours from CSS.
@@ -38,7 +62,6 @@ const TABS = [
   { id: 'trace', label: 'Trace', icon: _iconTrace },
   { id: 'debug', label: 'Debug', icon: _iconDebug },
 ];
-
 
 // L5 · the tab strip + persistent panels are now one renderPanelTabs
 // instance (variant 'ld'). It owns the active tab, per-tab scroll-top
@@ -73,7 +96,50 @@ export function panelEl(tabId) {
   return byId(PANEL_PREFIX + tabId) || null;
 }
 
-export function mountLdSkeleton({ camId, cameraName } = {}) {
+// F · shell-hosts mode. When the live-detect view rides the shared
+// MediaView shell, there is no 5-zone container — the shell supplies the
+// title/stage/legend/playbar regions. This mounts ONLY the live tab system
+// (renderPanelTabs 'ld' strip + persistent panels) into the shell's tab +
+// content hosts, and moves #lightboxSettings (Detections content) +
+// #lightboxBottomStack (swimlane) into the shell's panel + playbar slots so
+// their by-id renderers keep working unchanged. The img + overlays are
+// reparented into the shell frame by chrome.js (overlays fall back to
+// #lightboxMediaWrap); the status legend is the shell's band; the title is
+// the shell title bar. Bridges (getActiveTab/panelEl/onTabChange) read the
+// same module _tabsInst, so the tick-loop tab renderers are untouched.
+function _mountLdTabsInShell({ tabsHost, contentHost, timelineHost }) {
+  if (!tabsHost || !contentHost) return;
+  _tabsInst = renderPanelTabs(tabsHost, TABS, {
+    variant: 'ld',
+    contentHost,
+    persistentPanels: true,
+    panelIdPrefix: PANEL_PREFIX,
+    scrollMemory: true,
+    persistKey: LS_ACTIVE_TAB,
+    initialId: DEFAULT_TAB,
+    onChange: _pendingHandlers,
+  });
+  const settings = byId('lightboxSettings');
+  if (settings) {
+    settings.dataset.ldOrigParent = 'lightboxInner';
+    settings.hidden = false;
+    byId(PANEL_PREFIX + 'detections')?.appendChild(settings);
+  }
+  const bottomStack = byId('lightboxBottomStack');
+  if (bottomStack && timelineHost) {
+    bottomStack.dataset.ldOrigParent = 'lightboxInner';
+    timelineHost.appendChild(bottomStack);
+  }
+}
+
+export function mountLdSkeleton({ camId, cameraName, shellHosts } = {}) {
+  // F · shell-hosts mode — no 5-zone container; mount the tab system into
+  // the shell regions and skip the legacy chrome (title/legend/zones).
+  if (shellHosts) {
+    if (_tabsInst) return; // idempotent within one open
+    _mountLdTabsInShell(shellHosts);
+    return;
+  }
   const wrap = byId('lightboxMediaWrap');
   if (!wrap) return;
   // Idempotency — second mount just refreshes the title text.
@@ -187,7 +253,9 @@ function _applyInitialCollapsedStates(camId) {
 
 export function unmountLdSkeleton() {
   const container = byId(CONTAINER_ID);
-  if (!container) return;
+  // F · shell-hosts mode leaves no container — but we still moved
+  // #lightboxSettings + #lightboxBottomStack into the shell + built the tab
+  // instance, so the restore + teardown below must run either way.
   // L3 · tear down the shared legend (document listeners + popover)
   // before the container goes so nothing leaks across re-opens.
   try {
@@ -198,27 +266,26 @@ export function unmountLdSkeleton() {
   _legendHandle = null;
   const inner = byId('lightboxInner');
   const wrap = byId('lightboxMediaWrap');
-  if (!wrap || !inner) {
-    container.remove();
-    return;
-  }
-  // Move #lightboxBottomStack back to #lightboxInner.
+  // Move #lightboxBottomStack back to #lightboxInner. MUST run before the
+  // shell is removed (shell mode) so the node isn't detached with it.
   const bottomStack = byId('lightboxBottomStack');
-  if (bottomStack) {
+  if (bottomStack && inner) {
     inner.appendChild(bottomStack);
     delete bottomStack.dataset.ldOrigParent;
   }
   // Move #lightboxSettings back to #lightboxInner.
   const settings = byId('lightboxSettings');
-  if (settings) {
+  if (settings && inner) {
     inner.appendChild(settings);
     delete settings.dataset.ldOrigParent;
   }
-  // Move all remaining zone-video children back to #lightboxMediaWrap.
-  const zoneVideo = byId(ZONE_IDS.video);
-  if (zoneVideo) {
-    for (const child of Array.from(zoneVideo.children)) {
-      wrap.appendChild(child);
+  // Legacy 5-zone mode: move remaining zone-video children back to the wrap.
+  if (container && wrap) {
+    const zoneVideo = byId(ZONE_IDS.video);
+    if (zoneVideo) {
+      for (const child of Array.from(zoneVideo.children)) {
+        wrap.appendChild(child);
+      }
     }
   }
   // L5 · drop the tab-strip instance (removes the strip + panels, clears
@@ -230,7 +297,7 @@ export function unmountLdSkeleton() {
     /* already detached */
   }
   _tabsInst = null;
-  container.remove();
+  container?.remove();
   // SIMU-01d · session-only fullscreen snapshot is per-mount — reset so
   // the next mount starts from the expanded (or last-LS-state) baseline.
   _fsRestore = null;

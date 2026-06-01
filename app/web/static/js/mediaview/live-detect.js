@@ -30,13 +30,6 @@ import { _tick } from './live-detect-poll.js';
 import { _setupLiveChrome, _mountPanels } from './live-detect-chrome.js';
 import { _startHoldRefresh, _hideStallBanner } from './live-detect-stall.js';
 import { _renderDiagStrip } from './live-detect-diag.js';
-// SIMU-03 · lbRenderTrackTimeline is fired indirectly by _setupVideoChrome
-// on mount (it paints recorded chrome into #lightboxBottomStack before our
-// renderer takes over). Imported only for the type/back-compat hint; no
-// direct call site remains — the live-swimlane.js renderer replaces it.
-import { lbRenderTrackTimeline as _lbRenderTrackTimeline } from '../mediathek/bbox-overlay/index.js';
-void _lbRenderTrackTimeline;
-import { _setupVideoChrome } from '../lightbox.js';
 import { unmountLdSkeleton } from './live-detect-skeleton.js';
 import { stopSnapshotPrefetch } from './live-detect-debug/index.js';
 
@@ -118,6 +111,20 @@ export function openLiveDetect({ camId, cameraName }) {
   // torn_down_prev so a back-to-back cam switch is visible.
   const tornDownPrev = !!S.session;
   closeLiveDetect();
+  // Defensive: the shared #lightboxModal may be mid-weather or mid-recorded
+  // (one container for all modes) — tear those down + restore their borrowed
+  // DOM so two modes never coexist on one modal.
+  try {
+    window.closeWeatherMode?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    window.closeRecordedMode?.();
+  } catch {
+    /* ignore */
+  }
+  byId('lightboxModal')?.classList.remove('lb-weather', 'lb-recorded', 'lb-fs-video');
   S.session = {
     camId,
     cameraName,
@@ -320,11 +327,28 @@ export function closeLiveDetect() {
   // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it
   // doesn't keep hitting the closed session's camId.
   stopSnapshotPrefetch();
-  // SIMU-01 · tear down the 5-zone skeleton last so any remaining
-  // children get re-parented back to #lightboxMediaWrap / #lightbox
-  // Inner before the container is removed. Recorded-clip lightbox
-  // re-uses these IDs and expects them at their original parents.
+  // SIMU-01 · tear down the skeleton/tab system so #lightboxSettings +
+  // #lightboxBottomStack are re-parented back to #lightboxInner before the
+  // shell is removed (shell mode) or the 5-zone container goes (legacy).
   unmountLdSkeleton();
+  // F · restore the reparented media wrap to its DOM home, THEN drop the
+  // shell — the wrap (with the snapshot <img>) must leave the shell before
+  // the shell root is removed, or it'd be detached with it.
+  if (session.wrapHome) {
+    const wrap = byId('lightboxMediaWrap');
+    if (wrap) {
+      try {
+        session.wrapHome.parent?.insertBefore(wrap, session.wrapHome.next || null);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  try {
+    session.shell?.teardown();
+  } catch {
+    /* ignore */
+  }
 }
 
 // gp384 — bbox hold + empty-banner refresh. Drives the per-frame

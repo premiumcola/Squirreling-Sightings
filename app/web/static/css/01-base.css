@@ -432,7 +432,7 @@ p {
   gap: 14px;
   flex: 1;
   min-width: 0;
-  padding-bottom: 60dvh;
+  padding-bottom: 24px;
 }
 
 /* ── Range input · global custom styling ─────────────────────────────────

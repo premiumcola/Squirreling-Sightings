@@ -446,15 +446,6 @@ body.sidebar-locked {
   .cv-cog {
     width: 32px;
   }
-  .cv-sim-btn span {
-    display: none;
-  }
-  .cv-sim-btn {
-    padding: 0;
-    width: 32px;
-    min-width: 32px;
-    gap: 0;
-  }
   /* Telegram cluster — let the single-line label truncate with
      ellipsis when the cluster shares a narrow row with MQTT on a
      375 px tile. B3: was .cv-channel-status before the two-row

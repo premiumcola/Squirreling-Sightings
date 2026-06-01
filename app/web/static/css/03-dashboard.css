@@ -53,6 +53,11 @@
   position: relative;
   min-width: 0;
   contain: paint;
+  /* H1 · query container so the SIM button abbreviates on the TILE width
+     (several cams per row), not just on small viewports. inline-size adds
+     inline + layout containment but no block/size containment, so the
+     aspect-ratio tile + abs-positioned chrome overlays stay put. */
+  container-type: inline-size;
   --cv-overlay-inset: 8px;
   --class-stroke-w: 2.4px;
 }
@@ -1183,6 +1188,21 @@
 }
 .cv-sim-btn.has-text {
   padding: 0 14px;
+}
+/* H1 · full "Simulieren" label by default; collapses to "SIM" when the
+   tile (the .cv-card inline-size container) is narrow — see @container
+   below. Governs the label at every width, replacing the old viewport
+   overrides in 25-mobile.css. */
+.cv-sim-abbr {
+  display: none;
+}
+@container (max-width: 360px) {
+  .cv-sim-btn .cv-sim-full {
+    display: none;
+  }
+  .cv-sim-btn .cv-sim-abbr {
+    display: inline;
+  }
 }
 .cv-cog {
   width: 36px;

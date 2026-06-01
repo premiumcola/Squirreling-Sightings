@@ -871,7 +871,7 @@ ${
         ${_classPills ? `<div class="cv-class-cluster cv-overlay-region" data-region="classicons" data-bg="dark">${_classPills}</div>` : ''}
       </div>
       <div class="cv-chrome-bottom-right">
-        ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span>Simulieren</span></button>` : ''}
+        ${c.rtsp_url ? `<button class="cv-chrome-btn cv-sim-btn has-text" type="button" data-cam="${esc(c.id)}" onclick="event.stopPropagation();window._cvOpenSim && window._cvOpenSim('${esc(c.id)}')" title="Erkennung jetzt simulieren" aria-label="Simulieren">${_CHROME_SIM_SVG}<span class="cv-sim-full">Simulieren</span><span class="cv-sim-abbr" aria-hidden="true">SIM</span></button>` : ''}
         <button class="cv-chrome-btn cv-cog" type="button" onclick="event.stopPropagation();editCamera('${esc(c.id)}')" title="Einstellungen" aria-label="Einstellungen">${_CHROME_COG_SVG}</button>
       </div>
 `

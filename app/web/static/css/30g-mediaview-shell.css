@@ -659,8 +659,21 @@
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
+  /* K4 · clip horizontal overflow so a wide mono trace line can't add a
+     second (horizontal) scrollbar; the content wraps via word-break. */
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+}
+/* K1 · single scroll region in live — the detail panel is the SOLE scroll
+   owner. The fine-analysis fold (shared with recorded) nests its own body +
+   trace scroll regions; in live those stacked as parallel scrollbars inside
+   the detail panel (outer + fold-body + fold-trace = three). Flow the fold
+   into the one outer scroll instead. Recorded keeps its own caps (unscoped). */
+#lightboxModal.lb-live-detect .mv-fafold-body,
+#lightboxModal.lb-live-detect .mv-fafold-trace {
+  max-height: none;
+  overflow: visible;
 }
 
 /* G5 · thin dark scrollbar on the modal scroll regions — the live detail

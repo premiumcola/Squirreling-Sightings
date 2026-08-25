@@ -185,8 +185,17 @@ class CoralObjectDetector:
             except Exception as e2:
                 log.warning("[det] CPU-Inferenz fehlgeschlagen für %s: %s", try_path, e2)
 
-        self.reason = f"pycoral: {coral_error}"
-        log.warning("[det] Kein Detektor verfügbar – nur Bewegungserkennung aktiv")
+        # Every tier failed. Name the tier that was actually tried —
+        # blaming pycoral when the caller asked for CPU sends whoever
+        # reads this log looking in the wrong place.
+        self.reason = (
+            "cpu requested but no usable CPU model"
+            if self._prefer_cpu
+            else f"pycoral: {coral_error}"
+        )
+        log.warning(
+            "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
+        )
 
     # Per-label minimum bounding-box constraints. Surveillance cameras at
     # fixed positions almost never see a real person at <15% frame height

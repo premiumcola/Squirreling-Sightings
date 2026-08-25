@@ -717,7 +717,7 @@ def associate_detections(
     spawn_for: Callable[[str], float] | None = None,
     miss_grace_samples: int = TRACK_MISS_WINDOWS,
     iou_threshold: float = IOU_MATCH_THRESHOLD,
-) -> list[tuple[int, Track]]:
+) -> list[tuple[object, Track]]:
     """Two-tier greedy IoU pairing + spawn + age-out for one frame.
 
     Rules:
@@ -737,11 +737,17 @@ def associate_detections(
     spawn floor instead of the global one. ``spawn_score`` is the
     fallback when ``spawn_for`` is None or returns None.
 
-    Returns ``[(detection_index, track), …]`` for every detection that
-    matched OR spawned a track. The live caller forwards those
-    detections to the rest of the pipeline (confirmer + classifiers +
-    event triggers). The post-clip caller ignores the return value
-    (it queries state.closed at the end of the clip instead).
+    Returns ``[(detection, track), …]`` for every detection that matched
+    OR spawned a track. The live caller forwards those detections to the
+    rest of the pipeline (confirmer + classifiers + event triggers). The
+    post-clip caller ignores the return value (it queries state.closed at
+    the end of the clip instead).
+
+    The first element is the **detection object**, never its index. NMS
+    runs at the entry of this function and returns a new list regrouped
+    by label, so a positional index is only meaningful inside this
+    function — callers hold the pre-NMS list and would resolve such an
+    index to a different detection entirely.
     """
     spawn_lookup: Callable[[str], float]
     if spawn_for is None:
@@ -777,7 +783,11 @@ def associate_detections(
         predicted_bbox(tr, frame_idx) for tr in state.active
     ]
     taken_tracks: set[int] = set()
-    matches: list[tuple[int, Track]] = []  # (di, track)
+    # (detection object, track) — deliberately NOT (index, track): `di`
+    # indexes the post-NMS list built above, and every caller holds the
+    # pre-NMS list. Returning the object removes the whole class of
+    # mismatch. See test_tracker_nms_index.py.
+    matches: list[tuple[object, Track]] = []
 
     def _pair_pass(pool):
         """Greedy IoU pairing for one tier; returns
@@ -816,7 +826,7 @@ def associate_detections(
             tr.add_sample(frame_idx, t_s, bbox_dict, float(d.score), "detect", d.label)
             state.samples_emitted += 1
             update_best_top(state, d, frame_idx, t_s)
-            matches.append((di, tr))
+            matches.append((d, tr))
 
     # Phase 1 — confirmed dets fight for tracks first.
     confirmed_by_di = {di: d for di, d in confirmed}
@@ -901,7 +911,7 @@ def associate_detections(
             blocker.missed_windows = 0
             state.samples_emitted += 1
             update_best_top(state, d, frame_idx, t_s)
-            matches.append((di, blocker))
+            matches.append((d, blocker))
             try:
                 ti = state.active.index(blocker)
                 taken_tracks.add(ti)
@@ -919,7 +929,7 @@ def associate_detections(
             state.active.append(revived)
             state.samples_emitted += 1
             update_best_top(state, d, frame_idx, t_s)
-            matches.append((di, revived))
+            matches.append((d, revived))
             continue
         tid = short_id()
         tr = Track(tid, d.label, frame_idx)
@@ -927,7 +937,7 @@ def associate_detections(
         state.active.append(tr)
         state.samples_emitted += 1
         update_best_top(state, d, frame_idx, t_s)
-        matches.append((di, tr))
+        matches.append((d, tr))
 
     # Age out tracks that didn't get a hit this window. After
     # ``miss_grace_samples`` misses they close. Restricted to indices
@@ -1105,10 +1115,13 @@ class LiveTracker:
             miss_grace_samples=grace,
             iou_threshold=self.iou_threshold,
         )
-        # Return the detection objects (not the (di, track) tuples) in
-        # input order so downstream pipeline stages see a clean list.
-        matched_dets = [detections[di] for di, _tr in matches]
-        return matched_dets
+        # Unwrap the (detection, track) pairs so downstream pipeline
+        # stages see a clean list of detections. Order follows the
+        # tracker's match order, not the caller's input order — the two
+        # differ because NMS regroups by label, and honouring the input
+        # order was exactly the bug that handed classifiers the wrong
+        # crop.
+        return [d for d, _tr in matches]
 
     def active_count(self) -> int:
         return len(self.state.active)

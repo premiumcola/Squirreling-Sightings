@@ -468,12 +468,16 @@ def api_test_detection(cam_id: str):
     except Exception as exc:
         log.warning("[test-detection] %s tracker step failed: %s", cam_id, exc)
         matches = []
-    di_to_num: dict[int, int] = {}
+    # Keyed by id() of the detection object, not by list index: the
+    # tracker's NMS regroups its working list, so an index from there
+    # points at a different box in `raw`. Object identity is exact and
+    # the objects stay alive for this whole request.
+    num_by_det: dict[int, int] = {}
     wall_now = _time.time()
     prev_seen = tt.get("last_seen_ts") or {}
     new_seen: dict[str, float] = {}
     events_buf = tt.get("events") or collections.deque(maxlen=1024)
-    for di, tr in matches:
+    for det, tr in matches:
         tid = tr.track_id
         num = display_nums.get(tid)
         is_new = num is None
@@ -481,12 +485,12 @@ def api_test_detection(cam_id: str):
             tt["next_num"] = int(tt.get("next_num") or 0) + 1
             num = tt["next_num"]
             display_nums[tid] = num
-        di_to_num[di] = num
+        num_by_det[id(det)] = num
         new_seen[tid] = wall_now
         # SIMU-05h · emit SPAWN on first match, CONT on subsequent.
         ev_kind = "spawn" if is_new else "cont"
         try:
-            score_v = float(raw[di].score)
+            score_v = float(det.score)
         except Exception:
             score_v = 0.0
         events_buf.append(
@@ -494,7 +498,7 @@ def api_test_detection(cam_id: str):
                 wall_now,
                 ev_kind,
                 num,
-                getattr(raw[di], "label", ""),
+                getattr(det, "label", ""),
                 round(score_v, 4),
                 None,
                 "",
@@ -553,7 +557,7 @@ def api_test_detection(cam_id: str):
                 "bbox": [int(x1), int(y1), int(max(0, x2 - x1)), int(max(0, y2 - y1))],
                 "verdict": verdict,
                 "reason": reason,
-                "track_num": di_to_num.get(di),
+                "track_num": num_by_det.get(id(d)),
             }
         )
         class_log.append((wall_now, d.label, verdict))

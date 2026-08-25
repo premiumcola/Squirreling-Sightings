@@ -1,12 +1,25 @@
-# Best-effort Coral image for Unraid / Debian-like hosts.
-# Honest note: not hardware-tested here. You may need to tune USB device passthrough on Unraid.
+# Fallback Coral image — Python 3.9 so the pycoral wheel installs.
+#
+# Prefer the standard 3.11 image: detectors/_edgetpu.py reaches the same
+# TPU through a tflite-runtime delegate, which needs no pycoral. This
+# file exists for the case where the delegate route does not engage and
+# the canonical pycoral binding is genuinely required.
+#
+# Build context is app/ (same as docker/Dockerfile), NOT the repo root.
 FROM python:3.9-slim-bullseye
 
+ARG BUILD_COMMIT=dev
+ARG BUILD_DATE=unknown
+ARG BUILD_COUNT=0
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    BUILD_COMMIT=$BUILD_COMMIT \
+    BUILD_DATE=$BUILD_DATE \
+    BUILD_COUNT=$BUILD_COUNT
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl gnupg ca-certificates ffmpeg libglib2.0-0 libsm6 libxext6 libgl1 netcat-openbsd \
+    ffmpeg libglib2.0-0 libsm6 libxext6 libgl1 curl gnupg ca-certificates usbutils netcat-openbsd tzdata iputils-ping \
  && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/coral-edgetpu.gpg \
  && echo "deb [signed-by=/usr/share/keyrings/coral-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" > /etc/apt/sources.list.d/coral-edgetpu.list \
  && apt-get update \
@@ -14,15 +27,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# tflite-runtime pinned to match docker/Dockerfile — compiled against the
+# NumPy 1 C-API (hence the numpy<2 pin in requirements.txt) and matching
+# the opset of the shipped COCO SSD MobileNet v2 bundle.
+RUN pip install --no-cache-dir tflite-runtime==2.14.0
+
+# The whole point of this image: on 3.9 the pycoral wheel exists, so a
+# failure here is fatal rather than best-effort. Falling through to CPU
+# would make this image pointless while looking like it worked.
+RUN pip install --no-cache-dir --extra-index-url https://google-coral.github.io/py-repo "pycoral~=2.0"
+
 COPY app/ /app/app/
+COPY web/ /app/web/
 COPY config/ /app/config/
 COPY scripts/ /app/scripts/
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r /app/requirements.txt \
- # pycoral für Coral TPU (schlägt fehl wenn kein USB-EdgeTPU → ignoriert)
- && python -m pip install --no-cache-dir --extra-index-url https://google-coral.github.io/py-repo pycoral~=2.0 || true \
- # tflite-runtime als CPU-Fallback wenn pycoral nicht verfügbar ist
- && python -m pip install --no-cache-dir tflite-runtime || true
 
 EXPOSE 8099
 CMD ["python", "-m", "app.server"]

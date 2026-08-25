@@ -14,6 +14,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from ._edgetpu import make_delegate_interpreter
 from ._label_loader import load_label_map
 from ._wildlife_rules import (
     _inat_wildlife_category,
@@ -124,8 +125,25 @@ class WildlifeClassifier:
             self._load_inat_backend()
             return
         except Exception as e:
-            log.warning("[det] Wildlife classifier pycoral unavailable (%s) – CPU-Fallback…", e)
+            log.warning("[det] Wildlife classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e)
             coral_error = str(e)
+
+        # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────────
+        # See detectors/_edgetpu.py.
+        delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
+        if delegated is not None:
+            self.interpreter = delegated
+            self._cpu_mode = True
+            self.available = True
+            self.mode = "coral"
+            self.reason = "edgetpu_delegate"
+            log.info(
+                "[det] Wildlife classifier (EdgeTPU-Delegate) aktiv: %s — %d labels",
+                model_path,
+                len(self.labels),
+            )
+            self._load_inat_backend()
+            return
 
         # ── Tier 2: tflite-runtime ────────────────────────────────────────
         cpu_model = self.cfg.get("cpu_model_path")

@@ -357,10 +357,19 @@ docker logs squirreling-sightings --tail 50
 `docker compose up --build` gibt es hier nicht — auf dem Server wird nie
 gebaut. Ein `build:`-Key im Compose-File ist ein Fehler.
 
-**Coral:** der Stick steckt am Host (`1a6e:089a`), aber das
-Standard-Image läuft auf Python 3.11 und `pycoral` liefert dafür kein
-Wheel → `[det] CPU-Fallback aktiv`. Für echte TPU-Inferenz braucht es
-`docker/Dockerfile.coral` (Python 3.9) als eigenes Image.
+**Coral:** der Stick steckt am Host (`1a6e:089a`). Das Standard-Image
+läuft auf Python 3.11, wofür `pycoral` kein Wheel liefert — Tier 1 der
+Detektoren schlägt dort also immer fehl. Die TPU wird stattdessen über
+**Tier 1b** erreicht: `detectors/_edgetpu.py` lädt `libedgetpu.so.1` als
+tflite-Delegate, ganz ohne pycoral. Voraussetzungen: `libedgetpu1-std`
+im Image (ist drin), ein `*_edgetpu.tflite`-Modell in `models/` und der
+USB-Passthrough aus der compose (`/dev/bus/usb`).
+
+Erkennbar im Log: `[det] Coral TPU aktiv (EdgeTPU-Delegate): …`. Wenn
+der Delegate nicht greift, steht der Grund als WARNING davor — nie
+stillschweigend auf CPU zurückfallen lassen. `docker/Dockerfile.coral`
+(Python 3.9, echtes pycoral) ist nur noch der Rückfallweg, falls der
+Delegate scheitert.
 
 ## Local Development (without Docker)
 

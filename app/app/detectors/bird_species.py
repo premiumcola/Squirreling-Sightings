@@ -12,6 +12,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from ._edgetpu import make_delegate_interpreter
 from ._label_loader import _load_bird_latin_to_de, _pretty_bird_label, load_label_map
 
 log = logging.getLogger(__name__)
@@ -65,8 +66,21 @@ class BirdSpeciesClassifier:
             log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
             return
         except Exception as e:
-            log.warning("[det] Bird classifier pycoral unavailable (%s) – CPU-Fallback…", e)
+            log.warning("[det] Bird classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e)
             coral_error = str(e)
+
+        # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────────
+        # See detectors/_edgetpu.py. _classify_cpu already dequantises
+        # uint8/int8 output, so the compiled model parses unchanged.
+        delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
+        if delegated is not None:
+            self.interpreter = delegated
+            self._cpu_mode = True
+            self.available = True
+            self.mode = "coral"
+            self.reason = "edgetpu_delegate"
+            log.info("[det] Bird classifier (EdgeTPU-Delegate) aktiv: %s", model_path)
+            return
 
         # ── Tier 2: tflite-runtime ────────────────────────────────────────
         cpu_model = self.cfg.get("cpu_model_path")

@@ -14,6 +14,7 @@ import threading
 import cv2
 import numpy as np
 
+from ._edgetpu import make_delegate_interpreter
 from ._label_loader import load_label_map
 from ._types import Detection, _apply_region_filter
 
@@ -118,8 +119,23 @@ class CoralObjectDetector:
             log.info("[det] Coral TPU aktiv: %s", model_path)
             return
         except Exception as e:
-            log.warning("[det] Coral TPU nicht verfügbar (%s) – versuche CPU-Fallback…", e)
+            log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
             coral_error = str(e)
+
+        # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────────
+        # Same silicon as tier 1, reached without pycoral. Output is plain
+        # SSD, so the tflite parse path handles it — only the interpreter
+        # construction differs, hence _cpu_mode (= "uses the tflite API")
+        # is True while mode stays "coral" (= "runs on the TPU").
+        delegated = make_delegate_interpreter(model_path, self.device)
+        if delegated is not None:
+            self.interpreter = delegated
+            self._cpu_mode = True
+            self.available = True
+            self.mode = "coral"
+            self.reason = "edgetpu_delegate"
+            log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
+            return
 
         # ── Tier 2: tflite-runtime CPU fallback ────────────────────────────
         # For EdgeTPU models (*_edgetpu.tflite) try the non-EdgeTPU variant.

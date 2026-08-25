@@ -296,9 +296,10 @@ def empty() -> int:
 
 def cleanup_expired() -> int:
     """Daily sweep: hard-delete trash entries past the grace period.
-    Wire into the existing daily maintenance cron in a follow-up
-    commit; for now the function is exposed so a manual cron / test
-    can run it."""
+
+    Called from `maintenance._run_daily_cleanup`, alongside the event
+    retention sweep. Also safe to invoke manually (a cron, a test, or
+    the POST /api/trash/empty route's hard-delete path)."""
     root = _trash_root()
     if not root.exists():
         return 0

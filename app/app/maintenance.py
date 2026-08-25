@@ -29,6 +29,19 @@ def _run_daily_cleanup():
             )
     except Exception as e:
         logging.getLogger(__name__).warning(f"[storage] Failed: {e}")
+    # trash.cleanup_expired() shipped with the docstring "wire into the
+    # existing daily maintenance cron in a follow-up commit" — that
+    # commit never landed, so storage/.trash grew unbounded and only
+    # emptied via a manual POST /api/trash/empty (11 GB of May entries
+    # were found once). This is that follow-up.
+    try:
+        from .trash import cleanup_expired
+
+        purged = cleanup_expired()
+        if purged:
+            logging.getLogger(__name__).info("[storage] Trash: %d expired entries purged", purged)
+    except Exception as e:
+        logging.getLogger(__name__).warning("[storage] Trash cleanup failed: %s", e)
     t = threading.Timer(86400, _run_daily_cleanup)
     t.daemon = True
     t.start()

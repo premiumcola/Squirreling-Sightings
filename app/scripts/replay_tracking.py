@@ -10,10 +10,24 @@ be confirmed or refuted instead of believed.
 SAFE TO RUN ALONGSIDE THE LIVE INSTANCE:
   * Read-only on storage. The only writes go to --out (default
     storage/_replay/), never into motion_detection/.
-  * Forces `prefer_cpu`, so it never takes the Edge TPU away from the
-    running camera loops. On a 5950X that costs latency, not much else,
-    and this is a batch job.
   * Touches no settings, starts no server, sends no Telegram message.
+
+CPU OR TPU — this matters for more than speed. The two tiers load
+DIFFERENT MODEL FILES: `--tpu` uses the `*_edgetpu.tflite` the live path
+uses, plain CPU uses the non-quantised twin. Same architecture, but
+quantisation shifts the scores, so a CPU replay does not faithfully
+reproduce what the live detector saw.
+
+  * `--tpu`  — faithful to production. Use this when validating a change
+    against live behaviour. It briefly shares the single USB TPU with the
+    camera loops; libedgetpu serialises access, so the effect is added
+    latency on both sides for the duration of the run, not corruption.
+  * default (CPU) — leaves the TPU untouched. Fine for a smoke test or
+    when the live instance is under load, but treat the scores as
+    indicative rather than identical to production.
+
+Either way the comparison between two replay runs is valid as long as
+both runs use the same tier.
 
 Typical use, from inside the container:
 
@@ -241,6 +255,16 @@ def main() -> int:
         action="store_true",
         help="also replay .raw.mp4 stream-copy files (sometimes the only valid copy)",
     )
+    ap.add_argument(
+        "--tpu",
+        action="store_true",
+        help=(
+            "use the Edge TPU and the *_edgetpu.tflite model the live path uses. "
+            "Faithful to production scores; briefly shares the TPU with the camera loops. "
+            "Without this the non-quantised CPU twin is used and scores differ slightly."
+        ),
+    )
+    ap.add_argument("--cpu-threads", type=int, default=0, help="tflite CPU threads (0 = default)")
     args = ap.parse_args()
 
     storage_root = Path(args.storage)
@@ -254,12 +278,22 @@ def main() -> int:
     if not cfg.get("model_path"):
         print("no detection model configured — nothing to replay")
         return 2
-    # Never contend with the live camera loops for the single USB TPU.
     cfg = dict(cfg)
-    cfg["prefer_cpu"] = True
     cfg.setdefault("mode", "coral")
-
-    print(f"model : {cfg.get('cpu_model_path') or cfg.get('model_path')}  (CPU, forced)")
+    if args.tpu:
+        # Same silicon AND same model file as production, so the scores
+        # are comparable with what the live detector recorded.
+        print(f"model : {cfg.get('model_path')}  (TPU — production-faithful)")
+    else:
+        cfg["prefer_cpu"] = True
+        if args.cpu_threads:
+            cfg["cpu_threads"] = args.cpu_threads
+        print(
+            f"model : {cfg.get('cpu_model_path') or cfg.get('model_path')}  (CPU)\n"
+            "        note: non-quantised twin of the live model — scores differ "
+            "slightly.\n"
+            "        use --tpu for a production-faithful run."
+        )
     detector = CoralObjectDetector(cfg)
     if not detector.available:
         print(f"detector unavailable: {detector.reason}")

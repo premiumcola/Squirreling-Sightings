@@ -31,6 +31,7 @@ from ._main_loop import MainLoopMixin
 from ._motion import MotionMixin
 from ._recording import RecordingMixin
 from ._status import StatusMixin
+from ._wildlife_stage import WildlifeStageMixin
 from ._timelapse import TimelapseMixin
 from ._zones import ZonesMixin
 
@@ -119,6 +120,7 @@ class CameraRuntime(
     RecordingMixin,
     TimelapseMixin,
     StatusMixin,
+    WildlifeStageMixin,
     MainLoopMixin,
 ):
     def __init__(

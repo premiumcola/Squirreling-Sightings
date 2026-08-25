@@ -368,98 +368,20 @@ class MainLoopMixin:
                                 d.species_score = (
                                     float(species_score) if species_score is not None else None
                                 )
-                # Wildlife second-stage: catches fox / squirrel / hedgehog —
-                # none of which have a COCO class. Gating logic:
-                #   - Confident COCO bird / dog / person → skip wildlife.
-                #     These animals genuinely look like themselves to COCO,
-                #     no point second-guessing.
-                #   - Confident COCO cat (≥0.92) → skip wildlife. Anything
-                #     below that threshold is a "soft cat" that COCO often
-                #     emits on frontal-sitting squirrels; we keep wildlife
-                #     in the running and let it overrule a soft cat below.
-                hard_skip_labels = ("bird", "dog", "person")
-                soft_cat = next(
-                    (d for d in detections if d.label == "cat" and d.score < 0.92),
-                    None,
+                # Wildlife second-stage (fox / squirrel / hedgehog — none of
+                # which exist as a COCO class). Lives in _wildlife_stage.py;
+                # it classifies a CROP around the motion box rather than the
+                # whole frame, which is what the offline test panel always
+                # did and the live path never did.
+                detections, labels = self._apply_wildlife_stage(
+                    proc_frame,
+                    detections,
+                    labels,
+                    motion_confirmed=motion_confirmed,
+                    wildlife_motion_only=wildlife_motion_only,
+                    allowed=allowed,
+                    effective_bbox=effective_bbox,
                 )
-                hard_cat = any(d.label == "cat" and d.score >= 0.92 for d in detections)
-                if (
-                    (motion_confirmed or wildlife_motion_only)
-                    and self.wildlife_classifier.available
-                    and not any(d.label in hard_skip_labels for d in detections)
-                    and not hard_cat
-                ):
-                    try:
-                        wl_min = self.cfg.get("wildlife_min_score") or None
-                        cat, raw_lbl, wscore = self.wildlife_classifier.classify_crop(
-                            proc_frame,
-                            min_score=wl_min,
-                        )
-                    except Exception:
-                        cat, raw_lbl, wscore = None, None, None
-                    if cat and (not allowed or cat in allowed):
-                        h0, w0 = proc_frame.shape[:2]
-                        # Localise the animal: re-run COCO at a low threshold
-                        # and pick the bbox of any animal-shaped class
-                        # (cat/dog/bear/sheep/cow). The label is wrong but
-                        # the geometry is right — we only borrow the bbox.
-                        # Falls back to the motion bbox, then the full frame.
-                        bb = _refine_wildlife_bbox(
-                            self.detector,
-                            proc_frame,
-                            effective_bbox,
-                            (w0, h0),
-                        )
-                        wl_det = Detection(
-                            label=cat,
-                            score=float(wscore) if wscore is not None else 0.5,
-                            bbox=bb,
-                            species=raw_lbl,
-                            species_score=float(wscore) if wscore is not None else None,
-                        )
-                        survivors = self._filter_masked_detections(proc_frame, [wl_det])
-                        survivors = self._filter_zoned_detections(proc_frame, survivors)
-                        if survivors:
-                            # Cat-vs-squirrel override: COCO often calls a
-                            # frontal squirrel "cat" with moderate
-                            # confidence. If wildlife is sure enough, drop
-                            # the soft-cat detection and let squirrel win.
-                            if (
-                                cat == "squirrel"
-                                and soft_cat is not None
-                                and float(wscore or 0) >= 0.45
-                            ):
-                                log.info(
-                                    "[%s] cat→squirrel override: cat %.2f replaced by wildlife squirrel %.2f",
-                                    self.camera_id,
-                                    soft_cat.score,
-                                    float(wscore),
-                                )
-                                detections = [d for d in detections if d is not soft_cat]
-                                labels = [L for L in labels if L != "cat"]
-                            # Confident squirrel → suppress overlapping COCO
-                            # false-positives (cat/dog/bear/teddy bear) so
-                            # the event isn't double-labelled. The whole
-                            # project's purpose is squirrel detection — once
-                            # the wildlife model is sure, COCO's misreads on
-                            # the same patch become noise.
-                            if cat == "squirrel" and float(wscore or 0) >= 0.55:
-                                pre = len(detections)
-                                detections = _suppress_overlap(
-                                    detections,
-                                    bb,
-                                    drop_labels=("cat", "dog", "bear", "teddy bear"),
-                                    iou_min=0.3,
-                                )
-                                if len(detections) != pre:
-                                    labels = [
-                                        L
-                                        for L in labels
-                                        if L not in ("cat", "dog", "bear", "teddy bear")
-                                        or any(d.label == L for d in detections)
-                                    ]
-                            detections.append(wl_det)
-                            labels.append(cat)
                 if self.cat_registry:
                     for d in detections:
                         if d.label == "cat":

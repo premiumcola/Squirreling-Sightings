@@ -1,0 +1,202 @@
+"""Wildlife second-stage classification, carved out of `_main_loop._loop`.
+
+Catches fox / squirrel / hedgehog — none of which have a COCO class, so
+the first-stage detector can never name them. Extracted because `_loop`
+had grown to a single ~826-line method (CLAUDE.md budget: 80), and this
+block is a self-contained concern with one input and one output.
+
+The extraction also fixed the stage's central weakness: it used to hand
+the classifier the **entire frame**. `WildlifeClassifier` wraps an
+ImageNet MobileNet — a whole-image classifier that expects one dominant
+subject. On a 2560x1440 feeder scene a squirrel occupies a few percent
+of the pixels, and squeezing that into 224x224 dilutes it into the
+background. The offline Coral test panel always cropped first
+(`routes/coral.py`), which is why its accuracy never transferred to the
+live path. See `_wildlife_crop`.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from ..detectors import Detection
+from ._consts import _refine_wildlife_bbox, _suppress_overlap
+
+log = logging.getLogger(__name__)
+
+# COCO labels that mean "do not bother with the wildlife stage" — these
+# animals genuinely look like themselves to COCO.
+_HARD_SKIP_LABELS = ("bird", "dog", "person")
+
+# A COCO "cat" at or above this score is taken at face value. Below it,
+# the detection is a "soft cat" — COCO emits that a lot on frontal,
+# upright squirrels — and the wildlife stage is allowed to overrule it.
+_HARD_CAT_SCORE = 0.92
+
+# Wildlife confidence needed to overrule a soft cat / to suppress
+# overlapping COCO misreads on the same patch.
+_OVERRULE_SOFT_CAT = 0.45
+_SUPPRESS_OVERLAP = 0.55
+
+# Padding applied around the motion box before classification. A tight
+# motion box often clips ears, tail or head; a little context measurably
+# helps a whole-image classifier without reintroducing the full-frame
+# dilution problem.
+_CROP_PAD_FRAC = 0.30
+
+# Never crop below this many pixels per side — a 20px motion blob
+# upscaled to 224x224 is mush, and the surrounding context is what makes
+# the difference between "squirrel" and "leaf".
+_CROP_MIN_PX = 96
+
+
+class WildlifeStageMixin:
+    def _wildlife_crop(self, frame, motion_bbox):
+        """Return the region to classify: padded motion box, else the frame.
+
+        `motion_bbox` is ``(x, y, w, h)`` as produced by the motion
+        stage, or None when motion was not confirmed. Falling back to the
+        whole frame preserves the previous behaviour for that case
+        instead of inventing a guess.
+        """
+        h0, w0 = frame.shape[:2]
+        if not motion_bbox:
+            return frame, None
+        try:
+            mx, my, mw, mh = (int(v) for v in motion_bbox)
+        except (TypeError, ValueError):
+            return frame, None
+        if mw <= 0 or mh <= 0:
+            return frame, None
+
+        pad_x = int(mw * _CROP_PAD_FRAC)
+        pad_y = int(mh * _CROP_PAD_FRAC)
+        x1 = mx - pad_x
+        y1 = my - pad_y
+        x2 = mx + mw + pad_x
+        y2 = my + mh + pad_y
+
+        # Grow a too-small box around its own centre before clamping, so
+        # the subject keeps its position in the crop.
+        if (x2 - x1) < _CROP_MIN_PX:
+            cx = (x1 + x2) // 2
+            x1, x2 = cx - _CROP_MIN_PX // 2, cx + _CROP_MIN_PX // 2
+        if (y2 - y1) < _CROP_MIN_PX:
+            cy = (y1 + y2) // 2
+            y1, y2 = cy - _CROP_MIN_PX // 2, cy + _CROP_MIN_PX // 2
+
+        x1 = max(0, min(x1, w0 - 1))
+        y1 = max(0, min(y1, h0 - 1))
+        x2 = max(x1 + 1, min(x2, w0))
+        y2 = max(y1 + 1, min(y2, h0))
+
+        crop = frame[y1:y2, x1:x2]
+        if crop is None or crop.size == 0:
+            return frame, None
+        return crop, (x1, y1, x2, y2)
+
+    def _wildlife_gate_open(self, detections, *, motion_confirmed, wildlife_motion_only):
+        """Whether the wildlife stage should run for this frame."""
+        if not (motion_confirmed or wildlife_motion_only):
+            return False
+        if not self.wildlife_classifier.available:
+            return False
+        if any(d.label in _HARD_SKIP_LABELS for d in detections):
+            return False
+        return not any(d.label == "cat" and d.score >= _HARD_CAT_SCORE for d in detections)
+
+    def _apply_wildlife_stage(
+        self,
+        proc_frame,
+        detections: list,
+        labels: list,
+        *,
+        motion_confirmed: bool,
+        wildlife_motion_only: bool,
+        allowed,
+        effective_bbox,
+    ) -> tuple[list, list]:
+        """Run the wildlife classifier and fold its verdict into the frame.
+
+        Returns the (possibly rewritten) ``detections`` and ``labels``.
+        Both are returned rather than mutated in place because the
+        cat-vs-squirrel override REPLACES the lists.
+        """
+        if not self._wildlife_gate_open(
+            detections,
+            motion_confirmed=motion_confirmed,
+            wildlife_motion_only=wildlife_motion_only,
+        ):
+            return detections, labels
+
+        soft_cat = next(
+            (d for d in detections if d.label == "cat" and d.score < _HARD_CAT_SCORE),
+            None,
+        )
+        crop, crop_box = self._wildlife_crop(proc_frame, effective_bbox)
+        try:
+            wl_min = self.cfg.get("wildlife_min_score") or None
+            cat, raw_lbl, wscore = self.wildlife_classifier.classify_crop(crop, min_score=wl_min)
+        except Exception:
+            cat, raw_lbl, wscore = None, None, None
+        if not cat or (allowed and cat not in allowed):
+            return detections, labels
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug(
+                "[%s] wildlife: %s %.2f (crop=%s)",
+                self.camera_id,
+                cat,
+                float(wscore or 0),
+                "full frame" if crop_box is None else f"{crop.shape[1]}x{crop.shape[0]}",
+            )
+
+        h0, w0 = proc_frame.shape[:2]
+        # Localise the animal: re-run COCO at a low threshold and pick the
+        # bbox of any animal-shaped class (cat/dog/bear/sheep/cow). The
+        # label is wrong but the geometry is right — we only borrow the
+        # bbox. Falls back to the motion bbox, then the full frame.
+        bb = _refine_wildlife_bbox(self.detector, proc_frame, effective_bbox, (w0, h0))
+        wl_det = Detection(
+            label=cat,
+            score=float(wscore) if wscore is not None else 0.5,
+            bbox=bb,
+            species=raw_lbl,
+            species_score=float(wscore) if wscore is not None else None,
+        )
+        survivors = self._filter_masked_detections(proc_frame, [wl_det])
+        survivors = self._filter_zoned_detections(proc_frame, survivors)
+        if not survivors:
+            return detections, labels
+
+        score = float(wscore or 0)
+        # Cat-vs-squirrel override: COCO often calls a frontal squirrel
+        # "cat" with moderate confidence. If wildlife is sure enough,
+        # drop the soft-cat detection and let squirrel win.
+        if cat == "squirrel" and soft_cat is not None and score >= _OVERRULE_SOFT_CAT:
+            log.info(
+                "[%s] cat→squirrel override: cat %.2f replaced by wildlife squirrel %.2f",
+                self.camera_id,
+                soft_cat.score,
+                score,
+            )
+            detections = [d for d in detections if d is not soft_cat]
+            labels = [lbl for lbl in labels if lbl != "cat"]
+
+        # Confident squirrel → suppress overlapping COCO false-positives
+        # so the event isn't double-labelled. Once the wildlife model is
+        # sure, COCO's misreads on the same patch are noise.
+        if cat == "squirrel" and score >= _SUPPRESS_OVERLAP:
+            drop = ("cat", "dog", "bear", "teddy bear")
+            pre = len(detections)
+            detections = _suppress_overlap(detections, bb, drop_labels=drop, iou_min=0.3)
+            if len(detections) != pre:
+                labels = [
+                    lbl
+                    for lbl in labels
+                    if lbl not in drop or any(d.label == lbl for d in detections)
+                ]
+
+        detections.append(wl_det)
+        labels.append(cat)
+        return detections, labels

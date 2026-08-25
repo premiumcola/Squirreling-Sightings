@@ -65,10 +65,5 @@ def api_admin_timelapse_cleanup():
 
 @bp.post('/api/reload')
 def api_reload():
-    # Lazy import to avoid the cycle: server.py still owns the boot
-    # helpers and imports `routes` for blueprint registration. R01.6
-    # relocates these into a dedicated module.
-    from ..server import rebuild_runtimes
-
-    rebuild_runtimes()
+    app_state.rebuild_runtimes()
     return jsonify({"ok": True})

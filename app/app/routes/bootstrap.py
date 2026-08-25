@@ -581,10 +581,10 @@ def api_status():
 
 @bp.get('/api/system')
 def api_system():
-    # Lazy import — server.py owns the build-info constants until R01.6
-    # finishes the cleanup pass. Imported per request so any future
-    # rebind on server.py side is observable here.
-    from ..server import _BUILD_INFO, _PROCESS_START_ISO
+    # R01.6 · straight from lifecycle.py, where both constants actually
+    # live. server.py only ever re-exported them, and importing it by
+    # name re-executes the whole boot block (see app_state).
+    from ..lifecycle import _BUILD_INFO, _PROCESS_START_ISO
 
     mem_total = mem_used = proc_mem_mb = uptime_s = 0.0
     try:
@@ -639,8 +639,6 @@ def api_system():
 
 @bp.post('/api/wizard/complete')
 def api_wizard_complete():
-    from ..server import rebuild_runtimes
-
     settings = app_state.settings
     payload = request.get_json(force=True) or {}
     try:
@@ -663,7 +661,7 @@ def api_wizard_complete():
         settings.update_section("ui", {"wizard_completed": True})
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 422
-    rebuild_runtimes()
+    app_state.rebuild_runtimes()
     return jsonify({"ok": True, "bootstrap": settings.bootstrap_state()})
 
 
@@ -683,15 +681,13 @@ def api_settings_export():
 
 @bp.post('/api/settings/import')
 def api_settings_import():
-    from ..server import rebuild_runtimes
-
     settings = app_state.settings
     payload = request.get_json(force=True) or {}
     fmt = payload.get('format', 'json')
     content = payload.get('content', '')
     try:
         settings.import_text(content, fmt)
-        rebuild_runtimes()
+        app_state.rebuild_runtimes()
         return jsonify({"ok": True, "bootstrap": settings.bootstrap_state()})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

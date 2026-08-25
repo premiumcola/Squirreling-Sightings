@@ -65,6 +65,18 @@ weather_service: WeatherService | None = None
 runtimes: dict[str, CameraRuntime] = {}
 _runtime_cfgs: dict[str, dict] = {}
 
+# ── Boot-control hooks (bound by server.py once the functions exist) ──────
+# R01.6. Routes and the Telegram bot used to reach these with a
+# function-local `from ..server import ...`. Production runs
+# `python -m app.server`, so the process owns that file as "__main__" and
+# `app.server` is NOT in sys.modules — the first such import therefore
+# re-executes server.py top-to-bottom as a SECOND module object, with its
+# own camera runtimes and its own TelegramService on the same bot token.
+# Publishing the callables here means no module ever imports server.py by
+# name, which is the only thing that closes that hole for good.
+rebuild_runtimes: Callable[[], None] | None = None
+restart_single_camera: Callable[..., None] | None = None
+
 
 def get_effective_config() -> dict:
     """Return the merged base_cfg + settings.json view used everywhere

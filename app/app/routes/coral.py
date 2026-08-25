@@ -570,8 +570,6 @@ def api_coral_models_select():
 
     Path traversal protection: target must resolve inside /app/models/.
     """
-    from ..server import rebuild_runtimes
-
     settings = app_state.settings
     payload = request.get_json(silent=True) or {}
     raw_path = (payload.get("path") or "").strip()
@@ -623,7 +621,7 @@ def api_coral_models_select():
         bucket["enabled"] = True
     settings.save()
     try:
-        rebuild_runtimes()
+        app_state.rebuild_runtimes()
     except Exception as e:
         log.warning("[coral] model switch: rebuild_runtimes failed: %s", e)
     return jsonify({"ok": True, "path": str(target), "category": category})

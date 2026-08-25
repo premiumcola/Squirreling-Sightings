@@ -6,11 +6,15 @@ after `app_state` is wired up. Blueprints reach shared state via
 `from .. import app_state` — never via `from ..server import ...`,
 since that would close a circular-import loop.
 
-The one-way exception: a handful of routes need the boot helpers
-`rebuild_runtimes` / `restart_single_camera`, which still live in
-server.py. Those imports are lazy (inside the route function body) to
-avoid the import-time cycle. R01.6 cleans this up by relocating the
-boot helpers out of server.py.
+R01.6 closed the last exception: routes that need the boot helpers now
+call `app_state.rebuild_runtimes()` / `app_state.restart_single_camera()`,
+which server.py publishes onto app_state at boot. Nothing imports
+server.py by name any more — and nothing may start again. Production
+runs `python -m app.server`, so that file is owned by `__main__` and
+`app.server` is absent from sys.modules; the first `from ..server import
+...` therefore re-executes the entire boot block as a second module,
+yielding a duplicate camera-runtime set and a second Telegram poller on
+the same token (the T61 Conflict).
 """
 
 from __future__ import annotations

@@ -285,11 +285,9 @@ class _RootMixin:
     def _logs_view(self) -> tuple[str, InlineKeyboardMarkup]:
         # Last 10 WARNING/ERROR lines from the in-memory log buffer in server.py.
         try:
-            from ... import server as _srv
+            from ...logging_setup import log_buffer
 
-            recs = [r for r in _srv.log_buffer.get(0) if r.get("level") in ("WARNING", "ERROR")][
-                -10:
-            ]
+            recs = [r for r in log_buffer.get(0) if r.get("level") in ("WARNING", "ERROR")][-10:]
         except Exception:
             recs = []
         if not recs:

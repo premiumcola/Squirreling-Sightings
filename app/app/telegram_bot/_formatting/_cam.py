@@ -219,9 +219,9 @@ class _CamMixin:
         user having to leave the chat. Returns True iff the runtime is
         live afterwards."""
         try:
-            from ... import server as _srv
+            from ... import app_state as _st
 
-            _srv.restart_single_camera(cam_id)
+            _st.restart_single_camera(cam_id)
         except Exception as e:
             log.warning("[tg] restart_single_camera(%s) failed: %s", cam_id, e)
             return False

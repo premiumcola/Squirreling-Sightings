@@ -1,11 +1,10 @@
 """Camera CRUD, settings/cameras, settings/app, and settings/backups.
 
 Migrated from server.py during R01.3. Camera-save and camera-delete
-both touch live runtimes via `restart_single_camera` /
-`rebuild_runtimes`, which still live in server.py. Those imports are
-lazy inside the route bodies — same pattern admin.py uses for
-`/api/reload`. Settings/app save also calls `rebuild_runtimes` for
-config changes that affect runtime behaviour.
+both touch live runtimes via `app_state.restart_single_camera` /
+`app_state.rebuild_runtimes`, which server.py publishes at boot (R01.6).
+Settings/app save also calls `rebuild_runtimes` for config changes that
+affect runtime behaviour.
 """
 
 from __future__ import annotations
@@ -205,8 +204,6 @@ def api_settings_cam_restore_connection(cam_id: str):
     field on the cam (zones, schedule, profiles…) and every other camera
     is left alone. Triggers restart_single_camera so the cam comes back
     online without a full reload."""
-    from ..server import restart_single_camera
-
     settings = app_state.settings
     payload = request.get_json(force=True) or {}
     filename = (payload.get("filename") or "").strip()
@@ -232,7 +229,7 @@ def api_settings_cam_restore_connection(cam_id: str):
         settings.upsert_camera(merged)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 422
-    restart_single_camera(cam_id)
+    app_state.restart_single_camera(cam_id)
     return jsonify(
         {
             "ok": True,
@@ -245,8 +242,6 @@ def api_settings_cam_restore_connection(cam_id: str):
 
 @bp.post('/api/settings/cameras')
 def api_settings_cameras_save():
-    from ..server import restart_single_camera
-
     settings = app_state.settings
     runtimes = app_state.runtimes
     _runtime_cfgs = app_state._runtime_cfgs
@@ -287,9 +282,9 @@ def api_settings_cameras_save():
             existing.stop()
         _runtime_cfgs.pop(old_id, None)
         if enabled_now:
-            restart_single_camera(new_id, reason="rebound after migration")
+            app_state.restart_single_camera(new_id, reason="rebound after migration")
     elif conn_changed or (new_id not in runtimes and enabled_now):
-        restart_single_camera(new_id, reason="rebound after edit")
+        app_state.restart_single_camera(new_id, reason="rebound after edit")
     return jsonify(
         {
             "ok": True,
@@ -688,8 +683,6 @@ def api_settings_app():
 
 @bp.post('/api/settings/app')
 def api_settings_app_save():
-    from ..server import rebuild_runtimes
-
     settings = app_state.settings
     payload = request.get_json(force=True) or {}
     needs_rebuild = False
@@ -728,7 +721,7 @@ def api_settings_app_save():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 422
     if needs_rebuild:
-        rebuild_runtimes()
+        app_state.rebuild_runtimes()
     return jsonify({"ok": True, "saved": True})
 
 

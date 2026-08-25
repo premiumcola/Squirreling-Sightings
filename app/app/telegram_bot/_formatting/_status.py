@@ -351,9 +351,9 @@ class _StatusMixin:
         # Weather — last poll age + summary of active event triggers
         weather_line = "Wetter     ⚪ kein Poll bekannt"
         try:
-            from ... import server as _srv
+            from ... import app_state as _st
 
-            wsvc = getattr(_srv, "weather_service", None)
+            wsvc = getattr(_st, "weather_service", None)
         except Exception:
             wsvc = None
         try:

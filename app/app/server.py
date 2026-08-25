@@ -22,9 +22,9 @@ from .cat_identity import IdentityRegistry
 from .config_loader import load_config
 
 # Boot helpers — moved to lifecycle.py during the modular refactor.
-# The names re-exported here keep `from ..server import _BUILD_INFO,
-# _PROCESS_START_ISO` (routes/bootstrap.py) and every in-file caller
-# resolving without a path change.
+# Imported here for this file's own callers only; external consumers
+# (routes/bootstrap.py) now import them straight from lifecycle, since
+# importing server.py by name re-runs this whole boot block (R01.6).
 from .lifecycle import (  # noqa: E402
     _emit_boot_inventory,
     _fetch_github_commit_count,
@@ -496,6 +496,14 @@ def rebuild_runtimes():
         ", ".join(running) if running else "—",
         f" — {len(missing)} skipped/failed: {', '.join(missing)}" if missing else "",
     )
+
+
+# R01.6 · publish the boot-control hooks so no route or bot handler ever
+# needs `from ..server import ...`. See app_state for why that import is
+# load-bearing: under `python -m app.server` it re-executes this whole
+# file as a second module, doubling the runtimes and the TG poller.
+app_state.rebuild_runtimes = rebuild_runtimes
+app_state.restart_single_camera = restart_single_camera
 
 
 rebuild_runtimes()

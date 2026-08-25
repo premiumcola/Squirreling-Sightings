@@ -3,6 +3,29 @@
 Laufende Aufgabenverfolgung. Ergänzt das Tuning-Board (Artifact) um die
 arbeitsfähige Liste. Board = wo wir stehen, diese Datei = was zu tun ist.
 
+## Ziel
+
+**Alle Board-Kategorien auf > 80.** Nicht eine Kategorie perfekt, sondern
+alle über die Linie — der schwächste Wert bestimmt, wie zuverlässig sich
+das System anfühlt. Nach jeder erledigten Aufgabe den Reifegrad im Board
+nachziehen und begründen, warum er gestiegen ist.
+
+Board: https://claude.ai/code/artifact/0825e233-df25-4703-9101-1e43213e530b
+
+Stand 2026-08-26 früh (Ausgangswerte): Tracking 62 · TPU 60 · Hybrid 45 ·
+Kleine Objekte 45 · Einstufung 40 · Code-Hygiene 40 · Messbarkeit 45 ·
+Datenhaltbarkeit 25 · User-Einstufungen 18 · Schwellen-Dynamik 15 ·
+Rückfragen 15 · Lernen 14.
+
+Die vier untersten (Lernen, Rückfragen, Schwellen-Dynamik,
+User-Einstufungen) hängen alle am selben Fundament: **C4, der
+Feedback-Ledger.** Ohne ihn ist dort kein Fortschritt möglich, mit ihm
+werden alle vier gleichzeitig beweglich. Deshalb hat C4 Vorrang vor allem
+anderen im unteren Feld.
+
+Reihenfolge-Prinzip: erst messen (V2, M1), dann bauen. Eine Verbesserung,
+die sich nicht am Replay oder an einer Log-Zahl zeigen lässt, zählt nicht.
+
 Status: `[ ]` offen · `[~]` in Arbeit · `[x]` erledigt · `[!]` blockiert
 · `[-]` verworfen
 
@@ -34,13 +57,14 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
 
 ## Code · hoher Wert, überschaubares Risiko
 
-- [ ] **C1 · Crop vor der Wildlife-Klassifikation** (`_main_loop.py:392`)
-      Der Wildlife-Klassifikator bekommt das **volle 4-MP-Bild** auf 224×224
-      gequetscht. Ein Eichhörnchen auf wenigen Prozent der Fläche verschwindet
-      im Hintergrundrauschen. Das Coral-Testpanel croppt bereits korrekt
-      (`routes/coral.py:223`) — deshalb sieht der Test besser aus als die
-      Realität. Logik in den Live-Pfad ziehen.
-      *Größter Genauigkeitsgewinn im Code-Bereich.*
+- [x] **C1 · Crop vor der Wildlife-Klassifikation** — `21932c5`.
+      Der Klassifikator bekam das **volle 4-MP-Bild** auf 224×224 gequetscht.
+      Jetzt: gepaddeter Crop um die Bewegungsbox (30 % Rand, min. 96 px),
+      Rückfall auf das Vollbild nur ohne Bewegungsbox. Bei typischer
+      Motivgröße sieht das Modell jetzt <5 % der Bildfläche statt 100 %.
+      Enthielt zugleich den R1-Teilschritt: Block als eigenes
+      `_wildlife_stage.py`-Mixin extrahiert, `_main_loop.py` 885→807 Zeilen.
+      19 neue Tests.
 - [ ] **C2 · Klassifikatoren auf die CPU** — `prefer_cpu` existiert seit
       `cbfb174`. Drei Modelle auf einer TPU mit 8 MB SRAM schreiben bei jedem
       Wechsel den Parameter-Cache über USB neu; im Live-Pfad passiert das
@@ -81,6 +105,19 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
 - [ ] **C9 · `routes/telegram.py:161`** — matcht `("polling","running",
       "active")`; die ersten beiden gibt `get_polling_status` nie zurück.
       Heute harmlos, aber irreführend.
+
+## Verifikation
+
+- [x] **V1 · Replay-Werkzeug** — `1a8976b`,
+      `app/scripts/replay_tracking.py`. Spielt vorhandene Clips offline durch
+      denselben `tracker_core`, rendert annotierte Standbilder und gibt
+      Kennzahlen aus (Spuren, Frames mit Treffern, Spuren mit Label-Wechsel).
+      Erzwingt `prefer_cpu`, nimmt der Live-Instanz also nie die TPU weg;
+      schreibt ausschließlich nach `storage/_replay/`.
+      → Aufruf siehe unten unter „Nächster Lauf".
+- [ ] **V2 · Vorher/Nachher-Vergleich fahren** — Replay gegen dieselben
+      Clips vor und nach `833cf74`/`21932c5`, Kennzahlen diffen. Belegt
+      oder widerlegt die behaupteten Verbesserungen an echten Daten.
 
 ## Messbarkeit — Voraussetzung für alles Weitere
 
@@ -131,6 +168,19 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
       Konstant-Geschwindigkeits-Prädiktor.
 - [ ] **T2 · Wildlife-Treffer laufen am Tracker vorbei**
       (`_main_loop.py:344` vs `:461`) — sie bekommen nie eine Spur.
+
+## Nächster Lauf — Startbefehle
+
+Replay auf echten Clips (läuft im Container, nimmt der Live-Instanz nie
+die TPU weg, schreibt nur nach `storage/_replay/`):
+
+```bash
+docker exec squirreling-sightings python3 /app/scripts/replay_tracking.py \
+    --cam reolink_rlc811a_squirreltownnutbar_183 --latest 5 --stills 6
+```
+
+Die annotierten JPEGs liegen danach unter
+`/mnt/cache-ssd/appdata/squirreling-sightings/storage/_replay/`.
 
 ## Blockiert / wartet
 

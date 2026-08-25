@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -11,11 +13,29 @@ log = logging.getLogger(__name__)
 
 def _atomic_write_text(path: Path, text: str) -> None:
     """Write `text` to `path` via temp file + os.replace so a crash
-    mid-write never leaves a truncated or corrupt file. Mirrors
-    settings_store.save()'s pattern."""
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(str(tmp), str(path))
+    mid-write never leaves a truncated or corrupt file.
+
+    The temp name carries pid + thread id. A single shared ``<name>.tmp``
+    is not safe when two writers target the same path: writer A can
+    finish its write, writer B truncate and half-fill the same temp, and
+    A's ``os.replace`` then publish B's partial content as the real file.
+    Distinct temps make the replace the only interleaving point, and
+    ``os.replace`` is atomic — so a reader sees either version whole.
+
+    ``fsync`` before the replace so a power cut can't leave the rename
+    durable while the data behind it is still in the page cache.
+    """
+    tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(str(tmp), str(path))
+    except Exception:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
+        raise
 
 
 def event_date_subdir(event_id: str) -> str | None:

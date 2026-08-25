@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import threading
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -22,6 +22,7 @@ from ..schema import (
     SECTION_SCHEMAS,
     validate_and_coerce,
 )
+from ..storage import _atomic_write_text
 from .defaults import build_defaults, default_camera
 from .migrations import (
     migrate_alerting_schedules,
@@ -51,16 +52,63 @@ class SettingsStore:
         # from Telegram callback threads, scheduler jobs and the camera
         # threads, so any read-modify-write needs the lock.
         self._runtime_lock = threading.RLock()
+        # Serialises save(): a read-modify-write across settings.json,
+        # .bak and .bak2, reached from request/Telegram/scheduler/camera
+        # threads. RLock because load() saves while callers may already
+        # hold it via a nested helper.
+        self._save_lock = threading.RLock()
         self.load()
 
+    def _load_json_or_none(self, path: Path) -> dict | None:
+        """Parse `path` as a JSON object, or None if unusable."""
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            log.error("[settings] %s is not readable JSON: %s", path.name, e)
+            return None
+        if not isinstance(parsed, dict):
+            log.error("[settings] %s does not contain a JSON object", path.name)
+            return None
+        return parsed
+
     def load(self):
-        file_existed = self.path.exists()
-        if file_existed:
-            try:
-                loaded = json.loads(self.path.read_text(encoding="utf-8"))
+        if self.path.exists():
+            loaded = self._load_json_or_none(self.path)
+            if loaded is None:
+                # Do NOT fall through to bare defaults and save over it.
+                # load() ends in an unconditional save(), which rotates
+                # settings.json → .bak → .bak2; two boots on a corrupt
+                # file would therefore consume BOTH backups and destroy
+                # the last good credentials for good. Quarantine the bad
+                # file under a timestamp, then try the backups oldest-
+                # first-preserving order before accepting defaults.
+                stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                quarantine = self.path.with_suffix(f"{self.path.suffix}.corrupt.{stamp}")
+                try:
+                    shutil.copy2(str(self.path), str(quarantine))
+                    log.error("[settings] corrupt settings quarantined as %s", quarantine.name)
+                except Exception as e:
+                    log.error("[settings] could not quarantine corrupt settings: %s", e)
+                for cand in (
+                    self.path.with_suffix(self.path.suffix + ".bak"),
+                    self.path.with_suffix(self.path.suffix + ".bak2"),
+                ):
+                    if not cand.exists():
+                        continue
+                    recovered = self._load_json_or_none(cand)
+                    if recovered is not None:
+                        log.warning("[settings] recovered settings from %s", cand.name)
+                        loaded = recovered
+                        break
+                if loaded is None:
+                    log.error(
+                        "[settings] no usable backup — continuing with defaults. "
+                        "Camera credentials and the Telegram token must be re-entered; "
+                        "the unreadable file is kept as %s",
+                        quarantine.name,
+                    )
+            if loaded is not None:
                 self.data.update(loaded)
-            except Exception:
-                pass
         # Migration sequence — order matches the original SettingsStore.load
         # call sequence; never reorder existing entries because some
         # migrations depend on the output of earlier ones.
@@ -168,22 +216,29 @@ class SettingsStore:
 
         The rotation runs before the write so a crash mid-write leaves the
         previous state recoverable from .bak. We deliberately do not rotate
-        when self.path doesn't exist yet (first-run write)."""
-        new_text = json.dumps(self.data, ensure_ascii=False, indent=2)
-        bak = self.path.with_suffix(self.path.suffix + ".bak")
-        bak2 = self.path.with_suffix(self.path.suffix + ".bak2")
-        try:
-            if bak.exists():
-                shutil.copy2(str(bak), str(bak2))
-            if self.path.exists():
-                shutil.copy2(str(self.path), str(bak))
-        except Exception as e:
-            log.warning("[settings] backup rotation failed: %s (continuing with save)", e)
-        # Atomic write via temp file + os.replace, so a partial write never
-        # leaves settings.json truncated.
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(new_text, encoding="utf-8")
-        os.replace(str(tmp), str(self.path))
+        when self.path doesn't exist yet (first-run write).
+
+        The whole sequence is serialised under ``_save_lock``. It is a
+        read-modify-write over three files, and callers arrive from
+        Flask request threads, Telegram callback threads, scheduler jobs
+        and the camera threads. Unsynchronised, two saves could
+        interleave their rotation steps and copy a half-written
+        settings.json over the last good backup — losing RTSP passwords
+        and the Telegram token, which is precisely the file this project
+        can least afford to corrupt.
+        """
+        with self._save_lock:
+            new_text = json.dumps(self.data, ensure_ascii=False, indent=2)
+            bak = self.path.with_suffix(self.path.suffix + ".bak")
+            bak2 = self.path.with_suffix(self.path.suffix + ".bak2")
+            try:
+                if bak.exists():
+                    shutil.copy2(str(bak), str(bak2))
+                if self.path.exists():
+                    shutil.copy2(str(self.path), str(bak))
+            except Exception as e:
+                log.warning("[settings] backup rotation failed: %s (continuing with save)", e)
+            _atomic_write_text(self.path, new_text)
 
     # ── Runtime helpers (thread-safe) ────────────────────────────────────────
     # All callers go through these so the JSON file isn't corrupted by

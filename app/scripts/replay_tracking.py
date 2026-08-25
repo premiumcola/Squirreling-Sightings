@@ -18,16 +18,18 @@ uses, plain CPU uses the non-quantised twin. Same architecture, but
 quantisation shifts the scores, so a CPU replay does not faithfully
 reproduce what the live detector saw.
 
-  * `--tpu`  — faithful to production. Use this when validating a change
-    against live behaviour. It briefly shares the single USB TPU with the
-    camera loops; libedgetpu serialises access, so the effect is added
-    latency on both sides for the duration of the run, not corruption.
-  * default (CPU) — leaves the TPU untouched. Fine for a smoke test or
-    when the live instance is under load, but treat the scores as
-    indicative rather than identical to production.
+  * `--tpu`  — faithful to production, but ONLY usable while the live
+    instance is stopped. An Edge TPU is owned by a single process; the
+    running app holds it, and a second process asking for the same device
+    does not get a polite error — libedgetpu aborts, so this script dies
+    mid-run with no traceback. Observed exactly that on 2026-08-26.
+  * default (CPU) — the practical choice. Leaves the TPU with the live
+    instance, runs in a separate process safely. Scores come from the
+    non-quantised twin of the live model, so treat them as indicative
+    rather than bit-identical to production.
 
 Either way the comparison between two replay runs is valid as long as
-both runs use the same tier.
+both runs use the same tier — which is what matters for before/after.
 
 Typical use, from inside the container:
 
@@ -282,8 +284,17 @@ def main() -> int:
     cfg.setdefault("mode", "coral")
     if args.tpu:
         # Same silicon AND same model file as production, so the scores
-        # are comparable with what the live detector recorded.
+        # are comparable with what the live detector recorded — but only
+        # if this process can actually get the device. It cannot while
+        # the app is running, and libedgetpu aborts rather than raising,
+        # so warn before the process dies without a traceback.
         print(f"model : {cfg.get('model_path')}  (TPU — production-faithful)")
+        print(
+            "        WARNUNG: die Edge TPU gehört immer genau EINEM Prozess.\n"
+            "        Läuft die App gerade, hält sie das Gerät und dieser Lauf\n"
+            "        bricht ohne Fehlermeldung ab. Dann ohne --tpu starten."
+        )
+        sys.stdout.flush()
     else:
         cfg["prefer_cpu"] = True
         if args.cpu_threads:

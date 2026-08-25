@@ -37,11 +37,14 @@ services:
       # process. Without this, FFmpeg defaults to UDP, drops packets,
       # and decodes the gap into the bottom-strip / macroblock smear
       # corruption that the new bottom_strip_anomaly validator was
-      # built around. The 5 s `stimeout` matches CAP_PROP_READ_TIMEOUT_MSEC
-      # in camera_runtime/_capture.py so the boot-time setting agrees
-      # with the per-handle runtime override. Format follows OpenCV's
-      # FFmpeg-options grammar (key;value pairs joined by `|`).
-      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|stimeout;5000000
+      # built around. The 5 s `timeout` matches RTSP_TIMEOUT_US in
+      # app/rtsp_options.py so the boot-time setting agrees with the
+      # per-handle runtime override. Spelled `timeout`, not `stimeout` —
+      # FFmpeg 7 removed the latter and drops unknown keys silently,
+      # which left every handle with no socket timeout at all. Format
+      # follows OpenCV's FFmpeg-options grammar (key;value pairs
+      # joined by `|`).
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|timeout;5000000
       # V81 · pass through host-side FLAP_DIAG so the per-failure
       # diagnostic + parallel network probe in camera_runtime fire
       # only when the operator explicitly enables them

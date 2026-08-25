@@ -102,7 +102,9 @@ def api_config():
     # runtime, so the LRU-cached existence check skips the syscall
     # on the second-and-later /api/config hit (the dashboard polls
     # this endpoint every few seconds).
-    bird_model_available = any(p and path_exists_cached(p) for p in (bird_model_path, bird_cpu_path))
+    bird_model_available = any(
+        p and path_exists_cached(p) for p in (bird_model_path, bird_cpu_path)
+    )
     # Wildlife block — must mirror the four fields surfaced by
     # /api/settings/app, otherwise hydrateAppSettings reads
     # proc.wildlife_enabled as undefined → false and flips the toggle
@@ -147,7 +149,9 @@ def api_config():
                 "detection": proc.get("detection", {}),
                 "bird_species_enabled": bool(bird_cfg.get("enabled")),
                 "bird_model_available": bird_model_available,
-                "bird_labels_available": bool(bird_labels_path and path_exists_cached(bird_labels_path)),
+                "bird_labels_available": bool(
+                    bird_labels_path and path_exists_cached(bird_labels_path)
+                ),
                 "bird_model_path": bird_model_path,
                 "wildlife_enabled": bool(wl_cfg.get("enabled", False)),
                 "wildlife_model_available": wl_model_available,
@@ -353,6 +357,8 @@ def _probe_rtsp(
 
     import cv2  # noqa: PLC0415 — keep import local to keep boot fast
 
+    from ..rtsp_options import capture_options, timeout_params
+
     enc_pw = urllib.parse.quote(password or "", safe="")
     enc_user = urllib.parse.quote(user or "", safe="")
     safe_path = path or ""
@@ -362,16 +368,14 @@ def _probe_rtsp(
     masked = f"rtsp://{user}:{_mask_pw(password)}@{ip}:{port}{safe_path}"
     logging.info("[discovery] rtsp probe %s", masked)
 
-    # FFmpeg socket-level timeout in microseconds. Setting via env var so
-    # the per-handle CAP_PROP_OPEN_TIMEOUT_MSEC is reinforced (some
-    # FFmpeg versions ignore the property and only honour stimeout).
+    # FFmpeg socket-level timeout via env var, OpenCV's own open/read
+    # timeouts via the constructor params vector — cap.set() is a no-op
+    # for both on the FFmpeg backend. See app.rtsp_options.
     prev_env = os.environ.get("OPENCV_FFMPEG_CAPTURE_OPTIONS")
-    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;tcp|stimeout;{timeout_ms * 1000}"
+    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = capture_options(timeout_ms * 1000)
     cap = None
     try:
-        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, timeout_ms)
-        cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, timeout_ms)
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG, timeout_params(timeout_ms, timeout_ms))
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if not cap.isOpened():
             # No way to ask FFmpeg "why?" via the OpenCV API. Distinguish
@@ -671,7 +675,9 @@ def api_settings_export():
     return Response(
         text,
         mimetype=mimetype,
-        headers={"Content-Disposition": f"attachment; filename=squirreling-sightings-settings.{fmt}"},
+        headers={
+            "Content-Disposition": f"attachment; filename=squirreling-sightings-settings.{fmt}"
+        },
     )
 
 

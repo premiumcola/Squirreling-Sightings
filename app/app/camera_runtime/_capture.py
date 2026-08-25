@@ -34,6 +34,7 @@ from ..event_logic import (
     is_schedule_window_active,
     schedule_action_active,
 )
+from ..rtsp_options import capture_options, timeout_params
 from ._consts import (
     _FFMPEG_AVAILABLE,
     _PROFILE_PERIOD_DEFAULTS,
@@ -82,18 +83,15 @@ class CaptureMixin:
 
             # ── Main stream: motion detection + event snapshots ──────────────
             # TCP + software decode to prevent H.265 tile-split pink artifact.
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|hwaccel;none"
-            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 8000)
+            #
+            # Open/read timeouts ride the constructor's params vector, not
+            # cap.set() — the FFmpeg backend ignores those properties after
+            # construction, which used to leave a dead stream blocking
+            # read() for the backend's 30 s default while the 20 s watchdog
+            # fired uselessly. See rtsp_options for the full story.
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = capture_options(extra="hwaccel;none")
+            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG, timeout_params())
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            # Read timeout — without this, cap.read() blocks indefinitely
-            # when the network pipe goes black mid-stream and the main loop
-            # can't check self._force_reconnect / self.running until a frame
-            # eventually arrives (which may never happen). 6 s is long
-            # enough that healthy streams with occasional packet loss don't
-            # trip it, short enough that a real dropout reaches the
-            # exception handler and reconnect path quickly.
-            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 6000)
             _RES_MAP = {"720p": (1280, 720), "1080p": (1920, 1080), "4k": (3840, 2160)}
             _res = self.cfg.get("resolution", "auto")
             if _res in _RES_MAP:
@@ -114,16 +112,17 @@ class CaptureMixin:
             sub_url = self._sub_stream_url(rtsp_url)
             if sub_url:
                 try:
-                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
-                    pcap = cv2.VideoCapture(sub_url, cv2.CAP_FFMPEG)
+                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = capture_options()
+                    pcap = cv2.VideoCapture(sub_url, cv2.CAP_FFMPEG, timeout_params())
                     pcap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    pcap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 6000)
                     with self._preview_cap_lock:
                         old = self.preview_cap
                         if pcap.isOpened():
                             self.preview_cap = pcap
                             log_cam.info(
-                                "[%s] Sub-stream opened for preview: %s", self.camera_id, sub_url
+                                "[%s] Sub-stream opened for preview: %s",
+                                self.camera_id,
+                                self._masked_rtsp_url(sub_url),
                             )
                         else:
                             pcap.release()

@@ -174,11 +174,13 @@ class StatusMixin:
             "reconnect_count_24h": self._reconnect_count_24h(),
         }
 
-    def _masked_rtsp_url(self) -> str:
-        """Return the configured rtsp_url with the password replaced by
-        '•••' so log lines and operator messages don't leak credentials.
-        Falls back to the bare host when the URL has no embedded creds."""
-        url = self.cfg.get("rtsp_url", "") or ""
+    def _masked_rtsp_url(self, url: str | None = None) -> str:
+        """Return an rtsp URL with the password replaced by '•••' so log
+        lines and operator messages don't leak credentials. Defaults to
+        the camera's configured rtsp_url; pass ``url`` to mask a derived
+        one (e.g. the sub-stream). Falls back to the bare host when the
+        URL has no embedded creds."""
+        url = url if url is not None else (self.cfg.get("rtsp_url", "") or "")
         if not url or "://" not in url:
             return url
         try:

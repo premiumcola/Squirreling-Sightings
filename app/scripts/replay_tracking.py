@@ -74,17 +74,53 @@ def _load_cfg(storage_root: Path) -> dict:
     return {}
 
 
-def _find_clips(storage_root: Path, cam: str | None, latest: int) -> list[Path]:
+def _find_clips(storage_root: Path, cam: str | None, latest: int, include_raw: bool) -> list[Path]:
+    """Locate replayable clips, and say why when there are none.
+
+    "no clips found" with no further detail is useless on a box whose
+    storage you cannot inspect from where the code is written, so every
+    dead end here prints what it actually saw.
+    """
     root = storage_root / "motion_detection"
     if not root.exists():
+        print(f"  ! {root} does not exist")
+        others = (
+            [d.name for d in storage_root.iterdir() if d.is_dir()] if storage_root.exists() else []
+        )
+        if others:
+            print(f"    storage contains: {', '.join(sorted(others)[:12])}")
         return []
-    cam_dirs = [root / cam] if cam else [d for d in root.iterdir() if d.is_dir()]
+
+    available = sorted(d.name for d in root.iterdir() if d.is_dir())
+    if cam:
+        cam_dir = root / cam
+        if not cam_dir.exists():
+            print(f"  ! no such camera dir: {cam}")
+            print(f"    available: {', '.join(available) or '(none)'}")
+            return []
+        cam_dirs = [cam_dir]
+    else:
+        cam_dirs = [root / c for c in available]
+
     clips: list[Path] = []
+    raw_only = 0
     for d in cam_dirs:
-        if not d.exists():
-            continue
-        # Skip the stream-copy intermediates; they are not always playable.
-        clips.extend(p for p in d.rglob("*.mp4") if not p.name.endswith(".raw.mp4"))
+        for p in d.rglob("*.mp4"):
+            # .raw.mp4 is the stream-copy intermediate. Usually there is
+            # a re-encoded twin; when a re-encode timed out the .raw may
+            # be the only valid copy, hence --include-raw.
+            if p.name.endswith(".raw.mp4") and not include_raw:
+                raw_only += 1
+                continue
+            clips.append(p)
+    if not clips:
+        print(f"  ! no playable .mp4 under {root}")
+        if raw_only:
+            print(f"    {raw_only} .raw.mp4 found — retry with --include-raw")
+        for d in cam_dirs:
+            n = sum(1 for _ in d.rglob("*")) if d.exists() else 0
+            print(f"    {d.name}: {n} entries")
+        return []
     clips.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return clips[:latest]
 
@@ -200,6 +236,11 @@ def main() -> int:
     ap.add_argument("--floor", type=float, default=0.20, help="detector score floor")
     ap.add_argument("--spawn", type=float, default=0.50, help="track spawn score")
     ap.add_argument("--iou", type=float, default=0.30, help="IoU match threshold")
+    ap.add_argument(
+        "--include-raw",
+        action="store_true",
+        help="also replay .raw.mp4 stream-copy files (sometimes the only valid copy)",
+    )
     args = ap.parse_args()
 
     storage_root = Path(args.storage)
@@ -228,7 +269,7 @@ def main() -> int:
     if args.video:
         clips = [Path(args.video)]
     else:
-        clips = _find_clips(storage_root, args.cam, args.latest)
+        clips = _find_clips(storage_root, args.cam, args.latest, args.include_raw)
     if not clips:
         print("no clips found")
         return 1

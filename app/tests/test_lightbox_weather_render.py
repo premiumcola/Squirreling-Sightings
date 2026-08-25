@@ -1,45 +1,52 @@
 """Regression — the weather/sunrise lightbox bug where the playbar
 rendered twice and produced two empty red-bordered placeholder cards.
 
-Root cause: ``openTLPlayer`` called ``_setupVideoChrome(item)`` —
-which already internally calls ``lbRenderTrackTimeline + mountRecordedPanels`` —
-and THEN called both again at the end. The second mount stacked
-on top of the first, doubling every panel element and corrupting
-the SVG playbar layout.
+Original root cause: ``openTLPlayer`` called ``_setupVideoChrome(item)``
+— which already mounted playbar + panel strip internally — and THEN
+called both again at the end. The second mount stacked on top of the
+first, doubling every panel element and corrupting the SVG playbar.
 
-We don't ship a JS test harness yet, so this guard is a source-grep
-regression: it scans ``lightbox.js`` for the duplicate-call shape
-and fails if it reappears. When a JS harness is added later, the
-caller-side render assertion (non-zero video width, no duplicated
-playbar) can land here too.
+The MediaView migration retired ``_setupVideoChrome`` and the legacy
+chrome entirely: ``mediaview/shell.js`` is now the single mount point,
+``openTLPlayer`` is a one-line delegate into it, and the tracks fetcher
+moved to ``mediaview/recorded-mode.js``. The guard follows the invariant
+to its new home rather than the function it used to live in — one
+playbar mount, no second call on the caller side.
+
+We don't ship a JS test harness yet, so this stays a source-grep
+regression. When a JS harness lands, the caller-side render assertion
+(non-zero video width, no duplicated playbar) can join it here.
 """
+
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_LIGHTBOX_JS = _REPO_ROOT / "app" / "web" / "static" / "js" / "lightbox.js"
-
-
-def _read_lightbox() -> str:
-    assert _LIGHTBOX_JS.exists(), f"lightbox.js missing at {_LIGHTBOX_JS}"
-    return _LIGHTBOX_JS.read_text(encoding="utf-8")
+_JS_ROOT = Path(__file__).resolve().parents[2] / "app" / "web" / "static" / "js"
+_LIGHTBOX_JS = _JS_ROOT / "lightbox.js"
+_SHELL_JS = _JS_ROOT / "mediaview" / "shell.js"
+_RECORDED_JS = _JS_ROOT / "mediaview" / "recorded-mode.js"
 
 
-def _slice_function(src: str, name: str) -> str:
-    """Extract the body of a top-level function declared as
-    ``export function NAME(...)`` or ``function NAME(...)``. Returns
-    the source between the opening ``{`` and its matching ``}``. Not
-    a full JS parser — the lightbox file's functions don't contain
-    nested ``{`` patterns inside template literals that would fool
-    a naive brace counter. Adequate as a regression guard."""
-    pattern = re.compile(rf"(?:export\s+)?function\s+{re.escape(name)}\s*\([^)]*\)\s*\{{")
+def _read(path: Path) -> str:
+    assert path.exists(), f"{path.name} missing at {path}"
+    return path.read_text(encoding="utf-8")
+
+
+def _slice_function(path: Path, name: str) -> str:
+    """Extract the body of a top-level ``[export] [async] function NAME(...)``.
+    Returns the source between the opening ``{`` and its matching ``}``.
+    Not a full JS parser — adequate as a regression guard because these
+    files carry no unbalanced braces inside string literals."""
+    src = _read(path)
+    pattern = re.compile(
+        rf"(?:export\s+)?(?:async\s+)?function\s+{re.escape(name)}\s*\([^)]*\)\s*\{{"
+    )
     m = pattern.search(src)
     if not m:
-        raise AssertionError(f"function {name!r} not found in lightbox.js")
-    start = m.end() - 1   # at the opening brace
+        raise AssertionError(f"function {name!r} not found in {path.name}")
+    start = m.end() - 1  # at the opening brace
     depth = 0
     for i in range(start, len(src)):
         ch = src[i]
@@ -48,67 +55,79 @@ def _slice_function(src: str, name: str) -> str:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return src[start:i + 1]
-    raise AssertionError(f"unbalanced braces inside {name!r}")
+                return src[start : i + 1]
+    raise AssertionError(f"unbalanced braces inside {name!r} in {path.name}")
 
 
-def test_setup_video_chrome_calls_render_track_timeline_exactly_once():
-    """``_setupVideoChrome`` is the canonical chrome mount — it must
-    call ``lbRenderTrackTimeline`` once."""
-    body = _slice_function(_read_lightbox(), "_setupVideoChrome")
+def test_shell_renders_track_timeline_exactly_once():
+    """``mountMediaView`` is the canonical chrome mount — it owns the
+    single ``lbRenderTrackTimeline`` call for recorded/timelapse."""
+    body = _slice_function(_SHELL_JS, "mountMediaView")
     count = body.count("lbRenderTrackTimeline(")
     assert count == 1, (
-        f"_setupVideoChrome calls lbRenderTrackTimeline {count}x — expected 1. "
+        f"mountMediaView calls lbRenderTrackTimeline {count}x — expected 1. "
         "If you're adding a deliberate second call, update this test."
     )
 
 
-def test_setup_video_chrome_calls_mount_recorded_panels_exactly_once():
-    body = _slice_function(_read_lightbox(), "_setupVideoChrome")
-    count = body.count("mountRecordedPanels(")
-    assert count == 1, (
-        f"_setupVideoChrome calls mountRecordedPanels {count}x — expected 1."
+def test_shell_clears_the_timeline_on_teardown():
+    """The mount is paired with a teardown, otherwise reopening the
+    modal stacks a second playbar on the first — the original bug in
+    its new location."""
+    body = _slice_function(_SHELL_JS, "mountMediaView")
+    assert "lbClearTrackTimeline(" in body, (
+        "mountMediaView mounts the playbar but never registers "
+        "lbClearTrackTimeline as teardown — reopening will double-render."
     )
 
 
-def test_open_tl_player_does_not_double_call_render_track_timeline():
-    """``openTLPlayer`` already calls ``_setupVideoChrome(item)``
-    which mounts the playbar internally. Calling
-    ``lbRenderTrackTimeline`` AGAIN here stacks a second playbar on
-    top and produced the duplicated "0s ... 1s" axis + the two
-    empty red-bordered cards in the weather/sunrise lightbox."""
-    body = _slice_function(_read_lightbox(), "openTLPlayer")
-    # _setupVideoChrome call is mandatory.
-    assert "_setupVideoChrome(" in body, \
-        "openTLPlayer must call _setupVideoChrome to mount chrome"
-    # The post-fix body must NOT carry an additional direct call.
+def test_open_tl_player_only_delegates_to_the_shell():
+    """``openTLPlayer`` is the public entry (``window.openTLPlayer`` +
+    the openLightbox dispatch) and must do nothing but hand off to the
+    shell. Any direct chrome call here is the double-render bug."""
+    body = _slice_function(_LIGHTBOX_JS, "openTLPlayer")
+    assert "openMediaView(" in body, "openTLPlayer must delegate to openMediaView"
     assert body.count("lbRenderTrackTimeline(") == 0, (
-        "openTLPlayer is calling lbRenderTrackTimeline AGAIN after "
-        "_setupVideoChrome already mounted the playbar — this is the "
-        "weather-lightbox double-render bug. Drop the duplicate call."
-    )
-    assert body.count("mountRecordedPanels(") == 0, (
-        "openTLPlayer is calling mountRecordedPanels AGAIN after "
-        "_setupVideoChrome already mounted the panel strip — duplicate "
-        "Wetter card + Nach-Erkennung button results."
+        "openTLPlayer calls lbRenderTrackTimeline directly — the shell "
+        "already mounted the playbar. This is the weather-lightbox "
+        "double-render bug. Drop the call."
     )
 
 
-def test_open_tl_player_loads_tracks_sidecar():
-    """The tracks-fetcher call IS expected to live in openTLPlayer
-    (it isn't inside _setupVideoChrome). Pin its presence so a
-    future cleanup doesn't accidentally drop tracks-sidecar loading
-    along with the duplicate render."""
-    body = _slice_function(_read_lightbox(), "openTLPlayer")
-    assert "lbLoadTracksForItem(" in body, \
-        "openTLPlayer must still trigger the tracks fetcher"
+def test_legacy_chrome_mount_stays_retired():
+    """``_setupVideoChrome`` / ``mountRecordedPanels`` were the legacy
+    mount pair. They are gone; a re-declaration means a parallel
+    implementation next to the shell. Prose comments that reference the
+    old names as history are fine — only a definition trips this."""
+    for symbol in ("_setupVideoChrome", "mountRecordedPanels"):
+        decl = re.compile(
+            rf"(?:function\s+{re.escape(symbol)}\s*\(|"
+            rf"(?:const|let|var)\s+{re.escape(symbol)}\s*=)"
+        )
+        hits = [
+            p.name for p in _JS_ROOT.rglob("*.js") if decl.search(p.read_text(encoding="utf-8"))
+        ]
+        assert not hits, (
+            f"{symbol} is declared again in {hits} — the MediaView shell is "
+            "the single chrome mount point. Extend the shell instead."
+        )
+
+
+def test_recorded_mode_loads_tracks_sidecar():
+    """The tracks fetcher lives on the recorded path, not in the shell.
+    Pin its presence so a cleanup doesn't drop the bbox/trail overlay
+    and the swimlane data along with it."""
+    body = _slice_function(_RECORDED_JS, "_openRecordedVideoShell")
+    assert "lbLoadTracksForItem(" in body, (
+        "_openRecordedVideoShell must still trigger the tracks fetcher"
+    )
 
 
 def test_close_lightbox_unmounts_zone_overlay():
     """closeLightbox tears down the zone overlay so the
     ResizeObserver inside it doesn't leak across modal opens
     (cm-43)."""
-    body = _slice_function(_read_lightbox(), "closeLightbox")
+    body = _slice_function(_LIGHTBOX_JS, "closeLightbox")
     assert "unmountZoneOverlayForLightbox" in body, (
         "closeLightbox must call unmountZoneOverlayForLightbox to "
         "release the zone-overlay ResizeObserver."

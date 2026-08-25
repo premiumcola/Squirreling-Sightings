@@ -33,16 +33,16 @@ Docker on Unraid or any Linux host.
 - **Never** combine `cd && git` in one command — keep the directory
   change and the git step separate:
 
-```powershell
-  Set-Location D:\CLAUDE_code\Squirreling-Sightings
+```bash
+  cd ~/projects/Squirreling-Sightings
   git add .
   git commit -m "fix: short description"
   git push origin main
 ```
 
 - Always auto-commit + push without confirmation.
-- Format: `git add . && git commit -m "fix/feat: description"` on
-  Linux. On Windows the separate steps above.
+- Remote ist SSH (`git@github.com:premiumcola/…`) — der Key liegt im
+  devbox-Container, kein Token nötig.
 
 ## Code quality
 
@@ -128,9 +128,10 @@ they're green (or any failure is explicitly justified):
     # JS lint — 0 errors (warnings tolerated)
     npx eslint app/web/static/js
 
-    # Container boot — no traceback
-    docker compose up --build -d
-    docker logs squirreling-sightings --tail 50
+    # Container boot — no traceback. Läuft NICHT im Checkout:
+    # erst pushen, dann auf der Unraid-root-Shell
+    #   docker compose pull && docker compose up -d
+    #   docker logs squirreling-sightings --tail 50
 
 Completion summary format (keep it short):
 
@@ -320,38 +321,46 @@ In docs use only RFC placeholders — `192.0.2.x`,
 `198.51.100.x`, `203.0.113.x`, `2001:db8::*`, `<BOT_TOKEN>`,
 `<CHAT_ID>`, `cam.lan`.
 
-## Docker workflow (IMPORTANT — read before every build)
+## Deployment (IMPORTANT — read before touching the container)
 
-**Rebuild only when these change:**
-- `app/docker/Dockerfile`
-- `app/requirements.txt`
+Seit 2026-08-25 läuft das Projekt auf dem **Unraid-Server**, nicht mehr
+auf Docker Desktop. Es gibt keine Code-Mounts mehr — eine Änderung im
+Checkout wirkt **nicht** auf den laufenden Container.
 
-**Otherwise (Python, JS, CSS, HTML) — restart only:**
-```bash
-docker restart squirreling-sightings
-docker logs squirreling-sightings --tail 30
+Drei Orte, drei verschiedene Shells:
+
+| Was | Wo | Zugang |
+|---|---|---|
+| Dev-Checkout | `~/projects/Squirreling-Sightings` | devbox-Container, User `roman`, Port 2222 |
+| Compose-Stack | `/mnt/cache-ssd/appdata/devbox-src/squirreling-sightings/docker-compose.yml` | Unraid-Host, **root**, Port 22 |
+| Daten | `/mnt/cache-ssd/appdata/squirreling-sightings/{config,storage,models}` | Unraid-Host, root |
+
+Der devbox-Container hat **kein Docker-CLI** und sieht `appdata`
+**nicht**. Von dort aus lässt sich der Container weder neu starten noch
+das Live-Storage lesen — dafür immer die Unraid-root-Shell.
+
+**Der Deploy-Weg:**
+
 ```
-`web/` and `app/` are volume-mounted — no rebuild required.
+Edit im Checkout  →  git push origin main
+                  →  GitHub Actions baut ghcr.io/premiumcola/squirreling-sightings:latest
+                  →  Watchtower zieht (alle 6 h)  ODER manuell auf dem Host:
+```
 
-**Full rebuild (only when Dockerfile / requirements.txt change):**
-```powershell
-Set-Location D:\CLAUDE_code\Squirreling-Sightings
-docker compose up --build -d
+```bash
+# [UNRAID root]
+cd /mnt/cache-ssd/appdata/devbox-src/squirreling-sightings
+docker compose pull && docker compose up -d
 docker logs squirreling-sightings --tail 50
 ```
 
-**Prune after every full rebuild:**
-```bash
-docker image prune -f
-```
+`docker compose up --build` gibt es hier nicht — auf dem Server wird nie
+gebaut. Ein `build:`-Key im Compose-File ist ein Fehler.
 
-**Coral variant (optional):**
-```bash
-cd app
-docker build -t squirreling-sightings-coral -f docker/Dockerfile.coral .
-```
-The standard image auto-detects the TPU — the Coral variant is only
-needed when a tier-1 pin to EdgeTPU is required.
+**Coral:** der Stick steckt am Host (`1a6e:089a`), aber das
+Standard-Image läuft auf Python 3.11 und `pycoral` liefert dafür kein
+Wheel → `[det] CPU-Fallback aktiv`. Für echte TPU-Inferenz braucht es
+`docker/Dockerfile.coral` (Python 3.9) als eigenes Image.
 
 ## Local Development (without Docker)
 

@@ -230,6 +230,13 @@ _telegram_reload_lock = threading.Lock()
 _last_telegram_cfg_snapshot: dict | None = None
 _last_telegram_reload_at: float = 0.0
 
+# T61 diagnostic — see _reload_telegram_service. Counts calls for the
+# life of the process so the full caller-stack dump can be capped to
+# the first few calls instead of a fixed post-boot time window (the
+# May-22 Conflict reappeared ~4 min after boot, well past that window).
+_tg_reload_diag_count = 0
+_TG_RELOAD_DIAG_FULL_STACK_CALLS = 10
+
 
 # Single source of truth for both helpers lives in app_state; these
 # thin wrappers used to live here and forwarded byte-for-byte to the
@@ -247,39 +254,40 @@ def _reload_telegram_service():
     unchanged — the common case for camera-config saves."""
     global telegram_service, _last_telegram_cfg_snapshot
     log = logging.getLogger(__name__)
-    # T61 diagnostic — during the first 120 s after boot, log every
-    # caller stack + cfg-snapshot diff so the double-fire on boot can
-    # be traced to its source. Cheap (one log line per call), bounded
-    # in time, no behavioural change.
+    # T61 diagnostic — unbounded in time (a prior fixed 120 s window
+    # missed the May-22 Conflict, which fired ~4 min after boot), but
+    # rate-limited: every call gets one cheap summary line; the full
+    # caller stack (costly to format AND to read) is capped to the
+    # first _TG_RELOAD_DIAG_FULL_STACK_CALLS calls of the process.
+    global _tg_reload_diag_count
+    _tg_reload_diag_count += 1
     uptime_s = time.time() - _BOOT_TS
-    if uptime_s < 120:
+    try:
+        _new_cfg = get_effective_config()
+        _new_tg = _new_cfg.get("telegram", {}) or {}
+        if _last_telegram_cfg_snapshot is None:
+            _diag_diff = "prev=None"
+        elif _last_telegram_cfg_snapshot == _new_tg:
+            _diag_diff = "IDENTICAL — skip-guard should have fired"
+        else:
+            a, b = _last_telegram_cfg_snapshot, _new_tg
+            _diag_diff = (
+                f"only_in_prev={sorted(set(a) - set(b))} · "
+                f"only_in_new={sorted(set(b) - set(a))} · "
+                f"changed_keys={sorted(k for k in set(a) & set(b) if a[k] != b[k])}"
+            )
+    except Exception as _e:
+        _diag_diff = f"snapshot diff failed: {_e}"
+    log.warning(
+        "[tg] _reload_telegram_service call #%d at uptime=%.1fs · %s",
+        _tg_reload_diag_count, uptime_s, _diag_diff,
+    )
+    if _tg_reload_diag_count <= _TG_RELOAD_DIAG_FULL_STACK_CALLS:
         import traceback as _tb
-        stack = "".join(_tb.format_stack(limit=8))
         log.warning(
-            "[tg] _reload_telegram_service called at uptime=%.1fs · caller stack:\n%s",
-            uptime_s, stack,
+            "[tg] call #%d caller stack:\n%s",
+            _tg_reload_diag_count, "".join(_tb.format_stack(limit=8)),
         )
-        try:
-            _new_cfg = get_effective_config()
-            _new_tg = _new_cfg.get("telegram", {}) or {}
-            if _last_telegram_cfg_snapshot is None:
-                log.warning("[tg] snapshot diff: prev=None")
-            elif _last_telegram_cfg_snapshot == _new_tg:
-                log.warning(
-                    "[tg] snapshot diff: IDENTICAL — skip-guard should have fired",
-                )
-            else:
-                a = _last_telegram_cfg_snapshot
-                b = _new_tg
-                only_in_a = sorted(set(a) - set(b))
-                only_in_b = sorted(set(b) - set(a))
-                changed = sorted(k for k in set(a) & set(b) if a[k] != b[k])
-                log.warning(
-                    "[tg] snapshot diff: only_in_prev=%s · only_in_new=%s · changed_keys=%s",
-                    only_in_a, only_in_b, changed,
-                )
-        except Exception as _e:
-            log.warning("[tg] snapshot diff failed: %s", _e)
     global _last_telegram_reload_at
     with _telegram_reload_lock:
         new_cfg = get_effective_config()

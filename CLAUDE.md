@@ -25,19 +25,20 @@ Docker on Unraid or any Linux host.
 - After each discrete task: a short summary of what was done.
 - When "something is broken": check `git log` first, `git revert` if
   needed. Never stack further changes on a broken base.
-- Commit messages: English, precise, max 60 chars.
+- Commit messages: English, imperative, ≤ 60 chars, ONE line — no body,
+  no bullet list. One commit per task.
 
 ## Git workflow
 
 - **Never** combine `cd && git` in one command — keep the directory
   change and the git step separate:
 
-  ```powershell
+```powershell
   Set-Location D:\CLAUDE_code\Squirreling-Sightings
   git add .
   git commit -m "fix: short description"
   git push origin main
-  ```
+```
 
 - Always auto-commit + push without confirmation.
 - Format: `git add . && git commit -m "fix/feat: description"` on
@@ -95,6 +96,20 @@ CI gates (lint.yml) on push + pull_request:
 If CI is red on main: revert or hotfix immediately. Never push
 on top of a red main.
 
+## Progress & output (keep the terminal readable)
+
+The terminal window is small — long output buries what matters.
+
+- After EACH task, ONE progress line. No prose, no restating the task:
+
+      [A1.2] done · 1/5 closed · 4 open
+
+- Per task, 1–2 sentences max on WHAT changed — no code dumps, no
+  explanatory paragraphs in the terminal.
+- If blocked on a question: leave the task open, name its code, one
+  line on why (e.g. "A1.3 open — waiting on mockup sign-off"). Don't
+  guess and don't silently skip.
+
 ## Pre-flight checks (before declaring done)
 
 Every task ends with these commands run AND their exit codes
@@ -117,17 +132,19 @@ they're green (or any failure is explicitly justified):
     docker compose up --build -d
     docker logs squirreling-sightings --tail 50
 
-Completion summary format:
+Completion summary format (keep it short):
 
-  Done. Ran:
+  Balance: 4/5 closed · open: A1.3 (waiting on mockup)
   - ruff: exit 0
   - ruff format: exit 0
-  - pytest: 160 passed
+  - pytest: <N> passed
   - eslint: 0 errors, 18 warnings
   - docker boot: clean, no traceback
 
-Never say "should work", "looks good", "probably fine". Run
-the check. Report the number.
+First line is ALWAYS the balance (how many closed / open + the codes
+of the open ones). Then the check block, one line per check with its
+exit code / number. Never say "should work", "looks good", "probably
+fine" — run the check, report the number.
 
 ## Refactor discipline
 

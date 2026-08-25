@@ -10,6 +10,8 @@ import contextlib
 import logging
 import re
 import threading
+import time
+from collections import deque
 
 import cv2
 import numpy as np
@@ -100,6 +102,8 @@ class CoralObjectDetector:
         # The lock covers the entire read-from-output phase so callers
         # always observe a consistent snapshot.
         self._infer_lock = threading.Lock()
+        # Rolling per-stage inference timings — see _record_timing.
+        self._timings: deque = deque(maxlen=60)
         if not self.enabled:
             return
         # Startup diagnostic: log the label file path + first 25 entries so
@@ -196,6 +200,43 @@ class CoralObjectDetector:
         log.warning(
             "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
         )
+
+    def _record_timing(self, t_pre: float, t_wait: float, t_invoke: float, t_post: float) -> None:
+        """Store one inference split into its four real cost centres.
+
+        The single `inference_avg_ms` the status bubble used to show
+        wrapped all four together, which made it useless for deciding
+        anything: a slow number could mean the TPU is loaded, or that
+        another camera holds the lock, or merely that a 4-MP frame is
+        expensive to letterbox on the CPU. Those call for opposite fixes.
+
+          pre    — colour convert + letterbox + tensor prep (CPU, per frame)
+          wait   — blocked on _infer_lock (contention with another caller)
+          invoke — the actual inference (TPU or CPU compute)
+          post   — reading output tensors back out
+        """
+        now = time.perf_counter()
+        self._timings.append(
+            {
+                "pre": (t_wait - t_pre) * 1000.0,
+                "wait": (t_invoke - t_wait) * 1000.0,
+                "invoke": (t_post - t_invoke) * 1000.0,
+                "post": (now - t_post) * 1000.0,
+            }
+        )
+
+    def timing_breakdown(self) -> dict:
+        """Rolling averages in ms, or an empty dict before the first run."""
+        samples = list(self._timings)
+        if not samples:
+            return {}
+        n = len(samples)
+        out = {
+            k: round(sum(s[k] for s in samples) / n, 1) for k in ("pre", "wait", "invoke", "post")
+        }
+        out["total"] = round(sum(out[k] for k in ("pre", "wait", "invoke", "post")), 1)
+        out["samples"] = n
+        return out
 
     # Per-label minimum bounding-box constraints. Surveillance cameras at
     # fixed positions almost never see a real person at <15% frame height
@@ -456,6 +497,7 @@ class CoralObjectDetector:
             interpreter pinned.
         """
         score_threshold = threshold if threshold is not None else self.min_score
+        _t_pre = time.perf_counter()
         input_details = self.interpreter.get_input_details()
         output_details = self.interpreter.get_output_details()
         in_h = input_details[0]['shape'][1]
@@ -470,13 +512,17 @@ class CoralObjectDetector:
         inp = np.expand_dims(canvas, axis=0)
         if input_details[0]['dtype'] == np.float32:
             inp = (inp.astype(np.float32) - 127.5) / 127.5
+        _t_wait = time.perf_counter()
         with self._infer_lock:
+            _t_invoke = time.perf_counter()
             self.interpreter.set_tensor(input_details[0]['index'], inp)
             self.interpreter.invoke()
+            _t_post = time.perf_counter()
             # Standard SSD output order: boxes [N,4], classes [N], scores [N], count
             boxes = np.copy(self.interpreter.get_tensor(output_details[0]['index'])[0])
             classes = np.copy(self.interpreter.get_tensor(output_details[1]['index'])[0])
             scores = np.copy(self.interpreter.get_tensor(output_details[2]['index'])[0])
+        self._record_timing(_t_pre, _t_wait, _t_invoke, _t_post)
         h, w = frame.shape[:2]
         inv_scale = 1.0 / scale if scale > 0 else 1.0
         out: list[Detection] = []

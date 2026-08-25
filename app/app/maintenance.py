@@ -192,6 +192,20 @@ def _heartbeat_emit():
             coral_avgs.append(v)
     if coral_avgs:
         parts.append(f"coral={sum(coral_avgs) / len(coral_avgs):.0f}ms")
+        # Break that average into its cost centres — a rising total means
+        # nothing on its own, but "invoke steady, wait climbing" points
+        # straight at lock contention between the camera threads.
+        for _id, rt in cams_iter:
+            try:
+                bd = (rt.status() or {}).get("inference_breakdown_ms") or {}
+            except Exception:
+                bd = {}
+            if bd.get("samples"):
+                parts.append(
+                    f"det[pre={bd['pre']:.0f} wait={bd['wait']:.0f} "
+                    f"inv={bd['invoke']:.0f} post={bd['post']:.0f}]ms"
+                )
+                break
     # Disk
     free_gb = _disk_free_gb_cached()
     if free_gb < 10:

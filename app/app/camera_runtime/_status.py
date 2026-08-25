@@ -171,6 +171,16 @@ class StatusMixin:
             "inference_avg_ms": (sum(self._inference_times_ms) / len(self._inference_times_ms))
             if self._inference_times_ms
             else None,
+            # Per-stage split of that same number. inference_avg_ms alone
+            # cannot distinguish "the TPU is slow" from "another camera
+            # held the lock" from "letterboxing a 4-MP frame is expensive",
+            # and those three want opposite fixes. See
+            # CoralObjectDetector._record_timing.
+            "inference_breakdown_ms": (
+                self.detector.timing_breakdown()
+                if hasattr(getattr(self, "detector", None), "timing_breakdown")
+                else {}
+            ),
             "reconnect_count_24h": self._reconnect_count_24h(),
         }
 

@@ -831,11 +831,15 @@ class TrackingWorker(threading.Thread):
         if self._detector is None or sig != self._detector_cfg_id:
             from ..detectors import CoralObjectDetector
 
-            # Strip device hint so make_interpreter doesn't race the
-            # camera runtimes for the TPU. The CPU fallback path inside
-            # CoralObjectDetector.__init__ kicks in automatically.
+            # Keep this worker off the TPU. Nulling `device` alone does
+            # NOT do that any more: the EdgeTPU delegate (detectors tier
+            # 1b) takes the default device when given no device option,
+            # so with an `*_edgetpu.tflite` model_path this worker was
+            # silently acquiring the TPU it is documented to avoid.
+            # prefer_cpu skips both TPU tiers outright.
             worker_cfg = dict(cfg)
             worker_cfg["device"] = None
+            worker_cfg["prefer_cpu"] = True
             self._detector = CoralObjectDetector(worker_cfg)
             self._detector_cfg_id = sig
         return self._detector

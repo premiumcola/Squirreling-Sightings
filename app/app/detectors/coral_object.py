@@ -77,6 +77,17 @@ class CoralObjectDetector:
         self.detect = None
         self._cpu_mode = False  # True when using tflite-runtime instead of pycoral
         self.device = self.cfg.get("device")
+        # Explicit "stay off the TPU" switch. Setting device=None is NOT
+        # enough: the EdgeTPU delegate takes the default device when no
+        # device option is given, so a caller that only nulled the device
+        # still lands on the TPU. Callers that must not contend for it —
+        # the post-clip tracking worker, and the CPU half of a hybrid
+        # CPU+TPU split — set prefer_cpu and go straight to tier 2.
+        self._prefer_cpu = bool(self.cfg.get("prefer_cpu"))
+        # Thread count for CPU interpreters. None = tflite's
+        # implementation-dependent default. Worth capping on a box that
+        # also software-decodes several RTSP streams.
+        self._cpu_threads = self.cfg.get("cpu_threads")
         # Serialise set_tensor → invoke → get_tensor. The interpreter is
         # NOT thread-safe — when the runtime loop and the simulate-now
         # endpoint hit it concurrently, two effects collide:
@@ -104,38 +115,41 @@ class CoralObjectDetector:
             self.reason = "missing model_path"
             return
 
-        # ── Tier 1: pycoral + Coral TPU ────────────────────────────────────
-        try:
-            from pycoral.adapters import common, detect  # type: ignore
-            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
+        coral_error = "prefer_cpu"
+        if not self._prefer_cpu:
+            # ── Tier 1: pycoral + Coral TPU ────────────────────────────────
+            try:
+                from pycoral.adapters import common, detect  # type: ignore
+                from pycoral.utils.edgetpu import make_interpreter  # type: ignore
 
-            self.common = common
-            self.detect = detect
-            self.interpreter = make_interpreter(model_path, device=self.device)
-            self.interpreter.allocate_tensors()
-            self.available = True
-            self.mode = "coral"
-            self.reason = "ok"
-            log.info("[det] Coral TPU aktiv: %s", model_path)
-            return
-        except Exception as e:
-            log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
-            coral_error = str(e)
+                self.common = common
+                self.detect = detect
+                self.interpreter = make_interpreter(model_path, device=self.device)
+                self.interpreter.allocate_tensors()
+                self.available = True
+                self.mode = "coral"
+                self.reason = "ok"
+                log.info("[det] Coral TPU aktiv: %s", model_path)
+                return
+            except Exception as e:
+                log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
+                coral_error = str(e)
 
-        # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────────
-        # Same silicon as tier 1, reached without pycoral. Output is plain
-        # SSD, so the tflite parse path handles it — only the interpreter
-        # construction differs, hence _cpu_mode (= "uses the tflite API")
-        # is True while mode stays "coral" (= "runs on the TPU").
-        delegated = make_delegate_interpreter(model_path, self.device)
-        if delegated is not None:
-            self.interpreter = delegated
-            self._cpu_mode = True
-            self.available = True
-            self.mode = "coral"
-            self.reason = "edgetpu_delegate"
-            log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
-            return
+            # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────
+            # Same silicon as tier 1, reached without pycoral. Output is
+            # plain SSD, so the tflite parse path handles it — only the
+            # interpreter construction differs, hence _cpu_mode (= "uses
+            # the tflite API") is True while mode stays "coral" (= "runs
+            # on the TPU").
+            delegated = make_delegate_interpreter(model_path, self.device)
+            if delegated is not None:
+                self.interpreter = delegated
+                self._cpu_mode = True
+                self.available = True
+                self.mode = "coral"
+                self.reason = "edgetpu_delegate"
+                log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
+                return
 
         # ── Tier 2: tflite-runtime CPU fallback ────────────────────────────
         # For EdgeTPU models (*_edgetpu.tflite) try the non-EdgeTPU variant.
@@ -149,17 +163,27 @@ class CoralObjectDetector:
             try:
                 import tflite_runtime.interpreter as tflite  # type: ignore
 
-                interp = tflite.Interpreter(model_path=try_path)
+                kwargs = {"model_path": try_path}
+                if self._cpu_threads:
+                    kwargs["num_threads"] = int(self._cpu_threads)
+                interp = tflite.Interpreter(**kwargs)
                 interp.allocate_tensors()
                 self.interpreter = interp
                 self._cpu_mode = True
                 self.available = True
                 self.mode = "cpu"
-                self.reason = f"cpu_fallback (coral: {coral_error})"
-                log.info("[det] CPU-Fallback aktiv: %s", try_path)
+                self.reason = (
+                    "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
+                )
+                log.info(
+                    "[det] CPU-Inferenz aktiv: %s (threads=%s, %s)",
+                    try_path,
+                    self._cpu_threads or "default",
+                    "angefordert" if self._prefer_cpu else "Fallback",
+                )
                 return
             except Exception as e2:
-                log.warning("[det] CPU-Fallback fehlgeschlagen für %s: %s", try_path, e2)
+                log.warning("[det] CPU-Inferenz fehlgeschlagen für %s: %s", try_path, e2)
 
         self.reason = f"pycoral: {coral_error}"
         log.warning("[det] Kein Detektor verfügbar – nur Bewegungserkennung aktiv")

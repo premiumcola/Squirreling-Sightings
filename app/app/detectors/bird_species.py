@@ -38,6 +38,13 @@ class BirdSpeciesClassifier:
         self.common = None
         self.classify = None
         self._cpu_mode = False
+        # See CoralObjectDetector: device=None alone does NOT keep a model
+        # off the TPU, because the EdgeTPU delegate claims the default
+        # device. prefer_cpu skips both TPU tiers, so the classifiers can
+        # be moved to CPU and leave the TPU to the detector — three models
+        # on one TPU thrash its 8 MB parameter cache over USB.
+        self._prefer_cpu = bool(self.cfg.get("prefer_cpu"))
+        self._cpu_threads = self.cfg.get("cpu_threads")
         if not self.enabled:
             return
         model_path = self.cfg.get("model_path")
@@ -51,36 +58,38 @@ class BirdSpeciesClassifier:
                 log.warning("[det] Bird classifier: %s", self.reason)
                 return
 
-        # ── Tier 1: pycoral ───────────────────────────────────────────────
-        try:
-            from pycoral.adapters import classify, common  # type: ignore
-            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
+        coral_error = "prefer_cpu"
+        if not self._prefer_cpu:
+            # ── Tier 1: pycoral ───────────────────────────────────────────
+            try:
+                from pycoral.adapters import classify, common  # type: ignore
+                from pycoral.utils.edgetpu import make_interpreter  # type: ignore
 
-            self.common = common
-            self.classify = classify
-            self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
-            self.interpreter.allocate_tensors()
-            self.available = True
-            self.mode = "coral"
-            self.reason = "ok"
-            log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
-            return
-        except Exception as e:
-            log.warning("[det] Bird classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e)
-            coral_error = str(e)
+                self.common = common
+                self.classify = classify
+                self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
+                self.interpreter.allocate_tensors()
+                self.available = True
+                self.mode = "coral"
+                self.reason = "ok"
+                log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
+                return
+            except Exception as e:
+                log.warning("[det] Bird classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e)
+                coral_error = str(e)
 
-        # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────────
-        # See detectors/_edgetpu.py. _classify_cpu already dequantises
-        # uint8/int8 output, so the compiled model parses unchanged.
-        delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
-        if delegated is not None:
-            self.interpreter = delegated
-            self._cpu_mode = True
-            self.available = True
-            self.mode = "coral"
-            self.reason = "edgetpu_delegate"
-            log.info("[det] Bird classifier (EdgeTPU-Delegate) aktiv: %s", model_path)
-            return
+            # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────
+            # See detectors/_edgetpu.py. _classify_cpu already dequantises
+            # uint8/int8 output, so the compiled model parses unchanged.
+            delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
+            if delegated is not None:
+                self.interpreter = delegated
+                self._cpu_mode = True
+                self.available = True
+                self.mode = "coral"
+                self.reason = "edgetpu_delegate"
+                log.info("[det] Bird classifier (EdgeTPU-Delegate) aktiv: %s", model_path)
+                return
 
         # ── Tier 2: tflite-runtime ────────────────────────────────────────
         cpu_model = self.cfg.get("cpu_model_path")
@@ -93,13 +102,18 @@ class BirdSpeciesClassifier:
             try:
                 import tflite_runtime.interpreter as tflite  # type: ignore
 
-                interp = tflite.Interpreter(model_path=try_path)
+                kwargs = {"model_path": try_path}
+                if self._cpu_threads:
+                    kwargs["num_threads"] = int(self._cpu_threads)
+                interp = tflite.Interpreter(**kwargs)
                 interp.allocate_tensors()
                 self.interpreter = interp
                 self._cpu_mode = True
                 self.available = True
                 self.mode = "cpu"
-                self.reason = f"cpu_fallback (coral: {coral_error})"
+                self.reason = (
+                    "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
+                )
                 log.info("[det] Bird classifier (CPU) aktiv: %s", try_path)
                 return
             except Exception as e2:

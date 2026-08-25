@@ -156,6 +156,31 @@ def _format_uptime(seconds: float) -> str:
     return f"{h}h{m:02d}m"
 
 
+def classify_coral_usb(lsusb_output: str) -> str:
+    """Describe Coral presence from raw ``lsusb`` output.
+
+    The stick re-enumerates once its firmware is loaded: it appears as
+    ``1a6e:089a`` "Global Unichip Corp." while uninitialised, and as
+    ``18d1:9302`` "Google Inc." after the first inference. Both are the
+    same device.
+
+    The original probe required ``"Google"`` AND ``"1a6e:089a"`` in the
+    same output — a conjunction neither state can satisfy, since the
+    Google vendor string only ever accompanies the 18d1 id. A working,
+    already-initialised TPU therefore logged "not found" on every
+    restart while the detectors were happily using it, which sent the
+    operator hunting for a hardware fault that did not exist.
+    """
+    flat = lsusb_output.replace(" ", "")
+    if "18d1:9302" in flat:
+        return "found (USB, initialised)"
+    if "1a6e:089a" in flat:
+        return "found (USB, uninitialised)"
+    if "GlobalUnichip" in flat or "Google" in lsusb_output:
+        return "found (USB, by vendor string)"
+    return "not found"
+
+
 def _emit_boot_inventory(base_cfg: dict, storage_root: Path):
     """One-time inventory log at process start. Every line prefixed [boot]
     so a single grep tells the operator what got loaded. Cheap — runs once
@@ -304,17 +329,14 @@ def _emit_boot_inventory(base_cfg: dict, storage_root: Path):
         "[boot] wildlife_classifier: %s", "enabled" if wild.get("enabled", False) else "disabled"
     )
     # Coral USB presence — best-effort lsusb match. Skip cleanly if lsusb
-    # missing (Windows host, etc.).
+    # is missing (Windows host, etc.).
     coral = "not found"
     try:
         if _sh.which("lsusb"):
             out = _sp.check_output(["lsusb"], stderr=_sp.DEVNULL, timeout=2).decode(
                 errors="replace"
             )
-            if "Google" in out and "1a6e:089a" in out.replace(" ", ""):
-                coral = "found (USB)"
-            elif "Global Unichip" in out:
-                coral = "found (USB unichip)"
+            coral = classify_coral_usb(out)
     except Exception:
         pass
     log.info("[boot] coral tpu: %s", coral)

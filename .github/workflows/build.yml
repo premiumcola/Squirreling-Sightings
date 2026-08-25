@@ -1,13 +1,15 @@
 name: Build & Push Docker Image
-
 on:
   push:
     branches: [main]
     tags: ['v*.*.*']
 
+concurrency:
+  group: ghcr-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE: ghcr.io/premiumcola/squirreling-sightings
 
 jobs:
   build-push:
@@ -30,23 +32,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Build metadata
+        id: bi
+        run: |
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)"  >> "$GITHUB_OUTPUT"
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
+            type=sha,format=short
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: ./app
           file: ./app/docker/Dockerfile
+          platforms: linux/amd64
           push: true
+          pull: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_COMMIT=${{ steps.bi.outputs.commit }}
+            BUILD_DATE=${{ steps.bi.outputs.date }}
+            BUILD_COUNT=${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

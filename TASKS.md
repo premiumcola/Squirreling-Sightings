@@ -26,6 +26,20 @@ anderen im unteren Feld.
 Reihenfolge-Prinzip: erst messen (V2, M1), dann bauen. Eine Verbesserung,
 die sich nicht am Replay oder an einer Log-Zahl zeigen lässt, zählt nicht.
 
+## Arbeitsrhythmus
+
+**Board nach jeweils 2–3 erledigten Aufgaben aktualisieren** — nicht nach
+jedem Commit (Rauschen) und nicht erst am Schluss (dann ist der Stand
+tagelang falsch). Aktualisiert wird nur, wenn sich fachlich etwas bewegt
+hat: neuer Reifegrad mit Begründung, Protokolleintrag, geänderte
+Reihenfolge. Reine Doku-Commits lösen keine Aktualisierung aus.
+
+Das Board ist dieselbe Datei und dieselbe URL wie bisher — im Scratchpad
+neu schreiben und mit demselben Pfad erneut veröffentlichen, damit der
+Link stabil bleibt. Liegt der Scratchpad-Pfad nach einem Reset nicht mehr
+vor: Inhalt per `action: "read"` von der URL holen, bearbeiten, mit `url`
+zurückschreiben.
+
 Status: `[ ]` offen · `[~]` in Arbeit · `[x]` erledigt · `[!]` blockiert
 · `[-]` verworfen
 

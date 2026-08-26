@@ -1,9 +1,14 @@
 """HYG · the post-clip tracking package stays inside its budgets.
 
 `tracking_worker/__init__.py` had grown to 1203 lines with a 180-line
-`_run_one` and a 100-line `_update_event_achievement` in it — the
-largest single offender left in `app/app`. It is now one module per
-concern, and two properties keep it that way:
+`_run_one` and a 100-line `_update_event_achievement` in it. It was NOT
+the largest offender — an earlier version of this docstring claimed so
+and was wrong. At the time of the split `weather_service/_sun_tl` (2010),
+`routes/coral_test_detection.py` (1269) and `tracker_core` (1087) were
+all larger, and `camera_runtime/_main_loop.py` is the one the backlog
+calls the bottleneck because six other packages queue behind it. This
+split was still worth doing; it just was not the top of the list. It is
+now one module per concern, and two properties keep it that way:
 
   * the budgets from CLAUDE.md (500 lines per file, 80 per function),
     checked mechanically over this one package;

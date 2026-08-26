@@ -102,12 +102,14 @@ def _cfg(**over):
 
 def test_tpu_detector_is_warm_before_the_first_frame(fake_tflite):
     det = CoralObjectDetector(_cfg())
+    det.wait_for_warmup()
     assert det.mode == "coral", det.reason
     assert det.interpreter.invokes >= 1, "interpreter was never invoked during construction"
 
 
 def test_cpu_detector_is_warm_too(fake_tflite):
     det = CoralObjectDetector(_cfg(prefer_cpu=True))
+    det.wait_for_warmup()
     assert det.mode == "cpu"
     assert det.interpreter.invokes >= 1
 
@@ -115,6 +117,7 @@ def test_cpu_detector_is_warm_too(fake_tflite):
 def test_the_first_real_detection_is_not_the_first_invoke(fake_tflite):
     """The point of the whole exercise, stated as behaviour."""
     det = CoralObjectDetector(_cfg())
+    det.wait_for_warmup()
     warmed = det.interpreter.invokes
     det.detect_frame_raw(np.zeros((240, 320, 3), dtype=np.uint8), threshold=0.5)
     assert warmed >= 1
@@ -125,6 +128,7 @@ def test_warmup_failure_leaves_the_detector_available(fake_tflite):
     """A throwaway frame that fails must not cost us the detector."""
     fake_tflite["fail"] = True
     det = CoralObjectDetector(_cfg())
+    det.wait_for_warmup()
     assert det.available is True
     assert det.mode == "coral"
     assert det.reason == "edgetpu_delegate"
@@ -135,12 +139,14 @@ def test_warmup_is_excluded_from_the_timing_window(fake_tflite):
     it in the 60-frame window would inflate the average — and, worse,
     show up in wait_p95 as a stall that never happened."""
     det = CoralObjectDetector(_cfg())
+    det.wait_for_warmup()
     assert det.timing_breakdown() == {}, "warmup polluted the rolling timings"
 
 
 def test_disabled_detector_runs_no_warmup(fake_tflite):
     """No model, no tier, nothing to warm — and nothing to crash on."""
     det = CoralObjectDetector({})
+    det.wait_for_warmup()
     assert det.available is False
     assert det.interpreter is None
 
@@ -154,5 +160,51 @@ def test_unavailable_detector_runs_no_warmup(fake_tflite, monkeypatch):
 
     sys.modules["tflite_runtime.interpreter"].Interpreter = _boom
     det = CoralObjectDetector(_cfg())
+    det.wait_for_warmup()
     assert det.available is False
     assert det.interpreter is None
+
+
+def test_warmup_never_blocks_the_constructing_thread(fake_tflite, monkeypatch):
+    """Construction happens on Flask request threads and the bot thread.
+
+    rebuild_runtimes / restart_single_camera are reached from the camera
+    save, the wizard, settings import, /api/reload, the Coral test panel
+    and a Telegram button. Since the device lock became process-wide, a
+    synchronous warmup would park those threads behind whatever is on the
+    TPU — including the model-switch route, which is the escape hatch
+    from a wedged stick. So __init__ must return without waiting.
+    """
+    import threading
+    import time as _time
+
+    from app.detectors import coral_object as mod
+
+    release = threading.Event()
+    original = mod.CoralObjectDetector._warmup
+
+    def _slow_warmup(self):
+        release.wait(5.0)
+        return original(self)
+
+    monkeypatch.setattr(mod.CoralObjectDetector, "_warmup", _slow_warmup)
+
+    started = _time.perf_counter()
+    det = mod.CoralObjectDetector(_cfg())
+    elapsed = _time.perf_counter() - started
+    release.set()
+
+    assert elapsed < 1.0, (
+        f"__init__ blocked {elapsed:.2f}s on the warmup — a request thread "
+        "would hang behind the device lock"
+    )
+    assert det.wait_for_warmup(timeout=5.0)
+
+
+def test_warmup_runs_off_the_main_thread(fake_tflite):
+    """Belt and braces: the thread must actually exist and be a daemon,
+    so a stuck warmup can never keep the process alive at shutdown."""
+    det = CoralObjectDetector(_cfg())
+    thread = det._warmup_thread
+    assert thread.daemon is True
+    assert det.wait_for_warmup()

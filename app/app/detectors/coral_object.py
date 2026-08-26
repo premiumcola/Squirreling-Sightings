@@ -222,7 +222,37 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
         an unavailable detector runs no inference and needs neither.
         """
         self._infer_lock = inference_lock(self.mode, self.device)
-        self._warmup()
+        # Warm up OFF the constructing thread. A detector is not built in
+        # the background: rebuild_runtimes / restart_single_camera reach
+        # here from Flask request threads (camera save, wizard, settings
+        # import, /api/reload) and from the Telegram bot thread, and the
+        # Coral test panel builds one per HTTP request. Since the device
+        # lock is now process-wide, a synchronous warmup would park those
+        # threads behind whatever is currently on the TPU — including the
+        # model-switch route, which is precisely the escape hatch from a
+        # wedged stick. A daemon thread keeps the latency win (the first
+        # real frame still finds a warm interpreter) without ever holding
+        # a request hostage.
+        self._warmup_thread = threading.Thread(
+            target=self._warmup,
+            name=f"det-warmup-{self.mode}",
+            daemon=True,
+        )
+        self._warmup_thread.start()
+
+    def wait_for_warmup(self, timeout: float = 30.0) -> bool:
+        """Block until the warmup finishes. Returns False on timeout.
+
+        Production never needs this — the warmup races the first frame
+        and losing that race merely costs one slow frame. It exists so
+        tests can assert on warmup deterministically instead of sleeping,
+        and so a future diagnostic endpoint can report readiness.
+        """
+        thread = getattr(self, "_warmup_thread", None)
+        if thread is None:
+            return True
+        thread.join(timeout)
+        return not thread.is_alive()
 
     def _warmup(self) -> None:
         """Run one throwaway inference so the first real frame is warm.

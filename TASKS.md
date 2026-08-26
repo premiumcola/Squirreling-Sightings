@@ -26,6 +26,35 @@ anderen im unteren Feld.
 Reihenfolge-Prinzip: erst messen (V2, M1), dann bauen. Eine Verbesserung,
 die sich nicht am Replay oder an einer Log-Zahl zeigen lässt, zählt nicht.
 
+## Backlog
+
+`BACKLOG.md` (Architekt, `b25a6af`) hält 33 Arbeitspakete über alle zwölf
+Kategorien — jedes mit verifizierter `file:line`-Begründung, **disjunktem
+Dateibereich** für parallele Bearbeitung, Abhängigkeiten und Abnahme.
+Diese Datei hier bleibt die Kurzliste; das Backlog ist die Arbeitsvorlage.
+
+Kritischer Pfad laut Architekt: `HYG-2 → CORP-1 → {THR-2 → THR-3 |
+ASK-1 → ASK-2 | CORP-3}`.
+
+**Vom Architekten widerlegte Annahmen aus dieser Datei:**
+- **T1 war falsch begründet.** `predicted_bbox` hatte bereits ein
+  Bewegungsmodell. Die echten Defekte waren das Bootstrap-Loch
+  (eine Spur mit einem Sample wurde rein positionsbasiert zugeordnet)
+  und eine Begrenzung, die die Reichweite statt des Rauschens deckelte.
+  Behoben in `ccc103a` + `9822511`, mit Messungen.
+- **`_log_decision` ist nicht tot** — es hat einen Aufrufer, der auf einer
+  `cam_id` hängt, die niemand übergibt. Das sind genau die fehlenden
+  „warum hat es nicht ausgelöst"-Begründungen. Verdrahten, nicht löschen.
+  (`safe_cam_id` und `CatRegistry` sind dagegen wirklich tot.)
+- **A4 ist schlimmer als notiert** — vier unabhängige Defekte im
+  Identitäts-Crop, und es ist ein 64-Bit-dHash, kein Histogramm, wie
+  CLAUDE.md behauptet.
+
+**Der größte Hebel steht nicht im Backlog:** S1. Die Live-Push-Schwellen
+stehen weiter auf den Auslieferungswerten, während die Erkennung bei 0.45
+bestätigt. Eine Minute in der Oberfläche wiegt schwerer als die Hälfte
+der 33 Pakete.
+
 ## Arbeitsrhythmus
 
 **Board nach jeweils 2–3 erledigten Aufgaben aktualisieren** — nicht nach
@@ -117,10 +146,10 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
       OFFEN daraus: Telegram-Verdikte landen in `settings.json`, nicht im
       Event-JSON — solche Events sind noch NICHT geschützt. Schließt sich mit
       der C4-Verdrahtung.
-- [ ] **C6 · Telegram-Sendepfad härten** — `send_alert` schluckt jede
-      Exception, `RetryAfter` (429) wird nirgends behandelt, alle echten
-      Aufrufer verwerfen das zurückgegebene Future. Ein Netzaussetzer löscht
-      die Meldung endgültig.
+- [x] **C6 · Telegram-Sendepfad härten** — `7a412aa`.
+      429-Retry mit `retry_after` (gedeckelt auf 15 s) und je ein Retry bei
+      Netzfehlern. `BadRequest` erbt in PTB 22 von `NetworkError` — wird gezielt
+      NICHT wiederholt, sonst liefe „Chat nicht gefunden" endlos.
 - [ ] **C7 · Conflict-Quarantäne mit Backoff statt Dauer-Aus**
       `_conflict_quarantine` (`telegram_bot/_lifecycle.py:406`) wird
       **nirgends** wieder auf `false` gesetzt. Kein Auto-Recovery, entgegen
@@ -128,13 +157,13 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
       Zustand in `/api/telegram/status`.
       *Risiko: mittel — fasst die Lebenszyklus-Zustandsmaschine an. Erst mit
       einem Test, der drei schnelle Konflikte simuliert.*
-- [ ] **C8 · Send-Loop-Gesundheit sichtbar machen** —
-      `get_polling_status()` prüft nur den Polling-Thread. Stirbt der
-      Sende-Thread, laufen alle Meldungen ins Leere, während Status und
-      Heartbeat weiter „active" melden.
-- [ ] **C9 · `routes/telegram.py:161`** — matcht `("polling","running",
-      "active")`; die ersten beiden gibt `get_polling_status` nie zurück.
-      Heute harmlos, aber irreführend.
+- [x] **C8 · Send-Loop-Gesundheit sichtbar machen** — `4f847aa`.
+      `send_loop_alive` in `get_polling_status()` und im HTTP-Status. Ein toter
+      Sende-Thread meldete bisher weiter „active", während jede Meldung ins
+      Leere lief.
+- [x] **C9 · `routes/telegram.py:161`** — `b76eb8a`.
+      `connected` matcht jetzt die real zurückgegebenen Zustände
+      (`active`/`starting`/`conflict`); `polling`/`running` gab es nie.
 
 ## Verifikation
 

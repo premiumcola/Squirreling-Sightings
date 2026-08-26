@@ -9,10 +9,14 @@ request would upload zero bytes on the retry.
 
 The two helpers moved along with it: nothing outside this call path
 used them.
+
+Rebuilding per attempt also means the stream has to be *released* per
+attempt — see `_attach`.
 """
 
 from __future__ import annotations
 
+import contextlib
 from io import BytesIO
 from pathlib import Path
 
@@ -43,21 +47,44 @@ def src_size_bytes(src) -> int:
     return 0
 
 
+def _attach(stack: contextlib.ExitStack, src, default_name: str):
+    """prepare_input plus ownership bookkeeping.
+
+    Every stream this module *creates* — the BytesIO for raw bytes, the
+    file handle for a path — is registered for close on the way out of
+    dispatch_send. A value prepare_input passes through untouched still
+    belongs to the caller and is left alone.
+
+    Without this a path input leaked its handle on every attempt, and
+    send_with_retry makes up to three.
+    """
+    stream = prepare_input(src, default_name)
+    if stream is not src:
+        stack.callback(stream.close)
+    return stream
+
+
 async def dispatch_send(bot, *, text, photo, video, caption, common):
     """One outbound Telegram call — video, photo, or plain message,
-    falling back to sendDocument past Telegram's size limits."""
-    if video is not None:
-        size = src_size_bytes(video)
-        src = prepare_input(video, "video.mp4")
-        if size and size > _VIDEO_LIMIT_BYTES:
-            log.info("[tg] video > 50MB, falling back to sendDocument")
-            return await bot.send_document(document=src, caption=caption, **common)
-        return await bot.send_video(video=src, caption=caption, **common)
-    if photo is not None:
+    falling back to sendDocument past Telegram's size limits.
+
+    The upload stream lives exactly as long as the request: the stack
+    unwinds once the awaited call has returned, on the failure path too,
+    so a retried send never stacks handles on the same file.
+    """
+    if video is None and photo is None:
+        return await bot.send_message(text=text or "", **common)
+    with contextlib.ExitStack() as stack:
+        if video is not None:
+            size = src_size_bytes(video)
+            src = _attach(stack, video, "video.mp4")
+            if size and size > _VIDEO_LIMIT_BYTES:
+                log.info("[tg] video > 50MB, falling back to sendDocument")
+                return await bot.send_document(document=src, caption=caption, **common)
+            return await bot.send_video(video=src, caption=caption, **common)
         size = src_size_bytes(photo)
-        src = prepare_input(photo, "photo.jpg")
+        src = _attach(stack, photo, "photo.jpg")
         if size and size > _PHOTO_LIMIT_BYTES:
             log.info("[tg] photo > 10MB, falling back to sendDocument")
             return await bot.send_document(document=src, caption=caption, **common)
         return await bot.send_photo(photo=src, caption=caption, **common)
-    return await bot.send_message(text=text or "", **common)

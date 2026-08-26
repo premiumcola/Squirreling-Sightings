@@ -140,12 +140,12 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
       (`det[pre=8 wait=1 inv=21 post=2]ms`). Trennt jetzt "TPU langsam" von
       "Kamera-Threads streiten um den Lock" von "Letterboxing teuer" — drei
       Ursachen mit gegensätzlichen Gegenmaßnahmen. 6 Tests.
-- [x] **M2 · Zähler für den D2-Rettungspfad** — `a4b12e9`. Versuche UND
+- [x] **M2 · Zähler für den D2-Rettungspfad** — `a8d8e83`. Versuche UND
       Treffer, im Status und als `roi_rescue=<hits>/<attempts>` im Heartbeat.
       Vorher wurde nur der Erfolg geloggt, womit "feuert nie" und "feuert und
       findet nichts" ununterscheidbar waren. 6 Tests, alle schlagen gegen den
       alten Stand fehl.
-- [x] **M3 · Tests für `detection_tiling.py`** — `f3e8c11`. 20 Tests über
+- [x] **M3 · Tests für `detection_tiling.py`** — `63c6630`. 20 Tests über
       Kachel-Geometrie, Koordinaten-Rücktransformation und Naht-Duplikate.
       Absicherungs-Tests, keine Regressionstests — sie machen C3 gefahrlos.
       Halten fest, warum `roi` dem Raster vorzuziehen ist: 2×2 bringt auf

@@ -4,9 +4,11 @@ worker AND the live camera-runtime path.
 Carved out of ``tracking_worker.py`` so both callers reach the same
 ByteTrack-style logic — confirmed detections spawn / extend tracks,
 tentative (sub-spawn, above-floor) detections may only extend an
-existing IoU-matched track. Linear-velocity bbox prediction bridges
-the typical 1-frame motion gap; a miss-grace window keeps a track
-alive across short occlusions.
+existing IoU-matched track. The motion model in :mod:`._motion`
+predicts each track forward before the overlap test, so a subject
+that moves further than its own bbox between samples still matches
+itself; a miss-grace window keeps a track alive across short
+occlusions.
 
 Module scope is intentionally tight: NO file I/O, NO queue, NO event
 store, NO Flask app state. Both callers wrap this module with their
@@ -24,6 +26,8 @@ from dataclasses import dataclass, field
 
 from ..bbox_utils import bbox_centroid_dist, iou
 from ._consts import (  # noqa: F401 — public API re-export
+    BOOTSTRAP_DIST_FACTOR,
+    BOOTSTRAP_MAX_ELAPSED,
     EDGE_GRACE_SAMPLES,
     EDGE_MARGIN_PX,
     IOU_MATCH_THRESHOLD,
@@ -31,15 +35,28 @@ from ._consts import (  # noqa: F401 — public API re-export
     MERGE_SUSTAIN,
     MISS_GRACE_DEFAULT_SECONDS,
     NMS_IOU,
+    PRED_DECAY_CAP_SAMPLES,
+    PRED_DECAY_FULL_SAMPLES,
+    PRED_MAX_STEP_FRAC,
+    PRED_MAX_TOTAL_FRAC,
+    PRED_VELOCITY_WINDOW,
     REID_OCCUPIED_IOU,
     SAMPLE_BBOX_DELTA_PX,
     SPAWN_BLOCK_IOU,
+    STATIONARY_SPEED_FRAC,
     TRACK_FLOOR_SCORE,
     TRACK_MISS_WINDOWS,
     TRACK_REID_DIST_FACTOR,
     TRACK_REID_MAX_SECONDS,
     TRACK_REID_SIZE_RATIO,
     TRACK_SPAWN_SCORE,
+)
+from ._motion import (  # noqa: F401 — public API re-export
+    bootstrap_gate,
+    bootstrap_match_score,
+    predicted_bbox,
+    recent_observed_samples,
+    velocity_estimate,
 )
 
 log = logging.getLogger(__name__)
@@ -349,106 +366,8 @@ class TrackerState:
 
 
 # ── Algorithm ───────────────────────────────────────────────────────────────
-# K2 · stationary detection — if recent average centroid speed is
-# below this fraction of the bbox dimension PER FRAME, the subject
-# counts as "standing still" and predicted_bbox returns the last
-# observed bbox unchanged. A real moving person walks ≫ 5 % of
-# their bbox per frame; a wobbling stationary subject doesn't.
-STATIONARY_SPEED_FRAC = 0.05
-# K2 · per-frame displacement clamp + miss-window decay. Cap a
-# single predicted step at 40 % of the bbox dim (was 80 %, too
-# permissive), and decay the velocity contribution as the miss
-# grows — by miss-grace-cap we predict no movement at all and
-# rely entirely on the last observed position.
-PRED_STEP_FRAC = 0.4
-PRED_DECAY_CAP_SAMPLES = 6
-
-
-def predicted_bbox(track: Track, frame_idx: int) -> tuple[int, int, int, int]:
-    """Stationary-aware, magnitude-clamped, miss-decay bbox prediction
-    for IoU matching at ``frame_idx``.
-
-    Three rules combine to keep a small wobble from producing a
-    large prediction vector:
-
-      * MEDIAN velocity over up to 6 detect-source samples (was 4)
-        — more samples drown a single reversal frame.
-      * STATIONARY short-circuit — if the average centroid speed
-        across the recent window is below
-        ``STATIONARY_SPEED_FRAC × min(bw, bh)``, treat the subject
-        as stationary and return the last observed bbox unchanged.
-        A static subject must be matched by position, never flung
-        away by per-frame jitter.
-      * DECAY across the miss window — the further into the miss
-        we are, the less we trust the velocity estimate. At
-        elapsed = ``PRED_DECAY_CAP_SAMPLES`` the decay factor is
-        0 and the prediction reduces to the last observed bbox.
-        Combined with the hard ``PRED_STEP_FRAC`` clamp this caps
-        the worst-case overshoot regardless of velocity history."""
-    if not track.samples:
-        return (0, 0, 0, 0)
-    detect_samples = [s for s in track.samples if s.get("source") == "detect"]
-    if len(detect_samples) < 2:
-        last = track.samples[-1]["bbox"]
-        return (int(last["x1"]), int(last["y1"]), int(last["x2"]), int(last["y2"]))
-    s_last = detect_samples[-1]
-    bb_last = s_last["bbox"]
-    bw = bb_last["x2"] - bb_last["x1"]
-    bh = bb_last["y2"] - bb_last["y1"]
-    cx_last = (bb_last["x1"] + bb_last["x2"]) / 2.0
-    cy_last = (bb_last["y1"] + bb_last["y2"]) / 2.0
-    # Wider window than before (6 samples vs 4) — five-plus pairwise
-    # deltas drown an outlier reversal frame in the median.
-    window = detect_samples[-min(6, len(detect_samples)) :]
-    dxs: list[float] = []
-    dys: list[float] = []
-    for i in range(1, len(window)):
-        s_a = window[i - 1]
-        s_b = window[i]
-        bb_a = s_a["bbox"]
-        bb_b = s_b["bbox"]
-        df = max(1, int(s_b["f"]) - int(s_a["f"]))
-        cx_a = (bb_a["x1"] + bb_a["x2"]) / 2.0
-        cy_a = (bb_a["y1"] + bb_a["y2"]) / 2.0
-        cx_b = (bb_b["x1"] + bb_b["x2"]) / 2.0
-        cy_b = (bb_b["y1"] + bb_b["y2"]) / 2.0
-        dxs.append((cx_b - cx_a) / df)
-        dys.append((cy_b - cy_a) / df)
-    # Stationary short-circuit — average MAGNITUDE of per-frame
-    # velocity. If the subject barely moved across the window, do
-    # NOT extrapolate; the next detection should match against the
-    # last-observed position. Compute mean speed = mean(sqrt(dx² + dy²)).
-    mean_speed = sum((d * d + e * e) ** 0.5 for d, e in zip(dxs, dys, strict=False)) / max(
-        1, len(dxs)
-    )
-    min_dim = max(1.0, float(min(bw, bh)))
-    if mean_speed < STATIONARY_SPEED_FRAC * min_dim:
-        return (int(bb_last["x1"]), int(bb_last["y1"]), int(bb_last["x2"]), int(bb_last["y2"]))
-    dxs.sort()
-    dys.sort()
-    dx = dxs[len(dxs) // 2]
-    dy = dys[len(dys) // 2]
-    elapsed = max(0, frame_idx - int(s_last["f"]))
-    # Decay: linear ramp from 1.0 at elapsed=0 to 0.0 at
-    # PRED_DECAY_CAP_SAMPLES. Past that point, prediction stops
-    # extrapolating entirely and stays at the last observed
-    # position. Below the cap, the velocity contribution gradually
-    # shrinks so a long miss doesn't fling the predicted box
-    # further and further away from the (likely returning)
-    # subject.
-    decay = max(0.0, 1.0 - elapsed / float(PRED_DECAY_CAP_SAMPLES))
-    # Hard clamp per-frame displacement to PRED_STEP_FRAC × bbox.
-    # Combined with the decay, the total displacement also stays
-    # bounded as elapsed grows.
-    max_dx = bw * PRED_STEP_FRAC
-    max_dy = bh * PRED_STEP_FRAC
-    total_dx = max(-max_dx, min(max_dx, dx * elapsed * decay))
-    total_dy = max(-max_dy, min(max_dy, dy * elapsed * decay))
-    p_cx = cx_last + total_dx
-    p_cy = cy_last + total_dy
-    half_w = bw / 2.0
-    half_h = bh / 2.0
-    return (int(p_cx - half_w), int(p_cy - half_h), int(p_cx + half_w), int(p_cy + half_h))
+# The motion model (velocity estimate, bbox prediction, velocity
+# bootstrap gate) lives in :mod:`._motion` and is imported above.
 
 
 def _try_reidentify(state: TrackerState, det, t_s: float):
@@ -568,19 +487,13 @@ def nms_per_label(dets, iou_threshold: float = NMS_IOU):
 
 
 def _last_n_detect_bboxes(track: Track, n: int):
-    """Return up to the last ``n`` detect-source sample bboxes as
+    """Return up to the last ``n`` observed sample bboxes as
     (x1,y1,x2,y2) tuples in original order. Used by the merge pass
     to test SUSTAINED overlap between two active tracks."""
     out: list[tuple[int, int, int, int]] = []
-    for s in reversed(track.samples or []):
-        src = s.get("source")
-        if src not in ("detect", "track"):
-            continue
+    for s in recent_observed_samples(track, n):
         bb = s["bbox"]
         out.append((int(bb["x1"]), int(bb["y1"]), int(bb["x2"]), int(bb["y2"])))
-        if len(out) >= n:
-            break
-    out.reverse()
     return out
 
 
@@ -728,6 +641,9 @@ def associate_detections(
     * Phase 2 — *tentative* detections (score < resolved-spawn) may
       ONLY extend a still-unmatched active track via the same IoU
       rule.
+    * Phase 2b — both tiers get a second look against tracks that are
+      too young to have a velocity estimate, matched on centroid
+      distance instead of overlap (T1 · ``_motion.bootstrap_gate``).
     * Phase 3 — unmatched confirmed detections spawn fresh tracks.
       Unmatched tentative detections are dropped entirely.
 
@@ -780,8 +696,12 @@ def associate_detections(
             tentative.append((di, d))
 
     predicted: list[tuple[int, int, int, int]] = [
-        predicted_bbox(tr, frame_idx) for tr in state.active
+        predicted_bbox(tr, frame_idx, frame_w=frame_w, frame_h=frame_h) for tr in state.active
     ]
+    # T1 · per-track velocity-bootstrap gate, computed once per frame
+    # alongside the predictions. Non-None only for a track that still
+    # has a single observed sample — see ``_motion.bootstrap_gate``.
+    gates = [bootstrap_gate(tr, frame_idx) for tr in state.active]
     taken_tracks: set[int] = set()
     # (detection object, track) — deliberately NOT (index, track): `di`
     # indexes the post-NMS list built above, and every caller holds the
@@ -789,9 +709,24 @@ def associate_detections(
     # mismatch. See test_tracker_nms_index.py.
     matches: list[tuple[object, Track]] = []
 
-    def _pair_pass(pool):
-        """Greedy IoU pairing for one tier; returns
-        [(di, ti), …] and the set of di's that matched."""
+    def _iou_score(ti, d):
+        """Overlap of the detection with the track's PREDICTED bbox,
+        or None below the match threshold."""
+        v = iou(predicted[ti], d.bbox)
+        return v if v >= iou_threshold else None
+
+    def _gate_score(ti, d):
+        """T1 · distance match for a track too young to have a
+        velocity. None for every established track — those match on
+        prediction overlap alone."""
+        gate = gates[ti]
+        return None if gate is None else bootstrap_match_score(gate, d.bbox)
+
+    def _pair_pass(pool, scorer):
+        """Greedy best-first pairing for one tier; returns
+        [(di, ti), …] and the set of di's that matched. ``scorer``
+        returns a comparable strength in [0, 1] or None for "no
+        match" — highest strength claims its track first."""
         candidates: list[tuple[int, int, float]] = []
         for di, d in pool:
             for ti, tr in enumerate(state.active):
@@ -799,9 +734,9 @@ def associate_detections(
                     continue
                 if ti in taken_tracks:
                     continue
-                iou_v = iou(predicted[ti], d.bbox)
-                if iou_v >= iou_threshold:
-                    candidates.append((di, ti, iou_v))
+                score_v = scorer(ti, d)
+                if score_v is not None:
+                    candidates.append((di, ti, score_v))
         candidates.sort(key=lambda p: p[2], reverse=True)
         taken_dets_local: set[int] = set()
         out = []
@@ -830,13 +765,28 @@ def associate_detections(
 
     # Phase 1 — confirmed dets fight for tracks first.
     confirmed_by_di = {di: d for di, d in confirmed}
-    pairs1, taken_confirmed = _pair_pass(confirmed)
+    pairs1, taken_confirmed = _pair_pass(confirmed, _iou_score)
     _record_match(pairs1, confirmed_by_di)
 
     # Phase 2 — tentative dets extend whatever's still unmatched.
     tentative_by_di = {di: d for di, d in tentative}
-    pairs2, _taken_tentative = _pair_pass(tentative)
+    pairs2, taken_tentative = _pair_pass(tentative, _iou_score)
     _record_match(pairs2, tentative_by_di)
+
+    # Phase 2b (T1) — same two tiers again, but for newborn tracks the
+    # prediction can't help yet: with one observed sample there is no
+    # velocity, so a subject that outran its own bbox since spawning
+    # has IoU 0 against it. Distance-gated, one frame wide, and always
+    # AFTER the overlap passes so a real overlap never loses to it.
+    pairs3, taken3 = _pair_pass(
+        [(di, d) for di, d in confirmed if di not in taken_confirmed], _gate_score
+    )
+    _record_match(pairs3, confirmed_by_di)
+    taken_confirmed = taken_confirmed | taken3
+    pairs4, _taken4 = _pair_pass(
+        [(di, d) for di, d in tentative if di not in taken_tentative], _gate_score
+    )
+    _record_match(pairs4, tentative_by_di)
 
     # Snapshot the pre-spawn track count so the age-out loop below
     # can skip tracks that are about to be created on this same
@@ -968,19 +918,13 @@ def associate_detections(
     for ti, tr in enumerate(state.active[:original_count]):
         if ti in taken_tracks:
             continue
-        # K4 · clamp the predicted bbox to frame bounds so a subject
-        # whose extrapolated position would land off-frame is held
-        # at the visible boundary instead. A box predicted at
-        # x2 = frame_w + 200 is geometrically nonsense for IoU
-        # matching and visually misleading on the bbox overlay.
+        # K4 · the predicted bbox is already clamped to frame bounds
+        # by predicted_bbox, so a subject whose extrapolated position
+        # would land off-frame is held at the visible boundary — for
+        # the overlay AND for the IoU matcher that reads the same
+        # tuple.
         px1, py1, px2, py2 = predicted[ti]
-        if frame_w > 0:
-            px1 = max(0, min(frame_w, px1))
-            px2 = max(0, min(frame_w, px2))
-        if frame_h > 0:
-            py1 = max(0, min(frame_h, py1))
-            py2 = max(0, min(frame_h, py2))
-        bbox_dict = {"x1": int(px1), "y1": int(py1), "x2": int(px2), "y2": int(py2)}
+        bbox_dict = {"x1": px1, "y1": py1, "x2": px2, "y2": py2}
         last_detect_score = next(
             (
                 s.get("score")

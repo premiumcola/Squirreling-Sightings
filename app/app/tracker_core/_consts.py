@@ -96,6 +96,47 @@ SPAWN_BLOCK_IOU = 0.45
 # accidentally merging two people who briefly cross paths.
 MERGE_IOU = 0.6
 MERGE_SUSTAIN = 3
+# K2 / T1 · motion model. The algorithm lives in ``_motion.py``.
+#   STATIONARY_SPEED_FRAC — below this fraction of the smaller bbox
+#     dimension PER FRAME the subject counts as standing still and the
+#     prediction holds the last observed box. A walking person moves
+#     ≫ 5 % of its bbox per frame; a wobbling static subject doesn't.
+#   PRED_VELOCITY_WINDOW — observed samples the median velocity is
+#     taken over. Six gives five deltas, enough for the median to
+#     drown one reversal frame.
+#   PRED_DECAY_FULL_SAMPLES / PRED_DECAY_CAP_SAMPLES — velocity is
+#     trusted in full for the first three missed frames (dropped
+#     detections on a subject that is still walking), then ramps to
+#     zero at the cap, where the prediction holds the last observed
+#     position instead. Three is a compromise between the two
+#     callers: ~1 s of dead reckoning at the live cadence, 3 s at the
+#     post-clip 1 Hz — long enough to bridge a two-frame occlusion,
+#     short enough that a subject who turns around behind cover
+#     isn't chased into the next county.
+#   PRED_MAX_STEP_FRAC / PRED_MAX_TOTAL_FRAC — sanity caps in bbox
+#     dimensions on per-frame velocity and on total displacement.
+#     They exist to stop a noisy estimate flinging the box across the
+#     image, NOT to limit how far a genuine walker may be predicted:
+#     the old 0.4-of-a-bbox cap on TOTAL displacement made every
+#     subject moving more than ~1 bbox width per sample unmatchable.
+STATIONARY_SPEED_FRAC = 0.05
+PRED_VELOCITY_WINDOW = 6
+PRED_DECAY_FULL_SAMPLES = 3
+PRED_DECAY_CAP_SAMPLES = 6
+PRED_MAX_STEP_FRAC = 2.0
+PRED_MAX_TOTAL_FRAC = 4.0
+# T1 · velocity bootstrap. A track with exactly ONE observed sample
+# has no velocity, so its first re-match is purely positional — at
+# ~350 ms cadence a walking subject clears its own bbox between
+# samples, IoU is 0, the track dies at one sample and the next frame
+# spawns a fresh id (the "#1 … #10 on one person" fragmentation).
+# For at most BOOTSTRAP_MAX_ELAPSED frames after that single sample a
+# detection may instead match on centroid distance within
+# BOOTSTRAP_DIST_FACTOR × max(bw, bh) × elapsed. Deliberately tighter
+# than the re-id gate (1.6 × max, 12 s) — this is a one-frame bridge,
+# not a re-acquisition.
+BOOTSTRAP_DIST_FACTOR = 1.2
+BOOTSTRAP_MAX_ELAPSED = 2
 # J4 · the re-id revive path may only resume a closed track when the
 # new detection's bbox doesn't overlap ANY currently-active track
 # above this IoU. A revived closed track on top of a live track
@@ -105,5 +146,3 @@ MERGE_SUSTAIN = 3
 # blocks revival — the new detection should EXTEND that track via
 # the spawn-block path, not raise a second copy from the dead.
 REID_OCCUPIED_IOU = 0.2
-
-

@@ -27,6 +27,11 @@ class InferenceTimingMixin:
     to read the rolling averages back out.
     """
 
+    # Set while a throwaway warmup inference is running. The cold first
+    # invoke costs a multiple of the steady-state one, so counting it as
+    # a sample would misreport the model as slow for the next 60 frames.
+    _warming = False
+
     def _init_timings(self) -> None:
         self._timings: deque = deque(maxlen=_TIMING_WINDOW)
 
@@ -45,6 +50,8 @@ class InferenceTimingMixin:
           invoke — the actual inference (TPU or CPU compute)
           post   — reading output tensors back out
         """
+        if self._warming:
+            return
         now = time.perf_counter()
         self._timings.append(
             {

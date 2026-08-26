@@ -24,6 +24,11 @@ from ._types import Detection, _apply_region_filter
 
 log = logging.getLogger(__name__)
 
+# Size of the throwaway warmup frame. 4:3 rather than square so the
+# warmup exercises the letterbox padding branch as well, and small
+# enough that the resize itself costs nothing next to the invoke.
+_WARMUP_W, _WARMUP_H = 320, 240
+
 
 class CoralObjectDetector(InferenceTimingMixin):
     """Object detector with three-tier fallback:
@@ -185,6 +190,44 @@ class CoralObjectDetector(InferenceTimingMixin):
         an unavailable detector runs no inference and needs neither.
         """
         self._infer_lock = inference_lock(self.mode, self.device)
+        self._warmup()
+
+    def _warmup(self) -> None:
+        """Run one throwaway inference so the first real frame is warm.
+
+        On the TPU the first invoke pushes the model parameters across
+        USB into the device's on-chip cache; on CPU it triggers the
+        first-call allocations. Either way the cost lands on whichever
+        frame happens to be first — which, after a restart or a settings
+        save, is the first motion event, the one frame we would least
+        like to be slow.
+
+        Failure is deliberately non-fatal. Warmup is a latency
+        optimisation, and a detector that stumbles on a synthetic black
+        frame may well be fine on a real one; refusing to come up would
+        convert a slow first frame into no detection at all. The reason
+        is logged rather than swallowed silently — on the real box it
+        would be the first sign the model and the delegate disagree.
+        """
+        frame = np.zeros((_WARMUP_H, _WARMUP_W, 3), dtype=np.uint8)
+        started = time.perf_counter()
+        # Keep the cold sample out of the rolling window — see
+        # _record_timing. It is not a measurement of steady state.
+        self._warming = True
+        try:
+            # threshold=1.0: run the full path but keep the post-filter
+            # work at zero. We want the invoke, not the detections.
+            self.detect_frame_raw(frame, threshold=1.0)
+        except Exception as e:
+            log.warning("[det] Warmup fehlgeschlagen (%s) – Detektor bleibt verfügbar", e)
+            return
+        finally:
+            self._warming = False
+        log.info(
+            "[det] Warmup abgeschlossen (%s): %.0f ms",
+            self.mode,
+            (time.perf_counter() - started) * 1000.0,
+        )
 
     # Per-label minimum bounding-box constraints. Surveillance cameras at
     # fixed positions almost never see a real person at <15% frame height

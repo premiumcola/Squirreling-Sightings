@@ -162,3 +162,121 @@ def test_soft_cat_leaves_the_gate_open():
     assert stage._wildlife_gate_open(
         [_Det("cat", 0.60)], motion_confirmed=True, wildlife_motion_only=False
     )
+
+
+# ── positional gating: a blocker only blocks where it actually is ─────
+
+
+class _BoxDet:
+    def __init__(self, label, score, bbox):
+        self.label = label
+        self.score = score
+        self.bbox = bbox
+
+
+# The crop the wildlife stage would classify — a squirrel on the ground.
+CROP = (1100, 800, 1500, 1100)
+
+
+def test_bird_far_from_the_crop_no_longer_blocks():
+    """The feeder case: a bird up at the feeder, a squirrel on the ground.
+
+    The whole frame used to be skipped because a bird was detected
+    somewhere in it, discarding a squirrel the classifier would never
+    have seen the bird in.
+    """
+    stage = _Stage()
+    bird_at_feeder = _BoxDet("bird", 0.8, (200, 100, 320, 240))
+
+    assert stage._wildlife_gate_open(
+        [bird_at_feeder],
+        motion_confirmed=True,
+        wildlife_motion_only=False,
+        crop_box=CROP,
+    )
+
+
+def test_bird_inside_the_crop_still_blocks():
+    stage = _Stage()
+    bird_on_subject = _BoxDet("bird", 0.8, (1150, 850, 1350, 1000))
+
+    assert not stage._wildlife_gate_open(
+        [bird_on_subject],
+        motion_confirmed=True,
+        wildlife_motion_only=False,
+        crop_box=CROP,
+    )
+
+
+@pytest.mark.parametrize("label", ["dog", "person"])
+def test_other_blockers_are_positional_too(label):
+    stage = _Stage()
+    far = _BoxDet(label, 0.9, (0, 0, 150, 300))
+    near = _BoxDet(label, 0.9, (1150, 850, 1400, 1080))
+
+    assert stage._wildlife_gate_open(
+        [far], motion_confirmed=True, wildlife_motion_only=False, crop_box=CROP
+    )
+    assert not stage._wildlife_gate_open(
+        [near], motion_confirmed=True, wildlife_motion_only=False, crop_box=CROP
+    )
+
+
+def test_confident_cat_on_the_crop_still_blocks():
+    stage = _Stage()
+    cat = _BoxDet("cat", 0.96, (1150, 850, 1400, 1080))
+
+    assert not stage._wildlife_gate_open(
+        [cat], motion_confirmed=True, wildlife_motion_only=False, crop_box=CROP
+    )
+
+
+def test_confident_cat_elsewhere_does_not_block():
+    stage = _Stage()
+    cat = _BoxDet("cat", 0.96, (0, 0, 200, 200))
+
+    assert stage._wildlife_gate_open(
+        [cat], motion_confirmed=True, wildlife_motion_only=False, crop_box=CROP
+    )
+
+
+def test_without_a_crop_box_the_old_frame_wide_rule_applies():
+    """Callers with no crop keep the conservative behaviour."""
+    stage = _Stage()
+    bird = _BoxDet("bird", 0.8, (0, 0, 50, 50))
+
+    assert not stage._wildlife_gate_open(
+        [bird], motion_confirmed=True, wildlife_motion_only=False, crop_box=None
+    )
+
+
+def test_blocker_without_a_bbox_does_not_crash():
+    stage = _Stage()
+    weird = _Det("bird", 0.8)  # no bbox attribute
+
+    assert stage._wildlife_gate_open(
+        [weird], motion_confirmed=True, wildlife_motion_only=False, crop_box=CROP
+    )
+
+
+# ── _covers ───────────────────────────────────────────────────────────
+
+
+def test_covers_requires_a_real_overlap():
+    stage = _Stage()
+    assert not stage._covers((0, 0, 100, 100), (200, 200, 300, 300))
+    assert stage._covers((210, 210, 290, 290), (200, 200, 300, 300))
+
+
+def test_covers_uses_containment_not_iou():
+    """A small box fully inside a large region has a low IoU but is
+    unambiguously in the way — containment is the right measure."""
+    stage = _Stage()
+    small_inside = (1200, 900, 1240, 940)
+    assert stage._covers(small_inside, CROP)
+
+
+def test_covers_handles_missing_boxes():
+    stage = _Stage()
+    assert not stage._covers(None, CROP)
+    assert not stage._covers((0, 0, 10, 10), None)

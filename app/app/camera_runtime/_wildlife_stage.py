@@ -49,6 +49,11 @@ _CROP_PAD_FRAC = 0.30
 # the difference between "squirrel" and "leaf".
 _CROP_MIN_PX = 96
 
+# How much of a blocking detection must lie inside the crop before it
+# counts as "in the way". A quarter is enough to matter, and low enough
+# that a bird perched at the edge of the crop still blocks.
+_SKIP_OVERLAP_FRAC = 0.25
+
 
 class WildlifeStageMixin:
     def _wildlife_crop(self, frame, motion_bbox):
@@ -95,15 +100,55 @@ class WildlifeStageMixin:
             return frame, None
         return crop, (x1, y1, x2, y2)
 
-    def _wildlife_gate_open(self, detections, *, motion_confirmed, wildlife_motion_only):
-        """Whether the wildlife stage should run for this frame."""
+    @staticmethod
+    def _covers(box, region, min_frac: float = _SKIP_OVERLAP_FRAC) -> bool:
+        """True when `min_frac` of `box` lies inside `region`.
+
+        Both are ``(x1, y1, x2, y2)``. Deliberately an asymmetric
+        containment fraction rather than IoU: a small bird inside a large
+        crop has a low IoU but is very much "in the way", and that is the
+        case the caller cares about.
+        """
+        if not box or not region:
+            return False
+        ax1, ay1, ax2, ay2 = box
+        bx1, by1, bx2, by2 = region
+        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        if ix2 <= ix1 or iy2 <= iy1:
+            return False
+        box_area = float(max(1, (ax2 - ax1) * (ay2 - ay1)))
+        return ((ix2 - ix1) * (iy2 - iy1)) / box_area >= min_frac
+
+    def _wildlife_gate_open(
+        self, detections, *, motion_confirmed, wildlife_motion_only, crop_box=None
+    ):
+        """Whether the wildlife stage should run for this frame.
+
+        `crop_box` is the region that would actually be classified. When
+        given, a blocking label only blocks if it OVERLAPS that region.
+
+        This matters at a feeder. The stage used to skip the whole frame
+        whenever a bird was detected anywhere in it — but a bird at the
+        feeder and a squirrel on the ground below is the normal case
+        there, and the squirrel was being discarded because of a bird
+        several hundred pixels away that the classifier would never have
+        seen. The same reasoning applies to a person crossing the far
+        side of the garden. Passing crop_box=None keeps the old
+        frame-wide behaviour for callers that have no crop.
+        """
         if not (motion_confirmed or wildlife_motion_only):
             return False
         if not self.wildlife_classifier.available:
             return False
-        if any(d.label in _HARD_SKIP_LABELS for d in detections):
-            return False
-        return not any(d.label == "cat" and d.score >= _HARD_CAT_SCORE for d in detections)
+
+        blockers = [d for d in detections if d.label in _HARD_SKIP_LABELS]
+        hard_cats = [d for d in detections if d.label == "cat" and d.score >= _HARD_CAT_SCORE]
+        if crop_box is None:
+            return not blockers and not hard_cats
+        return not any(
+            self._covers(getattr(d, "bbox", None), crop_box) for d in blockers + hard_cats
+        )
 
     def _apply_wildlife_stage(
         self,
@@ -122,10 +167,15 @@ class WildlifeStageMixin:
         Both are returned rather than mutated in place because the
         cat-vs-squirrel override REPLACES the lists.
         """
+        # Crop first: the gate needs to know WHICH region would be
+        # classified before it can decide whether a bird or a person is
+        # actually in the way, or merely elsewhere in the frame.
+        crop, crop_box = self._wildlife_crop(proc_frame, effective_bbox)
         if not self._wildlife_gate_open(
             detections,
             motion_confirmed=motion_confirmed,
             wildlife_motion_only=wildlife_motion_only,
+            crop_box=crop_box,
         ):
             return detections, labels
 
@@ -133,7 +183,6 @@ class WildlifeStageMixin:
             (d for d in detections if d.label == "cat" and d.score < _HARD_CAT_SCORE),
             None,
         )
-        crop, crop_box = self._wildlife_crop(proc_frame, effective_bbox)
         try:
             wl_min = self.cfg.get("wildlife_min_score") or None
             cat, raw_lbl, wscore = self.wildlife_classifier.classify_crop(crop, min_score=wl_min)

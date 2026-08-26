@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 
 from ._decision_log import log_decision
+from ._device_lock import inference_lock
 from ._edgetpu import make_delegate_interpreter
 from ._label_loader import load_label_map
 from ._preprocess import letterbox
@@ -69,6 +70,11 @@ class CoralObjectDetector(InferenceTimingMixin):
         #      tensors are read.
         # The lock covers the entire read-from-output phase so callers
         # always observe a consistent snapshot.
+        #
+        # Provisional: WHICH lock is right depends on the tier this
+        # detector ends up on, which is not known yet. `_activate_tier`
+        # rebinds it once that is decided — process-wide for the TPU,
+        # per-instance for CPU. See `_device_lock`.
         self._infer_lock = threading.Lock()
         # Rolling per-stage inference timings — see _record_timing.
         self._init_timings()
@@ -102,6 +108,7 @@ class CoralObjectDetector(InferenceTimingMixin):
                 self.mode = "coral"
                 self.reason = "ok"
                 log.info("[det] Coral TPU aktiv: %s", model_path)
+                self._activate_tier()
                 return
             except Exception as e:
                 log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
@@ -121,6 +128,7 @@ class CoralObjectDetector(InferenceTimingMixin):
                 self.mode = "coral"
                 self.reason = "edgetpu_delegate"
                 log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
+                self._activate_tier()
                 return
 
         # ── Tier 2: tflite-runtime CPU fallback ────────────────────────────
@@ -153,6 +161,7 @@ class CoralObjectDetector(InferenceTimingMixin):
                     self._cpu_threads or "default",
                     "angefordert" if self._prefer_cpu else "Fallback",
                 )
+                self._activate_tier()
                 return
             except Exception as e2:
                 log.warning("[det] CPU-Inferenz fehlgeschlagen für %s: %s", try_path, e2)
@@ -168,6 +177,14 @@ class CoralObjectDetector(InferenceTimingMixin):
         log.warning(
             "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
         )
+
+    def _activate_tier(self) -> None:
+        """Wiring that can only happen once the tier is known.
+
+        Called from every successful tier, never from the failure path —
+        an unavailable detector runs no inference and needs neither.
+        """
+        self._infer_lock = inference_lock(self.mode, self.device)
 
     # Per-label minimum bounding-box constraints. Surveillance cameras at
     # fixed positions almost never see a real person at <15% frame height
@@ -294,18 +311,30 @@ class CoralObjectDetector(InferenceTimingMixin):
 
         Wrapped in ``_infer_lock`` so a concurrent simulate-now call
         can't start a second invoke while an outstanding get_objects()
-        view is still tied to the previous run.
+        view is still tied to the previous run — and, on the TPU tier,
+        so the cameras queue for the one device explicitly instead of
+        inside libedgetpu.
+
+        Colour conversion and letterboxing stay OUTSIDE the lock. That
+        prep is pure CPU work on a private frame, and now that the lock
+        is shared by every camera, holding it across the prep would
+        serialise their letterboxing too — throughput given away for
+        nothing.
         """
         score_threshold = threshold if threshold is not None else self.min_score
+        _t_pre = time.perf_counter()
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        width, height = self.common.input_size(self.interpreter)
+        # Aspect-preserving letterbox — see letterbox() for the why.
+        # pycoral returns bbox in model-pixel space, so the inverse
+        # transform below subtracts pad before dividing by scale.
+        canvas, scale, pad_x, pad_y = letterbox(rgb, width, height)
+        _t_wait = time.perf_counter()
         with self._infer_lock:
-            width, height = self.common.input_size(self.interpreter)
-            # Aspect-preserving letterbox — see letterbox() for the why.
-            # pycoral returns bbox in model-pixel space, so the inverse
-            # transform below subtracts pad before dividing by scale.
-            canvas, scale, pad_x, pad_y = letterbox(rgb, width, height)
+            _t_invoke = time.perf_counter()
             self.common.set_input(self.interpreter, canvas)
             self.interpreter.invoke()
+            _t_post = time.perf_counter()
             # Materialise pycoral results into a plain list of (id, score, bbox)
             # tuples while still inside the lock so the underlying tensor
             # references are released before the next caller can run set_input.
@@ -323,6 +352,7 @@ class CoralObjectDetector(InferenceTimingMixin):
                 )
                 for o in objs
             ]
+        self._record_timing(_t_pre, _t_wait, _t_invoke, _t_post)
         h, w = frame.shape[:2]
         inv_scale = 1.0 / scale if scale > 0 else 1.0
         out: list[Detection] = []

@@ -7,6 +7,7 @@ copying the bucket definitions.
 
 from __future__ import annotations
 
+import math
 import time
 from collections import deque
 
@@ -55,12 +56,29 @@ class InferenceTimingMixin:
         )
 
     def timing_breakdown(self) -> dict:
-        """Rolling averages in ms, or an empty dict before the first run."""
+        """Rolling averages in ms, or an empty dict before the first run.
+
+        `wait_p95` is reported alongside the mean because contention is
+        bursty by nature: three cameras whose inference intervals drift
+        into phase stall each other for a few frames and then separate
+        again. An average over 60 samples smears that into a number that
+        looks harmless, while the stall is what actually drops a frame.
+        """
         samples = list(self._timings)
         if not samples:
             return {}
         n = len(samples)
         out = {k: round(sum(s[k] for s in samples) / n, 1) for k in _BUCKETS}
         out["total"] = round(sum(out[k] for k in _BUCKETS), 1)
+        out["wait_p95"] = round(_percentile([s["wait"] for s in samples], 0.95), 1)
         out["samples"] = n
         return out
+
+
+def _percentile(values: list[float], q: float) -> float:
+    """Nearest-rank percentile. Exact on the small windows we keep, and
+    it always returns a value that was really observed — an interpolated
+    latency nobody measured is a poor thing to tune against."""
+    ordered = sorted(values)
+    idx = math.ceil(q * len(ordered)) - 1
+    return ordered[max(0, min(len(ordered) - 1, idx))]

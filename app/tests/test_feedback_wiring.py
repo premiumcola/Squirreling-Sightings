@@ -21,8 +21,17 @@ def _read(rel: str) -> str:
     return (SRC / rel).read_text(encoding="utf-8")
 
 
+def _read_outbound() -> str:
+    """The push path is a package (HYG-2 split it along its concerns), so
+    the wiring is pinned against the package as a whole rather than one
+    file inside it. The ordering assertion below still means what it
+    says: both of its needles live in the same module."""
+    pkg = SRC / "telegram_bot" / "_outbound"
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(pkg.glob("*.py")))
+
+
 def test_send_path_records_the_alert():
-    src = _read("telegram_bot/_outbound/__init__.py")
+    src = _read_outbound()
     assert "from ...detection_feedback import record_alert" in src
     assert "record_alert(" in src
 
@@ -30,7 +39,7 @@ def test_send_path_records_the_alert():
 def test_alert_record_carries_score_and_threshold():
     """Without these two the record cannot calibrate anything — which is
     precisely why the pre-existing runtime alert-index was useless."""
-    src = _read("telegram_bot/_outbound/__init__.py")
+    src = _read_outbound()
     call = src[src.index("record_alert(") : src.index("record_alert(") + 600]
     assert "score=top_score" in call
     assert "threshold=threshold" in call
@@ -54,7 +63,7 @@ def test_verdict_record_carries_the_camera():
 
 def test_both_writes_are_best_effort():
     """Bookkeeping must never drop a real alert or break a callback."""
-    out = _read("telegram_bot/_outbound/__init__.py")
+    out = _read_outbound()
     inb = _read("telegram_bot/_inbound.py")
     for src, needle in ((out, "record_alert("), (inb, "record_verdict(")):
         before = src[: src.index(needle)]
@@ -85,7 +94,7 @@ def test_alert_is_recorded_before_the_push_gate():
     the direction the system actually needs. The score of a REJECTED
     candidate is only observable above the gate.
     """
-    src = _read("telegram_bot/_outbound/__init__.py")
+    src = _read_outbound()
     record_at = src.index("record_alert(")
     gate_at = src.index("if top_score < threshold:")
     assert record_at < gate_at, (
@@ -97,11 +106,11 @@ def test_alert_is_recorded_before_the_push_gate():
 def test_only_one_ledger_write_per_event():
     """Two calls would double-count every sent event and skew the
     score distribution towards the ones that passed."""
-    src = _read("telegram_bot/_outbound/__init__.py")
+    src = _read_outbound()
     assert src.count("record_alert(") == 1
 
 
 def test_the_record_says_which_side_of_the_bar_it_fell_on():
-    src = _read("telegram_bot/_outbound/__init__.py")
+    src = _read_outbound()
     call = src[src.index("record_alert(") : src.index("record_alert(") + 600]
     assert "passed_threshold=" in call

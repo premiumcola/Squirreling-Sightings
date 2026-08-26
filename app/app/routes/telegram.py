@@ -131,7 +131,11 @@ def api_system_telegram():
     Returns the bot's connected/disconnected state plus the
     timestamp of the most recent successful send_alert. Connected
     means: the TelegramService instance exists, has bot+token+chat_id
-    configured, and is currently in the polling-active state.
+    configured, and its polling thread is up and trying — i.e. one of
+    the three live states get_polling_status can report (active /
+    starting / conflict). off, conflict_quarantine and stale are the
+    dead ones. The previously matched "polling" / "running" were never
+    produced by get_polling_status at all.
 
     Returned shape:
       {
@@ -158,7 +162,7 @@ def api_system_telegram():
     try:
         poll_status = tg.get_polling_status() or {}
         state = (poll_status.get("state") or "").lower()
-        out["connected"] = state in ("polling", "running", "active")
+        out["connected"] = state in ("active", "starting", "conflict")
     except Exception:
         out["connected"] = False
     last_push = getattr(tg, "_last_push_ts", None)

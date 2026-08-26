@@ -94,7 +94,11 @@ def test_alert_is_recorded_before_the_push_gate():
     the direction the system actually needs. The score of a REJECTED
     candidate is only observable above the gate.
     """
-    src = _read_outbound()
+    # Read the ONE module that holds both, never the concatenated
+    # package: across files the comparison would silently measure
+    # alphabetical filename order instead of source order, and this
+    # invariant is far too load-bearing to rest on that accident.
+    src = _read("telegram_bot/_outbound/_event_alert.py")
     record_at = src.index("record_alert(")
     gate_at = src.index("if top_score < threshold:")
     assert record_at < gate_at, (

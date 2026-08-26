@@ -115,15 +115,32 @@ def test_added_secondary_label_writes_nothing(client, store, tmp_storage_root):
     assert _verdicts(tmp_storage_root) == []
 
 
-def test_cleared_labels_count_as_a_correction(client, store, tmp_storage_root):
-    """Emptying the list falls back to `motion` — the detector's label is
-    gone, so the user did dispute it."""
+def test_cleared_labels_record_nothing(client, store, tmp_storage_root):
+    """An emptied list must NOT be filed as a correction to "motion".
+
+    "motion" there is OUR fallback, not a claim the user made. Recording
+    it would invent a positive example of a class nobody asserted — and
+    a poisoned corpus is worse than an empty one, because it silently
+    biases every threshold later calibrated from it.
+    """
     store(labels=["cat"], top_label="cat")
     client.post(f"/api/camera/{CAM}/events/{EID}/labels", json={"labels": []})
 
+    assert _verdicts(tmp_storage_root) == []
+
+
+def test_two_tap_correction_files_exactly_one_verdict(client, store, tmp_storage_root):
+    """The label editor toggles one bubble per request, so cat→squirrel
+    arrives as remove-cat then add-squirrel. Only the second tap is a
+    claim; booking the intermediate empty state would file a spurious
+    correction as well."""
+    store(labels=["cat"], top_label="cat")
+    client.post(f"/api/camera/{CAM}/events/{EID}/labels", json={"labels": []})
+    client.post(f"/api/camera/{CAM}/events/{EID}/labels", json={"labels": ["squirrel"]})
+
     records = _verdicts(tmp_storage_root)
-    assert len(records) == 1
-    assert records[0]["corrected_label"] == "motion"
+    assert len(records) == 1, f"expected one verdict for one correction, got {len(records)}"
+    assert records[0]["corrected_label"] == "squirrel"
 
 
 def test_delete_writes_a_false_alarm_verdict(client, store, tmp_storage_root, monkeypatch):
@@ -177,4 +194,39 @@ def test_missing_event_still_404s(client, store, tmp_storage_root):
     store()
     resp = client.post(f"/api/camera/{CAM}/events/evt_nope/confirm")
     assert resp.status_code == 404
+    assert _verdicts(tmp_storage_root) == []
+
+
+def test_a_404_delete_records_nothing(client, tmp_storage_root, monkeypatch):
+    """A double-tap or client retry must not book a second false alarm.
+
+    The verdict used to be written above the existence check, so a
+    DELETE on an already-deleted event returned 404 and still filed a
+    correct=False record — inflating the false-alarm count for an event
+    the user judged exactly once.
+    """
+    monkeypatch.setattr(
+        _trash,
+        "move_to_trash",
+        lambda cam_id, event_id: {"json_deleted": False, "trashed": False},
+    )
+    resp = client.delete(f"/api/camera/{CAM}/events/evt_does_not_exist")
+    assert resp.status_code == 404
+    assert _verdicts(tmp_storage_root) == []
+
+
+def test_deleting_a_timelapse_records_nothing(client, tmp_storage_root, monkeypatch):
+    """The timelapse card's delete posts a backstop DELETE for `tl_<stem>`.
+
+    Booking that as a false alarm files a judgement on a timelapse video
+    nobody disputed — pure fabrication, and it lands in the same corpus
+    the detection thresholds are calibrated from.
+    """
+    monkeypatch.setattr(
+        _trash,
+        "move_to_trash",
+        lambda cam_id, event_id: {"json_deleted": True, "trashed": True},
+    )
+    resp = client.delete(f"/api/camera/{CAM}/events/tl_20260813")
+    assert resp.status_code == 200
     assert _verdicts(tmp_storage_root) == []

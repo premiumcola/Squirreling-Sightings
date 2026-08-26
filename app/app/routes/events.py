@@ -53,12 +53,6 @@ def api_event_delete(cam_id, event_id):
     days before the daily sweep removes it. /api/trash/<id>/restore
     moves it back; /api/trash/empty hard-deletes everything now."""
     storage_root = app_state.storage_root
-    # Deleting a single event is the user calling it a false alarm.
-    # Recorded before the files move, so the verdict survives even a
-    # partial trash move. A verdict for an event that never produced an
-    # alert is inert: `judged_alerts` only joins verdicts that have an
-    # alert record with the same event_id.
-    _ledger_verdict(cam_id, event_id, correct=False, source="web_delete")
     result = _trash.move_to_trash(cam_id, event_id)
     # Timelapse fallback: tl_<stem> events live in storage/timelapse/<cam>/
     # and may not have an EventStore JSON yet (the migration that
@@ -82,6 +76,17 @@ def api_event_delete(cam_id, event_id):
                             companion.unlink()
     if not result["json_deleted"] and not tl_cleaned:
         return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
+    # Deleting a motion event is the user calling it a false alarm — but
+    # only AFTER we know something was really deleted, and only for a
+    # real event. Two ways this fabricated user claims when it sat above:
+    #   * a 404 (double-tap, client retry) still booked a verdict;
+    #   * the timelapse card's delete posts a second DELETE for
+    #     `tl_<stem>` as a backstop, which booked "false alarm" for a
+    #     timelapse video nobody judged.
+    # A poisoned corpus is worse than an empty one: it silently biases
+    # every threshold this data will later be used to calibrate.
+    if not event_id.startswith("tl_"):
+        _ledger_verdict(cam_id, event_id, correct=False, source="web_delete")
     return jsonify({"ok": True, "tl_cleaned": tl_cleaned, **result})
 
 
@@ -153,7 +158,18 @@ def api_event_labels(cam_id, event_id):
     # Only a changed top_label is a correction. Adding a secondary label
     # leaves the detector's verdict standing — recording that as "wrong"
     # would poison the corpus with events the user never disputed.
-    if event["top_label"] != prev_top:
+    #
+    # Two shapes are excluded on purpose, because both fabricate a claim
+    # the user never made:
+    #   * an emptied list. "motion" there is OUR fallback, not the user
+    #     saying "it was motion". Recording it as corrected_label would
+    #     invent a positive example of a class nobody asserted.
+    #   * the intermediate state of a two-tap correction. The label
+    #     editor toggles one bubble per request, so changing cat→squirrel
+    #     arrives as remove-cat then add-squirrel; booking the removal
+    #     would file a spurious correction to whatever remained.
+    #     Requiring a non-empty list means only the second tap counts.
+    if labels and event["top_label"] != prev_top:
         _ledger_verdict(
             cam_id,
             event_id,

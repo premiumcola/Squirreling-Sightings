@@ -252,53 +252,6 @@ class LifecycleMixin:
     def shutdown(self):
         self.stop(reason="shutdown")
 
-    def get_polling_status(self) -> dict:
-        """Snapshot of the polling state for /api/telegram/status.
-
-        States:
-          off                  — service disabled or polling not running
-          starting             — thread alive, getUpdates not yet confirmed
-          active               — getUpdates running, no recent conflict
-          conflict             — Telegram returned Conflict in the last 30s
-          conflict_quarantine  — 3 Conflicts in 60 s tripped the kill-switch;
-                                 polling stays down until a manual restart
-          stale                — stop() left an orphan polling thread; start() is
-                                 refusing to spawn a second one until restart
-        """
-        if not self.enabled:
-            return {"state": "off", "since_seconds": 0, "enabled": False}
-        now = time.time()
-        if getattr(self, "_conflict_quarantine", False):
-            ts = self._last_conflict_ts or now
-            return {
-                "state": "conflict_quarantine",
-                "since_seconds": int(now - ts),
-                "enabled": True,
-            }
-        stale = getattr(self, "_stale_poll_thread", None)
-        if stale is not None and stale.is_alive():
-            since = getattr(self, "_stale_since", None) or now
-            return {
-                "state": "stale",
-                "since_seconds": int(now - since),
-                "enabled": True,
-            }
-        if not (self._poll_thread and self._poll_thread.is_alive()):
-            return {"state": "off", "since_seconds": 0, "enabled": True}
-        if self._last_conflict_ts and (now - self._last_conflict_ts) < 30:
-            return {
-                "state": "conflict",
-                "since_seconds": int(now - self._last_conflict_ts),
-                "enabled": True,
-            }
-        if self._polling_active_since:
-            return {
-                "state": "active",
-                "since_seconds": int(now - self._polling_active_since),
-                "enabled": True,
-            }
-        return {"state": "starting", "since_seconds": 0, "enabled": True}
-
     def _run_send_loop(self):
         try:
             asyncio.set_event_loop(self._loop)

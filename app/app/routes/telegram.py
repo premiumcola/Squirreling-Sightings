@@ -131,15 +131,26 @@ def api_system_telegram():
     Returns the bot's connected/disconnected state plus the
     timestamp of the most recent successful send_alert. Connected
     means: the TelegramService instance exists, has bot+token+chat_id
-    configured, and is currently in the polling-active state.
+    configured, and its polling thread is up and trying — i.e. one of
+    the three live states get_polling_status can report (active /
+    starting / conflict). off, conflict_quarantine and stale are the
+    dead ones. The previously matched "polling" / "running" were never
+    produced by get_polling_status at all.
 
     Returned shape:
       {
         "enabled":       bool,    # service has token + chat_id
         "connected":     bool,    # polling thread is currently running
+        "send_loop_alive": bool,  # dedicated send-loop thread is alive
         "last_send_iso": str|null, # ISO timestamp of last successful push
         "last_send_age_s": float|null,  # seconds since last_send
       }
+    `connected` covers the polling thread only. The send loop is a
+    separate thread — when it dies every alert is dispatched into a loop
+    nobody runs and no-ops silently, while polling stays "active". Hence
+    send_loop_alive as its own field rather than folded into connected:
+    the two failure modes need different remedies.
+
     Frontend maps:
       enabled=False                            → grey dot, "deaktiviert"
       enabled=True && connected=True           → green dot, "verbunden"
@@ -148,6 +159,7 @@ def api_system_telegram():
     out = {
         "enabled": False,
         "connected": False,
+        "send_loop_alive": False,
         "last_send_iso": None,
         "last_send_age_s": None,
     }
@@ -158,9 +170,11 @@ def api_system_telegram():
     try:
         poll_status = tg.get_polling_status() or {}
         state = (poll_status.get("state") or "").lower()
-        out["connected"] = state in ("polling", "running", "active")
+        out["connected"] = state in ("active", "starting", "conflict")
+        out["send_loop_alive"] = bool(poll_status.get("send_loop_alive"))
     except Exception:
         out["connected"] = False
+        out["send_loop_alive"] = False
     last_push = getattr(tg, "_last_push_ts", None)
     if last_push:
         try:

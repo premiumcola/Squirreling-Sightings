@@ -17,6 +17,7 @@ import numpy as np
 from ._decision_log import log_decision
 from ._device_lock import inference_lock
 from ._edgetpu import make_delegate_interpreter
+from ._filters import LabelFilterMixin
 from ._label_loader import load_label_map
 from ._preprocess import letterbox
 from ._timing import InferenceTimingMixin
@@ -30,7 +31,7 @@ log = logging.getLogger(__name__)
 _WARMUP_W, _WARMUP_H = 320, 240
 
 
-class CoralObjectDetector(InferenceTimingMixin):
+class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
     """Object detector with three-tier fallback:
     1. pycoral + EdgeTPU  → mode="coral"
     2. tflite-runtime CPU → mode="cpu"
@@ -83,61 +84,101 @@ class CoralObjectDetector(InferenceTimingMixin):
         self._infer_lock = threading.Lock()
         # Rolling per-stage inference timings — see _record_timing.
         self._init_timings()
+        # Set by _try_pycoral, consumed by the CPU tier's reason string.
+        self._coral_error = "prefer_cpu"
         if not self.enabled:
             return
-        # Startup diagnostic: log the label file path + first 25 entries so
-        # label-mapping mistakes surface immediately instead of showing up as
-        # "crow detected as elephant" weeks later.
+        self._log_label_diagnostic()
+        model_path = self.cfg.get("model_path")
+        if not model_path:
+            self.reason = "missing model_path"
+            return
+        if self._select_tier(model_path):
+            self._activate_tier()
+
+    def _log_label_diagnostic(self) -> None:
+        """Log the label file path + first 25 entries at startup so
+        label-mapping mistakes surface immediately instead of showing up
+        as "crow detected as elephant" weeks later."""
         lp = self.cfg.get("labels_path")
         sample = {k: self.labels[k] for k in sorted(self.labels)[:25]}
         log.info(
             "CoralObjectDetector labels: %s — %d entries, head=%s", lp, len(self.labels), sample
         )
-        model_path = self.cfg.get("model_path")
-        if not model_path:
-            self.reason = "missing model_path"
-            return
 
-        coral_error = "prefer_cpu"
+    def _select_tier(self, model_path: str) -> bool:
+        """Walk the tiers in order and stop at the first that comes up.
+
+        Returns True once `self.interpreter` is live and `self.mode` is
+        final. False means every tier failed and the camera is on motion
+        detection alone.
+        """
         if not self._prefer_cpu:
-            # ── Tier 1: pycoral + Coral TPU ────────────────────────────────
-            try:
-                from pycoral.adapters import common, detect  # type: ignore
-                from pycoral.utils.edgetpu import make_interpreter  # type: ignore
+            if self._try_pycoral(model_path):
+                return True
+            if self._try_delegate(model_path):
+                return True
+        if self._try_cpu(model_path):
+            return True
+        # Every tier failed. Name the tier that was actually tried —
+        # blaming pycoral when the caller asked for CPU sends whoever
+        # reads this log looking in the wrong place.
+        self.reason = (
+            "cpu requested but no usable CPU model"
+            if self._prefer_cpu
+            else f"pycoral: {self._coral_error}"
+        )
+        log.warning(
+            "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
+        )
+        return False
 
-                self.common = common
-                self.detect = detect
-                self.interpreter = make_interpreter(model_path, device=self.device)
-                self.interpreter.allocate_tensors()
-                self.available = True
-                self.mode = "coral"
-                self.reason = "ok"
-                log.info("[det] Coral TPU aktiv: %s", model_path)
-                self._activate_tier()
-                return
-            except Exception as e:
-                log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
-                coral_error = str(e)
+    def _try_pycoral(self, model_path: str) -> bool:
+        """Tier 1: pycoral + Coral TPU."""
+        try:
+            from pycoral.adapters import common, detect  # type: ignore
+            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
 
-            # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────
-            # Same silicon as tier 1, reached without pycoral. Output is
-            # plain SSD, so the tflite parse path handles it — only the
-            # interpreter construction differs, hence _cpu_mode (= "uses
-            # the tflite API") is True while mode stays "coral" (= "runs
-            # on the TPU").
-            delegated = make_delegate_interpreter(model_path, self.device)
-            if delegated is not None:
-                self.interpreter = delegated
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "coral"
-                self.reason = "edgetpu_delegate"
-                log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
-                self._activate_tier()
-                return
+            self.common = common
+            self.detect = detect
+            self.interpreter = make_interpreter(model_path, device=self.device)
+            self.interpreter.allocate_tensors()
+        except Exception as e:
+            log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
+            self._coral_error = str(e)
+            return False
+        self.available = True
+        self.mode = "coral"
+        self.reason = "ok"
+        log.info("[det] Coral TPU aktiv: %s", model_path)
+        return True
 
-        # ── Tier 2: tflite-runtime CPU fallback ────────────────────────────
-        # For EdgeTPU models (*_edgetpu.tflite) try the non-EdgeTPU variant.
+    def _try_delegate(self, model_path: str) -> bool:
+        """Tier 1b: EdgeTPU via the tflite-runtime delegate.
+
+        Same silicon as tier 1, reached without pycoral. Output is plain
+        SSD, so the tflite parse path handles it — only the interpreter
+        construction differs, hence _cpu_mode (= "uses the tflite API")
+        is True while mode stays "coral" (= "runs on the TPU").
+        """
+        delegated = make_delegate_interpreter(model_path, self.device)
+        if delegated is None:
+            return False
+        self.interpreter = delegated
+        self._cpu_mode = True
+        self.available = True
+        self.mode = "coral"
+        self.reason = "edgetpu_delegate"
+        log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
+        return True
+
+    def _try_cpu(self, model_path: str) -> bool:
+        """Tier 2: tflite-runtime on the CPU.
+
+        For EdgeTPU models (*_edgetpu.tflite) the non-EdgeTPU variant is
+        tried first — a compiled model loads on CPU too, but every op
+        falls back and it is far slower than the plain build.
+        """
         cpu_model = self.cfg.get("cpu_model_path")
         if not cpu_model:
             cpu_model = model_path.replace("_edgetpu.tflite", ".tflite")
@@ -153,35 +194,26 @@ class CoralObjectDetector(InferenceTimingMixin):
                     kwargs["num_threads"] = int(self._cpu_threads)
                 interp = tflite.Interpreter(**kwargs)
                 interp.allocate_tensors()
-                self.interpreter = interp
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "cpu"
-                self.reason = (
-                    "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
-                )
-                log.info(
-                    "[det] CPU-Inferenz aktiv: %s (threads=%s, %s)",
-                    try_path,
-                    self._cpu_threads or "default",
-                    "angefordert" if self._prefer_cpu else "Fallback",
-                )
-                self._activate_tier()
-                return
             except Exception as e2:
                 log.warning("[det] CPU-Inferenz fehlgeschlagen für %s: %s", try_path, e2)
-
-        # Every tier failed. Name the tier that was actually tried —
-        # blaming pycoral when the caller asked for CPU sends whoever
-        # reads this log looking in the wrong place.
-        self.reason = (
-            "cpu requested but no usable CPU model"
-            if self._prefer_cpu
-            else f"pycoral: {coral_error}"
-        )
-        log.warning(
-            "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
-        )
+                continue
+            self.interpreter = interp
+            self._cpu_mode = True
+            self.available = True
+            self.mode = "cpu"
+            self.reason = (
+                "cpu_requested"
+                if self._prefer_cpu
+                else f"cpu_fallback (coral: {self._coral_error})"
+            )
+            log.info(
+                "[det] CPU-Inferenz aktiv: %s (threads=%s, %s)",
+                try_path,
+                self._cpu_threads or "default",
+                "angefordert" if self._prefer_cpu else "Fallback",
+            )
+            return True
+        return False
 
     def _activate_tier(self) -> None:
         """Wiring that can only happen once the tier is known.
@@ -229,15 +261,6 @@ class CoralObjectDetector(InferenceTimingMixin):
             (time.perf_counter() - started) * 1000.0,
         )
 
-    # Per-label minimum bounding-box constraints. Surveillance cameras at
-    # fixed positions almost never see a real person at <15% frame height
-    # or <2% frame area — a small "person" box is overwhelmingly a false
-    # positive (wood grain, shadow, distant silhouette). Keys are COCO
-    # labels; values are (min_height_frac, min_area_frac).
-    _LABEL_MIN_BBOX: dict[str, tuple[float, float]] = {
-        "person": (0.15, 0.02),
-    }
-
     def detect_frame(
         self,
         frame: np.ndarray,
@@ -275,61 +298,6 @@ class CoralObjectDetector(InferenceTimingMixin):
         if cam_id:
             with contextlib.suppress(Exception):
                 log_decision(cam_id, kept, drops)
-        return kept
-
-    def _apply_label_filters_with_reasons(
-        self,
-        dets: list[Detection],
-        frame: np.ndarray,
-        label_thresholds: dict[str, float] | None,
-        global_threshold: float,
-    ) -> tuple[list[Detection], list[tuple[Detection, str]]]:
-        """Same gates as _apply_label_filters but also returns a parallel
-        list of (detection, drop_reason) for the diagnostic logger. Hot
-        path: the reason-string formatting only happens for dropped
-        detections — the kept-list path is one append per kept det."""
-        out: list[Detection] = []
-        drops: list[tuple[Detection, str]] = []
-        if not dets:
-            return out, drops
-        h, w = frame.shape[:2]
-        frame_area = float(max(1, h * w))
-        for d in dets:
-            # Per-label confidence override.
-            if label_thresholds:
-                t = label_thresholds.get(d.label)
-                if t is not None and d.score < float(t):
-                    drops.append((d, f"label_threshold({d.label})={t} (got {d.score:.2f})"))
-                    continue
-            # Per-label size floor (currently only "person").
-            min_h_frac, min_area_frac = self._LABEL_MIN_BBOX.get(d.label, (0.0, 0.0))
-            if min_h_frac > 0.0 or min_area_frac > 0.0:
-                x1, y1, x2, y2 = d.bbox
-                bb_h = max(0, y2 - y1)
-                bb_area = max(0, (x2 - x1) * (y2 - y1))
-                if bb_h < min_h_frac * h:
-                    drops.append((d, f"size_floor (h_frac={bb_h / h:.2f} < {min_h_frac:.2f})"))
-                    continue
-                if bb_area < min_area_frac * frame_area:
-                    drops.append(
-                        (
-                            d,
-                            f"size_floor (area_frac={bb_area / frame_area:.3f} < {min_area_frac:.3f})",
-                        )
-                    )
-                    continue
-            out.append(d)
-        return out, drops
-
-    # Back-compat alias — anything that historically called
-    # _apply_label_filters keeps the old single-return-value semantics.
-    def _apply_label_filters(self, dets, frame, label_thresholds):
-        kept, _ = self._apply_label_filters_with_reasons(
-            dets,
-            frame,
-            label_thresholds,
-            self.min_score,
-        )
         return kept
 
     def detect_frame_raw(self, frame: np.ndarray, threshold: float = 0.20) -> list[Detection]:

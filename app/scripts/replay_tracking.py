@@ -180,7 +180,20 @@ def _replay(video: Path, detector, args, out_dir: Path) -> dict | None:
         frames_seen += 1
 
         dets = detector.detect_frame_raw(frame, threshold=args.floor) or []
-        survivors = tracker.step(dets, t_s=frames_seen / max(0.1, args.sample_fps), fps=fps)
+        # `fps` here must be the rate at which the TRACKER is fed, not the
+        # video's own frame rate. It becomes the miss-grace window via
+        # compute_miss_grace_samples, so passing the video's 15 fps while
+        # sampling at 3 handed every track five times the intended grace —
+        # which made this tool systematically UNDER-report fragmentation,
+        # the one thing it exists to measure.
+        h_px, w_px = frame.shape[:2]
+        survivors = tracker.step(
+            dets,
+            t_s=frames_seen / max(0.1, args.sample_fps),
+            fps=args.sample_fps,
+            frame_w=w_px,
+            frame_h=h_px,
+        )
         if survivors:
             frames_with_dets += 1
         for d in survivors:
@@ -251,7 +264,10 @@ def main() -> int:
     ap.add_argument("--max-frames", type=int, default=0, help="cap sampled frames (0 = all)")
     ap.add_argument("--floor", type=float, default=0.20, help="detector score floor")
     ap.add_argument("--spawn", type=float, default=0.50, help="track spawn score")
-    ap.add_argument("--iou", type=float, default=0.30, help="IoU match threshold")
+    # Defaults mirror tracker_core/_consts.py. A replay that does not use
+    # production's thresholds measures a different tracker than the one
+    # running on the cameras.
+    ap.add_argument("--iou", type=float, default=0.20, help="IoU match threshold")
     ap.add_argument(
         "--include-raw",
         action="store_true",

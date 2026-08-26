@@ -27,6 +27,17 @@ Which tier gets which lock is the whole design:
     gain (see `_CLASSIFIER_CPU_NOTE` in `_edgetpu.py`). The instance lock
     still does its original job of stopping one interpreter being
     re-entered by the simulate-now endpoint mid-inference.
+
+Known gap, left open on purpose: only `CoralObjectDetector` calls this.
+`BirdSpeciesClassifier` and `WildlifeClassifier` hold no lock at all.
+That is harmless in the shipped configuration — both default to
+``prefer_cpu=True`` and never touch the device — but an operator who
+sets ``prefer_cpu: false`` on a classifier puts a second, UNLOCKED
+interpreter on the same stick, and it will invoke concurrently with the
+detector. Closing that means calling `inference_lock(self.mode, device)`
+at the end of each classifier's tier selection and wrapping its
+set_tensor → invoke → get_tensor block, exactly as the detector does
+(`wildlife.py` has two interpreters and needs two locks).
 """
 
 from __future__ import annotations

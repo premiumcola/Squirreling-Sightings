@@ -471,6 +471,24 @@ class OutboundMixin:
         if top_score == 0.0 and detections:
             top_score = max((float(d.get("score", 0.0)) for d in detections), default=0.0)
         threshold = float(label_cfg.get("threshold", 0.0) or 0.0)
+        # C4 · record the CANDIDATE here, above every gate. Recording
+        # after them would only ever capture events that cleared the bar
+        # — for `person` nothing under 0.85 — and a calibration built on
+        # that could raise a threshold but never lower one, which is the
+        # direction this system actually needs. The score of a rejected
+        # candidate is only observable at this point.
+        with contextlib.suppress(Exception):
+            record_alert(
+                self._storage_root(),
+                cam_id=camera_id,
+                event_id=meta.get("event_id") or "",
+                label=primary,
+                score=top_score,
+                threshold=threshold,
+                ts=time.time(),
+                detections=detections,
+                passed_threshold=top_score >= threshold,
+            )
         if top_score < threshold:
             log.warning(
                 "[tg] skip: %s score=%.2f < threshold=%.2f (cam=%s)",
@@ -612,24 +630,9 @@ class OutboundMixin:
                 },
             )
 
-        # C4 · durable record of what the detector claimed, written here
-        # because this is the only place the SCORE and the THRESHOLD it
-        # had to clear are both in hand. The runtime alert-index above
-        # keeps neither, and lives in settings.json which grows without
-        # bound; the ledger is append-only, size-capped, and sits outside
-        # the event folders so retention cannot delete the corpus.
-        # Best-effort by construction — never let bookkeeping drop an alert.
-        with contextlib.suppress(Exception):
-            record_alert(
-                self._storage_root(),
-                cam_id=camera_id,
-                event_id=eid,
-                label=primary,
-                score=top_score,
-                threshold=threshold,
-                ts=time.time(),
-                detections=detections,
-            )
+        # The ledger record for this event was already written above the
+        # push gates — deliberately, so rejected candidates are captured
+        # too. Nothing to add here.
 
         # Push payload: prefer the highest-scoring frame from the
         # tracking sidecar (Phase 1 worker → tracks.json) with the

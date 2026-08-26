@@ -100,9 +100,19 @@ def record_alert(
     threshold: float,
     ts: float,
     detections=None,
+    passed_threshold: bool | None = None,
 ) -> bool:
-    """Record that an alert was sent, with the numbers behind it.
+    """Record that an alert was CONSIDERED, with the numbers behind it.
 
+    Considered, not sent — and the distinction decides whether this
+    ledger is useful at all. Written behind the push gates, it would
+    only ever contain events that cleared the threshold: for `person`
+    nothing below 0.85. A calibration fed on that can raise a threshold
+    and can never lower one, which is the direction that actually
+    matters here. So this must be called BEFORE the gates, while the
+    score of a *rejected* candidate is still observable.
+
+    `passed_threshold` records which side of the bar it fell on.
     `detections` is the full per-frame list so a later calibration can
     see what else was in the frame — a "person" alert that also carried
     a 0.4 "dog" is a different data point from a clean one.
@@ -128,6 +138,11 @@ def record_alert(
             "label": label,
             "score": round(float(score), 4),
             "threshold": round(float(threshold), 4),
+            "passed_threshold": (
+                bool(passed_threshold)
+                if passed_threshold is not None
+                else float(score) >= float(threshold)
+            ),
             "detections": dets,
         },
     )

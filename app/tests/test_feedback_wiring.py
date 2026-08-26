@@ -71,3 +71,37 @@ def test_verdict_is_written_alongside_the_settings_entry_not_instead():
     additive until that badge has another source."""
     src = _read("telegram_bot/_inbound.py")
     assert 'runtime_set_subkey(\n                "event_feedback"' in src
+
+
+# ── the record must sit ABOVE the gates ───────────────────────────────
+
+
+def test_alert_is_recorded_before_the_push_gate():
+    """The defect this guards against is subtle and total.
+
+    Recorded after the gates, the ledger only ever contains events that
+    cleared the threshold — for `person` nothing below 0.85. Calibration
+    on that data could raise a threshold and never lower one, which is
+    the direction the system actually needs. The score of a REJECTED
+    candidate is only observable above the gate.
+    """
+    src = _read("telegram_bot/_outbound/__init__.py")
+    record_at = src.index("record_alert(")
+    gate_at = src.index("if top_score < threshold:")
+    assert record_at < gate_at, (
+        "record_alert must run BEFORE the threshold gate, or rejected "
+        "candidates are never captured and thresholds can only go up"
+    )
+
+
+def test_only_one_ledger_write_per_event():
+    """Two calls would double-count every sent event and skew the
+    score distribution towards the ones that passed."""
+    src = _read("telegram_bot/_outbound/__init__.py")
+    assert src.count("record_alert(") == 1
+
+
+def test_the_record_says_which_side_of_the_bar_it_fell_on():
+    src = _read("telegram_bot/_outbound/__init__.py")
+    call = src[src.index("record_alert(") : src.index("record_alert(") + 600]
+    assert "passed_threshold=" in call

@@ -79,28 +79,44 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
       Enthielt zugleich den R1-Teilschritt: Block als eigenes
       `_wildlife_stage.py`-Mixin extrahiert, `_main_loop.py` 885→807 Zeilen.
       19 neue Tests.
-- [ ] **C2 · Klassifikatoren auf die CPU** — `prefer_cpu` existiert seit
-      `cbfb174`. Drei Modelle auf einer TPU mit 8 MB SRAM schreiben bei jedem
-      Wechsel den Parameter-Cache über USB neu; im Live-Pfad passiert das
-      mehrfach pro Wildtier-Frame. CPU ist zu ~98 % frei (Ryzen 9 5950X,
-      32 Threads, Load 1,55).
+- [x] **C2 · Klassifikatoren auf die CPU** — `6427515`. Bird- und
+      Wildlife-Klassifikator haben jetzt `prefer_cpu=True` als Default, der
+      Detektor behält die TPU. Damit hält die TPU EIN Modell statt drei, und
+      das Neuschreiben des 8-MB-Parameter-Caches über USB (bisher mehrfach pro
+      Wildtier-Frame) entfällt. Per `prefer_cpu: false` je Stufe umkehrbar.
+      4 Tests, 2 schlagen gegen den alten Stand fehl.
 - [ ] **C3 · Kachel-Pass dauerhaft auf der CPU** — `detection_tiling.py` ist
       bereits detektor-agnostisch (`tiled_detect(detector, …)`), lässt sich
       also ohne Umbau mit einem CPU-Detektor bestücken. Heute feuert die
       Kachelung nur, wenn der Vollbild-Pass **null** Treffer hatte — eine
       schwache Fehlerkennung („Katze" 0.30) verhindert die Rettung komplett.
       Liefert nebenbei das Uneinigkeits-Signal für A2.
-- [ ] **C4 · Feedback-Ledger** (`storage/_diag/detection_feedback.jsonl`)
-      Beim **Senden** der Telegram-Meldung Kamera, Label und Score
-      denormalisiert mitschreiben. Heute speichert das Verdikt nichts davon —
-      ohne diesen Datensatz ist jede Schwellen-Automatik unmöglich.
-      Append-only, außerhalb `events_dir` (siehe C5).
-- [ ] **C5 · Bestätigte Events vor `cleanup_old` schützen**
-      (`storage.py:610`) — löscht nach Alter, **ohne Ausnahme für bestätigte
-      Events**. Ein Urteilskorpus im Event-Ordner löst sich im 14-Tage-Fenster
-      selbst auf. Entweder Ausnahme einbauen oder den Ledger (C4) als das
-      haltbare Artefakt festlegen und Events explizit als vergänglich
-      dokumentieren.
+- [~] **C4 · Feedback-Ledger** — Modul fertig (`0cd6a5c`,
+      `app/app/detection_feedback.py`), **Verdrahtung offen**.
+      Append-only JSONL unter `storage/_diag/`, zwei Satzarten (`alert` mit
+      Kamera/Label/Score/Schwelle, `verdict` mit richtig-falsch und
+      Korrektur-Label), verbunden über `event_id`. Robust gegen abgerissene
+      Zeilen und nebenläufige Schreiber, größenbegrenzt mit einer
+      Vorgängergeneration. 19 Tests.
+      OFFEN: `record_alert` im Sendepfad und `record_verdict` im
+      Telegram-Callback aufrufen — beides in `telegram_bot/`, wartet auf den
+      Merge der Telegram-Härtung (C6/C8/C9).
+      BEFUND: es gibt bereits `runtime.event_feedback[<eid>]` in
+      `settings.json` (`telegram_bot/_inbound.py:328`) — speichert aber nur
+      `{verdict, by, ts}`, ohne Kamera, Label oder Score, und lässt
+      `settings.json` unbegrenzt wachsen. Der Ledger ersetzt das.
+- [x] **C5 · Bestätigte Events vor `cleanup_old` geschützt** — `1e5ec8e`.
+      Marker ist `confirmed`/`confirmed_at`, geschrieben ausschließlich vom
+      Confirm-Endpunkt. Schutz greift über die Event-ID, nicht über die
+      Datei — **wichtige Falle**: das Bestätigen schreibt das JSON neu, es
+      bekam dadurch eine frische mtime und überlebte von selbst, während
+      `.jpg`/`.mp4` mit alter mtime gelöscht wurden. Ein Schutz nur des JSON
+      hätte Urteile ohne Bild hinterlassen. Abschaltbar über
+      `storage.keep_judged_events`. Unlesbares JSON gilt als *nicht* beurteilt
+      (sonst wären kaputte Dateien unsterblich). 10 Tests.
+      OFFEN daraus: Telegram-Verdikte landen in `settings.json`, nicht im
+      Event-JSON — solche Events sind noch NICHT geschützt. Schließt sich mit
+      der C4-Verdrahtung.
 - [ ] **C6 · Telegram-Sendepfad härten** — `send_alert` schluckt jede
       Exception, `RetryAfter` (429) wird nirgends behandelt, alle echten
       Aufrufer verwerfen das zurückgegebene Future. Ein Netzaussetzer löscht

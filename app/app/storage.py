@@ -38,6 +38,47 @@ def _atomic_write_text(path: Path, text: str) -> None:
         raise
 
 
+# Fields in the event JSON that mark a human verdict. Both are written
+# exclusively by POST /api/camera/<cam>/events/<id>/confirm
+# (routes/events.py) — the detection pipeline never writes them, because
+# `detection_confirmer` keeps its two-frame state in memory only.
+# `labels` is deliberately NOT a marker: add_event fills it from the
+# detector on every single event, so a user-edited and an auto-labelled
+# event are indistinguishable on disk.
+JUDGEMENT_FIELDS = ("confirmed", "confirmed_at")
+
+
+def is_judged_event(payload: object) -> bool:
+    """True when an event payload carries a human verdict.
+
+    Falsy values (``confirmed: false``, empty ``confirmed_at``) and
+    non-dict payloads count as unjudged, so a half-parsed or default
+    manifest never becomes immortal.
+    """
+    if not isinstance(payload, dict):
+        return False
+    return any(payload.get(field) for field in JUDGEMENT_FIELDS)
+
+
+def keep_judged_events_enabled(default: bool = True) -> bool:
+    """Resolve ``storage.keep_judged_events``: settings.json first,
+    then config.yaml, else ``default`` (True).
+
+    Read-only — nothing is written back, so the additive-merge rule for
+    settings.json holds. The import is local because `app_state` is a
+    boot-time singleton module and storage.py is built before it.
+    """
+    from . import app_state
+
+    for source in (getattr(app_state.settings, "data", None), app_state.base_cfg):
+        if not isinstance(source, dict):
+            continue
+        section = source.get("storage")
+        if isinstance(section, dict) and "keep_judged_events" in section:
+            return bool(section["keep_judged_events"])
+    return default
+
+
 def event_date_subdir(event_id: str) -> str | None:
     """Derive the ``YYYY-MM-DD`` date-folder name from an event_id whose
     first 8 chars are ``YYYYMMDD`` (the standard
@@ -591,15 +632,54 @@ class EventStore:
             log.info("[MediaScan] %d verwaiste Events bereinigt", orphans)
         return scanned
 
-    def cleanup_old(self, retention_days: int) -> int:
-        import logging as _log
+    def judged_event_ids(self) -> set[str]:
+        """Event ids under ``motion_detection/`` whose JSON carries a
+        human verdict (see :func:`is_judged_event`).
 
-        log = _log.getLogger(__name__)
+        Every event JSON is parsed, not just the ones past the cutoff:
+        confirming an event rewrites its JSON, so the manifest gets a
+        fresh mtime while its snapshot / clip keep the old one. Reading
+        only the old JSONs would therefore protect nothing and let the
+        media of exactly those events be deleted.
+
+        Unreadable JSON is skipped with a WARNING and counted as NOT
+        judged — a corrupt file must stay mortal, otherwise every
+        truncated manifest becomes immortal.
+        """
+        ids: set[str] = set()
+        if not self.events_dir.exists():
+            return ids
+        for jf in self.events_dir.rglob("*.json"):
+            if jf.name.endswith(".tracks.json"):
+                continue
+            try:
+                payload = json.loads(jf.read_text(encoding="utf-8"))
+            except Exception as e:
+                log.warning("[storage] unreadable event JSON %s — not treated as judged: %s", jf, e)
+                continue
+            if is_judged_event(payload):
+                ids.add(jf.stem)
+        return ids
+
+    def cleanup_old(self, retention_days: int, keep_judged: bool | None = None) -> int:
+        """Delete files under ``motion_detection/`` older than
+        ``retention_days`` (hard unlink — this path does not go through
+        :mod:`trash`, so there is no grace period).
+
+        ``keep_judged`` skips events a human has judged; ``None`` (the
+        default) resolves ``storage.keep_judged_events``, itself
+        defaulting to True. The judgement corpus is the training signal
+        for threshold calibration, so it must outlive the retention
+        window.
+        """
         cutoff = datetime.now() - timedelta(days=retention_days)
         removed = 0
         if not self.events_dir.exists():
             log.info("[storage] motion_detection/ not found, nothing to clean")
             return 0
+        if keep_judged is None:
+            keep_judged = keep_judged_events_enabled()
+        judged = self.judged_event_ids() if keep_judged else set()
         log.info(
             "[storage] autoclean: retention=%dd cutoff=%s | "
             "eligible: motion snapshots + event JSON (motion_detection/) | "
@@ -607,10 +687,29 @@ class EventStore:
             retention_days,
             cutoff.strftime("%Y-%m-%d"),
         )
+        preserved_files = 0
+        preserved_ids: set[str] = set()
         for p in self.events_dir.rglob("*"):
-            if p.is_file() and datetime.fromtimestamp(p.stat().st_mtime) < cutoff:
-                p.unlink(missing_ok=True)
-                removed += 1
+            if not p.is_file() or datetime.fromtimestamp(p.stat().st_mtime) >= cutoff:
+                continue
+            # Companions share the event id up to the first dot —
+            # `<id>.json`, `<id>.jpg`, `<id>.mp4`, `<id>.tracks.json`,
+            # `<id>.best.jpg`. Protecting the id keeps the snapshot and
+            # the clip next to the manifest that was judged.
+            event_id = p.name.split(".", 1)[0]
+            if event_id in judged:
+                preserved_files += 1
+                preserved_ids.add(event_id)
+                continue
+            p.unlink(missing_ok=True)
+            removed += 1
+        if preserved_files:
+            log.info(
+                "[storage] autoclean: %d files of %d judged events preserved "
+                "(storage.keep_judged_events)",
+                preserved_files,
+                len(preserved_ids),
+            )
         if removed:
             log.info(
                 "[storage] removed %d files (motion events + snapshots older than %dd)",

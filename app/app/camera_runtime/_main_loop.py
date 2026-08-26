@@ -349,11 +349,14 @@ class MainLoopMixin:
                 # conservative 3 Hz when the rolling measurement hasn't
                 # warmed up yet (first ~5 s of a camera's session).
                 _eff_fps = max(1.0, float(getattr(self, "_main_fps", 0.0) or 3.0))
+                _fh_px, _fw_px = proc_frame.shape[:2]
                 detections = self._tracker.step(
                     detections,
                     t_s=time.monotonic(),
                     fps=_eff_fps,
                     spawn_for=spawn_for,
+                    frame_w=_fw_px,
+                    frame_h=_fh_px,
                 )
                 if log.isEnabledFor(logging.DEBUG) and detections:
                     log.debug(

@@ -218,3 +218,59 @@ def test_far_apart_detection_still_spawns_its_own_track():
     _step(state, [FakeDet("person", 0.80, _box(100, 200))], 0)
     _step(state, [FakeDet("person", 0.80, _box(1800, 900))], 1)
     assert len(_all_tracks(state)) == 2
+
+
+# ── frame dimensions must reach the live path ─────────────────────────
+
+
+def test_live_step_forwards_frame_dimensions():
+    """Without these, the prediction clamp and the edge-grace rule both
+    short-circuit on `0 == unknown`. They worked in the post-clip worker
+    and were silently inert live, which is the worst kind of bug: the
+    feature exists, its tests pass, and it never runs where it matters.
+    """
+    import inspect
+
+    from app.tracker_core import LiveTracker
+
+    sig = inspect.signature(LiveTracker.step)
+    assert "frame_w" in sig.parameters
+    assert "frame_h" in sig.parameters
+
+    src = inspect.getsource(LiveTracker.step)
+    assert "frame_w=frame_w" in src, "step must pass the width on to associate_detections"
+    assert "frame_h=frame_h" in src
+
+
+def test_camera_loop_supplies_the_frame_size():
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_main_loop.py"
+    ).read_text(encoding="utf-8")
+    call = src[src.index("self._tracker.step(") : src.index("self._tracker.step(") + 400]
+    assert "frame_w=" in call and "frame_h=" in call
+
+
+def test_prediction_is_clamped_when_dimensions_are_known():
+    """End-to-end through LiveTracker rather than associate_detections,
+    since that is the path the camera loop actually uses."""
+    from app.tracker_core import LiveTracker
+
+    tracker = LiveTracker(camera_id="c", spawn_default=0.5, iou_threshold=0.3)
+    # Walk a subject rightwards towards the frame edge.
+    x = 2300
+    for _ in range(4):
+        tracker.step(
+            [FakeDet("person", 0.9, (x, 600, x + 60, 780))],
+            t_s=0.0,
+            fps=3.0,
+            frame_w=2560,
+            frame_h=1440,
+        )
+        x += 60
+
+    for tr in tracker.state.active:
+        bb = predicted_bbox(tr, tracker._frame_idx + 2, frame_w=2560, frame_h=1440)
+        assert bb[2] <= 2560, f"prediction left the frame: {bb}"
+        assert bb[0] >= 0

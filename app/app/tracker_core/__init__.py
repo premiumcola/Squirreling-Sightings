@@ -1031,7 +1031,14 @@ class LiveTracker:
             self.iou_threshold = float(iou_threshold)
 
     def step(
-        self, detections, *, t_s: float, fps: float, spawn_for: Callable[[str], float] | None = None
+        self,
+        detections,
+        *,
+        t_s: float,
+        fps: float,
+        spawn_for: Callable[[str], float] | None = None,
+        frame_w: int = 0,
+        frame_h: int = 0,
     ) -> list:
         """Run one tracker step and return the surviving detections.
 
@@ -1044,6 +1051,13 @@ class LiveTracker:
         ``spawn_for`` defaults to a callable that returns this
         tracker's ``spawn_default`` for every label — pass a richer
         callable to honour the camera's label_thresholds dict.
+
+        ``frame_w`` / ``frame_h`` are the frame dimensions. They are not
+        cosmetic: without them the motion model's prediction clamp and
+        the edge-grace rule both short-circuit, because 0 reads as
+        "unknown". The live path used to omit them entirely, so both
+        features were inert there while working fine in the post-clip
+        worker, which does pass them.
         """
         self._frame_idx += 1
         grace = compute_miss_grace_samples(self.grace_seconds, fps)
@@ -1058,6 +1072,8 @@ class LiveTracker:
             spawn_for=spawn_for,
             miss_grace_samples=grace,
             iou_threshold=self.iou_threshold,
+            frame_w=frame_w,
+            frame_h=frame_h,
         )
         # Unwrap the (detection, track) pairs so downstream pipeline
         # stages see a clean list of detections. Order follows the

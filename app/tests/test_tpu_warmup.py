@@ -124,14 +124,47 @@ def test_the_first_real_detection_is_not_the_first_invoke(fake_tflite):
     assert det.interpreter.invokes == warmed + 1
 
 
-def test_warmup_failure_leaves_the_detector_available(fake_tflite):
-    """A throwaway frame that fails must not cost us the detector."""
+def test_failed_tpu_warmup_falls_back_to_cpu(fake_tflite):
+    """A failed warmup on the TPU is a failed TIER, not a slow frame.
+
+    Observed on the real box: the delegate loaded, so the detector
+    advertised mode="coral"/available=True, and then EVERY invoke raised
+    "unresolved custom op … EdgeTpuDelegateForCustomOp failed to invoke".
+    No detection ever survived, no motion event was built, and nothing
+    downstream could tell "nothing moved" apart from "the detector is
+    dead". Staying on a tier that cannot compute is worse than being
+    slow, so we drop to the CPU twin of the same model.
+    """
     fake_tflite["fail"] = True
     det = CoralObjectDetector(_cfg())
     det.wait_for_warmup()
+
+    assert det.available is True, "falling back must not cost us the detector"
+    assert det.mode == "cpu", "a TPU that cannot invoke must not keep claiming the TPU"
+    assert "warmup failed" in det.reason
+
+
+def test_cpu_warmup_failure_keeps_the_detector(fake_tflite):
+    """On CPU there is nowhere left to fall, and a synthetic black frame
+    is a weak reason to refuse real ones."""
+    fake_tflite["fail"] = True
+    det = CoralObjectDetector(_cfg(prefer_cpu=True))
+    det.wait_for_warmup()
+
     assert det.available is True
-    assert det.mode == "coral"
-    assert det.reason == "edgetpu_delegate"
+    assert det.mode == "cpu"
+
+
+def test_fallback_releases_the_tpu_lock(fake_tflite):
+    """A CPU detector holding the process-wide TPU lock would serialise
+    itself against the other cameras for no reason at all."""
+    from app.detectors._device_lock import inference_lock
+
+    fake_tflite["fail"] = True
+    det = CoralObjectDetector(_cfg())
+    det.wait_for_warmup()
+
+    assert det._infer_lock is not inference_lock("coral", det.device)
 
 
 def test_warmup_is_excluded_from_the_timing_window(fake_tflite):

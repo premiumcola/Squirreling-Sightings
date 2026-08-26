@@ -215,6 +215,59 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
             return True
         return False
 
+    def _on_warmup_failed(self, exc: Exception) -> None:
+        """Treat a failed warmup as a failed TIER, not a slow first frame.
+
+        The warmup started life as a latency optimisation. It turned out
+        to be the only thing that ever checks whether the chosen tier can
+        actually run an inference — and on a real box it caught exactly
+        that:
+
+            Encountered an unresolved custom op … Node number 8
+            (EdgeTpuDelegateForCustomOp) failed to invoke.
+
+        The delegate had loaded, so `_try_delegate` reported success and
+        the detector advertised `mode="coral"`, `available=True`. Every
+        real frame then raised the same error, no detection ever
+        survived, no motion event was ever built, and nothing downstream
+        could tell the difference between "nothing moved" and "the
+        detector is dead". `load_delegate` succeeding proves a device is
+        present; it proves nothing about the compiled model matching the
+        installed libedgetpu.
+
+        So on the TPU path a failed warmup drops to the CPU tier, which
+        runs the non-compiled twin of the same model. Slower, and
+        correct — the opposite trade of staying fast and blind. On the
+        CPU tier there is nowhere left to fall, so the failure is logged
+        and the detector stays up: a synthetic black frame is a weak
+        reason to refuse real ones.
+        """
+        if self.mode != "coral":
+            log.warning("[det] Warmup fehlgeschlagen (%s) – Detektor bleibt verfügbar", exc)
+            return
+        log.error(
+            "[det] TPU-Warmup fehlgeschlagen (%s) – der Delegate lädt, kann aber "
+            "nicht rechnen. Fallback auf CPU, sonst bliebe die Erkennung stumm.",
+            exc,
+        )
+        model_path = self.cfg.get("model_path") or ""
+        with self._infer_lock:
+            self._coral_error = f"warmup failed: {exc}"
+            self.interpreter = None
+            self.available = False
+            self.mode = "motion_only"
+            self._cpu_mode = False
+            recovered = self._try_cpu(model_path)
+        if recovered:
+            # The lock identity depends on the tier — a CPU detector must
+            # not keep holding the process-wide TPU lock, or it would
+            # serialise itself against the other cameras for no reason.
+            self._infer_lock = inference_lock(self.mode, self.device)
+            log.info("[det] Nach fehlgeschlagenem TPU-Warmup auf CPU umgestellt")
+        else:
+            self.reason = f"tpu warmup failed, no CPU fallback: {exc}"
+            log.error("[det] Kein CPU-Modell als Rückfall vorhanden – nur Bewegungserkennung aktiv")
+
     def _activate_tier(self) -> None:
         """Wiring that can only happen once the tier is known.
 
@@ -281,7 +334,8 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
             # work at zero. We want the invoke, not the detections.
             self.detect_frame_raw(frame, threshold=1.0)
         except Exception as e:
-            log.warning("[det] Warmup fehlgeschlagen (%s) – Detektor bleibt verfügbar", e)
+            self._warming = False
+            self._on_warmup_failed(e)
             return
         finally:
             self._warming = False

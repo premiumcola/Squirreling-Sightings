@@ -3,19 +3,47 @@
 Migrated from server.py during R01.4. Every write goes through the
 `store.update_event` / `store.delete_event` API; the storage layer
 handles atomic writes since B08.
+
+FB-1 · the three surfaces here that carry a human judgement also write it
+to the durable ledger (`detection_feedback`), joined to the alert record
+by ``event_id``. Before this, every correction made in the web UI was
+thrown away: `confirmed` has no reader in the Python code, and `labels`
+is overwritten by the detector on every event, so an edited and an
+auto-labelled event are indistinguishable on disk (see
+`storage.JUDGEMENT_FIELDS`).
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 
 from .. import app_state, trash as _trash
+from ..detection_feedback import record_verdict
 
 bp = Blueprint("events", __name__)
+
+
+def _ledger_verdict(cam_id, event_id, *, correct, source, corrected_label=None):
+    """Best-effort verdict write. A ledger failure must never turn a
+    successful user action into a 500 — the module's own contract is
+    that every write is swallowed and logged, and this keeps the same
+    promise for the exception the caller could still raise (a missing
+    storage root, a bad argument)."""
+    with contextlib.suppress(Exception):
+        record_verdict(
+            app_state.storage_root,
+            event_id=event_id,
+            correct=correct,
+            ts=time.time(),
+            corrected_label=corrected_label,
+            source=source,
+            cam_id=cam_id,
+        )
 
 
 @bp.delete('/api/camera/<cam_id>/events/<event_id>')
@@ -25,6 +53,12 @@ def api_event_delete(cam_id, event_id):
     days before the daily sweep removes it. /api/trash/<id>/restore
     moves it back; /api/trash/empty hard-deletes everything now."""
     storage_root = app_state.storage_root
+    # Deleting a single event is the user calling it a false alarm.
+    # Recorded before the files move, so the verdict survives even a
+    # partial trash move. A verdict for an event that never produced an
+    # alert is inert: `judged_alerts` only joins verdicts that have an
+    # alert record with the same event_id.
+    _ledger_verdict(cam_id, event_id, correct=False, source="web_delete")
     result = _trash.move_to_trash(cam_id, event_id)
     # Timelapse fallback: tl_<stem> events live in storage/timelapse/<cam>/
     # and may not have an EventStore JSON yet (the migration that
@@ -94,6 +128,7 @@ def api_event_confirm(cam_id, event_id):
     event["confirmed"] = True
     event["confirmed_at"] = datetime.now().isoformat(timespec="seconds")
     store.update_event(cam_id, event_id, event)
+    _ledger_verdict(cam_id, event_id, correct=True, source="web")
     return jsonify({"ok": True})
 
 
@@ -115,6 +150,17 @@ def api_event_labels(cam_id, event_id):
     elif prev_top not in labels:
         event["top_label"] = labels[0]
     store.update_event(cam_id, event_id, event)
+    # Only a changed top_label is a correction. Adding a secondary label
+    # leaves the detector's verdict standing — recording that as "wrong"
+    # would poison the corpus with events the user never disputed.
+    if event["top_label"] != prev_top:
+        _ledger_verdict(
+            cam_id,
+            event_id,
+            correct=False,
+            source="web",
+            corrected_label=event["top_label"],
+        )
     return jsonify({"ok": True, "labels": labels, "top_label": event["top_label"]})
 
 

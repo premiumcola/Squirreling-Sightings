@@ -5,6 +5,7 @@ from __future__ import annotations
 # methods can move between them without import bookkeeping. See
 # service.py for the canonical import list.
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import datetime, timedelta
@@ -31,6 +32,7 @@ from telegram.ext import (
     filters,
 )
 
+from ...detection_feedback import record_alert
 from ...telegram_helpers import (
     DULL_BIRDS,
     LABEL_DE,
@@ -608,6 +610,25 @@ class OutboundMixin:
                     "label": primary,
                     "ts": time.time(),
                 },
+            )
+
+        # C4 · durable record of what the detector claimed, written here
+        # because this is the only place the SCORE and the THRESHOLD it
+        # had to clear are both in hand. The runtime alert-index above
+        # keeps neither, and lives in settings.json which grows without
+        # bound; the ledger is append-only, size-capped, and sits outside
+        # the event folders so retention cannot delete the corpus.
+        # Best-effort by construction — never let bookkeeping drop an alert.
+        with contextlib.suppress(Exception):
+            record_alert(
+                self._storage_root(),
+                cam_id=camera_id,
+                event_id=eid,
+                label=primary,
+                score=top_score,
+                threshold=threshold,
+                ts=time.time(),
+                detections=detections,
             )
 
         # Push payload: prefer the highest-scoring frame from the

@@ -32,6 +32,7 @@ from telegram.ext import (
     filters,
 )
 
+from ..detection_feedback import record_verdict
 from ..telegram_helpers import (
     DULL_BIRDS,
     LABEL_DE,
@@ -339,6 +340,21 @@ class InboundMixin:
                     "ts": time.time(),
                 },
             )
+            # C4 · same judgement into the durable ledger. The settings
+            # entry above carries no camera, no label and no score, so it
+            # can never be joined back to what the detector actually saw
+            # — and it grows settings.json without bound. The ledger
+            # pairs this verdict with the alert record by event_id.
+            with contextlib.suppress(Exception):
+                idx = ss.runtime_get_subkey("alert_index", eid) or {}
+                record_verdict(
+                    self._storage_root(),
+                    event_id=eid,
+                    correct=(verdict == "ok"),
+                    ts=time.time(),
+                    source="telegram",
+                    cam_id=idx.get("cam"),
+                )
             ts_str = datetime.now().strftime("%H:%M")
             badge = f"✅ Gültig · {ts_str}" if verdict == "ok" else f"❌ Falsch · {ts_str}"
             await self._set_badge(q, badge)

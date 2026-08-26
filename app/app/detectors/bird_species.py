@@ -38,12 +38,10 @@ class BirdSpeciesClassifier:
         self.common = None
         self.classify = None
         self._cpu_mode = False
-        # See CoralObjectDetector: device=None alone does NOT keep a model
-        # off the TPU, because the EdgeTPU delegate claims the default
-        # device. prefer_cpu skips both TPU tiers, so the classifiers can
-        # be moved to CPU and leave the TPU to the detector — three models
-        # on one TPU thrash its 8 MB parameter cache over USB.
-        self._prefer_cpu = bool(self.cfg.get("prefer_cpu"))
+        # Second-stage classifiers default to CPU — see _CLASSIFIER_CPU_NOTE
+        # in detectors/_edgetpu.py. Set prefer_cpu: false in the
+        # processing.bird_species config to put this back on the TPU.
+        self._prefer_cpu = bool(self.cfg.get("prefer_cpu", True))
         self._cpu_threads = self.cfg.get("cpu_threads")
         if not self.enabled:
             return

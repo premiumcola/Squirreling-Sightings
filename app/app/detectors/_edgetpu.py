@@ -19,6 +19,25 @@ import logging
 
 log = logging.getLogger(__name__)
 
+# Why the second-stage classifiers default to prefer_cpu=True.
+#
+# An Edge TPU caches model parameters in roughly 8 MB of on-chip SRAM.
+# The three models this project ships — the COCO detector, the iNat bird
+# classifier and the ImageNet wildlife classifier — do not fit there
+# together, so every switch between them rewrites that cache across USB.
+# The live loop switches inside a SINGLE frame: detect (COCO) →
+# classify_crop (MobileNet) → _refine_wildlife_bbox (COCO again).
+#
+# The detector runs on every frame and belongs on the TPU. The two
+# classifiers run only on gated frames — a bird detection, or the
+# wildlife gate opening — so their per-call latency barely matters, and
+# a 5950X with 32 threads at ~2% load absorbs them without noticing.
+# Keeping ONE model resident on the TPU is worth far more than making
+# the rare classifier call fast.
+#
+# Override per stage with `prefer_cpu: false` in the processing config.
+_CLASSIFIER_CPU_NOTE = "second-stage classifiers default to CPU; see comment above"
+
 # libedgetpu ships under a different filename per platform. Linux is the
 # only one that matters for the container; the others keep a dev machine
 # from silently falling through to CPU.

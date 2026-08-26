@@ -18,7 +18,7 @@ import pytest
 
 from app import app_state
 from app.routes.telegram import bp
-from app.telegram_bot._lifecycle import LifecycleMixin
+from app.telegram_bot import TelegramService
 
 # The full state vocabulary of get_polling_status → expected `connected`.
 # True == "the instance is up and trying".
@@ -74,6 +74,6 @@ def test_documented_states_are_the_ones_the_mixin_documents():
     """Pins the tuple above to the docstring of the real implementation,
     so a new state added to get_polling_status fails here instead of
     silently defaulting to connected=False."""
-    doc = LifecycleMixin.get_polling_status.__doc__ or ""
+    doc = TelegramService.get_polling_status.__doc__ or ""
     for state in STATE_EXPECTATIONS:
         assert state in doc, f"{state} missing from get_polling_status docstring"

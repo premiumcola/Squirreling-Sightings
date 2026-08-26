@@ -32,6 +32,7 @@ from ._consts import (  # noqa: F401
     log,
 )
 from ._formatting import FormattingMixin
+from ._health import HealthMixin
 from ._inbound import InboundMixin
 from ._lifecycle import LifecycleMixin
 from ._outbound import OutboundMixin
@@ -39,6 +40,7 @@ from ._outbound import OutboundMixin
 
 class TelegramService(
     LifecycleMixin,
+    HealthMixin,
     OutboundMixin,
     InboundMixin,
     FormattingMixin,

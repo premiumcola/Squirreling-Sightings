@@ -128,6 +128,35 @@ CONFIRMATION_WINDOW_DEFAULTS = {
 }
 
 
+# THR-1 · per-camera keys landed in one go so six follow-up packages
+# don't each have to edit defaults.py. Only the keys and their defaults
+# live here — the logic that reads them ships with the package that
+# needs it.
+#   push_thresholds — per-label Telegram push floor for THIS camera.
+#     {} = fall back to the global telegram.push.labels[*].threshold.
+#     A workshop cam and a bird feeder are metres vs. tens of metres
+#     away from their subjects; one global person threshold cannot
+#     serve both. Resolution order lives in app/app/thresholds.py.
+#     NB: the consumer (telegram_bot/_outbound) still reads the global
+#     value — THR-3 switches it over. Until then the key is settable
+#     and deliberately inert.
+#   hybrid_mode     — off|shadow|merge, HYB-2's TPU+CPU dual pass.
+#   label_veto      — LEARN-1's per-label suppression map.
+HYBRID_MODE_DEFAULT = "off"
+CAMERA_THRESHOLD_KEY_DEFAULTS: dict = {
+    "push_thresholds": {},
+    "hybrid_mode": HYBRID_MODE_DEFAULT,
+    "label_veto": {},
+}
+
+# THR-1 · CORP-2's per-label daily cap on retained corpus samples.
+# Lives in the storage section next to retention_days.
+CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT = 50
+STORAGE_DEFAULTS: dict = {
+    "corpus_quota_per_label_day": CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT,
+}
+
+
 # Per-camera sun-timelapse defaults — both phases off until the user
 # opts in. window_min is overridden at runtime by _SUN_TL_LOCKED_WINDOW_MIN
 # (75 min) and persisted here as 30 only for legacy round-trips.

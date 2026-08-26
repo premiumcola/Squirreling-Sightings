@@ -92,6 +92,29 @@ class TestValidateAndCoerce:
         with pytest.raises(ValueError):
             validate_and_coerce(data, SECTION_SCHEMAS["telegram"])
 
+    # ── THR-1 · new camera keys ──────────────────────────────────────────────
+    def test_push_thresholds_passes_through(self):
+        """Per-camera push floors survive validation as a dict."""
+        data = {"id": "cam1", "name": "Cam", "push_thresholds": {"person": 0.5}}
+        out = validate_and_coerce(data, CAMERA_SCHEMA)
+        assert out["push_thresholds"] == {"person": 0.5}
+
+    def test_push_thresholds_rejects_scalar(self):
+        data = {"id": "cam1", "name": "Cam", "push_thresholds": "0.5"}
+        with pytest.raises(ValueError) as exc_info:
+            validate_and_coerce(data, CAMERA_SCHEMA)
+        assert "push_thresholds" in str(exc_info.value)
+        assert "expected dict" in str(exc_info.value)
+
+    def test_hybrid_mode_and_label_veto_are_known_fields(self):
+        assert CAMERA_SCHEMA["hybrid_mode"] == (str, "off")
+        assert CAMERA_SCHEMA["label_veto"] == (dict, {})
+
+    def test_storage_section_coerces_corpus_quota(self):
+        out = validate_and_coerce({"corpus_quota_per_label_day": "50"}, SECTION_SCHEMAS["storage"])
+        assert out["corpus_quota_per_label_day"] == 50
+        assert isinstance(out["corpus_quota_per_label_day"], int)
+
     # ── Non-dict input ───────────────────────────────────────────────────────
     def test_non_dict_input_raises(self):
         with pytest.raises(ValueError):

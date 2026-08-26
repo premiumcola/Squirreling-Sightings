@@ -12,10 +12,14 @@ from __future__ import annotations
 
 import logging
 
+from copy import deepcopy
+
 from ._consts import (
     ALARM_PROFILE_TO_SEVERITY,
+    CAMERA_THRESHOLD_KEY_DEFAULTS,
     EVENT_TL_DEFAULTS,
     SERVER_LOCATION_DEFAULTS,
+    STORAGE_DEFAULTS,
     SUN_TL_DEFAULTS,
     TELEGRAM_PUSH_DEFAULTS,
     TL_DEFAULT_PROFILES,
@@ -68,6 +72,41 @@ def migrate_camera_defaults(data: dict, base_config: dict) -> None:
         defaults = default_camera(c)
         for key, val in defaults.items():
             target.setdefault(key, val)
+    # The loop above only reaches cameras that also exist in
+    # config.yaml — user-added cams never pass through it. THR-1's keys
+    # have to land on EVERY camera, so the pass runs on its own below.
+    migrate_threshold_keys(data)
+
+
+def migrate_threshold_keys(data: dict) -> None:
+    """THR-1 · additively land the new threshold-related keys.
+
+    Purely additive: `setdefault` per key, so a value the operator
+    already stored is never touched. Runs for every camera, including
+    ones that only exist in settings.json.
+
+    Chained from migrate_camera_defaults rather than registered as its
+    own step in store.load() — the call sequence there belongs to a
+    different package's file scope. Order is irrelevant: none of these
+    keys is read by another migration.
+    """
+    touched_cams = 0
+    for cam in data.get("cameras", []):
+        if not isinstance(cam, dict):
+            continue
+        added = [k for k in CAMERA_THRESHOLD_KEY_DEFAULTS if k not in cam]
+        for key in added:
+            cam[key] = deepcopy(CAMERA_THRESHOLD_KEY_DEFAULTS[key])
+        if added:
+            touched_cams += 1
+    storage = data.setdefault("storage", {})
+    if not isinstance(storage, dict):
+        storage = {}
+        data["storage"] = storage
+    for key, val in STORAGE_DEFAULTS.items():
+        storage.setdefault(key, val)
+    if touched_cams:
+        log.info("[migration] threshold-keys: %d Kameras nachgerüstet", touched_cams)
 
 
 def migrate_schedules(data: dict) -> bool:

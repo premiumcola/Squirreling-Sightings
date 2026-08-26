@@ -9,8 +9,10 @@ from __future__ import annotations
 from copy import deepcopy
 
 from ._consts import (
+    CAMERA_THRESHOLD_KEY_DEFAULTS,
     CONFIRMATION_WINDOW_DEFAULTS,
     LABEL_THRESHOLD_DEFAULTS,
+    STORAGE_DEFAULTS,
     TELEGRAM_PUSH_DEFAULTS,
     TL_DEFAULT_PROFILES,
 )
@@ -91,6 +93,14 @@ def default_camera(cam: dict | None = None) -> dict:
             if cam.get("confirmation_window")
             else dict(CONFIRMATION_WINDOW_DEFAULTS)
         ),
+        # THR-1 · push_thresholds / hybrid_mode / label_veto — landed
+        # together so the six packages that consume them don't each
+        # have to touch this file. A stored value always wins; dict
+        # defaults are deep-copied so no two cameras share one dict.
+        **{
+            key: (cam.get(key) or deepcopy(default))
+            for key, default in CAMERA_THRESHOLD_KEY_DEFAULTS.items()
+        },
         "timelapse": {
             "enabled": _tl.get("enabled", False),
             "fps": _tl.get("fps", 30),
@@ -206,6 +216,12 @@ def build_defaults(base_config: dict) -> dict:
             "base_topic": base_config.get("mqtt", {}).get("base_topic", "tam-spy"),
         },
         "cameras": cams,
+        # THR-1 · only the corpus quota lives here. retention_days and
+        # media_limit_default stay absent on purpose: their readers
+        # (routes/bootstrap, routes/media) treat a missing settings-level
+        # value as "use the config.yaml one", and seeding them would
+        # freeze the base-config value into settings.json.
+        "storage": deepcopy(STORAGE_DEFAULTS),
         "telegram_actions": [],
         "review": {},
         "ui": {"wizard_completed": bool(cams)},

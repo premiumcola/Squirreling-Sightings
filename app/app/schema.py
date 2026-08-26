@@ -158,6 +158,23 @@ CAMERA_SCHEMA: dict = {
     # DetectionConfirmer's per-class fallbacks" so legacy settings.json
     # files load without crashing on the missing field.
     "confirmation_window": (dict, {}),
+    # ── THR-1 · per-camera push floor, per label ─────────────────────────
+    # {label: float}. Empty dict = "use the global
+    # telegram.push.labels[*].threshold" — the historical behaviour and
+    # the reason a workshop cam and a bird feeder had to share one
+    # person threshold despite an order-of-magnitude difference in
+    # subject distance. Resolution order (camera > adapted > global >
+    # default) lives in app/app/thresholds.py; the Telegram outbound
+    # path still reads the global value until THR-3 switches it over.
+    "push_thresholds": (dict, {}),
+    # HYB-2 · TPU+CPU dual detection pass: "off" (default, single TPU
+    # pass), "shadow" (CPU runs alongside, only agreement is recorded),
+    # "merge" (both result lists are merged). Key landed by THR-1; the
+    # detector wiring ships with HYB-2.
+    "hybrid_mode": (str, "off"),
+    # LEARN-1 · per-label suppression map. Key landed by THR-1; the
+    # veto logic ships with LEARN-1.
+    "label_veto": (dict, {}),
     "zones": (list, []),
     "masks": (list, []),
     "whitelist_names": (list, []),
@@ -296,6 +313,9 @@ SECTION_SCHEMAS: dict = {
         "retention_days": int,
         "media_limit_default": int,
         "auto_cleanup_enabled": bool,
+        # CORP-2 · cap on retained corpus samples per label per day.
+        # Key landed by THR-1; the pruning logic ships with CORP-2.
+        "corpus_quota_per_label_day": int,
     },
     "ui": {
         "wizard_completed": bool,

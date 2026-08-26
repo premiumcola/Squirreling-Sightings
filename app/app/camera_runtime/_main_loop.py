@@ -286,6 +286,13 @@ class MainLoopMixin:
                     and _coherent_blob is not None
                     and det_mode in ("roi", "2x2", "3x3")
                 ):
+                    # M2 · count every attempt, not just the successes.
+                    # "How often did the rescue fire, and how often did it
+                    # actually save something" is unanswerable from the
+                    # log alone, because only hits were ever logged — a
+                    # rescue that never fires and a rescue that fires and
+                    # finds nothing looked identical.
+                    self._roi_rescue_attempts += 1
                     mbox = _coherent_blob.last_bbox if det_mode == "roi" else None
                     roi_dets, _sahi = tiled_detect(
                         self.detector,
@@ -301,6 +308,7 @@ class MainLoopMixin:
                     for _d in roi_dets:
                         _d.via_roi = True  # D4 provenance
                     if roi_dets:
+                        self._roi_rescue_hits += 1
                         log.info(
                             "[%s] D2 ROI rescue (%s): %d hit(s) on coherent blob "
                             "net=%.0fpx straight=%.2f → %s",

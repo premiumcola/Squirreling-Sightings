@@ -181,6 +181,8 @@ class StatusMixin:
                 if hasattr(getattr(self, "detector", None), "timing_breakdown")
                 else {}
             ),
+            "roi_rescue_attempts": self._roi_rescue_attempts,
+            "roi_rescue_hits": self._roi_rescue_hits,
             "reconnect_count_24h": self._reconnect_count_24h(),
         }
 

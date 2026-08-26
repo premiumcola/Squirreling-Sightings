@@ -169,6 +169,12 @@ class CameraRuntime(
         # transient spikes don't dominate; the /status bubble reads the
         # current average from inference_avg_ms property below.
         self._inference_times_ms: deque = deque(maxlen=30)
+        # M2 · D2 tile-rescue counters, since process start. Attempts vs
+        # hits separates "never fires" from "fires and finds nothing" —
+        # two very different problems that looked identical in the log,
+        # which only ever recorded a successful rescue.
+        self._roi_rescue_attempts: int = 0
+        self._roi_rescue_hits: int = 0
         # Video recording state (ring pre-buffer + session tracking)
         self._pre_buffer: deque = deque(
             maxlen=300

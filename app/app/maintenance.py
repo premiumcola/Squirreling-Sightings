@@ -206,6 +206,19 @@ def _heartbeat_emit():
                     f"inv={bd['invoke']:.0f} post={bd['post']:.0f}]ms"
                 )
                 break
+    # M2 · tile-rescue effectiveness across all cameras. A permanent 0/0
+    # means roi_mode is off everywhere and the small-object rescue is
+    # inert; hits well below attempts means it fires but rarely helps.
+    roi_att = roi_hit = 0
+    for _id, rt in cams_iter:
+        try:
+            st = rt.status() or {}
+        except Exception:
+            continue
+        roi_att += int(st.get("roi_rescue_attempts") or 0)
+        roi_hit += int(st.get("roi_rescue_hits") or 0)
+    if roi_att:
+        parts.append(f"roi_rescue={roi_hit}/{roi_att}")
     # Disk
     free_gb = _disk_free_gb_cached()
     if free_gb < 10:

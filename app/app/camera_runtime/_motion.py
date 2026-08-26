@@ -186,6 +186,77 @@ class MotionMixin:
         x1, y1, x2, y2 = bbox
         return frame[max(0, y1) : max(0, y2), max(0, x1) : max(0, x2)]
 
+    def _upgrade_event_meta(self, labels: list, detections: list) -> bool:
+        """Fold late-confirming labels into the in-flight event.
+
+        The event's labels used to be frozen at recording start and never
+        revisited — and that start is decided by MOTION, which confirms
+        far sooner than a class does. Motion needs 2 of 3 frames (~0.7 s
+        at the 350 ms cadence); a person needs 3 hits in 5 s (~1.05 s).
+        Motion therefore wins the race almost every time, the event is
+        filed as ``labels=["motion"]``, and every downstream decision
+        reads that: `motion` is `off` in the severity matrix and
+        `push:false` in the push config, so the alert is dropped for a
+        clip that plainly shows a person.
+
+        The tell was visible in the event JSON all along — `top_label`
+        was built from the *unconfirmed* detections, so events read
+        `top_label: "person"` next to `labels: ["motion"]`.
+
+        Returns True when something actually changed, so the caller can
+        decide whether to rewrite the stub on disk.
+        """
+        meta = self._rec_event_meta
+        if not meta or not labels:
+            return False
+        known = set(meta.get("labels") or [])
+        fresh = {lbl for lbl in labels if lbl and lbl != "motion"}
+        if not fresh - known:
+            return False
+
+        merged = sorted((known | fresh) - {"motion"}) or sorted(known | fresh)
+        meta["labels"] = merged
+        if detections:
+            top = max(detections, key=lambda d: d.score, default=None)
+            if top is not None:
+                meta["top_label"] = top.label
+                meta["detections"] = [d.to_dict() for d in detections]
+        elif merged:
+            meta["top_label"] = merged[0]
+
+        # Re-run the severity decision on the corrected label set. Skipping
+        # this would leave the event carrying "person" while still holding
+        # motion's `notify=False`, which is the same silent drop wearing a
+        # better label.
+        whitelisted = bool(meta.get("whitelisted"))
+        profile = (self.cfg.get("alarm_profile") or "").strip().lower()
+        # The meta stores this under "after_hours" (see _build_event_meta);
+        # reading a "hard_active" key here would silently always be False
+        # and quietly downgrade every night-time event.
+        hard_active = bool(meta.get("after_hours"))
+        level, notify = choose_alarm_level(profile, merged, hard_active, whitelisted)
+        class_severity_cfg = self.cfg.get("class_severity") or {}
+        if class_severity_cfg and not whitelisted:
+            severity = compute_severity_from_matrix(class_severity_cfg, merged)
+            notify = severity != "off"
+        else:
+            severity = "alarm" if level == "alarm" else ("info" if notify else "off")
+        if whitelisted or not self.cfg.get("armed", True):
+            notify = False
+        meta["alarm_level"] = level
+        meta["severity"] = severity
+        meta["notify"] = notify
+        log.info(
+            "[trigger][cam:%s] event %s upgraded: labels=%s top=%s severity=%s notify=%s",
+            self.camera_id,
+            meta.get("event_id"),
+            ",".join(merged),
+            meta.get("top_label"),
+            severity,
+            notify,
+        )
+        return True
+
     def _build_event_meta(
         self, ts: datetime, labels: list, detections: list, drawn_frame, effective_bbox
     ) -> dict:

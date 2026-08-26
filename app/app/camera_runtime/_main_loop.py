@@ -4,6 +4,7 @@ from __future__ import annotations
 # Comprehensive import block — some symbols are unused in this mixin
 # but kept for parity so methods can be moved between mixins without
 # import bookkeeping. Trim later if a mixin grows enough to warrant it.
+import contextlib
 import json as _json_mod
 import logging
 import os
@@ -608,6 +609,21 @@ class MainLoopMixin:
                             self._rec_frames.append(proc_frame.copy())
 
                     elif self._recording:
+                        # F-2 · fold labels that confirmed AFTER the clip
+                        # started into the in-flight event. Motion wins the
+                        # confirmation race almost every time, so without
+                        # this the event stays "motion" and every downstream
+                        # gate reads that instead of "person".
+                        if labels and self._upgrade_event_meta(labels, detections):
+                            with contextlib.suppress(Exception):
+                                _eid = (self._rec_event_meta or {}).get("event_id")
+                                if _eid:
+                                    _ev = self.store.get_event(self.camera_id, _eid) or {}
+                                    _ev["labels"] = self._rec_event_meta["labels"]
+                                    _ev["top_label"] = self._rec_event_meta["top_label"]
+                                    _ev["alarm_level"] = self._rec_event_meta["alarm_level"]
+                                    _ev["severity"] = self._rec_event_meta["severity"]
+                                    self.store.update_event(self.camera_id, _eid, _ev)
                         since_last = (
                             (now_dt - self._last_motion_ts).total_seconds()
                             if self._last_motion_ts

@@ -8,55 +8,23 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import re
 import threading
 import time
-from collections import deque
 
 import cv2
 import numpy as np
 
+from ._decision_log import log_decision
 from ._edgetpu import make_delegate_interpreter
 from ._label_loader import load_label_map
+from ._preprocess import letterbox
+from ._timing import InferenceTimingMixin
 from ._types import Detection, _apply_region_filter
 
 log = logging.getLogger(__name__)
 
 
-def _letterbox(
-    img: np.ndarray,
-    dst_w: int,
-    dst_h: int,
-) -> tuple[np.ndarray, float, int, int]:
-    """Fit `img` into a `dst_w x dst_h` canvas without distorting aspect.
-
-    A plain ``cv2.resize(img, (dst_w, dst_h))`` stretches a 16:9 frame
-    into a square model input — bodies get horizontally compressed and
-    the SSD confidence collapses (a clearly-visible person scored
-    0.28-0.44 in a live test). Letterboxing scales by
-    ``scale = min(dst_w/w, dst_h/h)`` so neither axis is squashed, then
-    pads the unused edges with the neutral grey 114 used by the YOLO /
-    COCO training pipelines.
-
-    Returns ``(canvas, scale, pad_x, pad_y)``; callers invert the
-    transform back to frame-space pixel coordinates with:
-
-        x_frame = (x_model_px - pad_x) / scale
-        y_frame = (y_model_px - pad_y) / scale
-    """
-    h, w = img.shape[:2]
-    scale = min(dst_w / float(w), dst_h / float(h))
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    pad_x = (dst_w - new_w) // 2
-    pad_y = (dst_h - new_h) // 2
-    canvas = np.full((dst_h, dst_w, 3), 114, dtype=resized.dtype)
-    canvas[pad_y : pad_y + new_h, pad_x : pad_x + new_w] = resized
-    return canvas, scale, pad_x, pad_y
-
-
-class CoralObjectDetector:
+class CoralObjectDetector(InferenceTimingMixin):
     """Object detector with three-tier fallback:
     1. pycoral + EdgeTPU  → mode="coral"
     2. tflite-runtime CPU → mode="cpu"
@@ -103,7 +71,7 @@ class CoralObjectDetector:
         # always observe a consistent snapshot.
         self._infer_lock = threading.Lock()
         # Rolling per-stage inference timings — see _record_timing.
-        self._timings: deque = deque(maxlen=60)
+        self._init_timings()
         if not self.enabled:
             return
         # Startup diagnostic: log the label file path + first 25 entries so
@@ -201,43 +169,6 @@ class CoralObjectDetector:
             "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
         )
 
-    def _record_timing(self, t_pre: float, t_wait: float, t_invoke: float, t_post: float) -> None:
-        """Store one inference split into its four real cost centres.
-
-        The single `inference_avg_ms` the status bubble used to show
-        wrapped all four together, which made it useless for deciding
-        anything: a slow number could mean the TPU is loaded, or that
-        another camera holds the lock, or merely that a 4-MP frame is
-        expensive to letterbox on the CPU. Those call for opposite fixes.
-
-          pre    — colour convert + letterbox + tensor prep (CPU, per frame)
-          wait   — blocked on _infer_lock (contention with another caller)
-          invoke — the actual inference (TPU or CPU compute)
-          post   — reading output tensors back out
-        """
-        now = time.perf_counter()
-        self._timings.append(
-            {
-                "pre": (t_wait - t_pre) * 1000.0,
-                "wait": (t_invoke - t_wait) * 1000.0,
-                "invoke": (t_post - t_invoke) * 1000.0,
-                "post": (now - t_post) * 1000.0,
-            }
-        )
-
-    def timing_breakdown(self) -> dict:
-        """Rolling averages in ms, or an empty dict before the first run."""
-        samples = list(self._timings)
-        if not samples:
-            return {}
-        n = len(samples)
-        out = {
-            k: round(sum(s[k] for s in samples) / n, 1) for k in ("pre", "wait", "invoke", "post")
-        }
-        out["total"] = round(sum(out[k] for k in ("pre", "wait", "invoke", "post")), 1)
-        out["samples"] = n
-        return out
-
     # Per-label minimum bounding-box constraints. Surveillance cameras at
     # fixed positions almost never see a real person at <15% frame height
     # or <2% frame area — a small "person" box is overwhelmingly a false
@@ -281,9 +212,9 @@ class CoralObjectDetector:
             label_thresholds,
             threshold,
         )
-        if cam_id and log.isEnabledFor(logging.INFO):
+        if cam_id:
             with contextlib.suppress(Exception):
-                self._log_decision(cam_id, kept, drops)
+                log_decision(cam_id, kept, drops)
         return kept
 
     def _apply_label_filters_with_reasons(
@@ -341,85 +272,6 @@ class CoralObjectDetector:
         )
         return kept
 
-    @staticmethod
-    def _fmt_dets(dets, max_n: int = 8) -> str:
-        if not dets:
-            return "—"
-        head = dets[:max_n]
-        return ", ".join(f"{d.label} {int(round(d.score * 100))}%" for d in head) + (
-            f" (+{len(dets) - max_n} weitere)" if len(dets) > max_n else ""
-        )
-
-    @staticmethod
-    def _humanize_drop_reason(reason: str) -> str:
-        """Translate the raw drop-reason emitted by _apply_label_filters
-        into a German sentence the operator can read at a glance. Three
-        shapes are produced upstream:
-
-            label_threshold(person)=0.72 (got 0.67)
-            size_floor (h_frac=0.12 < 0.18)
-            size_floor (area_frac=0.005 < 0.012)
-
-        Unknown shapes fall back to the raw string so we never silently
-        lose information."""
-        m = re.match(r"label_threshold\([^)]+\)=([\d.]+)\s*\(got\s+([\d.]+)\)", reason)
-        if m:
-            thr = float(m.group(1)) * 100
-            got = float(m.group(2)) * 100
-            return f"Schwellwert {thr:.0f}% nicht erreicht (war {got:.0f}%)"
-        m = re.match(r"size_floor\s*\(h_frac=([\d.]+)\s*<\s*([\d.]+)\)", reason)
-        if m:
-            got = float(m.group(1)) * 100
-            need = float(m.group(2)) * 100
-            return f"zu klein im Bild: {got:.0f}% Höhe < {need:.0f}% nötig"
-        m = re.match(r"size_floor\s*\(area_frac=([\d.]+)\s*<\s*([\d.]+)\)", reason)
-        if m:
-            got = float(m.group(1)) * 100
-            need = float(m.group(2)) * 100
-            return f"zu klein im Bild: {got:.1f}% Fläche < {need:.1f}% nötig"
-        return reason
-
-    @classmethod
-    def _fmt_drops(cls, drops, max_n: int = 8) -> str:
-        if not drops:
-            return "—"
-        head = drops[:max_n]
-        return ", ".join(
-            f"{d.label} {int(round(d.score * 100))}% ({cls._humanize_drop_reason(reason)})"
-            for d, reason in head
-        ) + (f" (+{len(drops) - max_n} weitere)" if len(drops) > max_n else "")
-
-    def _log_decision(self, cam_id: str, kept: list, drops: list):
-        """Emit one INFO line per detect_frame call when there's anything
-        worth seeing. Decision tree:
-          - kept ≥ 1 → "[det][cam:…] ✓ erkannt: … · ✗ verworfen: …"
-          - kept == 0 AND drops > 0 → "[det][cam:…] ✗ verworfen: …"
-          - kept == 0 AND drops == 0 → silent (empty scene, no signal)
-        ASCII check/cross markers stand out in `docker logs` greps.
-        The previously-emitted "inference empty (raw=0)" DEBUG line is
-        deliberately dropped: the inference loop runs at ~3 Hz per
-        camera and ~99 % of frames on a quiet scene return 0 raw
-        candidates, so the line was a per-frame heartbeat with zero
-        diagnostic value. The real heartbeat in server.py already
-        confirms each runtime is alive; if a camera silently stops
-        producing frames, the [cam:…] connection logs surface that.
-        """
-        if kept:
-            if drops:
-                log.info(
-                    "[det][cam:%s] ✓ erkannt: %s · ✗ verworfen: %s",
-                    cam_id,
-                    self._fmt_dets(kept),
-                    self._fmt_drops(drops),
-                )
-            else:
-                log.info("[det][cam:%s] ✓ erkannt: %s", cam_id, self._fmt_dets(kept))
-            return
-        if drops:
-            # Sort by score descending so "almost made it" labels come first.
-            ordered = sorted(drops, key=lambda x: x[0].score, reverse=True)
-            log.info("[det][cam:%s] ✗ verworfen: %s", cam_id, self._fmt_drops(ordered))
-
     def detect_frame_raw(self, frame: np.ndarray, threshold: float = 0.20) -> list[Detection]:
         """Run inference and return the raw model output BEFORE label
         filters / size floors / per-label thresholds. Used by the
@@ -448,10 +300,10 @@ class CoralObjectDetector:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         with self._infer_lock:
             width, height = self.common.input_size(self.interpreter)
-            # Aspect-preserving letterbox — see _letterbox for the why.
+            # Aspect-preserving letterbox — see letterbox() for the why.
             # pycoral returns bbox in model-pixel space, so the inverse
             # transform below subtracts pad before dividing by scale.
-            canvas, scale, pad_x, pad_y = _letterbox(rgb, width, height)
+            canvas, scale, pad_x, pad_y = letterbox(rgb, width, height)
             self.common.set_input(self.interpreter, canvas)
             self.interpreter.invoke()
             # Materialise pycoral results into a plain list of (id, score, bbox)
@@ -508,7 +360,7 @@ class CoralObjectDetector:
         # padded model square, so the inverse transform multiplies by
         # the model dim first, then subtracts pad, then divides by
         # scale to land back in original frame pixels.
-        canvas, scale, pad_x, pad_y = _letterbox(rgb, in_w, in_h)
+        canvas, scale, pad_x, pad_y = letterbox(rgb, in_w, in_h)
         inp = np.expand_dims(canvas, axis=0)
         if input_details[0]['dtype'] == np.float32:
             inp = (inp.astype(np.float32) - 127.5) / 127.5

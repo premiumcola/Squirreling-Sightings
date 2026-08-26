@@ -135,15 +135,21 @@ Bestätigt am 2026-08-26 gegen die Live-`settings.json`.
 
 ## Messbarkeit — Voraussetzung für alles Weitere
 
-- [ ] **M1 · Inferenz-Timing aufsplitten** in pre / lock-wait / invoke /
-      post. `inference_avg_ms` misst heute den ganzen `detect`-Aufruf und
-      vermischt vier Kostenarten. Ohne diese Zahl ist jede weitere
-      TPU-Entscheidung geraten.
-- [ ] **M2 · Zähler für den D2-Rettungspfad** — niemand weiß, ob die
-      Kachel-Rettung je gefeuert hat.
-- [ ] **M3 · Tests für `detection_tiling.py`** — reine
-      Koordinaten-Transformation, null Tests. Risikofrei nachrüstbar und
-      Voraussetzung, bevor C3 daran etwas ändert.
+- [x] **M1 · Inferenz-Timing aufgesplittet** — `e2ca294`. pre / lock-wait /
+      invoke / post getrennt, im Status und im Heartbeat sichtbar
+      (`det[pre=8 wait=1 inv=21 post=2]ms`). Trennt jetzt "TPU langsam" von
+      "Kamera-Threads streiten um den Lock" von "Letterboxing teuer" — drei
+      Ursachen mit gegensätzlichen Gegenmaßnahmen. 6 Tests.
+- [x] **M2 · Zähler für den D2-Rettungspfad** — `a4b12e9`. Versuche UND
+      Treffer, im Status und als `roi_rescue=<hits>/<attempts>` im Heartbeat.
+      Vorher wurde nur der Erfolg geloggt, womit "feuert nie" und "feuert und
+      findet nichts" ununterscheidbar waren. 6 Tests, alle schlagen gegen den
+      alten Stand fehl.
+- [x] **M3 · Tests für `detection_tiling.py`** — `f3e8c11`. 20 Tests über
+      Kachel-Geometrie, Koordinaten-Rücktransformation und Naht-Duplikate.
+      Absicherungs-Tests, keine Regressionstests — sie machen C3 gefahrlos.
+      Halten fest, warum `roi` dem Raster vorzuziehen ist: 2×2 bringt auf
+      2560×1440 nur ~1,7× lineare Vergrößerung.
 
 ## Struktur — vor dem nächsten Feature in diesen Dateien
 

@@ -8,55 +8,30 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import re
 import threading
 import time
-from collections import deque
 
 import cv2
 import numpy as np
 
+from ._decision_log import log_decision
+from ._device_lock import inference_lock
 from ._edgetpu import make_delegate_interpreter
+from ._filters import LabelFilterMixin
 from ._label_loader import load_label_map
+from ._preprocess import letterbox
+from ._timing import InferenceTimingMixin
 from ._types import Detection, _apply_region_filter
 
 log = logging.getLogger(__name__)
 
-
-def _letterbox(
-    img: np.ndarray,
-    dst_w: int,
-    dst_h: int,
-) -> tuple[np.ndarray, float, int, int]:
-    """Fit `img` into a `dst_w x dst_h` canvas without distorting aspect.
-
-    A plain ``cv2.resize(img, (dst_w, dst_h))`` stretches a 16:9 frame
-    into a square model input — bodies get horizontally compressed and
-    the SSD confidence collapses (a clearly-visible person scored
-    0.28-0.44 in a live test). Letterboxing scales by
-    ``scale = min(dst_w/w, dst_h/h)`` so neither axis is squashed, then
-    pads the unused edges with the neutral grey 114 used by the YOLO /
-    COCO training pipelines.
-
-    Returns ``(canvas, scale, pad_x, pad_y)``; callers invert the
-    transform back to frame-space pixel coordinates with:
-
-        x_frame = (x_model_px - pad_x) / scale
-        y_frame = (y_model_px - pad_y) / scale
-    """
-    h, w = img.shape[:2]
-    scale = min(dst_w / float(w), dst_h / float(h))
-    new_w = max(1, int(round(w * scale)))
-    new_h = max(1, int(round(h * scale)))
-    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    pad_x = (dst_w - new_w) // 2
-    pad_y = (dst_h - new_h) // 2
-    canvas = np.full((dst_h, dst_w, 3), 114, dtype=resized.dtype)
-    canvas[pad_y : pad_y + new_h, pad_x : pad_x + new_w] = resized
-    return canvas, scale, pad_x, pad_y
+# Size of the throwaway warmup frame. 4:3 rather than square so the
+# warmup exercises the letterbox padding branch as well, and small
+# enough that the resize itself costs nothing next to the invoke.
+_WARMUP_W, _WARMUP_H = 320, 240
 
 
-class CoralObjectDetector:
+class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
     """Object detector with three-tier fallback:
     1. pycoral + EdgeTPU  → mode="coral"
     2. tflite-runtime CPU → mode="cpu"
@@ -101,62 +76,109 @@ class CoralObjectDetector:
         #      tensors are read.
         # The lock covers the entire read-from-output phase so callers
         # always observe a consistent snapshot.
+        #
+        # Provisional: WHICH lock is right depends on the tier this
+        # detector ends up on, which is not known yet. `_activate_tier`
+        # rebinds it once that is decided — process-wide for the TPU,
+        # per-instance for CPU. See `_device_lock`.
         self._infer_lock = threading.Lock()
         # Rolling per-stage inference timings — see _record_timing.
-        self._timings: deque = deque(maxlen=60)
+        self._init_timings()
+        # Set by _try_pycoral, consumed by the CPU tier's reason string.
+        self._coral_error = "prefer_cpu"
         if not self.enabled:
             return
-        # Startup diagnostic: log the label file path + first 25 entries so
-        # label-mapping mistakes surface immediately instead of showing up as
-        # "crow detected as elephant" weeks later.
+        self._log_label_diagnostic()
+        model_path = self.cfg.get("model_path")
+        if not model_path:
+            self.reason = "missing model_path"
+            return
+        if self._select_tier(model_path):
+            self._activate_tier()
+
+    def _log_label_diagnostic(self) -> None:
+        """Log the label file path + first 25 entries at startup so
+        label-mapping mistakes surface immediately instead of showing up
+        as "crow detected as elephant" weeks later."""
         lp = self.cfg.get("labels_path")
         sample = {k: self.labels[k] for k in sorted(self.labels)[:25]}
         log.info(
             "CoralObjectDetector labels: %s — %d entries, head=%s", lp, len(self.labels), sample
         )
-        model_path = self.cfg.get("model_path")
-        if not model_path:
-            self.reason = "missing model_path"
-            return
 
-        coral_error = "prefer_cpu"
+    def _select_tier(self, model_path: str) -> bool:
+        """Walk the tiers in order and stop at the first that comes up.
+
+        Returns True once `self.interpreter` is live and `self.mode` is
+        final. False means every tier failed and the camera is on motion
+        detection alone.
+        """
         if not self._prefer_cpu:
-            # ── Tier 1: pycoral + Coral TPU ────────────────────────────────
-            try:
-                from pycoral.adapters import common, detect  # type: ignore
-                from pycoral.utils.edgetpu import make_interpreter  # type: ignore
+            if self._try_pycoral(model_path):
+                return True
+            if self._try_delegate(model_path):
+                return True
+        if self._try_cpu(model_path):
+            return True
+        # Every tier failed. Name the tier that was actually tried —
+        # blaming pycoral when the caller asked for CPU sends whoever
+        # reads this log looking in the wrong place.
+        self.reason = (
+            "cpu requested but no usable CPU model"
+            if self._prefer_cpu
+            else f"pycoral: {self._coral_error}"
+        )
+        log.warning(
+            "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
+        )
+        return False
 
-                self.common = common
-                self.detect = detect
-                self.interpreter = make_interpreter(model_path, device=self.device)
-                self.interpreter.allocate_tensors()
-                self.available = True
-                self.mode = "coral"
-                self.reason = "ok"
-                log.info("[det] Coral TPU aktiv: %s", model_path)
-                return
-            except Exception as e:
-                log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
-                coral_error = str(e)
+    def _try_pycoral(self, model_path: str) -> bool:
+        """Tier 1: pycoral + Coral TPU."""
+        try:
+            from pycoral.adapters import common, detect  # type: ignore
+            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
 
-            # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────
-            # Same silicon as tier 1, reached without pycoral. Output is
-            # plain SSD, so the tflite parse path handles it — only the
-            # interpreter construction differs, hence _cpu_mode (= "uses
-            # the tflite API") is True while mode stays "coral" (= "runs
-            # on the TPU").
-            delegated = make_delegate_interpreter(model_path, self.device)
-            if delegated is not None:
-                self.interpreter = delegated
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "coral"
-                self.reason = "edgetpu_delegate"
-                log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
-                return
+            self.common = common
+            self.detect = detect
+            self.interpreter = make_interpreter(model_path, device=self.device)
+            self.interpreter.allocate_tensors()
+        except Exception as e:
+            log.warning("[det] pycoral nicht verfügbar (%s) – versuche EdgeTPU-Delegate…", e)
+            self._coral_error = str(e)
+            return False
+        self.available = True
+        self.mode = "coral"
+        self.reason = "ok"
+        log.info("[det] Coral TPU aktiv: %s", model_path)
+        return True
 
-        # ── Tier 2: tflite-runtime CPU fallback ────────────────────────────
-        # For EdgeTPU models (*_edgetpu.tflite) try the non-EdgeTPU variant.
+    def _try_delegate(self, model_path: str) -> bool:
+        """Tier 1b: EdgeTPU via the tflite-runtime delegate.
+
+        Same silicon as tier 1, reached without pycoral. Output is plain
+        SSD, so the tflite parse path handles it — only the interpreter
+        construction differs, hence _cpu_mode (= "uses the tflite API")
+        is True while mode stays "coral" (= "runs on the TPU").
+        """
+        delegated = make_delegate_interpreter(model_path, self.device)
+        if delegated is None:
+            return False
+        self.interpreter = delegated
+        self._cpu_mode = True
+        self.available = True
+        self.mode = "coral"
+        self.reason = "edgetpu_delegate"
+        log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
+        return True
+
+    def _try_cpu(self, model_path: str) -> bool:
+        """Tier 2: tflite-runtime on the CPU.
+
+        For EdgeTPU models (*_edgetpu.tflite) the non-EdgeTPU variant is
+        tried first — a compiled model loads on CPU too, but every op
+        falls back and it is far slower than the plain build.
+        """
         cpu_model = self.cfg.get("cpu_model_path")
         if not cpu_model:
             cpu_model = model_path.replace("_edgetpu.tflite", ".tflite")
@@ -172,80 +194,72 @@ class CoralObjectDetector:
                     kwargs["num_threads"] = int(self._cpu_threads)
                 interp = tflite.Interpreter(**kwargs)
                 interp.allocate_tensors()
-                self.interpreter = interp
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "cpu"
-                self.reason = (
-                    "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
-                )
-                log.info(
-                    "[det] CPU-Inferenz aktiv: %s (threads=%s, %s)",
-                    try_path,
-                    self._cpu_threads or "default",
-                    "angefordert" if self._prefer_cpu else "Fallback",
-                )
-                return
             except Exception as e2:
                 log.warning("[det] CPU-Inferenz fehlgeschlagen für %s: %s", try_path, e2)
+                continue
+            self.interpreter = interp
+            self._cpu_mode = True
+            self.available = True
+            self.mode = "cpu"
+            self.reason = (
+                "cpu_requested"
+                if self._prefer_cpu
+                else f"cpu_fallback (coral: {self._coral_error})"
+            )
+            log.info(
+                "[det] CPU-Inferenz aktiv: %s (threads=%s, %s)",
+                try_path,
+                self._cpu_threads or "default",
+                "angefordert" if self._prefer_cpu else "Fallback",
+            )
+            return True
+        return False
 
-        # Every tier failed. Name the tier that was actually tried —
-        # blaming pycoral when the caller asked for CPU sends whoever
-        # reads this log looking in the wrong place.
-        self.reason = (
-            "cpu requested but no usable CPU model"
-            if self._prefer_cpu
-            else f"pycoral: {coral_error}"
-        )
-        log.warning(
-            "[det] Kein Detektor verfügbar (%s) – nur Bewegungserkennung aktiv", self.reason
-        )
+    def _activate_tier(self) -> None:
+        """Wiring that can only happen once the tier is known.
 
-    def _record_timing(self, t_pre: float, t_wait: float, t_invoke: float, t_post: float) -> None:
-        """Store one inference split into its four real cost centres.
-
-        The single `inference_avg_ms` the status bubble used to show
-        wrapped all four together, which made it useless for deciding
-        anything: a slow number could mean the TPU is loaded, or that
-        another camera holds the lock, or merely that a 4-MP frame is
-        expensive to letterbox on the CPU. Those call for opposite fixes.
-
-          pre    — colour convert + letterbox + tensor prep (CPU, per frame)
-          wait   — blocked on _infer_lock (contention with another caller)
-          invoke — the actual inference (TPU or CPU compute)
-          post   — reading output tensors back out
+        Called from every successful tier, never from the failure path —
+        an unavailable detector runs no inference and needs neither.
         """
-        now = time.perf_counter()
-        self._timings.append(
-            {
-                "pre": (t_wait - t_pre) * 1000.0,
-                "wait": (t_invoke - t_wait) * 1000.0,
-                "invoke": (t_post - t_invoke) * 1000.0,
-                "post": (now - t_post) * 1000.0,
-            }
+        self._infer_lock = inference_lock(self.mode, self.device)
+        self._warmup()
+
+    def _warmup(self) -> None:
+        """Run one throwaway inference so the first real frame is warm.
+
+        On the TPU the first invoke pushes the model parameters across
+        USB into the device's on-chip cache; on CPU it triggers the
+        first-call allocations. Either way the cost lands on whichever
+        frame happens to be first — which, after a restart or a settings
+        save, is the first motion event, the one frame we would least
+        like to be slow.
+
+        Failure is deliberately non-fatal. Warmup is a latency
+        optimisation, and a detector that stumbles on a synthetic black
+        frame may well be fine on a real one; refusing to come up would
+        convert a slow first frame into no detection at all. The reason
+        is logged rather than swallowed silently — on the real box it
+        would be the first sign the model and the delegate disagree.
+        """
+        frame = np.zeros((_WARMUP_H, _WARMUP_W, 3), dtype=np.uint8)
+        started = time.perf_counter()
+        # Keep the cold sample out of the rolling window — see
+        # _record_timing. It is not a measurement of steady state.
+        self._warming = True
+        try:
+            # threshold=1.0: run the full path but keep the post-filter
+            # work at zero. We want the invoke, not the detections.
+            self.detect_frame_raw(frame, threshold=1.0)
+        except Exception as e:
+            log.warning("[det] Warmup fehlgeschlagen (%s) – Detektor bleibt verfügbar", e)
+            return
+        finally:
+            self._warming = False
+        log.info(
+            "[det] Warmup abgeschlossen (%s): %.0f ms",
+            self.mode,
+            (time.perf_counter() - started) * 1000.0,
         )
-
-    def timing_breakdown(self) -> dict:
-        """Rolling averages in ms, or an empty dict before the first run."""
-        samples = list(self._timings)
-        if not samples:
-            return {}
-        n = len(samples)
-        out = {
-            k: round(sum(s[k] for s in samples) / n, 1) for k in ("pre", "wait", "invoke", "post")
-        }
-        out["total"] = round(sum(out[k] for k in ("pre", "wait", "invoke", "post")), 1)
-        out["samples"] = n
-        return out
-
-    # Per-label minimum bounding-box constraints. Surveillance cameras at
-    # fixed positions almost never see a real person at <15% frame height
-    # or <2% frame area — a small "person" box is overwhelmingly a false
-    # positive (wood grain, shadow, distant silhouette). Keys are COCO
-    # labels; values are (min_height_frac, min_area_frac).
-    _LABEL_MIN_BBOX: dict[str, tuple[float, float]] = {
-        "person": (0.15, 0.02),
-    }
 
     def detect_frame(
         self,
@@ -281,144 +295,10 @@ class CoralObjectDetector:
             label_thresholds,
             threshold,
         )
-        if cam_id and log.isEnabledFor(logging.INFO):
+        if cam_id:
             with contextlib.suppress(Exception):
-                self._log_decision(cam_id, kept, drops)
+                log_decision(cam_id, kept, drops)
         return kept
-
-    def _apply_label_filters_with_reasons(
-        self,
-        dets: list[Detection],
-        frame: np.ndarray,
-        label_thresholds: dict[str, float] | None,
-        global_threshold: float,
-    ) -> tuple[list[Detection], list[tuple[Detection, str]]]:
-        """Same gates as _apply_label_filters but also returns a parallel
-        list of (detection, drop_reason) for the diagnostic logger. Hot
-        path: the reason-string formatting only happens for dropped
-        detections — the kept-list path is one append per kept det."""
-        out: list[Detection] = []
-        drops: list[tuple[Detection, str]] = []
-        if not dets:
-            return out, drops
-        h, w = frame.shape[:2]
-        frame_area = float(max(1, h * w))
-        for d in dets:
-            # Per-label confidence override.
-            if label_thresholds:
-                t = label_thresholds.get(d.label)
-                if t is not None and d.score < float(t):
-                    drops.append((d, f"label_threshold({d.label})={t} (got {d.score:.2f})"))
-                    continue
-            # Per-label size floor (currently only "person").
-            min_h_frac, min_area_frac = self._LABEL_MIN_BBOX.get(d.label, (0.0, 0.0))
-            if min_h_frac > 0.0 or min_area_frac > 0.0:
-                x1, y1, x2, y2 = d.bbox
-                bb_h = max(0, y2 - y1)
-                bb_area = max(0, (x2 - x1) * (y2 - y1))
-                if bb_h < min_h_frac * h:
-                    drops.append((d, f"size_floor (h_frac={bb_h / h:.2f} < {min_h_frac:.2f})"))
-                    continue
-                if bb_area < min_area_frac * frame_area:
-                    drops.append(
-                        (
-                            d,
-                            f"size_floor (area_frac={bb_area / frame_area:.3f} < {min_area_frac:.3f})",
-                        )
-                    )
-                    continue
-            out.append(d)
-        return out, drops
-
-    # Back-compat alias — anything that historically called
-    # _apply_label_filters keeps the old single-return-value semantics.
-    def _apply_label_filters(self, dets, frame, label_thresholds):
-        kept, _ = self._apply_label_filters_with_reasons(
-            dets,
-            frame,
-            label_thresholds,
-            self.min_score,
-        )
-        return kept
-
-    @staticmethod
-    def _fmt_dets(dets, max_n: int = 8) -> str:
-        if not dets:
-            return "—"
-        head = dets[:max_n]
-        return ", ".join(f"{d.label} {int(round(d.score * 100))}%" for d in head) + (
-            f" (+{len(dets) - max_n} weitere)" if len(dets) > max_n else ""
-        )
-
-    @staticmethod
-    def _humanize_drop_reason(reason: str) -> str:
-        """Translate the raw drop-reason emitted by _apply_label_filters
-        into a German sentence the operator can read at a glance. Three
-        shapes are produced upstream:
-
-            label_threshold(person)=0.72 (got 0.67)
-            size_floor (h_frac=0.12 < 0.18)
-            size_floor (area_frac=0.005 < 0.012)
-
-        Unknown shapes fall back to the raw string so we never silently
-        lose information."""
-        m = re.match(r"label_threshold\([^)]+\)=([\d.]+)\s*\(got\s+([\d.]+)\)", reason)
-        if m:
-            thr = float(m.group(1)) * 100
-            got = float(m.group(2)) * 100
-            return f"Schwellwert {thr:.0f}% nicht erreicht (war {got:.0f}%)"
-        m = re.match(r"size_floor\s*\(h_frac=([\d.]+)\s*<\s*([\d.]+)\)", reason)
-        if m:
-            got = float(m.group(1)) * 100
-            need = float(m.group(2)) * 100
-            return f"zu klein im Bild: {got:.0f}% Höhe < {need:.0f}% nötig"
-        m = re.match(r"size_floor\s*\(area_frac=([\d.]+)\s*<\s*([\d.]+)\)", reason)
-        if m:
-            got = float(m.group(1)) * 100
-            need = float(m.group(2)) * 100
-            return f"zu klein im Bild: {got:.1f}% Fläche < {need:.1f}% nötig"
-        return reason
-
-    @classmethod
-    def _fmt_drops(cls, drops, max_n: int = 8) -> str:
-        if not drops:
-            return "—"
-        head = drops[:max_n]
-        return ", ".join(
-            f"{d.label} {int(round(d.score * 100))}% ({cls._humanize_drop_reason(reason)})"
-            for d, reason in head
-        ) + (f" (+{len(drops) - max_n} weitere)" if len(drops) > max_n else "")
-
-    def _log_decision(self, cam_id: str, kept: list, drops: list):
-        """Emit one INFO line per detect_frame call when there's anything
-        worth seeing. Decision tree:
-          - kept ≥ 1 → "[det][cam:…] ✓ erkannt: … · ✗ verworfen: …"
-          - kept == 0 AND drops > 0 → "[det][cam:…] ✗ verworfen: …"
-          - kept == 0 AND drops == 0 → silent (empty scene, no signal)
-        ASCII check/cross markers stand out in `docker logs` greps.
-        The previously-emitted "inference empty (raw=0)" DEBUG line is
-        deliberately dropped: the inference loop runs at ~3 Hz per
-        camera and ~99 % of frames on a quiet scene return 0 raw
-        candidates, so the line was a per-frame heartbeat with zero
-        diagnostic value. The real heartbeat in server.py already
-        confirms each runtime is alive; if a camera silently stops
-        producing frames, the [cam:…] connection logs surface that.
-        """
-        if kept:
-            if drops:
-                log.info(
-                    "[det][cam:%s] ✓ erkannt: %s · ✗ verworfen: %s",
-                    cam_id,
-                    self._fmt_dets(kept),
-                    self._fmt_drops(drops),
-                )
-            else:
-                log.info("[det][cam:%s] ✓ erkannt: %s", cam_id, self._fmt_dets(kept))
-            return
-        if drops:
-            # Sort by score descending so "almost made it" labels come first.
-            ordered = sorted(drops, key=lambda x: x[0].score, reverse=True)
-            log.info("[det][cam:%s] ✗ verworfen: %s", cam_id, self._fmt_drops(ordered))
 
     def detect_frame_raw(self, frame: np.ndarray, threshold: float = 0.20) -> list[Detection]:
         """Run inference and return the raw model output BEFORE label
@@ -442,18 +322,30 @@ class CoralObjectDetector:
 
         Wrapped in ``_infer_lock`` so a concurrent simulate-now call
         can't start a second invoke while an outstanding get_objects()
-        view is still tied to the previous run.
+        view is still tied to the previous run — and, on the TPU tier,
+        so the cameras queue for the one device explicitly instead of
+        inside libedgetpu.
+
+        Colour conversion and letterboxing stay OUTSIDE the lock. That
+        prep is pure CPU work on a private frame, and now that the lock
+        is shared by every camera, holding it across the prep would
+        serialise their letterboxing too — throughput given away for
+        nothing.
         """
         score_threshold = threshold if threshold is not None else self.min_score
+        _t_pre = time.perf_counter()
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        width, height = self.common.input_size(self.interpreter)
+        # Aspect-preserving letterbox — see letterbox() for the why.
+        # pycoral returns bbox in model-pixel space, so the inverse
+        # transform below subtracts pad before dividing by scale.
+        canvas, scale, pad_x, pad_y = letterbox(rgb, width, height)
+        _t_wait = time.perf_counter()
         with self._infer_lock:
-            width, height = self.common.input_size(self.interpreter)
-            # Aspect-preserving letterbox — see _letterbox for the why.
-            # pycoral returns bbox in model-pixel space, so the inverse
-            # transform below subtracts pad before dividing by scale.
-            canvas, scale, pad_x, pad_y = _letterbox(rgb, width, height)
+            _t_invoke = time.perf_counter()
             self.common.set_input(self.interpreter, canvas)
             self.interpreter.invoke()
+            _t_post = time.perf_counter()
             # Materialise pycoral results into a plain list of (id, score, bbox)
             # tuples while still inside the lock so the underlying tensor
             # references are released before the next caller can run set_input.
@@ -471,6 +363,7 @@ class CoralObjectDetector:
                 )
                 for o in objs
             ]
+        self._record_timing(_t_pre, _t_wait, _t_invoke, _t_post)
         h, w = frame.shape[:2]
         inv_scale = 1.0 / scale if scale > 0 else 1.0
         out: list[Detection] = []
@@ -508,7 +401,7 @@ class CoralObjectDetector:
         # padded model square, so the inverse transform multiplies by
         # the model dim first, then subtracts pad, then divides by
         # scale to land back in original frame pixels.
-        canvas, scale, pad_x, pad_y = _letterbox(rgb, in_w, in_h)
+        canvas, scale, pad_x, pad_y = letterbox(rgb, in_w, in_h)
         inp = np.expand_dims(canvas, axis=0)
         if input_details[0]['dtype'] == np.float32:
             inp = (inp.astype(np.float32) - 127.5) / 127.5

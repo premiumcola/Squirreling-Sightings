@@ -14,6 +14,7 @@ exceptions. No token, no network, no event loop beyond asyncio.run.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 from telegram.error import BadRequest, Forbidden, NetworkError, RetryAfter, TimedOut
@@ -162,3 +163,45 @@ def test_bad_request_is_not_retried(sleeps):
     assert _run(svc) is None
     assert len(svc.bot.calls) == 1
     assert sleeps == []
+
+
+# ── HYG-2 · giving up must leave a trace ──────────────────────────────
+#
+# Failing fast is right; failing invisibly is not. Nobody checks the
+# Future, so the only places a dropped alert can still be noticed are
+# the log and the status snapshot.
+
+
+def test_a_dropped_alert_is_counted_and_named(sleeps):
+    svc = _Service([Forbidden("bot was blocked by the user")])
+    assert _run(svc) is None
+    assert svc._send_failures == 1
+    assert svc._last_send_error == "Forbidden: bot was blocked by the user"
+
+
+def test_failures_accumulate_across_sends(sleeps):
+    svc = _Service([Forbidden("blocked"), BadRequest("chat not found")])
+    _run(svc)
+    _run(svc)
+    assert svc._send_failures == 2
+    assert svc._last_send_error.startswith("BadRequest")
+
+
+def test_a_delivered_alert_leaves_the_counter_alone(sleeps):
+    """A retried-then-delivered alert is not a failure — the counter is
+    for alerts that never arrived."""
+    svc = _Service([RetryAfter(1), "ok"])
+    assert _run(svc) == "ok"
+    assert not hasattr(svc, "_send_failures")
+
+
+def test_the_dropped_alert_logs_its_traceback(sleeps, caplog):
+    """`log.error("...: %s", e)` alone loses the stack — and the stack is
+    the whole diagnostic value when the exception type is a generic
+    transport error."""
+    svc = _Service([Forbidden("bot was blocked by the user")])
+    with caplog.at_level(logging.ERROR, logger="app.telegram_bot"):
+        _run(svc)
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert errors, "a dropped alert must log at ERROR"
+    assert errors[-1].exc_info is not None

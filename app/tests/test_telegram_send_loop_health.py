@@ -166,3 +166,37 @@ def test_system_endpoint_surfaces_send_loop_alive(client, monkeypatch, live_thre
 def test_system_endpoint_defaults_field_without_service(client, monkeypatch):
     monkeypatch.setattr(app_state, "telegram_service", None, raising=False)
     assert client.get("/api/system/telegram").get_json()["send_loop_alive"] is False
+
+
+# ── HYG-2 · failing sends must be countable ───────────────────────────
+#
+# The blind spot one layer below the send loop: send_alert catches
+# everything non-transient, logs it and returns None, and no caller
+# checks the Future. A revoked token drops every alert while state,
+# send_loop_alive and the polling thread all stay green.
+
+
+def test_status_reports_zero_failures_before_anything_fails(live_threads):
+    svc = _Service(poll_alive=True, loop_thread=live_threads())
+    status = svc.get_polling_status()
+    assert status["send_failures"] == 0
+    assert status["last_send_error"] is None
+
+
+def test_status_counts_send_failures_and_names_the_last_one(live_threads):
+    svc = _Service(poll_alive=True, loop_thread=live_threads())
+    svc._send_failures = 2
+    svc._last_send_error = "Forbidden: bot was blocked by the user"
+    status = svc.get_polling_status()
+    assert status["state"] == "active"  # polling is fine — that is the point
+    assert status["send_failures"] == 2
+    assert status["last_send_error"] == "Forbidden: bot was blocked by the user"
+
+
+def test_disabled_service_still_reports_the_counter():
+    """The `off` branch returns early — it must carry the new keys too."""
+    svc = _Service(poll_alive=False, loop_thread=None)
+    svc.enabled = False
+    status = svc.get_polling_status()
+    assert status["send_failures"] == 0
+    assert "last_send_error" in status

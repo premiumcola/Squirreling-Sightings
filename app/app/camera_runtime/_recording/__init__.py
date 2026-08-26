@@ -34,6 +34,7 @@ from ...event_logic import (
     is_schedule_window_active,
     schedule_action_active,
 )
+from ._publish import PublishMixin
 from .._consts import (
     _FFMPEG_AVAILABLE,
     _PROFILE_PERIOD_DEFAULTS,
@@ -49,11 +50,17 @@ from .._consts import (
 )
 
 
-class RecordingMixin:
+class RecordingMixin(PublishMixin):
     """Motion-clip lifecycle: ffmpeg start/stop + reencode + finalize + adhoc.
 
     Mixin for CameraRuntime. Methods access shared state via `self.*`
     (frame buffers, lock, config, etc.) which live on the concrete class.
+
+    Both finalize paths — the ffmpeg re-encode that production takes, and
+    the OpenCV frame-buffer fallback — end in
+    ``PublishMixin._publish_finalized_event``. They used to diverge, and
+    every consequence of an event (alert, first-since, achievement,
+    quest, dossier) lived only in the fallback. See _publish.py.
     """
 
     def _write_clip_ffmpeg(self, frames, fps, out_path) -> bool:
@@ -378,6 +385,9 @@ class RecordingMixin:
                 log.debug("[%s] motion thumb (post-encode) failed: %s", self.camera_id, _te)
 
         # Update the event JSON: transition from 'processing' → 'ready' (or 'error')
+        # Bound before the try so the publish step below always has a dict,
+        # even when the store read itself failed.
+        ev: dict = {}
         try:
             ev = self.store.get_event(self.camera_id, event_id) or {}
             ev["video_url"] = video_url
@@ -394,20 +404,6 @@ class RecordingMixin:
         except Exception as e:
             log.warning("[%s] event JSON update failed: %s", self.camera_id, e)
 
-        # MQTT + Telegram (best-effort, only when we actually produced a video)
-        if video_url and self.mqtt and self.cfg.get("mqtt_enabled", True):
-            with contextlib.suppress(Exception):
-                self.mqtt.publish(
-                    f"events/{self.camera_id}",
-                    {
-                        "event_id": event_id,
-                        "labels": meta["labels"],
-                        "time": start_time.isoformat(timespec="seconds"),
-                        "video_url": video_url,
-                        "snapshot_url": thumb_url,
-                    },
-                )
-
         # Tracking sidecar — enqueue once per finalized clip so the
         # next Mediathek open finds <event>.tracks.json on disk. The
         # ffmpeg re-encode path used to skip this step; the legacy
@@ -420,11 +416,18 @@ class RecordingMixin:
             playable = storage_root / video_relpath
             snap = (storage_root / thumb_rel) if thumb_rel else None
             self._enqueue_tracks_for_clip(event_id, playable, snap)
-        # Telegram alert is fired once, by the modern push pipeline in
-        # _finalize_motion_clip via TelegramService.send_event_alert. The
-        # legacy send_alert_sync alert that used to live here was a duplicate
-        # — it produced a second bubble per detection with a different button
-        # layout and confused users. Removed.
+
+        # Every consequence of the event — first-since, MQTT, achievement,
+        # quests, dossiers, and the Telegram alert. This path is the one
+        # production actually takes (ffmpeg is installed in the image), and
+        # it used to do NONE of that: a comment here claimed the alert was
+        # "fired once, by the modern push pipeline in _finalize_motion_clip",
+        # but that function is reachable only from the OpenCV fallback. So
+        # the alert removed here as a duplicate was the only one that ran.
+        # See _publish.py.
+        meta.setdefault("event_id", event_id)
+        ev.setdefault("event_id", event_id)
+        self._publish_finalized_event(ev, meta, thumb_rel)
 
     def _enqueue_tracks_for_clip(
         self, event_id: str, video_path: Path, snapshot_path: Path | None
@@ -725,25 +728,9 @@ class RecordingMixin:
         if encode_error:
             event["encode_error"] = encode_error
 
-        # F06 first-since marker — runs BEFORE add_event so the JSON on
-        # disk carries the marker for downstream consumers (lightbox
-        # badge, /api/insights/first-since later). The detector reads
-        # the prior event of the same class via EventStore; cheap
-        # because list_events is indexed and we cap at limit=10.
-        try:
-            from ... import app_state as _app_state
-
-            fs = getattr(_app_state, "first_since_detector", None)
-            if fs is not None:
-                marker = fs.evaluate(event)
-                if marker:
-                    event["first_since"] = marker
-                    # Surface on the meta dict too so the telegram path
-                    # below picks up the headline label/gap without a
-                    # second store read.
-                    meta["first_since"] = marker
-        except Exception as _fe:
-            log.debug("[%s] first_since skipped: %s", self.camera_id, _fe)
+        # F06 first-since marker — runs BEFORE add_event so the first
+        # write of the JSON already carries it.
+        self._apply_first_since(event, meta)
 
         self.store.add_event(self.camera_id, event)
 
@@ -757,123 +744,9 @@ class RecordingMixin:
             snap = (storage_root / thumb_rel) if thumb_rel else None
             self._enqueue_tracks_for_clip(event_id, vid_path, snap)
 
-        if self.mqtt and self.cfg.get("mqtt_enabled", True):
-            self.mqtt.publish(f"events/{self.camera_id}", event)
-
-        # Achievement unlock
-        bird_species = meta.get("bird_species")
-        if bird_species:
-            newly_unlocked = self._try_unlock_achievement(bird_species, bird_species)
-            if newly_unlocked and self.notifier:
-                try:
-                    ach_msg = (
-                        f"🌿 Neue Sichtung entdeckt: {bird_species}!\n"
-                        f"📷 Kamera: {self.cfg.get('name', self.camera_id)}"
-                    )
-                    threading.Thread(
-                        target=self.notifier.send_alert_sync,
-                        kwargs={"caption": ach_msg},
-                        daemon=True,
-                    ).start()
-                except Exception:
-                    pass
-
-        # Quest re-evaluation (F09). Best-effort: every motion event
-        # triggers a full re-eval. Performance is fine — running over a
-        # year of events is a few-ms disk walk. The hourly job in
-        # server.py is the safety net; this trigger keeps the pinboard
-        # in sync without waiting up to an hour. Wrapped tightly so a
-        # quest-eval bug never poisons the recording pipeline.
-        try:
-            from ...quests import reevaluate_and_save
-
-            threading.Thread(target=reevaluate_and_save, daemon=True).start()
-        except Exception as _qe:
-            log.debug("[%s] quest re-eval skipped: %s", self.camera_id, _qe)
-
-        # Bird dossier hook (F08). For every detection in this event
-        # carrying a `species_latin`, register it with the dossier
-        # service — first sighting kicks off a Wikipedia + Xeno-canto
-        # fetch, repeats just bump the counter. Late-binding via
-        # app_state so the runtime keeps working when the service
-        # isn't wired (e.g. older configs).
-        try:
-            from ... import app_state as _app_state
-
-            svc = getattr(_app_state, "bird_dossiers", None)
-            if svc is not None:
-                seen_latin: set[str] = set()
-                for det in meta.get("detections") or []:
-                    latin = (det.get("species_latin") or "").strip()
-                    if not latin or latin in seen_latin:
-                        continue
-                    seen_latin.add(latin)
-                    common_de = det.get("species") or None
-                    svc.on_new_species(latin, common_de, event_id, self.camera_id)
-        except Exception as _de:
-            log.debug("[%s] dossier hook skipped: %s", self.camera_id, _de)
-
-        # Telegram — gate the event through the same camera-level switches
-        # the old code respected (armed, zone send_telegram, telegram_enabled,
-        # notify-from-alarm-profile), then hand the event to the push system
-        # which makes the final decision (label-config, threshold, suppress,
-        # rate-limit, quiet/night).
-        notify = meta.get("notify", False)
-        if not self.cfg.get("armed", True):
-            notify = False
-        if not meta.get("send_telegram", True):
-            notify = False
-        # Diagnose: one ROUTING line per finalized event, BEFORE any further
-        # gating. Surfaces the exact reason an alert is dropped without
-        # forcing a DEBUG log level. Companion line on successful handoff
-        # below confirms the notifier accepted the event.
-        log.info(
-            "[trigger][cam:%s] alert routing: labels=%s notify=%s armed=%s "
-            "telegram_enabled=%s send_telegram_meta=%s alarm_level=%s",
-            self.camera_id,
-            ",".join(sorted(set(meta.get("labels", [])))),
-            notify,
-            self.cfg.get("armed", True),
-            self.cfg.get("telegram_enabled", True),
-            meta.get("send_telegram", True),
-            meta.get("alarm_level"),
-        )
-        if notify and self.cfg.get("telegram_enabled", True) and self.notifier:
-            try:
-                snap_path = (
-                    (Path(self.global_cfg["storage"]["root"]) / thumb_rel) if thumb_rel else None
-                )
-                if hasattr(self.notifier, "send_event_alert"):
-                    self.notifier.send_event_alert(
-                        meta=meta,
-                        camera_id=self.camera_id,
-                        snapshot_path=snap_path,
-                    )
-                else:
-                    # Older notifier: fall back to legacy caption builder so
-                    # local dev environments without the push system still
-                    # produce alerts.
-                    labels = meta["labels"]
-                    level = meta.get("alarm_level")
-                    caption = (
-                        f"{'🚨' if level == 'alarm' else 'ℹ️'} "
-                        f"{', '.join(sorted(set(labels)))} · "
-                        f"{self.cfg.get('name', self.camera_id)}"
-                    )
-                    self.notifier.send_alert_sync(
-                        caption=caption,
-                        jpeg_bytes=meta.get("thumb_bytes"),
-                        snapshot_url=video_url,
-                        dashboard_url=public_base,
-                        camera_id=self.camera_id,
-                    )
-                log.info(
-                    "[trigger][cam:%s] alert handed off to notifier (event_id=%s)",
-                    self.camera_id,
-                    meta.get("event_id"),
-                )
-            except Exception as e:
-                log.warning("[%s] telegram event push failed: %s", self.camera_id, e)
+        # Same publish step the ffmpeg path uses — see _publish.py. The
+        # marker is already stamped above, so it is not re-applied here.
+        self._publish_finalized_event(event, meta, thumb_rel, apply_first_since=False)
 
     def record_adhoc_clip(self, seconds: int) -> str | None:
         """Capture a `seconds`-long mp4 from the live RTSP stream.

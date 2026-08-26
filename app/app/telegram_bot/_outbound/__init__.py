@@ -60,6 +60,8 @@ from .._consts import (
     _parse_hhmm,
     log,
 )
+from ._payload import dispatch_send
+from ._retry import send_with_retry
 
 
 class OutboundMixin:
@@ -110,29 +112,6 @@ class OutboundMixin:
                 rows.append(built_row)
         return InlineKeyboardMarkup(rows) if rows else None
 
-    @staticmethod
-    def _prepare_input(src, default_name: str):
-        """Accept bytes OR a filesystem path; return something send_photo
-        / send_video / send_document can swallow."""
-        if isinstance(src, (bytes, bytearray)):
-            bio = BytesIO(bytes(src))
-            bio.name = default_name
-            return bio
-        if isinstance(src, (str, Path)):
-            return open(str(src), "rb")
-        return src
-
-    @staticmethod
-    def _src_size_bytes(src) -> int:
-        if isinstance(src, (bytes, bytearray)):
-            return len(src)
-        if isinstance(src, (str, Path)):
-            try:
-                return Path(str(src)).stat().st_size
-            except Exception:
-                return 0
-        return 0
-
     async def send_alert(
         self,
         text: str = "",
@@ -146,7 +125,12 @@ class OutboundMixin:
         reply_to: int | None = None,
     ):
         """Unified send. `photo`/`video` accept bytes or a filesystem path.
-        Auto-falls-back to sendDocument when limits are exceeded."""
+        Auto-falls-back to sendDocument when limits are exceeded.
+
+        Transient failures — flood control (429) and network drops — get
+        exactly one retry each via send_with_retry. Anything else is
+        logged and dropped, as before: callers discard the Future, so
+        there is nobody upstream to raise to."""
         if not self.enabled or not self.bot:
             log.info(
                 "[tg] send_alert skipped (enabled=%s, bot=%s)", self.enabled, self.bot is not None
@@ -169,33 +153,25 @@ class OutboundMixin:
             common["reply_to_message_id"] = reply_to
         caption = truncate_caption(text or "")
         try:
-            if video is not None:
-                size = self._src_size_bytes(video)
-                src = self._prepare_input(video, "video.mp4")
-                if size and size > _VIDEO_LIMIT_BYTES:
-                    log.info("[tg] video > 50MB, falling back to sendDocument")
-                    msg = await self.bot.send_document(document=src, caption=caption, **common)
-                else:
-                    msg = await self.bot.send_video(video=src, caption=caption, **common)
-            elif photo is not None:
-                size = self._src_size_bytes(photo)
-                src = self._prepare_input(photo, "photo.jpg")
-                if size and size > _PHOTO_LIMIT_BYTES:
-                    log.info("[tg] photo > 10MB, falling back to sendDocument")
-                    msg = await self.bot.send_document(document=src, caption=caption, **common)
-                else:
-                    msg = await self.bot.send_photo(photo=src, caption=caption, **common)
-            else:
-                msg = await self.bot.send_message(text=text or "", **common)
-            # Stash timestamp of the most recent successful push so the
-            # /api/system/telegram health endpoint can surface "letzte
-            # Push vor X Min" without scraping the polling state.
-            self._last_push_ts = time.time()
-            log.info("[tg] send_alert ok (chat=%s silent=%s)", self.chat_id, silent)
-            return msg
+            msg = await send_with_retry(
+                lambda: dispatch_send(
+                    self.bot,
+                    text=text,
+                    photo=photo,
+                    video=video,
+                    caption=caption,
+                    common=common,
+                )
+            )
         except Exception as e:
             log.error("[tg] send_alert failed: %s", e)
             return None
+        # Stash timestamp of the most recent successful push so the
+        # /api/system/telegram health endpoint can surface "letzte
+        # Push vor X Min" without scraping the polling state.
+        self._last_push_ts = time.time()
+        log.info("[tg] send_alert ok (chat=%s silent=%s)", self.chat_id, silent)
+        return msg
 
     # Legacy sync wrapper (kept for the achievement push and the test endpoint).
     # Footer buttons used to include "24 h Zeitraffer" and "Last detections"

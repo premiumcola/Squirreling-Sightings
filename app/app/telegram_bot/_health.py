@@ -44,9 +44,18 @@ class HealthMixin:
         Every state carries ``send_loop_alive`` next to it: the state
         field describes the polling thread alone, so send-loop death has
         no state of its own to be spotted in.
+
+        The same blind spot exists one layer down: send_alert catches
+        everything non-transient, logs it and returns None, so a revoked
+        token or a wrong chat_id drops every alert while all three fields
+        above stay green. ``send_failures`` / ``last_send_error`` are
+        that failure made countable — read via getattr because they only
+        come into existence on the first failure.
         """
         status = self._poll_state()
         status["send_loop_alive"] = self.send_loop_alive()
+        status["send_failures"] = int(getattr(self, "_send_failures", 0))
+        status["last_send_error"] = getattr(self, "_last_send_error", None)
         return status
 
     def _poll_state(self) -> dict:

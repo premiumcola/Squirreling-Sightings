@@ -83,8 +83,11 @@ class SendMixin:
 
         Transient failures — flood control (429) and network drops — get
         exactly one retry each via send_with_retry. Anything else is
-        logged and dropped, as before: callers discard the Future, so
-        there is nobody upstream to raise to."""
+        logged and dropped: callers discard the Future, so there is
+        nobody upstream to raise to. Dropping it silently was the
+        remaining half of that problem — the failure is now counted and
+        the traceback kept, so `get_polling_status()` can say that sends
+        are failing while polling looks perfectly healthy."""
         if not self.enabled or not self.bot:
             log.info(
                 "[tg] send_alert skipped (enabled=%s, bot=%s)", self.enabled, self.bot is not None
@@ -118,7 +121,17 @@ class SendMixin:
                 )
             )
         except Exception as e:
-            log.error("[tg] send_alert failed: %s", e)
+            # getattr defaults rather than __init__ state: the counter has
+            # to survive on service instances that predate it, and every
+            # test builds its state by hand.
+            self._send_failures = getattr(self, "_send_failures", 0) + 1
+            self._last_send_error = f"{type(e).__name__}: {e}"
+            log.error(
+                "[tg] send_alert failed (%d since start): %s",
+                self._send_failures,
+                e,
+                exc_info=True,
+            )
             return None
         # Stash timestamp of the most recent successful push so the
         # /api/system/telegram health endpoint can surface "letzte

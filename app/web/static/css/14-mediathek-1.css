@@ -642,7 +642,16 @@ body.media-select-mode .media-grid .mmc-img-wrap {
 /* Detail — the stage chain + the reason a stuck clip is stuck. Closed
    by default; opens on tap (.is-open) everywhere and additionally on
    hover where a pointer exists. A phone never gets the hover rule, so
-   the tap path is the one that has to work. */
+   the tap path is the one that has to work.
+
+   The detail SWAPS FOR the spinner rather than growing below it. A card
+   is 160 px wide on an iPhone SE, so with aspect-ratio 16/10 the tile
+   has ~100 px of height: 38 px ring + caption + a three-step chain +
+   two lines of error does not fit, and .mmc-img-wrap clips the
+   overflow. Trading the ring for the detail keeps everything inside the
+   tile at every width, and the chain's own "is-now" marker says what
+   the ring was saying anyway. The caption stays put through the swap so
+   the stage name and elapsed never blink out. */
 .mvp-detail {
   display: block;
   width: 100%;
@@ -653,14 +662,32 @@ body.media-select-mode .media-grid .mmc-img-wrap {
     max-height 0.18s ease,
     opacity 0.18s ease;
 }
+.mvp-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  max-height: 44px;
+  transition:
+    max-height 0.18s ease,
+    opacity 0.18s ease;
+}
 .mvp-tile.is-open .mvp-detail {
-  max-height: 140px;
+  max-height: 70%;
   opacity: 1;
+}
+.mvp-tile.is-open .mvp-mark {
+  max-height: 0;
+  opacity: 0;
 }
 @media (hover: hover) {
   .mvp-tile:hover .mvp-detail {
-    max-height: 140px;
+    max-height: 70%;
     opacity: 1;
+  }
+  .mvp-tile:hover .mvp-mark {
+    max-height: 0;
+    opacity: 0;
   }
 }
 
@@ -695,8 +722,16 @@ body.media-select-mode .media-grid .mmc-img-wrap {
   background: rgba(250, 204, 21, 0.16);
   color: rgba(250, 204, 21, 0.75);
 }
+/* Clamped, never scrolled: a scroll area inside a <button> turns every
+   drag into a stray tap that closes the panel. Three lines is enough to
+   name the failure ("moov atom not found"); the ellipsis is honest
+   about there being more. */
 .mvp-note {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   padding-top: 6px;
   font-size: 9.5px;
   font-weight: 500;
@@ -837,6 +872,7 @@ body.media-select-mode .media-grid .mmc-img-wrap {
     animation: none;
   }
   .mvp-detail,
+  .mvp-mark,
   .mvq-list,
   .mvq-chev {
     transition: none;

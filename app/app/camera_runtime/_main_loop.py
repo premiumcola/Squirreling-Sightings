@@ -21,7 +21,7 @@ import numpy as np
 import requests
 
 from ..detection_confirmer import DetectionConfirmer
-from ..detection_tiling import tiled_detect
+from ..detection_tiling import normalise_mode, tiled_detect
 from ..motion_samples import record_sample as record_motion_sample
 from ..detectors import (
     BirdSpeciesClassifier,
@@ -51,12 +51,120 @@ from ._consts import (
 )
 
 
+# Overlap a detection needs with the coherent motion blob before it counts
+# as "this box explains the thing that moved".
+_RESCUE_BLOB_IOU = 0.3
+_UNSET = object()
+
+
+def _confirmable_on_blob(detections, blob, spawn_for, iou_thresh=_RESCUE_BLOB_IOU):
+    """Does any surviving detection both clear its spawn floor AND sit on the blob?
+
+    The D2 rescue used to be skipped whenever ``detections`` was non-empty.
+    One weak, wrong box — COCO reading a distant squirrel as "cat" at 0.30,
+    far below any spawn threshold — was therefore enough to suppress the
+    magnified re-detect entirely. That is exactly the case small and distant
+    subjects produce: the detector sees *something*, names it wrong and
+    weakly, and the suppression fires because of it.
+
+    What matters is not whether the detector returned anything, but whether
+    anything it returned is confirmable and actually explains the blob that
+    moved. Everything else leaves the rescue's reason to run intact.
+    """
+    if blob is None:
+        return False
+    bx, by, bw, bh = blob.last_bbox
+    blob_box = (bx, by, bx + bw, by + bh)
+    for d in detections:
+        if float(d.score) < float(spawn_for(d.label)):
+            continue
+        if _bbox_iou(tuple(d.bbox), blob_box) >= iou_thresh:
+            return True
+    return False
+
+
 class MainLoopMixin:
     """The 530-line per-camera orchestrator (_loop).
 
     Mixin for CameraRuntime. Methods access shared state via `self.*`
     (frame buffers, lock, config, etc.) which live on the concrete class.
     """
+
+    def _effective_roi_mode(self) -> str:
+        """The camera's roi_mode, warning once per distinct bad value.
+
+        `normalise_mode` logs when it has to fall back; calling it from the
+        frame loop would emit that warning several times a second. The last
+        raw value is remembered so a typo is reported when it appears and
+        when it changes, and stays quiet in between.
+        """
+        raw = self.cfg.get("roi_mode")
+        if raw == getattr(self, "_roi_mode_raw", _UNSET):
+            return self._roi_mode_effective
+        mode = normalise_mode(raw)
+        self._roi_mode_raw = raw
+        self._roi_mode_effective = mode
+        return mode
+
+    def _roi_rescue(self, proc_frame, raw_detections, blob, det_mode, allowed):
+        """D2 · magnified re-detect around a coherent motion blob.
+
+        Returns the detection list the rest of the frame should work with.
+        The full-frame pass the loop already ran is handed to `tiled_detect`
+        instead of being repeated, so an attempt costs the region inferences
+        only — on CPU, with the TPU down, that saved invoke is the single
+        largest cost item in this path.
+        """
+        # M2 · count every attempt, not just the successes. "How often did
+        # the rescue fire, and how often did it actually save something" is
+        # unanswerable from the log alone if only hits are recorded.
+        self._roi_rescue_attempts += 1
+        mbox = blob.last_bbox if det_mode == "roi" else None
+        roi_dets, _sahi = tiled_detect(
+            self.detector,
+            proc_frame,
+            det_mode,
+            threshold=self._tracker.floor,
+            motion_box=mbox,
+            full_dets=raw_detections,
+        )
+        if allowed:
+            roi_dets = [d for d in roi_dets if d.label in allowed]
+        roi_dets = self._filter_masked_detections(proc_frame, roi_dets)
+        roi_dets = self._filter_zoned_detections(proc_frame, roi_dets)
+        # Only boxes that came out of a magnified region are "via roi" — the
+        # full-frame boxes travelled through the merge unchanged and marking
+        # them too would make the D4 provenance flag meaningless, and would
+        # let a pre-existing weak box count as a rescue hit.
+        seen = {id(d) for d in raw_detections}
+        gained = [d for d in roi_dets if id(d) not in seen]
+        for d in gained:
+            d.via_roi = True
+        if gained:
+            self._roi_rescue_hits += 1
+            log.info(
+                "[%s] D2 ROI rescue (%s): %d hit(s) on coherent blob "
+                "net=%.0fpx straight=%.2f zoom=%s → %s",
+                self.camera_id,
+                det_mode,
+                len(gained),
+                blob.net_displacement,
+                blob.straightness,
+                _sahi.get("magnification"),
+                ",".join(sorted({d.label for d in gained})),
+            )
+        # E1 · persist a labeled motion sample (kept ≈ animal, empty ≈
+        # wind/noise) for offline threshold calibration.
+        record_motion_sample(
+            self.global_cfg.get("storage", {}).get("root"),
+            self.camera_id,
+            blob,
+            bool(gained),
+            det_mode,
+            time.time(),
+            proc_frame.shape[1],
+        )
+        return roi_dets
 
     def _loop(self):
         if self.cfg.get("rtsp_url"):
@@ -251,10 +359,11 @@ class MainLoopMixin:
                 # tentative (floor ≤ score < spawn) downstream. Per-camera
                 # detection_min_score is no longer the live cutoff — it
                 # would defeat the point of the tracker's two-tier flow.
-                detections = self.detector.detect_frame_raw(
+                raw_detections = self.detector.detect_frame_raw(
                     proc_frame,
                     threshold=self._tracker.floor,
                 )
+                detections = list(raw_detections)
                 # Rolling-average Coral inference latency for the /status
                 # bubble. Cost is unchanged from detect_frame() — same
                 # underlying invoke; only the post-filter threshold differs.
@@ -271,80 +380,36 @@ class MainLoopMixin:
                 # Masks + zones compose: detect inside zones BUT exclude
                 # masked areas within zones.
                 detections = self._filter_zoned_detections(proc_frame, detections)
-                # ── D2 · ROI / tiling rescue ─────────────────────────────
-                # When the full-frame HD detect found NO kept object but D1
-                # saw a coherent moving blob, re-detect with the camera's
-                # tiling/ROI mode on the SAME main frame, NMS-merge with a
-                # full-frame pass, then re-apply object_filter + masks +
-                # zones so the merged hits flow through the EXISTING tracker
-                # + confirmer + recording path unchanged. cat→"dog" is
-                # accepted as "animal present". COST GUARD: this fires only
-                # on the escalated wildlife-low + coherent-motion case —
-                # never every frame.
-                det_mode = (self.cfg.get("roi_mode") or "off").strip().lower()
-                if (
-                    not detections
-                    and _coherent_blob is not None
-                    and det_mode in ("roi", "2x2", "3x3")
-                ):
-                    # M2 · count every attempt, not just the successes.
-                    # "How often did the rescue fire, and how often did it
-                    # actually save something" is unanswerable from the
-                    # log alone, because only hits were ever logged — a
-                    # rescue that never fires and a rescue that fires and
-                    # finds nothing looked identical.
-                    self._roi_rescue_attempts += 1
-                    mbox = _coherent_blob.last_bbox if det_mode == "roi" else None
-                    roi_dets, _sahi = tiled_detect(
-                        self.detector,
-                        proc_frame,
-                        det_mode,
-                        threshold=self._tracker.floor,
-                        motion_box=mbox,
-                    )
-                    if allowed:
-                        roi_dets = [d for d in roi_dets if d.label in allowed]
-                    roi_dets = self._filter_masked_detections(proc_frame, roi_dets)
-                    roi_dets = self._filter_zoned_detections(proc_frame, roi_dets)
-                    for _d in roi_dets:
-                        _d.via_roi = True  # D4 provenance
-                    if roi_dets:
-                        self._roi_rescue_hits += 1
-                        log.info(
-                            "[%s] D2 ROI rescue (%s): %d hit(s) on coherent blob "
-                            "net=%.0fpx straight=%.2f → %s",
-                            self.camera_id,
-                            det_mode,
-                            len(roi_dets),
-                            _coherent_blob.net_displacement,
-                            _coherent_blob.straightness,
-                            ",".join(sorted({d.label for d in roi_dets})),
-                        )
-                    # E1 · persist a labeled motion sample (kept ≈ animal,
-                    # empty ≈ wind/noise) for offline threshold calibration.
-                    record_motion_sample(
-                        self.global_cfg.get("storage", {}).get("root"),
-                        self.camera_id,
-                        _coherent_blob,
-                        bool(roi_dets),
-                        det_mode,
-                        time.time(),
-                        proc_frame.shape[1],
-                    )
-                    detections = roi_dets
-                # ── Two-tier tracker ────────────────────────────────────
+                # ── Two-tier tracker thresholds ─────────────────────────
                 # Classifies each surviving detection into confirmed
                 # (≥ per-label spawn threshold) vs tentative (above floor,
                 # below spawn). Confirmed dets can spawn or extend tracks;
                 # tentative dets can only extend a still-unmatched IoU
                 # partner. Subjects survive short low-conf dips while
                 # genuine cold-start gating stays the confirmer's job.
+                # Resolved BEFORE the rescue gate below, which needs the same
+                # notion of "strong enough to be believed".
                 spawn_for = lambda _lbl: self._tracker.spawn_default
                 if label_thresholds:
                     _lt = dict(label_thresholds)
                     _default = self._tracker.spawn_default
                     spawn_for = lambda lbl, _lt=_lt, _d=_default: (
                         float(_lt[lbl]) if lbl in _lt else _d
+                    )
+                # ── D2 · ROI / tiling rescue ─────────────────────────────
+                # D1 saw a coherent moving blob and the full-frame pass
+                # produced nothing CONFIRMABLE on it — see
+                # _confirmable_on_blob for why "nothing at all" was the
+                # wrong question. The coherent blob stays the cost guard, so
+                # this fires on the escalated case, never every frame.
+                det_mode = self._effective_roi_mode()
+                if (
+                    det_mode != "off"
+                    and _coherent_blob is not None
+                    and not _confirmable_on_blob(detections, _coherent_blob, spawn_for)
+                ):
+                    detections = self._roi_rescue(
+                        proc_frame, raw_detections, _coherent_blob, det_mode, allowed
                     )
                 # Effective fps for grace-window math. Falls back to a
                 # conservative 3 Hz when the rolling measurement hasn't

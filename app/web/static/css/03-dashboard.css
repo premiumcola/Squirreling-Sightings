@@ -653,6 +653,11 @@
    one stacked unit instead of two floating rows. The inter-cluster
    gap (TG ↔ MQTT) also tightened 14 → 10 px so the badge feels
    compact at 375 px without crowding. */
+/* M · the two bottom clusters used to reserve `50% - 110px` EACH, which on
+   a 374 px phone tile left them 77 px apiece and a 220 px dead zone in the
+   middle. The right cluster (SIM + cog) has a bounded, known width, so it
+   is the one that gets its content budget; the left cluster takes the rest
+   minus that reserve. */
 .cv-chrome-bottom-left {
   position: absolute;
   left: var(--cv-overlay-inset);
@@ -661,7 +666,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  max-width: calc(50% - 110px);
+  max-width: calc(100% - 170px);
   z-index: 3;
   pointer-events: none;
 }
@@ -679,8 +684,9 @@
   bottom: var(--cv-overlay-inset);
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 4px;
-  max-width: calc(50% - 110px);
+  max-width: calc(100% - 16px);
   z-index: 6;
 }
 
@@ -768,6 +774,14 @@
   position: relative;
   height: 36px;
   min-width: 36px;
+  /* M · a corner button never shrinks below its own content. `min-width:
+     36px` is an EXPLICIT floor, so it overrode the `min-width: auto` that
+     normally stops a flex item collapsing under its content: in a cramped
+     corner cluster the SIM button squeezed down to 36 px while its
+     "Simulieren" label kept rendering at ~110 px, and `justify-content:
+     center` spilled that text symmetrically straight over the cog beside
+     it ("Simul⚙re"). Content decides the width; the container adapts. */
+  flex-shrink: 0;
   border-radius: 10px;
   border: 0;
   outline: 0;
@@ -1192,11 +1206,16 @@
 /* H1 · full "Simulieren" label by default; collapses to "SIM" when the
    tile (the .cv-card inline-size container) is narrow — see @container
    below. Governs the label at every width, replacing the old viewport
-   overrides in 25-mobile.css. */
+   overrides in 25-mobile.css.
+   M · breakpoint raised 360 → 440 px. A single-column iPhone tile is
+   ~343-377 px wide, i.e. just ABOVE the old threshold, so the phone never
+   actually got the compact label it was written for — it got the full
+   word crushed into the corner instead. 440 px still leaves the spelled-
+   out label on any multi-column desktop tile. */
 .cv-sim-abbr {
   display: none;
 }
-@container (max-width: 360px) {
+@container (max-width: 440px) {
   .cv-sim-btn .cv-sim-full {
     display: none;
   }

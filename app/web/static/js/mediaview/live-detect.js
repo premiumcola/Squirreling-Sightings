@@ -151,7 +151,6 @@ export function openLiveDetect({ camId, cameraName }) {
   // open's last-known SVG dims don't bleed into the new one.
   S.diagState.bbox = null;
   S.diagState.trails = null;
-  S.diagState.zonemask = null;
   S.diagState.posFail = null;
   S.diagState.paintFail = null;
   S.diagState.tick = null;
@@ -301,8 +300,6 @@ export function closeLiveDetect() {
   if (overlay) overlay.remove();
   const trails = byId('lightboxLiveTrails');
   if (trails) trails.remove();
-  const zoneMask = byId('lightboxLiveZoneMask');
-  if (zoneMask) zoneMask.remove();
   // L1 · tear down the shared overlay-toggle bar (its document
   // touch-dismiss listener) before removing the row node.
   try {
@@ -318,10 +315,6 @@ export function closeLiveDetect() {
   if (diagStrip) diagStrip.remove();
   const livePill = byId('mvLiveScrubPill');
   if (livePill) livePill.remove();
-  // D52 · the "<n> verworfen — antippen für Details" hint sits
-  // outside the toggle row; remove it on session teardown.
-  const suppressedHint = byId('mvLiveSuppressedHint');
-  if (suppressedHint) suppressedHint.remove();
   // Q2-5 · drop the stall banner if a teardown happens while stalled.
   _hideStallBanner();
   // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it

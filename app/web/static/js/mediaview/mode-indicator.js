@@ -22,9 +22,15 @@ import { attachHoverAndLongPress } from '../core/tooltip.js';
 // whole-frame single-shot. The title is the German hover / long-press
 // explanation surfaced on the interactive segments (F3-G4) — kept here so
 // label + explanation share one source.
+//
+// M · the ROI segment reads "ROI", not "Motion-ROI". Four segments must
+// share one row on a 375 px phone, and the long label alone was wider than
+// the other three combined. The full term still reaches the operator twice:
+// in this segment's tooltip and as the caption on the scan box the mode
+// draws over the frame (.mv-grid-roi-label).
 export const MV_DETECTION_MODES = [
   ['off', 'Aus', 'Ganzer Frame, ein einziger Durchlauf'],
-  ['roi', 'Motion-ROI', 'Inferenz nur auf dem Bewegungs-Ausschnitt (Motion-Crop)'],
+  ['roi', 'ROI', 'Motion-ROI — Inferenz nur auf dem Bewegungs-Ausschnitt (Motion-Crop)'],
   ['2x2', '2×2', 'Frame in 2×2 Kacheln, jede einzeln geprüft — findet kleine/ferne Tiere besser'],
   ['3x3', '3×3', 'Frame in 3×3 Kacheln, jede einzeln — am genauesten, langsamer'],
 ];
@@ -91,6 +97,57 @@ function _segHtml(value) {
   ).join('');
 }
 
+// Reflect the current selection onto every segment.
+function _syncSegments(wrap, value) {
+  wrap.querySelectorAll('.mv-sim-seg').forEach((b) => {
+    const on = b.dataset.val === value;
+    b.dataset.on = on ? '1' : '0';
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+
+// Interactive variant — the live segmented control.
+// M · a visible "Modus" key rides in front of the segments. Over the frame
+// they read as video chrome, but the live control row sits BELOW the
+// picture, where four bare chips (Aus · ROI · 2×2 · 3×3) name nothing.
+function _mountSegments(wrap, getValue, setValue, opts, tipTeardowns) {
+  wrap.innerHTML =
+    `<div class="mv-sim-seg-group" role="group" aria-label="Erkennungs-Modus">` +
+    `<span class="mv-sim-ctl-k mv-sim-seg-k" aria-hidden="true">Modus</span>` +
+    `${_segHtml(getValue())}</div>`;
+  wrap.querySelectorAll('.mv-sim-seg').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.val;
+      if (!id || id === getValue()) return;
+      setValue(id);
+      _syncSegments(wrap, id);
+      if (typeof opts.onChange === 'function') opts.onChange(id);
+    });
+    // G4 · German explanation on desktop hover + touch long-press, reusing
+    // the shared overlay-toggle popover. A long-press swallows the click
+    // (no mode switch); a normal tap still switches the mode.
+    tipTeardowns.push(attachHoverAndLongPress(btn, btn.getAttribute('data-desc') || ''));
+  });
+}
+
+// Read-only variant — the recorded/weather "angewandt: X" badge, which
+// toggles the tiling grid over the stored clip.
+function _mountBadge(wrap, getValue, opts) {
+  let gridOn = false;
+  wrap.innerHTML =
+    `<button type="button" class="mv-mode-badge" aria-pressed="false" ` +
+    `title="Angewandte Kachelung — antippen für Raster">` +
+    `<span class="mv-mode-badge-k">angewandt</span>` +
+    `<span class="mv-mode-badge-v">${esc(mvModeLabel(getValue()))}</span></button>`;
+  const badge = wrap.querySelector('.mv-mode-badge');
+  badge.addEventListener('click', () => {
+    gridOn = !gridOn;
+    badge.dataset.on = gridOn ? '1' : '0';
+    badge.setAttribute('aria-pressed', String(gridOn));
+    if (typeof opts.onToggleGrid === 'function') opts.onToggleGrid(gridOn, getValue());
+  });
+}
+
 /**
  * Mount the mode indicator.
  *
@@ -108,46 +165,25 @@ export function renderModeIndicator(host, opts = {}) {
   const el = typeof host === 'string' ? byId(host) : host;
   if (!el) return null;
   let value = opts.value || 'off';
+  const getValue = () => value;
   const wrap = document.createElement('div');
   wrap.className = 'mv-mode-ind';
   wrap.dataset.interactive = opts.interactive ? '1' : '0';
   // Hover / long-press popover teardowns for the interactive segments
   // (released in teardown()); stays empty for the read-only badge.
   const tipTeardowns = [];
-
   if (opts.interactive) {
-    wrap.innerHTML = `<div class="mv-sim-seg-group" role="group" aria-label="Erkennungs-Modus">${_segHtml(value)}</div>`;
-    wrap.querySelectorAll('.mv-sim-seg').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.dataset.val;
-        if (!id || id === value) return;
-        value = id;
-        wrap.querySelectorAll('.mv-sim-seg').forEach((b) => {
-          const on = b.dataset.val === value;
-          b.dataset.on = on ? '1' : '0';
-          b.setAttribute('aria-pressed', String(on));
-        });
-        if (typeof opts.onChange === 'function') opts.onChange(value);
-      });
-      // G4 · German explanation on desktop hover + touch long-press, reusing
-      // the shared overlay-toggle popover. A long-press swallows the click
-      // (no mode switch); a normal tap still switches the mode.
-      tipTeardowns.push(attachHoverAndLongPress(btn, btn.getAttribute('data-desc') || ''));
-    });
+    _mountSegments(
+      wrap,
+      getValue,
+      (v) => {
+        value = v;
+      },
+      opts,
+      tipTeardowns,
+    );
   } else {
-    let gridOn = false;
-    wrap.innerHTML =
-      `<button type="button" class="mv-mode-badge" aria-pressed="false" ` +
-      `title="Angewandte Kachelung — antippen für Raster">` +
-      `<span class="mv-mode-badge-k">angewandt</span>` +
-      `<span class="mv-mode-badge-v">${esc(mvModeLabel(value))}</span></button>`;
-    const badge = wrap.querySelector('.mv-mode-badge');
-    badge.addEventListener('click', () => {
-      gridOn = !gridOn;
-      badge.dataset.on = gridOn ? '1' : '0';
-      badge.setAttribute('aria-pressed', String(gridOn));
-      if (typeof opts.onToggleGrid === 'function') opts.onToggleGrid(gridOn, value);
-    });
+    _mountBadge(wrap, getValue, opts);
   }
   el.appendChild(wrap);
   return {
@@ -156,11 +192,7 @@ export function renderModeIndicator(host, opts = {}) {
     setValue: (id) => {
       value = id || 'off';
       if (opts.interactive) {
-        wrap.querySelectorAll('.mv-sim-seg').forEach((b) => {
-          const on = b.dataset.val === value;
-          b.dataset.on = on ? '1' : '0';
-          b.setAttribute('aria-pressed', String(on));
-        });
+        _syncSegments(wrap, value);
       } else {
         const v = wrap.querySelector('.mv-mode-badge-v');
         if (v) v.textContent = mvModeLabel(value);

@@ -409,7 +409,11 @@
   display: block;
   position: relative;
   width: 100%;
-  padding: 4px 0 6px;
+  /* M · real side padding. With `padding: 4px 0` the strip ran edge-to-edge
+     of the viewport, so the LIVE pill sat flush against the screen border
+     and the rightmost count chips were shorn off by it. The inset also
+     matches .mv-shell-controls above it, so the whole column lines up. */
+  padding: 4px 10px 6px;
   /* J5 · lift the timeline onto a lighter surface so it reads as a distinct
      panel; top divider via inset box-shadow (depth by colour, no border). */
   background: rgba(255, 255, 255, 0.05);
@@ -423,7 +427,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: rgba(226, 232, 240, 0.6);
-  padding: 6px 10px 4px;
+  padding: 6px 0 4px;
 }
 .mv-ld-swim-heading-sub {
   text-transform: none;
@@ -608,8 +612,13 @@
 }
 .mv-ld-swim-bar {
   position: absolute;
+  /* M · right-anchored (live-swimlane.js sets the inline `right`), so a
+     chip at "now" ends exactly on the lane's right edge and grows leftward
+     — it can never overhang into the clipped overflow. */
+  left: auto;
   top: 50%;
   transform: translateY(-50%);
+  max-width: 100%;
   z-index: 1;
   display: inline-flex;
   align-items: center;

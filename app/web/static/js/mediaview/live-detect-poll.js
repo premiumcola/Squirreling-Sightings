@@ -6,7 +6,7 @@
 import { byId, esc } from '../core/dom.js';
 import { S } from './live-detect-state.js';
 import { _renderBboxOverlay } from './live-detect-bbox.js';
-import { _renderTrailsOverlay, _renderZoneMaskOverlay } from './live-detect-overlays.js';
+import { _renderTrailsOverlay } from './live-detect-overlays.js';
 import { _renderDetectionsPanel, _renderLiveSwimlane, _appendTrace, _renderTraceTab } from './live-detect-panels.js';
 import { _refreshCadenceRow } from './live-detect-diag.js';
 import { _renderDebugTab, _renderDiagPanel } from './live-detect-tabs.js';
@@ -26,7 +26,7 @@ export function _logSimDiag() {
   const imgEl = byId('lightboxImg');
   const wrap = byId('lightboxMediaWrap');
   const bboxSvg = byId('lightboxLiveOverlay');
-  const zoneSvg = byId('lightboxLiveZoneMask');
+  const trailSvg = byId('lightboxLiveTrails');
   const _rect = (el) => {
     if (!el) return '0x0';
     const r = el.getBoundingClientRect();
@@ -41,7 +41,7 @@ export function _logSimDiag() {
     `[sim-diag] bboxSvg: viewBox=${_vb(bboxSvg)} rect=${_rect(bboxSvg)} display=${_disp(bboxSvg)} z-index=${_z(bboxSvg)}`,
   );
   console.warn(
-    `[sim-diag] zoneSvg: viewBox=${_vb(zoneSvg)} rect=${_rect(zoneSvg)} display=${_disp(zoneSvg)} z-index=${_z(zoneSvg)}`,
+    `[sim-diag] trailSvg: viewBox=${_vb(trailSvg)} rect=${_rect(trailSvg)} display=${_disp(trailSvg)} z-index=${_z(trailSvg)}`,
   );
   console.warn(`[sim-diag] wrap: rect=${_rect(wrap)}`);
   console.warn(
@@ -273,7 +273,6 @@ export function _renderFrame(data) {
   S.detBuffer = S.detBuffer.filter((e) => e.ms >= cutoff);
   _renderBboxOverlay();
   _renderTrailsOverlay();
-  _renderZoneMaskOverlay();
   // SIMU-FIX-05d · append trace lines BEFORE rendering the
   // Detections tab — its Track-Ereignisse section reads from
   // `S.traceLines` and was previously seeing the PREVIOUS tick's

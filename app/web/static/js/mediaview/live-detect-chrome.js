@@ -29,9 +29,7 @@ import {
   _installLiveOverlayRefresh,
   _ensureBboxOverlay,
   _ensureTrailsOverlay,
-  _ensureZoneMaskOverlay,
   _renderTrailsOverlay,
-  _renderZoneMaskOverlay,
 } from './live-detect-overlays.js';
 import { _renderLiveSwimlane } from './live-detect-panels.js';
 import { _tick } from './live-detect-poll.js';
@@ -47,15 +45,21 @@ export function _setupLiveChrome(camId, cameraName) {
     _tracks: { tracks: [] },
   };
   // Mount the shared shell. live-detect mode → interactive mode-indicator
-  // (D4: picking Motion-ROI / 2×2 / 3×3 draws the tiling grid over the LIVE
-  // frame, "Aus" clears it) + the live swimlane region. The shell owns the
+  // (D4: picking ROI / 2×2 / 3×3 draws the tiling grid over the LIVE frame,
+  // "Aus" clears it) + the live swimlane region. The shell owns the
   // overlay-toggle pills + the status-legend band; onModeChange /
   // onOverlayChange wire them back into the live data path. No shell fafold —
   // _mountPanels owns the live "Trace" fold (inside the Detections tab).
+  //
+  // M · only the two DETECTION layers are offered here. Zone / mask polygons
+  // have no bearing on what the simulator computes (the test-detection
+  // endpoint gates on the score threshold + the object filter, never on
+  // geometry), so over a 220 px-tall phone stage they were four chips of
+  // clutter answering a question the cam-edit zone editor already answers.
   const shell = mountMediaView({
     mode: 'live-detect',
     item,
-    overlays: { bboxes: true, trails: true, zones: true, masks: true },
+    overlays: { bboxes: true, trails: true },
     panels: {}, // live uses its own persistent 'ld' tabs, not the shell tabs
     showFineFold: false,
     detMode: S.session.detMode || 'off',
@@ -71,7 +75,6 @@ export function _setupLiveChrome(camId, cameraName) {
         S.overlays[id] = on;
         _renderBboxOverlay();
         _renderTrailsOverlay();
-        _renderZoneMaskOverlay();
       },
     },
   });
@@ -84,7 +87,7 @@ export function _setupLiveChrome(camId, cameraName) {
   S.session.shell = shell;
 
   // Reparent the legacy media wrap into the shell frame — the snapshot <img>
-  // + the bbox/trails/zonemask overlays live inside it, so the tick loop +
+  // + the bbox/trails overlays live inside it, so the tick loop +
   // painters keep working unchanged (overlays fall back to #lightboxMediaWrap
   // when no 5-zone skeleton is present).
   const frame = shell.root.querySelector('[data-slot="frame"]');
@@ -134,13 +137,11 @@ export function _setupLiveChrome(camId, cameraName) {
   }
   _ensureBboxOverlay();
   _ensureTrailsOverlay();
-  _ensureZoneMaskOverlay();
 
   // Stream Sub/Main toggle → the shell's reserved Stream slot (D3).
   _mountStreamToggle(shell);
 
-  // Paint zones/masks + an empty swimlane before the first tick lands.
-  _renderZoneMaskOverlay();
+  // Paint an empty swimlane before the first tick lands.
   _renderLiveSwimlane();
 }
 

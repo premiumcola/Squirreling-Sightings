@@ -527,10 +527,33 @@ class MainLoopMixin:
                 # New schedule_record dict gates by time window; the
                 # recording_enabled toggle is the master record on/off.
                 if has_motion and not self._recording:
+                    # Both gates below used to `continue` in total silence.
+                    # From the outside that is indistinguishable from "the
+                    # camera saw nothing": no clip, no event, no library
+                    # entry, no log. A user who walks past a camera at
+                    # midday with a night-only recording schedule gets
+                    # exactly the same evidence as a broken detector.
+                    # Throttled to one line per minute per reason so a
+                    # busy scene cannot flood the log.
+                    _block = None
                     if not self.cfg.get("recording_enabled", True):
-                        time.sleep(interval)
-                        continue
-                    if not is_schedule_window_active(self.cfg.get("schedule_record") or {}):
+                        _block = "recording_enabled=False"
+                    elif not is_schedule_window_active(self.cfg.get("schedule_record") or {}):
+                        _sched = self.cfg.get("schedule_record") or {}
+                        _block = (
+                            f"schedule_record window={_sched.get('from', '?')}"
+                            f"→{_sched.get('to', '?')} inactive"
+                        )
+                    if _block is not None:
+                        _now_mono = time.monotonic()
+                        if _now_mono - getattr(self, "_rec_block_logged_at", 0.0) > 60.0:
+                            self._rec_block_logged_at = _now_mono
+                            log.info(
+                                "[trigger][cam:%s] motion seen (labels=%s) but NOT recording: %s",
+                                self.camera_id,
+                                ",".join(sorted(set(labels))) or "—",
+                                _block,
+                            )
                         time.sleep(interval)
                         continue
 

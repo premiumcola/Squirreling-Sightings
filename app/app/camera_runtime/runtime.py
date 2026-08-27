@@ -175,6 +175,10 @@ class CameraRuntime(
         # which only ever recorded a successful rescue.
         self._roi_rescue_attempts: int = 0
         self._roi_rescue_hits: int = 0
+        # Throttle for the "motion seen but not recording" line — one per
+        # minute per camera, so a busy scene cannot flood the log while
+        # still making a silently-blocking gate visible.
+        self._rec_block_logged_at: float = 0.0
         # Video recording state (ring pre-buffer + session tracking)
         self._pre_buffer: deque = deque(
             maxlen=300

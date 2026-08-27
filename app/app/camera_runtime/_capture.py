@@ -48,6 +48,23 @@ from ._consts import (
     log_cam,
     log_tl,
 )
+from ._frame_reader import DrainedCapture
+
+# How far behind live the decoder may fall before the stream gets
+# dropped and reopened. The reader keeps the decode queue empty, so a lag
+# this large means decoding itself cannot keep up — and an inter-coded
+# stream cannot be fast-forwarded, so reading harder never recovers it.
+# Reopening snaps straight back to live.
+_LAG_RECONNECT_S = 5.0
+
+# Minimum gap between two lag-triggered reconnects, so a camera that is
+# permanently too expensive to decode does not reconnect-loop.
+_LAG_RECONNECT_COOLDOWN_S = 30.0
+
+# Wait for a replacement after discarding a pink frame. A pink frame
+# proves the stream IS delivering, so the full read timeout would only
+# stall the loop; the next frame is one frame-interval away.
+_PINK_RETRY_TIMEOUT_S = 1.0
 
 
 class CaptureMixin:
@@ -55,6 +72,12 @@ class CaptureMixin:
 
     Mixin for CameraRuntime. Methods access shared state via `self.*`
     (frame buffers, lock, config, etc.) which live on the concrete class.
+
+    Both streams are drained by a thread of their own so what the
+    pipeline analyses is always the CURRENT scene: the main stream via
+    :class:`DrainedCapture`, the sub-stream via :meth:`_preview_loop`.
+    Without that, ``read()`` walks a FIFO backlog and the picture drifts
+    minutes behind reality — see :mod:`._frame_reader`.
     """
 
     @staticmethod
@@ -91,7 +114,6 @@ class CaptureMixin:
             # fired uselessly. See rtsp_options for the full story.
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = capture_options(extra="hwaccel;none")
             cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG, timeout_params())
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             _RES_MAP = {"720p": (1280, 720), "1080p": (1920, 1080), "4k": (3840, 2160)}
             _res = self.cfg.get("resolution", "auto")
             if _res in _RES_MAP:
@@ -99,8 +121,18 @@ class CaptureMixin:
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, _w)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, _h)
             if not cap.isOpened():
+                with contextlib.suppress(Exception):
+                    cap.release()
                 raise RuntimeError(f"Kamera {self.camera_id}: RTSP konnte nicht geöffnet werden")
-            self.capture = cap
+            # Retire the previous handle first — _grab_frame reopens on
+            # `not isOpened()` without releasing, which leaked one FFmpeg
+            # context per reconnect.
+            self._close_capture()
+            # Newest-frame-wins. A bare handle returns the OLDEST queued
+            # frame, and CAP_PROP_BUFFERSIZE is silently ignored by the
+            # FFmpeg backend, so a consumer slower than the camera walks
+            # an ever-growing backlog. See _frame_reader.
+            self.capture = DrainedCapture(cap, self.camera_id)
             # Mark the RTSP-open moment so the [cam:<id>] RTSP opened line
             # can include the first-frame latency. Picked up by _loop()
             # the next time a fresh frame is decoded.
@@ -113,8 +145,12 @@ class CaptureMixin:
             if sub_url:
                 try:
                     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = capture_options()
+                    # No BUFFERSIZE call here either — it is a no-op on the
+                    # FFmpeg backend. The sub-stream stays current because
+                    # _preview_loop below reads it on its own thread as fast
+                    # as it arrives, which is the same drain the main stream
+                    # gets from DrainedCapture.
                     pcap = cv2.VideoCapture(sub_url, cv2.CAP_FFMPEG, timeout_params())
-                    pcap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                     with self._preview_cap_lock:
                         old = self.preview_cap
                         if pcap.isOpened():
@@ -139,7 +175,10 @@ class CaptureMixin:
             self.connect_time = time.time()
             self.prev_gray = None  # reset motion state on reconnect
         else:
-            self.capture = None
+            # Snapshot (HTTP) camera: no handle to drain, and any handle
+            # left over from an earlier RTSP config must not keep a
+            # reader thread alive.
+            self._close_capture()
 
     def _preview_loop(self):
         """Dedicated thread: sole reader of self.preview_cap (sub-stream).
@@ -187,11 +226,77 @@ class CaptureMixin:
             except Exception:
                 time.sleep(0.2)
 
+    def _close_capture(self) -> None:
+        """Retire the current main-stream handle, if any."""
+        cap = self.capture
+        self.capture = None
+        if cap is None:
+            return
+        with contextlib.suppress(Exception):
+            cap.release()
+
+    def _note_capture_age(self, captured_ts: float) -> None:
+        """Record when the frame we are about to return arrived.
+
+        ``self.frame_ts`` is stamped by the main loop when the frame is
+        DECODED, so a minutes-old picture carries a fresh timestamp and
+        every freshness check built on it passes. This is the honest
+        number: the wall-clock moment the frame came off the wire, with
+        the decode queue provably empty behind it.
+        """
+        with self.lock:
+            self._frame_capture_ts = float(captured_ts)
+        lag = self.capture_lag_s()
+        if lag is not None and lag > _LAG_RECONNECT_S:
+            self._request_lag_reconnect(lag)
+
+    def _request_lag_reconnect(self, lag_s: float) -> None:
+        """Ask the main loop to reopen a stream that fell behind live."""
+        now = time.time()
+        if now - getattr(self, "_lag_reconnect_ts", 0.0) < _LAG_RECONNECT_COOLDOWN_S:
+            return
+        self._lag_reconnect_ts = now
+        log_cam.warning(
+            "[cam:%s] decoder %.1fs behind live — forcing reconnect",
+            self.camera_id,
+            lag_s,
+        )
+        self._force_reconnect = True
+
+    def capture_lag_s(self) -> float | None:
+        """Seconds the decoder output trails real time, or None when the
+        backend reports no usable presentation timestamps."""
+        cap = self.capture
+        return cap.lag_s if isinstance(cap, DrainedCapture) else None
+
+    def latest_main_frame(self):
+        """``(frame, arrival_ts)`` for the newest main-stream frame.
+
+        Served straight from the reader slot, so a caller that only wants
+        to LOOK at the scene is not held to the main loop's
+        frame_interval cadence. Snapshot (HTTP) cameras have no reader
+        and fall back to the last stored frame.
+        """
+        cap = self.capture
+        if isinstance(cap, DrainedCapture):
+            frame, ts = cap.peek()
+            if frame is not None:
+                return frame, ts
+        with self.lock:
+            ts = float(getattr(self, "_frame_capture_ts", 0.0) or 0.0)
+            return self.frame, (ts or float(self.frame_ts or 0.0))
+
     def _grab_frame(self):
         if self.cfg.get("rtsp_url"):
             if self.capture is None or not self.capture.isOpened():
                 self._open_capture()
-            ok, frame = self.capture.read()
+            # newer_than pins this to a frame we have not served before.
+            # Without it a stream that went quiet would keep handing the
+            # same frame back, every grab would look successful, and the
+            # main loop's 20 s silence watchdog would never fire.
+            ok, frame, ts = self.capture.read_latest(
+                newer_than=getattr(self, "_frame_capture_ts", 0.0)
+            )
             if not ok or frame is None:
                 raise RuntimeError(f"Kamera {self.camera_id}: Frame lesen fehlgeschlagen")
             # Reject H.265 pink/magenta corruption frames (hardware decode artifact)
@@ -200,15 +305,23 @@ class CaptureMixin:
             if r > b * 2.5 and r > 150:
                 log.debug("[%s] Pink frame discarded (R=%.0f B=%.0f)", self.camera_id, r, b)
                 for _ in range(3):
-                    ok2, frame2 = self.capture.read()
+                    # newer_than pins each retry to a frame the reader has
+                    # not served yet — without it the slot would hand back
+                    # the same pink frame three times.
+                    ok2, frame2, ts2 = self.capture.read_latest(
+                        newer_than=ts, timeout=_PINK_RETRY_TIMEOUT_S
+                    )
                     if ok2 and frame2 is not None:
+                        ts = ts2
                         r2 = float(frame2[:, :, 2].mean())
                         b2 = float(frame2[:, :, 0].mean())
                         if not (r2 > b2 * 2.5 and r2 > 150):
+                            self._note_capture_age(ts2)
                             return frame2
                 raise RuntimeError(
                     f"Kamera {self.camera_id}: Frame nach Pink-Discard fehlgeschlagen"
                 )
+            self._note_capture_age(ts)
             return frame
         url = self.cfg.get("snapshot_url")
         auth = None
@@ -219,6 +332,7 @@ class CaptureMixin:
         frame = cv2.imdecode(np.frombuffer(resp.content, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise RuntimeError(f"Kamera {self.camera_id}: Snapshot lesen fehlgeschlagen")
+        self._note_capture_age(time.time())
         return frame
 
     def _is_frame_valid(self, frame) -> bool:

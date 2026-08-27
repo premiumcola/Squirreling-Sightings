@@ -1,12 +1,31 @@
-# Fallback Coral image — Python 3.9 so the pycoral wheel installs.
+# Coral Edge TPU image — the stack Google actually builds and tests.
 #
-# Prefer the standard 3.11 image: detectors/_edgetpu.py reaches the same
-# TPU through a tflite-runtime delegate, which needs no pycoral. This
-# file exists for the case where the delegate route does not engage and
-# the canonical pycoral binding is genuinely required.
+# Why this exists: on the 3.11 image every compiled model fails at
+# invoke time with
+#
+#     Encountered an unresolved custom op. Did you miss a custom op or
+#     delegate? Node number N (EdgeTpuDelegateForCustomOp) failed to
+#     invoke.
+#
+# `load_delegate` succeeds, so the stick is present and libedgetpu is
+# loadable — the mismatch is tflite-runtime 2.14 against a libedgetpu
+# the Coral project never paired it with. Four different models failing
+# at four different node numbers rules out the models.
+#
+# The combination Google ships, tests, and pins to each other:
+#
+#     Python 3.9 · libedgetpu1-std · tflite-runtime 2.5.0.post1 · pycoral 2.0
+#
+# pycoral 2.0.0 hard-pins `tflite-runtime==2.5.0.post1` in its own
+# metadata, and publishes wheels only for cp35–cp39 — which is exactly
+# why the main 3.11 image cannot have it and needs this second image.
 #
 # Build context is app/ (same as docker/Dockerfile), NOT the repo root.
-FROM python:3.9-slim-bullseye
+#
+# Base is bookworm, not bullseye: Debian 11 leaves LTS on 2026-08-31,
+# after which its suites move to archive.debian.org and `apt-get update`
+# on a bullseye base starts failing the build.
+FROM python:3.9-slim-bookworm
 
 ARG BUILD_COMMIT=dev
 ARG BUILD_DATE=unknown
@@ -18,29 +37,74 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BUILD_DATE=$BUILD_DATE \
     BUILD_COUNT=$BUILD_COUNT
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Base system deps + the Coral apt repo for libedgetpu1-std. Unlike
+# docker/Dockerfile this is NOT best-effort: an image without
+# libedgetpu.so.1 cannot do the one thing this image is for, and would
+# boot happily on CPU while looking healthy.
+#
+# -std, not -max: -max clocks the TPU higher, runs hot on a passively
+# cooled USB stick, and prompts via debconf on install.
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ffmpeg libglib2.0-0 libsm6 libxext6 libgl1 curl gnupg ca-certificates usbutils netcat-openbsd tzdata iputils-ping \
- && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/coral-edgetpu.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/coral-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" > /etc/apt/sources.list.d/coral-edgetpu.list \
+ && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+     | gpg --dearmor -o /usr/share/keyrings/coral-edgetpu.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/coral-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" \
+     > /etc/apt/sources.list.d/coral-edgetpu.list \
  && apt-get update \
- && apt-get install -y --no-install-recommends libedgetpu1-std \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libedgetpu1-std \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Install Python deps first — layer is only invalidated when
+# requirements.txt changes.
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# tflite-runtime pinned to match docker/Dockerfile — compiled against the
-# NumPy 1 C-API (hence the numpy<2 pin in requirements.txt) and matching
-# the opset of the shipped COCO SSD MobileNet v2 bundle.
-RUN pip install --no-cache-dir tflite-runtime==2.14.0
+# The Coral stack, resolved in ONE pip pass so the pins settle together.
+#
+# tflite-runtime is 2.5.0.post1, not 2.5.0 — the Coral repo publishes no
+# cp39/linux_x86_64 wheel for plain 2.5.0, only for .post1, and pycoral
+# 2.0.0's own metadata pins that exact version anyway.
+#
+# numpy is restated at the requirements.txt pin on purpose. pycoral asks
+# only for `numpy>=1.16.0` with no upper bound, so left alone the
+# resolver may pull numpy 2.x — and tflite-runtime 2.5.0.post1 is a C
+# extension built against the NumPy 1 C-API, which under NumPy 2 fails
+# at import with "_ARRAY_API not found". Restating the pin in the same
+# invocation makes the ABI contract explicit instead of a lucky
+# side effect of install order. NumPy 1.26.4 is safe in the other
+# direction: within the 1.x series the C ABI is forward compatible, so
+# an extension compiled against 1.19 headers runs on 1.26.
+#
+# No `|| true` anywhere below. A silent fallback here would produce an
+# image that looks fine and runs on CPU — the exact failure this image
+# exists to escape.
+RUN pip install --no-cache-dir \
+        --extra-index-url https://google-coral.github.io/py-repo/ \
+        "numpy==1.26.4" \
+        "tflite-runtime==2.5.0.post1" \
+        "pycoral~=2.0"
 
-# The whole point of this image: on 3.9 the pycoral wheel exists, so a
-# failure here is fatal rather than best-effort. Falling through to CPU
-# would make this image pointless while looking like it worked.
-RUN pip install --no-cache-dir --extra-index-url https://google-coral.github.io/py-repo "pycoral~=2.0"
+# Prove the stack imports before the image is allowed to exist. pip can
+# report success while the result is unusable at runtime: a NumPy ABI
+# break, or a pycoral wheel whose _pywrap_coral.so cannot resolve
+# libedgetpu.so.1. Both surface here, at build time, as a red CI job
+# rather than as a CPU fallback in production.
+#
+# list_edge_tpus() is called but NOT asserted non-empty — the CI runner
+# has no Coral stick attached. That it returns at all proves the native
+# library loaded.
+RUN python -c "\
+import numpy, tflite_runtime.interpreter as tflite;\
+from pycoral.utils.edgetpu import list_edge_tpus;\
+print('numpy', numpy.__version__);\
+print('tflite_runtime', tflite.__name__, 'ok');\
+print('edge tpus visible at build time:', list_edge_tpus())"
 
+# Copy app code after deps so code changes don't re-run pip. This set is
+# kept identical to docker/Dockerfile — an earlier revision of this file
+# omitted `COPY web/`, which ships an image with no user interface.
 COPY app/ /app/app/
 COPY web/ /app/web/
 COPY config/ /app/config/

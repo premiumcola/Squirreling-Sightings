@@ -52,14 +52,16 @@ services:
       # `os.getenv("FLAP_DIAG")` check returns "" and short-circuits.
       - FLAP_DIAG=${FLAP_DIAG:-}
 
-  # Coral TPU variant — uncomment and use instead of above if you have a Coral USB TPU
+  # Coral TPU variant — Python 3.9 + pycoral 2.0, the stack Google tests
+  # against libedgetpu. Use INSTEAD OF the service above (both claim
+  # container_name and port 8099, so exactly one may be active).
+  #
+  # No build: key — the server never builds. The image comes from ghcr,
+  # published by the build-push-coral job in .github/workflows/build.yml.
+  # Full switch-over and rollback procedure: docs/coral-tpu-image.md
+  #
   # squirreling-sightings-coral:
-  #   build:
-  #     context: ./app
-  #     dockerfile: docker/Dockerfile.coral
-  #     cache_from:
-  #       - squirreling-sightings-coral:latest
-  #   image: squirreling-sightings-coral
+  #   image: ghcr.io/premiumcola/squirreling-sightings:coral
   #   container_name: squirreling-sightings
   #   restart: unless-stopped
   #   ports:
@@ -72,3 +74,5 @@ services:
   #     - /dev/bus/usb:/dev/bus/usb
   #   environment:
   #     - TZ=Europe/Berlin
+  #     - OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp|timeout;5000000
+  #     - FLAP_DIAG=${FLAP_DIAG:-}

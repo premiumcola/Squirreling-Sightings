@@ -31,6 +31,7 @@ from app.camera_runtime._recording._stages import (
     STAGE_STATUS,
     annotate_stage,
     is_pending,
+    set_clip_stage,
     stage_age_s,
     stage_of,
     stall_ceiling_s,
@@ -176,6 +177,59 @@ def test_a_legacy_pending_event_gets_one_clip_length_of_grace():
     assert annotate_stage(dict(ev), NOW, 120)["stage_stalled"] is False
     old = _ev(status="processing", time=(NOW - timedelta(seconds=1000)).isoformat())
     assert annotate_stage(old, NOW, 120)["stage_stalled"] is True
+
+
+# ── set_clip_stage ─────────────────────────────────────────────────────────
+class _FakeStore:
+    def __init__(self, event=None):
+        self.event = event
+        self.writes = []
+
+    def get_event(self, _cam, _eid):
+        return dict(self.event) if self.event is not None else None
+
+    def update_event(self, cam, eid, payload):
+        self.writes.append((cam, eid, payload))
+        self.event = payload
+        return True
+
+
+def test_setting_a_stage_writes_stage_status_and_timestamp():
+    store = _FakeStore({"event_id": "e", "status": "recording"})
+    set_clip_stage(store, "cam", "e", STAGE_ENCODING)
+    (_cam, _eid, payload) = store.writes[0]
+    assert payload["stage"] == STAGE_ENCODING
+    assert payload["status"] == "processing", "the legacy coarse field must follow along"
+    assert stage_age_s(payload, datetime.now()) is not None
+
+
+def test_a_store_that_blows_up_does_not_take_the_encode_down():
+    """The stage announcement is decoration. Losing it must never cost
+    the clip."""
+
+    class _Broken:
+        def get_event(self, *_a):
+            raise OSError("disk gone")
+
+    set_clip_stage(_Broken(), "cam", "e", STAGE_ENCODING)  # must not raise
+
+
+def test_the_recorder_announces_every_transition():
+    """Three call sites, one per stage change. A dropped one leaves the
+    tile stuck on the previous phase for the rest of the clip."""
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parent.parent
+        / "app"
+        / "camera_runtime"
+        / "_recording"
+        / "__init__.py"
+    ).read_text(encoding="utf-8")
+    assert '"stage": STAGE_RECORDING' in src, "the stub must be born knowing its stage"
+    assert "_set_clip_stage(event_id, STAGE_QUEUED)" in src
+    assert "_set_clip_stage(event_id, STAGE_ENCODING)" in src
+    assert "STAGE_READY if video_url else STAGE_FAILED" in src
 
 
 def test_no_progress_percentage_is_ever_invented():

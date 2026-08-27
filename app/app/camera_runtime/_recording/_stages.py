@@ -42,8 +42,13 @@ past the stage's own ceiling is the honest tell.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Optional
+
+# Same channel the rest of the camera_runtime package logs on, so the
+# stage lines land in the ring buffer with everything else about the cam.
+log = logging.getLogger("app.camera_runtime")
 
 STAGE_RECORDING = "recording"
 STAGE_QUEUED = "queued"
@@ -99,6 +104,28 @@ def stall_ceiling_s(stage: str, clip_max_s: int = DEFAULT_CLIP_MAX_S) -> int:
     if stage in (STAGE_ENCODING, STAGE_PROCESSING):
         return _ENCODE_STALL_S
     return 0
+
+
+def set_clip_stage(store, camera_id: str, event_id: str, stage: str) -> None:
+    """Move an in-flight clip to ``stage`` and stamp when it got there.
+
+    One event-JSON write per transition — three per clip in total, which
+    is what buys the library an honest "where is it right now" without a
+    progress poller hammering the store. ``status`` keeps its old coarse
+    values so every consumer that predates ``stage`` sees exactly what
+    it saw before.
+
+    Best-effort by design: a clip that fails to advertise its stage must
+    still finish encoding.
+    """
+    try:
+        ev = store.get_event(camera_id, event_id) or {}
+        ev["stage"] = stage
+        ev["status"] = STAGE_STATUS.get(stage, ev.get("status") or "processing")
+        ev["stage_since"] = datetime.now().isoformat(timespec="seconds")
+        store.update_event(camera_id, event_id, ev)
+    except Exception as e:
+        log.debug("[%s] stage update (%s) failed: %s", camera_id, stage, e)
 
 
 def stage_of(event: dict) -> str:

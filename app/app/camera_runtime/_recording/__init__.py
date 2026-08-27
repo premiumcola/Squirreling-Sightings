@@ -42,6 +42,7 @@ from ._stages import (
     STAGE_READY,
     STAGE_RECORDING,
     STAGE_STATUS,
+    set_clip_stage,
 )
 from .._consts import (
     _FFMPEG_AVAILABLE,
@@ -139,23 +140,8 @@ class RecordingMixin(PublishMixin):
             return False
 
     def _set_clip_stage(self, event_id: str, stage: str) -> None:
-        """Move an in-flight clip to ``stage`` and stamp when it got there.
-
-        One event-JSON write per transition — three per clip in total,
-        which is what buys the library an honest "where is it right now"
-        without a progress poller hammering the store. ``status`` keeps
-        its old coarse values so every consumer that predates ``stage``
-        sees exactly what it saw before. Best-effort: a clip that fails
-        to advertise its stage must still finish encoding.
-        """
-        try:
-            ev = self.store.get_event(self.camera_id, event_id) or {}
-            ev["stage"] = stage
-            ev["status"] = STAGE_STATUS.get(stage, ev.get("status") or "processing")
-            ev["stage_since"] = datetime.now().isoformat(timespec="seconds")
-            self.store.update_event(self.camera_id, event_id, ev)
-        except Exception as e:
-            log.debug("[%s] stage update (%s) failed: %s", self.camera_id, stage, e)
+        """Announce which phase this clip is in. See ``_stages.py``."""
+        set_clip_stage(self.store, self.camera_id, event_id, stage)
 
     def _write_recording_event_stub(
         self, event_id: str, meta: dict, start_time: datetime, status: str = "recording"

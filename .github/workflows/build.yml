@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
     tags: ['v*.*.*']
+  workflow_dispatch:
 
 concurrency:
   group: ghcr-${{ github.ref }}
@@ -65,3 +66,65 @@ jobs:
             BUILD_COUNT=${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Second image: Python 3.9 + pycoral 2.0 + tflite-runtime 2.5.0.post1,
+  # the stack Google tests against libedgetpu. Kept a separate job so a
+  # Coral build failure can never block or overwrite :latest.
+  #
+  # Every tag it produces is namespaced with `coral` — there is no tag
+  # here that the build-push job also emits, so the two images cannot
+  # collide in the registry.
+  build-push-coral:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build metadata
+        id: bi
+        run: |
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)"  >> "$GITHUB_OUTPUT"
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=coral,enable={{is_default_branch}}
+            type=semver,pattern=coral-{{version}}
+            type=sha,format=short,prefix=coral-
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          file: ./app/docker/Dockerfile.coral
+          platforms: linux/amd64
+          push: true
+          pull: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_COMMIT=${{ steps.bi.outputs.commit }}
+            BUILD_DATE=${{ steps.bi.outputs.date }}
+            BUILD_COUNT=${{ github.run_number }}
+          # Own cache scope — sharing the default scope with build-push
+          # would have the two images evicting each other every run.
+          cache-from: type=gha,scope=coral
+          cache-to: type=gha,mode=max,scope=coral

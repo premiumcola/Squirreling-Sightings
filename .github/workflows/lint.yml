@@ -33,6 +33,33 @@ jobs:
         working-directory: app
         run: pytest tests/ -q
 
+  py39:
+    # The Coral image runs Python 3.9 (pycoral publishes no wheel above
+    # it), so one tree has to serve two interpreters. test_py39_compat.py
+    # guards this by scanning the AST — but it runs UNDER 3.11, so it is
+    # a proxy, not the thing itself. This job is the thing itself: a real
+    # 3.9 interpreter compiling every module.
+    #
+    # Cheap on purpose. compileall catches syntax and grammar, which is
+    # the class of breakage that would otherwise surface as a container
+    # restart-loop on the operator's box with no local reproduction.
+    # It cannot catch a runtime-only break (a 3.11-only stdlib argument
+    # on a code path nobody imports at compile time) — the AST guard
+    # covers the known names there, and the image's own build-time import
+    # smoke covers the rest.
+    name: Python 3.9 floor (Coral image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Compile every module on 3.9
+        run: python -m compileall -q app/app app/scripts
+
   python:
     name: Python (ruff + mypy)
     runs-on: ubuntu-latest

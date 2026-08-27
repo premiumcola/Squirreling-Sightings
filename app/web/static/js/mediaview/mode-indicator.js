@@ -22,9 +22,15 @@ import { attachHoverAndLongPress } from '../core/tooltip.js';
 // whole-frame single-shot. The title is the German hover / long-press
 // explanation surfaced on the interactive segments (F3-G4) — kept here so
 // label + explanation share one source.
+//
+// M · the ROI segment reads "ROI", not "Motion-ROI". Four segments must
+// share one row on a 375 px phone, and the long label alone was wider than
+// the other three combined. The full term still reaches the operator twice:
+// in this segment's tooltip and as the caption on the scan box the mode
+// draws over the frame (.mv-grid-roi-label).
 export const MV_DETECTION_MODES = [
   ['off', 'Aus', 'Ganzer Frame, ein einziger Durchlauf'],
-  ['roi', 'Motion-ROI', 'Inferenz nur auf dem Bewegungs-Ausschnitt (Motion-Crop)'],
+  ['roi', 'ROI', 'Motion-ROI — Inferenz nur auf dem Bewegungs-Ausschnitt (Motion-Crop)'],
   ['2x2', '2×2', 'Frame in 2×2 Kacheln, jede einzeln geprüft — findet kleine/ferne Tiere besser'],
   ['3x3', '3×3', 'Frame in 3×3 Kacheln, jede einzeln — am genauesten, langsamer'],
 ];
@@ -116,7 +122,14 @@ export function renderModeIndicator(host, opts = {}) {
   const tipTeardowns = [];
 
   if (opts.interactive) {
-    wrap.innerHTML = `<div class="mv-sim-seg-group" role="group" aria-label="Erkennungs-Modus">${_segHtml(value)}</div>`;
+    // M · a visible "Modus" key. Over the frame the segments read as
+    // video chrome, but the live control row sits below the picture where
+    // four bare chips (Aus · ROI · 2×2 · 3×3) name nothing — the key is
+    // what tells the operator the row switches the detection mode.
+    wrap.innerHTML =
+      `<div class="mv-sim-seg-group" role="group" aria-label="Erkennungs-Modus">` +
+      `<span class="mv-sim-ctl-k mv-sim-seg-k" aria-hidden="true">Modus</span>` +
+      `${_segHtml(value)}</div>`;
     wrap.querySelectorAll('.mv-sim-seg').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.dataset.val;

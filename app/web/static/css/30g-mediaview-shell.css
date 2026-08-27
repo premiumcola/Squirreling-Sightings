@@ -147,32 +147,50 @@
   white-space: nowrap;
   pointer-events: none;
 }
-/* Overlay-toggle pills — pinned top-LEFT inside the stage (sim-player
-   layout). Wraps on narrow stages; collapses when a mode mounts none. */
+/* ── Stage chrome + the control row below it (M · rewritten) ──────────
+   Two absolutely-positioned corner clusters over one stage is the layout
+   that kept colliding on iPhone: each sizes to its own content with no
+   shared width budget, so on a 390 px stage the ~360 px right cluster slid
+   underneath the left one and the stage's overflow:hidden sheared its
+   leading chips off mid-word. New rule: at most ONE pinned cluster per
+   stage, and the pinning lives on a `.mv-shell-stage >` child selector so
+   the same block reads as a plain flex row wherever else it is mounted.
+
+   · toggles  — the view-layer pills (what do I see on THIS frame). Stay
+                pinned top-left; capped to the stage width, wrapping.
+   · topright — Stream + detection mode (what does the NEXT tick compute).
+                Read-only modes keep the single "angewandt: X" badge over
+                the frame; live relocates the cluster into .mv-shell-
+                controls below the stage (shell.js _relocateControls). */
 .mv-shell-toggles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mv-shell-stage > .mv-shell-toggles {
   position: absolute;
   top: 6px;
   left: 8px;
   z-index: 18;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   max-width: calc(100% - 16px);
 }
 .mv-shell-toggles:empty {
   display: none;
 }
-/* Stream-selector + mode-indicator cluster — pinned top-RIGHT inside the
-   stage. The Stream slot is reserved (empty until live-detect migrates in
-   F); :empty collapses it so the gap doesn't show before then. */
 .mv-shell-topright {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.mv-shell-stage > .mv-shell-topright {
   position: absolute;
   top: 6px;
   right: 8px;
   z-index: 18;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  max-width: calc(100% - 16px);
+  justify-content: flex-end;
 }
 .mv-shell-streamslot:empty {
   display: none;
@@ -180,6 +198,84 @@
 .mv-shell-modeind {
   display: inline-flex;
   align-items: center;
+}
+
+/* Control row directly under the stage — the live Stream selector + the
+   detection-mode segments. Wraps rather than scrolling so no control can
+   hide off-screen, and collapses via :empty for every mode that keeps its
+   chrome on the frame. */
+.mv-shell-controls {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+.mv-shell-controls:empty {
+  display: none;
+}
+.mv-shell-controls > .mv-shell-topright {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: space-between;
+}
+/* The four mode segments read as ONE segmented control: a single soft
+   track behind them (depth by colour, no border line) instead of four
+   loose chips. Kept ungrouped inside the stage so the read-only badge
+   isn't given a track it doesn't need. */
+.mv-shell-topright .mv-sim-seg-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.mv-shell-controls .mv-sim-seg-group {
+  flex-wrap: nowrap;
+  padding: 0 4px 0 2px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.mv-sim-seg-k {
+  padding: 0 4px 0 8px;
+  white-space: nowrap;
+}
+/* Segmented-control read in the control row: OFF segments sit bare on the
+   shared track, only the active one is a filled chip. Off-frame there is
+   no video to punch through, so the dark-glass surface (which would be
+   dark-on-dark against the #0b0f17 panel) drops out entirely. */
+.mv-shell-controls .mv-sim-seg .mv-sim-ctl-chip {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: rgba(226, 232, 240, 0.72);
+}
+.mv-shell-controls .mv-sim-seg[data-on='1'] .mv-sim-ctl-chip {
+  background: rgba(56, 189, 248, 0.42);
+  color: #f0f9ff;
+  box-shadow: none;
+}
+/* The Stream selector is a stand-alone chip, not part of the segment
+   track — it gets its own lifted surface so it never reads dark-on-dark. */
+.mv-shell-controls .mv-sim-ctl .mv-sim-ctl-chip {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (hover: hover) {
+  .mv-shell-controls .mv-sim-ctl:hover .mv-sim-ctl-chip {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    box-shadow: none;
+  }
+  .mv-shell-controls .mv-sim-seg:hover .mv-sim-ctl-chip {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    box-shadow: none;
+  }
+  .mv-shell-controls .mv-sim-seg[data-on='1']:hover .mv-sim-ctl-chip {
+    background: rgba(56, 189, 248, 0.55);
+    color: #f0f9ff;
+  }
 }
 
 /* G2 · Stream selector + mode segments dark-glass chips. The F migration

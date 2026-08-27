@@ -105,6 +105,8 @@ function _buildTabs(panels, panelRenderers, item) {
 //   stage    — frame + media + overlay layers, tiling grid, overlay-
 //              toggle pills pinned top-left, Stream+mode cluster (with a
 //              reserved Stream-selector slot) pinned top-right.
+//   controls — below the stage; empty (and collapsed) unless a mode moves
+//              chrome down here. See _relocateControls.
 //   legendband — inline status legend + class legend + re-trigger pill,
 //                directly below the stage (collapses via :empty).
 //   playbar  — recorded/timelapse scrubber + per-class swimlane, or the
@@ -119,11 +121,31 @@ const _SHELL_HTML =
   `<div class="mv-shell-topright" data-slot="topright">` +
   `<div class="mv-shell-streamslot" data-slot="stream"></div>` +
   `<div class="mv-shell-modeind" data-slot="modeind"></div></div></div>` +
+  `<div class="mv-shell-controls" data-slot="controls"></div>` +
   `<div class="mv-shell-legendband" data-slot="legendband"></div>` +
   `<div class="mv-shell-playbar" data-slot="playbar"></div>` +
   `<div class="mv-shell-panels" data-slot="panels">` +
   `<div class="mv-shell-tabs" data-slot="tabs"></div>` +
   `<div class="mv-shell-fafold" data-slot="fafold"></div></div>`;
+
+// M · the interactive Stream + detection-mode cluster does NOT stay pinned
+// over the picture. Pinned top-left (overlay toggles) and pinned top-right
+// (Stream + four mode segments) are two absolutely-positioned boxes in the
+// same corner strip with no shared width budget: on a 390 px iPhone stage
+// the right cluster is ~360 px wide on its own, so it slid underneath the
+// left one and got its leading chips clipped by the stage's overflow.
+// They are also different KINDS of control — the toggles change what you
+// see on the current frame, Stream/Modus change what the NEXT tick
+// computes. Moving the settings cluster into its own row directly below
+// the stage makes the collision structurally impossible (siblings in
+// normal flow, not two absolute boxes) and gives it real 44 px targets.
+// Read-only modes keep their single "angewandt: 2×2" badge over the frame.
+function _relocateControls(root, interactive) {
+  if (!interactive) return;
+  const controls = root.querySelector('[data-slot="controls"]');
+  const cluster = root.querySelector('[data-slot="topright"]');
+  if (controls && cluster) controls.appendChild(cluster);
+}
 
 // I3 · Motion-ROI scan-box caption. The tiling-grid svg is
 // preserveAspectRatio="none" (text inside would distort), so the label is a
@@ -166,6 +188,7 @@ export function mountMediaView(config = {}) {
   root.className = 'mv-shell';
   root.dataset.mode = mode;
   root.innerHTML = _SHELL_HTML;
+  _relocateControls(root, flags.interactiveMode);
   const slot = (name) => root.querySelector(`[data-slot="${name}"]`);
 
   const tb = renderTitleBar(slot('titlebar'), config);

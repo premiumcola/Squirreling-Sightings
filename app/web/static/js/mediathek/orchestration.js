@@ -40,6 +40,12 @@ import { loadMedia } from './media-loader.js';
 import { renderMediaFilterPills, _seedTopMediaLabel, _pruneEmptyMediaFilters } from './filters.js';
 import { openLightbox } from '../lightbox.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
+import {
+  isPendingItem,
+  needsProcessingTile,
+  processingTileHTML,
+  renderProcessingQueue,
+} from './_processing.js';
 
 // ── Page-size sizer ─────────────────────────────────────────────────────────
 // _lastKnownCols + window._cachedPageSize are bridged on window so the
@@ -176,7 +182,7 @@ export function mediaCardHTML(item) {
       </div>
     </article>`;
   }
-  const isProcessing = item.status === 'recording' || item.status === 'processing';
+  const isProcessing = needsProcessingTile(item);
   const hasVideo = !!(item.video_relpath || item.video_url);
   const showPlayer = hasVideo || !!item.encode_error;
   const imgSrc = item.snapshot_relpath
@@ -220,18 +226,12 @@ export function mediaCardHTML(item) {
   const vidTime = fmtMediaTimeOnly(item.time || '');
   const vidDur = fmtDur(item.duration_s);
   const vidSize = fmtByt(item.file_size_bytes);
-  const procMsg = item.status === 'recording' ? 'wird aufgenommen…' : 'wird verarbeitet…';
-  const processingInner = `<div style="position:absolute;inset:0;background:#0a0e1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px">
-        <div style="width:42px;height:42px;border:3px solid ${hexToRgba(colors.motion, 0.2)};border-top-color:${colors.motion};border-radius:50%;animation:spin 1s linear infinite"></div>
-        <div style="font-size:11px;color:${colors.motion};font-weight:600">${procMsg}</div>
-      </div>
-      ${motionBadge}`;
   const videoThumbEl =
     showPlayer && imgSrc
       ? `<img src="${esc(imgSrc)}" alt="preview" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.7" loading="lazy" onerror="this.remove()">`
       : '';
   const mediaInner = isProcessing
-    ? processingInner
+    ? processingTileHTML(item, motionBadge)
     : showPlayer
       ? `<div style="position:absolute;inset:0;background:#0a0e1a">${videoThumbEl}</div>
       <div style="position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center">
@@ -271,18 +271,29 @@ export function mediaCardHTML(item) {
       </div>`
           : ''
       }`;
-  return `<article class="media-card ${confirmed}" data-event-id="${esc(item.event_id || '')}" data-camera-id="${esc(item.camera_id || '')}">
-    <div class="mmc-img-wrap" onclick="window._openMediaItem('${esc(item.event_id || '')}')">
-      ${mediaInner}
-      ${showPlayer ? '' : `<div class="media-label-bubbles">${labelBubbles}</div>`}
-      ${
-        item.confirmed
-          ? `<span class="media-confirmed-badge">✓</span>`
-          : `<div class="mmc-actions">
-        <button class="mmc-btn mmc-confirm" title="Bestätigen" onclick="event.stopPropagation();window.confirmMediaCard('${esc(item.camera_id || '')}','${esc(item.event_id || '')}',this)">✓</button>
+  // A clip that isn't finished has nothing to open and nothing to
+  // confirm — the tile itself is the interaction (it toggles its stage
+  // detail), and delete is the only action that still means something.
+  // Its own badge already names the label, so the bubble row would say
+  // the same thing twice.
+  const wrapClick = isProcessing
+    ? ''
+    : ` onclick="window._openMediaItem('${esc(item.event_id || '')}')"`;
+  const actions = isProcessing
+    ? `<div class="mmc-actions">
         <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteMediaCard(this)">${_LB_TRASH_ICON_ONLY}</button>
       </div>`
-      }
+    : item.confirmed
+      ? `<span class="media-confirmed-badge">✓</span>`
+      : `<div class="mmc-actions">
+        <button class="mmc-btn mmc-confirm" title="Bestätigen" onclick="event.stopPropagation();window.confirmMediaCard('${esc(item.camera_id || '')}','${esc(item.event_id || '')}',this)">✓</button>
+        <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteMediaCard(this)">${_LB_TRASH_ICON_ONLY}</button>
+      </div>`;
+  return `<article class="media-card ${confirmed}" data-event-id="${esc(item.event_id || '')}" data-camera-id="${esc(item.camera_id || '')}">
+    <div class="mmc-img-wrap"${wrapClick}>
+      ${mediaInner}
+      ${showPlayer || isProcessing ? '' : `<div class="media-label-bubbles">${labelBubbles}</div>`}
+      ${actions}
     </div>
   </article>`;
 }
@@ -664,9 +675,11 @@ export function renderMediaPagination() {
 
 let _processingPoll = null;
 export function _ensureProcessingPoll() {
-  const pending = (state.media || []).some(
-    (x) => x && (x.status === 'recording' || x.status === 'processing'),
-  );
+  // Watch the whole loaded library, not just the current page. A clip
+  // that starts recording while the user is on page 2 pushes itself to
+  // the top of page 1 — polling only `state.media` meant that clip
+  // never refreshed and its tile stayed frozen mid-stage forever.
+  const pending = (state._allMedia || state.media || []).some(isPendingItem);
   if (pending && !_processingPoll) {
     _processingPoll = setInterval(async () => {
       try {
@@ -691,6 +704,9 @@ export function renderMediaGrid() {
   // Unified stream: EventStore now contains motion + timelapse events, so no
   // separate tl list needs to be merged here.
   const items = state.media || [];
+  // Strip first: it summarises every in-flight clip in the loaded
+  // library, including the ones that fell onto another page.
+  renderProcessingQueue(state._allMedia || items);
   // Light slide-in on page change
   grid.style.opacity = '0';
   grid.style.transform = 'translateX(10px)';

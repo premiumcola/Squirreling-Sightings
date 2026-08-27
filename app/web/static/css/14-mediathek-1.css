@@ -572,3 +572,273 @@ body.media-select-mode .media-grid .mmc-img-wrap {
     padding: 11px 18px;
   }
 }
+
+/* ── In-flight clips: stage tile + queue strip ──────────────────────────────
+   Two surfaces for "what is being produced right now" (see
+   mediathek/_processing.js). Both stay in one muted palette — the
+   spinner borrows --class-motion, the stuck/failed state borrows the
+   same amber the encode_error badge already uses, and nothing else gets
+   a colour. Depth comes from background contrast, never a hairline.
+
+   Reduced motion is handled once, at the bottom: the ring stops turning
+   but keeps its arc, so the tile still reads as "in progress" instead
+   of going blank. */
+
+.mvp-tile {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  appearance: none;
+  border: none;
+  margin: 0;
+  padding: 10px;
+  background: #0a0e1a;
+  color: var(--class-motion);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  -webkit-tap-highlight-color: transparent;
+}
+.mvp-tile[data-kind='stalled'],
+.mvp-tile[data-kind='failed'] {
+  color: #facc15;
+}
+
+/* Spinner — 42 px ring, 3 px stroke, one lit quarter. */
+.mvp-spin {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  border: 3px solid rgba(203, 213, 225, 0.18);
+  border-top-color: currentcolor;
+  animation: spin 1s linear infinite;
+}
+.mvq-head .mvp-spin {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+.mvp-warn {
+  flex: none;
+}
+.mvq-head .mvp-warn {
+  width: 18px;
+  height: 18px;
+}
+
+.mvp-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  max-width: 100%;
+}
+
+/* Detail — the stage chain + the reason a stuck clip is stuck. Closed
+   by default; opens on tap (.is-open) everywhere and additionally on
+   hover where a pointer exists. A phone never gets the hover rule, so
+   the tap path is the one that has to work. */
+.mvp-detail {
+  display: block;
+  width: 100%;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-height 0.18s ease,
+    opacity 0.18s ease;
+}
+.mvp-tile.is-open .mvp-detail {
+  max-height: 140px;
+  opacity: 1;
+}
+@media (hover: hover) {
+  .mvp-tile:hover .mvp-detail {
+    max-height: 140px;
+    opacity: 1;
+  }
+}
+
+.mvp-chain {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.mvp-chain li {
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(203, 213, 225, 0.5);
+  white-space: nowrap;
+}
+.mvp-chain li.is-done {
+  background: rgba(148, 163, 184, 0.2);
+  color: rgba(226, 232, 240, 0.8);
+}
+.mvp-chain li.is-now {
+  background: rgba(203, 213, 225, 0.28);
+  color: #f1f5f9;
+}
+.mvp-chain li.is-halted {
+  background: rgba(250, 204, 21, 0.16);
+  color: rgba(250, 204, 21, 0.75);
+}
+.mvp-note {
+  display: block;
+  padding-top: 6px;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.62);
+  overflow-wrap: anywhere;
+}
+
+/* ── Queue strip ────────────────────────────────────────────────────────────
+   One line above the grid. Collapsed it is a count; expanded it lists
+   every clip in flight. It never shows a position ("2 of 3") — each
+   clip re-encodes in its own thread, so there is no line to be in. */
+#mediaProcessingQueue:empty {
+  display: none;
+}
+.mvq {
+  margin: 0 0 10px;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.09);
+  overflow: hidden;
+}
+.mvq-head {
+  appearance: none;
+  border: none;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--class-motion);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.mvq-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mvq-chev {
+  flex: none;
+  opacity: 0.6;
+  transition: transform 0.18s ease;
+}
+.mvq.is-open .mvq-chev {
+  transform: rotate(180deg);
+}
+
+.mvq-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease;
+}
+.mvq.is-open .mvq-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.mvq-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px 9px 14px;
+  font-size: 11.5px;
+  color: rgba(226, 232, 240, 0.78);
+  background: rgba(10, 14, 26, 0.35);
+}
+.mvq-row + .mvq-row {
+  margin-top: 2px;
+}
+.mvq-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--class-motion);
+  animation: mvq-pulse 1.6s ease-in-out infinite;
+}
+.mvq-row[data-kind='stalled'] .mvq-dot,
+.mvq-row[data-kind='failed'] .mvq-dot {
+  background: #facc15;
+  animation: none;
+}
+.mvq-cam {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.mvq-stage {
+  flex: none;
+  color: rgba(203, 213, 225, 0.62);
+}
+.mvq-age {
+  flex: none;
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(203, 213, 225, 0.62);
+}
+@keyframes mvq-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (max-width: 480px) {
+  /* The stage word and the age would wrap the camera name off the row
+     on an SE. Age carries more information per pixel — keep it. */
+  .mvq-stage {
+    display: none;
+  }
+}
+
+/* Reduced motion: stop every rotation and pulse, keep every shape. The
+   ring holds its lit arc and the dot holds full opacity, so both still
+   say "busy" — they just stop moving. */
+@media (prefers-reduced-motion: reduce) {
+  .mvp-spin {
+    animation: none;
+  }
+  .mvq-dot {
+    animation: none;
+  }
+  .mvp-detail,
+  .mvq-list,
+  .mvq-chev {
+    transition: none;
+  }
+}

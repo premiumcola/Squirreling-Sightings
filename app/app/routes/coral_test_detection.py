@@ -55,6 +55,49 @@ log = logging.getLogger(__name__)
 # doesn't spam docker logs on every Simulieren tick.
 _FALLBACK_WARN_TS: dict[str, float] = {}
 
+# How far a candidate frame's ARRIVAL may predate the request before it
+# counts as stale. One second so a normally-cadenced main frame (~350 ms)
+# qualifies on the first poll.
+_FRESH_GRACE_S = 1.0
+
+# Ceiling on how far behind live the decoder may be before a frame is
+# refused even though its arrival stamp looks fresh. Covers the case the
+# drain alone cannot: a CPU-starved decoder reads flat out and still
+# falls behind, so every frame arrives "just now" carrying old pixels.
+_MAX_CAPTURE_LAG_S = 2.0
+
+# How long the handler polls for a frame that clears both bars before it
+# gives up and reports the stream stuck.
+_FRESH_POLL_WINDOW_S = 2.5
+
+
+def _newest_main_frame(rt):
+    """``(frame_copy, arrival_ts)`` for the camera's newest main frame.
+
+    Reads the runtime's drained reader slot, which holds the frame that
+    came off the wire most recently, stamped when it ARRIVED — not when
+    the main loop got round to storing it. The fallback (runtimes without
+    the drained capture, e.g. HTTP-snapshot cameras) reads ``rt.frame``
+    with its decode-time ``frame_ts``.
+    """
+    getter = getattr(rt, "latest_main_frame", None)
+    if callable(getter):
+        frame, ts = getter()
+        # The reader publishes a fresh array per frame and never mutates
+        # a published one, so copying outside rt.lock is safe.
+        return (frame.copy() if frame is not None else None), float(ts or 0.0)
+    with rt.lock:
+        frame = rt.frame.copy() if rt.frame is not None else None
+        ts = float(getattr(rt, "frame_ts", 0.0) or 0.0)
+    return frame, ts
+
+
+def _capture_lag_s(rt):
+    """Seconds the runtime's decoder trails real time, or None."""
+    getter = getattr(rt, "capture_lag_s", None)
+    return getter() if callable(getter) else None
+
+
 # SIMU-02e · per-camera tracker state for the test-detection endpoint.
 # Mirrors the runtime tracker config but keeps its OWN state so the
 # alarm pipeline's tracker isn't perturbed by Simulieren ticks. The
@@ -175,16 +218,16 @@ def api_test_detection(cam_id: str):
     snapshot inline with coloured bounding boxes so the user can see
     exactly what Coral found and which filter dropped what.
 
-    No fresh capture: we read the runtime's last cached frame
-    (rt.frame). The main loop refills that buffer on every successful
-    grab (~frame_interval_ms cadence). To guarantee the simulation
-    actually reflects the CURRENT scene — the user-visible bug was
-    snapshots 2+ minutes old when the stream had stalled — the
-    handler does a fresh-frame check: if the cached frame is older
-    than ~1.5 s OR 3× the camera's frame_interval_ms, it waits up to
-    2 s for the main loop to advance ``frame_ts``. If the buffer
-    never moves, returns 503 so the operator sees a clear "stream
-    stuck" instead of inferring on a stale frame. Inference runs at a
+    No fresh capture of its own: the handler reads whichever stream's
+    reader thread holds the newest frame — the main stream's drained
+    capture or the sub-stream preview slot — and both are timestamped
+    when the frame ARRIVED off the wire. That is what makes the
+    freshness check below mean anything: the frame is refused unless it
+    arrived within ``_FRESH_GRACE_S`` of the request AND the decoder is
+    within ``_MAX_CAPTURE_LAG_S`` of live. The handler polls for up to
+    2.5 s and returns 503 if nothing qualifies, so the operator sees a
+    clear "stream stuck" instead of a simulation run on a picture from
+    two minutes ago. Inference runs at a
     low 0.20 threshold so even almost-rejected hits surface in the
     visualisation; the user's actual thresholds are applied afterwards
     to compute the per-detection verdict.
@@ -240,7 +283,7 @@ def api_test_detection(cam_id: str):
     )
 
     request_started_at = _time.time()
-    deadline = _time.monotonic() + 2.5
+    deadline = _time.monotonic() + _FRESH_POLL_WINDOW_S
     frame = None
     frame_ts_accepted = 0.0
     last_candidate_ts = 0.0
@@ -279,7 +322,11 @@ def api_test_detection(cam_id: str):
                     continue
                 saw_frame = True
                 last_candidate_ts = max(last_candidate_ts, cand_ts)
-                if cand_ts < request_started_at - 1.0:
+                # _preview_frame_ts is written by _preview_loop the moment
+                # its read() returns, and that loop reads the sub-stream on
+                # its own thread as fast as it arrives — so this one is an
+                # arrival stamp, not a decode-time stamp.
+                if cand_ts < request_started_at - _FRESH_GRACE_S:
                     if final_outcome != "corrupt":
                         final_outcome = "stale"
                     continue
@@ -296,16 +343,29 @@ def api_test_detection(cam_id: str):
             # the first poll; without it the looser sub bar would always win
             # even when main is the preferred stream. A genuinely stalled
             # main (>1 s old) still falls through to the other stream.
-            with rt.lock:
-                cand = rt.frame.copy() if rt.frame is not None else None
-                cand_ts = float(getattr(rt, "frame_ts", 0.0) or 0.0)
+            #
+            # cand_ts is the moment the frame came off the wire. It used to
+            # be rt.frame_ts, stamped when the main loop DECODED the frame
+            # — which made this check unfalsifiable: a frame pulled from a
+            # minutes-deep decoder backlog carried a timestamp from a
+            # millisecond ago and sailed through. See _frame_reader.
+            cand, cand_ts = _newest_main_frame(rt)
             if cand is None:
                 continue
             saw_frame = True
             last_candidate_ts = max(last_candidate_ts, cand_ts)
-            if cand_ts < request_started_at - 1.0:
+            if cand_ts < request_started_at - _FRESH_GRACE_S:
                 if final_outcome != "corrupt":
                     final_outcome = "stale"
+                continue
+            # Second half of the freshness contract: a decoder that cannot
+            # keep up delivers old pixels that still ARRIVE just now, so the
+            # arrival stamp alone is not enough.
+            lag_s = _capture_lag_s(rt)
+            if lag_s is not None and lag_s > _MAX_CAPTURE_LAG_S:
+                if final_outcome != "corrupt":
+                    final_outcome = "stale"
+                last_validator_reason = f"capture_lag={lag_s:.1f}s"
                 continue
             saw_fresh_candidate = True
             active_profile = pick_profile_from_baseline([cand])
@@ -346,8 +406,10 @@ def api_test_detection(cam_id: str):
         # below so an operator's grep matches both shapes.
         # H1 · last_validator_reason carries the gate that flagged the
         # most-recent rejected frame — single source for the stage-1
-        # diagnostic. Empty string on "no_frame" / "stale" branches
-        # because no frame ever reached the validator in those cases.
+        # diagnostic. Empty on "no_frame", and on a plain "stale" where
+        # no frame ever reached the validator; a stale-by-lag rejection
+        # fills it with the measured capture_lag so the two are told
+        # apart in the same field.
         log.warning(
             "[test-detection] cam=%s outcome=%s waited=%.2fs retries=%d "
             "frame_age_ms=%d frame_src=- raw=0 pass=0 belowthresh=0 "
@@ -374,7 +436,10 @@ def api_test_detection(cam_id: str):
                 "validator_profile": (active_profile.name if active_profile else None),
             }
         ), 503
+    # frame_ts_accepted is an arrival timestamp on both stream paths, so
+    # this is now the real age of the pixels, not the age of the decode.
     frame_age_ms = int((_time.time() - frame_ts_accepted) * 1000)
+    served_lag_s = _capture_lag_s(rt)
     # C41/C2 · frame_src is "main" or "sub" — the stream the served frame
     # came from. A WARNING fires ONCE per 60 s per camera only when the
     # operator's PREFERRED stream was unavailable and we served the other
@@ -819,6 +884,10 @@ def api_test_detection(cam_id: str):
         "sub_stream_available": sub_stream_available,
         "frame_size": {"w": int(src_w_raw), "h": int(src_h_raw)},
         "frame_age_ms": int(frame_age_ms),
+        # How far the decoder trails real time, independent of how long
+        # ago the frame arrived. None when the backend exposes no usable
+        # presentation timestamps (or on an HTTP-snapshot camera).
+        "capture_lag_ms": (None if served_lag_s is None else int(served_lag_s * 1000)),
         "coral_available": bool(getattr(detector, "available", False)),
         "inference_ms": int(inference_ms),
         "gates": {

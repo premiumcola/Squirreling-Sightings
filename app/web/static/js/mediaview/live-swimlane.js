@@ -93,11 +93,19 @@ function _buildStructure(lanes) {
   }
   const axisLabels = ['60 s', '45 s', '30 s', '15 s', 'jetzt'];
   const lastIdx = axisLabels.length - 1;
+  // M · the end ticks anchor to their own edge instead of guessing a pixel
+  // nudge from a centred position — "jetzt" used to be pushed out past the
+  // track by a hard-coded 24 px that no longer matched its rendered width.
   const axisHtml = axisLabels
-    .map(
-      (txt, i) =>
-        `<span class="mv-ld-axis-tick" style="left:calc(${(i * 100) / lastIdx}% - ${i === 0 ? 0 : i === lastIdx ? 24 : 12}px)">${esc(txt)}</span>`,
-    )
+    .map((txt, i) => {
+      const pos =
+        i === 0
+          ? 'left:0'
+          : i === lastIdx
+            ? 'right:0'
+            : `left:calc(${(i * 100) / lastIdx}% - 12px)`;
+      return `<span class="mv-ld-axis-tick" style="${pos}">${esc(txt)}</span>`;
+    })
     .join('');
   // Vertical time gridlines at the same ticks, behind the lanes.
   const gridlines = axisLabels
@@ -186,10 +194,16 @@ function _syncBars(cell, lane, windowMs) {
     chips
       .map((ch) => {
         const label = ch.count > 1 ? `×${ch.count}` : '';
-        const left = `calc(${ch.rightPct.toFixed(2)}% - ${_CHIP_W}px)`;
+        // M · anchor by the chip's RIGHT edge, not its left. A chip is
+        // wider than the nominal _CHIP_W once it carries an "×6" label, so
+        // `left: calc(pct% - 24px)` pushed the newest chips past 100 % and
+        // the cell's overflow:hidden sheared their labels off at the
+        // viewport edge. Anchoring right means a chip at "now" ends exactly
+        // at the lane's right edge and grows leftward instead.
+        const right = `calc(${(100 - ch.rightPct).toFixed(2)}%)`;
         const title = ch.count > 1 ? `${ch.count} Detektionen` : '1 Detektion';
         return (
-          `<span class="mv-ld-swim-bar" style="left:${left};background:${c}" title="${esc(title)}">` +
+          `<span class="mv-ld-swim-bar" style="right:${right};background:${c}" title="${esc(title)}">` +
           (label ? `<span class="mv-ld-swim-chip-lbl">${esc(label)}</span>` : '') +
           '</span>'
         );

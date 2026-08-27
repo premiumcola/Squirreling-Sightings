@@ -223,6 +223,7 @@
    stays 44 px and every segment's own label already carries it past 44 px
    wide. If a locale or font pushes past the width, the row wraps — Stream
    on top, the Modus track below — instead of overlapping anything. */
+.mv-shell-controls .mv-sim-ctl,
 .mv-shell-controls .mv-sim-seg {
   padding: 6px 3px;
 }

@@ -35,6 +35,14 @@ from ...event_logic import (
     schedule_action_active,
 )
 from ._publish import PublishMixin
+from ._stages import (
+    STAGE_ENCODING,
+    STAGE_FAILED,
+    STAGE_QUEUED,
+    STAGE_READY,
+    STAGE_RECORDING,
+    STAGE_STATUS,
+)
 from .._consts import (
     _FFMPEG_AVAILABLE,
     _PROFILE_PERIOD_DEFAULTS,
@@ -130,6 +138,25 @@ class RecordingMixin(PublishMixin):
             log.error('[%s] ffmpeg pipe error: %s', self.camera_id, e)
             return False
 
+    def _set_clip_stage(self, event_id: str, stage: str) -> None:
+        """Move an in-flight clip to ``stage`` and stamp when it got there.
+
+        One event-JSON write per transition — three per clip in total,
+        which is what buys the library an honest "where is it right now"
+        without a progress poller hammering the store. ``status`` keeps
+        its old coarse values so every consumer that predates ``stage``
+        sees exactly what it saw before. Best-effort: a clip that fails
+        to advertise its stage must still finish encoding.
+        """
+        try:
+            ev = self.store.get_event(self.camera_id, event_id) or {}
+            ev["stage"] = stage
+            ev["status"] = STAGE_STATUS.get(stage, ev.get("status") or "processing")
+            ev["stage_since"] = datetime.now().isoformat(timespec="seconds")
+            self.store.update_event(self.camera_id, event_id, ev)
+        except Exception as e:
+            log.debug("[%s] stage update (%s) failed: %s", self.camera_id, stage, e)
+
     def _write_recording_event_stub(
         self, event_id: str, meta: dict, start_time: datetime, status: str = "recording"
     ):
@@ -158,6 +185,12 @@ class RecordingMixin(PublishMixin):
             "duration_s": 0.0,
             "file_size_bytes": 0,
             "status": status,
+            # Fine stage + the moment it started, so the library can say
+            # WHICH phase this clip is in and how long it has been there
+            # instead of a bare "wird verarbeitet". stage_since is also
+            # the only handle on a stub whose runtime died mid-clip.
+            "stage": STAGE_RECORDING,
+            "stage_since": start_time.isoformat(timespec="seconds"),
             "recording_settings": self._build_recording_settings_snapshot(),
         }
         # The ffmpeg stream-copy path (this caller) starts the encoder
@@ -262,13 +295,10 @@ class RecordingMixin(PublishMixin):
         )
         if raw_path is None or event_id is None or meta is None or start_time is None:
             return
-        # Update status → processing so the UI shows the intermediate state
-        try:
-            ev = self.store.get_event(self.camera_id, event_id) or {}
-            ev["status"] = "processing"
-            self.store.update_event(self.camera_id, event_id, ev)
-        except Exception:
-            pass
+        # Stream-copy is on disk, the re-encode thread is about to spawn.
+        # Short-lived by design (each clip gets its own thread, there is
+        # no shared worker pool), but it is the honest state right here.
+        self._set_clip_stage(event_id, STAGE_QUEUED)
         threading.Thread(
             target=self._reencode_motion_clip,
             args=(raw_path, event_id, meta, start_time),
@@ -291,6 +321,9 @@ class RecordingMixin(PublishMixin):
         duration_s = 0.0
         file_size_bytes = 0
         encode_error = None
+        # ffmpeg is about to run — this is the long pole of the chain and
+        # the one the user actually waits on.
+        self._set_clip_stage(event_id, STAGE_ENCODING)
         try:
             if not raw_path.exists() or raw_path.stat().st_size < 1024:
                 raise RuntimeError(
@@ -397,7 +430,9 @@ class RecordingMixin(PublishMixin):
             ev["snapshot_url"] = thumb_url
             ev["snapshot_relpath"] = thumb_rel
             ev["thumb_url"] = thumb_url
-            ev["status"] = "ready" if video_url else "error"
+            ev["stage"] = STAGE_READY if video_url else STAGE_FAILED
+            ev["status"] = STAGE_STATUS[ev["stage"]]
+            ev["stage_since"] = datetime.now().isoformat(timespec="seconds")
             if encode_error:
                 ev["encode_error"] = encode_error
             self.store.update_event(self.camera_id, event_id, ev)

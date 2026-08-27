@@ -11,13 +11,25 @@ from __future__ import annotations
 import json as _json
 import logging
 import threading as _threading_fix
+from datetime import datetime
 
 import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from ..camera_runtime._recording._stages import (
+    DEFAULT_CLIP_MAX_S,
+    annotate_stage,
+    is_pending,
+)
 
 bp = Blueprint("media", __name__)
+
+#: list_events takes a slice; the media library paginates client-side and
+#: the visibility filter below has to see every candidate before it can
+#: count them. Effectively "no limit" — a camera tree that large has
+#: bigger problems than this constant.
+_ALL_EVENTS = 1_000_000
 
 
 _thumb_task = {"running": False, "done": 0, "total": 0, "errors": 0, "recent": []}
@@ -286,6 +298,62 @@ def api_media_cleanup():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _has_media_file(obj: dict) -> bool:
+    """Mirror of EventStore's ``media_only`` test: does this event point
+    at anything the viewer can actually display?"""
+    return bool(
+        obj.get("snapshot_relpath")
+        or obj.get("snapshot_url")
+        or obj.get("video_relpath")
+        or obj.get("video_url")
+    )
+
+
+def _visible_media_events(store, cam_id, *, label, labels, start, end):
+    """Every event the media library should show for ``cam_id``.
+
+    ``media_only=True`` asks "is there a file on disk", and for an
+    in-flight clip the honest answer is no — the recording stub carries
+    null video/snapshot fields until the re-encode lands. That dropped
+    every clip out of the library for the whole minute it was being
+    produced, which is precisely the window the user wants to watch.
+    So the store scan runs unfiltered and the media test is applied
+    here, widened by "or it is still being produced".
+
+    Doing the filtering here also collapses what used to be two full
+    rglob passes over the camera's event tree (list + count) into one.
+    """
+    now = datetime.now()
+    clip_max = DEFAULT_CLIP_MAX_S
+    try:
+        clip_max = int(
+            (app_state.get_effective_config().get("processing") or {}).get(
+                "clip_max_duration_s", DEFAULT_CLIP_MAX_S
+            )
+        )
+    except (TypeError, ValueError, AttributeError):
+        pass
+    raw = store.list_events(
+        cam_id,
+        label=label,
+        labels=labels,
+        start=start,
+        end=end,
+        limit=_ALL_EVENTS,
+        offset=0,
+        media_only=False,
+    )
+    visible = []
+    for obj in raw:
+        pending = is_pending(obj)
+        if not (pending or _has_media_file(obj)):
+            continue
+        if pending:
+            annotate_stage(obj, now, clip_max)
+        visible.append(obj)
+    return visible
+
+
 @bp.get('/api/camera/<cam_id>/media')
 def api_camera_media(cam_id):
     settings = app_state.settings
@@ -300,19 +368,9 @@ def api_camera_media(cam_id):
     cfg_default = app_state.get_effective_config().get("storage", {}).get("media_limit_default", 24)
     limit = request.args.get('limit', type=int) or cfg_default
     offset = request.args.get('offset', type=int) or 0
-    items = store.list_events(
-        cam_id,
-        label=label,
-        labels=labels,
-        start=start,
-        end=end,
-        limit=limit,
-        offset=offset,
-        media_only=True,
-    )
-    total_count = store.count_events(
-        cam_id, label=label, labels=labels, start=start, end=end, media_only=True
-    )
+    visible = _visible_media_events(store, cam_id, label=label, labels=labels, start=start, end=end)
+    total_count = len(visible)
+    items = visible[offset : offset + limit]
     for item in items:
         review = settings.get_review(f"{cam_id}:{item['event_id']}")
         if review:

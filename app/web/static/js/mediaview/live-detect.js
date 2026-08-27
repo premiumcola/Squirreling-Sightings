@@ -315,10 +315,6 @@ export function closeLiveDetect() {
   if (diagStrip) diagStrip.remove();
   const livePill = byId('mvLiveScrubPill');
   if (livePill) livePill.remove();
-  // D52 · the "<n> verworfen — antippen für Details" hint sits
-  // outside the toggle row; remove it on session teardown.
-  const suppressedHint = byId('mvLiveSuppressedHint');
-  if (suppressedHint) suppressedHint.remove();
   // Q2-5 · drop the stall banner if a teardown happens while stalled.
   _hideStallBanner();
   // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it

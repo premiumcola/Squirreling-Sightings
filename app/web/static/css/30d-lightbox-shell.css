@@ -61,31 +61,11 @@
   }
 }
 
-/* D52 · the old three-switch verdict legend was deleted — same info
-   now lives on the Detections-panel verdict badges. Replaced by a
-   single tappable muted line that surfaces only when at least one
-   non-pass bbox is visible. Tap toggles the Detections panel between
-   pass-only and all-detections (state in localStorage). Touch
-   target ≥44 px via tall vertical padding; visible text 14 px so it
-   reads at arm's length on a 375 px iPhone. */
-.mv-live-suppressed-hint {
-  display: block;
-  width: 100%;
-  padding: 14px 12px;
-  min-height: 44px;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  color: rgba(226, 232, 240, 0.55);
-  font-size: 14px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.mv-live-suppressed-hint:hover {
-  color: rgba(226, 232, 240, 0.85);
-}
+/* M · the "<n> verworfen — antippen für Details" line is gone with its
+   renderer. It mounted itself next to #mvLiveToggles, an id the MediaView
+   shell never creates, so it had not rendered since that migration — and
+   the panel view it toggled reads no such state any more. The verdict
+   badges on the Detections-panel rows carry the same information. */
 
 .mv-fafold-root {
   background: #0a0e1a;

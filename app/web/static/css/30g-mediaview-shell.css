@@ -207,7 +207,7 @@
 .mv-shell-controls {
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 2px 8px;
 }
 .mv-shell-controls:empty {
   display: none;
@@ -215,7 +215,16 @@
 .mv-shell-controls > .mv-shell-topright {
   flex: 1 1 auto;
   min-width: 0;
+  align-content: flex-start;
   justify-content: space-between;
+}
+/* Trim the horizontal slop off the segment buttons so Stream + Modus land
+   on ONE row at 375 px. The 44 px touch minimum is untouched: min-height
+   stays 44 px and every segment's own label already carries it past 44 px
+   wide. If a locale or font pushes past the width, the row wraps — Stream
+   on top, the Modus track below — instead of overlapping anything. */
+.mv-shell-controls .mv-sim-seg {
+  padding: 6px 3px;
 }
 /* The four mode segments read as ONE segmented control: a single soft
    track behind them (depth by colour, no border line) instead of four

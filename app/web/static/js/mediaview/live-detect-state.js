@@ -34,7 +34,6 @@ export const S = {
   diagState: {
     bbox: null,
     trails: null,
-    zonemask: null,
     media: null,
     tick: null,
     posFail: null,

@@ -98,7 +98,6 @@ export function _renderDiagStrip() {
     _renderDiagStripLine('cadence', S.diagState.cadence?.fields, S.diagState.cadence?.opts || {}),
     _renderDiagStripLine('bbox', S.diagState.bbox?.fields, S.diagState.bbox?.opts || {}),
     _renderDiagStripLine('trails', S.diagState.trails?.fields, S.diagState.trails?.opts || {}),
-    _renderDiagStripLine('zonemask', S.diagState.zonemask?.fields, S.diagState.zonemask?.opts || {}),
     _renderDiagStripLine('media', S.diagState.media?.fields, S.diagState.media?.opts || {}),
   ].filter(Boolean);
   if (S.diagState.posFail) {

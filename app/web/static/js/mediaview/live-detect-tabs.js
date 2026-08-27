@@ -151,13 +151,13 @@ export function _renderDiagPanel(diag) {
 // toggle row, persisted in localStorage so it stays sticky across
 // sessions. When OFF the strip is fully removed from the DOM
 // (no hidden offscreen renders, no extra rAF work). When ON, every
-// _renderBboxOverlay/_renderTrailsOverlay/_renderZoneMaskOverlay
+// _renderBboxOverlay/_renderTrailsOverlay
 // call piggybacks on the existing render path and writes its
 // state into the strip — no new timers. Rich fields per row so
 // the operator can screenshot the strip on iPhone and read the
 // failure mode without DevTools (see A1 spec).
 //
-// Rows: bbox / trails / zonemask / media (always-on geometry dump)
+// Rows: bbox / trails / media (always-on geometry dump)
 // + position-fail (sticky when an SVG ends up 0×0)
 // + paint-fail   (sticky when SVG sized but first child collapsed).
 

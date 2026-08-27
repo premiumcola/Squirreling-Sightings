@@ -24,24 +24,18 @@ from __future__ import annotations
 
 import json
 import statistics as st
-import sys
 import time
 from pathlib import Path
+
+try:  # package invocation: python3 -m scripts.motion_calibration
+    from ._common import storage_root
+except ImportError:  # direct path: python3 app/scripts/motion_calibration.py
+    from _common import storage_root
 
 # Minimum evidence before any threshold is trustworthy. Conservative — a
 # calibration on a handful of samples (or with no windy day) would overfit.
 MIN_TOTAL = 30
 MIN_PER_CLASS = 8
-
-
-def _storage_root() -> Path:
-    try:
-        sys.path.insert(0, "/app")
-        from app.config_loader import load_config  # type: ignore
-
-        return Path(load_config()["storage"]["root"])
-    except Exception:
-        return Path("storage")
 
 
 def _load(samples_path: Path):
@@ -83,7 +77,7 @@ def _sep_threshold(animal_vals, wind_vals, prefer="high"):
 
 
 def main():
-    root = _storage_root()
+    root = storage_root()
     diag = root / "_diag"
     rows = _load(diag / "motion_samples.jsonl")
     # ts must be injected (Date.now is fine here — plain CPython script).

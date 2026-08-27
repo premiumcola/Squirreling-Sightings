@@ -125,6 +125,27 @@ def test_mode_group_carries_a_visible_key():
     assert "Modus" in src
 
 
+def test_control_row_skin_wins_the_cascade_over_the_on_frame_skin():
+    """`.mv-shell-topright .mv-sim-ctl` and `.mv-shell-controls
+    .mv-sim-ctl` carry IDENTICAL specificity, so source order is the only
+    thing deciding which skin applies. The control-row block must stay
+    BELOW the on-frame (G2 dark-glass) block — moving it up silently
+    restores the dark-on-dark chips and the untrimmed padding."""
+    css = _read(_CSS_SHELL)
+    for on_frame, in_row in (
+        (".mv-shell-topright .mv-sim-ctl,", ".mv-shell-controls .mv-sim-ctl,"),
+        (
+            ".mv-shell-topright .mv-sim-seg[data-on='1'] .mv-sim-ctl-chip",
+            ".mv-shell-controls .mv-sim-seg[data-on='1'] .mv-sim-ctl-chip",
+        ),
+        (".mv-shell-topright .mv-sim-seg-group", ".mv-shell-controls .mv-sim-seg-group"),
+    ):
+        assert on_frame in css and in_row in css
+        assert css.index(in_row) > css.index(
+            on_frame
+        ), f"{in_row!r} must come after {on_frame!r} — equal specificity, order decides"
+
+
 # ── swimlane right edge ──────────────────────────────────────────────
 
 

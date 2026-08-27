@@ -218,19 +218,9 @@
   align-content: flex-start;
   justify-content: space-between;
 }
-/* Trim the horizontal slop off the segment buttons so Stream + Modus land
-   on ONE row at 375 px. The 44 px touch minimum is untouched: min-height
-   stays 44 px and every segment's own label already carries it past 44 px
-   wide. If a locale or font pushes past the width, the row wraps — Stream
-   on top, the Modus track below — instead of overlapping anything. */
-.mv-shell-controls .mv-sim-ctl,
-.mv-shell-controls .mv-sim-seg {
-  padding: 6px 3px;
-}
 /* The four mode segments read as ONE segmented control: a single soft
    track behind them (depth by colour, no border line) instead of four
-   loose chips. Kept ungrouped inside the stage so the read-only badge
-   isn't given a track it doesn't need. */
+   loose chips. */
 .mv-shell-topright .mv-sim-seg-group {
   display: inline-flex;
   align-items: center;
@@ -246,46 +236,6 @@
 .mv-sim-seg-k {
   padding: 0 4px 0 8px;
   white-space: nowrap;
-}
-/* Segmented-control read in the control row: OFF segments sit bare on the
-   shared track, only the active one is a filled chip. Off-frame there is
-   no video to punch through, so the dark-glass surface (which would be
-   dark-on-dark against the #0b0f17 panel) drops out entirely. */
-.mv-shell-controls .mv-sim-seg .mv-sim-ctl-chip {
-  background: transparent;
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  color: rgba(226, 232, 240, 0.72);
-}
-.mv-shell-controls .mv-sim-seg[data-on='1'] .mv-sim-ctl-chip {
-  background: rgba(56, 189, 248, 0.42);
-  color: #f0f9ff;
-  box-shadow: none;
-}
-/* The Stream selector is a stand-alone chip, not part of the segment
-   track — it gets its own lifted surface so it never reads dark-on-dark. */
-.mv-shell-controls .mv-sim-ctl .mv-sim-ctl-chip {
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-@media (hover: hover) {
-  .mv-shell-controls .mv-sim-ctl:hover .mv-sim-ctl-chip {
-    background: rgba(255, 255, 255, 0.18);
-    color: #fff;
-    box-shadow: none;
-  }
-  .mv-shell-controls .mv-sim-seg:hover .mv-sim-ctl-chip {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
-    box-shadow: none;
-  }
-  .mv-shell-controls .mv-sim-seg[data-on='1']:hover .mv-sim-ctl-chip {
-    background: rgba(56, 189, 248, 0.55);
-    color: #f0f9ff;
-  }
 }
 
 /* G2 · Stream selector + mode segments dark-glass chips. The F migration
@@ -339,6 +289,60 @@
     background: rgba(20, 30, 42, 0.7);
     color: #fff;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+}
+
+/* ── Control-row skin (M) ─────────────────────────────────────────────
+   These override the G2 dark-glass block above and MUST stay after it:
+   the selectors carry the same specificity, so source order is what
+   decides. G2 dresses the cluster for life over VIDEO (opaque glass so
+   the chip reads against a bright sky). In the control row there is no
+   video underneath — that same glass is dark-on-dark against the
+   #0b0f17 panel, which the design rules forbid outright. */
+.mv-shell-controls .mv-sim-ctl,
+.mv-shell-controls .mv-sim-seg {
+  /* Trim the horizontal slop so Stream + Modus land on ONE row at 375 px.
+     The 44 px touch minimum is untouched — min-height/min-width stay at
+     44 px from G2. If a font or locale pushes past the width, the row
+     wraps (Stream on top, the Modus track below) rather than colliding. */
+  padding: 6px 3px;
+}
+/* OFF segments sit bare on the shared track; only the active one is a
+   filled chip — the classic segmented-control read. */
+.mv-shell-controls .mv-sim-seg .mv-sim-ctl-chip {
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: rgba(226, 232, 240, 0.72);
+}
+.mv-shell-controls .mv-sim-seg[data-on='1'] .mv-sim-ctl-chip {
+  background: rgba(56, 189, 248, 0.42);
+  color: #f0f9ff;
+  box-shadow: none;
+}
+/* The Stream selector is a stand-alone chip, not part of that track, so
+   it carries its own lifted surface. */
+.mv-shell-controls .mv-sim-ctl .mv-sim-ctl-chip {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+@media (hover: hover) {
+  .mv-shell-controls .mv-sim-ctl:hover .mv-sim-ctl-chip {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    box-shadow: none;
+  }
+  .mv-shell-controls .mv-sim-seg:hover .mv-sim-ctl-chip {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    box-shadow: none;
+  }
+  .mv-shell-controls .mv-sim-seg[data-on='1']:hover .mv-sim-ctl-chip {
+    background: rgba(56, 189, 248, 0.55);
+    color: #f0f9ff;
   }
 }
 

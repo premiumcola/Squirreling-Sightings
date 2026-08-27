@@ -20,7 +20,7 @@ import signal as _signal
 import subprocess
 import threading
 import time
-from datetime import UTC, datetime as _dt
+from datetime import datetime as _dt, timezone
 from pathlib import Path
 
 from . import app_state
@@ -88,7 +88,7 @@ _BUILD_INFO = _get_build_info()
 # when the Flask process actually started — distinct from BUILD_DATE, which
 # only advances on a code rebuild. For bind-mounted dev setups the container
 # often runs code from days ago; users need to see when the restart happened.
-_PROCESS_START_ISO = _dt.now(UTC).astimezone().isoformat(timespec="seconds")
+_PROCESS_START_ISO = _dt.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
 def _fetch_github_commit_count():

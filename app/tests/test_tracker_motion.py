@@ -172,7 +172,7 @@ def test_crossing_subjects_do_not_swap_identity():
         xs = [s["bbox"]["x1"] for s in detects]
         # Each track must describe ONE consistent direction of travel —
         # a swapped identity shows up as a reversal mid-track.
-        deltas = [b - a for a, b in zip(xs, xs[1:], strict=False)]
+        deltas = [b - a for a, b in zip(xs, xs[1:])]
         assert all(d > 0 for d in deltas) or all(
             d < 0 for d in deltas
         ), f"track {tr.track_id} reverses direction: {xs}"

@@ -20,7 +20,10 @@ def dhash_bgr(img: np.ndarray) -> str | None:
 
 
 def hamming_hex(a: str, b: str) -> int:
-    return (int(a, 16) ^ int(b, 16)).bit_count()
+    # bin().count("1") rather than int.bit_count() — the latter is 3.10+
+    # and the Coral image runs Python 3.9. Both operands are non-negative,
+    # so the "0b" prefix contributes no "1" and there is no sign char.
+    return bin(int(a, 16) ^ int(b, 16)).count("1")
 
 
 class IdentityRegistry:

@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -88,7 +88,7 @@ class DetectionMixin:
             # datetime.now() makes it interpret local-clock-as-UTC and
             # the resulting altitude/azimuth are off by the local UTC
             # offset (visible as a 2 h sunset-time error in CEST).
-            now_dt = datetime.now(tz=UTC)
+            now_dt = datetime.now(tz=timezone.utc)
             data = {
                 "altitude": float(elevation(obs, now_dt)),
                 "azimuth": float(azimuth(obs, now_dt)),

@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests

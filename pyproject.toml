@@ -5,8 +5,26 @@
 # typing. Strict mode comes later when type hints are denser.
 
 [tool.ruff]
-# Match the runtime Python — see app/docker/Dockerfile (python:3.11-slim).
-target-version = "py311"
+# ruff's target-version means "the OLDEST Python this code must run on",
+# not "the newest we deploy on". Two images now ship the same tree:
+#   app/docker/Dockerfile        — python:3.11-slim (main service)
+#   app/docker/Dockerfile.coral  — python 3.9 (pycoral 2.0 + tflite 2.5.0
+#                                  are the only combination Google ships
+#                                  and tests against for the EdgeTPU)
+# So the floor is 3.9. Do NOT raise this back to py311 while the Coral
+# image exists — that single line is what keeps four rule families from
+# rewriting the tree into syntax the Coral interpreter cannot import:
+#   B905  would demand zip(strict=...)          — 3.10+
+#   UP017 would rewrite timezone.utc → datetime.UTC — 3.11+
+#   UP038 would rewrite isinstance(x, (int, float)) into a PEP-604
+#         union evaluated at RUNTIME (27 sites) — 3.10+, and the
+#         `from __future__ import annotations` escape hatch does not
+#         cover isinstance()
+#   UP007/UP045 would push PEP-604 unions into the eight modules that
+#         have no `from __future__ import annotations`
+# app/tests/test_py39_compat.py enforces the same floor on the source
+# itself, so a construct that slips past ruff still fails the suite.
+target-version = "py39"
 # 100 cols is a small bump from the default 88. The project already has
 # many longer log strings and German labels; aggressive wrapping hurts
 # readability for those without enough payoff in fewer tracebacks-per-
@@ -81,7 +99,9 @@ line-ending = "lf"
 [tool.mypy]
 # Permissive baseline — strictness ratchets up in later stages once the
 # refactor quiet-period stabilises.
-python_version = "3.11"
+# Same floor as [tool.ruff] target-version: the Coral image is Python 3.9,
+# so type-check against the oldest supported interpreter, not the newest.
+python_version = "3.9"
 ignore_missing_imports = true
 strict_optional = false
 no_implicit_optional = false

@@ -438,7 +438,7 @@ def migrate(settings_store, storage_root) -> dict:
     total_merges = 0
     total_rewrites = 0
     id_changes = 0
-    for cam, plan in zip(cams, plans, strict=False):
+    for cam, plan in zip(cams, plans):
         new_id = plan["new_id"]
         old_id = plan["old_id"]
         for area in _AREAS:

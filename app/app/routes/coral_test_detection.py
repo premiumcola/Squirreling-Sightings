@@ -16,7 +16,7 @@ from __future__ import annotations
 import collections
 import logging
 import time as _time
-from datetime import UTC
+from datetime import timezone
 
 import cv2
 from flask import Blueprint, jsonify, request
@@ -1083,7 +1083,7 @@ def api_debug_snapshot(cam_id: str):
         return Response("# Camera not found\n", mimetype="text/markdown", status=404)
     tt = _TEST_TRACKERS.get(cam_id) or {}
     last = tt.get("last_tick") or {}
-    now_iso = datetime.now(UTC).isoformat(timespec="seconds")
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
     diag = last.get("diag") or {}
     fs = last.get("frame_size") or {"w": 0, "h": 0}
     frame_age_ms = last.get("frame_age_ms") or 0

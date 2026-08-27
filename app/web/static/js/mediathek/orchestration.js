@@ -41,7 +41,7 @@ import { renderMediaFilterPills, _seedTopMediaLabel, _pruneEmptyMediaFilters } f
 import { openLightbox } from '../lightbox.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import {
-  isPendingItem,
+  isActivelyPending,
   needsProcessingTile,
   processingTileHTML,
   renderProcessingQueue,
@@ -547,6 +547,9 @@ export async function openAllMediaDrilldown(preFilterLabel) {
   if (state.mediaSelectMode) _exitMediaSelectMode();
   state.media = [];
   state._allMedia = [];
+  // Drop the previous drilldown's queue strip with its items — it
+  // belongs to a camera the user just left.
+  renderProcessingQueue([]);
   const grid = byId('mediaGrid');
   if (grid)
     grid.innerHTML =
@@ -590,6 +593,9 @@ export async function openMediaDrilldown(camId) {
   // don't flash before the new fetch resolves.
   state.media = [];
   state._allMedia = [];
+  // Drop the previous drilldown's queue strip with its items — it
+  // belongs to a camera the user just left.
+  renderProcessingQueue([]);
   const grid = byId('mediaGrid');
   if (grid)
     grid.innerHTML =
@@ -679,7 +685,9 @@ export function _ensureProcessingPoll() {
   // that starts recording while the user is on page 2 pushes itself to
   // the top of page 1 — polling only `state.media` meant that clip
   // never refreshed and its tile stayed frozen mid-stage forever.
-  const pending = (state._allMedia || state.media || []).some(isPendingItem);
+  // Stalled items are excluded: they stay on screen but nothing will
+  // move them, so they must not hold the interval open indefinitely.
+  const pending = (state._allMedia || state.media || []).some(isActivelyPending);
   if (pending && !_processingPoll) {
     _processingPoll = setInterval(async () => {
       try {

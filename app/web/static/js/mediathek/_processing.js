@@ -45,6 +45,19 @@ export function isPendingItem(item) {
 }
 
 /**
+ * Is this item worth polling for?
+ *
+ * A stalled clip is still "pending" — it keeps its tile and its row in
+ * the strip — but nothing is going to advance it, so refreshing every
+ * three seconds only buys a full event-tree rglob per camera, forever.
+ * One abandoned stub used to be enough to keep that running for the
+ * lifetime of the tab.
+ */
+export function isActivelyPending(item) {
+  return isPendingItem(item) && !item.stage_stalled;
+}
+
+/**
  * Does this card show a stage tile instead of a thumbnail?
  *
  * Pending clips, plus the terminal failure that has nothing to play: a

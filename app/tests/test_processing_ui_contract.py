@@ -72,8 +72,17 @@ def test_the_grid_uses_the_processing_module(orch):
 def test_the_poll_watches_the_whole_library_not_just_the_page(orch):
     """`state.media` is one page. A clip that starts recording while the
     user is on page 2 lands on page 1 and would never be polled."""
-    poll = orch[orch.index("export function _ensureProcessingPoll") :][:600]
+    poll = orch[orch.index("export function _ensureProcessingPoll") :][:800]
     assert "state._allMedia" in poll
+
+
+def test_a_stalled_clip_does_not_keep_the_poll_alive(orch, js):
+    """It stays on screen, but nothing will advance it. Polling for it
+    every 3 s costs a full event-tree scan per camera, forever."""
+    poll = orch[orch.index("export function _ensureProcessingPoll") :][:800]
+    assert "isActivelyPending" in poll
+    active = js[js.index("export function isActivelyPending") :]
+    assert "!item.stage_stalled" in active[: active.index("\n}")]
 
 
 def test_an_in_flight_card_does_not_route_into_the_lightbox(orch):

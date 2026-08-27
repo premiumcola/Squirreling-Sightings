@@ -145,13 +145,25 @@ class MotionMixin:
         else:
             wl_sens = min(3.0, max(0.1, float(wl_sens)))
         wl_min_area = int(frame_area * 0.001 / max(0.1, wl_sens))
-        # Minimum changed-pixel count: a global brightness shift produces many small
-        # changed pixels but no large contour. We use a 0.5% floor (down from 1%)
-        # so a single squirrel/fox can still trigger the wildlife threshold —
-        # the actual per-contour size check below remains the primary filter
-        # for real motion vs. noise.
-        h_f2, w_f2 = thresh.shape[:2]
-        if int(np.sum(thresh > 0)) < int(h_f2 * w_f2 * 0.005):
+        # Cheap early-out before findContours: if fewer pixels changed in the
+        # WHOLE frame than the smallest contour we would accept, no contour can
+        # clear either floor and the contour pass is wasted work.
+        #
+        # This used to be a flat 0.5 % of the frame — 18 432 px on 2560x1440 —
+        # which is 3.5x the wildlife floor above (5 266 px at the default
+        # sensitivity). It was therefore not an early-out at all but a hidden
+        # third threshold that silently overrode both configured ones: an
+        # 11 000 px squirrel at the feeder cleared `wl_min_area` and was
+        # rejected here regardless, so the wildlife stage was never even
+        # offered the blob. Deriving the floor from the two real thresholds
+        # makes the pre-check conservative by construction — it can only skip
+        # work, never change a verdict — and makes it per-camera for free, via
+        # the existing `motion_sensitivity` / `wildlife_motion_sensitivity`
+        # knobs. A camera that wants the old, deafer behaviour back sets
+        # wildlife_motion_sensitivity=0.2, which puts wl_min_area at exactly
+        # the old 18 432 px.
+        change_floor = max(1, min(int(min_area), int(wl_min_area)))
+        if int(np.sum(thresh > 0)) < change_floor:
             return [], None, False, []
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         # Two parallel checks against the same contour set — cheap.

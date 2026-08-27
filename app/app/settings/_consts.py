@@ -33,6 +33,14 @@ TELEGRAM_PUSH_DEFAULTS: dict = {
         "squirrel": {"push": True, "threshold": 0.80},
         "motion": {"push": False, "threshold": 0.0},
     },
+    # Recording ticker — one line when a clip starts, one when it ends.
+    # A diagnostic aid for walk-in tests ("is it recording me right now,
+    # and when can I go again?"), NOT an alert: it deliberately bypasses
+    # the severity matrix, push thresholds, quiet hours and schedules,
+    # since those are usually the very things being tested. Per-camera
+    # `recording_ticker` overrides this. Set to False once testing is
+    # done — in normal operation it is two extra messages per event.
+    "recording_ticker": True,
     "daily_report": {"enabled": True, "time": "22:00"},
     "highlight": {"enabled": True, "time": "19:00"},
     "system": {"enabled": True},

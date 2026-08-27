@@ -28,12 +28,81 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
 from pathlib import Path
 
 from .._consts import log
 
 
+# Minimum seconds between two ticker messages for the same camera. The
+# ticker exists to answer "is it recording right now?" while someone
+# walks in front of a camera; without a floor a busy scene would send a
+# pair every few seconds and become the noise it is meant to cut through.
+_TICKER_MIN_GAP_S = 20.0
+
+
 class PublishMixin:
+    def _ticker_enabled(self) -> bool:
+        """Whether the recording ticker is on for this camera.
+
+        Deliberately independent of the alert path. The ticker answers
+        "is the camera recording me right now?" during a walk-in test —
+        it must therefore survive every gate that could silence a real
+        alert (severity matrix, push thresholds, quiet hours, schedule),
+        because those gates are frequently the very thing being
+        diagnosed. It still respects `telegram_enabled` and `armed`,
+        which are the operator's explicit "this camera is off" switches.
+        """
+        if not (self.notifier and self.cfg.get("telegram_enabled", True)):
+            return False
+        if not self.cfg.get("armed", True):
+            return False
+        tg = (self.global_cfg.get("telegram") or {}) if self.global_cfg else {}
+        cam_pref = self.cfg.get("recording_ticker")
+        if cam_pref is not None:
+            return bool(cam_pref)
+        return bool(tg.get("recording_ticker", True))
+
+    def _send_ticker(self, text: str) -> None:
+        """Fire-and-forget one-line status message. Never raises."""
+        try:
+            now = time.monotonic()
+            if now - getattr(self, "_ticker_last_ts", 0.0) < _TICKER_MIN_GAP_S:
+                return
+            self._ticker_last_ts = now
+            threading.Thread(
+                target=self.notifier.send_alert_sync,
+                kwargs={"caption": text, "camera_id": self.camera_id},
+                daemon=True,
+            ).start()
+        except Exception as e:
+            log.debug("[%s] ticker send skipped: %s", self.camera_id, e)
+
+    def notify_recording_started(self, labels, event_id: str | None = None) -> None:
+        """Ticker: a clip just started."""
+        if not self._ticker_enabled():
+            return
+        what = ", ".join(sorted(set(labels))) if labels else "Bewegung"
+        self._send_ticker(
+            f"🔴 Aufnahme gestartet · {self.cfg.get('name', self.camera_id)}\n" f"Erkannt: {what}"
+        )
+
+    def notify_recording_finished(self, meta: dict, duration_s: float | None) -> None:
+        """Ticker: the clip ended — the cue that it is safe to walk in again."""
+        if not self._ticker_enabled():
+            return
+        # Bypass the gap floor here: a start without its matching end
+        # would leave the user waiting for a signal that never comes,
+        # which is worse than one extra message.
+        self._ticker_last_ts = 0.0
+        labels = meta.get("labels") or []
+        what = ", ".join(sorted(set(labels))) if labels else "Bewegung"
+        dur = f"{duration_s:.0f} s" if duration_s else "—"
+        self._send_ticker(
+            f"⏹ Aufnahme beendet · {self.cfg.get('name', self.camera_id)}\n"
+            f"Dauer: {dur} · Erkannt: {what}"
+        )
+
     def _apply_first_since(self, event: dict, meta: dict) -> None:
         """F06 marker. Mutates both dicts so the JSON on disk carries it
         AND the alert caption can read it without a second store read."""
@@ -175,3 +244,6 @@ class PublishMixin:
         self._publish_quests()
         self._publish_dossiers(meta, event.get("event_id") or meta.get("event_id") or "")
         self._publish_alert(meta, thumb_rel)
+        # Last, so the "you can walk in again" cue only goes out once the
+        # clip is genuinely finished and filed.
+        self.notify_recording_finished(meta, event.get("duration_s"))

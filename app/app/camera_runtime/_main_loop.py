@@ -609,6 +609,13 @@ class MainLoopMixin:
                                     self._rec_event_meta = rec_meta
                                     self.last_event_at = now_dt
                                     self.event_counter_today += 1
+                                    # Ticker: tell the operator a clip just
+                                    # started. Diagnostic, not an alert — it
+                                    # deliberately bypasses the push gates,
+                                    # which are often what is being tested.
+                                    self.notify_recording_started(
+                                        rec_meta.get("labels"), rec_meta.get("event_id")
+                                    )
                                 else:
                                     # OpenCV fallback (legacy path)
                                     self._recording = True

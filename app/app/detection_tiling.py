@@ -15,15 +15,104 @@ runs it only on the escalated wildlife-low + coherent-motion case (D1/D2).
 
 from __future__ import annotations
 
+import logging
+import math
+
 import cv2
 import numpy as np
 
 from .bbox_utils import iou
 
+log = logging.getLogger(__name__)
+
 VALID_MODES = ("off", "roi", "2x2", "3x3")
+# Fallback for a mode that is set but unrecognised — `roi` is the only mode
+# whose magnification scales with how small the subject is.
+FALLBACK_MODE = "roi"
+TILE_OVERLAP = 0.15
+# Minimum linear zoom a region has to reach before it is worth an inference.
+# 1.5 is deliberately modest: it rejects the "crop is basically the frame"
+# case without splitting crops that already help.
+DEFAULT_MIN_MAGNIFICATION = 1.5
 
 
-def tile_regions(w: int, h: int, gx: int, gy: int, overlap: float = 0.15):
+def normalise_mode(mode) -> str:
+    """Map a configured ``roi_mode`` onto :data:`VALID_MODES`.
+
+    Unset / empty stays ``off`` — that is the schema default and means the
+    operator has not switched the rescue on. A value that is *set but not
+    recognised* used to read exactly like ``off``: the rescue was disabled
+    silently and nothing said so. It now warns and falls back to ``roi``.
+    """
+    if mode is None:
+        return "off"
+    text = str(mode).strip().lower()
+    if not text:
+        return "off"
+    if text in VALID_MODES:
+        return text
+    log.warning("[det] unknown roi_mode %r — falling back to %r", mode, FALLBACK_MODE)
+    return FALLBACK_MODE
+
+
+def magnification(frame_w: int, frame_h: int, region) -> float:
+    """Linear zoom of ``region`` relative to the full-frame pass.
+
+    Both passes letterbox into the same square model input, so the gain is
+    just the ratio of the longer edges: a 2560x1440 frame cropped to
+    800x600 reaches the model at 2560/800 = 3.2x the linear resolution the
+    full-frame pass gave it. A 2x2 tile of the same frame reaches only
+    ~1.74x — which is why `roi` is the mode that matters for small
+    subjects, and why a crop that barely shrinks the frame is an
+    inference spent for nothing.
+    """
+    x1, y1, x2, y2 = region
+    longest = max(1, x2 - x1, y2 - y1)
+    return max(frame_w, frame_h) / float(longest)
+
+
+def split_for_magnification(
+    region,
+    frame_w: int,
+    frame_h: int,
+    min_magnification: float = DEFAULT_MIN_MAGNIFICATION,
+    max_parts: int = 4,
+):
+    """Cut ``region`` into overlapping parts until each one actually zooms.
+
+    A motion box that spans a third of the frame produces an ROI crop with
+    a magnification near 1.0 — the subject arrives at the model at the same
+    resolution the full-frame pass already showed it, so the rescue cannot
+    possibly find anything new. Splitting that crop is what turns a wasted
+    pass into a zoom. Capped at ``max_parts`` so the added CPU inference
+    cost per rescue stays bounded and predictable.
+    """
+    x1, y1, x2, y2 = region
+    cw, ch = x2 - x1, y2 - y1
+    if cw <= 0 or ch <= 0:
+        return []
+    if min_magnification <= 0:
+        return [region]
+    if magnification(frame_w, frame_h, region) >= min_magnification:
+        return [region]
+    # Longest edge a part may have to still reach the requested zoom.
+    limit = max(1.0, max(frame_w, frame_h) / float(min_magnification))
+    # tile_regions pads every part by `overlap` on each side, so a 1/n slice
+    # is ~(1 + 2·overlap)/n of the crop, not 1/n.
+    span = 1.0 + 2.0 * TILE_OVERLAP
+    gx = max(1, int(math.ceil(cw * span / limit)))
+    gy = max(1, int(math.ceil(ch * span / limit)))
+    while gx * gy > max_parts and gx * gy > 1:
+        if gx >= gy:
+            gx -= 1
+        else:
+            gy -= 1
+    if gx * gy <= 1:
+        return [region]
+    return [(x1 + a, y1 + b, x1 + c, y1 + d) for a, b, c, d in tile_regions(cw, ch, gx, gy)]
+
+
+def tile_regions(w: int, h: int, gx: int, gy: int, overlap: float = TILE_OVERLAP):
     """Split a W×H frame into gx·gy overlapping tile rectangles."""
     tw, th = w / gx, h / gy
     ox, oy = int(tw * overlap), int(th * overlap)
@@ -87,37 +176,71 @@ def motion_bbox(prev_gray, gray, frame_area: float, min_area_frac: float = 0.000
     return tuple(int(v) for v in cv2.boundingRect(np.concatenate(big)))
 
 
-def tiled_detect(detector, frame, mode: str, threshold: float = 0.20, motion_box=None):
+def roi_regions(w: int, h: int, motion_box, min_magnification: float):
+    """Padded crop around the motion box, split until it really magnifies."""
+    if not motion_box:
+        return []
+    mx, my, mw, mh = motion_box
+    pad = int(0.25 * max(mw, mh)) + 8
+    rx1, ry1 = max(0, mx - pad), max(0, my - pad)
+    rx2, ry2 = min(w, mx + mw + pad), min(h, my + mh + pad)
+    if rx2 <= rx1 or ry2 <= ry1:
+        return []
+    return split_for_magnification((rx1, ry1, rx2, ry2), w, h, min_magnification)
+
+
+def _diag(mode, regions, w, h, tile_hits, raw, merged, min_magnification):
+    """Diagnostics for one tiled_detect pass.
+
+    ``magnification`` and ``crop_px`` are the numbers the whole small-object
+    category hangs on and were previously invisible: whether an ROI crop
+    zoomed 8x or not at all depended entirely on the motion box size and
+    was reported nowhere, so the mode could be neither trusted nor tuned.
+    """
+    return {
+        "mode": mode,
+        "tiles": len(regions),
+        "raw": raw,
+        "merged": merged,
+        "tile_hits": tile_hits,
+        "magnification": [round(magnification(w, h, r), 2) for r in regions],
+        "crop_px": [(r[2] - r[0], r[3] - r[1]) for r in regions],
+        "min_magnification": float(min_magnification),
+    }
+
+
+def tiled_detect(
+    detector,
+    frame,
+    mode: str,
+    threshold: float = 0.20,
+    motion_box=None,
+    min_magnification: float = DEFAULT_MIN_MAGNIFICATION,
+    full_dets=None,
+):
     """Hybrid full-frame + tiling/ROI detection.
 
     Returns (merged_detections, diag) where diag carries the SAHI counters.
     mode: 'off' (full only) | '2x2' | '3x3' | 'roi' (motion bbox crop).
-    A full-frame pass always runs and is NMS-merged with the tile/ROI hits.
+    A full-frame pass is always part of the merge — pass ``full_dets`` to
+    reuse one the caller has already run instead of paying for a second
+    identical inference (the live loop always has one in hand).
     """
     h, w = frame.shape[:2]
-    full = detector.detect_frame_raw(frame, threshold=threshold)
-    if mode not in ("2x2", "3x3", "roi"):
-        return list(full), {
-            "mode": "off",
-            "tiles": 0,
-            "raw": len(full),
-            "merged": len(full),
-            "tile_hits": [],
-        }
+    mode = normalise_mode(mode)
+    if full_dets is not None:
+        full = list(full_dets)
+    else:
+        full = list(detector.detect_frame_raw(frame, threshold=threshold))
+    if mode == "off":
+        return full, _diag("off", [], w, h, [], len(full), len(full), min_magnification)
 
     if mode == "2x2":
         regions = tile_regions(w, h, 2, 2)
     elif mode == "3x3":
         regions = tile_regions(w, h, 3, 3)
     else:  # roi
-        regions = []
-        if motion_box:
-            mx, my, mw, mh = motion_box
-            pad = int(0.25 * max(mw, mh)) + 8
-            rx1, ry1 = max(0, mx - pad), max(0, my - pad)
-            rx2, ry2 = min(w, mx + mw + pad), min(h, my + mh + pad)
-            if rx2 > rx1 and ry2 > ry1:
-                regions = [(rx1, ry1, rx2, ry2)]
+        regions = roi_regions(w, h, motion_box, min_magnification)
 
     tile_hits = []
     tiled = []
@@ -125,13 +248,8 @@ def tiled_detect(detector, frame, mode: str, threshold: float = 0.20, motion_box
         rd = detect_region(detector, frame, r, threshold)
         tile_hits.append(len(rd))
         tiled.extend(rd)
-    raw_all = list(full) + tiled
+    raw_all = full + tiled
     merged = nms_merge(raw_all)
-    diag = {
-        "mode": mode,
-        "tiles": len(regions),
-        "raw": len(raw_all),
-        "merged": len(merged),
-        "tile_hits": tile_hits,
-    }
-    return merged, diag
+    return merged, _diag(
+        mode, regions, w, h, tile_hits, len(raw_all), len(merged), min_magnification
+    )

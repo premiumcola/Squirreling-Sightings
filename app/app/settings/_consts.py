@@ -86,6 +86,15 @@ WEATHER_DEFAULTS: dict = {
         "thunder": {"enabled": True, "threshold": 1000.0, "cooldown_min": 30},
         "heavy_rain": {"enabled": True, "threshold": 5.0, "hysteresis": 1.0, "cooldown_min": 30},
         "snow": {"enabled": True, "threshold": 0.5, "cooldown_min": 60},
+        # Gusts in km/h. 60 sits just under Beaufort 8 ("stürmischer
+        # Wind", 62 km/h) so a gale is caught as it arrives, and far
+        # above the 22–26 km/h that is an ordinary breezy afternoon here.
+        # This event feeds the EPISODE ARCHIVE only — `_detection._detect`
+        # has no `storm` branch, so it deliberately produces no weather
+        # clip and no push. It exists because a squall that peaked at
+        # 65 km/h on 2026-08-28 could not be archived at all: gusts were
+        # charted but had no threshold behind them.
+        "storm": {"enabled": True, "threshold": 60.0, "cooldown_min": 60},
         "fog": {"enabled": True, "vis_max_m": 1000, "contrast_max": 0.25, "cooldown_min": 90},
         # Sunset: triggers once per day in the dusk window.
         "sunset": {

@@ -78,8 +78,11 @@ def _history(series, *, base=BASE, step_min=STEP_MIN, field="lightning_potential
     return rows
 
 
-def _quiet(n):
-    return [0.0] * n
+def _quiet(n, value=0.0):
+    """`n` calm slots. `value` because a calm WIND series is 20 km/h, not
+    0 — a gust field that reads zero for an hour is a broken sensor, not
+    a quiet afternoon, and the storm tests need the difference."""
+    return [value] * n
 
 
 # ── Segmentation ───────────────────────────────────────────────────────
@@ -474,3 +477,49 @@ def test_route_delete_tombstones(client, tmp_path):
     assert client.delete(url).status_code == 200
     assert client.get("/api/weather/episodes").get_json()["count"] == 0
     assert client.delete(url).status_code == 404
+
+
+# ── Wind gusts as a trigger ────────────────────────────────────────────
+#
+# On 2026-08-28 a squall peaked at ~65 km/h on Garten 'Dach Terrasse'
+# while lightning sat at 1 J/kg and rain at 0.20 mm/h. Nothing was
+# archived, and the operator asked why: gusts were charted, carried a
+# palette entry, an intensity reference and even a `storm` user-class in
+# the frontend — but `wind_gusts_10m` had no entry in HISTORY_FIELD_TO_EVENT
+# or FIELD_DIRECTION, so the one remarkable number in the window was the
+# one that could not start an episode.
+#
+# 60 km/h sits just under Beaufort 8 (62) and far above the 22–26 km/h
+# that is an ordinary breezy afternoon at this location.
+
+STORM_EVENTS = dict(EVENTS, storm={"enabled": True, "threshold": 60.0})
+
+
+def test_a_gale_alone_is_archived_as_a_storm():
+    """THE regression test — this window produced no episode at all."""
+    rows = _history(
+        _quiet(12, 20.0) + [58.0, 65.0, 70.0, 66.0, 61.0] + _quiet(60, 22.0),
+        field="wind_gusts_10m",
+    )
+    eps, _ = detect_episodes(rows, events_cfg=STORM_EVENTS, episode_cfg=TIGHT)
+    assert len(eps) == 1, f"a 70 km/h gale must be archivable, got {eps}"
+    ep = eps[0]
+    assert ep["auto_class"] == "storm"
+    assert ep["peaks"]["wind_gusts_10m"] == 70.0
+
+
+def test_an_ordinary_breezy_afternoon_is_not_a_storm():
+    """The counter-test — the threshold has to exclude normal weather."""
+    rows = _history(_quiet(40, 26.0), field="wind_gusts_10m")
+    eps, _ = detect_episodes(rows, events_cfg=STORM_EVENTS, episode_cfg=TIGHT)
+    assert eps == []
+
+
+def test_lightning_still_outranks_gusts_in_one_episode():
+    """A thunderstorm with gusts in it is a thunderstorm, not a Sturm."""
+    rows = _history(_quiet(12) + [1500.0, 2400.0, 1800.0] + _quiet(60))
+    for i, r in enumerate(rows):
+        r["values"]["wind_gusts_10m"] = 70.0 if 12 <= i < 15 else 20.0
+    eps, _ = detect_episodes(rows, events_cfg=STORM_EVENTS, episode_cfg=TIGHT)
+    assert len(eps) == 1
+    assert eps[0]["auto_class"] == "thunder", "EVENT_PRIORITY puts thunder first"

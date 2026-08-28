@@ -30,6 +30,7 @@ EVENT_LABEL_DE: dict[str, str] = {
     "thunder": "Gewitter",
     "heavy_rain": "Starkregen",
     "snow": "Schnee",
+    "storm": "Sturm",
     "fog": "Nebel",
     # `sunset` removed — sunrise/sunset content lives only in the
     # sun_timelapse pipeline (sun_timelapse_rise / sun_timelapse_set).
@@ -88,6 +89,14 @@ HISTORY_FIELD_TO_EVENT: dict[str, str] = {
     "snowfall": "snow",
     "lightning_potential": "thunder",
     "visibility": "fog",
+    # Gusts were measured and charted but could not trigger anything, so a
+    # squall that hit 65 km/h on 2026-08-28 left the archive empty while
+    # lightning sat at 1 J/kg and rain at 0.20 mm/h — the one remarkable
+    # number in the window was the one with no threshold behind it. The
+    # operator's own words: "die Windböen sind deutlich hoch auf fast
+    # 70 km/h. Das war davor eigentlich noch nie der Fall. Also das kann
+    # man deutlich abgrenzen."
+    "wind_gusts_10m": "storm",
 }
 
 HISTORY_MAXLEN = 8640  # 30 d @ 5 min — deque truncates oldest, ~1.5 MB on disk

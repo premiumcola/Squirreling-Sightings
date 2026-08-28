@@ -129,9 +129,20 @@ def test_record_stamps_the_thresholds_it_was_measured_against():
     # Fog is configured as `vis_max_m`, not `threshold`; the live history
     # payload therefore emits null for it and only the snapshot knows.
     assert thr["visibility"] == 1000.0
-    # Wind has no event at all, so it must be ABSENT rather than 0 — a
-    # zero here draws a "Schwelle" line along the chart's axis floor.
-    assert "wind_gusts_10m" not in thr
+    # Gusts DID have no event when this test was written, and the
+    # assertion here was `"wind_gusts_10m" not in thr`. That changed on
+    # purpose: a 65 km/h squall could not be archived at all because the
+    # only remarkable value in its window had no threshold behind it, so
+    # `storm` was added at 60 km/h (just under Beaufort 8). The fixture
+    # above does not configure it, so this also pins that the DEFAULT
+    # carries through when the caller omits the event.
+    assert thr["wind_gusts_10m"] == 60.0
+    # The invariant the old assertion was really protecting, moved to a
+    # field that still has no event: absent, never 0. A zero would draw a
+    # "Schwelle" line along the chart's axis floor and read as a real bar
+    # the value is permanently above.
+    assert "cloud_cover" not in thr
+    assert "sun_altitude" not in thr
 
 
 def test_threshold_snapshot_follows_the_configured_values():

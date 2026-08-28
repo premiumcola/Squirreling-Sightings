@@ -81,13 +81,17 @@ FIELD_DIRECTION: dict[str, str] = {
     "snowfall": "above",
     "lightning_potential": "above",
     "visibility": "below",
+    "wind_gusts_10m": "above",
 }
 
 # auto_class when several events fire inside one episode. Fixed order,
 # not a magnitude race: a downpour with lightning in it is a
 # thunderstorm, and frozen precipitation is the notable half of a
 # rain/snow mix.
-EVENT_PRIORITY: tuple[str, ...] = ("thunder", "snow", "heavy_rain", "fog")
+# `storm` sits below the precipitation events on purpose: a downpour with
+# gusts in it is still a downpour, and lightning outranks everything. It
+# beats `fog` because a gale is the more notable half of a windy mist.
+EVENT_PRIORITY: tuple[str, ...] = ("thunder", "snow", "heavy_rain", "storm", "fog")
 
 # Peak metrics carried on every record, whether or not they triggered.
 # Wind has no configured event threshold but is what separates a squall

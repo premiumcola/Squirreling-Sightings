@@ -82,8 +82,27 @@ WEATHER_DEFAULTS: dict = {
     "enabled": True,
     "poll_interval": 300,
     "events": {
-        # lightning_potential is in J/kg from Open-Meteo's icon_d2 model.
-        "thunder": {"enabled": True, "threshold": 1000.0, "cooldown_min": 30},
+        # lightning_potential is the LIGHTNING POTENTIAL INDEX (LPI) after
+        # Lynn & Yair (2010), a native ICON-D2 field: the vertical integral
+        # of squared updraft velocity weighted by graupel concentration.
+        # The unit is J/kg, which is what caused the error — it reads like
+        # CAPE and is nothing like it. Published observed thunderstorm
+        # cases run **0.2 to 0.8 J/kg**.
+        #
+        # The threshold here was 1000.0, i.e. roughly a thousandfold too
+        # high: it could not fire for any storm that has ever existed. On
+        # 2026-08-28 the operator watched a thunderstorm with visible
+        # lightning and heavy rain while the archive stayed empty and the
+        # panel read "Blitz-Potential 0 J/kg" — the sample at 12:53 was
+        # 1 J/kg, ABOVE the published thunderstorm range, and still three
+        # orders of magnitude under the bar.
+        #
+        # 0.2 is the BOTTOM of the observed band, so even the weakest
+        # published thunderstorm case crosses it. LPI is ~0 outside
+        # convection, so this is a signal, not a noise floor. See migrate_thunder_lpi_scale() — a
+        # value this wrong is a bug, not a preference, so existing
+        # installs are corrected rather than merely backfilled.
+        "thunder": {"enabled": True, "threshold": 0.2, "cooldown_min": 30},
         "heavy_rain": {"enabled": True, "threshold": 5.0, "hysteresis": 1.0, "cooldown_min": 30},
         "snow": {"enabled": True, "threshold": 0.5, "cooldown_min": 60},
         # Gusts in km/h. 60 sits just under Beaufort 8 ("stürmischer

@@ -169,7 +169,13 @@ class DetectionMixin:
             return False, 0.0
         thr = float(cfg.get("threshold", 1000.0))
         if float(lp) >= thr:
-            return True, min(1.0, float(lp) / 3000.0)
+            # /2.0, not /3000.0 — lightning_potential is the LPI (Lynn &
+            # Yair 2010), whose observed thunderstorm range is 0.2–0.8
+            # J/kg. Against 3000 every real storm scored ~0.0003 and was
+            # filtered out by push.weather.min_score = 0.4, so even a
+            # firing thunder event could never have reached Telegram.
+            # Mirrored by INTENSITY_REFERENCE in weather_episodes/_consts.
+            return True, min(1.0, float(lp) / 2.0)
         return False, 0.0
 
     def _detect_rain_or_snow(

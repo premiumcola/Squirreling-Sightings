@@ -346,6 +346,51 @@ def migrate_weather_defaults(data: dict) -> None:
             _deep_merge_defaults(evt_tl, EVENT_TL_DEFAULTS)
 
 
+# No plausible LPI threshold is anywhere near this. The physical index
+# runs 0.2–0.8 J/kg in observed thunderstorms and tops out in the low
+# tens; anything at or above 100 can only have come from reading "J/kg"
+# as a CAPE-like quantity.
+_LPI_WRONG_SCALE_MIN = 100.0
+
+
+def migrate_thunder_lpi_scale(data: dict) -> None:
+    """Correct a thunder threshold left on the CAPE scale.
+
+    `lightning_potential` is the Lightning Potential Index (Lynn & Yair
+    2010), a native ICON-D2 field. Its unit is J/kg, which reads like
+    CAPE and is nothing like it: observed thunderstorm cases run
+    0.2–0.8 J/kg. The shipped default was 1000.0, so the thunder trigger
+    could not fire for any storm that has ever existed — and on
+    2026-08-28 it did not, through a thunderstorm the operator watched
+    with visible lightning.
+
+    This deliberately OVERWRITES an existing value, which the rest of
+    this module never does. The justification is narrow and it matters:
+    a threshold three orders of magnitude outside its own index's range
+    is not a preference the operator expressed, it is a unit error, and
+    leaving it in place would mean the additive-merge rule preserves a
+    bug forever. The guard is conservative — only values at or above
+    100 are touched, so any hand-tuned LPI number survives untouched.
+    """
+    events = ((data.get("weather") or {}).get("events") or {}).get("thunder")
+    if not isinstance(events, dict):
+        return
+    try:
+        current = float(events.get("threshold"))
+    except (TypeError, ValueError):
+        return
+    if current < _LPI_WRONG_SCALE_MIN:
+        return
+    corrected = float(WEATHER_DEFAULTS["events"]["thunder"]["threshold"])
+    events["threshold"] = corrected
+    log.warning(
+        "[migration] thunder-Schwelle %.1f J/kg lag auf der CAPE-Skala – "
+        "korrigiert auf %.2f J/kg (LPI-Bereich 0.2–0.8)",
+        current,
+        corrected,
+    )
+
+
 def migrate_timelapse_intervals(data: dict) -> None:
     """E1 · enforce the 2026-05-16 timelapse floor on legacy settings.json
     files: every capture interval clamps to ≥ 8 s, every fps locks to

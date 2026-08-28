@@ -117,7 +117,13 @@ PEAK_FIELDS: tuple[str, ...] = (
 # detectors (_detection.py: `lp / 3000.0`, `scale=20.0`, `scale=5.0`) so
 # the archive and the alert path agree on what "bad" means.
 INTENSITY_REFERENCE: dict[str, float] = {
-    "lightning_potential": 3000.0,  # J/kg — icon-d2 extreme convective
+    # LPI (Lynn & Yair 2010), NOT CAPE — observed thunderstorm cases run
+    # 0.2–0.8 J/kg. This was 3000.0, matching the equally wrong 1000.0
+    # trigger threshold, so every real storm scored ~0.0003 on this axis
+    # and the intensity ranking was blind to lightning altogether.
+    # 2.0 puts the operator's 2026-08-28 storm (peak ~1 J/kg) at ~0.5 —
+    # "a normally strong thunderstorm", which is what they called it.
+    "lightning_potential": 2.0,
     "precipitation": 20.0,  # mm/h — cloudburst
     "snowfall": 5.0,  # cm/h — heavy snowfall
     "wind_gusts_10m": 120.0,  # km/h — Beaufort 12 starts at 118

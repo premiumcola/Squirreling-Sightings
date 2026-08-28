@@ -36,9 +36,17 @@ flask = pytest.importorskip("flask")
 BASE = datetime(2026, 8, 20, 6, 0, 0)
 STEP_MIN = 5
 
-# Matches WEATHER_DEFAULTS["events"] — the archive reads the SAME
-# thresholds the live detectors fire on, so the fixture states them
-# once and every test inherits them.
+# A SYNTHETIC threshold set, deliberately not the shipped one. These
+# tests are about segmentation — where an episode starts, when it
+# settles, how margins merge — and round numbers like 1000/1500/2400
+# keep the series in each test readable.
+#
+# It used to claim "Matches WEATHER_DEFAULTS", which stopped being true
+# when the thunder threshold was corrected from 1000.0 to 0.2 J/kg: the
+# field is the Lightning Potential Index, not CAPE, and its observed
+# thunderstorm band is 0.2-0.8. The physical values live in
+# test_thunder_lpi_scale.py, which asserts them against the real
+# WEATHER_DEFAULTS — that is the test to change if a threshold moves.
 EVENTS = {
     "thunder": {"enabled": True, "threshold": 1000.0},
     "heavy_rain": {"enabled": True, "threshold": 5.0},
@@ -205,8 +213,14 @@ def test_precipitation_total_integrates_the_episode():
 
 
 def test_intensity_orders_two_known_storms():
-    mild = {"lightning_potential": 1200.0, "precipitation": 3.0, "wind_gusts_10m": 40.0}
-    severe = {"lightning_potential": 2800.0, "precipitation": 18.0, "wind_gusts_10m": 95.0}
+    # Lightning values are LPI (Lynn & Yair 2010), whose observed
+    # thunderstorm band is 0.2-0.8 J/kg. These fixtures used to read
+    # 1200 / 2800 — CAPE magnitudes, matching the trigger threshold that
+    # was wrong by three orders of magnitude. Both clamped to 1.0 under
+    # the corrected reference, so the ordering this test exists to check
+    # became untestable.
+    mild = {"lightning_potential": 0.4, "precipitation": 3.0, "wind_gusts_10m": 40.0}
+    severe = {"lightning_potential": 1.6, "precipitation": 18.0, "wind_gusts_10m": 95.0}
     mild_score = intensity_score(mild, {"precipitation_mm": 4.0})
     severe_score = intensity_score(severe, {"precipitation_mm": 31.0})
     assert 0.0 < mild_score < severe_score <= 1.0
@@ -214,20 +228,20 @@ def test_intensity_orders_two_known_storms():
 
 def test_intensity_reference_value_scores_one():
     """An axis at its documented reference alone is intensity 1.0."""
-    assert intensity_score({"lightning_potential": 3000.0}) == 1.0
+    assert intensity_score({"lightning_potential": 2.0}) == 1.0
     assert intensity_score({"precipitation": 20.0}) == 1.0
     assert intensity_score({"wind_gusts_10m": 120.0}) == 1.0
 
 
 def test_intensity_ignores_missing_axes():
     """A missing wind reading must not make a storm look milder."""
-    assert intensity_score({"lightning_potential": 1500.0}) == pytest.approx(0.5)
+    assert intensity_score({"lightning_potential": 1.0}) == pytest.approx(0.5)
     assert intensity_score({}) == 0.0
 
 
 def test_intensity_is_monotone_in_every_axis():
-    low = {"lightning_potential": 1500.0, "precipitation": 5.0}
-    high = {"lightning_potential": 1500.0, "precipitation": 10.0}
+    low = {"lightning_potential": 1.0, "precipitation": 5.0}
+    high = {"lightning_potential": 1.0, "precipitation": 10.0}
     assert intensity_score(high) > intensity_score(low)
 
 

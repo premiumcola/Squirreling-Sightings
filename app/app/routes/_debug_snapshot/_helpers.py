@@ -109,23 +109,28 @@ def collect_log_lines(cam_id: str, limit: int = _LOG_LINES) -> list:
     ``logging_setup.log_buffer`` already holds the last 400 records for
     ``/api/logs``; this is the same data narrowed to what answers "why
     was there no alert" so the operator never has to open a root shell.
+
+    Lines naming THIS camera win the budget. ``[det]`` and ``[tg]`` are
+    system-wide tags, so on a box with several cameras a chatty detector
+    would otherwise push the very lines being diagnosed out of a 40-line
+    window — the snapshot would look full and say nothing.
     """
     try:
         records = log_buffer.get(logging.DEBUG)
     except Exception:  # pragma: no cover - defensive
         return []
-    keep = []
-    for rec in records:
+    mine, others = [], []
+    for idx, rec in enumerate(records):
         msg = rec.get("msg") or ""
         level = (rec.get("level") or "").upper()
-        relevant = (
-            (cam_id and cam_id in msg)
-            or any(tag in msg for tag in _LOG_TAGS)
-            or level in ("WARNING", "ERROR", "CRITICAL")
-        )
-        if relevant:
-            keep.append(rec)
-    return keep[-limit:]
+        if cam_id and cam_id in msg:
+            mine.append((idx, rec))
+        elif any(tag in msg for tag in _LOG_TAGS) or level in ("WARNING", "ERROR", "CRITICAL"):
+            others.append((idx, rec))
+    mine = mine[-limit:]
+    others = others[-max(0, limit - len(mine)) :] if len(mine) < limit else []
+    # Re-interleave by buffer position so the block reads chronologically.
+    return [rec for _idx, rec in sorted(mine + others, key=lambda pair: pair[0])]
 
 
 def _log_block(cam_id: str, records) -> str:

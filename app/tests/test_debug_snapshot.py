@@ -259,6 +259,38 @@ def test_collect_log_lines_is_bounded():
     assert lines[-1]["msg"] == "[det] line 399", "newest lines are the ones kept"
 
 
+def test_this_cameras_own_lines_are_never_crowded_out():
+    """``[det]`` / ``[tg]`` are system-wide tags. On a multi-camera box a
+    chatty detector would fill a 40-line window with other cameras' noise
+    and the snapshot would look full while saying nothing about this one."""
+    noise = [{"ts": "12:00:00", "level": "INFO", "msg": f"[det] other cam {i}"} for i in range(60)]
+    ours = [
+        {"ts": "12:00:01", "level": "INFO", "msg": f"[trigger][cam:{CAM_ID}] ours {i}"}
+        for i in range(5)
+    ]
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.routes._debug_snapshot._helpers.log_buffer", _FakeBuffer(noise + ours))
+        lines = collect_log_lines(CAM_ID)
+    kept = [line["msg"] for line in lines]
+    for i in range(5):
+        assert f"ours {i}" in "\n".join(kept), "every line naming this camera must survive"
+    assert len(lines) == 40, "the rest of the budget is still filled with context"
+
+
+def test_the_log_block_reads_chronologically():
+    """Camera lines and context lines are re-interleaved by buffer order —
+    a block that jumped back in time would misread as a causal sequence."""
+    records = [
+        {"ts": "12:00:00", "level": "INFO", "msg": "[det] before"},
+        {"ts": "12:00:01", "level": "INFO", "msg": f"[trigger][cam:{CAM_ID}] middle"},
+        {"ts": "12:00:02", "level": "INFO", "msg": "[tg] after"},
+    ]
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("app.routes._debug_snapshot._helpers.log_buffer", _FakeBuffer(records))
+        lines = collect_log_lines(CAM_ID)
+    assert [line["msg"] for line in lines] == [r["msg"] for r in records]
+
+
 def test_the_real_log_buffer_is_readable():
     """Guards against the filter drifting away from the buffer's shape."""
     log_buffer.emit(

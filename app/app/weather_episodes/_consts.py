@@ -19,6 +19,18 @@ EPISODE_FILE = "weather_episodes.jsonl"
 KIND_EPISODE = "episode"
 KIND_PATCH = "patch"
 KIND_DELETE = "delete"
+# How many recordings overlap this episode's window. Written ONCE, by
+# whoever last scanned the media stores for that window — never by the
+# list route. See ``_archive._stamp_footage`` for why the count lives in
+# the ledger instead of being recomputed per request.
+KIND_FOOTAGE = "footage"
+
+# Episodes to count per sweep when the archive predates the stamped
+# count. Three, not "all": the sweep runs on the weather poll's thread
+# every 5 minutes, and a fresh deploy with a full window of storms must
+# not turn one poll into a minutes-long media walk. At this rate a
+# 60-storm archive is fully stamped inside 100 minutes.
+FOOTAGE_BACKFILL_PER_SWEEP = 3
 
 # Margin + settle defaults. Mirrored into WEATHER_DEFAULTS["episodes"]
 # (app/app/settings/_consts.py) so the values are user-configurable and

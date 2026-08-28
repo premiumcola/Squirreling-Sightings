@@ -21,11 +21,11 @@ from ..weather_episodes import (
     USER_CLASSES,
     USER_NAME_MAX,
     USER_NOTE_MAX,
+    append_footage_count,
     build_footage_index,
     delete_episode,
-    earliest_window_start,
     episode_footage,
-    episode_footage_counts,
+    episode_window,
     get_episode,
     list_episodes,
     patch_episode,
@@ -59,14 +59,16 @@ def _cameras() -> list:
         return []
 
 
-def _footage_index(root, records: list):
-    """Scan the media stores once for a set of episode records."""
+def _footage_index(root, rec: dict):
+    """Scan the media stores for ONE episode's window."""
+    start, end = episode_window(rec)
     return build_footage_index(
         root,
         weather_service=app_state.weather_service,
         store=app_state.store,
         cameras=_cameras(),
-        since=earliest_window_start(records),
+        since=start,
+        until=end,
     )
 
 
@@ -112,19 +114,18 @@ def api_weather_episodes_list():
     episode would make the list view megabytes. Fetch one episode by id
     to get its samples.
 
-    Each row carries a ``footage_count`` so the list can show which
-    storms were filmed without a request per row; the media stores are
-    scanned exactly once for the whole list.
+    Rows carry a ``footage_count`` when one has been stamped into the
+    ledger (by the sweep, or by the footage route below). This handler
+    touches NO media store: it used to build a footage index per
+    request, which meant walking the motion tree — every event JSON on
+    disk, parsed — for a number that cannot change once an episode's
+    window has closed. The operator opens this route constantly; it has
+    to stay a single append-only file read.
     """
     root = app_state.storage_root
     if root is None:
         return jsonify({"items": [], "count": 0, "pending": None})
-
-    def _counts(records: list) -> dict:
-        candidates, _degraded = _footage_index(root, records)
-        return episode_footage_counts(candidates, records)
-
-    items = list_episodes(root, footage_counts=_counts)
+    items = list_episodes(root)
     return jsonify({"items": items, "count": len(items), "pending": _pending()})
 
 
@@ -149,6 +150,11 @@ def api_weather_episode_footage(episode_id: str):
     that could not be read is reported in ``degraded`` rather than
     turning the whole page into an error, because the archive is a
     passive record and one dead source must not hide the other three.
+
+    The total is stamped back into the ledger when it differs from what
+    is stored, so the list's chip is corrected by the very scan the
+    operator just paid for — and an episode archived before the count
+    existed gets one the first time it is opened.
     """
     root = app_state.storage_root
     if root is None or len(episode_id) > _MAX_ID_LEN:
@@ -156,8 +162,15 @@ def api_weather_episode_footage(episode_id: str):
     rec = get_episode(root, episode_id)
     if not rec:
         return jsonify({"error": "not found"}), 404
-    candidates, degraded = _footage_index(root, [rec])
-    return jsonify(episode_footage(candidates, degraded, rec))
+    candidates, degraded = _footage_index(root, rec)
+    payload = episode_footage(candidates, degraded, rec)
+    # `event_timelapse_disabled` is a configuration hint, not a read
+    # failure — only an unreadable source may block the stamp, or a
+    # partial scan would be written down as the truth.
+    incomplete = "weather_service_unavailable" in degraded
+    if not incomplete and payload["total"] != rec.get("footage_count"):
+        append_footage_count(root, episode_id, payload["total"])
+    return jsonify(payload)
 
 
 @bp.patch('/api/weather/episodes/<episode_id>')

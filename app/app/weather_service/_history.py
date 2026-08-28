@@ -157,12 +157,51 @@ class HistoryMixin:
                 rows,
                 events_cfg=self.cfg.get("events"),
                 episode_cfg=self.cfg.get("episodes"),
+                footage_counter=self._episode_footage_counter(root),
             )
         except Exception as e:
             log.warning("[weather] episode sweep failed: %s", e)
             return
         with self._history_lock:
             self._episode_pending = result.get("pending")
+
+    def _episode_footage_counter(self, root):
+        """``record -> overlapping-recording count``, for the list chip.
+
+        The count is stamped into the archive ledger HERE — on the poll
+        thread, once per episode — because the list route must not walk
+        the media tree to render a chip. Bounded to the record's OWN
+        window, so one call reads the two date folders that window
+        touches instead of every event ever recorded.
+
+        Returns ``None`` for a record with no usable window, which tells
+        the sweep to stop rather than stamp a wrong number.
+        """
+        from .. import app_state
+        from ..weather_episodes import build_footage_index, episode_footage, episode_window
+
+        def _count(rec: dict):
+            start, end = episode_window(rec)
+            if start is None:
+                return None
+            try:
+                cameras = list(app_state.get_effective_config().get("cameras") or [])
+            except Exception as e:
+                log.warning("[weather] camera list unavailable for footage count: %s", e)
+                return None
+            candidates, degraded = build_footage_index(
+                root,
+                weather_service=self,
+                store=app_state.store,
+                cameras=cameras,
+                since=start,
+                until=end,
+            )
+            if "weather_service_unavailable" in degraded:
+                return None
+            return int(episode_footage(candidates, degraded, rec)["total"])
+
+        return _count
 
     def episodes_pending(self) -> dict | None:
         """The storm currently being recorded, or None.

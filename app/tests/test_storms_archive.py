@@ -203,6 +203,42 @@ def test_there_is_no_alignment_toggle():
         ), f"{name} introduces an alignment toggle — §3.2 is decided"
 
 
+def test_no_shipped_comment_cites_a_spec_section():
+    """Section numbers point at a document that is not in this repo, so
+    a reader has no way to follow them — `_state.js` carried "never
+    paginated (see §9.3)" and §9.3 exists nowhere. The reason belongs in
+    the comment, not behind a citation."""
+    sources = dict(_storm_sources())
+    sources.update({p.name: _read(p) for p in sorted(_CHART.glob("*.js"))})
+    sources["metric-direction.js"] = _read(_JS / "weather" / "metric-direction.js")
+    for name, src in sources.items():
+        assert "§" not in src, f"{name} cites a spec section that no reader can look up"
+
+
+def test_metric_direction_is_asked_never_re_declared():
+    """The direction was known in three places and consulted in some:
+    the chart's peak dot planted itself on the clearest moment of a fog
+    and the table bolded the best visibility as the worst. One helper,
+    every consumer — two sites agreeing by convention drift again."""
+    shared = _read(_JS / "weather" / "metric-direction.js")
+    assert "'visibility'" in shared, "the shared helper must own the inverted set"
+    consumers = {
+        "_multi.js": _read(_CHART / "_multi.js"),
+        "_compare_table.js": _read(_STORMS / "_compare_table.js"),
+        "_helpers.js": _read(_STORMS / "_helpers.js"),
+    }
+    for name, src in consumers.items():
+        assert "metric-direction.js" in src, f"{name} must ask the shared helper"
+    # Nobody else may hard-code the direction. The metric KEY may of
+    # course appear (STORM_METRICS lists it); what may not is a second
+    # copy of "which way is worse".
+    others = dict(_storm_sources())
+    others.update({p.name: _read(p) for p in sorted(_CHART.glob("*.js"))})
+    for name, src in others.items():
+        for smell in ("INVERTED", "new Set(['visibility'", "=== 'visibility'"):
+            assert smell not in src, f"{name} re-declares the metric direction ({smell})"
+
+
 def test_compare_shares_one_absolute_y_scale():
     """Per-line normalisation would draw a 12 mm/h cloudburst and a
     3 mm/h shower as identical curves — the opposite of comparing."""

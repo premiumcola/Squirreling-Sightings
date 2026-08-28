@@ -28,12 +28,33 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from ..weather_service._consts import _safe_dt
+from ._motion_scan import motion_events_between
 
 log = logging.getLogger(__name__)
 
-_MOTION_LIMIT = 100000
 _DEFAULT_MOTION_SPAN_S = 60.0
 _DEFAULT_TIMELAPSE_PERIOD_S = 86400.0
+
+# `list_sightings` paginates; the window bounds already do the pruning,
+# so one page has to be able to hold what is left.
+_PAGE_ALL = 100000
+
+# A recording is stamped at ONE end of the span it covers, so a window
+# query has to reach past the window to find everything that overlaps
+# it. Two different pads, because the two stores lie in opposite
+# directions:
+#
+#   motion — `time` is the START, the clip runs forwards. An event a few
+#     minutes before the window can still reach into it.
+#   sightings — a timelapse manifest stamps `started_at` when the ENCODE
+#     finished, i.e. at the END of a window that can be a full day
+#     (`window_min`), so the pad has to cover the widest such window.
+_MOTION_PAD_MIN = 15
+_SIGHTING_PAD_H = 36
+
+
+def _iso(dt) -> str:
+    return dt.isoformat(timespec="seconds") if dt is not None else ""
 
 
 def _num(value, fallback: float = 0.0) -> float:
@@ -59,9 +80,22 @@ def _manifest_span(m: dict) -> tuple:
     return stamped, stamped + timedelta(seconds=max(0.0, _num(m.get("duration_s"), 0.0)))
 
 
-def weather_candidates(weather_service) -> list:
-    """Every weather sighting on disk, normalised. Raises on read failure."""
-    result = weather_service.list_sightings(page=0, page_size=_MOTION_LIMIT)
+def weather_candidates(weather_service, since=None, until=None) -> list:
+    """Weather sightings overlapping ``[since, until]``, normalised.
+
+    The bounds are handed to ``list_sightings`` (padded by
+    ``_SIGHTING_PAD_H``, see above) so the manifest list this walks is
+    the window's, not the whole archive's. Raises on read failure — the
+    caller turns that into a ``degraded`` marker.
+    """
+    lo = since - timedelta(hours=_SIGHTING_PAD_H) if since is not None else None
+    hi = until + timedelta(hours=_SIGHTING_PAD_H) if until is not None else None
+    result = weather_service.list_sightings(
+        since_iso=_iso(lo) or None,
+        until_iso=_iso(hi) or None,
+        page=0,
+        page_size=_PAGE_ALL,
+    )
     out: list = []
     for m in result.get("items") or []:
         start, end = _manifest_span(m)
@@ -147,19 +181,24 @@ def _motion_span(obj: dict, start: datetime) -> datetime:
     return start + timedelta(seconds=max(_DEFAULT_MOTION_SPAN_S, length))
 
 
-def motion_candidates(store, cam_ids: list, cam_names: dict, since_iso: str) -> list:
-    """Motion events with media, per camera, no earlier than ``since_iso``.
+def motion_candidates(store, cam_ids: list, cam_names: dict, since=None, until=None) -> list:
+    """Motion events with media, per camera, inside ``[since, until]``.
+
+    Reads via ``motion_events_between``, which prunes on the date-folder
+    name — the window is hours wide and the tree is years deep, so the
+    unbounded read this used to do (``list_events`` parses EVERY event
+    JSON before applying its ``start``) was the whole cost of the route.
 
     The whole event payload rides along in ``extra`` because the client
     hands motion tiles to the existing lightbox, which speaks exactly
     the shape ``/api/camera/<id>/media`` returns.
     """
+    lo = _iso(since - timedelta(minutes=_MOTION_PAD_MIN) if since is not None else None)
+    hi = _iso(until)
     out: list = []
     for cam_id in cam_ids:
         try:
-            events = store.list_events(
-                cam_id, start=since_iso, limit=_MOTION_LIMIT, offset=0, media_only=True
-            )
+            events = motion_events_between(store, cam_id, lo, hi)
         except Exception as e:
             log.warning("[weather] motion scan failed for %s: %s", cam_id, e)
             continue

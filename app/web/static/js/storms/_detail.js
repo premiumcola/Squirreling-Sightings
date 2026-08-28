@@ -44,6 +44,10 @@ import { fetchFootage } from './_api.js';
 // episode and then opening a thunderstorm renders a blank chart with
 // the Schnee pill both selected and disabled — a state the operator
 // cannot click out of.
+//
+// Returns null for a record with NO peaks at all — the same rule taken
+// to its end: nothing is selected, so nothing can be selected and
+// disabled at once, and _mountChart says so in words.
 export function detailMetric(ep) {
   const sticky = stormsState.metric;
   if (sticky && STORM_METRICS.includes(sticky) && metricHasData([ep], sticky)) return sticky;
@@ -116,6 +120,14 @@ function _mountChart(ep, metric) {
   const wrap = document.querySelector('#stormsDetailChart');
   const foot = document.querySelector('#stormsFootage');
   if (!wrap) return;
+  // No metric has a peak on this record — every pill is disabled, so
+  // none may be active either. Say so instead of isolating a field that
+  // is not there.
+  if (!metric) {
+    wrap.innerHTML =
+      '<div class="ws-stats-empty">Für dieses Gewitter liegen keine Messwerte vor.</div>';
+    return;
+  }
   renderStatsChartInto(wrap, _chartData(ep), {
     isolated: metric,
     markers: [

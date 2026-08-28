@@ -105,21 +105,34 @@ function _activeMetric(episodes) {
 }
 
 /**
- * The threshold for the metric, if any is known. Falls back to the live
- * Wetter-panel values; when neither exists we draw no line and no hint —
- * the chart is still correct without it.
+ * Every DISTINCT trigger level in the selection, as chart lines.
+ *
+ * Each record stamps the thresholds it was measured against, and the
+ * archive outlives the settings that produced it — so two episodes on
+ * the same chart can legitimately have been judged against different
+ * levels. Taking the first episode's value and drawing it across all
+ * four curves labels three of them with a threshold that was never
+ * theirs, which is why this returns a list: one line per level, and the
+ * slot numbers in the label as soon as they disagree.
  *
  * `thresholdFor` is what keeps a missing threshold missing: the payload
  * carries `null` for wind gusts (no event) and for visibility (fog is
  * configured as `vis_max_m`), and `Number(null)` is a finite 0 that
  * would otherwise paint a "Schwelle" line along the axis floor.
  */
-export function metricThreshold(episodes, metric) {
+export function metricThresholds(episodes, metric) {
+  const bySlot = new Map();
   for (const ep of episodes) {
     const v = thresholdFor(episodeThresholds(ep), metric);
-    if (Number.isFinite(v)) return v;
+    if (!Number.isFinite(v)) continue;
+    bySlot.set(v, (bySlot.get(v) || []).concat(slotOf(ep.id)));
   }
-  return NaN;
+  const levels = [...bySlot.entries()].sort((a, b) => a[0] - b[0]);
+  if (levels.length < 2) return levels.map(([value]) => ({ value, label: 'Schwelle' }));
+  return levels.map(([value, slots]) => ({
+    value,
+    label: `Schwelle ${slots.sort((a, b) => a - b).join('·')}`,
+  }));
 }
 
 function _shellHtml(episodes, metric) {
@@ -141,14 +154,18 @@ export function renderCompare(host, episodes, onNavigate) {
     renderDeadEnd(host, 'Für einen Vergleich werden mindestens 2 Gewitter benötigt.', onNavigate);
     return;
   }
+  // `null` when no episode in the selection has a peak for ANY metric.
+  // Passing an empty series renders the chart's own "keine Messwerte"
+  // state, and no pill is marked active — never selected-and-disabled.
   const metric = _activeMetric(episodes);
   host.innerHTML = _shellHtml(episodes, metric);
   const wrap = host.querySelector('#stormsCompareChart');
-  renderEpisodeChart(wrap, _series(episodes, metric), {
+  renderEpisodeChart(wrap, metric ? _series(episodes, metric) : [], {
+    metric,
     unit: metricUnit(metric),
-    threshold: metricThreshold(episodes, metric),
+    thresholds: metricThresholds(episodes, metric),
     fmtValue: (v) => fmtMetric(metric, v),
-    aria: `Vergleich · ${WEATHER_FIELD_LABEL_DE[metric] || metric}`,
+    aria: `Vergleich · ${WEATHER_FIELD_LABEL_DE[metric] || metric || 'keine Messgröße'}`,
   });
   host.querySelectorAll('[data-metric]').forEach((b) =>
     b.addEventListener('click', () => {

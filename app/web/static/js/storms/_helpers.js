@@ -9,7 +9,8 @@
 
 import { esc } from '../core/dom.js';
 import { _wsStatsState, WEATHER_FIELD_UNIT_DE, wsFieldDigits } from '../weather/stats.js';
-import { STORM_CLASSES, STORM_METRICS, STORM_METRICS_INVERTED } from './_state.js';
+import { isMetricInverted } from '../weather/metric-direction.js';
+import { STORM_CLASSES, STORM_METRICS } from './_state.js';
 
 export { esc };
 
@@ -133,7 +134,7 @@ export function severityRatio(key, value, threshold) {
   const v = Number(value);
   const t = Number(threshold);
   if (!Number.isFinite(v) || !Number.isFinite(t) || t <= 0) return 0;
-  if (STORM_METRICS_INVERTED.has(key)) return v > 0 ? t / v : 0;
+  if (isMetricInverted(key)) return v > 0 ? t / v : 0;
   return v / t;
 }
 
@@ -179,12 +180,16 @@ export function metricHasData(episodes, key) {
 
 /**
  * First metric in STORM_METRICS order that any of these episodes has a
- * peak for. Falls back to STORM_METRICS[0] only when NOTHING has data,
- * where the chart is empty either way — never leaves a caller pointing
- * at a metric whose pill is disabled while it renders as selected.
+ * peak for, or `null` when NOTHING has data.
+ *
+ * `null`, not STORM_METRICS[0]: falling back to the first metric named
+ * an entry whose pill renders disabled (it has no data) AND selected
+ * (it is the active metric) at the same time — the exact contradiction
+ * this fallback exists to prevent. With no metric selected, no pill is
+ * selected, and the chart says so in words.
  */
 export function firstMetricWithData(episodes) {
-  return STORM_METRICS.find((k) => metricHasData(episodes, k)) || STORM_METRICS[0];
+  return STORM_METRICS.find((k) => metricHasData(episodes, k)) || null;
 }
 
 /**

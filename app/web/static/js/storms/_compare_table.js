@@ -3,10 +3,14 @@
 // selection, one column per slot, cell = that episode's peak in its own
 // unit. Split out of _compare.js at the pre-declared seam.
 //
-// The per-row maximum is bolded and that is the ONLY emphasis in the
-// table: a table where several things are highlighted highlights
-// nothing. tabular-nums throughout so the columns line up digit by
-// digit at 11 px.
+// The per-row WORST reading is bolded and that is the ONLY emphasis in
+// the table: a table where several things are highlighted highlights
+// nothing. Worst, not largest — `worstValue` reads the metric's
+// direction from weather/metric-direction.js, the same helper the
+// chart's peak dot and the severity ratio use, because "Sicht" bolded
+// by an argmax marks the episode with the BEST visibility as the worst
+// fog. tabular-nums throughout so the columns line up digit by digit at
+// 11 px.
 //
 // Column budget, measured at 375 px: section content is 327 px, the
 // label column takes 72, leaving 255 for four 63 px columns. A fifth
@@ -15,17 +19,24 @@
 
 import { esc } from '../core/dom.js';
 import { WEATHER_FIELD_LABEL_DE } from '../weather/stats.js';
+import { worstValue } from '../weather/metric-direction.js';
 import { STORM_METRICS } from './_state.js';
 import { fmtDuration, fmtIntensity, fmtMetric } from './_helpers.js';
 
-function _row(label, cells, values) {
-  // Bold the row maximum. Ties bold every tied cell — pretending one of
-  // two identical peaks is "the" maximum would be a lie.
-  let max = -Infinity;
-  for (const v of values) if (Number.isFinite(v) && v > max) max = v;
+/**
+ * One table row. `metric` is the history field the values belong to, or
+ * null for the quantities that are not metrics (Dauer, Intensität) —
+ * for which higher is worse, which is what `worstValue` does with an
+ * unknown key.
+ *
+ * Ties bold every tied cell: pretending one of two identical peaks is
+ * "the" worst would be a lie.
+ */
+function _row(label, cells, values, metric = null) {
+  const worst = worstValue(metric, values);
   const tds = cells
     .map((txt, i) => {
-      const isMax = Number.isFinite(values[i]) && values[i] === max && max > -Infinity;
+      const isMax = Number.isFinite(values[i]) && Number.isFinite(worst) && values[i] === worst;
       return `<td class="${isMax ? 'is-max' : ''}">${esc(txt)}</td>`;
     })
     .join('');
@@ -44,6 +55,7 @@ export function compareTableHtml(episodes, slotsOf) {
       WEATHER_FIELD_LABEL_DE[k] || k,
       values.map((v) => (Number.isFinite(v) ? fmtMetric(k, v) : '—')),
       values,
+      k,
     );
   });
   const durs = episodes.map((ep) => Number(ep.duration_min));

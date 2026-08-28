@@ -51,6 +51,9 @@ export const STORM_SLOT_COLORS = LIVE_PALETTE.slice(0, STORM_MAX_COMPARE);
 // there renders a pill that can never light up. cloud_cover and
 // sun_altitude are excluded on purpose: diagnostics, never a storm
 // signal.
+// Which DIRECTION counts as worse for each of them is deliberately NOT
+// stated here — weather/metric-direction.js owns that single fact and
+// every consumer (chart dot, table bold, severity ratio) asks it.
 export const STORM_METRICS = [
   'lightning_potential',
   'precipitation',
@@ -58,12 +61,6 @@ export const STORM_METRICS = [
   'snowfall',
   'visibility',
 ];
-
-// Metrics where the LOW reading is the alarm — the mirror of
-// FIELD_DIRECTION's "below" entries in the same backend module. Fog is
-// configured as a visibility ceiling, so its peak is the episode's
-// minimum and its severity ratio is threshold ÷ value, not the inverse.
-export const STORM_METRICS_INVERTED = new Set(['visibility']);
 
 // Short pill labels. The full names (WEATHER_FIELD_LABEL_DE) go into
 // title / aria-label, where space is not the constraint.
@@ -77,7 +74,9 @@ export const STORM_METRIC_SHORT = {
 
 export const stormsState = {
   view: 'list', // 'list' | 'detail' | 'compare'
-  episodes: [], // full list, newest first — never paginated (see §9.3)
+  // Full list, newest first. Never paginated: the year's Top-3 ranking
+  // is computed client-side and a partial page makes it wrong.
+  episodes: [],
   loaded: false,
   unavailable: false, // endpoint missing / unreachable → empty archive, not an error page
   year: null, // selected year, null = newest present

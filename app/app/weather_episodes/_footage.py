@@ -123,13 +123,17 @@ def _event_tl_enabled(cameras: list) -> bool:
 
 
 def build_footage_index(
-    storage_root, *, weather_service=None, store=None, cameras=None, since=None
+    storage_root, *, weather_service=None, store=None, cameras=None, since=None, until=None
 ):
-    """Scan every media store once. Returns ``(candidates, degraded)``.
+    """Scan the media stores for ONE window. Returns ``(candidates, degraded)``.
 
-    One scan serves the whole list view: the archive page asks for a
-    footage count per episode, and doing that per episode would re-walk
-    the event tree once per row.
+    ``since`` / ``until`` are the outer bounds of the episode windows the
+    caller is about to answer for. They are not a nicety: without them
+    every source degenerates into a full-archive walk, which is what
+    made the list route cost seconds. The bounds are passed INTO each
+    reader (so the pruning happens at the filesystem, not after) and
+    applied again here, because a reader may pad its own query to catch
+    recordings stamped at the far end of their span.
     """
     cams = list(cameras or [])
     cam_names = {c.get("id"): c.get("name") or c.get("id") for c in cams if c.get("id")}
@@ -139,7 +143,7 @@ def build_footage_index(
         degraded.append("weather_service_unavailable")
     else:
         try:
-            candidates.extend(weather_candidates(weather_service))
+            candidates.extend(weather_candidates(weather_service, since=since, until=until))
         except Exception as e:
             log.warning("[weather] episode footage: sighting scan failed: %s", e)
             degraded.append("weather_service_unavailable")
@@ -148,11 +152,21 @@ def build_footage_index(
     except OSError as e:
         log.warning("[weather] episode footage: timelapse scan failed: %s", e)
     if store is not None and cam_names:
-        since_iso = since.isoformat(timespec="seconds") if since is not None else None
-        candidates.extend(motion_candidates(store, list(cam_names), cam_names, since_iso))
+        candidates.extend(motion_candidates(store, list(cam_names), cam_names, since, until))
     if not _event_tl_enabled(cams):
         degraded.append("event_timelapse_disabled")
-    return candidates, degraded
+    return _within(candidates, since, until), degraded
+
+
+def _within(candidates: list, since, until) -> list:
+    """Drop candidates that cannot overlap ``[since, until]`` at all."""
+    if since is None and until is None:
+        return candidates
+    return [
+        c
+        for c in candidates
+        if (until is None or c["start"] <= until) and (since is None or c["end"] >= since)
+    ]
 
 
 def _item(cand: dict, overlap: float) -> dict:
@@ -195,25 +209,3 @@ def episode_footage(candidates: list, degraded: list, rec: dict) -> dict:
         del items[MAX_ITEMS_PER_GROUP:]
         total += len(items)
     return {"groups": groups, "total": total, "degraded": list(degraded)}
-
-
-def episode_footage_counts(candidates: list, records: list) -> dict:
-    """id → number of overlapping recordings, for the list-row chip."""
-    windows = []
-    for rec in records:
-        start, end = episode_window(rec)
-        if start is not None:
-            windows.append((rec.get("id"), start, end))
-    counts = {rid: 0 for rid, _, _ in windows}
-    for cand in candidates:
-        for rid, start, end in windows:
-            if _overlap_s(start, end, cand["start"], cand["end"]) > 0:
-                counts[rid] += 1
-    return counts
-
-
-def earliest_window_start(records: list):
-    """Oldest window start across the records, for bounding a motion scan."""
-    starts = [episode_window(rec)[0] for rec in records or []]
-    starts = [s for s in starts if s is not None]
-    return min(starts) if starts else None

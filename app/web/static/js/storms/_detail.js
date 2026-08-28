@@ -23,12 +23,14 @@ import {
   effectiveClass,
   classMeta,
   episodeThresholds,
+  firstMetricWithData,
   fmtDateFull,
   fmtDuration,
   fmtIntensity,
   fmtMetric,
   fmtTime,
   leadPeak,
+  metricHasData,
 } from './_helpers.js';
 import { detailHeadHtml, bindDetailHead } from './_detail_edit.js';
 import { renderFootage, highlightFootageAt } from './_footage.js';
@@ -36,10 +38,17 @@ import { fetchFootage } from './_api.js';
 
 // Which metric the detail chart isolates. Own state, not the Wetter
 // panel's — that one belongs to the section above.
-function _metricFor(ep) {
-  if (stormsState.metric && STORM_METRICS.includes(stormsState.metric)) return stormsState.metric;
+//
+// The sticky metric only survives if THIS episode has data for it, the
+// same guard compare applies. Without it, picking Schnee on a snow
+// episode and then opening a thunderstorm renders a blank chart with
+// the Schnee pill both selected and disabled — a state the operator
+// cannot click out of.
+export function detailMetric(ep) {
+  const sticky = stormsState.metric;
+  if (sticky && STORM_METRICS.includes(sticky) && metricHasData([ep], sticky)) return sticky;
   const lead = leadPeak(ep);
-  return lead ? lead.key : STORM_METRICS[0];
+  return lead ? lead.key : firstMetricWithData([ep]);
 }
 
 function _metricPills(ep, active) {
@@ -185,8 +194,21 @@ function _bindTileCross(host, ep) {
   });
 }
 
+/**
+ * Re-draw ONLY the chart, leaving the DOM around it in place.
+ *
+ * The resize path calls this instead of re-rendering the view: the
+ * detail header holds two live text editors that autosave on blur, and
+ * replacing `host.innerHTML` removes them without firing blur, so a
+ * half-typed name or note is lost to a window drag or a rotation.
+ */
+export function remountDetailChart(ep) {
+  if (!ep || !document.querySelector('#stormsDetailChart')) return;
+  _mountChart(ep, detailMetric(ep));
+}
+
 export function renderDetail(host, ep, onNavigate) {
-  const metric = _metricFor(ep);
+  const metric = detailMetric(ep);
   const rerender = () => renderDetail(host, ep, onNavigate);
   host.innerHTML = _shellHtml(ep, metric);
   bindDetailHead(host, ep, rerender);

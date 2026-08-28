@@ -21,7 +21,11 @@ from ..weather_episodes import (
     USER_CLASSES,
     USER_NAME_MAX,
     USER_NOTE_MAX,
+    build_footage_index,
     delete_episode,
+    earliest_window_start,
+    episode_footage,
+    episode_footage_counts,
     get_episode,
     list_episodes,
     patch_episode,
@@ -45,6 +49,25 @@ def _pending() -> dict | None:
     except Exception as e:
         log.warning("[weather] pending episode lookup failed: %s", e)
         return None
+
+
+def _cameras() -> list:
+    try:
+        return list(app_state.get_effective_config().get("cameras") or [])
+    except Exception as e:
+        log.warning("[weather] camera list unavailable for footage: %s", e)
+        return []
+
+
+def _footage_index(root, records: list):
+    """Scan the media stores once for a set of episode records."""
+    return build_footage_index(
+        root,
+        weather_service=app_state.weather_service,
+        store=app_state.store,
+        cameras=_cameras(),
+        since=earliest_window_start(records),
+    )
 
 
 def _clean_text(raw, limit: int, field: str):
@@ -88,11 +111,20 @@ def api_weather_episodes_list():
     The curve slice is the bulk of a record — shipping it for every
     episode would make the list view megabytes. Fetch one episode by id
     to get its samples.
+
+    Each row carries a ``footage_count`` so the list can show which
+    storms were filmed without a request per row; the media stores are
+    scanned exactly once for the whole list.
     """
     root = app_state.storage_root
     if root is None:
         return jsonify({"items": [], "count": 0, "pending": None})
-    items = list_episodes(root)
+
+    def _counts(records: list) -> dict:
+        candidates, _degraded = _footage_index(root, records)
+        return episode_footage_counts(candidates, records)
+
+    items = list_episodes(root, footage_counts=_counts)
     return jsonify({"items": items, "count": len(items), "pending": _pending()})
 
 
@@ -106,6 +138,26 @@ def api_weather_episode_get(episode_id: str):
     if not rec:
         return jsonify({"error": "not found"}), 404
     return jsonify(rec)
+
+
+@bp.get('/api/weather/episodes/<episode_id>/footage')
+def api_weather_episode_footage(episode_id: str):
+    """Recordings overlapping this episode's window, grouped by purpose.
+
+    200 with empty groups means "we looked and there is nothing" — the
+    calm empty state. 404 means the episode itself is unknown. A store
+    that could not be read is reported in ``degraded`` rather than
+    turning the whole page into an error, because the archive is a
+    passive record and one dead source must not hide the other three.
+    """
+    root = app_state.storage_root
+    if root is None or len(episode_id) > _MAX_ID_LEN:
+        return jsonify({"error": "not found"}), 404
+    rec = get_episode(root, episode_id)
+    if not rec:
+        return jsonify({"error": "not found"}), 404
+    candidates, degraded = _footage_index(root, [rec])
+    return jsonify(episode_footage(candidates, degraded, rec))
 
 
 @bp.patch('/api/weather/episodes/<episode_id>')

@@ -2,23 +2,16 @@
 // Pure German formatters + the two derived facts the whole page reads
 // from an episode record: its effective class and its Leitwert (the
 // single peak that most exceeds its own configured threshold).
+//
+// Plus the one shared fragment that is not a formatter: the dead-end
+// state. Every "this cannot be shown" branch in the package renders
+// through it so none of them can forget the way back out.
 
 import { esc } from '../core/dom.js';
-import { _wsStatsState, WEATHER_FIELD_UNIT_DE } from '../weather/stats.js';
-import { STORM_CLASSES, STORM_METRICS } from './_state.js';
+import { _wsStatsState, WEATHER_FIELD_UNIT_DE, wsFieldDigits } from '../weather/stats.js';
+import { STORM_CLASSES, STORM_METRICS, STORM_METRICS_INVERTED } from './_state.js';
 
 export { esc };
-
-// Decimal places per metric — mirrors _wsFmtVal's banding so a value
-// reads the same in the archive as it does in the Wetter panel.
-const _DIGITS = {
-  lightning_potential: 0,
-  visibility: 0,
-  wind_gusts_10m: 0,
-  cloud_cover: 0,
-  precipitation: 1,
-  snowfall: 1,
-};
 
 export function fmtNumberDe(v, digits = 1) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -28,11 +21,15 @@ export function fmtNumberDe(v, digits = 1) {
   });
 }
 
-/** Value + unit in the metric's own unit, German decimal comma. */
+/** Value + unit in the metric's own unit, German decimal comma.
+ *
+ * The decimal banding comes from the Wetter panel's own formatter
+ * (wsFieldDigits) so one number cannot read two different ways in two
+ * sections of the same page. */
 export function fmtMetric(key, v) {
   if (v == null || !Number.isFinite(Number(v))) return '—';
   const unit = WEATHER_FIELD_UNIT_DE[key] || '';
-  const s = fmtNumberDe(v, _DIGITS[key] ?? 1);
+  const s = fmtNumberDe(v, wsFieldDigits(key));
   return unit ? `${s} ${unit}` : s;
 }
 
@@ -99,14 +96,45 @@ export function episodeTitle(ep) {
 }
 
 /**
- * Thresholds to measure this episode against. A snapshot stamped on the
- * record (backend §9.4) is the honest source; the live values the Wetter
- * panel above has almost always already fetched are the fallback. When
- * neither exists we simply have no threshold — callers draw no line and
- * no hint rather than inventing one.
+ * Thresholds to measure this episode against. The snapshot the record
+ * carries (stamped by build_record at archive time) is the honest
+ * source — the archive outlives the settings that produced it. The live
+ * values the Wetter panel above has almost always already fetched are
+ * the fallback. When neither exists we simply have no threshold —
+ * callers draw no line and no hint rather than inventing one.
  */
 export function episodeThresholds(ep) {
   return ep?.thresholds || _wsStatsState.data?.thresholds || {};
+}
+
+/**
+ * One metric's trigger level, or NaN when it has none.
+ *
+ * The guard is `> 0`, not `Number.isFinite`: the live history payload
+ * emits `null` for every field without an event (wind gusts) and for
+ * fog, whose trigger is configured as `vis_max_m` rather than
+ * `threshold` — and `Number(null)` is 0, which is finite. Treating that
+ * 0 as a threshold draws a "Schwelle" line along the axis floor and
+ * makes every ratio infinite.
+ */
+export function thresholdFor(thresholds, key) {
+  const t = Number((thresholds || {})[key]);
+  return Number.isFinite(t) && t > 0 ? t : NaN;
+}
+
+/**
+ * How far past its own trigger line a reading sits, as a ratio. Mirrors
+ * the backend's sample_strength: for an inverted metric (low visibility
+ * is the alarm) the ratio is threshold ÷ value. 0 when the metric has
+ * no usable threshold — comparable only against other unthresholded
+ * metrics, which is the honest answer.
+ */
+export function severityRatio(key, value, threshold) {
+  const v = Number(value);
+  const t = Number(threshold);
+  if (!Number.isFinite(v) || !Number.isFinite(t) || t <= 0) return 0;
+  if (STORM_METRICS_INVERTED.has(key)) return v > 0 ? t / v : 0;
+  return v / t;
 }
 
 /**
@@ -123,8 +151,7 @@ export function leadPeak(ep) {
   for (const key of STORM_METRICS) {
     const v = Number(peaks[key]);
     if (!Number.isFinite(v)) continue;
-    const t = Number(thr[key]);
-    const ratio = Number.isFinite(t) && t > 0 ? v / t : 0;
+    const ratio = severityRatio(key, v, thresholdFor(thr, key));
     if (!best || ratio > best.ratio) best = { key, value: v, ratio };
   }
   return best;
@@ -142,10 +169,46 @@ export function dominantMetric(episodes) {
     if (!lead) continue;
     if (!best || lead.ratio > best.ratio) best = lead;
   }
-  return best ? best.key : STORM_METRICS[0];
+  return best ? best.key : firstMetricWithData(episodes);
 }
 
 /** Metrics that are all-null across the selection → pill renders disabled. */
 export function metricHasData(episodes, key) {
   return episodes.some((ep) => Number.isFinite(Number((ep?.peaks || {})[key])));
+}
+
+/**
+ * First metric in STORM_METRICS order that any of these episodes has a
+ * peak for. Falls back to STORM_METRICS[0] only when NOTHING has data,
+ * where the chart is empty either way — never leaves a caller pointing
+ * at a metric whose pill is disabled while it renders as selected.
+ */
+export function firstMetricWithData(episodes) {
+  return STORM_METRICS.find((k) => metricHasData(episodes, k)) || STORM_METRICS[0];
+}
+
+/**
+ * A state the operator cannot act on — a deleted episode, a compare
+ * link with too few ids — rendered WITH the way back.
+ *
+ * Two things make it a dead end otherwise: no control returns to the
+ * list, and the bad hash stays in the address bar, so scrolling back
+ * into the section re-renders the same message forever. The hash is
+ * rewritten to `#storms` without a navigation (replaceState fires no
+ * hashchange), so the message stays up, a reload lands on the list, and
+ * the button below re-routes explicitly.
+ */
+export function renderDeadEnd(host, message, onNavigate) {
+  host.innerHTML = `<div class="ws-empty st-deadend">
+      <div class="st-deadend-txt">${esc(message)}</div>
+      <button type="button" class="btn btn-action st-deadend-back">‹ Archiv</button>
+    </div>`;
+  try {
+    history.replaceState(null, '', '#storms');
+  } catch {
+    /* a blocked history write must not swallow the message */
+  }
+  host
+    .querySelector('.st-deadend-back')
+    ?.addEventListener('click', () => onNavigate && onNavigate('#storms'));
 }

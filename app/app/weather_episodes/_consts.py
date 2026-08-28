@@ -81,11 +81,19 @@ EVENT_PRIORITY: tuple[str, ...] = ("thunder", "snow", "heavy_rain", "fog")
 # Wind has no configured event threshold but is what separates a squall
 # from a downpour, so it is measured even though it cannot start an
 # episode on its own.
+#
+# `visibility` is on this list too, and it is the one field where "peak"
+# means MINIMUM: a low visibility is the alarm (FIELD_DIRECTION above,
+# and _detect_fog). _build._peaks reads the direction rather than always
+# taking a max, so the stored value is the worst reading either way.
+# This list is mirrored by STORM_METRICS in web/static/js/storms/_state.js
+# — a field missing here renders its pill permanently disabled there.
 PEAK_FIELDS: tuple[str, ...] = (
     "lightning_potential",
     "precipitation",
     "wind_gusts_10m",
     "snowfall",
+    "visibility",
 )
 
 # ── Intensity reference values — see _intensity.py for the formula ─────

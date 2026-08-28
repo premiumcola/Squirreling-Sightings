@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from ._consts import MAX_INTEGRATION_GAP_MIN, PEAK_FIELDS
+from ._consts import FIELD_DIRECTION, MAX_INTEGRATION_GAP_MIN, PEAK_FIELDS
 from ._intensity import intensity_score
 from ._segment import dominant_event, sample_strength
 
@@ -28,18 +28,53 @@ def _slice_bounds(samples: list, seg, pre_min: float, post_min: float) -> tuple:
     return lo, hi
 
 
+def worse(field: str, value: float, current: float) -> bool:
+    """True when ``value`` sits further on the alarm side than ``current``.
+
+    Every peak metric but one is "higher is worse". ``visibility`` is
+    inverted — fog is configured as a ceiling (``vis_max_m``) and a LOW
+    reading is the alarm — so its peak is the episode's MINIMUM.
+    """
+    if FIELD_DIRECTION.get(field) == "below":
+        return value < current
+    return value > current
+
+
 def _peaks(samples: list, seg) -> dict:
-    """Max of each peak metric over the episode itself (margins excluded)."""
+    """Worst reading per peak metric over the episode (margins excluded)."""
     out: dict = {}
     for i in range(seg.start_i, seg.end_i + 1):
         for fld in PEAK_FIELDS:
             val = samples[i].values.get(fld)
-            if not isinstance(val, (int, float)):
+            if not isinstance(val, (int, float)) or isinstance(val, bool):
                 continue
             val = float(val)
-            if fld not in out or val > out[fld]:
+            if fld not in out or worse(fld, val, out[fld]):
                 out[fld] = val
     return {k: round(v, 3) for k, v in out.items()}
+
+
+def threshold_snapshot(thresholds: dict) -> dict:
+    """The trigger lines this episode was measured against, flattened.
+
+    Stamped onto the record because the archive outlives the settings
+    that produced it: a storm compared in 2031 has to be readable
+    against the thresholds that were configured when it happened, not
+    whatever they are by then. Shape is the flat ``{field: level}`` map
+    the weather chart already speaks (``/api/weather/history``), so the
+    detail chart can pass it straight through — and unlike that payload
+    it carries ``visibility``, whose trigger is configured as
+    ``vis_max_m`` rather than ``threshold``.
+    """
+    out: dict = {}
+    for fld, spec in (thresholds or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        try:
+            out[fld] = float(spec["threshold"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
 
 
 def _precipitation_total(samples: list, seg) -> float:
@@ -99,6 +134,7 @@ def build_record(samples: list, seg, thresholds: dict, *, pre_min, post_min) -> 
         "user_note": None,
         "peaks": peaks,
         "totals": totals,
+        "thresholds": threshold_snapshot(thresholds),
         "intensity": intensity_score(peaks, totals),
         "pre_min": int(pre_min),
         "post_min": int(post_min),

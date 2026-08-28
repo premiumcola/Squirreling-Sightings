@@ -5,8 +5,9 @@
 //
 // All three write through ONE PATCH endpoint and all three are
 // optimistic: the UI updates immediately, and a failed write reverts the
-// record and toasts. The server's returned record (backend §9.5) is
-// merged back in, so the UI reconciles against the server's own view
+// record and toasts. The record the route returns — inside its
+// `{ok, episode}` envelope — is merged back in, so the UI reconciles
+// against the server's own view (trimmed strings, rejected values)
 // rather than assuming its write landed verbatim.
 
 import { esc } from '../core/dom.js';
@@ -14,6 +15,11 @@ import { showToast } from '../core/toast.js';
 import { STORM_CLASS_ORDER } from './_state.js';
 import { classMeta, effectiveClass, episodeTitle, fmtIntensity } from './_helpers.js';
 import { patchEpisode } from './_api.js';
+
+// Mirrors USER_NAME_MAX in app/app/weather_episodes/_consts.py. A lower
+// value here would silently cap what the server accepts; a higher one
+// would let the operator type a name the PATCH then rejects.
+const NAME_MAX = 120;
 
 const PENCIL =
   '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
@@ -65,11 +71,26 @@ export function detailHeadHtml(ep) {
         <span class="st-name" style="--cc:${m.color}">${esc(episodeTitle(ep))}</span>
         <span class="st-name-pen" aria-hidden="true">${PENCIL}</span>
       </div>
-      <input class="st-name-input" type="text" inputmode="text" enterkeyhint="done" maxlength="60" hidden placeholder="${esc(episodeTitle({ ...ep, user_name: null }))}" value="${esc(ep.user_name || '')}"/>
+      <input class="st-name-input" type="text" inputmode="text" enterkeyhint="done" maxlength="${NAME_MAX}" hidden placeholder="${esc(episodeTitle({ ...ep, user_name: null }))}" value="${esc(ep.user_name || '')}"/>
       <div class="st-dmeta">Intensität ${esc(fmtIntensity(ep.intensity))}</div>
       ${_classHtml(ep)}
       ${_noteHtml(ep)}
     </div>`;
+}
+
+/**
+ * The record out of a PATCH response, or null.
+ *
+ * The route answers `{"ok": true, "episode": rec}` — reading `.id` off
+ * the envelope finds nothing, so the reconcile step never ran and every
+ * server-side normalisation was silently discarded. A bare record is
+ * accepted too, so the merge survives an envelope change either way.
+ */
+export function patchedRecord(response) {
+  if (!response || typeof response !== 'object') return null;
+  const rec =
+    response.episode && typeof response.episode === 'object' ? response.episode : response;
+  return typeof rec.id === 'string' && rec.id ? rec : null;
 }
 
 // One write path for all three editors.
@@ -78,8 +99,8 @@ async function _save(ep, patch, rerender) {
   Object.assign(ep, patch);
   rerender();
   try {
-    const fresh = await patchEpisode(ep.id, patch);
-    if (fresh && typeof fresh === 'object' && fresh.id) {
+    const fresh = patchedRecord(await patchEpisode(ep.id, patch));
+    if (fresh) {
       Object.assign(ep, fresh);
       rerender();
     }

@@ -20,7 +20,13 @@ async function _request(url, init = {}) {
     } catch {
       detail = r.statusText;
     }
-    throw new Error(detail || `${r.status} ${r.statusText}`);
+    // The status rides along on the error: callers that must tell
+    // "this resource does not exist" (404 → an empty, calm state) from
+    // "the request never landed" (a degraded banner) cannot recover it
+    // from the message text alone.
+    const err = new Error(detail || `${r.status} ${r.statusText}`);
+    err.status = r.status;
+    throw err;
   }
   // 204 No Content / empty body — return null rather than crashing
   // on JSON.parse. Production endpoints always return JSON but the

@@ -35,6 +35,8 @@ import {
   fmtMetric,
   metricHasData,
   metricUnit,
+  renderDeadEnd,
+  thresholdFor,
 } from './_helpers.js';
 import { compareTableHtml } from './_compare_table.js';
 
@@ -102,12 +104,19 @@ function _activeMetric(episodes) {
   return dominantMetric(episodes);
 }
 
-// The threshold for the metric, if any is known. Falls back to the live
-// Wetter-panel values; when neither exists we draw no line and no hint —
-// the chart is still correct without it.
-function _threshold(episodes, metric) {
+/**
+ * The threshold for the metric, if any is known. Falls back to the live
+ * Wetter-panel values; when neither exists we draw no line and no hint —
+ * the chart is still correct without it.
+ *
+ * `thresholdFor` is what keeps a missing threshold missing: the payload
+ * carries `null` for wind gusts (no event) and for visibility (fog is
+ * configured as `vis_max_m`), and `Number(null)` is a finite 0 that
+ * would otherwise paint a "Schwelle" line along the axis floor.
+ */
+export function metricThreshold(episodes, metric) {
   for (const ep of episodes) {
-    const v = Number(episodeThresholds(ep)[metric]);
+    const v = thresholdFor(episodeThresholds(ep), metric);
     if (Number.isFinite(v)) return v;
   }
   return NaN;
@@ -129,8 +138,7 @@ function _shellHtml(episodes, metric) {
 
 export function renderCompare(host, episodes, onNavigate) {
   if (episodes.length < 2) {
-    host.innerHTML =
-      '<div class="ws-empty">Für einen Vergleich werden mindestens 2 Gewitter benötigt.</div>';
+    renderDeadEnd(host, 'Für einen Vergleich werden mindestens 2 Gewitter benötigt.', onNavigate);
     return;
   }
   const metric = _activeMetric(episodes);
@@ -138,7 +146,7 @@ export function renderCompare(host, episodes, onNavigate) {
   const wrap = host.querySelector('#stormsCompareChart');
   renderEpisodeChart(wrap, _series(episodes, metric), {
     unit: metricUnit(metric),
-    threshold: _threshold(episodes, metric),
+    threshold: metricThreshold(episodes, metric),
     fmtValue: (v) => fmtMetric(metric, v),
     aria: `Vergleich · ${WEATHER_FIELD_LABEL_DE[metric] || metric}`,
   });

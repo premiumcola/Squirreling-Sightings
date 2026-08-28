@@ -107,27 +107,38 @@ function _seriesPaths(series, dom, pad, cw, ch) {
   return svg;
 }
 
+/**
+ * The largest value in a series, with the relative minute it occurred
+ * at. `null` when the series carries no finite reading.
+ *
+ * This is the DISPLAYED metric's own maximum, deliberately not `t = 0`.
+ * The x axis is anchored on the record's `peak_at`, which the backend
+ * derives from the thresholded fields only — a metric with no
+ * configured threshold (wind gusts) can never set it, so "the sample
+ * nearest t=0" is not that metric's maximum and labelling it as the
+ * peak would be a straight lie on the chart.
+ */
+export function seriesMax(points) {
+  let best = null;
+  for (const [m, v] of points || []) {
+    if (!Number.isFinite(m) || !Number.isFinite(v)) continue;
+    if (best === null || v > best.v) best = { m, v };
+  }
+  return best;
+}
+
 // Redundant, non-colour identity channel: a filled dot carrying the slot
-// number at each episode's own peak — which, by construction, sits on
-// the t=0 guide. Survives colour-blindness and a greyscale screenshot,
-// and doubles as visual reinforcement of the alignment anchor. No dash
-// patterns: they wreck the readability of a noisy storm curve.
-function _peakDots(series, dom, pad, cw, ch) {
+// number at each series' own maximum. Survives colour-blindness and a
+// greyscale screenshot. No dash patterns: they wreck the readability of
+// a noisy storm curve.
+function _maxDots(series, dom, pad, cw, ch) {
   const span = dom.maxMin - dom.minMin || 1;
-  const x = pad.l + ((0 - dom.minMin) / span) * cw;
   let svg = '';
   for (const s of series) {
-    let best = null,
-      bestD = Infinity;
-    for (const [m, v] of s.points) {
-      const d = Math.abs(m);
-      if (Number.isFinite(v) && d < bestD) {
-        bestD = d;
-        best = v;
-      }
-    }
-    if (best == null) continue;
-    const y = pad.t + ch - ((best - dom.lo) / (dom.hi - dom.lo)) * ch;
+    const top = seriesMax(s.points);
+    if (!top) continue;
+    const x = pad.l + ((top.m - dom.minMin) / span) * cw;
+    const y = pad.t + ch - ((top.v - dom.lo) / (dom.hi - dom.lo)) * ch;
     svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="${s.colour}"/>`;
     svg += `<text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#0a0e14">${s.slot}</text>`;
   }
@@ -160,17 +171,45 @@ function _hoverGrid(series) {
   return [...set].sort((a, b) => a - b).map((m) => ({ ts: _relToTs(m), rel: m }));
 }
 
+/**
+ * The sample of `points` closest to relative minute `rel`, within
+ * `tol` minutes. `null` when the series has nothing that near.
+ *
+ * Exact matching is wrong here: the episodes are weeks apart and their
+ * 5-minute polls are not phase-locked, so two series' relative-minute
+ * sets almost never intersect and an `===` lookup shows one episode per
+ * tooltip — the one thing a compare view must not do.
+ */
+export function nearestPoint(points, rel, tol) {
+  let best = null,
+    bestD = Infinity;
+  for (const [m, v] of points || []) {
+    if (!Number.isFinite(m) || !Number.isFinite(v)) continue;
+    const d = Math.abs(m - rel);
+    if (d <= tol && d < bestD) {
+      bestD = d;
+      best = [m, v];
+    }
+  }
+  return best;
+}
+
+// Half a poll interval: every relative minute in the hover grid comes
+// from some series' own sample, so the nearest sample of any OTHER
+// series is at most half an interval away when it exists at all.
+const HOVER_TOLERANCE_MIN = 2.5;
+
 // Tooltip rows: "[1] ⚡ Hagelfront · 2400 J/kg", one per episode that has
-// a reading at the hovered minute. `fmtValue` is injected so this module
-// stays free of German-formatting imports from the storms package (which
-// imports this one — the dependency must not become a cycle).
+// a reading near the hovered minute. `fmtValue` is injected so this
+// module stays free of German-formatting imports from the storms package
+// (which imports this one — the dependency must not become a cycle).
 function _hoverRows(series, fmtValue) {
   return (sample) => {
     const rel = sample.rel;
     return series
       .map((s) => {
-        const hit = s.points.find(([m]) => m === rel);
-        if (!hit || !Number.isFinite(hit[1])) return '';
+        const hit = nearestPoint(s.points, rel, HOVER_TOLERANCE_MIN);
+        if (!hit) return '';
         return `<div class="ws-tt-row"><span class="ws-tt-dot" style="background:${s.colour}"></span><span class="ws-tt-lbl">${s.label}</span><span class="ws-tt-val">${fmtValue(hit[1])}</span></div>`;
       })
       .filter(Boolean)
@@ -199,7 +238,10 @@ export function renderEpisodeChart(wrap, series, opts = {}) {
   const cw = size.w - pad.l - pad.r;
   const ch = size.h - pad.t - pad.b;
   if (cw <= 0 || ch <= 0) return;
-  const threshold = Number.isFinite(opts.threshold) ? opts.threshold : NaN;
+  // `> 0`, not just finite: a metric with no configured threshold
+  // arrives as 0 from a `Number(null)` somewhere upstream, and a
+  // "Schwelle" line along the axis floor is worse than no line.
+  const threshold = Number.isFinite(opts.threshold) && opts.threshold > 0 ? opts.threshold : NaN;
   const dom = _domain(list, threshold);
   if (!dom) return;
   const fmtValue = opts.fmtValue || ((v) => String(v));
@@ -209,7 +251,7 @@ export function renderEpisodeChart(wrap, series, opts = {}) {
       ${buildRelTicks({ minMin: dom.minMin, maxMin: dom.maxMin, pad, cw, ch, vbH: size.h })}
       ${_anchors(dom, threshold, pad, cw, ch)}
       ${_seriesPaths(list, dom, pad, cw, ch)}
-      ${_peakDots(list, dom, pad, cw, ch)}
+      ${_maxDots(list, dom, pad, cw, ch)}
       <line class="ws-chart-guide" x1="0" y1="${pad.t}" x2="0" y2="${pad.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
       <rect class="ws-chart-hover-area" x="${pad.l}" y="${pad.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
     </svg>

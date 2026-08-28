@@ -220,16 +220,19 @@ def test_compare_shares_one_absolute_y_scale():
 def test_compare_caps_at_four_and_says_so():
     state = _read(_STORMS / "_state.js")
     assert "STORM_MAX_COMPARE = 4" in state
-    assert (
-        len(
-            re.findall(
-                r"#[0-9a-fA-F]{6}",
-                _read(_STORMS / "_state.js").split("STORM_SLOT_COLORS")[1].split("]")[0],
-            )
-        )
-        == 4
-    ), "the slot palette must hold exactly 4 colours"
     assert "Maximal 4 Gewitter vergleichen" in _read(_STORMS / "_list.js")
+
+
+def test_slot_colours_are_imported_not_redeclared():
+    """The four compare-slot colours are the app's existing
+    "N distinguishable series" palette (core/track-color.js). A hex
+    literal here forks the palette; that the four are four, distinct and
+    from that palette is asserted behaviourally in
+    test_storms_frontend_logic.py."""
+    src = _read(_STORMS / "_state.js")
+    block = src[src.index("STORM_SLOT_COLORS") :].split("\n\n")[0]
+    assert not re.search(r"#[0-9a-fA-F]{6}", block), "a slot colour is hardcoded"
+    assert "LIVE_PALETTE" in src
 
 
 def test_slot_assignment_is_by_slot_not_by_pick_order():

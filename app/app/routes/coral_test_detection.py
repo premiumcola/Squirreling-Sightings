@@ -29,6 +29,9 @@ from ..tracker_core import (
     resolve_track_thresholds,
 )
 from ._sim_guard import (
+    MAX_CAPTURE_LAG_S as _MAX_CAPTURE_LAG_S,
+)
+from ._sim_guard import (
     affordability,
     busy_payload,
     record_cost,
@@ -71,7 +74,8 @@ _FRESH_GRACE_S = 1.0
 # refused even though its arrival stamp looks fresh. Covers the case the
 # drain alone cannot: a CPU-starved decoder reads flat out and still
 # falls behind, so every frame arrives "just now" carrying old pixels.
-_MAX_CAPTURE_LAG_S = 2.0
+# Owned by _sim_guard: the affordability ceiling is the same budget
+# measured from the other end, and the two must never drift apart.
 
 # How long the handler polls for a frame that clears both bars before it
 # gives up and reports the stream stuck.
@@ -531,8 +535,12 @@ def _run_test_detection(cam_id: str):
     inference_ms = int(round((_time.monotonic() - inference_t0) * 1000))
     # Feed the admission gate its own measurement. Every mode's real cost
     # on THIS camera comes from here — no estimate is used where a
-    # measurement exists.
-    record_cost(cam_id, det_mode, inference_ms)
+    # measurement exists. The invoke count is the one this tick ACTUALLY
+    # ran (full-frame pass + the regions tiled_detect built), not the
+    # table's worst case: ``roi`` splits into 1–4 crops depending on the
+    # motion box, so the table cannot say what this tick paid for.
+    sim_tiles = int((sahi_diag or {}).get("tiles") or 0)
+    record_cost(cam_id, det_mode, inference_ms, 1 + sim_tiles)
     # Resolve the global confidence floor — empty/zero on the camera
     # means "use the global processing.detection.min_score". This must
     # match what camera_runtime actually applies at runtime so the

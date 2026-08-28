@@ -24,6 +24,7 @@ import { renderPanelTabs } from './panel-tabs.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { lbRenderTrackTimeline, lbClearTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { renderLiveSwimlane } from './live-swimlane.js';
+import { observeLiveChromeBudget } from './live-chrome-budget.js';
 
 // Per-mode shell behaviour. interactiveMode → live segmented control vs
 // read-only badge; contextKey → overlay-toggle persistence
@@ -341,6 +342,12 @@ export function mountMediaView(config = {}) {
     const host = typeof config.mount === 'string' ? byId(config.mount) : config.mount;
     if (host) host.appendChild(root);
   }
+
+  // The live layout sizes its stage against the height the chrome rows
+  // leave over, and the playbar in that sum is content-sized (44 px per
+  // swimlane lane). Publish the measured total instead of subtracting a
+  // constant that goes stale the next time a row gains a line.
+  if (flags.interactiveMode) teardowns.push(observeLiveChromeBudget(root));
 
   return {
     root,

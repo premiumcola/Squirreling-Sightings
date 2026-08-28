@@ -31,6 +31,7 @@ import { mvModeInvokes, mvModeLabel } from './mode-indicator.js';
 import {
   _STALL_FLOOR_MS,
   _STALL_FACTOR,
+  _PACE_FLOOR_MS,
   _STALL_BACKOFF_START,
   _STALL_BACKOFF_MAX,
   _HOLD_REFRESH_MS,
@@ -54,13 +55,35 @@ export function _startHoldRefresh() {
   }, _HOLD_REFRESH_MS);
 }
 
-// Budget for "a frame should have landed by now", in ms. Scales with the
-// mode: 3×3 spends ten inferences per tick, so a 5 s budget measured in
-// "Aus" describes a completely different request.
+// Budget for "a frame should have landed by now", in ms.
+//
+// P5 · this used to be `_STALL_FLOOR_MS * invokes`, which handed 3×3 a
+// 50 000 ms budget — the notice written to explain the expensive modes
+// could not fire in any of them, and the operator watched a frozen
+// picture with no text for the whole of a slow tick. The mode's cost
+// belongs in the MESSAGE, not in the threshold: what makes a wait worth
+// explaining is its length in seconds, which does not change because the
+// reason for it does. The adaptive half (`_STALL_FACTOR × the camera's
+// own cadence`) still keeps a legitimately slow camera quiet once its
+// EMA has caught up — the floor only governs the first ticks after a
+// mode switch, which is exactly when the operator is asking why.
 function _paceBudgetMs() {
-  const invokes = mvModeInvokes(S.session?.detMode || 'off');
   const expected = Math.max(S.cycleEmaMs || 0, S.tickState.lastDelayMs || 0);
-  return Math.max(_STALL_FLOOR_MS * invokes, Math.round(_STALL_FACTOR * expected));
+  return Math.max(_PACE_FLOOR_MS, Math.round(_STALL_FACTOR * expected));
+}
+
+// Contact is (re-)established: drop the stall state and take down the
+// disconnect banner — and ONLY that banner. A busy / refused / pace
+// notice put up by the poll loop describes the current truth and must
+// survive; blanket-hiding here is what made the two paths fight.
+function _clearContactStall() {
+  if (S.stallState.active) {
+    console.warn(`[sim-stall] recovered after ${Date.now() - S.stallState.sinceMs} ms`);
+    S.stallState.active = false;
+    S.stallState.backoffMs = _STALL_BACKOFF_START;
+  }
+  const el = byId('mvLiveStallBanner');
+  if (el && el.dataset.tone === 'warn') el.remove();
 }
 
 export function _checkStall() {
@@ -75,7 +98,19 @@ export function _checkStall() {
   // A 429 refusal already explains itself on screen (mode too expensive,
   // or a previous analysis still running). Painting a watchdog banner over
   // that message would replace the real reason with a guess.
-  if (t.lastStatus === 429) return;
+  //
+  // P6 · but it must clear the stall state on the way out. This branch
+  // used to `return` ABOVE the recovery block, and the only way to reach
+  // it was through the disconnect path: a >30 s tick painted "Keine
+  // Antwort vom Server", _retryTickNow aborted and re-issued, the aborted
+  // handler still held the backend's single slot, and the replacement
+  // request came back 429 busy — which then returned early, forever, with
+  // the disconnect banner frozen on top of a server that was answering
+  // every 500 ms. Wrong message, and unclearable.
+  if (t.lastStatus === 429) {
+    _clearContactStall();
+    return;
+  }
   const contactRef = t.lastContactAt || started;
   const contactGap = now - contactRef;
   // An OPEN request IS contact. The socket is up and the server is working;
@@ -91,12 +126,7 @@ export function _checkStall() {
     _handleContactStall(now, contactGap, contactRef);
     return;
   }
-  if (S.stallState.active) {
-    console.warn(`[sim-stall] recovered after ${now - S.stallState.sinceMs} ms`);
-    S.stallState.active = false;
-    S.stallState.backoffMs = _STALL_BACKOFF_START;
-    _hideStallBanner();
-  }
+  _clearContactStall();
   // PACE — contact is fine, frames are just slow. Informational only.
   const frameGap = now - (t.lastRespAt || started);
   if (frameGap > _paceBudgetMs()) _showPaceNotice();
@@ -144,6 +174,10 @@ export function _retryTickNow() {
   } catch {
     /* ignore */
   }
+  // The aborted request is given up on HERE, synchronously — its own
+  // rejection handler lands a microtask later and would otherwise clear
+  // the stamp of the replacement request issued below.
+  S.session.inflightSince = 0;
   if (S.session.tickHandle) {
     clearTimeout(S.session.tickHandle);
     S.session.tickHandle = null;
@@ -204,6 +238,20 @@ function _showPaceNotice() {
       '<div class="mv-ld-stall-spinner" aria-hidden="true"></div>' +
       `<div class="mv-ld-stall-text">Analyse läuft noch — ${esc(mvModeLabel(mode))} ` +
       `kostet ${n} Inferenzen je Bild.</div>` +
+      '</div>',
+  );
+}
+
+// The backend still owns its single slot from the previous request
+// (429 · busy). Flask cannot cancel that handler, so the honest thing to
+// say is that it is finishing — not that the camera is unreachable.
+export function _showBusyNotice() {
+  _banner(
+    'info',
+    '<div class="mv-ld-stall-inner">' +
+      '<div class="mv-ld-stall-spinner" aria-hidden="true"></div>' +
+      '<div class="mv-ld-stall-text">Vorherige Analyse läuft noch — ' +
+      'der Server rechnet den letzten Tick zu Ende.</div>' +
       '</div>',
   );
 }

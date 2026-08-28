@@ -95,6 +95,16 @@ export const _HOLD_REFRESH_MS = 250;
 // recent cadence) — responsive on fast cams, quiet on slow ones.
 export const _STALL_FLOOR_MS = 5000;
 export const _STALL_FACTOR = 2.2;
+// Floor for the PACE notice ("Analyse läuft noch — 3×3 kostet 10
+// Inferenzen je Bild"), which is informational and never aborts. It is
+// deliberately NOT scaled by the mode's inference count: multiplying a
+// 5 s floor by ten handed 3×3 a 50 s budget, so the notice written FOR
+// the expensive modes could not appear in any of them. The steady state
+// is still governed by `_STALL_FACTOR × cadence`, so a camera that
+// genuinely ticks every 4 s does not sit under a permanent notice — this
+// floor only decides how soon after a mode switch (which resets the
+// cadence EMA) the operator is told why the picture is holding still.
+export const _PACE_FLOOR_MS = 2500;
 // Auto-retry backoff while stalled: 1 s → 2 s → 4 s → 8 s (capped).
 export const _STALL_BACKOFF_START = 1000;
 export const _STALL_BACKOFF_MAX = 8000;
@@ -103,6 +113,10 @@ export const _STALL_BACKOFF_MAX = 8000;
 // inferences to completion regardless — so an abort-and-retry does not
 // free the server, it doubles its load. See live-detect-stall.js.
 export const _INFLIGHT_ABORT_CEILING_MS = 30_000;
+// How long a tick that found a request already in flight waits before
+// looking again. The request is NOT aborted (see above) and no second
+// one is issued, so this is a poll on someone else's work, not a retry.
+export const _TICK_RETRY_WHILE_INFLIGHT_MS = 500;
 
 // Q2-5 · stall watchdog state. `active` flips on when the frame gap
 // crosses the adaptive threshold; `nextRetryAt` paces the backoff.

@@ -219,16 +219,23 @@ def test_bottom_corner_clusters_do_not_both_reserve_half_the_tile():
 # actually broke.
 
 
-def test_live_panels_row_has_a_height_floor():
+def test_live_panels_row_is_bounded_from_the_stage_and_not_by_a_floor():
+    """The first attempt put `min-height: min(46dvh, 460px)` here. A floor
+    on the only flexible row of a column pinned to 100dvh does not create
+    space — flex-shrink is simply forbidden from taking it, so the deficit
+    lands on the stage, whose automatic minimum is 0. On a 375 px phone
+    that turned a 211 px picture into a ~58 px strip. The over-subscription
+    is bounded on the stage instead; the arithmetic lives in
+    test_sim_layout_budget.py."""
     css = _read(_CSS_SHELL)
     rule = re.search(r"#lightboxModal\.lb-live-detect \.mv-shell-panels \{(.*?)\}", css, re.DOTALL)
     assert rule, "the live panels rule is gone"
     body = rule.group(1)
     assert "flex: 1 1 0" in body
-    assert re.search(r"min-height:\s*min\(", body), (
-        "flex:1 1 0 with no floor resolves to 0 px whenever the rows above "
-        "over-subscribe the 100dvh column — that is the desktop bug"
-    )
+    assert not re.search(r"min-height:\s*min\(", body), "the floor is back on the panels row"
+    stage = re.search(r"#lightboxModal\.lb-live-detect \.mv-shell-stage \{(.*?)\}", css, re.DOTALL)
+    assert stage, "nothing bounds the stage"
+    assert "max-height" in stage.group(1)
 
 
 def test_desktop_gives_the_panels_their_own_column():
@@ -241,7 +248,10 @@ def test_desktop_gives_the_panels_their_own_column():
         if hit.start() < grid_at:
             m = hit
     assert m, "no desktop breakpoint guards the live grid"
-    assert int(m.group(1)) >= 1000, "the breakpoint must sit above phone/tablet widths"
+    # Above every phone in either orientation (a 430 px Pro Max is 932 px
+    # tall, and this view is not used landscape), below the 900 px window
+    # whose stacked stage could not fit — see test_sim_layout_budget.
+    assert 700 <= int(m.group(1)) <= 900, "the breakpoint misses the band it exists for"
     desktop = css[m.start() :]
     assert "grid-template-columns" in desktop
     panels = re.search(

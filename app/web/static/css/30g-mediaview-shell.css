@@ -781,25 +781,44 @@
   height: 100dvh;
   min-height: 0;
   background: #0b0f17;
+  /* Measured by mediaview/live-chrome-budget.js from the real title bar
+     / control row / legend band / playbar; this is only the first-paint
+     fallback. Both the stage cap below and the desktop grid's column
+     formula subtract it. */
+  --mv-live-chrome: 300px;
+  /* Share of the column the stage may claim in the STACKED layout. Every
+     portrait phone is naturally under it — the stage is
+     0.5625 × width / height of the column, i.e. 31.6dvh at 375 × 667 and
+     26.0dvh at 390 × 844 — so this cap changes nothing on the platform
+     that already worked. It only bites where the stage is wide relative
+     to the window height, which is the case that used to leave the
+     panels with nothing. */
+  --mv-stage-cap: 34dvh;
 }
 /* The panels block grows to fill the leftover height; its detail host is
-   the sole scroll region (mirrors the retired 5-zone zone-detail). */
+   the sole scroll region (mirrors the retired 5-zone zone-detail).
+   NO min-height floor here. The panels row is the only flexible one in a
+   column hard-pinned to 100dvh, so a floor on it does not create space —
+   it takes it from the one row that can still yield, which is the stage
+   (all of its children are absolutely positioned, so its own automatic
+   minimum is 0). A `min(46dvh, 460px)` floor therefore did not rescue the
+   desktop, it starved the phone: at 375 × 667 the floor beat flex-shrink
+   and the 16:9 stage collapsed from 211 px to about 58 px — a letterbox
+   strip where the live picture had been. The starvation is bounded from
+   the other end instead, on the stage itself. */
 #lightboxModal.lb-live-detect .mv-shell-panels {
   flex: 1 1 0;
-  /* The panels row is the ONLY flexible one in a column hard-pinned to
-     100dvh, and the stage above it is WIDTH-driven (aspect-ratio 16/9 off
-     100 % width = 810 px at a 1440 px window). Past roughly 1050 px the
-     rows above over-subscribe the column, free space goes negative, and
-     `flex: 1 1 0` resolves to exactly 0 — then this block's own
-     overflow:hidden erases the tab strip. Nothing could scroll to it
-     either: #lightboxInner and the modal are both overflow:hidden
-     !important for this mode. That is the "auf dem PC komme ich nicht
-     hin, auf dem Handy schon" report — a phone stage is only ~220 px tall
-     so the row never ran out of budget there.
-     A floor rather than a min-height:0: the stage yields instead, and it
-     can (all its children are absolutely positioned, so its own automatic
-     minimum is 0). */
-  min-height: min(46dvh, 460px);
+  min-height: 0;
+}
+/* The bound that replaces the floor. Two independent caps, whichever is
+   smaller: a share of the column (so a wide-and-short window cannot hand
+   the whole height to a 16:9 picture) and the height that is actually
+   left after the measured chrome (so the rows below the stage are never
+   pushed past the bottom edge, where #lightboxInner's
+   `overflow: hidden !important` would eat them). The stage letterboxes
+   inside whatever it gets — the media is object-fit: contain. */
+#lightboxModal.lb-live-detect .mv-shell-stage {
+  max-height: min(var(--mv-stage-cap), calc(100dvh - var(--mv-live-chrome)));
 }
 #lightboxModal.lb-live-detect .mv-ld-shell-detail {
   flex: 1 1 0;
@@ -1010,21 +1029,41 @@
    INSIDE the panel that had collapsed.
 
    The shell markup is flat (shell.js _SHELL_HTML), so the rows are placed
-   by grid line rather than by adding a wrapper element: no JS change, and
-   the phone layout below 1000 px is byte-identical to before. */
-@media (min-width: 1000px) {
+   by grid line rather than by adding a wrapper element — no JS change.
+
+   The breakpoint is 820 px, not 1000: between the two the layout was
+   still the single stacked column with a stage 700–900 px wide, which is
+   the same over-subscription this grid exists to fix (at 900 × 600 the
+   stacked stage alone wanted 506 px of a 600 px column). 820 px is the
+   narrowest window the grid actually fits — 340 px right column + 10 px
+   gap + a 320 px floor on the left one — and no phone reaches it in
+   either orientation that this view is used in. */
+@media (min-width: 820px) {
   #lightboxModal.lb-live-detect .mv-shell {
     display: grid;
-    /* Left column is at most as wide as a 16:9 frame may be tall, so the
-       stage can never demand more height than the column has. ~230 px is
-       the fixed chrome: title bar, control row, legend band, playbar and
-       the gaps between them. */
+    /* Left column is at most as wide as a 16:9 frame may be TALL, so the
+       stage can never demand more height than the column has. The chrome
+       it subtracts is measured (live-chrome-budget.js), not a constant:
+       the previous 230 px was already ~70 px short on the day it landed
+       (the control row had grown the telemetry cost line, the legend band
+       had just been mounted inline) and the playbar in that sum is
+       content-sized at 44 px per swimlane lane, so no constant can track
+       it. The 320 px floor keeps the picture from becoming a postage
+       stamp on a short window; the stage's own max-height absorbs the
+       over-subscription that follows. */
     grid-template-columns:
-      minmax(0, min(calc((100dvh - 230px) * 16 / 9), 60vw))
+      minmax(0, clamp(320px, calc((100dvh - var(--mv-live-chrome)) * 16 / 9), 60vw))
       minmax(340px, 1fr);
     grid-template-rows: auto auto auto auto 1fr;
     column-gap: 10px;
     align-content: start;
+  }
+  /* The share-of-column cap is a stacked-layout rule: here the panels are
+     in their own full-height column and cannot be starved by the stage,
+     so the picture is free to use the whole left column. The chrome cap
+     stays — it is what keeps the playbar inside the window. */
+  #lightboxModal.lb-live-detect .mv-shell-stage {
+    max-height: calc(100dvh - var(--mv-live-chrome));
   }
   #lightboxModal.lb-live-detect .mv-shell-titlebar {
     grid-column: 1 / -1;
@@ -1050,9 +1089,6 @@
   #lightboxModal.lb-live-detect .mv-shell-panels {
     grid-column: 2;
     grid-row: 2 / -1;
-    /* The grid track already guarantees the height; the flex-era floor
-       would only fight it on a short window. */
-    min-height: 0;
   }
   /* "Video ausblenden" folds the whole left column away. Falling back to
      the single column hands the panels the full width instead of 1fr of

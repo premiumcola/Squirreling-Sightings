@@ -10,7 +10,7 @@ import { _renderTrailsOverlay } from './live-detect-overlays.js';
 import { _renderDetectionsPanel, _renderLiveSwimlane, _appendTrace, _renderTraceTab } from './live-detect-panels.js';
 import { _refreshCadenceRow } from './live-detect-diag.js';
 import { _renderDebugTab, _renderDiagPanel } from './live-detect-tabs.js';
-import { _showModeRefusedBanner } from './live-detect-stall.js';
+import { _showModeRefusedBanner, _showBusyNotice } from './live-detect-stall.js';
 import { mvModeInvokes } from './mode-indicator.js';
 import {
   _HOLD_MS_CEILING,
@@ -20,6 +20,8 @@ import {
   _TICK_FLOOR_MAIN_MS,
   _TICK_MAX_MS,
   _TICK_FACTOR,
+  _INFLIGHT_ABORT_CEILING_MS,
+  _TICK_RETRY_WHILE_INFLIGHT_MS,
 } from './live-detect.js';
 
 export function _logSimDiag() {
@@ -60,9 +62,48 @@ export function _logSimDiag() {
 // the new stream / mode takes visible effect on the next frame instead of
 // waiting out the current cadence delay.
 
+// P7 · the in-flight contract, enforced for EVERY caller and not only in
+// the stall watchdog. `_tick` used to abort at its head unconditionally,
+// which made the documented "a request younger than 30 s is never
+// aborted" false for the path the operator uses most: _forceImmediateTick
+// (mode or stream change) calls straight in here. Flask cannot cancel a
+// request — the handler runs all ten of its inferences to completion
+// whatever we do to the socket — so aborting hides the cost from the UI
+// without removing it from the box, and the backend's single slot then
+// answers the replacement with 429 busy anyway. Wait instead, and say so
+// on screen (the busy notice) rather than racing.
+//
+// Returns true when the caller must stand down; it has re-armed itself.
+function _deferWhileInflight(session) {
+  const inflightMs = session.inflightSince ? Date.now() - session.inflightSince : 0;
+  if (inflightMs <= 0 || inflightMs >= _INFLIGHT_ABORT_CEILING_MS) return false;
+  if (session.tickHandle) clearTimeout(session.tickHandle);
+  session.tickHandle = setTimeout(_tick, _TICK_RETRY_WHILE_INFLIGHT_MS);
+  return true;
+}
+
+// B23' · an ok=false response. Stash the code+message for the fold's
+// "Letzter Tick" banner (status first so screenshots are greppable), and
+// let the two 429 codes paint their own explanation — leaving either of
+// them wordless is what let the stall watchdog's guess stand in for the
+// real reason.
+function _handleTickFailure(status, data) {
+  const code = data?.code || status || '?';
+  const msg = data?.error || data?.message || '';
+  const text = msg ? `${code} · ${msg}` : String(code);
+  S.tickState.lastTickError = text;
+  S.session?.fold?.setLastError?.(text);
+  if (data?.code === 'mode_too_expensive') {
+    _showModeRefusedBanner(msg || text, () => _fallbackToOff());
+  } else if (data?.code === 'busy') {
+    _showBusyNotice();
+  }
+}
+
 export async function _tick() {
   const session = S.session;
   if (!session) return;
+  if (_deferWhileInflight(session)) return;
   S.tickState.lastTickAt = Date.now();
   try {
     session.abort?.abort();
@@ -129,26 +170,13 @@ export async function _tick() {
       S.session?.fold?.setLastError?.(null);
       _renderFrame(data);
     } else {
-      // B23' · ok=false response. Stash the code+message for the
-      // fold's "Letzter Tick" banner. data may be null if the
-      // body wasn't JSON; we still know the HTTP status and can
-      // surface that. Status code goes first so screenshots are
-      // greppable, message second when available.
-      const code = data?.code || (r ? r.status : '?');
-      const msg = data?.error || data?.message || '';
-      const text = msg ? `${code} · ${msg}` : String(code);
-      S.tickState.lastTickError = text;
-      S.session?.fold?.setLastError?.(text);
-      // The backend refused the mode as unaffordable. Say so in those
-      // words — with the arithmetic and a way back — instead of letting
-      // the watchdog paint a connection error over a healthy camera.
-      if (data?.code === 'mode_too_expensive') {
-        _showModeRefusedBanner(msg || text, () => _fallbackToOff());
-      }
+      _handleTickFailure(r?.status, data);
     }
-    session.inflightSince = 0;
+    if (session.abort === controller) session.inflightSince = 0;
   } catch (err) {
-    session.inflightSince = 0;
+    // Only the CURRENT request may clear the stamp: an abandoned one
+    // rejects late, after a replacement has already gone out.
+    if (session.abort === controller) session.inflightSince = 0;
     if (err?.name === 'AbortError') {
       S.tickState.lastStatus = 'abort';
       return;

@@ -169,17 +169,19 @@ function _renderModeCost(id) {
   S.session?.modeCost?.render?.(id);
 }
 
+// Drop the pending cadence delay and tick now. P7 · no abort here. This
+// is the path a mode or stream change takes, so it was the ONE caller
+// guaranteed to hit a request that is still in flight — and aborting it
+// bought nothing: Flask runs the handler to its last inference either
+// way, and the backend's single slot then answers this "immediate" tick
+// with 429 busy. _tick carries the in-flight rule for every caller now;
+// clearing the timer is all that is left to do here.
 export function _forceImmediateTick() {
   const session = S.session;
   if (!session) return;
   if (session.tickHandle) {
     clearTimeout(session.tickHandle);
     session.tickHandle = null;
-  }
-  try {
-    session.abort?.abort();
-  } catch {
-    /* ignore */
   }
   _tick();
 }

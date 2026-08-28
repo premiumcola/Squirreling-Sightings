@@ -684,8 +684,13 @@ export function hydrateSettings() {
   if (mqttP) mqttP.value = mqtt.port || 1883;
   const mqttU = byId('mqtt_username');
   if (mqttU) mqttU.value = mqtt.username || '';
+  // Same contract as the Telegram token: the server ships mqtt.password_set,
+  // never the password. Empty field + placeholder = "unverändert".
   const mqttPw = byId('mqtt_password');
-  if (mqttPw) mqttPw.value = mqtt.password || '';
+  if (mqttPw) {
+    mqttPw.value = '';
+    mqttPw.placeholder = mqtt.password_set ? 'Gespeichert · leer lassen = unverändert' : 'Passwort';
+  }
   const mqttT = byId('mqtt_base_topic');
   if (mqttT) mqttT.value = mqtt.base_topic || 'tam-spy';
   // MQTT badge
@@ -887,17 +892,18 @@ byId('reloadConfigBtn').onclick = () => loadAll();
 
 byId('closeCameraEdit')?.addEventListener('click', () => _closeEditPanel());
 window.saveMqttSettings = async function () {
-  const existingPass = state.config?.mqtt?.password || '';
-  const payload = {
-    mqtt: {
-      enabled: byId('mqtt_enabled')?.checked || false,
-      host: byId('mqtt_host')?.value || '',
-      port: Number(byId('mqtt_port')?.value || 1883),
-      username: byId('mqtt_username')?.value || '',
-      password: byId('mqtt_password')?.value || existingPass,
-      base_topic: byId('mqtt_base_topic')?.value || 'tam-spy',
-    },
+  // Omit `password` when the field is empty — the server deep-merge then
+  // keeps the stored value. An explicit '' would clear it.
+  const typedPass = byId('mqtt_password')?.value || '';
+  const mqtt = {
+    enabled: byId('mqtt_enabled')?.checked || false,
+    host: byId('mqtt_host')?.value || '',
+    port: Number(byId('mqtt_port')?.value || 1883),
+    username: byId('mqtt_username')?.value || '',
+    base_topic: byId('mqtt_base_topic')?.value || 'tam-spy',
   };
+  if (typedPass) mqtt.password = typedPass;
+  const payload = { mqtt };
   await apiPost('/api/settings/app', payload);
   showToast('MQTT gespeichert · Verbindungen werden neu gestartet.', 'success');
   await loadAll();

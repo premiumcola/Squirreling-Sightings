@@ -16,7 +16,8 @@ from datetime import datetime
 import cv2
 from flask import Blueprint, jsonify, request
 
-from .. import app_state
+from .. import app_state, timelapse_storage
+from ..camera_runtime._consts import _PROFILES as _TL_PROFILES
 from ..camera_runtime._recording._stages import (
     DEFAULT_CLIP_MAX_S,
     annotate_stage,
@@ -118,10 +119,17 @@ def api_media_storage_stats():
                         size_bytes += p.stat().st_size
                 except Exception:
                     pass
+        # Un-encoded timelapse frames were missing from this walk entirely
+        # — the single largest transient consumer on the box (a daily
+        # profile holds ~264 MB per camera) did not show up in the storage
+        # overview. Read through the 60 s cache so the poll stays cheap.
+        tl_frames_bytes = timelapse_storage.camera_frames_bytes(storage_root, cam_id, _TL_PROFILES)
+        size_bytes += tl_frames_bytes
         return {
             "id": cam_id,
             "name": resolved_name,
             "size_mb": round(size_bytes / 1024 / 1024, 1),
+            "timelapse_frames_mb": round(tl_frames_bytes / 1024 / 1024, 1),
             "jpg_count": jpg_count,
             "event_count": json_count,
             "timelapse_count": tl_count,

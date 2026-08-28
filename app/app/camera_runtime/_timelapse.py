@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 import requests
 
+from .. import timelapse_storage as _tl_storage
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
     BirdSpeciesClassifier,
@@ -57,12 +58,19 @@ class TimelapseMixin:
 
     def _cleanup_stale_timelapse_frames(self):
         """Scan timelapse frame directories on startup and log what was found.
-        - Previous-day directories: preserved so _finalize_orphaned_windows can encode
+        - Closed windows: preserved so _finalize_orphaned_windows can encode
           them when the profile loop starts (restart-safe behavior).
-        - Today's directories: all except the newest per profile are cleaned up
-          (mid-run windows that were abandoned without encode).
-        Called once on startup before any profile thread begins."""
+        - Custom profile, same day but not the newest: cleaned up (mid-run
+          windows that were abandoned without encode).
+        Called once on startup before any profile thread begins.
+
+        Window keys are per-period now (``2026-W35``, ``2026-08``,
+        ``2026-Q3``), so the old ``name[:10] < today`` string compare no
+        longer identifies a closed window — ask timelapse_windows for the
+        current key instead."""
         import shutil
+
+        from ..timelapse_windows import window_key as _tl_window_key
 
         storage_root = Path(self.global_cfg["storage"]["root"])
         today = datetime.now().strftime("%Y-%m-%d")
@@ -72,23 +80,17 @@ class TimelapseMixin:
         for profile_dir in tl_base.iterdir():
             if not profile_dir.is_dir():
                 continue
+            # None for the custom profile — its window key encodes the
+            # wall-clock start, which only the running loop knows.
+            current_key = _tl_window_key(profile_dir.name)
             all_windows = sorted([d for d in profile_dir.iterdir() if d.is_dir()])
             for i, window_dir in enumerate(all_windows):
-                dir_date = window_dir.name[:10]
-                if dir_date < today:
-                    # Previous day: keep frames on disk — the profile loop will call
-                    # _finalize_orphaned_windows() which encodes and then deletes them.
-                    n = len(list(window_dir.glob("*.jpg")))
-                    log_tl.info(
-                        "[%s][media] previous-day frames preserved for encoding: "
-                        "%s/%s (%d frames) — will be encoded on profile startup",
-                        self.camera_id,
-                        profile_dir.name,
-                        window_dir.name,
-                        n,
-                    )
-                elif dir_date == today and i < len(all_windows) - 1:
-                    # Today but not the newest window → abandoned mid-run, safe to delete
+                is_abandoned_custom = (
+                    current_key is None
+                    and window_dir.name[:10] == today
+                    and i < len(all_windows) - 1
+                )
+                if is_abandoned_custom:
                     try:
                         shutil.rmtree(str(window_dir))
                         log_tl.info(
@@ -104,6 +106,18 @@ class TimelapseMixin:
                             window_dir,
                             e,
                         )
+                elif window_dir.name != current_key:
+                    # Closed window: keep frames on disk — the profile loop calls
+                    # _finalize_orphaned_windows() which encodes and then deletes them.
+                    n = len(list(window_dir.glob("*.jpg")))
+                    log_tl.info(
+                        "[%s][media] closed-window frames preserved for encoding: "
+                        "%s/%s (%d frames) — will be encoded on profile startup",
+                        self.camera_id,
+                        profile_dir.name,
+                        window_dir.name,
+                        n,
+                    )
 
     def _finalize_timelapse_window(
         self, profile_name: str, window_key: str, target_s: int, target_fps: int, period_s: int = 0
@@ -143,6 +157,7 @@ class TimelapseMixin:
                 )
             except Exception as e:
                 log_tl.warning("[%s][%s] cleanup failed: %s", self.camera_id, profile_name, e)
+            _tl_storage.invalidate(self.camera_id, profile_name)
             return
 
         log_tl.info(
@@ -341,6 +356,10 @@ class TimelapseMixin:
             )
         except Exception as e:
             log_tl.warning("[%s][timelapse] frame cleanup failed: %s", self.camera_id, e)
+        # The storage panel caches its scandir for 60 s — drop the entry
+        # now so it reports zero the moment the frames are gone instead of
+        # showing a stale quarter-gigabyte for up to a minute.
+        _tl_storage.invalidate(self.camera_id, profile_name)
 
     def _finalize_orphaned_windows(
         self, profile_name: str, current_key: str, target_s: int, target_fps: int, period_s: int
@@ -420,7 +439,15 @@ class TimelapseMixin:
             perceptual_hash as _ph_phash,
             pick_profile_from_baseline as _pick_profile,
         )
+        from ..timelapse_windows import (
+            FIXED_FPS as _TL_FIXED_FPS,
+            capture_interval_s as _tl_interval,
+            expected_frames as _tl_expected_frames,
+            window_key as _tl_window_key,
+        )
 
+        # One WARNING per thread when the 8 s floor bites, not one per tick.
+        clamp_logged = False
         window_key: str | None = None
         window_start_t: float = 0.0
         _last_frame_ts: float = 0.0  # frame_ts at last capture — detects stale buffer
@@ -469,14 +496,29 @@ class TimelapseMixin:
                 continue
 
             target_s = int(prof.get("target_seconds", 60))
-            # Per-profile fps falls back to the camera-level fps, then 25.
-            target_fps = int(prof.get("fps") or tl.get("fps") or 25)
+            # Per-profile fps falls back to the camera-level fps, then to
+            # the 15 the UI pins — NOT 25. A legacy settings.json that
+            # skipped the fps migration used to run at 25, which shortens
+            # the interval and is the only thing that made the timelapse
+            # measurably compete with the detection loop.
+            target_fps = int(prof.get("fps") or tl.get("fps") or _TL_FIXED_FPS)
             period_s = int(
                 prof.get("period_seconds", _PROFILE_PERIOD_DEFAULTS.get(profile_name, 86400))
             )
-            total_frames = max(1, target_s * target_fps)
-            interval_s = max(0.5, period_s / total_frames)
-            jpeg_q = 50 if interval_s < 1.0 else 72
+            interval_s, clamped = _tl_interval(period_s, target_s, target_fps)
+            if clamped and not clamp_logged:
+                log_tl.warning(
+                    "[timelapse] %s/%s interval clamped to %.0fs "
+                    "(period=%ds target=%ds fps=%d) — video will be shorter than requested",
+                    self.camera_id,
+                    profile_name,
+                    interval_s,
+                    period_s,
+                    target_s,
+                    target_fps,
+                )
+                clamp_logged = True
+            jpeg_q = 72
 
             now = datetime.now()
             now_t = time.time()
@@ -508,16 +550,22 @@ class TimelapseMixin:
                         profile_name, window_key, target_s, target_fps, period_s
                     )
             else:
-                # Calendar-based: one window per calendar day
-                new_key = now.strftime("%Y-%m-%d")
+                # Calendar-based, one window per period the profile is
+                # NAMED after — day / ISO week / month / quarter / year.
+                # This used to be %Y-%m-%d for every profile, so weekly
+                # and monthly collected at their own cadence but encoded
+                # and deleted at midnight: "monthly" was a one-day video
+                # of ~150 frames at 1 fps, which is exactly the choppy-
+                # video warning _write_video kept emitting.
+                new_key = _tl_window_key(profile_name) or now.strftime("%Y-%m-%d")
                 if window_key is not None and new_key != window_key:
-                    # Day rolled over — finalize the completed day
+                    # Period rolled over — finalize the completed window
                     old_key = window_key
                     self._finalize_timelapse_window(
                         profile_name, old_key, target_s, target_fps, period_s
                     )
                     log_tl.info(
-                        "[%s][timelapse] %s day boundary: finalized %s, starting %s",
+                        "[%s][timelapse] %s window boundary: finalized %s, starting %s",
                         self.camera_id,
                         profile_name,
                         old_key,
@@ -533,7 +581,7 @@ class TimelapseMixin:
                         period_s,
                         interval_s,
                     )
-                    # Scan for abandoned windows from prior days
+                    # Scan for abandoned windows from prior periods
                     self._finalize_orphaned_windows(
                         profile_name, window_key, target_s, target_fps, period_s
                     )
@@ -605,7 +653,8 @@ class TimelapseMixin:
                         if stats is None or stats_window_key != window_key:
                             tl_dir.mkdir(parents=True, exist_ok=True)
                             stats = _CaptureStats(
-                                out_dir=tl_dir, expected_frames=int(period_s / max(0.5, interval_s))
+                                out_dir=tl_dir,
+                                expected_frames=_tl_expected_frames(period_s, interval_s),
                             )
                             stats_window_key = window_key
                             # Reset the dedup pHash on a fresh window —
@@ -636,12 +685,20 @@ class TimelapseMixin:
                             except Exception:
                                 pass
                             next_profile_repick_t = _now_t + 300.0
-                        # Three-attempt validity check. The shared frame buffer
-                        # is refreshed by the main RTSP loop, so a 0.7 s pause
-                        # between attempts gives the decode loop time to
-                        # produce a fresh frame past the hickup. We only
-                        # attempt up to 3 times — past that the slot stays
-                        # empty (gap-tolerant: ffmpeg concat just skips it).
+                        # Two-attempt validity check. The shared frame buffer
+                        # is refreshed by the main RTSP loop, so a 0.5 s pause
+                        # gives the decode loop time to produce a fresh frame
+                        # past the hickup. Past that the slot stays empty
+                        # (gap-tolerant: the encoder recomputes fps from the
+                        # frames that actually landed, so a gap shortens the
+                        # video rather than desyncing it).
+                        #
+                        # Capped at one retry deliberately: the happy path
+                        # costs the detection loop ~60 ms of GIL bleed, but
+                        # the old 3-attempt path blocked for up to 1.4 s of
+                        # sleep plus two extra full-resolution validations —
+                        # and rejects cluster at dawn/dusk, so that was the
+                        # only place the timelapse actually hurt.
                         ok, reason = _fh_valid(frame, profile=active_profile)
                         attempt_used = 0
                         # For the daily profile we emit a per-rejection INFO
@@ -657,8 +714,8 @@ class TimelapseMixin:
                                 reason,
                             )
                         if not ok:
-                            for retry in range(1, 3):
-                                time.sleep(0.7)
+                            for retry in range(1, 2):
+                                time.sleep(0.5)
                                 with self.lock:
                                     cand = self.frame.copy() if self.frame is not None else None
                                 if cand is None:

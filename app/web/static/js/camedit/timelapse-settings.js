@@ -1,17 +1,16 @@
 // ─── camedit/timelapse-settings.js ─────────────────────────────────────────
 // Stage 25 of the legacy.js → ES modules refactor — Timelapse subdomain.
 // Profiles, period/target presets, camera list + mode grid in cam-edit,
-// custom-preset chips, save handlers, status-bar pill on the dashboard,
-// loadTimelapse + toggleTimelapse for the camera-card buttons.
-// Pure code move from legacy.js, no behaviour changes.
+// custom-preset chips, save handlers, loadTimelapse + toggleTimelapse
+// for the camera-card buttons.
 //
-// _TL_FILMSTRIP travels with renderTlStatusBar — it is the only consumer
-// now that the Mediathek timelapse-card moved to orchestration.js.
+// The dashboard status pill lives in timelapse-status.js — it grew a
+// live storage panel and this file was already past the 400-line ceiling.
 // _tlFetchTimeline stays in legacy.js: despite the `tl` prefix it is
 // timeline-fetch logic, paired with the dashboard-section slider.
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { j, apiGet, apiPost } from '../core/api.js';
+import { apiGet, apiPost } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 import { loadAll } from '../live-update.js';
 // _renderTlCameraList + _updateTlActiveTags use getCameraIcon to
@@ -187,6 +186,13 @@ const _TL_FIXED_FPS = 15;
 // non-custom profile is derived from period / (floor × fps) so the user
 // can't choose a target the encoder would have to back-fill below 8 s.
 const _TL_MIN_INTERVAL_S = 8;
+// Measured, not guessed: a 2560×1440 capture frame encoded at q=72 has a
+// median size of ~338 KB (p25 268 / p75 478); a frame taken off disk
+// measured 245 KB. ~300 KB is the honest typical. The previous 40 KB
+// constant understated a daily profile's footprint by 7.5× — it claimed
+// "900 Frames · ~35 MB" where the real cost is ~264 MB per camera.
+// The 8 s floor means q is always 72 now, so there is no second branch.
+const _TL_PER_FRAME_KB = 300;
 function _tlFmtInterval(secs) {
   const s = Number(secs);
   if (!isFinite(s) || s <= 0) return '—';
@@ -423,9 +429,7 @@ function _tlResultDesc(periodS, targetS, fps) {
   const periodLabel = _tlDurationLabel(pN);
   const intervalLabel = _tlFmtInterval(intervalS);
   const compression = Math.round(pN / Math.max(1, tN));
-  // ~40 KB per JPEG at q≈72; sub-1s interval drops to q=50 ≈ 26 KB.
-  const perFrameKb = intervalS < 1 ? 26 : 40;
-  const diskMb = Math.max(1, Math.round((totalFrames * perFrameKb) / 1024));
+  const diskMb = Math.max(1, Math.round((totalFrames * _TL_PER_FRAME_KB) / 1024));
   const targetLine = ci.clamped
     ? `<div class="tl-drow tl-drow-warn"><span class="tl-drow-ico">⚠</span><span class="tl-drow-text">Intervall auf Minimum ${_TL_MIN_INTERVAL_S} s begrenzt — Video wird ${Math.round(realisedDuration)} s statt ${tN} s lang</span></div>`
     : '';
@@ -480,58 +484,6 @@ window.saveTlCameraProfiles = async function (camId) {
   }
 };
 
-// ── Timelapse Status Bar (Dashboard in Cameras section) ───────────────────────
-window._tlStatus = null;
-async function loadTlStatus() {
-  try {
-    window._tlStatus = await j('/api/timelapse/status');
-    renderTlStatusBar();
-  } catch (_err) {
-    /* silent */
-  }
-}
-function renderTlStatusBar() {
-  const bar = byId('tlStatusBar');
-  if (!bar) return;
-  const s = window._tlStatus;
-  if (!s || s.active_count === 0) {
-    bar.innerHTML = '';
-    return;
-  }
-  const activeCams = (s.cameras || []).filter((c) => c.any_active);
-  const panelId = 'tlSbPanel';
-  bar.innerHTML = `
-    <div class="tl-sb-pill" onclick="byId('${panelId}').classList.toggle('hidden')">
-      ${_TL_FILMSTRIP}
-      <span>Timelapse aktiv</span>
-      <span class="tl-sb-count">${activeCams.length}</span>
-    </div>
-    <div class="tl-sb-panel hidden" id="${panelId}">
-      ${activeCams
-        .map(
-          (cam) => `
-        <div class="tl-sb-cam">
-          <div class="tl-sb-cam-name">${esc(cam.name)}</div>
-          <div class="tl-sb-profiles">
-            ${_TL_PROFILES_DEF
-              .map((p) => {
-                const prof = cam.profiles[p.key];
-                if (!prof?.enabled) return '';
-                return `<div class="tl-sb-profile">
-                <span class="tl-sb-prof-name">${esc(p.label)}</span>
-                <span class="tl-sb-prof-frames">${prof.frame_count} Frames heute</span>
-                <span class="tl-sb-prof-interval">alle ~${_tlIntervalLabel(prof.interval_s)}</span>
-              </div>`;
-              })
-              .join('')}
-          </div>
-        </div>`,
-        )
-        .join('')}
-      <div class="tl-sb-footer small muted">Stand: ${esc(s.today || '—')}</div>
-    </div>`;
-}
-
 // (Wizard form seeds + tab/prev/next/finish bindings moved into
 //  camedit/wizard.js in stage 25 C.)
 
@@ -539,17 +491,18 @@ function renderTlStatusBar() {
 // mediaCardHTML, _MOC_*, renderMediaOverview, _setActiveMocCard,
 // drilldown openers, _goToPage, renderMediaPagination, _ensureProcessingPoll,
 // renderMediaGrid, _MEDIA_TITLE_SVG, updateMediaSectionTitle, syncMediaPills:
-// all extracted to mediathek/orchestration.js in stage 23. _TL_FILMSTRIP
-// stays here — still referenced by the timelapse-card snippet above.
-const _TL_FILMSTRIP = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><line x1="6" y1="3" x2="18" y2="3"/><line x1="6" y1="21" x2="18" y2="21"/><polygon points="7,4 17,4 12,12" fill="#c4b5fd" opacity=".8"/><polygon points="12,12 7,20 17,20" fill="#c4b5fd" opacity=".5"/></svg>`;
+// all extracted to mediathek/orchestration.js in stage 23. The dashboard
+// status pill (and _TL_FILMSTRIP with it) moved to timelapse-status.js
+// when this file passed the 400-line ceiling.
 
 // Public surface — bridges in legacy.js consume these by name.
 
-export { loadTimelapse, toggleTimelapse, loadTlStatus, _updateTlActiveTags };
+export { loadTimelapse, toggleTimelapse, _updateTlActiveTags };
+// Consumed by timelapse-status.js — the profile catalogue and the
+// interval formatter are shared, not duplicated.
+export { _TL_PROFILES_DEF, _tlIntervalLabel };
 
 // ── window.* bridges ────────────────────────────────────────────────────────
-// loadAll() in live-update.js looks these up by global name; without
-// them the dashboard timelapse status pill stays empty and the cam-
-// edit Timelapse-Tab "active" tags never refresh.
-window.loadTlStatus = loadTlStatus;
+// loadAll() in live-update.js looks this up by global name; without it
+// the cam-edit Timelapse-Tab "active" tags never refresh.
 window._updateTlActiveTags = _updateTlActiveTags;

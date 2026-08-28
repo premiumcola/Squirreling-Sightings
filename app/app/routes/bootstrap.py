@@ -158,10 +158,12 @@ def api_config():
                 "wildlife_labels_available": wl_labels_available,
                 "wildlife_model_path": wl_model_path,
             },
+            # Secrets are never shipped to the browser — only "is one
+            # stored?". See routes/_camera_helpers.redact_secrets.
             "telegram": {
                 "enabled": bool(c.get("telegram", {}).get("enabled")),
                 "chat_id": c.get("telegram", {}).get("chat_id", ""),
-                "token": c.get("telegram", {}).get("token", ""),
+                "token_set": bool(c.get("telegram", {}).get("token")),
             },
             "mqtt": {
                 "enabled": bool(c.get("mqtt", {}).get("enabled")),
@@ -169,7 +171,7 @@ def api_config():
                 "host": c.get("mqtt", {}).get("host", ""),
                 "port": c.get("mqtt", {}).get("port", 1883),
                 "username": c.get("mqtt", {}).get("username", ""),
-                "password": c.get("mqtt", {}).get("password", ""),
+                "password_set": bool(c.get("mqtt", {}).get("password")),
             },
             "storage": {
                 "root": str(base_cfg.get("storage", {}).get("root", "/app/storage")),

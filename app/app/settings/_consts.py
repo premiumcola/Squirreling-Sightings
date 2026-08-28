@@ -136,10 +136,15 @@ WEATHER_DEFAULTS: dict = {
 }
 
 
+# Keys mirror camera_runtime._consts._PROFILES and the frontend's
+# _TL_PROFILES_DEF — all three lists must carry the same profile names or
+# a profile is configurable somewhere and inert everywhere else.
 TL_DEFAULT_PROFILES = {
     "daily": {"enabled": False, "target_seconds": 60, "period_seconds": 86400},
     "weekly": {"enabled": False, "target_seconds": 180, "period_seconds": 604800},
     "monthly": {"enabled": False, "target_seconds": 300, "period_seconds": 2592000},
+    "quarterly": {"enabled": False, "target_seconds": 600, "period_seconds": 7776000},
+    "yearly": {"enabled": False, "target_seconds": 900, "period_seconds": 31536000},
     "custom": {"enabled": False, "target_seconds": 30, "period_seconds": 600},
 }
 

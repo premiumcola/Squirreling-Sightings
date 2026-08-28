@@ -63,8 +63,18 @@ log = logging.getLogger("app.camera_runtime")
 log_tl = logging.getLogger("app.camera_runtime.timelapse")  # timelapse-specific logs
 log_cam = logging.getLogger("app.camera_runtime.camera")  # connection/stream logs
 
-_PROFILES = ("daily", "weekly", "monthly", "custom")
-_PROFILE_PERIOD_DEFAULTS = {"daily": 86400, "weekly": 604800, "monthly": 2592000, "custom": 600}
+# Mirror of _TL_PROFILES_DEF in web/static/js/camedit/timelapse-settings.js.
+# quarterly / yearly were configurable in the UI but absent here, so a user
+# could enable them and no capture thread was ever started — silently inert.
+_PROFILES = ("daily", "weekly", "monthly", "quarterly", "yearly", "custom")
+_PROFILE_PERIOD_DEFAULTS = {
+    "daily": 86400,
+    "weekly": 604800,
+    "monthly": 2592000,
+    "quarterly": 7776000,
+    "yearly": 31536000,
+    "custom": 600,
+}
 
 # COCO classes whose geometry usually localises a small ground mammal even
 # when the label is wrong (squirrels read as "cat" head-on, "bear" furry,

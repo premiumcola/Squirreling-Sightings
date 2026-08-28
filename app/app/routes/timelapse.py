@@ -16,18 +16,74 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
-from .. import app_state
+from .. import app_state, timelapse_storage
+from ..timelapse_windows import FIXED_FPS as _FIXED_FPS
 from ._helpers import safe_day_param
 
 bp = Blueprint("timelapse", __name__)
 
 
+def _timelapse_configured(tl_cfg: dict) -> bool:
+    """True when the camera captures timelapse frames at all.
+
+    The legacy ``timelapse.enabled`` flag only drives the legacy flat
+    capture loop, which starts *only* when no profile is enabled. Gating
+    the on-demand build endpoints on that flag alone rejected every
+    camera running a profile — the common case.
+    """
+    if tl_cfg.get("enabled"):
+        return True
+    return any(bool(p.get("enabled")) for p in (tl_cfg.get("profiles") or {}).values())
+
+
+def _profile_status(cam_id: str, pname: str, prof: dict, cam_fps: int) -> dict:
+    """One profile row for /api/timelapse/status — config + live disk use.
+
+    Disk figures come from the 60 s-TTL cache in ``timelapse_storage``,
+    so this is cheaper than the uncached per-profile glob it replaces
+    even though it now also reports bytes, age and projection.
+    """
+    from ..camera_runtime import _PROFILE_PERIOD_DEFAULTS
+    from ..timelapse_windows import capture_interval_s, expected_frames, next_window_start
+
+    storage_root = app_state.storage_root
+    target_s = int(prof.get("target_seconds", 60))
+    period_s = int(prof.get("period_seconds", _PROFILE_PERIOD_DEFAULTS.get(pname, 86400)))
+    prof_fps = int(prof.get("fps") or cam_fps)
+    interval_s, clamped = capture_interval_s(period_s, target_s, prof_fps)
+    expected = expected_frames(period_s, interval_s)
+    usage = timelapse_storage.profile_usage(storage_root, cam_id, pname)
+    nxt = next_window_start(pname)
+    if nxt is None and usage.get("oldest_frame"):
+        # Custom profile — its window closes period_s after the first
+        # frame landed, which is the only start marker on disk.
+        with contextlib.suppress(ValueError):
+            nxt = datetime.fromisoformat(usage["oldest_frame"]) + timedelta(seconds=period_s)
+    return {
+        "enabled": bool(prof.get("enabled")),
+        "interval_s": round(interval_s, 2),
+        "interval_clamped": clamped,
+        "fps": prof_fps,
+        "period_s": period_s,
+        "target_s": target_s,
+        "expected_frames": expected,
+        "window_key": usage.get("window_key"),
+        "frame_count": usage.get("frame_count", 0),
+        "bytes_on_disk": usage.get("bytes_on_disk", 0),
+        "oldest_frame": usage.get("oldest_frame"),
+        "newest_frame": usage.get("newest_frame"),
+        "projected_bytes": timelapse_storage.projected_bytes(usage, expected),
+        "next_build_at": nxt.isoformat(timespec="seconds") if nxt else None,
+        "captured": usage.get("captured", 0),
+        "rejected": usage.get("rejected", 0),
+    }
+
+
 @bp.get('/api/timelapse/status')
 def api_timelapse_status():
-    from ..camera_runtime import _PROFILE_PERIOD_DEFAULTS, _PROFILES
+    from ..camera_runtime import _PROFILES
 
     settings = app_state.settings
-    timelapse_builder = app_state.timelapse_builder
     today = datetime.now().strftime("%Y-%m-%d")
     tl_settings = settings.data.get("timelapse_settings", {})
     global_enabled = bool(tl_settings.get("global_enabled", False))
@@ -36,27 +92,14 @@ def api_timelapse_status():
         cam_id = cam["id"]
         tl = cam.get("timelapse") or {}
         profiles = tl.get("profiles") or {}
-        cam_fps = int(tl.get("fps", 25))
+        cam_fps = int(tl.get("fps") or _FIXED_FPS)
         prof_status = {}
         any_active = False
         for pname in _PROFILES:
             prof = profiles.get(pname) or {}
-            enabled = bool(prof.get("enabled"))
-            if enabled:
+            if prof.get("enabled"):
                 any_active = True
-            fc = timelapse_builder.frame_count(cam_id, pname, today)
-            target_s = int(prof.get("target_seconds", 60))
-            period_s = int(prof.get("period_seconds", _PROFILE_PERIOD_DEFAULTS.get(pname, 86400)))
-            prof_fps = int(prof.get("fps") or cam_fps)
-            # Sub-1s interval is legitimate for short periods (15min → 1min).
-            interval_s = round(period_s / max(1, target_s * prof_fps), 2)
-            interval_s = max(0.5, interval_s)
-            prof_status[pname] = {
-                "enabled": enabled,
-                "frame_count": fc,
-                "interval_s": interval_s,
-                "fps": prof_fps,
-            }
+            prof_status[pname] = _profile_status(cam_id, pname, prof, cam_fps)
         cameras_out.append(
             {
                 "camera_id": cam_id,
@@ -98,14 +141,14 @@ def api_camera_timelapse(cam_id):
     if not cam_cfg:
         return jsonify({"ok": False, "error": "camera not found"}), 404
     tl_cfg = cam_cfg.get("timelapse") or {}
-    if not tl_cfg.get("enabled", False):
+    if not _timelapse_configured(tl_cfg):
         return jsonify({"ok": False, "error": "timelapse disabled"}), 400
     # Validate YYYY-MM-DD or fall back to today — guards against a
     # path-traversal attempt landing in the filesystem join below.
     day = safe_day_param(request.args.get("day")) or datetime.now().strftime("%Y-%m-%d")
     force = request.args.get("force") == "1"
     target_s = int(tl_cfg.get("daily_target_seconds", 60))
-    target_fps = int(tl_cfg.get("fps", 25))
+    target_fps = int(tl_cfg.get("fps") or _FIXED_FPS)
     period = tl_cfg.get("period", "day")
     # Resolve a per-camera filename slug so multi-camera installs
     # downloading the same day's timelapses don't end up with
@@ -128,9 +171,8 @@ def api_camera_timelapse(cam_id):
         qa_ctx=qa_ctx,
     )
     if not path:
-        frames_dir = storage_root / "timelapse_frames" / cam_id / day
         day_dir = store.events_dir / cam_id / day
-        has_frames = (frames_dir.exists() and any(frames_dir.glob("*.jpg"))) or (
+        has_frames = bool(timelapse_builder.frames_for_day(cam_id, day)) or (
             day_dir.exists() and any(day_dir.rglob("*.jpg"))
         )
         if not has_frames:
@@ -281,19 +323,21 @@ def api_camera_timelapse_rolling(cam_id):
     if not cam_cfg:
         return jsonify({"ok": False, "error": "camera not found"}), 404
     tl_cfg = cam_cfg.get("timelapse") or {}
-    if not tl_cfg.get("enabled"):
+    if not _timelapse_configured(tl_cfg):
         return jsonify({"ok": False, "error": "timelapse disabled"}), 400
     day = datetime.now().strftime("%Y-%m-%d")
-    frames_dir = storage_root / "timelapse_frames" / cam_id / day
-    if not frames_dir.exists():
+    # frames_for_day covers both the legacy flat layout and the
+    # per-profile window dirs the capture loop actually writes.
+    candidates = timelapse_builder.frames_for_day(cam_id, day)
+    if not candidates:
         return jsonify({"ok": False, "error": "no_frames"}), 404
-    cutoff = datetime.now() - timedelta(minutes=minutes)
+    cutoff = (datetime.now() - timedelta(minutes=minutes)).timestamp()
     images = sorted(
-        [p for p in frames_dir.glob("*.jpg") if p.stat().st_mtime >= cutoff.timestamp()]
+        (p for p in candidates if p.stat().st_mtime >= cutoff), key=lambda p: p.stat().st_mtime
     )
     if len(images) < 2:
         return jsonify({"ok": False, "error": "not_enough_frames", "minutes": minutes}), 404
-    target_fps = int(tl_cfg.get("fps", 25))
+    target_fps = int(tl_cfg.get("fps") or _FIXED_FPS)
     target_s = max(5, int(tl_cfg.get("daily_target_seconds", 60)) // 10)
     from ..camera_id import camera_slug
 

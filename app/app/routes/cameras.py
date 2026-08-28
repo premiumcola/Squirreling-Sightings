@@ -30,6 +30,7 @@ from ._camera_helpers import (
     _list_backup_files,
     _mask_password_in_url,
     _read_backup,
+    redact_secrets,
 )
 
 bp = Blueprint("cameras", __name__)
@@ -275,7 +276,12 @@ def api_settings_cameras_save():
     # else triggered a rebuild_runtimes.
     enabled_now = payload.get("enabled", True)
     id_renamed = old_id != new_id
-    conn_changed = any(payload.get(f) != old_cfg.get(f) for f in _CONN_FIELDS)
+    # Only keys the client actually sent count as a change. `payload.get(f)`
+    # returned None for an omitted key and so read as "differs from stored"
+    # → restart_single_camera on every partial save (the failure the comment
+    # in camedit/index.js documents). Omission means "unchanged", matching
+    # upsert_camera's dict.update merge.
+    conn_changed = any(f in payload and payload[f] != old_cfg.get(f) for f in _CONN_FIELDS)
     if id_renamed:
         existing = runtimes.pop(old_id, None)
         if existing:
@@ -663,8 +669,8 @@ def api_settings_app():
         {
             "app": settings.data.get("app", {}),
             "server": settings.data.get("server", {}),
-            "telegram": settings.data.get("telegram", {}),
-            "mqtt": settings.data.get("mqtt", {}),
+            "telegram": redact_secrets(settings.data.get("telegram"), ("token",)),
+            "mqtt": redact_secrets(settings.data.get("mqtt"), ("password",)),
             "ui": settings.data.get("ui", {}),
             "processing": {
                 "coral_enabled": proc.get("detection", {}).get("mode", "none") == "coral",

@@ -63,6 +63,7 @@ import './weather/maintenance.js'; // rescan + thumb regen
 import './storms/index.js'; // Gewitter-Archiv (storm episodes)
 import './camedit/coral-test.js'; // stage 25 A
 import './camedit/timelapse-settings.js'; // stage 25 B
+import './camedit/timelapse-status.js'; // dashboard pill + storage panel
 import './camedit/wizard.js'; // stage 25 C
 import './camedit/discovery.js'; // stage 25 C
 import './camedit/index.js'; // stage 25 D

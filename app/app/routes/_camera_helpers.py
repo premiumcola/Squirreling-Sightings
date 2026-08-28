@@ -104,6 +104,28 @@ def _mask_password_in_url(url: str) -> str:
         return url
 
 
+def redact_secrets(section: dict | None, keys: tuple[str, ...]) -> dict:
+    """Return a copy of ``section`` with every secret in ``keys`` dropped and
+    replaced by a ``<key>_set`` boolean.
+
+    The dashboard polls /api/config every few seconds and the app has no
+    authentication, so a secret in a response body is a secret on the wire
+    — and a secret in a ``type=password`` input, which is what makes
+    Chrome offer to save it. Shipping only "is a value stored?" keeps the
+    UI able to render the "unverändert" placeholder without ever handing
+    the browser the value.
+
+    The save path treats an OMITTED key as "unchanged" (SettingsStore
+    deep-merges), so the client must never echo ``<key>_set`` back into a
+    payload — build the payload from form state, not from the response.
+    """
+    out = dict(section or {})
+    for key in keys:
+        val = out.pop(key, None)
+        out[f"{key}_set"] = bool(val)
+    return out
+
+
 def _list_backup_files() -> list[Path]:
     """Backup sources, oldest-priority order:
     1. settings.json.bak  (last save)

@@ -23,8 +23,17 @@ export function hydrateTelegram() {
     tgBadge.className =
       'set-status-badge ' + (tg.enabled ? 'set-status-badge--on' : 'set-status-badge--off');
   }
+  // The server never ships the token — only tg.token_set. Keeping the
+  // field empty is what stops Chrome offering "Passwort speichern" when
+  // the collapsed settings accordion re-renders, and it means an
+  // unauthenticated /api/config no longer carries the bot token.
   const tok = byId('tg_token');
-  if (tok) tok.value = tg.token || '';
+  if (tok) {
+    tok.value = '';
+    tok.placeholder = tg.token_set
+      ? 'Gespeichert · leer lassen = unverändert'
+      : 'Bot-Token · 123456789:AAExampleBotToken';
+  }
   const cid = byId('tg_chat_id');
   if (cid) cid.value = tg.chat_id || '';
   const fmt = tg.format || 'photo';
@@ -110,16 +119,17 @@ export function renderTgFormatPreview(fmt) {
 // button (was in its own section before this stage).
 byId('telegramForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const existingToken = state.config?.telegram?.token || '';
-  const token = byId('tg_token')?.value || existingToken;
-  const payload = {
-    telegram: {
-      enabled: !!byId('tg_enabled')?.checked,
-      token,
-      chat_id: byId('tg_chat_id')?.value || '',
-      format: (state.config?.telegram || {}).format || 'photo',
-    },
+  // Key omission is the "unchanged" signal: SettingsStore.update_section
+  // deep-merges, so a missing `token` keeps the stored one while an
+  // explicit "" would wipe it. Never send the key for an empty field.
+  const typedToken = byId('tg_token')?.value || '';
+  const telegram = {
+    enabled: !!byId('tg_enabled')?.checked,
+    chat_id: byId('tg_chat_id')?.value || '',
+    format: (state.config?.telegram || {}).format || 'photo',
   };
+  if (typedToken) telegram.token = typedToken;
+  const payload = { telegram };
   await apiPost('/api/settings/app', payload);
   showToast('Telegram-Verbindung gespeichert.', 'success');
   if (typeof window.loadAll === 'function') await window.loadAll();
@@ -132,8 +142,11 @@ document.querySelectorAll('[name="tg_format"]').forEach((r) => {
 byId('saveTgFormatBtn')?.addEventListener('click', async () => {
   const fmt =
     [...document.querySelectorAll('[name="tg_format"]')].find((r) => r.checked)?.value || 'photo';
-  const existing = state.config?.telegram || {};
-  const payload = { telegram: { ...existing, format: fmt } };
+  // Partial patch only — the server deep-merges. Spreading state.config
+  // .telegram would echo the redaction marker (token_set) back into the
+  // stored section and, before the redaction, re-sent the bot token on
+  // every format change.
+  const payload = { telegram: { format: fmt } };
   await apiPost('/api/settings/app', payload);
   showToast('Format gespeichert.', 'success');
   if (typeof window.loadAll === 'function') await window.loadAll();

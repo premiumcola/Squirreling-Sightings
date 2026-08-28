@@ -529,6 +529,13 @@ def api_test_detection(cam_id: str):
             spawn_for=lambda lbl: float(per_class.get(lbl, tracker.spawn_default)),
             miss_grace_samples=grace_samples,
             iou_threshold=tracker.iou_threshold,
+            # Without these the motion model's prediction clamp and the
+            # edge-grace rule both short-circuit on `0 == unknown`, so
+            # the simulator shows a WORSE tracker than production runs —
+            # and the simulator is what the operator judges tracking by.
+            # The live path had the same hole until 9822511.
+            frame_w=src_w_raw,
+            frame_h=src_h_raw,
         )
     except Exception as exc:
         log.warning("[test-detection] %s tracker step failed: %s", cam_id, exc)

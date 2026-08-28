@@ -62,3 +62,19 @@ def test_a_lookup_failure_cannot_break_the_endpoint():
     block_start = src.index("push_blocked = False")
     block = src[block_start : block_start + 1400]
     assert "except Exception" in block
+
+
+def test_the_simulator_passes_the_frame_size_to_the_tracker():
+    """Without frame_w/frame_h the motion model's prediction clamp and the
+    edge-grace rule short-circuit on `0 == unknown`.
+
+    That matters more here than anywhere else: the simulator is what the
+    operator LOOKS AT to judge tracking quality. Running it with the
+    clamp disabled shows a worse tracker than production actually has,
+    and sends the diagnosis chasing a problem that is partly the
+    diagnostic tool's own. The live path carried the same hole until
+    9822511.
+    """
+    src = _src()
+    call = src[src.index("matches = associate_detections(") :][:900]
+    assert "frame_w=" in call and "frame_h=" in call

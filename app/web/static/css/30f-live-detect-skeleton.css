@@ -1795,6 +1795,7 @@
 
 .mv-ld-debug-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1804,8 +1805,11 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  flex: 1 1 0;
-  min-width: 0;
+  /* Side by side at 375 px (≈163 px each, both labels fit); below that
+     the row wraps and each button takes the full width rather than
+     ellipsising the primary action down to "Debug kopie…". */
+  flex: 1 1 132px;
+  min-width: 132px;
   min-height: 44px;
   padding: 4px 10px;
   border: 0;

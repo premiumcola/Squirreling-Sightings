@@ -97,12 +97,31 @@ def test_a_narrowed_object_filter_reaches_the_alarm_loop(wired):
 
 
 def test_a_changed_label_threshold_reaches_the_alarm_loop(wired):
+    """`cat`, not `person` — see the next test for why."""
+    wired.client.patch(
+        f"/api/cameras/{CAM}/detection-tuning",
+        json={"label_thresholds": {"cat": 0.8}},
+    )
+    assert wired.runtime.detect_setup.spawn_for("cat") == pytest.approx(0.8)
+
+
+def test_the_person_floor_still_wins_on_this_route(wired):
+    """The two rails compose, and the safety one is the outer.
+
+    This route rebuilds DetectionSetup so a tuning change reaches the
+    alarm loop without a restart. It also runs the person clamp, because
+    it shows no confirmation dialog. So a request for 0.8 arrives at the
+    detector as 0.54 — propagated, and capped. Neither guarantee may
+    swallow the other, which is what this pins.
+    """
     wired.client.patch(
         f"/api/cameras/{CAM}/detection-tuning",
         json={"label_thresholds": {"person": 0.8}},
     )
-    spawn_for = wired.runtime.detect_setup.spawn_for
-    assert spawn_for("person") == pytest.approx(0.8)
+    from app.thresholds._apply import AUTO_E_FLOOR_PERSON_SECURITY, spawn_for
+
+    ceiling = spawn_for("person", AUTO_E_FLOOR_PERSON_SECURITY)
+    assert wired.runtime.detect_setup.spawn_for("person") == pytest.approx(ceiling)
 
 
 def test_the_tracker_is_still_reconfigured(wired):

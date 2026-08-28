@@ -197,6 +197,7 @@ class MainLoopMixin:
         # the rescue fire, and how often did it actually save something" is
         # unanswerable from the log alone if only hits are recorded.
         self._roi_rescue_attempts += 1
+        self._roi_rescue_log.append(time.time())
         mbox = blob.last_bbox if det_mode == "roi" else None
         roi_dets, _sahi = tiled_detect(
             self.detector,

@@ -20,22 +20,62 @@
 import { esc } from '../core/dom.js';
 import { OBJ_LABEL, OBJ_SVG } from '../core/icons.js';
 import { liveTrackColor, LIVE_MOTION_COLOR } from '../core/track-color.js';
+import { mvStatusCategory } from './status-legend.js';
 
 // Lane id for the catch-all motion lane (detections without a track number).
 const _MOTION_ID = '__motion__';
-const _MASKED_COLOR = '#64748b';
+
+// ── Do filtered detections belong in the timeline at all? ──────────────
+// Yes, but folded away. Three arguments decided it:
+//
+//  · Dropping them would make the timeline lie by omission. A workbench
+//    recognised at 46 % nine times a minute IS what the detector is
+//    spending its inferences on, and the operator's next move — adding
+//    "bench" to the class filter — is one they can only decide to make if
+//    they can see how much noise there is.
+//  · Showing them inline crowds out the real ones. That is the reported
+//    symptom: a strip dense with grey blocks, with the one track that
+//    matters lost among them. Lanes are equal-height rows, so N filtered
+//    tracks cost exactly as much vertical space as N real ones.
+//  · So: segregated and collapsed by default, with a count in the toggle.
+//    The information stays reachable in one tap and stops competing for
+//    the same pixels. A lane counts as filtered only when EVERY sample in
+//    the 60 s window was filtered — a track that passed even once is a
+//    real track having a bad frame, not noise.
+const _FILTERED_KEY = 'tam.ld.swim.filtered';
+let _showFiltered = _loadShowFiltered();
+
+function _loadShowFiltered() {
+  try {
+    return localStorage.getItem(_FILTERED_KEY) === '1';
+  } catch {
+    return false; // private mode / quota — default to the calm state
+  }
+}
+
+function _saveShowFiltered() {
+  try {
+    localStorage.setItem(_FILTERED_KEY, _showFiltered ? '1' : '0');
+  } catch {
+    /* private mode / quota — the session-local flag still works */
+  }
+}
 
 export function renderLiveSwimlane(host, opts = {}) {
   if (!host) return;
   const detBuffer = Array.isArray(opts.detBuffer) ? opts.detBuffer : [];
   const windowMs = Number(opts.windowMs) || 60_000;
-  const lanes = _computeLanes(detBuffer, windowMs);
-  // Lane-structure fingerprint — rebuild only when lane membership or colour
-  // changes so bar elements survive across ticks.
-  const fp = lanes.map((l) => `${l.id}:${l.color}`).join('|');
+  const { active, filtered } = _computeLanes(detBuffer, windowMs);
+  const lanes = _showFiltered ? active.concat(filtered) : active;
+  // Lane-structure fingerprint — rebuild only when lane membership, colour
+  // or the fold state changes so bar elements survive across ticks.
+  const fp =
+    `${_showFiltered ? 1 : 0}/${filtered.length}|` +
+    lanes.map((l) => `${l.id}:${l.color}:${l.filtered ? 'f' : 'a'}`).join('|');
   if (host.dataset.mvLdFp !== fp) {
-    host.innerHTML = _buildStructure(lanes);
+    host.innerHTML = _buildStructure(lanes, filtered.length);
     host.dataset.mvLdFp = fp;
+    _wireFilteredToggle(host, opts);
   }
   for (let i = 0; i < lanes.length; i++) {
     const cell = host.querySelector(`.mv-ld-swim-cell-events[data-lane-idx="${i}"]`);
@@ -44,10 +84,23 @@ export function renderLiveSwimlane(host, opts = {}) {
   }
 }
 
+// The toggle re-renders through the public entry so the fold state and the
+// lane structure can never drift apart.
+function _wireFilteredToggle(host, opts) {
+  host.querySelector('[data-action="swim-filtered"]')?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    _showFiltered = !_showFiltered;
+    _saveShowFiltered();
+    host.dataset.mvLdFp = '';
+    renderLiveSwimlane(host, opts);
+  });
+}
+
 // J3 · group the 60 s detection window into per-TRACK lanes. Detections with a
 // positive track_num bucket by that number; everything else collapses into one
-// neutral motion lane. Lane colour matches the bbox: a normal track uses its
-// track colour, an off-filter (masked) track uses slate, motion uses grey.
+// neutral motion lane. Lane colour matches the bbox exactly — the track
+// colour, or grey for the track-less motion lane. Returns the lanes split
+// into `active` and `filtered` (see the fold rationale at the top).
 function _computeLanes(detBuffer, windowMs) {
   const now = Date.now();
   const cutoff = now - windowMs;
@@ -72,21 +125,33 @@ function _computeLanes(detBuffer, windowMs) {
     return (a.num || 0) - (b.num || 0);
   });
   for (const lane of lanes) {
-    lane.color =
-      lane.id === _MOTION_ID
-        ? LIVE_MOTION_COLOR
-        : lane.lastVerdict === 'filtered'
-          ? _MASKED_COLOR
-          : liveTrackColor(lane.num);
+    // COLOUR IS THE TRACK NUMBER. Nothing else. The legend says so in as
+    // many words ("Farbe = Person-Nr."), the bbox stroke and the trail
+    // polyline both derive it from track_num alone — and this lane used to
+    // override it to slate whenever the track's last verdict was
+    // "filtered". That is why an orange trail on the picture had no orange
+    // anywhere in the strip below it: same track, two different hues, one
+    // of them encoding STATUS in a channel reserved for IDENTITY. Status
+    // now travels the way the legend already documents it: line style and
+    // opacity (see .mv-ld-swim-cell[data-status]).
+    lane.color = lane.id === _MOTION_ID ? LIVE_MOTION_COLOR : liveTrackColor(lane.num);
+    lane.status = mvStatusCategory(lane.lastVerdict);
+    // Filtered only when the whole window was filtered — one pass makes it
+    // a real track, not noise.
+    lane.filtered =
+      lane.samples.length > 0 && lane.samples.every((s) => s.verdict === 'filtered');
   }
-  return lanes;
+  return {
+    active: lanes.filter((l) => !l.filtered),
+    filtered: lanes.filter((l) => l.filtered),
+  };
 }
 
 // J5 · the swimlane is a labelled panel: "Timeline · letzte 60 s" heading, a
 // CSS-grid of per-track lanes (44 px label column + elastic event column),
 // vertical time gridlines behind the lanes, and the green LIVE marker pinned
 // to the right edge that bars flow into.
-function _buildStructure(lanes) {
+function _buildStructure(lanes, filteredCount) {
   const cells = [];
   for (let i = 0; i < lanes.length; i++) {
     cells.push(_renderLaneCells(lanes[i], i, i + 1));
@@ -123,15 +188,39 @@ function _buildStructure(lanes) {
         <div class="mv-ld-swim-gridlines" aria-hidden="true">${gridlines}</div>
         ${cells.join('')}${liveMarker}
       </div>
+      ${_filteredToggle(filteredCount)}
       <div class="mv-ld-swim-axis"><div class="mv-ld-swim-axis-track">${axisHtml}</div></div>
     </div>`;
 }
 
+// The fold control for the filtered lanes. Full-width row below the grid,
+// 44 px tall so it is a real touch target, and it states the count so the
+// operator knows what they are not looking at.
+function _filteredToggle(count) {
+  if (!count) return '';
+  const word = count === 1 ? 'gefilterte Spur' : 'gefilterte Spuren';
+  const verb = _showFiltered ? 'ausblenden' : 'einblenden';
+  return (
+    `<button type="button" class="mv-ld-swim-filtered" data-action="swim-filtered" ` +
+    `aria-expanded="${_showFiltered ? 'true' : 'false'}" data-on="${_showFiltered ? '1' : '0'}">` +
+    `<span class="mv-ld-swim-filtered-dot" aria-hidden="true"></span>` +
+    `${count} ${esc(word)} ${esc(verb)}</button>`
+  );
+}
+
 function _renderLaneCells(lane, idx, gridRow) {
   const labelCell = _renderLaneLabel(lane);
+  // data-status carries the SAME vocabulary the legend explains
+  // (confirmed / weak / ghost / masked); the CSS turns it into dash + alpha
+  // so a filtered lane reads as filtered without borrowing the hue channel.
+  // --lane-color publishes the track hue to CSS so a status style can
+  // restyle the connector (dotted for "maskiert") without inventing a
+  // second colour for it. `color` is always an internal palette constant.
+  const st = ` data-status="${lane.status || 'confirmed'}"`;
+  const cv = `--lane-color:${lane.color};`;
   return (
-    `<div class="mv-ld-swim-cell mv-ld-swim-cell-label" data-lane-idx="${idx}" style="grid-row:${gridRow};grid-column:1">${labelCell}</div>` +
-    `<div class="mv-ld-swim-cell mv-ld-swim-cell-events" data-lane-idx="${idx}" style="grid-row:${gridRow};grid-column:2"></div>`
+    `<div class="mv-ld-swim-cell mv-ld-swim-cell-label" data-lane-idx="${idx}"${st} style="${cv}grid-row:${gridRow};grid-column:1">${labelCell}</div>` +
+    `<div class="mv-ld-swim-cell mv-ld-swim-cell-events" data-lane-idx="${idx}"${st} style="${cv}grid-row:${gridRow};grid-column:2"></div>`
   );
 }
 
@@ -139,9 +228,10 @@ function _renderLaneCells(lane, idx, gridRow) {
 // (one per lane), so the colour reads as the track and the glyph as the class.
 function _renderLaneLabel(lane) {
   const isMotion = lane.id === _MOTION_ID;
+  const suffix = lane.filtered ? ' · gefiltert' : '';
   const title = isMotion
-    ? 'Bewegung (ohne Track)'
-    : `${OBJ_LABEL[lane.label] || lane.label} · Track #${lane.num}`;
+    ? `Bewegung (ohne Track)${suffix}`
+    : `${OBJ_LABEL[lane.label] || lane.label} · Track #${lane.num}${suffix}`;
   return `<span class="mv-ld-swim-icon" title="${esc(title)}">${_tintedIcon(lane.label, lane.color)}</span>`;
 }
 

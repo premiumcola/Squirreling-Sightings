@@ -53,6 +53,11 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
         self.common = None
         self.detect = None
         self._cpu_mode = False  # True when using tflite-runtime instead of pycoral
+        # The model file the ACTIVE tier really loaded. Not the configured
+        # one: the CPU tier substitutes the non-EdgeTPU build, and a panel
+        # that shows the configured path while a different file is running
+        # explains nothing about the latency it is showing next to it.
+        self.active_model_path: str | None = None
         self.device = self.cfg.get("device")
         # Explicit "stay off the TPU" switch. Setting device=None is NOT
         # enough: the EdgeTPU delegate takes the default device when no
@@ -150,6 +155,7 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
         self.available = True
         self.mode = "coral"
         self.reason = "ok"
+        self.active_model_path = model_path
         log.info("[det] Coral TPU aktiv: %s", model_path)
         return True
 
@@ -169,6 +175,7 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
         self.available = True
         self.mode = "coral"
         self.reason = "edgetpu_delegate"
+        self.active_model_path = model_path
         log.info("[det] Coral TPU aktiv (EdgeTPU-Delegate): %s", model_path)
         return True
 
@@ -206,6 +213,7 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
                 if self._prefer_cpu
                 else f"cpu_fallback (coral: {self._coral_error})"
             )
+            self.active_model_path = try_path
             log.info(
                 "[det] CPU-Inferenz aktiv: %s (threads=%s, %s)",
                 try_path,

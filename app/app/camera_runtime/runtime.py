@@ -175,6 +175,12 @@ class CameraRuntime(
         # which only ever recorded a successful rescue.
         self._roi_rescue_attempts: int = 0
         self._roi_rescue_hits: int = 0
+        # Timestamps of the last few rescue attempts. The lifetime counters
+        # above cannot yield a RATE, and a rate is what the duty-cycle
+        # projection needs — "how often does this camera spend tile
+        # inferences" is a per-second question. Same shape as
+        # _reconnect_log (pruned on read in _status).
+        self._roi_rescue_log: deque = deque(maxlen=64)
         # Throttle for the "motion seen but not recording" line — one per
         # minute per camera, so a busy scene cannot flood the log while
         # still making a silently-blocking gate visible.

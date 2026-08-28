@@ -225,6 +225,11 @@
 .mv-shell-controls {
   display: flex;
   align-items: center;
+  /* Wrap so the telemetry cost line (width:100%) drops onto its own row
+     instead of competing with the Stream + mode cluster for one 375 px
+     strip — the same collision that put the mode cluster below the stage
+     in the first place. */
+  flex-wrap: wrap;
   padding: 2px 8px;
 }
 .mv-shell-controls:empty {
@@ -781,7 +786,20 @@
    the sole scroll region (mirrors the retired 5-zone zone-detail). */
 #lightboxModal.lb-live-detect .mv-shell-panels {
   flex: 1 1 0;
-  min-height: 0;
+  /* The panels row is the ONLY flexible one in a column hard-pinned to
+     100dvh, and the stage above it is WIDTH-driven (aspect-ratio 16/9 off
+     100 % width = 810 px at a 1440 px window). Past roughly 1050 px the
+     rows above over-subscribe the column, free space goes negative, and
+     `flex: 1 1 0` resolves to exactly 0 — then this block's own
+     overflow:hidden erases the tab strip. Nothing could scroll to it
+     either: #lightboxInner and the modal are both overflow:hidden
+     !important for this mode. That is the "auf dem PC komme ich nicht
+     hin, auf dem Handy schon" report — a phone stage is only ~220 px tall
+     so the row never ran out of budget there.
+     A floor rather than a min-height:0: the stage yields instead, and it
+     can (all its children are absolutely positioned, so its own automatic
+     minimum is 0). */
+  min-height: min(46dvh, 460px);
 }
 #lightboxModal.lb-live-detect .mv-ld-shell-detail {
   flex: 1 1 0;
@@ -978,4 +996,84 @@
 }
 .mvdp-legend-fill {
   color: #94a3b8;
+}
+
+
+/* ── Live-detect · desktop two-column layout ──────────────────────────
+   A wide window has MORE room, just on the horizontal axis — which a
+   single stacked column cannot spend. Above 1000 px the shell becomes a
+   grid: picture + its controls + legend + timeline on the left, sized so
+   a 16:9 frame fits the height budget, and Detections / Trace / Debug in
+   their own full-height column on the right, always visible and scrolling
+   internally. No tab hunting, and no need for the Debug tab's "Video
+   ausblenden" escape hatch — which was itself unreachable, since it lives
+   INSIDE the panel that had collapsed.
+
+   The shell markup is flat (shell.js _SHELL_HTML), so the rows are placed
+   by grid line rather than by adding a wrapper element: no JS change, and
+   the phone layout below 1000 px is byte-identical to before. */
+@media (min-width: 1000px) {
+  #lightboxModal.lb-live-detect .mv-shell {
+    display: grid;
+    /* Left column is at most as wide as a 16:9 frame may be tall, so the
+       stage can never demand more height than the column has. ~230 px is
+       the fixed chrome: title bar, control row, legend band, playbar and
+       the gaps between them. */
+    grid-template-columns:
+      minmax(0, min(calc((100dvh - 230px) * 16 / 9), 60vw))
+      minmax(340px, 1fr);
+    grid-template-rows: auto auto auto auto 1fr;
+    column-gap: 10px;
+    align-content: start;
+  }
+  #lightboxModal.lb-live-detect .mv-shell-titlebar {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  #lightboxModal.lb-live-detect .mv-shell-stage {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  #lightboxModal.lb-live-detect .mv-shell-controls {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  #lightboxModal.lb-live-detect .mv-shell-legendband {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  #lightboxModal.lb-live-detect .mv-shell-playbar {
+    grid-column: 1;
+    grid-row: 5;
+    align-self: start;
+  }
+  #lightboxModal.lb-live-detect .mv-shell-panels {
+    grid-column: 2;
+    grid-row: 2 / -1;
+    /* The grid track already guarantees the height; the flex-era floor
+       would only fight it on a short window. */
+    min-height: 0;
+  }
+  /* "Video ausblenden" folds the whole left column away. Falling back to
+     the single column hands the panels the full width instead of 1fr of
+     empty space beside a void. */
+  #lightboxModal.lb-live-detect .mv-shell[data-compact='1'] {
+    display: flex;
+  }
+}
+
+/* ── Legend band · live ──────────────────────────────────────────────
+   Live now mounts the status legend inline here like every other mode
+   (see shell.js). It is no longer floated over the frame, because the
+   only thing it could be positioned against — the camera's burnt-in OSD
+   timestamp — is invisible to this app: the flags assumed a top band, the
+   operator's camera burns it at the bottom, and the two collided.
+   On a phone the legend collapses to its 44 px "?" chip, so this band
+   costs one touch-target row rather than four labelled rows. */
+#lightboxModal.lb-live-detect .mv-shell-legendband {
+  min-height: 0;
+  padding: 2px 8px;
+}
+#lightboxModal.lb-live-detect .mv-shell-legendband .mv-legend {
+  margin-left: auto;
 }

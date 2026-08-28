@@ -72,6 +72,7 @@ def register_blueprints(app) -> None:
         sichtungen,
         streams,
         telegram,
+        telemetry,
         timelapse,
         timeline_stats,
         tracking,
@@ -98,6 +99,9 @@ def register_blueprints(app) -> None:
     # is already past the file ceiling.
     app.register_blueprint(weather_episodes.bp)
     app.register_blueprint(telegram.bp)
+    # Device-scoped inference telemetry — deliberately not folded into
+    # /api/status (per-camera) nor into the two oversized coral modules.
+    app.register_blueprint(telemetry.bp)
     app.register_blueprint(detection_cloud.bp)
     app.register_blueprint(trash.bp)
 

@@ -42,6 +42,9 @@ import { stopSnapshotPrefetch } from './live-detect-debug/index.js';
 // unhealthy / sub-disabled camera doesn't get hammered.
 export const _TICK_FLOOR_SUB_MS = 500;
 export const _TICK_FLOOR_MAIN_MS = 1000;
+// Ceiling on the pause BETWEEN ticks. Scaled by the mode's inference
+// count at the callsite (_scheduleNext): a 4 s ceiling is meaningless
+// when one tick legitimately takes 10 s.
 export const _TICK_MAX_MS = 4000;
 export const _TICK_FACTOR = 1.2;
 
@@ -95,6 +98,11 @@ export const _STALL_FACTOR = 2.2;
 // Auto-retry backoff while stalled: 1 s → 2 s → 4 s → 8 s (capped).
 export const _STALL_BACKOFF_START = 1000;
 export const _STALL_BACKOFF_MAX = 8000;
+// A request younger than this is never aborted, however stalled the view
+// looks. Flask cannot cancel a request — the handler runs all its
+// inferences to completion regardless — so an abort-and-retry does not
+// free the server, it doubles its load. See live-detect-stall.js.
+export const _INFLIGHT_ABORT_CEILING_MS = 30_000;
 
 // Q2-5 · stall watchdog state. `active` flips on when the frame gap
 // crosses the adaptive threshold; `nextRetryAt` paces the backoff.
@@ -161,6 +169,7 @@ export function openLiveDetect({ camId, cameraName }) {
   // last action — not some half-finished prior session.
   S.tickState.lastTickAt = 0;
   S.tickState.lastRespAt = 0;
+  S.tickState.lastContactAt = 0;
   S.tickState.lastStatus = '—';
   S.tickState.nextTickAt = 0;
   S.tickState.startedAt = Date.now();
@@ -304,6 +313,11 @@ export function closeLiveDetect() {
   // touch-dismiss listener) before removing the row node.
   try {
     session.overlayToggles?.teardown?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    session.modeCost?.teardown?.();
   } catch {
     /* ignore */
   }

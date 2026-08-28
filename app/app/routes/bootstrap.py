@@ -617,7 +617,12 @@ def api_system():
 
         lsusb = _sp.check_output(['lsusb'], text=True, timeout=3, stderr=_sp.DEVNULL)
         for line in lsusb.splitlines():
-            if 'Google' in line or 'Coral' in line or '18d1' in line.lower():
+            # The stick enumerates as 1a6e:089a "Global Unichip" until its
+            # firmware is uploaded and only then as 18d1:9302 "Google" —
+            # both are the same device. Matching Google/18d1 alone reported
+            # "kein Coral" for a stick that was plugged in and working.
+            low = line.lower()
+            if 'google' in low or 'coral' in low or '18d1' in low or '1a6e' in low:
                 coral_device = line.strip()
                 break
     except Exception:

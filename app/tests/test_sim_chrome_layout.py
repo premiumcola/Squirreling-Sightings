@@ -206,3 +206,94 @@ def test_bottom_corner_clusters_do_not_both_reserve_half_the_tile():
         rule = re.search(rf"^{re.escape(cls)} \{{(.*?)\}}", css, re.DOTALL | re.MULTILINE)
         assert rule, f"{cls} rule missing"
         assert "calc(50% - 110px)" not in rule.group(1), f"{cls} still reserves half the tile"
+
+
+# ── desktop: the panels row must survive a wide window ───────────────
+#
+# `.mv-shell-stage` is sized `aspect-ratio: 16/9` off 100 % width inside a
+# column pinned to 100dvh, and `.mv-shell-panels` was the only flexible
+# row with `flex-basis: 0`. Past ~1050 px the stage alone exceeded the
+# column, free space went negative, and the panels row resolved to 0 px —
+# then its own overflow:hidden erased the tab strip. No ancestor could
+# scroll to it either. Both guards below pin the two properties that
+# actually broke.
+
+
+def test_live_panels_row_has_a_height_floor():
+    css = _read(_CSS_SHELL)
+    rule = re.search(r"#lightboxModal\.lb-live-detect \.mv-shell-panels \{(.*?)\}", css, re.DOTALL)
+    assert rule, "the live panels rule is gone"
+    body = rule.group(1)
+    assert "flex: 1 1 0" in body
+    assert re.search(r"min-height:\s*min\(", body), (
+        "flex:1 1 0 with no floor resolves to 0 px whenever the rows above "
+        "over-subscribe the 100dvh column — that is the desktop bug"
+    )
+
+
+def test_desktop_gives_the_panels_their_own_column():
+    """A wide window has more room on the HORIZONTAL axis, which a single
+    stacked column cannot spend. The panels get column 2, full height."""
+    css = _read(_CSS_SHELL)
+    grid_at = css.rindex("grid-template-columns")
+    m = None
+    for hit in re.finditer(r"@media \(min-width:\s*(\d+)px\)", css):
+        if hit.start() < grid_at:
+            m = hit
+    assert m, "no desktop breakpoint guards the live grid"
+    assert int(m.group(1)) >= 1000, "the breakpoint must sit above phone/tablet widths"
+    desktop = css[m.start() :]
+    assert "grid-template-columns" in desktop
+    panels = re.search(
+        r"#lightboxModal\.lb-live-detect \.mv-shell-panels \{([^}]*grid-column[^}]*)\}",
+        desktop,
+        re.DOTALL,
+    )
+    assert panels, "the panels are not placed into their own grid column"
+    assert "grid-column: 2" in panels.group(1)
+
+
+def test_compact_mode_falls_back_to_one_column():
+    """ "Video ausblenden" folds the whole left column away; keeping the
+    two-column grid would leave the panels beside 1fr of nothing."""
+    css = _read(_CSS_SHELL)
+    assert "#lightboxModal.lb-live-detect .mv-shell[data-compact='1']" in css
+
+
+# ── the legend must not be placed over the picture ───────────────────
+
+
+def test_live_mounts_the_legend_inline_not_over_the_frame():
+    """The floating legend positioned itself "opposite the OSD band", but
+    where a camera burns its timestamp is invisible to this app — the flag
+    said top, the camera said bottom, and the two collided. Below the
+    frame is the only placement that cannot collide."""
+    src = _read(_SHELL)
+    assert "renderStatusLegend(legendBand, { float: false })" in src
+    assert "float: true" not in src, "live must not float the legend over the stage"
+    assert "osdBand" not in src, "the OSD-avoid guess is what produced the overlap"
+
+
+# ── swimlane colour must agree with the painted overlays ─────────────
+
+
+def test_swimlane_lane_colour_is_the_track_number_only():
+    """Colour encodes IDENTITY everywhere (bbox, trail, legend tail
+    "Farbe = Person-Nr."). The lane used to repaint a filtered track slate,
+    so an orange trail on the picture had no orange in the strip below."""
+    src = _read(_SWIMLANE)
+    body = src[src.index("function _computeLanes") : src.index("function _buildStructure")]
+    assert "liveTrackColor(lane.num)" in body
+    assert "_MASKED_COLOR" not in src, "status must not travel in the colour channel"
+    assert "lane.status = mvStatusCategory" in body, "status needs the legend's vocabulary"
+
+
+def test_filtered_tracks_are_folded_not_dropped():
+    """They stay reachable (the operator needs to see what the detector is
+    spending inferences on) but must not crowd out the real lanes."""
+    src = _read(_SWIMLANE)
+    assert "data-action=\"swim-filtered\"" in src
+    body = src[src.index("function _computeLanes") :]
+    assert (
+        "every((s) => s.verdict === 'filtered')" in body
+    ), "a lane that passed even once is a real track having a bad frame"

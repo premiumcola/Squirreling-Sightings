@@ -825,6 +825,33 @@
   font: inherit;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+/* Auto-refresh indicator. The panel polls itself every 5 s while it is on
+   screen, so the Refresh button is gone; this is the quiet signal that what
+   you are reading is current, without implying anything must be pressed. */
+.log-live {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #00ff41;
+  animation: log-live-pulse 2.4s ease-in-out infinite;
+}
+@keyframes log-live-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .log-live {
+    animation: none;
+    opacity: 0.55;
+  }
+}
 /* Logs section: strict Matrix terminal — pure black, classic green, sharp
    corners. Nav-item and panel share the look so they read as one surface. */
 #logs.panel {

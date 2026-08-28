@@ -136,7 +136,7 @@ function _renderDiscoveryResults() {
         ${reolinkNote}
         <div class="discovery-creds">
           <input id="disc_user_${uid}" class="disc-input" placeholder="Benutzer" value="admin" autocomplete="off" />
-          <input id="disc_pass_${uid}" class="disc-input" type="password" placeholder="Passwort" autocomplete="off" />
+          <input id="disc_pass_${uid}" class="disc-input" type="password" placeholder="Passwort" autocomplete="new-password" />
           <select id="disc_path_${uid}" class="disc-select">${pathOptsForCam}</select>
         </div>
         <div id="disc_cred_status_${uid}" class="disc-cred-status" data-state="idle" hidden>

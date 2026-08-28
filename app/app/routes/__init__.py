@@ -77,6 +77,7 @@ def register_blueprints(app) -> None:
         tracking,
         trash,
         weather,
+        weather_episodes,
     )
 
     app.register_blueprint(tracking.bp)
@@ -93,6 +94,9 @@ def register_blueprints(app) -> None:
     # N14 · per-cam test-detection lives in its own module now.
     app.register_blueprint(coral_test_detection.bp)
     app.register_blueprint(weather.bp)
+    # Storm-episode archive — its own module because routes/weather.py
+    # is already past the file ceiling.
+    app.register_blueprint(weather_episodes.bp)
     app.register_blueprint(telegram.bp)
     app.register_blueprint(detection_cloud.bp)
     app.register_blueprint(trash.bp)

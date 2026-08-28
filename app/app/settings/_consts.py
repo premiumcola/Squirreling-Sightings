@@ -120,6 +120,20 @@ WEATHER_DEFAULTS: dict = {
         "prebuffer_max_mb": 256,
         "watch_grace_min": 30,
     },
+    # Storm-episode archive (app/app/weather_episodes). The weather
+    # history is a rolling 30-day window; these knobs decide what gets
+    # lifted out of it into the permanent archive before it rolls.
+    #   pre_min / post_min — minutes of curve kept around the episode.
+    #     The build-up is the part worth comparing across years.
+    #   settle_min         — how long every metric must stay below its
+    #     threshold before the episode counts as over. Without it a
+    #     pulsing storm fragments into six separate episodes.
+    "episodes": {
+        "enabled": True,
+        "pre_min": 90,
+        "post_min": 90,
+        "settle_min": 30,
+    },
 }
 
 

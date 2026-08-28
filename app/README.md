@@ -30,10 +30,11 @@ gruppiert, nicht alphabetisch.
   (`migrate_timelapse_events`, `generate_missing_thumbnails`,
   `migrate_timelapse_to_eventstore`); jede läuft im eigenen
   Daemon-Thread.
-- **`routes/`** — Paket (14 Blueprint-Module + zwei `_*_helpers`).
+- **`routes/`** — Paket (17 Blueprint-Module + zwei `_*_helpers`).
   `bootstrap`, `cameras`, `streams`, `media`, `events`,
   `timeline_stats`, `timelapse`, `tracking`, `sichtungen`, `coral`,
-  `weather`, `telegram`, `admin`. Jedes Blueprint resolved Shared
+  `coral_test_detection`, `weather`, `weather_episodes`, `telegram`,
+  `detection_cloud`, `trash`, `admin`. Jedes Blueprint resolved Shared
   State über `app_state` — niemals zurück nach `server.py` (außer den
   Lazy-Imports von `rebuild_runtimes` / `restart_single_camera` als
   einseitige Boot-Helpers).
@@ -118,6 +119,16 @@ gruppiert, nicht alphabetisch.
   `weather_history.json`, triggert Wetter-Sichtungen (Gewitter,
   Sonnen-untergänge, Nebel) als 10 s-Clips. Sun-Timelapse-Builder
   inkl. Polar-Day-Edge-Case.
+- **`weather_episodes/`** — Paket (8 Dateien). Sturm-Episoden-Archiv.
+  `weather_history.json` ist ein rollendes 30-Tage-Fenster; dieses
+  Paket schneidet daraus diskrete Episoden (Schwellen aus
+  `weather.events` — kein zweites Schwellensystem), hängt je 90 min
+  Vor-/Nachlauf an, berechnet einen vergleichbaren Intensity-Score
+  und schreibt sie append-only nach `storage/weather_episodes.jsonl`.
+  Der Sweep läuft bei jedem Poll über die GANZE History und ist
+  idempotent — der erste Lauf nach einem Deploy backfillt damit das
+  komplette Fenster. User-Labels sind Patch-Records, nichts wird
+  überschrieben.
 - **`mqtt_service.py`** — `MQTTService`. Dünner Wrapper um
   `paho-mqtt`, publiziert JSON-Payloads zu
   `<base_topic>/events/<cam_id>` und Status-Topics. Rate-limited

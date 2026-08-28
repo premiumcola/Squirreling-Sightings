@@ -102,6 +102,9 @@ class WeatherService(
         # restart. Survives reload() — it's diagnostic data, not config.
         self._history_lock = threading.Lock()
         self._history: deque = deque(maxlen=HISTORY_MAXLEN)
+        # Storm episode currently being recorded (not yet archivable —
+        # see weather_episodes._segment). Refreshed by every sweep.
+        self._episode_pending: dict | None = None
         try:
             self._load_history()
         except Exception as e:

@@ -124,6 +124,57 @@ class HistoryMixin:
         with self._lock:
             self._status["current_values"] = dict(values)
         self._save_history()
+        self._sweep_episodes()
+
+    def _sweep_episodes(self):
+        """Lift finished storms out of the rolling window into the archive.
+
+        The history buffer is 30 days deep and drops its oldest sample
+        on every append — a storm that falls off the end is gone for
+        good, which is exactly what makes "how bad was the 2026 one"
+        unanswerable. The sweep re-segments the WHOLE buffer each poll
+        and appends only ids the archive does not carry yet, so the
+        first sweep after a restart backfills every episode still in
+        the window and later sweeps cost a set lookup.
+
+        Best-effort: an archive failure must never interrupt the poll
+        cadence, the same contract `_save_history` runs under.
+        """
+        # Local import — weather_episodes imports back into this
+        # package for the field/event map, so a module-level import
+        # here would close an import cycle.
+        from ..weather_episodes import sweep as _sweep_episodes_impl
+
+        try:
+            root = self.settings_store.base_config.get("storage", {}).get("root", "/app/storage")
+        except Exception:
+            root = "/app/storage"
+        with self._history_lock:
+            rows = list(self._history)
+        try:
+            result = _sweep_episodes_impl(
+                root,
+                rows,
+                events_cfg=self.cfg.get("events"),
+                episode_cfg=self.cfg.get("episodes"),
+            )
+        except Exception as e:
+            log.warning("[weather] episode sweep failed: %s", e)
+            return
+        with self._history_lock:
+            self._episode_pending = result.get("pending")
+
+    def episodes_pending(self) -> dict | None:
+        """The storm currently being recorded, or None.
+
+        An episode is only archived once no later sample can still
+        change it (see weather_episodes._segment), which for the
+        default margins is three hours after the rain stops. Without
+        this the UI would have no way to say "a storm is happening and
+        it is being captured".
+        """
+        with self._history_lock:
+            return self._episode_pending
 
     def history(self, hours: int = 24) -> dict:
         """Backing call for /api/weather/history."""

@@ -34,6 +34,8 @@ from ._consts import (  # noqa: F401
 from ._formatting import FormattingMixin
 from ._health import HealthMixin
 from ._inbound import InboundMixin
+from ._inbound_camera import CameraActionMixin
+from ._inbound_event import EventCallbackMixin
 from ._lifecycle import LifecycleMixin
 from ._outbound import OutboundMixin
 
@@ -43,6 +45,8 @@ class TelegramService(
     HealthMixin,
     OutboundMixin,
     InboundMixin,
+    CameraActionMixin,
+    EventCallbackMixin,
     FormattingMixin,
 ):
     """Telegram bot service. Two-loop runtime (polling + send queue),
@@ -137,6 +141,12 @@ class TelegramService(
         # and archiving are never gated by this — only the user-facing
         # push.
         self._last_notify: dict[tuple[str, str], float] = {}
+        # NETZ · (camera_id, label) → monotonic timestamp of the last
+        # QUESTION. Separate from _last_notify on purpose: a question is
+        # not a push, its spacing is 10 min rather than the per-class
+        # notification cooldown, and one squirrel visit must produce one
+        # question rather than six.
+        self._question_last: dict[tuple[str, str], float] = {}
         self._scheduler = None
         self._lifecycle_lock = Lock()
         self._stopped = False

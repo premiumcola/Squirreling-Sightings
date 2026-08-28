@@ -21,6 +21,12 @@ def _read(rel: str) -> str:
     return (SRC / rel).read_text(encoding="utf-8")
 
 
+#: The ``ev:*`` callbacks moved out of `_inbound.py` when the question's
+#: three new branches would have pushed that file 350 lines past the
+#: ceiling. The wiring is the same; only its address changed.
+_VERDICT_MODULE = "telegram_bot/_inbound_event.py"
+
+
 def _read_outbound() -> str:
     """The push path is a package (HYG-2 split it along its concerns), so
     the wiring is pinned against the package as a whole rather than one
@@ -48,23 +54,24 @@ def test_alert_record_carries_score_and_threshold():
 
 
 def test_verdict_path_records_the_judgement():
-    src = _read("telegram_bot/_inbound.py")
+    src = _read(_VERDICT_MODULE)
     assert "from ..detection_feedback import record_verdict" in src
     assert "record_verdict(" in src
 
 
 def test_verdict_record_carries_the_camera():
-    """Joined from the alert index, so a per-camera calibration is possible."""
-    src = _read("telegram_bot/_inbound.py")
+    """Joined from the alert index — or, once the LRU has dropped it,
+    from the archive record, which outlives it by design."""
+    src = _read(_VERDICT_MODULE)
     call = src[src.index("record_verdict(") : src.index("record_verdict(") + 400]
     assert "cam_id=" in call
-    assert 'source="telegram"' in call
+    assert "source=source" in call
 
 
 def test_both_writes_are_best_effort():
     """Bookkeeping must never drop a real alert or break a callback."""
     out = _read_outbound()
-    inb = _read("telegram_bot/_inbound.py")
+    inb = _read(_VERDICT_MODULE)
     for src, needle in ((out, "record_alert("), (inb, "record_verdict(")):
         before = src[: src.index(needle)]
         tail = before[-400:]
@@ -78,8 +85,11 @@ def test_verdict_is_written_alongside_the_settings_entry_not_instead():
     """The settings entry drives the 'already rated' badge in the chat;
     removing it would change user-visible behaviour, so the ledger is
     additive until that badge has another source."""
-    src = _read("telegram_bot/_inbound.py")
-    assert 'runtime_set_subkey(\n                "event_feedback"' in src
+    src = _read(_VERDICT_MODULE)
+    assert '"event_feedback"' in src
+    # LRU-bounded: it is a dedupe guard, and an unbounded one grows
+    # settings.json by an entry per judged event forever.
+    assert "runtime_set_subkey_lru(" in src
 
 
 # ── the record must sit ABOVE the gates ───────────────────────────────
@@ -107,11 +117,26 @@ def test_alert_is_recorded_before_the_push_gate():
     )
 
 
-def test_only_one_ledger_write_per_event():
-    """Two calls would double-count every sent event and skew the
-    score distribution towards the ones that passed."""
-    src = _read_outbound()
-    assert src.count("record_alert(") == 1
+def test_only_one_ledger_write_per_event(tmp_storage_root):
+    """Two rows for one event would double-count it and skew the score
+    distribution towards the ones that passed.
+
+    Asserted by DRIVING an event rather than by counting call sites in
+    the source. There are now two writers on purpose — the push chain
+    for an alert it is about to send, and the question path for
+    everything the push chain never sees (`cat`, `bird`, `severity:
+    off`, and every score in the quiet band, which is the entire set the
+    net has to learn from). The invariant that matters is the one about
+    the FILE, and only a run can check it.
+    """
+    from app.detection_feedback import iter_records
+    from tests.test_netz_question import CAM, _Bot, _meta
+
+    bot = _Bot(tmp_storage_root, dict(CAM))
+    assert bot.on_finalized_event(_meta("dup-alarm", 0.92), "cam_werkstatt") == "alarm"
+    bot.on_finalized_event(_meta("dup-alarm", 0.92), "cam_werkstatt")
+    rows = [r for r in iter_records(tmp_storage_root) if r.get("kind") == "alert"]
+    assert [r["event_id"] for r in rows] == ["dup-alarm"]
 
 
 def test_the_record_says_which_side_of_the_bar_it_fell_on():

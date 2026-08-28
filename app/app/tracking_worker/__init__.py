@@ -344,7 +344,6 @@ class TrackingWorker(threading.Thread):
         n_ghosts = prune_ghost_tracks(
             state,
             cam_cfg=cam_cfg,
-            detection_cfg=self._detection_cfg(),
             camera_id=job.camera_id,
         )
         if n_ghosts:

@@ -20,14 +20,15 @@ from dataclasses import dataclass, field
 # SAME bar instead of three guesses. This module is that calibration.
 from ..detection_feedback import MIN_JUDGED_PER_CLASS
 from ..tracker_core._consts import TRACK_FLOOR_SCORE
+from ._apply import adapted_layer
 from ._ladder import _sub, resolve_effective
 
 # Everything below reads the verdict corpus and PROPOSES a push
 # threshold. Nothing here applies one. ``resolve_effective``'s
-# ``adapted`` layer is where an applied proposal would enter, and it is
-# still fed by nobody — deliberately. That is the whole difference
-# between a calibration that can be reviewed and one that changes the
-# system while the operator is asleep.
+# ``adapted`` layer is where an applied proposal enters, and its single
+# writer is the nightly run in ``_learner`` — never this module. That is
+# the whole difference between a calibration that can be reviewed and
+# one that changes the system while the operator is asleep.
 #
 # These functions stay pure: the caller reads the ledger
 # (``detection_feedback.corpus_stats`` / ``judged_alerts``) and hands the
@@ -90,8 +91,6 @@ class PushRecommendation:
     label: str
     current: float
     current_source: str
-    enforced: float
-    enforced_matches: bool
     push_enabled: bool
     severity: str
     verdict: str
@@ -108,8 +107,6 @@ class PushRecommendation:
             "label": self.label,
             "current": self.current,
             "current_source": self.current_source,
-            "enforced": self.enforced,
-            "enforced_matches": self.enforced_matches,
             "push_enabled": self.push_enabled,
             "severity": self.severity,
             "verdict": self.verdict,
@@ -119,27 +116,6 @@ class PushRecommendation:
             "blockers": list(self.blockers),
             "evidence": dict(self.evidence),
         }
-
-
-def enforced_push(push_cfg: dict | None, label: str) -> float:
-    """The push threshold the LIVE gate applies today.
-
-    Deliberately NOT ``resolve_effective(...).push``. The shipped
-    consumer — ``telegram_bot/_outbound/_event_alert._event_ctx`` —
-    reads ``telegram.push.labels[<label>].threshold`` and falls back to
-    **0.0**, full stop: it consults neither the per-camera
-    ``push_thresholds`` map nor ``TELEGRAM_PUSH_DEFAULTS``. So for a
-    label missing from the saved config the ladder here says 0.85 while
-    the live gate says "let everything through", and a per-camera
-    override the operator typed is inert — ``settings/_consts`` says so
-    out loud: the key "is settable and deliberately inert" until THR-3
-    switches the consumer over.
-
-    Reporting only the ladder value would print a number the system does
-    not use. Both are reported side by side, with ``enforced_matches``
-    flagging the divergence, rather than papering over it here.
-    """
-    return float(_sub(_sub(push_cfg or {}, "labels"), label).get("threshold", 0.0) or 0.0)
 
 
 def _floor2(x: float) -> float:
@@ -200,15 +176,12 @@ def _confidence(n_true: int, n_false: int, separation: str) -> str:
 def _context(stratum: dict, cam_cfg: dict | None, push_cfg: dict | None) -> dict:
     """The read-only surroundings every recommendation carries, ready or not."""
     label = str(stratum.get("label") or "?")
-    eff = resolve_effective(cam_cfg, push_cfg, label)
-    live = enforced_push(push_cfg, label)
+    eff = resolve_effective(cam_cfg, push_cfg, label, adapted=adapted_layer(cam_cfg, label))
     return {
         "cam": str(stratum.get("cam") or "?"),
         "label": label,
         "current": eff.push,
         "current_source": eff.source["push"],
-        "enforced": live,
-        "enforced_matches": abs(live - eff.push) < 1e-9,
         "push_enabled": eff.push_enabled,
         "severity": str(_sub(cam_cfg or {}, "class_severity").get(label) or "").lower(),
     }
@@ -310,13 +283,6 @@ def _explain(ctx: dict, value: float, ev: dict) -> str:
         parts.append(
             "Advisory only for now — `{}` has push disabled globally, so no value here "
             "changes anything until that flag is turned on.".format(ctx["label"])
-        )
-    if not ctx["enforced_matches"]:
-        parts.append(
-            "Heads up: the live gate currently enforces {:.2f}, not the {:.2f} this ladder "
-            "resolves — the shipped consumer reads only the global telegram.push value.".format(
-                ctx["enforced"], ctx["current"]
-            )
         )
     return " ".join(parts)
 

@@ -11,9 +11,6 @@ import { state } from '../core/state.js';
 // the consumer sees no rename. See each sub-module for the actual
 // implementation.
 export {
-  _renderErkPerClassConfidence,
-  _bindErkPerClassToggle,
-  _collectLabelThresholds,
   _renderErkPerClassConfirm,
   _bindErkConfirmPerClassToggle,
   _collectConfirmationWindow,
@@ -63,12 +60,11 @@ export function _initCameraFormListeners() {
 export function _initErkSliders(form) {
   if (!form) return;
   const map = [
-    ['detection_min_score', 'erkMinScoreVal', (v) => Math.round(v * 100) + ' %'],
-    ['label_threshold_person', 'erkPersonVal', (v) => Math.round(v * 100) + ' %'],
+    // D1/D2/D4 · detection_min_score, label_threshold_person and the
+    // global confirm_n / confirm_seconds pair lost their sliders. The
+    // Netz replaced the first two; nothing ever read the third.
     ['motion_sensitivity', 'erkMotionVal', (v) => Math.round(v * 100) + ' %'],
     ['frame_interval_ms', 'erkFrameIntervalVal', (v) => v + ' ms'],
-    ['confirm_n', 'erkConfirmN', (v) => v + ' ×'],
-    ['confirm_seconds', 'erkConfirmS', (v) => v + ' s'],
   ];
   for (const [name, valId, fmt] of map) {
     const inp = form.querySelector(`[name="${name}"]`);
@@ -78,18 +74,6 @@ export function _initErkSliders(form) {
       lbl.textContent = fmt(parseFloat(inp.value));
     };
     inp.addEventListener('input', upd);
-    upd();
-  }
-  // Compound: confirmation filter — "N Treffer in S Sekunden bestätigen".
-  const cn = form.querySelector('[name="confirm_n"]');
-  const cs = form.querySelector('[name="confirm_seconds"]');
-  const cl = document.querySelector('#erkConfirmLbl');
-  if (cn && cs && cl) {
-    const upd = () => {
-      cl.textContent = `${cn.value} Treffer in ${cs.value} Sekunden bestätigen`;
-    };
-    cn.addEventListener('input', upd);
-    cs.addEventListener('input', upd);
     upd();
   }
   // Compound: frame_interval_ms → fps line. 1000 / interval rounded to

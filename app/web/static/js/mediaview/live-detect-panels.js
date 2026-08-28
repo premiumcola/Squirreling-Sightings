@@ -18,6 +18,7 @@ import {
   _TRACE_TICK_CAP,
 } from './live-detect.js';
 import { _renderBboxOverlay } from './live-detect-bbox.js';
+import { netzSpawnFor } from '../netz/effective.js';
 import { _pinScrubberRight } from './live-detect-chrome.js';
 
 // Verdicts that mean "a gate removed this box". Mirrors the backend's
@@ -322,11 +323,13 @@ export function _renderDetailPill() {
     renderDetailPill(pill, { tracks: [], emptyText: `${lblText} · aktuell nicht im Bild` });
     return;
   }
-  const cam = (state.cameras || []).find((x) => x.id === S.session.camId) || {};
-  const perCls = cam.label_thresholds || {};
-  const generalThresh = Number(cam.detection_min_score) || 0.55;
-  const scoreThresh =
-    perCls[S.selectedLabel] != null ? Number(perCls[S.selectedLabel]) : generalThresh;
+  // D12 · the "Settings-Limit" tick reads the NET's effective spawn, not
+  // a `detection_min_score || 0.55` guess. That fallback was the global
+  // processing default while the real spawn is TRACK_SPAWN_SCORE 0.50,
+  // so the tick sat five points away from the line the pipeline actually
+  // applies — on the one panel whose whole job is to explain why a
+  // detection did or did not pass.
+  const scoreThresh = netzSpawnFor(S.session.camId, S.selectedLabel);
   const fs = S.session.lastFrameSize || { w: 1920, h: 1080 };
   const bh = det.bbox?.[3] || 0;
   const bw = det.bbox?.[2] || 0;

@@ -166,48 +166,50 @@ class TestPrecision:
 
 # ── ghost prune ─────────────────────────────────────────────────────────
 class TestSpawnThresholdLadder:
-    def test_label_threshold_wins(self):
-        fn = spawn_threshold_fn(
-            {"label_thresholds": {"person": 0.7}, "detection_min_score": 0.4},
-            {"min_score": 0.55},
-        )
+    """P4 · the prune reads the ONE ladder, not a third resolution order.
+
+    It used to carry its own chain (label_thresholds → detection_min_score
+    → detection_cfg["min_score"] → 0.55) with a fallback five points
+    above the live loop's TRACK_SPAWN_SCORE of 0.50. `dog` and `car`
+    spawned during the clip and were pruned after it against the higher
+    bar, so the sidecar lost tracks the pipeline had genuinely followed.
+    """
+
+    def test_label_threshold_is_the_camera_layer(self):
+        fn = spawn_threshold_fn({"label_thresholds": {"person": 0.7}})
         assert fn("person") == 0.7
 
-    def test_camera_default_covers_unlisted_labels(self):
+    def test_an_unlisted_label_falls_to_its_shipped_default(self):
+        """`cat` ships at 0.55 in LABEL_THRESHOLD_DEFAULTS — the ladder's
+        `default` layer, not a hard-coded number in this module."""
+        assert spawn_threshold_fn({})("cat") == 0.55
+
+    def test_a_label_with_no_shipped_default_uses_the_track_spawn_score(self):
+        """0.50, the value the live loop spawns at — the exact number the
+        old 0.55 fallback contradicted."""
+        assert spawn_threshold_fn({})("dog") == 0.50
+
+    def test_camera_wide_spawn_covers_labels_with_no_entry(self):
+        fn = spawn_threshold_fn({"track_spawn_min_score": 0.6})
+        assert fn("dog") == 0.6
+
+    def test_a_per_label_entry_outranks_the_camera_wide_one(self):
+        """Ladder order, not max(): `label_thresholds` and
+        `track_spawn_min_score` are both the CAMERA layer and the more
+        specific of the two wins."""
         fn = spawn_threshold_fn(
-            {"label_thresholds": {"person": 0.7}, "detection_min_score": 0.4},
-            {"min_score": 0.55},
+            {"label_thresholds": {"person": 0.3}, "track_spawn_min_score": 0.6}
         )
-        assert fn("cat") == 0.4
+        assert fn("person") == 0.3
 
-    def test_global_default_is_the_last_resort(self):
-        assert spawn_threshold_fn({}, {"min_score": 0.62})("cat") == 0.62
-
-    def test_missing_global_falls_back_to_the_module_default(self):
-        assert spawn_threshold_fn({}, {})("cat") == 0.55
-
-    def test_zero_is_the_use_the_default_sentinel(self):
-        fn = spawn_threshold_fn(
-            {"label_thresholds": {"person": 0}, "detection_min_score": 0},
-            {"min_score": 0.55},
-        )
-        assert fn("person") == 0.55
-
-    def test_track_spawn_min_score_is_a_floor_not_a_replacement(self):
-        """It raises a permissive per-label threshold and leaves a
-        stricter one alone — a camera-wide floor, same as
-        resolve_track_thresholds applies to the matcher."""
-        cfg = {"label_thresholds": {"person": 0.3, "cat": 0.9}, "track_spawn_min_score": 0.6}
-        fn = spawn_threshold_fn(cfg, {"min_score": 0.55})
-        assert fn("person") == 0.6
-        assert fn("cat") == 0.9
+    def test_the_learners_value_ranks_below_a_manual_one(self):
+        cfg = {"net_adapted": {"cat": {"E": 70}}, "label_thresholds": {"cat": 0.8}}
+        assert spawn_threshold_fn(cfg)("cat") == 0.8
+        assert spawn_threshold_fn({"net_adapted": {"cat": {"E": 70}}})("cat") < 0.55
 
     def test_garbage_values_do_not_raise(self):
-        fn = spawn_threshold_fn(
-            {"label_thresholds": {"person": "n/a"}, "detection_min_score": "x"},
-            {"min_score": "y"},
-        )
-        assert fn("person") == 0.55
+        fn = spawn_threshold_fn({"label_thresholds": {"person": "n/a"}})
+        assert fn("person") == 0.45
 
 
 class TestGhostPrune:
@@ -220,7 +222,7 @@ class TestGhostPrune:
         st = self._state(_track(samples=_walk(4, score=0.8)))
         assert (
             prune_ghost_tracks(
-                st, cam_cfg={"detection_min_score": 0.6}, detection_cfg={}, camera_id="cam"
+                st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam"
             )
             == 0
         )
@@ -229,7 +231,7 @@ class TestGhostPrune:
     def test_faint_and_sparse_track_is_dropped(self):
         st = self._state(_track(samples=_walk(3, score=0.25, dt=9.0)))
         dropped = prune_ghost_tracks(
-            st, cam_cfg={"detection_min_score": 0.6}, detection_cfg={}, camera_id="cam"
+            st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam"
         )
         assert dropped == 1
         assert st.closed == []
@@ -240,7 +242,7 @@ class TestGhostPrune:
         st = self._state(_track(samples=_walk(5, score=0.25, dt=1.0)))
         assert (
             prune_ghost_tracks(
-                st, cam_cfg={"detection_min_score": 0.6}, detection_cfg={}, camera_id="cam"
+                st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam"
             )
             == 0
         )
@@ -248,7 +250,7 @@ class TestGhostPrune:
 
     def test_per_label_window_overrides_the_global_one(self):
         cam_cfg = {
-            "detection_min_score": 0.6,
+            "label_thresholds": {"person": 0.6, "cat": 0.6},
             "confirmation_window": {
                 "global": {"n": 2, "seconds": 5},
                 "person": {"n": 99, "seconds": 1},
@@ -257,12 +259,12 @@ class TestGhostPrune:
         faint = _track(samples=_walk(5, score=0.25), track_id="p")
         cat = _track(label="cat", samples=_walk(5, score=0.25), track_id="c")
         st = self._state(faint, cat)
-        assert prune_ghost_tracks(st, cam_cfg=cam_cfg, detection_cfg={}, camera_id="cam") == 1
+        assert prune_ghost_tracks(st, cam_cfg=cam_cfg, camera_id="cam") == 1
         assert [t.label for t in st.closed] == ["cat"]
 
     def test_empty_state_is_a_no_op(self):
         st = TrackerState()
-        assert prune_ghost_tracks(st, cam_cfg={}, detection_cfg={}, camera_id="cam") == 0
+        assert prune_ghost_tracks(st, cam_cfg={}, camera_id="cam") == 0
 
 
 # ── static false positives ──────────────────────────────────────────────

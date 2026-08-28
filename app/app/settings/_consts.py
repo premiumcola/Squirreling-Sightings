@@ -221,10 +221,10 @@ CONFIRMATION_WINDOW_DEFAULTS = {
 #     {} = fall back to the global telegram.push.labels[*].threshold.
 #     A workshop cam and a bird feeder are metres vs. tens of metres
 #     away from their subjects; one global person threshold cannot
-#     serve both. Resolution order lives in app/app/thresholds.py.
-#     NB: the consumer (telegram_bot/_outbound) still reads the global
-#     value — THR-3 switches it over. Until then the key is settable
-#     and deliberately inert.
+#     serve both. Resolution order lives in app/app/thresholds.
+#     THR-3 landed: telegram_bot/_outbound/_event_alert resolves the
+#     push gate through `resolve_effective`, so this key is LIVE — it
+#     is the camera layer, and the Netz panel writes exactly it.
 #   hybrid_mode     — off|shadow|merge, HYB-2's TPU+CPU dual pass.
 #   label_veto      — LEARN-1's per-label suppression map.
 HYBRID_MODE_DEFAULT = "off"
@@ -232,6 +232,34 @@ CAMERA_THRESHOLD_KEY_DEFAULTS: dict = {
     "push_thresholds": {},
     "hybrid_mode": HYBRID_MODE_DEFAULT,
     "label_veto": {},
+}
+
+# NETZ · the four per-camera keys the Erkennungsnetz owns.
+#
+#   role        — "security" | "wildlife". Decides whether the person
+#                 safety floor applies to the AUTOMATIC path. Default is
+#                 "security", the safe direction: a camera nobody has
+#                 classified is treated as one an intruder could trip.
+#   net_pin     — {label: {E, ts, by}} — axes the operator dragged by
+#                 hand. A pin is permanent and the learner never writes
+#                 a pinned axis. No timeout: a value that silently
+#                 reverts after 30 days destroys trust.
+#   net_adapted — {label: {E, ts}} — what the nightly learner applied.
+#                 Feeds the ladder's `adapted` layer, which ranks BELOW
+#                 `camera`, so a pin physically outranks the learner.
+#   net_auto    — per-camera master switch for the learner. Default on;
+#                 off means it only proposes and never writes.
+#
+# Kept OUT of CAMERA_THRESHOLD_KEY_DEFAULTS on purpose: that map is
+# applied with `cam.get(key) or default`, which would silently resurrect
+# a `net_auto: false` the operator deliberately set.
+NET_AUTO_DEFAULT = True
+CAMERA_ROLE_DEFAULT = "security"
+CAMERA_NET_KEY_DEFAULTS: dict = {
+    "role": CAMERA_ROLE_DEFAULT,
+    "net_pin": {},
+    "net_adapted": {},
+    "net_auto": NET_AUTO_DEFAULT,
 }
 
 # THR-1 · CORP-2's per-label daily cap on retained corpus samples.

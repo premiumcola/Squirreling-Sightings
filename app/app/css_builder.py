@@ -90,6 +90,9 @@ LOAD_ORDER = [
     "30g-mediaview-shell.css",
     # Telemetrie-Panel (Cluster 6 + Kostenzeile unter dem Modus-Schalter).
     "31-mediaview-telemetry.css",
+    # NETZ · Erkennungsnetz (Radar + Drag) und sein Verlaufs-Archiv.
+    "32-netz.css",
+    "33-netz-archiv.css",
 ]
 
 _BANNER = (

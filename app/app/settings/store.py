@@ -274,19 +274,30 @@ class SettingsStore:
                 return default
             return deepcopy(sec.get(subkey, default))
 
-    def runtime_alert_index_set(self, eid: str, payload: dict, cap: int = 200):
-        """LRU-bounded write to runtime.alert_index. Cap protects against
-        unbounded growth — at cap, the oldest insertion is evicted."""
+    def runtime_set_subkey_lru(self, key: str, subkey: str, value, cap: int):
+        """LRU-bounded write to runtime[key][subkey].
+
+        The cap is what keeps settings.json from growing one entry per
+        event forever. Every bounded runtime map goes through this one
+        method — `alert_index` and `event_feedback` differ only in their
+        cap, and two hand-rolled eviction loops is one more than the
+        number that can stay correct.
+        """
         with self._runtime_lock:
-            idx = self.data.setdefault("runtime", {}).setdefault("alert_index", {})
+            idx = self.data.setdefault("runtime", {}).setdefault(key, {})
             if not isinstance(idx, dict):
                 idx = {}
-                self.data["runtime"]["alert_index"] = idx
-            idx[eid] = payload
+                self.data["runtime"][key] = idx
+            idx[subkey] = value
             while len(idx) > cap:
                 # Python 3.7+ dicts preserve insertion order
                 idx.pop(next(iter(idx)))
             self.save()
+
+    def runtime_alert_index_set(self, eid: str, payload: dict, cap: int = 200):
+        """LRU-bounded write to runtime.alert_index. Cap protects against
+        unbounded growth — at cap, the oldest insertion is evicted."""
+        self.runtime_set_subkey_lru("alert_index", eid, payload, cap)
 
     def get_camera(self, cam_id: str) -> dict | None:
         return next((c for c in self.data.get("cameras", []) if c.get("id") == cam_id), None)

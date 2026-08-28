@@ -1,85 +1,21 @@
 // ─── camedit/detection-perclass.js ─────────────────────────────────────────
-// Per-class confidence + per-class confirmation-window grids on the
-// Erkennung tab. Both share the same data model (per-camera per-label
-// config) and the same DOM patterns (table grid with per-row toggle).
-// Plus the legacy hidden #camConfirmGrid retained for older templates.
+// Per-class CONFIRMATION-WINDOW grid on the Erkennung tab, plus the
+// legacy hidden #camConfirmGrid retained for older templates.
+//
+// The per-class CONFIDENCE grid that used to live here was removed with
+// D2/D3 — the Netz owns those thresholds. Confirmation stays: it is
+// anti-flicker tied to how long a class stays in frame (a bird 2 s, a
+// person 20 s), not to risk appetite, and conflating the two would make
+// the Netz's mapping unexplainable.
 import { byId, esc } from '../core/dom.js';
 import { OBJ_LABEL } from '../core/icons.js';
 
-// Per-class confidence drilldown rendered into #erkPerClassAdvanced when
-// the user opens "Pro Klasse anpassen" under step 2. Defaults mirror the
-// settings_store fallbacks (cat 0.55 / bird 0.45 / squirrel 0.45 / car
-// 0.65 / dog 0.55) so a fresh camera with no per-class entries doesn't
-// look misconfigured. Sliders are name="label_threshold_<key>" so the
-// save handler's _collectLabelThresholds() picks them up automatically.
-const _ERK_PERCLASS_CONFIDENCE = [
-  { key: 'cat', label: 'Katze', defaultV: 0.55 },
-  { key: 'bird', label: 'Vogel', defaultV: 0.45 },
-  { key: 'squirrel', label: 'Eichhörnchen', defaultV: 0.45 },
-  { key: 'car', label: 'Auto', defaultV: 0.65 },
-  { key: 'dog', label: 'Hund', defaultV: 0.55 },
-];
-
-export function _renderErkPerClassConfidence(form, cam) {
-  const wrap = byId('erkPerClassAdvanced');
-  if (!wrap) return;
-  const thresholds = cam?.label_thresholds || {};
-  wrap.innerHTML = _ERK_PERCLASS_CONFIDENCE
-    .map((c) => {
-      const raw = thresholds[c.key];
-      const v = raw != null && Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : c.defaultV;
-      return `
-      <div class="erk-card">
-        <div class="row">
-          <input type="range" name="label_threshold_${c.key}" min="0.50" max="0.95" step="0.01" value="${v.toFixed(2)}" />
-          <span class="val" id="erkLT_${c.key}_val">${Math.round(v * 100)}%</span>
-        </div>
-        <span class="lbl">${esc(c.label)} · überschreibt allgemein</span>
-      </div>`;
-    })
-    .join('');
-  _ERK_PERCLASS_CONFIDENCE.forEach((c) => {
-    const inp = wrap.querySelector(`[name="label_threshold_${c.key}"]`);
-    const lbl = byId(`erkLT_${c.key}_val`);
-    if (inp && lbl) {
-      inp.addEventListener('input', () => {
-        lbl.textContent = Math.round(parseFloat(inp.value) * 100) + '%';
-      });
-    }
-  });
-}
-
-// One-time wiring for the "Pro Klasse anpassen ▾" disclosure toggle in
-// step 2. Idempotent via dataset.wired so re-opening cam-edit doesn't
-// double-bind.
-export function _bindErkPerClassToggle() {
-  const btn = byId('erkPerClassToggle');
-  const wrap = byId('erkPerClassAdvanced');
-  const lbl = byId('erkPerClassToggleLbl');
-  if (!btn || !wrap || !lbl || btn.dataset.wired) return;
-  btn.dataset.wired = '1';
-  btn.addEventListener('click', () => {
-    const open = wrap.hidden;
-    wrap.hidden = !open;
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    lbl.textContent = open ? 'Weniger anzeigen' : 'Pro Klasse anpassen';
-  });
-}
-
-// Read every label_threshold_<class> slider from the form into the
-// dict shape settings.json expects. Includes the step-2 person
-// slider AND any per-class drilldown sliders rendered into
-// #erkPerClassAdvanced. Drops NaN values silently — no slider, no
-// entry, schema falls back to the global detection_min_score.
-export function _collectLabelThresholds(form) {
-  const out = {};
-  form.querySelectorAll('[name^="label_threshold_"]').forEach((inp) => {
-    const key = inp.name.replace('label_threshold_', '');
-    const v = parseFloat(inp.value);
-    if (key && Number.isFinite(v)) out[key] = v;
-  });
-  return out;
-}
+// D2/D3 · the per-class confidence drilldown and its
+// _collectLabelThresholds collector are GONE. They doubled the Netz,
+// and the min="0.50" clamp on the sliders silently RAISED bird and
+// squirrel from their shipped 0.45 the moment somebody opened the fold
+// and pressed Speichern. The Netz writes label_thresholds now, one axis
+// per class, and camedit echoes the stored map back untouched.
 
 // Per-class confirmation-window drilldown rendered into
 // #erkConfirmPerClass when "Pro Klasse anpassen" under step 3 is

@@ -161,13 +161,13 @@ function _renderPushLabelsList(labels) {
       const l = labels[lbl] || { push: false, threshold: 0.8 };
       const color = colors[lbl] || '#5bc8f5';
       const name = OBJ_LABEL[lbl] || lbl;
-      const pct = Math.round((l.threshold || 0) * 100);
+      // D8 · the threshold slider is gone. Besides doubling the Netz it
+      // carried a min="0.5" clamp that silently rewrote `motion` from
+      // 0.0 to 0.5 the moment anyone touched it.
       return `
       <div class="push-label-row" data-label="${esc(lbl)}">
         <span class="push-label-chip" style="background:${esc(color)}22;border:1px solid ${esc(color)}55;color:${esc(color)}">${esc(name)}</span>
         <label class="switch push-label-toggle"><input type="checkbox" ${l.push ? 'checked' : ''} data-push-toggle/><span class="slider"></span></label>
-        <input type="range" class="push-label-slider" min="0.5" max="1.0" step="0.05" value="${l.threshold || 0.8}" ${l.push ? '' : 'disabled'} data-push-slider/>
-        <span class="push-label-pct">${pct}%</span>
       </div>`;
     })
     .join('');
@@ -261,21 +261,8 @@ function _bindPushHandlers() {
     if (!row) return;
     const lbl = row.dataset.label;
     if (e.target.matches('[data-push-toggle]')) {
-      const on = e.target.checked;
-      const slider = row.querySelector('[data-push-slider]');
-      if (slider) slider.disabled = !on;
-      savePushCfg({ labels: { [lbl]: { push: on } } });
+      savePushCfg({ labels: { [lbl]: { push: e.target.checked } } });
     }
-    // [data-push-slider] saves on input below.
-  });
-  byId('pushLabelsList')?.addEventListener('input', (e) => {
-    if (!e.target.matches('[data-push-slider]')) return;
-    const row = e.target.closest('.push-label-row');
-    const lbl = row.dataset.label;
-    const v = parseFloat(e.target.value) || 0;
-    const pctEl = row.querySelector('.push-label-pct');
-    if (pctEl) pctEl.textContent = Math.round(v * 100) + '%';
-    _debouncedPushSave({ labels: { [lbl]: { threshold: v } } });
   });
   // Bottom toggles.
   byId('push_timelapse_enabled')?.addEventListener('change', (e) =>
@@ -297,22 +284,26 @@ function _bindPushHandlers() {
   });
 }
 
+// D8 · the presets keep their POLICY half (which labels alert at all,
+// quiet hours, highlight) and lose their threshold half. A preset that
+// rewrote the per-label thresholds would silently overwrite whatever the
+// Netz had learned or the operator had dragged — the same drift the
+// slider caused, just in one click instead of many.
 function _buildPushPreset(name) {
   const def = _pushDefaults();
-  if (name === 'standard') return def;
   if (name === 'quiet') {
     return {
       enabled: true,
       quiet_hours: { start: '22:00', end: '08:00' },
       highlight: { enabled: false },
       labels: {
-        person: { push: true, threshold: 0.9 },
-        car: { push: true, threshold: 0.9 },
-        squirrel: { push: false, threshold: 0.8 },
-        dog: { push: false, threshold: 0.8 },
-        cat: { push: false, threshold: 0.8 },
-        bird: { push: false, threshold: 0.9 },
-        motion: { push: false, threshold: 0.0 },
+        person: { push: true },
+        car: { push: true },
+        squirrel: { push: false },
+        dog: { push: false },
+        cat: { push: false },
+        bird: { push: false },
+        motion: { push: false },
       },
     };
   }
@@ -321,13 +312,13 @@ function _buildPushPreset(name) {
       enabled: true,
       quiet_hours: { start: '00:00', end: '00:00' },
       labels: {
-        person: { push: true, threshold: 0.7 },
-        car: { push: true, threshold: 0.7 },
-        squirrel: { push: true, threshold: 0.7 },
-        dog: { push: true, threshold: 0.7 },
-        cat: { push: true, threshold: 0.7 },
-        bird: { push: true, threshold: 0.7 },
-        motion: { push: false, threshold: 0.0 },
+        person: { push: true },
+        car: { push: true },
+        squirrel: { push: true },
+        dog: { push: true },
+        cat: { push: true },
+        bird: { push: true },
+        motion: { push: false },
       },
     };
   }

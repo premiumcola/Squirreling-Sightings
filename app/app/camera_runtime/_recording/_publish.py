@@ -220,6 +220,27 @@ class PublishMixin:
         except Exception as e:
             log.warning("[%s] telegram event push failed: %s", self.camera_id, e)
 
+    def _publish_question(self, meta: dict) -> None:
+        """NETZ · ask about a detection that sits between spawn and push.
+
+        Invoked here, beside the recording ticker, and on the ticker's
+        principle: the gates an alert passes are exactly the gates that
+        silence the classes with no corpus, so the question path
+        deliberately does not go through them. It respects
+        `telegram_enabled`, `armed`, both mutes and its own budget — the
+        Telegram side owns those, so this is just the hand-off.
+
+        Deliberately AFTER `_publish_alert`: an event that cleared the
+        push bar is an alarm and has already been sent with its own
+        ✅/❌ buttons. `send_question` is the band below it.
+        """
+        if not (self.notifier and hasattr(self.notifier, "on_finalized_event")):
+            return
+        try:
+            self.notifier.on_finalized_event(meta, self.camera_id)
+        except Exception as e:
+            log.debug("[%s] Netz-Frage übersprungen: %s", self.camera_id, e)
+
     def _publish_finalized_event(
         self,
         event: dict,
@@ -244,6 +265,10 @@ class PublishMixin:
         self._publish_quests()
         self._publish_dossiers(meta, event.get("event_id") or meta.get("event_id") or "")
         self._publish_alert(meta, thumb_rel)
+        # After the alert: an event above the push bar is an alarm and
+        # has just been sent with its own verdict buttons. This handles
+        # the band BELOW it — and archives both.
+        self._publish_question(meta)
         # Last, so the "you can walk in again" cue only goes out once the
         # clip is genuinely finished and filed.
         self.notify_recording_finished(meta, event.get("duration_s"))

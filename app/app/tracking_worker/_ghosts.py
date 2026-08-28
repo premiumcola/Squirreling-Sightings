@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from ._consts import DEFAULT_CONFIRM_N, DEFAULT_CONFIRM_SECONDS, DEFAULT_MIN_SCORE
+from ._consts import DEFAULT_CONFIRM_N, DEFAULT_CONFIRM_SECONDS
 from ._samples import confirmed_in_window
 
 log = logging.getLogger(__name__)
@@ -23,13 +23,6 @@ log = logging.getLogger(__name__)
 # prune_ghost_tracks with each cam's CURRENT config, and rewrites
 # the sidecar. Out of scope for the initial L07 commit — only NEW
 # clips get the cleanup until that ships.
-
-
-def _coerce_float(value, fallback: float) -> float:
-    try:
-        return float(value or 0.0)
-    except (TypeError, ValueError):
-        return fallback
 
 
 def confirm_window_defaults(cam_cfg: dict) -> tuple[dict, int, float]:
@@ -50,47 +43,39 @@ def window_for_label(cw_cfg: dict, label: str, default_n: int, default_secs: flo
     return int(cw.get("n", default_n)), float(cw.get("seconds", default_secs))
 
 
-def spawn_threshold_fn(cam_cfg: dict, detection_cfg: dict):
-    """Build the per-label spawn-threshold lookup, mirroring the live path:
+def spawn_threshold_fn(cam_cfg: dict):
+    """The per-label spawn threshold, resolved through the ONE ladder.
 
-        1. cam_cfg.label_thresholds[label]   (non-zero)
-        2. cam_cfg.detection_min_score       (non-zero)
-        3. detection_cfg["min_score"]        (global default)
+    P4 · this used to carry a third, hand-rolled resolution order with a
+    ``0.55`` fallback where the live loop uses ``TRACK_SPAWN_SCORE``
+    0.50. The consequence was concrete and invisible: ``dog`` and
+    ``car`` spawned a track at 0.50 during the clip and were then pruned
+    from the sidecar after it against a bar five points higher, so the
+    lightbox lost tracks the live pipeline had genuinely followed.
 
-    The per-camera ``track_spawn_min_score`` (non-zero) is a FLOOR on
-    top of that — ``max(per-label, per-cam-floor)`` is the threshold a
-    track must clear, same rule ``resolve_track_thresholds`` applies
-    cam-wide."""
-    label_thresholds = (cam_cfg or {}).get("label_thresholds") or {}
-    cam_dms = _coerce_float((cam_cfg or {}).get("detection_min_score"), 0.0)
-    global_dms = _coerce_float((detection_cfg or {}).get("min_score"), DEFAULT_MIN_SCORE)
-    if not global_dms:
-        global_dms = DEFAULT_MIN_SCORE
-    cam_spawn_floor = _coerce_float((cam_cfg or {}).get("track_spawn_min_score"), 0.0)
+    ``resolve_effective`` is the one place that knows the camera >
+    adapted > global > default order. Reading it here means the prune
+    can no longer disagree with the spawn.
+    """
+    from ..thresholds import resolve_effective
+    from ..thresholds._apply import adapted_layer
+
+    adapted = {}
 
     def _effective(label: str) -> float:
-        per_label = None
-        raw = label_thresholds.get(label)
-        try:
-            if raw is not None:
-                candidate = float(raw)
-                if candidate > 0:
-                    per_label = candidate
-        except (TypeError, ValueError):
-            per_label = None
-        if per_label is None:
-            per_label = cam_dms if cam_dms > 0 else global_dms
-        return max(per_label, cam_spawn_floor)
+        if label not in adapted:
+            adapted[label] = adapted_layer(cam_cfg, label)
+        return resolve_effective(cam_cfg, None, label, adapted=adapted[label]).spawn
 
     return _effective
 
 
-def prune_ghost_tracks(state, *, cam_cfg: dict, detection_cfg: dict, camera_id: str) -> int:
+def prune_ghost_tracks(state, *, cam_cfg: dict, camera_id: str) -> int:
     """Drop ghost tracks from ``state.closed`` in place; return the drop
     count so the caller can summarise. Idempotent."""
     if not state.closed:
         return 0
-    effective_for = spawn_threshold_fn(cam_cfg, detection_cfg)
+    effective_for = spawn_threshold_fn(cam_cfg)
     cw_cfg, default_n, default_secs = confirm_window_defaults(cam_cfg)
 
     survivors = []

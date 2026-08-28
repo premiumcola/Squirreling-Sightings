@@ -451,6 +451,18 @@ class LifecycleMixin:
             self.schedule_daily(hh, mm, "tg_highlight", self._job_highlight)
         if pcfg.get("system", {}).get("enabled", True):
             self.schedule_interval(60, "tg_watchdog", self._job_watchdog)
+        # NETZ · the two jobs the Erkennungsnetz needs. Both are
+        # unconditional: the release is a no-op on an empty queue, and
+        # the learner's own rails (24 h per axis, 5 E points per run)
+        # are what bound it — not a config flag that could be off while
+        # the corpus fills.
+        #
+        # 07:00 first, matching the default end of quiet_hours: the
+        # questions held overnight are released as ONE message with one
+        # button, never as a digest of thumbnails.
+        hh, mm = _parse_hhmm((pcfg.get("quiet_hours") or {}).get("end", "07:00"))
+        self.schedule_daily(hh, mm, "netz_question_release", self._job_question_release)
+        self.schedule_daily(3, 30, "netz_learner", self._job_netz_learner)
         try:
             jobs = [j.id for j in self._scheduler.get_jobs()]
             log.info("[tg] Registered jobs: %s", jobs)

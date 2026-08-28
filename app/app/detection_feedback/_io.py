@@ -15,7 +15,7 @@ import logging
 import threading
 from pathlib import Path
 
-from ._retention import select_retained
+from ._retention import index_records, select_retained
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +80,53 @@ def iter_records(storage_root):
     path = _pkg("ledger_path")(storage_root)
     yield from _read_file(archive_path(path))
     yield from _read_file(path)
+
+
+# ── the parsed ledger, kept for as long as the file is unchanged ──────
+#
+# The read side folds the whole file for every question asked of it, and
+# the Netz panel asks eleven of them per camera: `corpus_stats` once, then
+# `judged_alerts` again inside `axis_proposal` for each axis. At 8 MB
+# that was twelve full JSON parses per page load and twenty-four per drag
+# commit, plus one on the recording thread for every finalized event.
+#
+# The fingerprint is (size, mtime_ns) of BOTH generations. An append only
+# ever grows the live file and a compaction rewrites both, so a stale
+# entry cannot survive a write. The returned index is READ-ONLY by
+# contract — no consumer mutates it, and one that did would be handing
+# its edits to every other caller.
+_index_lock = threading.Lock()
+_index_key = None
+_index_value = None
+
+
+def _fingerprint(path: Path) -> tuple:
+    marks = []
+    for p in (archive_path(path), path):
+        try:
+            st = p.stat()
+            marks.append((st.st_size, st.st_mtime_ns))
+        except OSError:
+            marks.append((-1, -1))
+    return (str(path), tuple(marks))
+
+
+def ledger_index(storage_root):
+    """The ledger folded into a :class:`LedgerIndex`, cached by file state.
+
+    Same result as ``index_records(iter_records(root))`` — this only
+    stops the file being re-parsed once per caller when nothing has
+    changed between them.
+    """
+    global _index_key, _index_value
+    key = _fingerprint(_pkg("ledger_path")(storage_root))
+    with _index_lock:
+        if _index_key == key and _index_value is not None:
+            return _index_value
+    idx = index_records(iter_records(storage_root))
+    with _index_lock:
+        _index_key, _index_value = key, idx
+    return idx
 
 
 def _compact(path: Path) -> dict:

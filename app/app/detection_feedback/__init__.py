@@ -72,6 +72,7 @@ from ._stats import (
     centroid_readiness,
     corpus_stats,
     judged_alerts,
+    resolve_stratum,
     score_summary,
     veto_readiness,
 )
@@ -102,6 +103,7 @@ __all__ = [
     "ledger_path",
     "record_alert",
     "record_verdict",
+    "resolve_stratum",
     "score_summary",
     "select_retained",
     "veto_readiness",

@@ -10,6 +10,7 @@ It is now the seam list: one module per concern, composed into the single
   _gates.py       the cheap push predicates (suppress, rate limit, quiet)
   _best_frame.py  the strongest frame of a clip, boxes burnt on
   _event_alert.py the event push path: nine gates, then one message
+  _question.py    NETZ · the quiet question in the spawn..push band
   _jobs.py        daily report, highlight, watchdog + system notices
 
 Nothing but composition and re-exports belongs here. `EventAlertResult`
@@ -23,12 +24,15 @@ from ._best_frame import BestFrameMixin
 from ._event_alert import EventAlertMixin, EventAlertResult
 from ._gates import GatesMixin
 from ._jobs import JobsMixin
+from ._question import QuestionMixin
 from ._send import SendMixin
 
 __all__ = ["EventAlertResult", "OutboundMixin"]
 
 
-class OutboundMixin(SendMixin, GatesMixin, BestFrameMixin, EventAlertMixin, JobsMixin):
+class OutboundMixin(
+    SendMixin, GatesMixin, BestFrameMixin, EventAlertMixin, QuestionMixin, JobsMixin
+):
     """Send pipeline: low-level send, alerts, scheduled-job bodies (daily/highlight/watchdog).
 
     Mixin for TelegramService. Methods access shared state via `self.*`

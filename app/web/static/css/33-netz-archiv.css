@@ -1,0 +1,285 @@
+/* ─── 33-netz-archiv.css · Verlaufs-Archiv ─────────────────────────────────
+   List rows, the state badge and the detail sheet.
+
+   Row geometry at 375 px: a 96 x 54 thumbnail on the left, three lines
+   on the right, ~92 px tall, and the WHOLE row is the tap target. */
+
+.netz-arc-head {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.netz-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-toggle.is-on {
+  background: rgba(34, 197, 94, 0.24);
+  color: #eaf7ee;
+}
+
+.netz-toggle-n {
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 12px;
+}
+
+/* ── rows ───────────────────────────────────────────────────────────── */
+
+.netz-arc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.netz-arc-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  min-height: 92px;
+  padding: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  text-align: left;
+  cursor: pointer;
+}
+
+.netz-arc-thumb {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 54px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  object-fit: cover;
+}
+
+.netz-arc-thumb--net {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #22c55e;
+  font-size: 22px;
+}
+
+.netz-arc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.netz-arc-l1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.netz-arc-cam {
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.netz-arc-time {
+  color: #94a3b8;
+}
+
+.netz-arc-l2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* Consequence sentence — clamped to two lines in the row, unclamped in
+   the detail sheet. */
+.netz-arc-l3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #94a3b8;
+}
+
+/* ── the state badge ────────────────────────────────────────────────── */
+
+.netz-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.netz-badge[data-state='changed'] {
+  background: rgba(34, 197, 94, 0.28);
+  color: #eaf7ee;
+}
+
+.netz-badge[data-state='confirmed'] {
+  background: rgba(120, 200, 255, 0.24);
+  color: #e0f2fe;
+}
+
+.netz-badge[data-state='pinned'] {
+  background: rgba(250, 204, 21, 0.22);
+  color: #fef9c3;
+}
+
+/* ── class chip ─────────────────────────────────────────────────────── */
+
+.netz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--cc) 22%, transparent);
+  color: var(--cc);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.netz-chip-ic {
+  display: inline-flex;
+  line-height: 0;
+}
+
+/* ── detail sheet ───────────────────────────────────────────────────── */
+
+.netz-det {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.netz-back {
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-det-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.netz-det-figure {
+  margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.netz-det-frame {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.netz-det-verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.netz-det-reason {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+.netz-det-sub {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.netz-mini {
+  display: flex;
+  justify-content: center;
+}
+
+/* Wide content scrolls inside its own container — the page body never
+   scrolls sideways. */
+.netz-table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.netz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.netz-table th,
+.netz-table td {
+  padding: 7px 10px;
+  text-align: left;
+  color: #cbd5e1;
+}
+
+.netz-table thead th {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.netz-table tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.netz-src {
+  color: #94a3b8;
+}
+
+@media (hover: hover) {
+  .netz-arc-row:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+}

@@ -19,7 +19,7 @@ import { _restoreEditWrapper } from './panel.js';
 import { openWizard } from './wizard.js';
 import { applySecretField } from '../chrome/secret-field.js';
 import { _collectClassSeverity, _collectAlertCooldown } from '../alerting.js';
-import { _collectLabelThresholds, _collectConfirmationWindow } from './detection.js';
+import { _collectConfirmationWindow } from './detection.js';
 
 // alias so discovery modal code still works
 const RTSP_PATHS = RTSP_PATH_OPTS;
@@ -734,7 +734,13 @@ byId('cameraForm').onsubmit = async (e) => {
     // unchanged so the class_severity migration on next load still
     // sees the same source if needed.
     alarm_profile: f['alarm_profile']?.value || existingCam?.alarm_profile || 'soft',
-    detection_min_score: parseFloat(f['detection_min_score']?.value || 0),
+    // D1 · the general confidence slider is gone and this key is pinned
+    // at 0.0. It has been dead in the live path since the two-tier
+    // tracker (camera_runtime/_main_loop.py says so explicitly) and the
+    // control showed the GLOBAL 0.55 as though it were a per-camera
+    // value. The Netz replaces it; the key stays in the schema so old
+    // settings.json files still load.
+    detection_min_score: 0.0,
     // D3 · small-animal ROI/tiling controls (persisted per camera). The
     // segmented control writes the hidden #roi_mode input; the
     // min-net-displacement slider is roi_min_net_disp_frac. Fall back to the
@@ -744,14 +750,24 @@ byId('cameraForm').onsubmit = async (e) => {
     roi_min_net_disp_frac: parseFloat(
       f['roi_min_net_disp_frac']?.value ?? existingCam?.roi_min_net_disp_frac ?? 0,
     ),
-    label_thresholds: _collectLabelThresholds(e.target),
-    // Per-camera tracker overrides — 0 means "use the module default"
-    // from tracker_core.py. Spawn/floor land as scores (0..1); grace is
-    // wall-clock seconds. See cam-edit Erkennung tab step 6.
-    track_spawn_min_score: parseFloat(f['track_spawn_min_score']?.value || 0),
-    track_continue_min_score: parseFloat(f['track_continue_min_score']?.value || 0),
-    track_miss_grace_seconds: parseFloat(f['track_miss_grace_seconds']?.value || 0),
-    track_iou_match_threshold: parseFloat(f['track_iou_match_threshold']?.value || 0),
+    // D2/D3 · the Netz owns label_thresholds now. upsert_camera replaces
+    // nested dicts WHOLESALE, so sending the (now always empty) form
+    // collection here would wipe every dragged spawn value on the next
+    // unrelated camera save. Echo the stored map back untouched instead.
+    label_thresholds: existingCam?.label_thresholds || {},
+    // D6 · Spawn + Fortsetzung are the two numbers the Netz writes, so
+    // their inputs are gone from step 6. Same hazard, same fix: fall back
+    // to the stored value rather than to 0, which the schema reads as
+    // "use the module default" and would silently discard a per-camera
+    // floor. Grace + IoU keep their inputs behind the Experte fold (D7).
+    track_spawn_min_score: parseFloat(existingCam?.track_spawn_min_score || 0),
+    track_continue_min_score: parseFloat(existingCam?.track_continue_min_score || 0),
+    track_miss_grace_seconds: parseFloat(
+      f['track_miss_grace_seconds']?.value ?? existingCam?.track_miss_grace_seconds ?? 0,
+    ),
+    track_iou_match_threshold: parseFloat(
+      f['track_iou_match_threshold']?.value ?? existingCam?.track_iou_match_threshold ?? 0,
+    ),
     // L07 · default ON. Treat the missing-checkbox case (form re-init
     // edge) as inheriting the stored value so a save doesn't silently
     // flip a power user's debug-mode off back to on.

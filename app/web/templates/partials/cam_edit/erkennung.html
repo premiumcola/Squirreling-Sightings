@@ -38,7 +38,15 @@
       </div>
     </div>
 
-    <!-- STEP 2 — Konfidenz -->
+    <!-- STEPS 2 + 3 · Konfidenz-Schwellen sind jetzt das Netz.
+         D1 detection_min_score war seit dem Zwei-Stufen-Tracker tot im
+         Live-Pfad und zeigte den globalen 0,55-Wert als wäre er eine
+         Kamera-Einstellung. D2 der Person-Regler hatte einen hartkodierten
+         0,72-Fallback, der dem ausgelieferten 0,45 widersprach. D3 die
+         Pro-Klasse-Falte hob Vogel und Eichhörnchen beim blossen
+         Öffnen-und-Speichern von 0,45 auf 0,50 (min="0.50"). D4 der
+         globale Bestätigungs-Regler schrieb einen Schlüssel, den kein
+         Gate liest. Alle vier ersetzt durch eine Achse im Netz. -->
     <div class="erk-step">
       <div class="erk-step-num">2</div>
       <div class="erk-step-head">
@@ -53,96 +61,25 @@
           aria-hidden="true"
         >
           <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3 3" />
+          <circle cx="12" cy="12" r="4.5" opacity=".6" />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
         </svg>
         <span class="erk-step-title">Wie sicher?</span>
-        <span class="erk-step-hint">Konfidenz-Schwelle</span>
+        <span class="erk-step-hint">Erkennungsnetz</span>
       </div>
-      <div class="erk-card">
-        <div class="row">
-          <input
-            type="range"
-            name="detection_min_score"
-            min="0.05"
-            max="0.95"
-            step="0.05"
-            value="0.55"
-          />
-          <span class="val" id="erkMinScoreVal">55%</span>
-        </div>
-        <span class="lbl">Allgemein · für alle Klassen</span>
-      </div>
-      <div class="erk-card">
-        <div class="row">
-          <input
-            type="range"
-            name="label_threshold_person"
-            min="0.20"
-            max="0.95"
-            step="0.01"
-            value="0.72"
-          />
-          <span class="val" id="erkPersonVal">72%</span>
-        </div>
-        <span class="lbl">Person · überschreibt allgemein</span>
-      </div>
-      <button type="button" class="erk-more" id="erkPerClassToggle" aria-expanded="false">
-        <svg
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
+      <div class="erk-card erk-netz-card">
+        <span class="lbl"
+          >Konfidenz-Schwellen regelt jetzt das Netz — eine Achse je Klasse, geformt von deinen
+          Antworten in Telegram.</span
         >
-          <path d="M3 4.5l3 3 3-3" />
-        </svg>
-        <span id="erkPerClassToggleLbl">Pro Klasse anpassen</span>
-      </button>
-      <div id="erkPerClassAdvanced" hidden></div>
-    </div>
-
-    <!-- STEP 3 — Bestätigungs-Filter (N-of-M sliding window) -->
-    <div class="erk-step">
-      <div class="erk-step-num">3</div>
-      <div class="erk-step-head">
-        <svg
-          class="erk-step-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="20 6 9 17 4 12" />
-          <polyline points="20 12 14 18" opacity=".5" />
-        </svg>
-        <span class="erk-step-title">Wie oft bestätigen?</span>
-        <span class="erk-step-hint">Anti-Fehlalarm</span>
+        <a class="btn btn-action erk-netz-link" href="#netz">Netz öffnen</a>
       </div>
-      <div class="erk-card">
-        <div class="two-col">
-          <div class="row">
-            <span class="row-lbl">Treffer</span>
-            <input type="range" name="confirm_n" min="1" max="10" step="1" value="3" />
-            <span class="val" id="erkConfirmN">3 ×</span>
-          </div>
-          <div class="row">
-            <span class="row-lbl">Sekunden</span>
-            <input type="range" name="confirm_seconds" min="2" max="20" step="1" value="5" />
-            <span class="val" id="erkConfirmS">5 s</span>
-          </div>
-        </div>
-        <span class="lbl" id="erkConfirmLbl">3 Treffer in 5 Sekunden bestätigen</span>
-      </div>
-      <!-- Legacy per-class grid stays hidden — the save handler
-                       still reads any rows it contains for backwards-compat,
-                       but rows are no longer rendered. The new "Pro Klasse
-                       anpassen" drilldown writes into #erkConfirmPerClass. -->
-      <div id="camConfirmGrid" hidden></div>
+      <!-- D5 · BEHALTEN, vorerst. Grund für den Operator, unten sichtbar:
+           die Live-Schleife liest ihre Klassen-Standardwerte noch nicht
+           (P5, camera_runtime/_main_loop.py:599-610), also fiele ein halb
+           gefülltes Feld hier still auf 3/5 s zurück. Sobald das gefixt
+           ist: in einem Folge-Commit entfernen und bei
+           CONFIRMATION_WINDOW_DEFAULTS einfrieren. -->
       <button type="button" class="erk-more" id="erkConfirmPerClassToggle" aria-expanded="false">
         <svg
           viewBox="0 0 12 12"
@@ -155,9 +92,13 @@
         >
           <path d="M3 4.5l3 3 3-3" />
         </svg>
-        <span id="erkConfirmPerClassToggleLbl">Pro Klasse anpassen</span>
+        <span id="erkConfirmPerClassToggleLbl">Bestätigung pro Klasse anpassen</span>
       </button>
       <div id="erkConfirmPerClass" hidden></div>
+      <span class="lbl erk-note"
+        >Diese Werte bleiben einstellbar, bis die Live-Schleife ihre Klassen-Standardwerte liest.
+        Bis dahin würde ein halb gefülltes Feld hier still auf 3 Treffer in 5 s zurückfallen.</span
+      >
     </div>
 
     <!-- STEP 4 — Analyse-Intervall -->
@@ -302,66 +243,55 @@
           <input type="checkbox" name="track_filter_ghosts" class="switch-input" checked />
           <span class="switch"></span>
         </label>
-        <div class="erk-track-grid">
-          <label class="erk-track-cell">
-            <span class="erk-track-lbl">Spawn-Schwelle</span>
-            <input
-              type="number"
-              name="track_spawn_min_score"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0"
-              inputmode="decimal"
-              placeholder="0,50"
-            />
-            <span class="erk-track-sub">Score nötig, um einen neuen Track zu starten</span>
-          </label>
-          <label class="erk-track-cell">
-            <span class="erk-track-lbl">Fortsetzungs-Schwelle</span>
-            <input
-              type="number"
-              name="track_continue_min_score"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0"
-              inputmode="decimal"
-              placeholder="0,20"
-            />
-            <span class="erk-track-sub">Score-Floor, bis zu dem ein Track fortgesetzt wird</span>
-          </label>
-          <label class="erk-track-cell">
-            <span class="erk-track-lbl">Gnadenfrist (Sek.)</span>
-            <input
-              type="number"
-              name="track_miss_grace_seconds"
-              min="0"
-              max="30"
-              step="0.5"
-              value="0"
-              inputmode="decimal"
-              placeholder="6,0"
-            />
-            <span class="erk-track-sub">Wie lange darf ein Track ohne Treffer überleben</span>
-          </label>
-          <label class="erk-track-cell">
-            <span class="erk-track-lbl">IoU-Schwelle</span>
-            <input
-              type="number"
-              name="track_iou_match_threshold"
-              min="0"
-              max="0.95"
-              step="0.05"
-              value="0"
-              inputmode="decimal"
-              placeholder="0,20"
-            />
-            <span class="erk-track-sub"
-              >Wie ähnlich die Box-Lage frame-übergreifend sein muss, damit ein Track fortgesetzt
-              wird statt neu zu spawnen. Niedriger = großzügiger.</span
-            >
-          </label>
+        <!-- D6 · Spawn + Fortsetzung ENTFERNT — genau die zwei Zahlen,
+             die das Netz schreibt. Zwei Bedienwege auf einen Wert sind
+             eine Drift-Quelle, und das Netz kennt sie pro Klasse statt
+             nur kameraweit.
+             D7 · Gnadenfrist + IoU BLEIBEN, hinter dieser Falte:
+             Track-Kontinuität sitzt VOR allen vier Gates, das Netz kann
+             sie nicht ausdrücken, und track_iou_match_threshold ist die
+             einzige Zahl, mit der sich eine schlecht trackende Kamera
+             retten lässt. Ohne sie gibt es keinen Rettungsweg. -->
+        <details class="erk-expert">
+          <summary>Experte · Track-Kontinuität</summary>
+          <span class="erk-track-warn"
+            >Diese zwei Werte betreffen nicht die Konfidenz, sondern ob ein Objekt über Frames
+            hinweg dasselbe bleibt. Nur anfassen, wenn eine Kamera Spuren zerreißt.</span
+          >
+          <div class="erk-track-grid">
+            <label class="erk-track-cell">
+              <span class="erk-track-lbl">Gnadenfrist (Sek.)</span>
+              <input
+                type="number"
+                name="track_miss_grace_seconds"
+                min="0"
+                max="30"
+                step="0.5"
+                value="0"
+                inputmode="decimal"
+                placeholder="8,0"
+              />
+              <span class="erk-track-sub">Wie lange darf ein Track ohne Treffer überleben</span>
+            </label>
+            <label class="erk-track-cell">
+              <span class="erk-track-lbl">IoU-Schwelle</span>
+              <input
+                type="number"
+                name="track_iou_match_threshold"
+                min="0"
+                max="0.95"
+                step="0.05"
+                value="0"
+                inputmode="decimal"
+                placeholder="0,20"
+              />
+              <span class="erk-track-sub"
+                >Wie ähnlich die Box-Lage frame-übergreifend sein muss, damit ein Track fortgesetzt
+                wird statt neu zu spawnen. Niedriger = großzügiger.</span
+              >
+            </label>
+          </div>
+        </details>
         </div>
       </div>
     </div>

@@ -5,7 +5,18 @@
 // dynamically-rendered template strings can still find them.
 import { byId } from './dom.js';
 
-export function showToast(msg, type = 'info') {
+/**
+ * @param {string} msg
+ * @param {string} type   info | success | warn | error
+ * @param {object} [opts]
+ * @param {{label:string, onClick:Function}} [opts.action]
+ *   One inline button inside the toast. Added for the Netz panel's
+ *   8-second "Rückgängig" after a commit: an undo has to sit ON the
+ *   confirmation it undoes, and a second toast variant would have been
+ *   a parallel implementation of this one.
+ * @param {number} [opts.lifetime]  ms; defaults by severity.
+ */
+export function showToast(msg, type = 'info', opts = {}) {
   const c = byId('toastContainer');
   if (!c) return;
   const t = document.createElement('div');
@@ -21,12 +32,30 @@ export function showToast(msg, type = 'info') {
   close.className = 'toast-close';
   close.textContent = '×';
   close.addEventListener('click', () => t.remove());
-  t.append(icon, text, close);
+  t.append(icon, text);
+  if (opts.action?.label) {
+    const act = document.createElement('button');
+    act.className = 'toast-action';
+    act.type = 'button';
+    act.textContent = opts.action.label;
+    act.addEventListener('click', () => {
+      t.remove();
+      try {
+        opts.action.onClick?.();
+      } catch (e) {
+        console.error('[toast] action failed', e);
+      }
+    });
+    t.append(act);
+  }
+  t.append(close);
   c.appendChild(t);
   // Toast lifetime by severity — errors linger longest because the
   // user usually wants time to read what failed before reaching for
-  // a retry.
-  const lifetime = type === 'error' ? 8000 : type === 'warn' || type === 'info' ? 6000 : 4000;
+  // a retry. An action toast gets 8 s: long enough to notice and reach.
+  const bySeverity =
+    type === 'error' ? 8000 : type === 'warn' || type === 'info' ? 6000 : 4000;
+  const lifetime = opts.lifetime || (opts.action ? 8000 : bySeverity);
   const dismiss = () => {
     t.classList.add('toast-out');
     t.addEventListener('animationend', () => t.remove(), { once: true });

@@ -145,11 +145,28 @@ def _resolve_detect(cam_cfg: dict, adapted: dict) -> tuple[float, str]:
 
 
 def _resolve_spawn(cam_cfg: dict, label: str, adapted: dict) -> tuple[float, str]:
+    """Per-label camera value, then the learner, then the camera-wide one.
+
+    ``track_spawn_min_score`` sits BELOW ``adapted`` on purpose, and that
+    is the one place the precedence table bends — for a reason that is
+    about what the two keys mean, not about who wrote them.
+    ``label_thresholds[label]`` is a statement about THIS class;
+    ``track_spawn_min_score`` is a single camera-wide tracker knob with
+    no class in it at all, written four at a time by the „Vorsichtig /
+    Ausgewogen / Robust" preset buttons on the Erkennung tab.
+
+    Ranked above ``adapted`` it was a silent global veto: one
+    „Vorsichtig" click posted ``track_spawn_min_score: 0.55`` to
+    ``/api/settings/cameras`` and every axis the learner had moved — every
+    label without its own ``label_thresholds`` entry — reverted to 0.55
+    with no control anywhere showing it. A per-class decision still wins;
+    a camera-wide default no longer overrides a per-class one.
+    """
     return _pick(
         [
             (SOURCE_CAMERA, _as_float(_sub(cam_cfg, "label_thresholds").get(label))),
-            (SOURCE_CAMERA, _positive(cam_cfg.get("track_spawn_min_score"))),
             (SOURCE_ADAPTED, _as_float(adapted.get("spawn"))),
+            (SOURCE_CAMERA, _positive(cam_cfg.get("track_spawn_min_score"))),
             (SOURCE_DEFAULT, _as_float(LABEL_THRESHOLD_DEFAULTS.get(label))),
         ],
         TRACK_SPAWN_SCORE,

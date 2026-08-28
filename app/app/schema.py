@@ -164,8 +164,9 @@ CAMERA_SCHEMA: dict = {
     # the reason a workshop cam and a bird feeder had to share one
     # person threshold despite an order-of-magnitude difference in
     # subject distance. Resolution order (camera > adapted > global >
-    # default) lives in app/app/thresholds.py; the Telegram outbound
-    # path still reads the global value until THR-3 switches it over.
+    # default) lives in app/app/thresholds; since THR-3 the Telegram
+    # outbound path resolves through it, so this key is LIVE. The Netz
+    # panel is its writer — a dragged vertex lands here.
     "push_thresholds": (dict, {}),
     # HYB-2 · TPU+CPU dual detection pass: "off" (default, single TPU
     # pass), "shadow" (CPU runs alongside, only agreement is recorded),
@@ -175,6 +176,19 @@ CAMERA_SCHEMA: dict = {
     # LEARN-1 · per-label suppression map. Key landed by THR-1; the
     # veto logic ships with LEARN-1.
     "label_veto": (dict, {}),
+    # ── NETZ · the Erkennungsnetz's four per-camera keys ─────────────────
+    # `role` decides whether the person safety floor guards the
+    # automatic path on this camera; "security" is the default because
+    # it is the direction that cannot cause a missed intruder.
+    "role": (str, "security"),
+    # {label: {E, ts, by}} — axes the operator dragged. Permanent; the
+    # learner never writes a pinned axis.
+    "net_pin": (dict, {}),
+    # {label: {E, ts}} — what the nightly learner applied. Feeds the
+    # ladder's `adapted` layer, which ranks below `camera`.
+    "net_adapted": (dict, {}),
+    # Per-camera master switch for the learner. Off = it proposes only.
+    "net_auto": (bool, True),
     "zones": (list, []),
     "masks": (list, []),
     "whitelist_names": (list, []),

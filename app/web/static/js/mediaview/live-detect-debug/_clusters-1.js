@@ -1,26 +1,21 @@
 import { esc } from '../../core/dom.js';
-import { _scheduleSave, _flushSave, _saveTimers } from './_save.js';
 export const _CLUSTER_CHEVRON =
   '<svg class="mv-ld-cluster-chevron" viewBox="0 0 24 24" width="14" height="14" ' +
   'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" ' +
   'stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
 
-// SIMU-05b · default + recommended tuning values for Cluster 1.
+// Module defaults, shown when a camera carries no override. These
+// mirror tracker_core/_consts.py — MISS_GRACE_DEFAULT_SECONDS is 8.0,
+// which the Erkennung tab's placeholder claimed was 6.0 until D7.
 const _CLUSTER1_DEFAULTS = {
   track_iou_match_threshold: 0.2,
   track_miss_grace_seconds: 8.0,
   track_continue_min_score: 0.2,
 };
-const _CLUSTER1_RECOMMENDED = {
-  track_iou_match_threshold: 0.1,
-  track_miss_grace_seconds: 15.0,
-  track_continue_min_score: 0.1,
-};
 
-// SIMU-05b · Cluster 1 render. Three sliders (IoU / grace / floor)
-// + evidence box + Speichern/Defaults/Empfohlene buttons. The slider
-// component lives in this file (no separate module) since clusters
-// 1/2 are the only callers; clusters 3+ use pill toggles instead.
+// Cluster 1 render — three READ-ONLY read-outs (IoU / grace / floor)
+// plus the evidence box. Editing lives on the Erkennung tab behind the
+// Experte fold; see the note on _renderSlider.
 export function _renderCluster1(ctx, cam) {
   const iou = _readField(cam, 'track_iou_match_threshold', _CLUSTER1_DEFAULTS.track_iou_match_threshold);
   const grace = _readField(cam, 'track_miss_grace_seconds', _CLUSTER1_DEFAULTS.track_miss_grace_seconds);
@@ -62,12 +57,8 @@ export function _renderCluster1(ctx, cam) {
           hint: '↓ Senken (0.10) = Track überlebt schwache Frames (Drehung, dunkle Pose)',
         })}
         ${_renderCluster1Evidence(ctx, cam)}
-        <div class="mv-ld-cluster-actions">
-          <button type="button" class="mv-ld-action-btn mv-ld-action-save" data-action="save-cluster1">Speichern (Cam)</button>
-          <button type="button" class="mv-ld-action-btn" data-action="defaults-cluster1">Defaults</button>
-          <button type="button" class="mv-ld-action-btn mv-ld-action-recommend" data-action="recommend-cluster1">Empfohlene Werte testen</button>
-          <span class="mv-ld-save-status" data-save-status data-save-state="idle"></span>
-        </div>
+        <div class="mv-ld-cluster-note">Anzeige · geändert wird auf dem Erkennung-Tab
+          unter „Experte · Track-Kontinuität".</div>
       </div>
     </div>`;
 }
@@ -131,16 +122,22 @@ export function _readField(cam, key, defaultVal) {
   return Number.isFinite(v) && v > 0 ? v : defaultVal;
 }
 
+// D11 · READ-ONLY. Diagnosis needs to SEE these numbers; it does not
+// need the right to write them. The Erkennung tab's Experte fold owns
+// the edit (grace + IoU), the Netz owns everything confidence-shaped,
+// and a third writing surface in a debug panel is how the same value
+// ends up with three owners and no source of truth. The bar still shows
+// where the value sits between its bounds — that is the diagnostic part.
 export function _renderSlider(cfg) {
   const valDisplay = _formatValue(cfg.value, cfg.step);
   const pct = _valToPct(cfg.value, cfg.min, cfg.max);
   return `
-    <div class="mv-ld-slider" data-field="${esc(cfg.field)}" data-min="${cfg.min}" data-max="${cfg.max}" data-step="${cfg.step}" data-value="${cfg.value}">
+    <div class="mv-ld-slider is-readonly" data-field="${esc(cfg.field)}" data-min="${cfg.min}" data-max="${cfg.max}" data-step="${cfg.step}" data-value="${cfg.value}">
       <div class="mv-ld-slider-top">
         <span class="mv-ld-slider-label">${esc(cfg.label)}</span>
         <span class="mv-ld-slider-value" data-slider-value>${esc(valDisplay)}</span>
       </div>
-      <div class="mv-ld-slider-track" data-slider-track>
+      <div class="mv-ld-slider-track">
         <div class="mv-ld-slider-fill" data-slider-fill style="width:${pct.toFixed(2)}%"></div>
         <div class="mv-ld-slider-knob" data-slider-knob style="left:${pct.toFixed(2)}%"></div>
       </div>
@@ -162,126 +159,10 @@ export function _valToPct(v, min, max) {
   return Math.min(100, Math.max(0, ((Number(v) - min) / range) * 100));
 }
 
-export function _pctToVal(pct, min, max, step) {
-  const range = max - min;
-  const raw = min + (range * pct) / 100;
-  const snapped = Math.round(raw / step) * step;
-  return Math.min(max, Math.max(min, snapped));
-}
-
-// SIMU-05b · wire up sliders + action buttons inside Cluster 1.
-export function _wireCluster1(host, cam, ctx) {
-  const camId = (ctx.session || {}).camId || cam.id;
-  host.querySelectorAll('.mv-ld-slider').forEach((root) => {
-    _wireSlider(root, camId);
-  });
-  host
-    .querySelector('[data-action="save-cluster1"]')
-    ?.addEventListener('click', () => _forceSave(camId, host));
-  host
-    .querySelector('[data-action="defaults-cluster1"]')
-    ?.addEventListener('click', () => _applyClusterValues(host, camId, _CLUSTER1_DEFAULTS));
-  host
-    .querySelector('[data-action="recommend-cluster1"]')
-    ?.addEventListener('click', () => _applyClusterValues(host, camId, _CLUSTER1_RECOMMENDED));
-}
-
-export function _wireSlider(root, camId) {
-  if (root.dataset.wired === '1') return;
-  root.dataset.wired = '1';
-  const track = root.querySelector('[data-slider-track]');
-  const knob = root.querySelector('[data-slider-knob]');
-  const fill = root.querySelector('[data-slider-fill]');
-  const valEl = root.querySelector('[data-slider-value]');
-  if (!track || !knob || !fill || !valEl) return;
-  const min = Number(root.dataset.min);
-  const max = Number(root.dataset.max);
-  const step = Number(root.dataset.step);
-  const field = root.dataset.field;
-  let dragging = false;
-  const setFromX = (clientX) => {
-    const rect = track.getBoundingClientRect();
-    const pct = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
-    const val = _pctToVal(pct, min, max, step);
-    root.dataset.value = String(val);
-    knob.style.left = `${pct.toFixed(2)}%`;
-    fill.style.width = `${pct.toFixed(2)}%`;
-    valEl.textContent = _formatValue(val, step);
-    return val;
-  };
-  const onMove = (ev) => {
-    if (!dragging) return;
-    const val = setFromX(ev.clientX);
-    const statusEl = root.closest('.mv-ld-cluster')?.querySelector('[data-save-status]');
-    _scheduleSave(camId, { [field]: val }, statusEl);
-  };
-  const onUp = () => {
-    if (!dragging) return;
-    dragging = false;
-    document.removeEventListener('pointermove', onMove);
-    document.removeEventListener('pointerup', onUp);
-  };
-  const onDown = (ev) => {
-    dragging = true;
-    setFromX(ev.clientX);
-    const val = Number(root.dataset.value);
-    const statusEl = root.closest('.mv-ld-cluster')?.querySelector('[data-save-status]');
-    _scheduleSave(camId, { [field]: val }, statusEl);
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    ev.preventDefault();
-  };
-  knob.addEventListener('pointerdown', onDown);
-  track.addEventListener('pointerdown', onDown);
-}
-
-export function _applyClusterValues(host, camId, values) {
-  const patch = {};
-  for (const [field, val] of Object.entries(values)) {
-    const sliderRoot = host.querySelector(`.mv-ld-slider[data-field="${field}"]`);
-    if (sliderRoot) {
-      const min = Number(sliderRoot.dataset.min);
-      const max = Number(sliderRoot.dataset.max);
-      const step = Number(sliderRoot.dataset.step);
-      const pct = _valToPct(val, min, max);
-      sliderRoot.dataset.value = String(val);
-      const knob = sliderRoot.querySelector('[data-slider-knob]');
-      const fill = sliderRoot.querySelector('[data-slider-fill]');
-      const valEl = sliderRoot.querySelector('[data-slider-value]');
-      if (knob) knob.style.left = `${pct.toFixed(2)}%`;
-      if (fill) fill.style.width = `${pct.toFixed(2)}%`;
-      if (valEl) valEl.textContent = _formatValue(val, step);
-    }
-    patch[field] = val;
-  }
-  const statusEl = host.querySelector('[data-save-status]');
-  _scheduleSave(camId, patch, statusEl);
-}
-
-export function _forceSave(camId, host) {
-  // Force-flush any pending debounced timers for this camera.
-  for (const [key, timerId] of Array.from(_saveTimers.entries())) {
-    if (!key.startsWith(`${camId}:`)) continue;
-    clearTimeout(timerId);
-    _saveTimers.delete(key);
-  }
-  // Collect current slider values and send them all at once. The
-  // backend's PATCH endpoint accepts the merged payload happily.
-  const patch = {};
-  host.querySelectorAll('.mv-ld-slider').forEach((root) => {
-    const field = root.dataset.field;
-    const val = Number(root.dataset.value);
-    if (field && Number.isFinite(val)) {
-      if (field.startsWith('label_thresholds:')) {
-        const lbl = field.split(':')[1];
-        patch.label_thresholds = patch.label_thresholds || {};
-        patch.label_thresholds[lbl] = val;
-      } else {
-        patch[field] = val;
-      }
-    }
-  });
-  if (!Object.keys(patch).length) return;
-  const statusEl = host.querySelector('[data-save-status]');
-  _flushSave(camId, patch, statusEl, `${camId}:force`);
-}
+// D11 · Cluster 1 is a READ-OUT now. The sliders render their value and
+// its position between the bounds; nothing here binds a pointer to them
+// and nothing writes. The Save / Defaults / Empfohlene buttons went with
+// the write path — a "Defaults" button that silently disagrees with the
+// module defaults is how track_continue_min_score ended up with three
+// different notions of its own default.
+export function _wireCluster1() {}

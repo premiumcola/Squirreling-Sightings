@@ -41,8 +41,8 @@ from ._consts import (
     MIN_JUDGED_PER_STRATUM,
     MIN_VETO_WRONG_RATE_LOWER,
 )
-from ._io import iter_records, ledger_health
-from ._retention import index_records, stratum
+from ._io import ledger_health, ledger_index
+from ._retention import stratum
 
 
 def judged_alerts(storage_root, cam_id: str | None = None, label: str | None = None):
@@ -53,7 +53,7 @@ def judged_alerts(storage_root, cam_id: str | None = None, label: str | None = N
     with no verdict are excluded — an unanswered alert says nothing.
     A later verdict supersedes an earlier one for the same event.
     """
-    idx = index_records(iter_records(storage_root))
+    idx = ledger_index(storage_root)
     out = []
     for eid, alert in idx.alerts.items():
         verdict = idx.verdicts.get(eid)
@@ -247,9 +247,77 @@ def _class_examples(idx) -> dict:
     return dict(counts)
 
 
+def _pooled_rows(idx, census: dict) -> list:
+    """One row per LABEL, across every camera — the fallback stratum.
+
+    At seven events a day, ``MIN_JUDGED_PER_STRATUM`` per (camera, label)
+    is a decade for the tail, and the honest fix is not to lower the bar
+    — the bars are the reason this module refuses instead of guessing.
+    It is to widen the sample: a ``squirrel`` is a squirrel on all three
+    cameras, and the score distribution of the class is far more nearly
+    shared than the per-camera event rate is.
+
+    What pooling costs is stated rather than hidden: a recommendation
+    derived from this carries ``scope: "pooled"`` and ``confidence:
+    "low"``, and the archive sentence says "aus allen Kameras
+    zusammengerechnet" in words. The class bars
+    (``MIN_JUDGED_PER_CLASS``, 20 true and 20 false) still apply — this
+    widens the denominator, it does not weaken the test.
+    """
+    grouped: dict = {}
+    for eid, alert in idx.alerts.items():
+        grouped.setdefault(alert.get("label") or "?", []).append((alert, idx.verdicts.get(eid)))
+    pooled_census: Counter = Counter()
+    for (_cam, lab), n in census.items():
+        pooled_census[lab] += n
+    labels = sorted(set(grouped) | set(pooled_census))
+    rows = []
+    for lab in labels:
+        row = _stratum_row("*", lab, grouped.get(lab, []), pooled_census.get(lab, 0))
+        row["scope"] = "pooled"
+        rows.append(row)
+    return rows
+
+
+def resolve_stratum(stats: dict, cam: str, label: str) -> dict:
+    """The stratum a calibration for (cam, label) should be judged on.
+
+    The per-camera row when it clears the bar; otherwise the pooled row
+    for that label. Always returns a row with a ``scope`` field, so a
+    caller can never act on pooled evidence while believing it is
+    per-camera. When neither exists, an empty, explicitly not-ready row
+    — a fresh install has no evidence and must say so.
+    """
+    own = next(
+        (s for s in stats.get("strata") or [] if s.get("cam") == cam and s.get("label") == label),
+        None,
+    )
+    if own and own.get("ready"):
+        return {**own, "scope": "stratum"}
+    pooled = next(
+        (s for s in stats.get("pooled") or [] if s.get("label") == label),
+        None,
+    )
+    if pooled and pooled.get("ready"):
+        return dict(pooled)
+    if own:
+        return {**own, "scope": "stratum"}
+    return {
+        "cam": cam,
+        "label": label,
+        "scope": "stratum",
+        "n_total": 0,
+        "n_true": 0,
+        "n_false": 0,
+        "answer_rate": 0.0,
+        "ready": False,
+        "blockers": [f"judged 0/{MIN_JUDGED_PER_STRATUM}"],
+    }
+
+
 def corpus_stats(storage_root) -> dict:
     """One pass over the ledger, rolled up per camera and label."""
-    idx = index_records(iter_records(storage_root))
+    idx = ledger_index(storage_root)
     grouped: dict = {}
     for eid, alert in idx.alerts.items():
         grouped.setdefault(stratum(alert), []).append((alert, idx.verdicts.get(eid)))
@@ -279,6 +347,7 @@ def corpus_stats(storage_root) -> dict:
         "protected_records": protected,
         "over_record_budget": protected > health["max_retained_records"],
         "strata": strata,
+        "pooled": _pooled_rows(idx, idx.census),
         "centroid": centroid_readiness(_class_examples(idx)),
         "health": health,
     }

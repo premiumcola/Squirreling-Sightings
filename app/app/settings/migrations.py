@@ -16,6 +16,7 @@ from copy import deepcopy
 
 from ._consts import (
     ALARM_PROFILE_TO_SEVERITY,
+    CAMERA_NET_KEY_DEFAULTS,
     CAMERA_THRESHOLD_KEY_DEFAULTS,
     EVENT_TL_DEFAULTS,
     SERVER_LOCATION_DEFAULTS,
@@ -97,7 +98,14 @@ def migrate_threshold_keys(data: dict) -> None:
         added = [k for k in CAMERA_THRESHOLD_KEY_DEFAULTS if k not in cam]
         for key in added:
             cam[key] = deepcopy(CAMERA_THRESHOLD_KEY_DEFAULTS[key])
-        if added:
+        # NETZ · same additive rule, separate map. `net_auto` is a
+        # boolean whose False is meaningful, so it must never travel
+        # through an `or default` merge — setdefault is the only
+        # correct operator here.
+        net_added = [k for k in CAMERA_NET_KEY_DEFAULTS if k not in cam]
+        for key in net_added:
+            cam[key] = deepcopy(CAMERA_NET_KEY_DEFAULTS[key])
+        if added or net_added:
             touched_cams += 1
     storage = data.setdefault("storage", {})
     if not isinstance(storage, dict):

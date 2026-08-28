@@ -51,6 +51,8 @@ from ._consts import (  # noqa: F401 — public API re-export
     TRACK_REID_SIZE_RATIO,
     TRACK_SPAWN_SCORE,
 )
+from ._adopt import nearby_track, spawn_blocking_track, try_reidentify
+from ._merge import merge_active_duplicates
 from ._motion import (  # noqa: F401 — public API re-export
     bootstrap_gate,
     bootstrap_match_score,
@@ -370,86 +372,6 @@ class TrackerState:
 # bootstrap gate) lives in :mod:`._motion` and is imported above.
 
 
-def _try_reidentify(state: TrackerState, det, t_s: float):
-    """Find the most recent CLOSED track that plausibly matches
-    ``det`` so an unmatched confirmed detection can RESUME the
-    track instead of spawning a fresh id. Returns the candidate
-    Track (still in ``state.closed`` — caller is responsible for
-    moving it back to ``state.active``) or None.
-
-    Match gates:
-      * same label
-      * closed within ``TRACK_REID_MAX_SECONDS`` of ``t_s``
-      * centroid distance ≤ ``TRACK_REID_DIST_FACTOR × max(bw,bh)``
-      * size ratio ≤ ``TRACK_REID_SIZE_RATIO``
-      * (J4) the det's bbox does NOT overlap any ACTIVE track above
-        REID_OCCUPIED_IOU — re-id only ever resumes into truly free
-        space, never on top of a live track (which would create a
-        parallel duplicate).
-
-    Among candidates passing all gates, the closest in centroid
-    distance wins.
-    """
-    closed = state.closed
-    if not closed:
-        return None
-    bb = det.bbox
-    # J4 · refuse re-id if ANY active track already occupies this
-    # spot — the det should extend that live track via the spawn-
-    # block path instead of resurrecting a parallel ghost.
-    for tr in state.active:
-        if not tr.samples:
-            continue
-        last_bb = tr.samples[-1]["bbox"]
-        last_tuple = (
-            int(last_bb["x1"]),
-            int(last_bb["y1"]),
-            int(last_bb["x2"]),
-            int(last_bb["y2"]),
-        )
-        if iou(bb, last_tuple) > REID_OCCUPIED_IOU:
-            return None
-    cx = (bb[0] + bb[2]) / 2.0
-    cy = (bb[1] + bb[3]) / 2.0
-    bw = max(1.0, float(bb[2] - bb[0]))
-    bh = max(1.0, float(bb[3] - bb[1]))
-    best: Track | None = None
-    best_dist = float("inf")
-    # Scan the recently-closed window. Iterate over a bounded tail of
-    # the closed list (newest closes first), then per-track filter on
-    # last-sample t proximity. `continue` rather than `break` because
-    # closed-order ≠ last_sample.t order — a track that closed late
-    # after a long active span can have an older tail than one that
-    # closed earlier with a fresher final sample.
-    for tr in reversed(closed[-32:]):
-        if tr.label != det.label:
-            continue
-        if not tr.samples:
-            continue
-        last_t = float(tr.samples[-1].get("t", 0) or 0)
-        if t_s - last_t > TRACK_REID_MAX_SECONDS:
-            continue
-        last_bb = tr.samples[-1]["bbox"]
-        last_bw = max(1.0, float(last_bb["x2"] - last_bb["x1"]))
-        last_bh = max(1.0, float(last_bb["y2"] - last_bb["y1"]))
-        sz_ratio = max(bw, last_bw) / min(bw, last_bw)
-        if sz_ratio > TRACK_REID_SIZE_RATIO:
-            continue
-        sz_ratio_h = max(bh, last_bh) / min(bh, last_bh)
-        if sz_ratio_h > TRACK_REID_SIZE_RATIO:
-            continue
-        last_cx = (last_bb["x1"] + last_bb["x2"]) / 2.0
-        last_cy = (last_bb["y1"] + last_bb["y2"]) / 2.0
-        d = ((cx - last_cx) ** 2 + (cy - last_cy) ** 2) ** 0.5
-        max_d = max(last_bw, last_bh) * TRACK_REID_DIST_FACTOR
-        if d > max_d:
-            continue
-        if d < best_dist:
-            best_dist = d
-            best = tr
-    return best
-
-
 def nms_per_label(dets, iou_threshold: float = NMS_IOU):
     """Per-label non-max suppression on raw detector output.
 
@@ -484,126 +406,6 @@ def nms_per_label(dets, iou_threshold: float = NMS_IOU):
             kept.append(d)
         survivors.extend(kept)
     return survivors
-
-
-def _last_n_detect_bboxes(track: Track, n: int):
-    """Return up to the last ``n`` observed sample bboxes as
-    (x1,y1,x2,y2) tuples in original order. Used by the merge pass
-    to test SUSTAINED overlap between two active tracks."""
-    out: list[tuple[int, int, int, int]] = []
-    for s in recent_observed_samples(track, n):
-        bb = s["bbox"]
-        out.append((int(bb["x1"]), int(bb["y1"]), int(bb["x2"]), int(bb["y2"])))
-    return out
-
-
-def _track_quality_score(track: Track) -> float:
-    """Heuristic ordering for "which track to KEEP when merging two
-    duplicates". Higher score wins. Ranks on: number of detect
-    samples first (longer history = canonical), then best_score
-    (stronger evidence). Ties broken by first_frame (earlier id
-    keeps the id the operator already learned)."""
-    detect_n = sum(1 for s in (track.samples or []) if s.get("source") in ("detect", "track"))
-    return detect_n * 100.0 + float(track.best_score or 0.0) * 10.0
-
-
-def _merge_active_duplicates(state: TrackerState):
-    """One-pass merge for parallel duplicate active tracks. Scans
-    every (i, j) pair of active tracks; merges j into i when:
-      * same label
-      * both have at least MERGE_SUSTAIN detect samples
-      * their last MERGE_SUSTAIN detect bboxes pairwise overlap
-        above MERGE_IOU on EVERY pair (= "sustained co-location")
-
-    The winner is picked via _track_quality_score so the operator's
-    canonical id (the one with more history) keeps living. The loser
-    is absorbed (samples merged in chronological order then re-sorted
-    by frame index) and moved to ``state.closed`` with end_reason
-    ``"merged"`` so the post-clip diagnostics can audit the merge.
-
-    Conservative-by-design — the sustained-overlap requirement
-    avoids merging two genuinely distinct people who happen to cross
-    paths for a single sample.
-    """
-    active = state.active
-    if len(active) < 2:
-        return
-    # Pre-compute tail bboxes once per track per pass.
-    tails: dict[int, list] = {}
-    for ti, tr in enumerate(active):
-        tails[ti] = _last_n_detect_bboxes(tr, MERGE_SUSTAIN)
-    absorbed: set[int] = set()
-    for i in range(len(active)):
-        if i in absorbed:
-            continue
-        ti_tail = tails[i]
-        if len(ti_tail) < MERGE_SUSTAIN:
-            continue
-        for j in range(i + 1, len(active)):
-            if j in absorbed:
-                continue
-            if active[i].label != active[j].label:
-                continue
-            tj_tail = tails[j]
-            if len(tj_tail) < MERGE_SUSTAIN:
-                continue
-            # Sustained pairwise overlap across the last MERGE_SUSTAIN
-            # detect samples. Compare position-by-position (oldest to
-            # newest) so two tracks that overlap NOW but didn't earlier
-            # don't get merged on a single-frame coincidence.
-            all_overlap = True
-            for k in range(MERGE_SUSTAIN):
-                if iou(ti_tail[k], tj_tail[k]) < MERGE_IOU:
-                    all_overlap = False
-                    break
-            if not all_overlap:
-                continue
-            # Pick the winner / loser.
-            qi = _track_quality_score(active[i])
-            qj = _track_quality_score(active[j])
-            if qj > qi or (qj == qi and active[j].first_frame < active[i].first_frame):
-                winner, loser = active[j], active[i]
-                absorbed.add(i)
-            else:
-                winner, loser = active[i], active[j]
-                absorbed.add(j)
-            # Absorb loser samples — frame-deduplicated merge so
-            # overlapping frames don't double-count. The winner keeps
-            # its own bbox for any frame both touched (its sample is
-            # already in its list).
-            existing_frames = {s.get("f") for s in (winner.samples or [])}
-            for s in loser.samples or []:
-                if s.get("f") in existing_frames:
-                    continue
-                winner.samples.append(s)
-            winner.samples.sort(key=lambda s: int(s.get("f", 0)))
-            # Refresh aggregate fields from the merged sample set.
-            winner.first_frame = min(winner.first_frame, loser.first_frame)
-            winner.last_frame = max(winner.last_frame, loser.last_frame)
-            for s in winner.samples or []:
-                sc = s.get("score")
-                if sc is not None and float(sc) > float(winner.best_score):
-                    winner.best_score = float(sc)
-                    winner.best_frame_idx = int(s.get("f", 0))
-            loser.active = False
-            loser.end_reason = "merged"
-            # Refresh winner's tail cache so subsequent comparisons in
-            # this same pass see the post-merge state.
-            tails[active.index(winner)] = _last_n_detect_bboxes(winner, MERGE_SUSTAIN)
-            if winner is active[i]:
-                ti_tail = tails[i]
-            # If winner was j, the outer loop will skip i since i is
-            # in `absorbed` — no need to update outer indices.
-    if not absorbed:
-        return
-    # Move absorbed tracks to closed.
-    survivors = []
-    for idx, tr in enumerate(active):
-        if idx in absorbed:
-            state.closed.append(tr)
-        else:
-            survivors.append(tr)
-    state.active = survivors
 
 
 def update_best_top(state: TrackerState, det, frame_idx: int, t_s: float) -> None:
@@ -795,50 +597,25 @@ def associate_detections(
     # birth frame — halving the intended grace period.
     original_count = len(state.active)
 
-    # Phase 3 — unmatched confirmed dets. The flow now is:
+    # Phase 3 — unmatched confirmed dets. The flow is:
     #
     #   1. SPAWN-BLOCK check (J2). If the det's bbox strongly
-    #      overlaps an active track's LAST-OBSERVED bbox (any
-    #      label, IoU > SPAWN_BLOCK_IOU), the det is either a
-    #      same-label duplicate (likely a direction-reversal that
-    #      slipped past Phase 1's prediction-based matcher) or a
-    #      cross-label misclassification of an already-tracked
-    #      subject. Same-label → ATTACH to that track. Cross-label
-    #      → DROP. Either way no fresh id spawns.
-    #   2. RE-ID against recently-closed same-label tracks for
+    #      overlaps an active track's predicted or last-observed
+    #      bbox (any label, IoU > SPAWN_BLOCK_IOU), the det is either
+    #      a same-label duplicate or a cross-label misclassification
+    #      of an already-tracked subject. Either way it ATTACHES to
+    #      that track and no fresh id spawns.
+    #   2. PROXIMITY check (J6). No overlap, but a same-label track
+    #      with no detection of its own this frame sits within a
+    #      bbox dimension of the det — the subject moved further
+    #      than the prediction expected (a direction reversal is the
+    #      classic case). Attach rather than spawn beside it.
+    #   3. RE-ID against recently-closed same-label tracks for
     #      "person walked back in after grace expired".
-    #   3. Fallback: spawn a fresh id.
+    #   4. Fallback: spawn a fresh id.
     #
     # Unmatched tentative dets are still dropped (no spawn) so a
     # flicker of low-conf noise can't seed a new track id.
-    def _spawn_blocking_track(det):
-        """Return the ACTIVE track whose last-observed bbox
-        overlaps ``det.bbox`` above SPAWN_BLOCK_IOU, or None.
-        Considers ALL labels — a cross-label hit indicates a
-        misclassification of an already-tracked subject. Picks the
-        highest IoU when multiple qualify."""
-        best_track: Track | None = None
-        best_iou = SPAWN_BLOCK_IOU
-        for ti, tr in enumerate(state.active):
-            if not tr.samples:
-                continue
-            # Predicted bbox was computed at frame entry — reuse.
-            pred = predicted[ti] if ti < len(predicted) else None
-            last_bb = tr.samples[-1]["bbox"]
-            last_tuple = (
-                int(last_bb["x1"]),
-                int(last_bb["y1"]),
-                int(last_bb["x2"]),
-                int(last_bb["y2"]),
-            )
-            iou_pred = iou(det.bbox, pred) if pred is not None else 0.0
-            iou_last = iou(det.bbox, last_tuple)
-            best_for_track = max(iou_pred, iou_last)
-            if best_for_track > best_iou:
-                best_iou = best_for_track
-                best_track = tr
-        return best_track
-
     for di, d in confirmed:
         if di in taken_confirmed:
             continue
@@ -848,7 +625,13 @@ def associate_detections(
             "x2": int(d.bbox[2]),
             "y2": int(d.bbox[3]),
         }
-        blocker = _spawn_blocking_track(d)
+        blocker = spawn_blocking_track(state.active, predicted, d)
+        if blocker is None:
+            # J6 · only tracks that existed at frame entry are
+            # candidates, so `predicted` stays index-aligned and a
+            # track spawned earlier in this very loop can't adopt the
+            # next detection of the same frame.
+            blocker = nearby_track(state.active[: len(predicted)], predicted, d, taken_tracks)
         if blocker is not None:
             # J5 · attach the det to the blocker REGARDLESS of label.
             # The per-sample label is preserved on the new sample and
@@ -868,7 +651,7 @@ def associate_detections(
             except ValueError:
                 pass
             continue
-        revived = _try_reidentify(state, d, t_s)
+        revived = try_reidentify(state, d, t_s)
         if revived is not None:
             with contextlib.suppress(ValueError):
                 state.closed.remove(revived)
@@ -962,7 +745,7 @@ def associate_detections(
     # (same-label + sustained overlap) keep two crossing people
     # safely separate. Runs AFTER age-out so a track about to be
     # closed by miss-grace doesn't get re-merged on its way out.
-    _merge_active_duplicates(state)
+    merge_active_duplicates(state)
     return matches
 
 

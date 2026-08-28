@@ -89,6 +89,51 @@ EDGE_GRACE_SAMPLES = 2
 # without blocking a fresh subject who happens to brush past an
 # unrelated existing track.
 SPAWN_BLOCK_IOU = 0.45
+# J6 · proximity adoption for a LIVE same-label track. The J2 gate
+# above is blind to the case that actually fragments a walking person.
+#
+# Measured 2026-08 on a 640 × 360 sub-stream at ~369 ms cadence: ONE
+# person, alone in frame, produced five person tracks and five
+# grace-expiry deaths inside 60 s — each new id spawning while the
+# previous one was still alive. A person box there is ~44 × 140 px and
+# a walking step ~38 px, i.e. ~0.9 bbox WIDTHS per sample. Two
+# consequences:
+#
+#   * IoU against the last observed box is ~0 on EVERY frame, so the
+#     velocity prediction is the only thing holding the track together.
+#   * The moment the prediction is wrong — a direction reversal puts
+#     it one step the wrong way, leaving predicted and actual ~2 steps
+#     (~1.7 box widths) apart — that IoU collapses to 0 too.
+#
+# Neither gate then holds. Matching needs IoU ≥ 0.20, which for equal
+# boxes offset by d means d ≤ 0.67 w ≈ 29 px — less than one step. The
+# J2 spawn block needs IoU > 0.45, i.e. d ≤ 0.38 w ≈ 17 px, STRICTER
+# than the match it is meant to backstop, so on a same-label track it
+# can only ever fire on cases the matcher already caught. The orphan
+# spawns beside its own subject, the old track runs out its 16-sample
+# grace alone, and the next turn repeats it.
+#
+# The asymmetry that gives the fix away: TRACK_REID_* lets a CLOSED
+# track re-adopt a detection 1.6 × max(bw, bh) = 224 px away, while a
+# LIVE track of the same subject was limited to those 17 px. J6 closes
+# the hole from the live side.
+#
+# Distance is normalised PER AXIS — dx by width, dy by height, taking
+# the larger of the two boxes on each axis. That is what makes it both
+# robust to the aspect change of a turning person (width can swing
+# 1.8× while height holds) and tight against a second subject: for a
+# 44 × 140 person, 1.5 allows 66 px sideways (1.7 walking steps) and
+# rejects a neighbour standing 1.5 m away, which is 3+ box widths.
+# Only ORPHAN detections reach this gate, and only tracks with no
+# detection of their own on this frame are candidates — two subjects
+# who both match by IoU never get here at all.
+SPAWN_NEAR_DIST_FACTOR = 1.5
+# Height is the stable dimension of an upright subject; a turn barely
+# touches it. Gating on height ALONE — and deliberately not on width,
+# which is exactly what the turn changes — is the difference between
+# adopting the turning walker and rejecting them the way the re-id and
+# bootstrap size gates do at 1.7.
+SPAWN_NEAR_H_RATIO = 1.8
 # J3 · sustained-overlap merge for active tracks that drift parallel
 # along the same subject. Two same-label active tracks merge when
 # the IoU of their last N detect-sample bboxes consistently exceeds

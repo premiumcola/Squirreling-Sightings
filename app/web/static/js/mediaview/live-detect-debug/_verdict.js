@@ -32,10 +32,25 @@ const _ICON_COPY =
   '<rect x="9" y="9" width="12" height="12" rx="2" ry="2"/>' +
   '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
-const _ICON_COMPACT =
-  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<polyline points="4 9 12 3 20 9"/><polyline points="4 21 12 15 20 21"/></svg>';
+// The glyph follows the ACTION, not the state — it was a single static
+// double-chevron that pointed up whether the button said "ausblenden" or
+// "zeigen", so it told the operator nothing and contradicted the label
+// half the time. Down = ausblenden (the video folds away), up = zeigen.
+function _iconCompact(compact) {
+  // compact === true  → the video is already hidden, the button offers
+  //                     "Video zeigen"      → chevrons UP
+  // compact === false → the video is showing, the button offers
+  //                     "Video ausblenden"  → chevrons DOWN
+  const arrows = compact
+    ? '<polyline points="4 9 12 3 20 9"/><polyline points="4 21 12 15 20 21"/>'
+    : '<polyline points="4 15 12 21 20 15"/><polyline points="4 3 12 9 20 3"/>';
+  return (
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    arrows +
+    '</svg>'
+  );
+}
 
 export function isCompact() {
   try {
@@ -109,7 +124,7 @@ export function _renderVerdictBar(findings) {
         </button>
         <button type="button" class="mv-ld-debug-compact" data-action="toggle-compact"
                 aria-pressed="${compact ? 'true' : 'false'}">
-          <span class="mv-ld-debug-copy-glyph">${_ICON_COMPACT}</span>
+          <span class="mv-ld-debug-copy-glyph">${_iconCompact(compact)}</span>
           <span class="mv-ld-debug-copy-lbl">${compact ? 'Video zeigen' : 'Video ausblenden'}</span>
         </button>
       </div>
@@ -127,5 +142,9 @@ export function _wireVerdictBar(host) {
     btn.setAttribute('aria-pressed', next ? 'true' : 'false');
     const lbl = btn.querySelector('.mv-ld-debug-copy-lbl');
     if (lbl) lbl.textContent = next ? 'Video zeigen' : 'Video ausblenden';
+    // The glyph has to move with the label — it did not, which is how a
+    // button offering "Video zeigen" ended up wearing a hide arrow.
+    const glyph = btn.querySelector('.mv-ld-debug-copy-glyph');
+    if (glyph) glyph.innerHTML = _iconCompact(next);
   });
 }

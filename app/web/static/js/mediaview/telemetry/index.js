@@ -104,13 +104,25 @@ export function mountModeCost(host, getMode) {
 function _costLine(mode) {
   const row = modeRow(_data, mode);
   if (!row) return '';
+  // `invokes` is prod_invokes — TILES ONLY, because production reuses the
+  // full-frame pass and spends the tiles on a rescue. It was labelled
+  // "Inferenzen/Bild", which is wrong twice over: they are not per frame,
+  // and the simulator's own per-tick cost is tiles + 1. Naming the unit
+  // "Kacheln je Rettung" makes it agree with the "+N ms je Rettung" it
+  // has always sat next to.
   const invokes = row.invokes ? row.invokes[1] : 1;
-  const parts = [`${esc(mvModeLabel(mode))} · ${invokes} Inferenzen/Bild`];
+  // Short by design: at 11.5 px monospace a 375 px phone holds ~53
+  // characters, and the old wording ran past 60 — so the projection, the
+  // one thing this line exists to show, was the part that got ellipsised.
+  const parts = [esc(mvModeLabel(mode))];
   if (row.duty && _data?.projection?.basis === 'tpu') {
-    parts.push(`geschätzt ${Math.round(row.duty[1] * 100)} % Auslastung`);
+    parts.push(`${Math.round(row.duty[1] * 100)} % TPU`);
+  }
+  if (invokes > 0) {
+    parts.push(`${invokes} Kacheln/Rettung`);
   }
   if (row.stall_ms && row.stall_ms[1] > 0) {
-    parts.push(`+${row.stall_ms[1]} ms je Rettung`);
+    parts.push(`+${row.stall_ms[1]} ms`);
   }
   const tone = row.verdict || 'ok';
   return (

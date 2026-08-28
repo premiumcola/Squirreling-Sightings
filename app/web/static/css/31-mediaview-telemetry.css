@@ -15,11 +15,16 @@
   line-height: 1.35;
   color: rgba(226, 232, 240, 0.62);
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  /* One line at 375 px. Truncation beats a reflow that pushes the stage
-     down every time the mode changes. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Was nowrap + ellipsis, to stop a reflow pushing the stage down on
+     every mode change. It did stop the reflow — by cutting off the duty
+     projection, which is the only reason the line is here.
+     The text is now ~40 characters, and 375 px of 11.5 px monospace
+     holds ~53, so it does not wrap on the narrowest phone. Wrapping is
+     allowed as the safety net for a longer number: the stage reads its
+     height from a measured ResizeObserver budget, so a second line
+     resizes the picture instead of pushing it out of the window. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .mv-tele-cost-line[data-tone='tight'] {
   color: #ffd9a8;

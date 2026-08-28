@@ -105,6 +105,21 @@ WEATHER_DEFAULTS: dict = {
         "model": "icon_d2",
         "timezone": "Europe/Berlin",
     },
+    # Global cost caps for the per-camera event-timelapse pre-roll ring
+    # (the per-camera window itself lives in EVENT_TL_DEFAULTS).
+    #   prebuffer_max_mb — hard ceiling per camera ring. At interval_s=8
+    #     a 15-min window is 113 frames; a 2560x1440 JPEG at quality 92
+    #     runs 0.6–1.5 MB, so ~90 MB typical and ~170 MB worst case. The
+    #     cap evicts by bytes as well as by frame count so an unusually
+    #     detailed scene cannot outgrow the budget.
+    #   watch_grace_min  — how long a single "elevated risk" poll keeps
+    #     the ring alive in `armed` mode. Longer than the 5-min poll
+    #     interval on purpose: it is what stops a flickering forecast
+    #     from repeatedly wiping a half-full ring.
+    "event_timelapse": {
+        "prebuffer_max_mb": 256,
+        "watch_grace_min": 30,
+    },
 }
 
 
@@ -184,11 +199,27 @@ SUN_TL_DEFAULTS: dict = {
 # toggles. Default OFF so existing weather cameras don't suddenly start
 # producing 60-min timelapses without explicit consent.
 # E1 · interval_s 6 → 8, fps 24 → 15 — same rationale as SUN_TL above.
+#
+# prebuffer_min / prebuffer_mode — pre-roll ring buffer. A storm only
+# reveals itself once it has arrived, so a forward-only capture misses
+# the build-up entirely. The ring keeps the last `prebuffer_min` minutes
+# and discards the rest until a trigger fires, at which point the frames
+# are retained and the capture continues forward. Modes:
+#   off    — no ring; forward-only (behaviour before this key existed).
+#   armed  — DEFAULT. Ring spins only while the forecast shows elevated
+#            risk. The triggers read 60–90 min ahead, so the watch
+#            predicate normally arms hours before a trigger can fire;
+#            this gets the same pre-roll at a fraction of the duty cycle.
+#   always — ring spins 24/7 for every opted-in camera.
+# Backfilled additively by migrate_weather_defaults, so a camera that
+# predates the keys lands on 15 min / armed rather than on "no pre-roll".
 EVENT_TL_DEFAULTS: dict = {
     "enabled": False,
     "window_min": 60,
     "interval_s": 8,
     "fps": 15,
+    "prebuffer_min": 15,
+    "prebuffer_mode": "armed",
     "triggers": {
         "thunder_rising": True,
         "front_passing": True,

@@ -192,6 +192,13 @@ CAMERA_SCHEMA: dict = {
     # CPU budget free.
     "streaming": (dict, {}),
     "timelapse": (dict, {}),
+    # Per-camera weather opt-in + the sun_timelapse / event_timelapse
+    # sub-blocks. Only the container is type-checked here; the nested
+    # event_timelapse block is validated against WEATHER_EVENT_TL_SCHEMA
+    # by the weather service when it reads the block (a settings.json
+    # hand-edit is the realistic source of a bad value there, and that
+    # path does not go through update_camera).
+    "weather": (dict, {}),
     "schedule": (dict, {}),
     # Two independent schedules — one for notifications (Telegram/MQTT),
     # one for archival recording. Replaces the single 'schedule' dict's
@@ -277,6 +284,30 @@ CAMERA_SCHEMA: dict = {
     # it back to "".
     "color": (str, ""),
 }
+
+# ── Nested blocks ──────────────────────────────────────────────────────────────
+
+# Legal values for cameras[i].weather.event_timelapse.prebuffer_mode.
+#   off    — no pre-roll ring; forward-only capture.
+#   armed  — ring spins only while the forecast shows elevated risk.
+#   always — ring spins 24/7 while the camera is opted in.
+EVENT_TL_PREBUFFER_MODES: frozenset[str] = frozenset({"off", "armed", "always"})
+
+# cameras[i].weather.event_timelapse — section-style (all optional, only
+# type-checked / coerced when present). Read by
+# weather_service._event_tl_ring before the ring is sized, so a
+# hand-edited settings.json carrying "prebuffer_min": "15" coerces
+# instead of crashing the poll thread.
+WEATHER_EVENT_TL_SCHEMA: dict = {
+    "enabled": bool,
+    "window_min": int,
+    "interval_s": int,
+    "fps": int,
+    "prebuffer_min": int,
+    "prebuffer_mode": str,
+    "triggers": dict,
+}
+
 
 # ── Section schemas (for update_section; all fields optional) ──────────────────
 

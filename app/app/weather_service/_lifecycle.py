@@ -64,6 +64,11 @@ class LifecycleMixin:
         # Attach prebuffers to opted-in cameras so post-roll capture has
         # something to splice on.
         self._attach_prebuffers()
+        # Sweep orphan event-tl pre-roll rings / capture scratch dirs /
+        # part-encodes left by a container restart. Runs exactly once per
+        # service instance — nothing of ours is live at this point, so
+        # anything matching is by definition an orphan.
+        self._event_tl_boot_cleanup()
         # Register the recurring poll job.
         from apscheduler.triggers.interval import IntervalTrigger
 
@@ -227,6 +232,9 @@ class LifecycleMixin:
         self._scheduler = None
         # Detach prebuffers so cameras stop spending CPU on JPEG encoding.
         self._detach_prebuffers()
+        # Stop every event-tl pre-roll ring loop and delete its frames —
+        # a ring left on disk after teardown would accumulate forever.
+        self._stop_event_tl_prebuffers()
 
     def reload(self, new_cfg: dict, server_cfg: dict | None = None):
         was_enabled = bool(self.cfg.get("enabled", True))
@@ -243,6 +251,10 @@ class LifecycleMixin:
             pass
         self._scheduler = None
         self._detach_prebuffers()
+        # Rings are sized from config; a reload may have changed
+        # prebuffer_min / prebuffer_mode, so tear them down and let the
+        # next poll rebuild them against the new values.
+        self._stop_event_tl_prebuffers()
         if not self.cfg.get("enabled", True):
             log.info("[weather] reloaded — disabled")
             with self._lock:

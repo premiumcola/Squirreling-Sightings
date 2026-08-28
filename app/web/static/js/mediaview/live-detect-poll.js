@@ -288,7 +288,7 @@ export function _renderFrame(data) {
     S.session._frameDiagLogged = true;
     const dets = S.session.lastDetections;
     const np = dets.filter((d) => d.verdict === 'pass').length;
-    const nb = dets.filter((d) => d.verdict === 'belowthresh').length;
+    const nb = dets.filter((d) => d.verdict === 'tentative').length;
     const nf = dets.filter((d) => d.verdict === 'filtered').length;
     const fs = S.session.lastFrameSize;
     const gates = data.diag?.gates || {};

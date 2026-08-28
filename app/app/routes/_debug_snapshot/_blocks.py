@@ -46,8 +46,7 @@ def _live_status_block(cam: dict, last: dict, diag: dict, cluster_ev: dict) -> s
             f"{int(diag.get('frame_interval_avg_ms') or 0)} ms · next <<tick_next_ms>>",
             f"QUELLE   {mode} · {fs.get('w', 0)}×{fs.get('h', 0)} · "
             f"age {last.get('frame_age_ms') or 0} ms · inference {infer} ms",
-            f"CADENCE  avg_cycle {c4.get('tick_cycle_ema_ms', 0)} · hold <<hold_ms>> · "
-            f"drops {c4.get('dropped_ticks_session', 0)}",
+            f"CADENCE  avg_cycle {c4.get('tick_cycle_ema_ms', 0)} · hold <<hold_ms>>",
             f"PROFIL   {diag.get('validator_profile') or _UNKNOWN} · "
             f"ARMED={'true' if cam.get('armed', True) else 'false'}",
         ]
@@ -172,7 +171,11 @@ def _detections_block(last: dict, cluster_ev: dict) -> str:
         )
 
     passed = [d for d in out if d.get("verdict") == "pass"]
-    below = [d for d in out if d.get("verdict") == "belowthresh"]
+    # "tentative" is the two-tier tracker's under-spawn tier: the box
+    # holds its track but does not count toward confirmation. It replaced
+    # "belowthresh", which meant "under detection_min_score" — a bar the
+    # live pipeline no longer applies at all.
+    below = [d for d in out if d.get("verdict") == "tentative"]
     off = (cluster_ev.get("cluster3") or {}).get("off_filter_60s_counts") or {}
     top_off = sorted(off.items(), key=lambda kv: kv[1], reverse=True)[:5]
     return _fenced(
@@ -191,7 +194,6 @@ def _perf_block(cluster_ev: dict, diag: dict, runtime) -> str:
     return _fenced(
         [
             f"tick_cycle_ema_ms:     {c4.get('tick_cycle_ema_ms', 0)}",
-            f"dropped_ticks_session: {c4.get('dropped_ticks_session', 0)}",
             f"sim_frame_src:         {src} (Simulator)",
             "alarm_pipeline_src:    main (camera_runtime/_main_loop)",
             f"main_stream_fps:       {_fmt_fps(runtime, '_main_fps')}",

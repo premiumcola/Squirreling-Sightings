@@ -20,6 +20,24 @@ import {
 import { _renderBboxOverlay } from './live-detect-bbox.js';
 import { _pinScrubberRight } from './live-detect-chrome.js';
 
+// Verdicts that mean "a gate removed this box". Mirrors the backend's
+// gate sequence in routes/_sim_pipeline — the tokens are the contract.
+const _DROP_VERDICTS = new Set([
+  'filtered',
+  'masked',
+  'outside_zone',
+  'no_track',
+]);
+
+// German gate name per verdict, shown in the row's verdict pill. The
+// full sentence lives in d.reason and rides along as the title.
+const _GATE_LABEL = {
+  filtered: 'gefiltert',
+  masked: 'maskiert',
+  outside_zone: 'außerhalb Zone',
+  no_track: 'kein Track',
+};
+
 export function _renderDetectionsPanel(data) {
   // SIMU-04b · the Detections tab content is three sections:
   //   1. AKTIVE TRACKS — pass-verdict dets with their track-#N badge
@@ -49,17 +67,23 @@ export function _renderDetectionsPanel(data) {
   const activeRowsHtml = passDets.length
     ? passDets.map((d) => _renderActiveTrackRow(d)).join('')
     : '<div class="mv-ld-empty-row">Noch keine Detektion</div>';
-  // SECTION 2 · Verworfen — filtered (off-filter) detections from
-  // current tick. Only rendered when at least one such row exists.
+  // SECTION 2 · Verworfen — every box a gate removed on this tick, with
+  // the gate named. It used to list only off-filter classes, so a box
+  // the operator's exclusion mask killed simply vanished from the panel
+  // — indistinguishable from a detector that never saw it. The backend
+  // now reports production's whole gate sequence, and each row carries
+  // its own German reason string.
   const filteredDets = dets
     .filter((d) => {
-      if (d.verdict !== 'filtered') return false;
-      if (objFilter && objFilter.has(d.label)) return false;
+      if (!_DROP_VERDICTS.has(d.verdict)) return false;
+      // An off-filter row for a class that IS in the filter would be a
+      // stale response; drop it rather than contradict the config.
+      if (d.verdict === 'filtered' && objFilter && objFilter.has(d.label)) return false;
       return true;
     })
     .sort((a, b) => (b.score || 0) - (a.score || 0));
   const verworfenHtml = filteredDets.length
-    ? `<div class="mv-ld-section-head">VERWORFEN (KLASSE NICHT IM FILTER)</div>` +
+    ? `<div class="mv-ld-section-head">VERWORFEN (TOR · GRUND)</div>` +
       filteredDets.map((d) => _renderVerworfenRow(d)).join('')
     : '';
   // SECTION 3 · Track-Ereignisse · last 30 s. Pulled from the trace
@@ -112,7 +136,8 @@ export function _renderActiveTrackRow(d) {
 
 export function _renderVerworfenRow(d) {
   const scorePct = Math.round((d.score || 0) * 100);
-  return `<div class="mv-ld-row mv-ld-row-verworfen">
+  const gate = _GATE_LABEL[d.verdict] || 'verworfen';
+  return `<div class="mv-ld-row mv-ld-row-verworfen" title="${esc(d.reason || '')}">
     <span class="mv-ld-row-icon mv-ld-row-icon-andere" aria-hidden="true">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
         <circle cx="6" cy="12" r="1.6" fill="#5a7a68"/>
@@ -122,7 +147,7 @@ export function _renderVerworfenRow(d) {
     </span>
     <span class="mv-ld-row-label">${esc(d.label)}</span>
     <span class="mv-ld-row-score">${scorePct}%</span>
-    <span class="mv-ld-row-verdict mv-ld-row-verdict-mute">gefiltert</span>
+    <span class="mv-ld-row-verdict mv-ld-row-verdict-mute">${esc(gate)}</span>
   </div>`;
 }
 

@@ -142,13 +142,22 @@ def test_empty_labels_are_ignored(labels):
 
 
 def test_main_loop_calls_the_upgrade_while_recording():
+    """The recording state machine moved to ``_recording_step`` when
+    ``_main_loop`` was split back under the 500-line ceiling. The
+    invariant is unchanged: the ``elif self._recording:`` arm — the only
+    window in which a late class confirmation can still be caught — must
+    reach the upgrade, and must reach it BEFORE the clip can be closed.
+    """
     from pathlib import Path
 
     src = (
-        Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_main_loop.py"
+        Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_recording_step.py"
     ).read_text(encoding="utf-8")
-    branch = src[src.index("elif self._recording:") :][:1400]
-    assert "_upgrade_event_meta(" in branch, (
-        "the upgrade must run on frames DURING the recording — that is the "
-        "only window in which a late class confirmation can still be caught"
-    )
+    branch = src[src.index("elif self._recording:") :][:400]
+    assert "self._advance_clip(" in branch
+
+    advance = src[src.index("def _advance_clip(") :]
+    assert "_upgrade_event_meta(" in advance
+    assert advance.index("_upgrade_event_meta(") < advance.index(
+        "self._stop_ffmpeg_and_queue_reencode()"
+    ), "a label confirmed on the closing frame must still land in the event"

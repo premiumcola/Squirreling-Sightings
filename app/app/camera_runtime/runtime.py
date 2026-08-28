@@ -17,6 +17,7 @@ from pathlib import Path
 
 import cv2
 
+from ..detect_setup import build_detection_setup
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
     BirdSpeciesClassifier,
@@ -27,9 +28,12 @@ from ..tracker_core import LiveTracker, resolve_track_thresholds
 from ._capture import CaptureMixin
 from ._consts import log  # noqa: F401  (kept for parity with original module log binding)
 from ._lifecycle import LifecycleMixin
+from ._loop_stages import LoopStagesMixin
 from ._main_loop import MainLoopMixin
 from ._motion import MotionMixin
 from ._recording import RecordingMixin
+from ._recording_step import RecordingStepMixin
+from ._rescue import RescueMixin
 from ._status import StatusMixin
 from ._wildlife_stage import WildlifeStageMixin
 from ._timelapse import TimelapseMixin
@@ -118,6 +122,9 @@ class CameraRuntime(
     ZonesMixin,
     MotionMixin,
     RecordingMixin,
+    RecordingStepMixin,
+    RescueMixin,
+    LoopStagesMixin,
     TimelapseMixin,
     StatusMixin,
     WildlifeStageMixin,
@@ -225,6 +232,20 @@ class CameraRuntime(
             floor=_t_floor,
             grace_seconds=_t_grace,
             iou_threshold=_t_iou,
+        )
+        # The detection configuration, resolved once — same lifetime and
+        # same source as the tracker above. Every camera-config change
+        # restarts the runtime (server._compute_camera_diff →
+        # restart_single_camera), so nothing on it can go stale while the
+        # loop runs; resolving it per frame allocated a frozen dataclass,
+        # two dict copies and a frozenset ~20×/s per camera for values
+        # that cannot change. The Simulieren panel builds its own from the
+        # same function, so both paths still read one definition.
+        self.detect_setup = build_detection_setup(
+            self.camera_id,
+            self.cfg,
+            roi_mode=self._effective_roi_mode(),
+            global_cfg=self.global_cfg,
         )
         # D1 · per-camera motion-blob tracker for the wind-tolerant gate. Feeds
         # on the raw wildlife-low motion blobs and reports coherent net

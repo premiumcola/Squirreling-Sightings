@@ -31,7 +31,7 @@ def test_counters_are_initialised_on_the_runtime():
 def test_every_attempt_is_counted_not_only_successes():
     """The counter must sit before the hit check, or it degenerates back
     into 'successes only' and the distinction is lost again."""
-    src = _read("camera_runtime/_main_loop.py")
+    src = _read("camera_runtime/_rescue.py")
     assert "self._roi_rescue_attempts += 1" in src
     assert "self._roi_rescue_hits += 1" in src
 
@@ -42,7 +42,7 @@ def test_every_attempt_is_counted_not_only_successes():
 
 def test_attempt_counter_precedes_the_detection_call():
     """It must count the attempt even when tiled_detect returns nothing."""
-    src = _read("camera_runtime/_main_loop.py")
+    src = _read("camera_runtime/_rescue.py")
     attempts_at = src.index("self._roi_rescue_attempts += 1")
     detect_at = src.index("roi_dets, _sahi = tiled_detect(")
     assert attempts_at < detect_at

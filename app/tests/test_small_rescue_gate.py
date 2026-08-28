@@ -21,7 +21,7 @@ import collections
 import numpy as np
 import pytest
 
-from app.camera_runtime._main_loop import MainLoopMixin, _confirmable_on_blob
+from app.camera_runtime._rescue import RescueMixin as MainLoopMixin, _confirmable_on_blob
 
 
 class _Det:

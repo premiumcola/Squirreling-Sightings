@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.camera_runtime._main_loop import _confirmable_on_blob
+from app.camera_runtime._rescue import _confirmable_on_blob
 
 
 class _Det:
@@ -54,7 +54,7 @@ def test_a_blob_fully_inside_a_detection_is_fully_explained():
     old 0.3 threshold, which is the bug in one line.
     """
     from app.bbox_utils import iou
-    from app.camera_runtime._main_loop import _blob_containment
+    from app.camera_runtime._rescue import _blob_containment
 
     person = (1000, 400, 1500, 1100)
     blob = (1200, 700, 1400, 860)
@@ -90,7 +90,7 @@ def test_containment_never_undercuts_iou():
     the counterexample below.
     """
     from app.bbox_utils import iou
-    from app.camera_runtime._main_loop import _blob_containment
+    from app.camera_runtime._rescue import _blob_containment
 
     blob = (1200, 700, 1400, 860)
     for det in [
@@ -137,7 +137,7 @@ def test_the_new_gate_can_fire_where_the_old_one_did_not():
     not say what it was read to say.
     """
     from app.bbox_utils import iou
-    from app.camera_runtime._main_loop import (
+    from app.camera_runtime._rescue import (
         _RESCUE_BLOB_CONTAINMENT,
         _blob_containment,
     )

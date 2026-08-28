@@ -366,6 +366,22 @@ def api_camera_detection_tuning(cam_id):
                 grace_seconds=grace,
                 iou_threshold=iou,
             )
+            # DetectionSetup is resolved ONCE at runtime construction, on
+            # the premise that every camera-config change restarts the
+            # runtime. THIS ROUTE IS THE EXCEPTION — live-applying without
+            # a restart is its whole purpose. Without this rebuild the
+            # loop keeps the old object_filter, label_thresholds,
+            # bottom_crop_px and roi_mode while the response below reports
+            # the new ones under "effective": the panel would show an
+            # applied setting the alarm path never received.
+            from ..detect_setup import build_detection_setup
+
+            runtime.detect_setup = build_detection_setup(
+                cam_id,
+                cam,
+                roi_mode=runtime._effective_roi_mode(),
+                global_cfg=runtime.global_cfg,
+            )
         except Exception as exc:  # noqa: BLE001
             log.warning("[detection-tuning] %s live-apply failed: %s", cam_id, exc)
     return jsonify(

@@ -25,7 +25,7 @@ import collections
 import numpy as np
 import pytest
 
-from app.camera_runtime._main_loop import _RESCUE_MIN_INTERVAL_S, MainLoopMixin
+from app.camera_runtime._rescue import _RESCUE_MIN_INTERVAL_S, RescueMixin as MainLoopMixin
 
 
 class _Blob:

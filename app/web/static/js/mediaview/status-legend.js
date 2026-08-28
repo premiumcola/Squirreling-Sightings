@@ -47,13 +47,27 @@ export const MV_STATUS_ROWS = [
 ];
 
 // Live test-detection verdict → unified status category. The live
-// pipeline gates a raw detection to pass / belowthresh / filtered;
-// the recorded tracks.json already speaks confirmed / weak / ghost /
+// pipeline now reports production's OWN gate vocabulary — the same
+// sequence camera_runtime/_main_loop runs — so every box says which
+// gate decided it instead of every surviving box saying "pass":
+//   pass         · at or above the label's spawn threshold
+//   tentative    · holds its track, does not count toward confirmation
+//   no_track     · the tracker dropped it (tentative, no IoU partner)
+//   filtered     · class not in object_filter
+//   masked       · inside an exclusion mask
+//   outside_zone · outside every inclusion zone
+// `belowthresh` is the retired name for the tentative tier; kept so a
+// cached response from before the change still renders.
+// The recorded tracks.json already speaks confirmed / weak / ghost /
 // masked. Both render through MV_STATUS_STYLE.
 export const MV_LIVE_VERDICT_CAT = {
   pass: 'confirmed',
+  tentative: 'weak',
   belowthresh: 'weak',
+  no_track: 'ghost',
   filtered: 'masked',
+  masked: 'masked',
+  outside_zone: 'masked',
 };
 
 const _MASKED_COLOR = '#64748b';

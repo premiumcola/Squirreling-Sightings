@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 from app import app_state
+from app.routes import _sim_frame
 from app.routes import coral_test_detection as ctd
 
 flask = pytest.importorskip("flask")
@@ -64,7 +65,7 @@ def client(monkeypatch):
     """
     # The handler polls 2.5 s before declaring a stream stuck; the tests
     # only care about the verdict, not about waiting for it.
-    monkeypatch.setattr(ctd, "_FRESH_POLL_WINDOW_S", 0.2)
+    monkeypatch.setattr(_sim_frame, "FRESH_POLL_WINDOW_S", 0.2)
 
     class _Settings:
         def get_camera(self, cam_id):

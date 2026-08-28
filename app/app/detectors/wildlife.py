@@ -207,6 +207,22 @@ class WildlifeClassifier:
             model_path = cpu_alt
         self._inat_min_score = float(cfg.get("min_score", 0.25))
         self._inat_labels = load_label_map(cfg.get("labels_path"))
+        # Same prefer_cpu contract as the wildlife stage above, and for the
+        # same reason (see detectors/_edgetpu.py): the Edge TPU caches model
+        # parameters in ~8 MB of SRAM, the shipped models do not fit there
+        # together, and every switch rewrites that cache across USB. The
+        # object detector runs on EVERY frame and owns the stick; this
+        # backend runs only on a wildlife-gated crop.
+        #
+        # This guard was missing, which stayed invisible for as long as the
+        # image ran Python 3.11 — pycoral had no wheel there, so tier 1
+        # always raised and the backend silently landed on CPU anyway. The
+        # moment the :coral image made pycoral importable (2026-08-28) this
+        # started claiming the TPU and evicting the detector on every bird.
+        # Absence of a symptom was never evidence the guard was present.
+        if bool(cfg.get("prefer_cpu", self._prefer_cpu)):
+            self._load_inat_cpu(model_path)
+            return
         # Tier 1: pycoral
         try:
             from pycoral.adapters import classify, common  # type: ignore
@@ -225,6 +241,18 @@ class WildlifeClassifier:
         except Exception:
             pass
         # Tier 2: tflite-runtime
+        self._load_inat_cpu(model_path)
+
+    def _load_inat_cpu(self, model_path: str) -> None:
+        """Load the iNat backend on the CPU via plain tflite-runtime.
+
+        Reached both as the deliberate default (prefer_cpu) and as the
+        fallback after a failed pycoral load, so it must not assume which
+        path got here. `cpu_model_path` points at the uncompiled twin of an
+        `*_edgetpu.tflite`; running the compiled one on the CPU works but
+        wastes the compilation, hence the preference order.
+        """
+        cfg = self._inat_cfg or {}
         try:
             import tflite_runtime.interpreter as tflite  # type: ignore
 

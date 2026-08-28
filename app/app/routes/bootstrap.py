@@ -19,6 +19,7 @@ from .. import app_state
 from ..discovery import discover_hosts, discover_hosts_stream
 from ..io_utils import path_exists_cached
 from ._camera_helpers import _auto_detect_device_info
+from ._secrets import redact_camera
 
 bp = Blueprint("bootstrap", __name__)
 
@@ -139,7 +140,10 @@ def api_config():
                 "location": srv.get("location") or {"lat": None, "lon": None, "elevation": None},
             },
             "default_discovery_subnet": srv.get("default_discovery_subnet", "192.168.1.0/24"),
-            "cameras": c.get("cameras", []),
+            # Redacted: no camera password, no `user:pass@` in any URL.
+            # This endpoint is unauthenticated, plain HTTP, and polled
+            # by live-update.js on every dashboard tick.
+            "cameras": [redact_camera(cam) for cam in c.get("cameras", [])],
             "weather": c.get("weather") or {},
             "coral": {
                 "mode": proc.get("detection", {}).get("mode", "none"),
@@ -159,11 +163,18 @@ def api_config():
                 "wildlife_model_path": wl_model_path,
             },
             # Secrets are never shipped to the browser — only "is one
-            # stored?". See routes/_camera_helpers.redact_secrets.
+            # stored?". Holds for the camera list above too. See
+            # routes/_secrets for the full contract.
             "telegram": {
                 "enabled": bool(c.get("telegram", {}).get("enabled")),
                 "chat_id": c.get("telegram", {}).get("chat_id", ""),
                 "token_set": bool(c.get("telegram", {}).get("token")),
+                # hydrateTelegram() checks the matching format radio off
+                # this and the Verbindung form used to echo it back on
+                # save. Omitting it meant `tg.format || 'photo'` read
+                # 'photo' forever, so every connection save silently
+                # reset a 'video' or 'text' choice.
+                "format": c.get("telegram", {}).get("format", "photo"),
             },
             "mqtt": {
                 "enabled": bool(c.get("mqtt", {}).get("enabled")),

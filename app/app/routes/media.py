@@ -17,7 +17,7 @@ import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state, timelapse_storage
-from ..camera_runtime._consts import _PROFILES as _TL_PROFILES
+from ..timelapse_windows import TIMELAPSE_PROFILES as _TL_PROFILES
 from ..camera_runtime._recording._stages import (
     DEFAULT_CLIP_MAX_S,
     annotate_stage,

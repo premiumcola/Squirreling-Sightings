@@ -7,6 +7,7 @@ import { byId, esc } from './core/dom.js';
 import { state } from './core/state.js';
 import { showToast } from './core/toast.js';
 import { apiGet, apiPost } from './core/api.js';
+import { hydrateSecretField, applySecretField } from './chrome/secret-field.js';
 
 let _tgPollStatusTimer = null;
 
@@ -26,14 +27,9 @@ export function hydrateTelegram() {
   // The server never ships the token — only tg.token_set. Keeping the
   // field empty is what stops Chrome offering "Passwort speichern" when
   // the collapsed settings accordion re-renders, and it means an
-  // unauthenticated /api/config no longer carries the bot token.
-  const tok = byId('tg_token');
-  if (tok) {
-    tok.value = '';
-    tok.placeholder = tg.token_set
-      ? 'Gespeichert · leer lassen = unverändert'
-      : 'Bot-Token · 123456789:AAExampleBotToken';
-  }
+  // unauthenticated /api/config no longer carries the bot token. The
+  // Löschen button next to it is what makes "" reachable at all.
+  hydrateSecretField(byId('tg_token'), tg.token_set, 'Bot-Token · 123456789:AAExampleBotToken');
   const cid = byId('tg_chat_id');
   if (cid) cid.value = tg.chat_id || '';
   const fmt = tg.format || 'photo';
@@ -105,7 +101,7 @@ export function renderTgFormatPreview(fmt) {
   let html = `<div class="tg-bubble">
     <div class="tg-bubble-meta">🚨 motion, person · 📷 ${esc(cam?.name || 'Kamera')} · 📍 Einfahrt · 🕒 ${ts}</div>`;
   if (fmt === 'photo' || fmt === 'video') {
-    const snap = cam?.snapshot_url || '';
+    const snap = cam?.snap_url || '';
     html += `<div class="tg-bubble-img">${snap ? `<img src="${esc(snap)}" alt="snapshot"/>` : '<div class="tg-bubble-img-ph">📷 Snapshot</div>'}</div>`;
   }
   if (fmt === 'video')
@@ -120,15 +116,20 @@ export function renderTgFormatPreview(fmt) {
 byId('telegramForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   // Key omission is the "unchanged" signal: SettingsStore.update_section
-  // deep-merges, so a missing `token` keeps the stored one while an
-  // explicit "" would wipe it. Never send the key for an empty field.
-  const typedToken = byId('tg_token')?.value || '';
+  // deep-merges, so a missing `token` keeps the stored one, an explicit
+  // "" clears it, and a typed value replaces it. applySecretField owns
+  // that three-way decision for every secret input in the app.
+  //
+  // `format` is deliberately NOT in this payload: it belongs to the
+  // Format tab's own save button, and echoing it here re-sent
+  // `state.config.telegram.format` — a key /api/config did not ship,
+  // so the fallback 'photo' overwrote the operator's choice on every
+  // connection save.
   const telegram = {
     enabled: !!byId('tg_enabled')?.checked,
     chat_id: byId('tg_chat_id')?.value || '',
-    format: (state.config?.telegram || {}).format || 'photo',
   };
-  if (typedToken) telegram.token = typedToken;
+  applySecretField(telegram, 'token', byId('tg_token'));
   const payload = { telegram };
   await apiPost('/api/settings/app', payload);
   showToast('Telegram-Verbindung gespeichert.', 'success');

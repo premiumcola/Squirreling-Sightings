@@ -164,10 +164,13 @@ export function initRtspBuilder() {
     const auth = user ? user + (pass ? ':' + _rtspEnc(pass) : '') + '@' : '';
     const portPart = port && port !== '554' ? ':' + port : '';
     setMaskable(f['rtsp_url'], `rtsp://${auth}${ip}${portPart}${path}`);
-    // auto-fill snapshot if empty
+    // auto-fill snapshot if empty. Same `auth` as the RTSP URL rather
+    // than a hard-coded `user:pass@` — the password field is empty
+    // whenever the stored secret was not retyped, and that spelling
+    // produced a dangling `admin:@host`.
     const snapReal = f['snapshot_url']?.dataset.real || f['snapshot_url']?.value || '';
     if (!snapReal && user) {
-      setMaskable(f['snapshot_url'], `http://${user}:${_rtspEnc(pass)}@${ip}/cgi-bin/snapshot.cgi`);
+      setMaskable(f['snapshot_url'], `http://${auth}${ip}/cgi-bin/snapshot.cgi`);
     }
     if (typeof window._refreshConnectionWarn === 'function') window._refreshConnectionWarn();
   };

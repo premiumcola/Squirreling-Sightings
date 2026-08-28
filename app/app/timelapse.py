@@ -10,6 +10,8 @@ from pathlib import Path
 
 import cv2
 
+from .timelapse_frames import frames_for_day_stamped
+
 log = logging.getLogger(__name__)
 
 # Maximum output width for timelapse videos. 4K source frames are downscaled to this
@@ -562,7 +564,8 @@ class TimelapseBuilder:
         path = self._write_video_ffmpeg(valid_paths, out_path, fps, ref_size)
         if path is None:
             log.debug(
-                "[timelapse] ffmpeg unavailable/failed, falling back to OpenCV for %s", out_path.name
+                "[timelapse] ffmpeg unavailable/failed, falling back to OpenCV for %s",
+                out_path.name,
             )
             path = self._write_video_opencv(valid_paths, out_path, fps, ref_size)
 
@@ -656,31 +659,15 @@ class TimelapseBuilder:
 
     # ── Frame discovery ───────────────────────────────────────────────────────
 
-    def frames_for_day(self, camera_id: str, day: str) -> list[Path]:
-        """Every captured frame for ``day``, across both on-disk layouts.
+    def frames_for_day_stamped(self, camera_id: str, day: str) -> list[tuple[float, Path]]:
+        """``(mtime, path)`` for every frame of ``day``, oldest first.
+        See :mod:`timelapse_frames` for what "for ``day``" means per
+        profile."""
+        return frames_for_day_stamped(self._timelapse_frames_dir(camera_id), day)
 
-        The profile loop writes ``timelapse_frames/<cam>/<profile>/
-        <window>/``; only the legacy loop writes the flat
-        ``timelapse_frames/<cam>/<day>/``, and it starts only when NO
-        profile is enabled. Looking at the flat path alone therefore made
-        /api/camera/<id>/timelapse answer ``no_frames`` for every camera
-        that had a profile turned on. Window keys are prefix-matched so a
-        custom window (``<day>_<HHMMSS>``) counts toward its own day.
-        """
-        base = self._timelapse_frames_dir(camera_id)
-        if not base.is_dir():
-            return []
-        images: list[Path] = []
-        flat = base / day
-        if flat.is_dir():
-            images.extend(flat.glob("*.jpg"))
-        for profile_dir in base.iterdir():
-            if not profile_dir.is_dir() or profile_dir.name == day:
-                continue
-            for window_dir in profile_dir.iterdir():
-                if window_dir.is_dir() and window_dir.name.startswith(day):
-                    images.extend(window_dir.glob("*.jpg"))
-        return sorted(images, key=lambda p: (p.parent.name, p.name))
+    def frames_for_day(self, camera_id: str, day: str) -> list[Path]:
+        """Every captured frame for ``day``, chronologically."""
+        return [p for _, p in self.frames_for_day_stamped(camera_id, day)]
 
     def build_period(
         self,

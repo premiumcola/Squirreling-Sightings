@@ -18,7 +18,7 @@ import re
 
 from ...event_logic import is_schedule_window_active
 from ...logging_setup import log_buffer
-from .._camera_helpers import _mask_password_in_url
+from .._secrets import mask_url_password
 
 _UNKNOWN = "n/v"
 
@@ -50,7 +50,7 @@ _URL_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s]*@[^\s]*")
 
 def _scrub(text: str) -> str:
     """Mask passwords in any embedded-credential URL inside a log line."""
-    return _URL_RE.sub(lambda m: _mask_password_in_url(m.group(0)), text or "")
+    return _URL_RE.sub(lambda m: mask_url_password(m.group(0)), text or "")
 
 
 def _fmt_float(val, digits: int = 2) -> str:

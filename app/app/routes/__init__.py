@@ -62,7 +62,11 @@ def register_blueprints(app) -> None:
     """
     from . import (
         admin,
+        app_settings,
         bootstrap,
+        camera_backups,
+        camera_device,
+        camera_merge,
         cameras,
         coral,
         coral_test_detection,
@@ -85,6 +89,12 @@ def register_blueprints(app) -> None:
     app.register_blueprint(admin.bp)
     app.register_blueprint(bootstrap.bp)
     app.register_blueprint(cameras.bp)
+    # Carved out of cameras.py, which stood 386 lines past the file
+    # ceiling. Same URL space — no url_prefix on any of them.
+    app.register_blueprint(camera_backups.bp)
+    app.register_blueprint(camera_device.bp)
+    app.register_blueprint(camera_merge.bp)
+    app.register_blueprint(app_settings.bp)
     app.register_blueprint(streams.bp)
     app.register_blueprint(media.bp)
     app.register_blueprint(events.bp)

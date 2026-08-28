@@ -68,8 +68,14 @@ def _profile_status(cam_id: str, pname: str, prof: dict, cam_fps: int) -> dict:
         "target_s": target_s,
         "expected_frames": expected,
         "window_key": usage.get("window_key"),
+        # frame_count / bytes_on_disk span EVERY window this profile still
+        # holds, not just the current one — a closed window waiting to be
+        # encoded is exactly the disk the operator has to account for.
+        # current_* isolate the window being captured into right now.
         "frame_count": usage.get("frame_count", 0),
         "bytes_on_disk": usage.get("bytes_on_disk", 0),
+        "current_frame_count": usage.get("current_frame_count", 0),
+        "pending_windows": usage.get("pending_windows", 0),
         "oldest_frame": usage.get("oldest_frame"),
         "newest_frame": usage.get("newest_frame"),
         "projected_bytes": timelapse_storage.projected_bytes(usage, expected),
@@ -326,15 +332,15 @@ def api_camera_timelapse_rolling(cam_id):
     if not _timelapse_configured(tl_cfg):
         return jsonify({"ok": False, "error": "timelapse disabled"}), 400
     day = datetime.now().strftime("%Y-%m-%d")
-    # frames_for_day covers both the legacy flat layout and the
-    # per-profile window dirs the capture loop actually writes.
-    candidates = timelapse_builder.frames_for_day(cam_id, day)
+    # frames_for_day_stamped covers the legacy flat layout AND all six
+    # per-profile window shapes, and hands back the mtime it already
+    # read — the previous version stat()ed every candidate twice, once
+    # for the cutoff filter and once again as the sort key.
+    candidates = timelapse_builder.frames_for_day_stamped(cam_id, day)
     if not candidates:
         return jsonify({"ok": False, "error": "no_frames"}), 404
     cutoff = (datetime.now() - timedelta(minutes=minutes)).timestamp()
-    images = sorted(
-        (p for p in candidates if p.stat().st_mtime >= cutoff), key=lambda p: p.stat().st_mtime
-    )
+    images = [p for ts, p in candidates if ts >= cutoff]
     if len(images) < 2:
         return jsonify({"ok": False, "error": "not_enough_frames", "minutes": minutes}), 404
     target_fps = int(tl_cfg.get("fps") or _FIXED_FPS)

@@ -32,8 +32,8 @@ log = logging.getLogger(__name__)
 
 TTL_S = 60.0
 
-# key -> (expires_at_monotonic, payload)
-_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+# (storage_root, camera_id, profile_name) -> (expires_at_monotonic, payload)
+_cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
 _lock = threading.Lock()
 
 
@@ -87,10 +87,37 @@ def _empty(window_key: str | None = None) -> dict:
         "newest_frame": None,
         "captured": 0,
         "rejected": 0,
+        "window_count": 0,
+        "pending_windows": 0,
+        "current_frame_count": 0,
+        "current_bytes": 0,
     }
 
 
+def _merge_window(out: dict, scan: dict) -> None:
+    """Fold one window's scan into the running profile total."""
+    out["frame_count"] += scan["frame_count"]
+    out["bytes_on_disk"] += scan["bytes_on_disk"]
+    for field, pick in (("oldest_frame", min), ("newest_frame", max)):
+        have, new = out[field], scan[field]
+        out[field] = pick(have, new) if have and new else (have or new)
+
+
 def _compute(storage_root: Path, camera_id: str, profile_name: str) -> dict:
+    """Every window this profile still holds on disk, not just the newest.
+
+    Reporting only ``max(windows, key=mtime)`` under-reported by ~88 %
+    in the one situation the number exists for: a closed window waiting
+    for ``_finalize_orphaned_windows`` to encode it, or an orphan left
+    behind by a crashed encode, is invisible while it is exactly the
+    disk the operator has to account for. 900 un-encoded frames plus
+    120 current frames reported as 120.
+
+    ``window_key`` still names the newest window — the status panel
+    labels the *current* period with it — and the current window's
+    figures stay available separately so "collecting now" and "still
+    on disk" can be told apart.
+    """
     profile_dir = Path(storage_root) / "timelapse_frames" / camera_id / profile_name
     if not profile_dir.is_dir():
         return _empty()
@@ -102,9 +129,18 @@ def _compute(storage_root: Path, camera_id: str, profile_name: str) -> dict:
     # caller has to know how a profile names its windows.
     current = max(windows, key=lambda d: d.stat().st_mtime)
     out = _empty(current.name)
-    out.update(_scan_window(current))
+    out["window_count"] = len(windows)
+    out["pending_windows"] = len(windows) - 1
+    for window_dir in windows:
+        scan = _scan_window(window_dir)
+        _merge_window(out, scan)
+        if window_dir == current:
+            out["current_frame_count"] = scan["frame_count"]
+            out["current_bytes"] = scan["bytes_on_disk"]
     # The capture loop already writes captured / invalid counters next to
     # the frames on every interval — read them instead of recomputing.
+    # They describe the window being captured into, so they stay scoped
+    # to `current` even though the byte totals no longer are.
     from .frame_helpers import read_capture_stats
 
     stats = read_capture_stats(current) or {}
@@ -114,32 +150,42 @@ def _compute(storage_root: Path, camera_id: str, profile_name: str) -> dict:
 
 
 def profile_usage(storage_root: Path, camera_id: str, profile_name: str) -> dict:
-    """Disk facts for a profile's current window. Cached for ``TTL_S``."""
-    key = (camera_id, profile_name)
-    now = _now()
+    """Disk facts for every window this profile holds. Cached ``TTL_S``.
+
+    ``storage_root`` is part of the cache key: the tests and the
+    settings-restore path both point the same camera at a different
+    tree, and a root-blind key served one tree's numbers for the other.
+
+    ``_lock`` is held across the recompute, not dropped around it. On a
+    cold entry every concurrent poller used to run its own scandir over
+    the same ~900 files; now the first one scans and the rest re-check
+    the cache and take the fresh value.
+    """
+    key = (str(storage_root), camera_id, profile_name)
     with _lock:
         hit = _cache.get(key)
-        if hit and hit[0] > now:
+        if hit and hit[0] > _now():
             return dict(hit[1])
-    try:
-        payload = _compute(Path(storage_root), camera_id, profile_name)
-    except Exception as e:
-        log.debug("[timelapse] usage scan failed for %s/%s: %s", camera_id, profile_name, e)
-        payload = _empty()
-    with _lock:
-        _cache[key] = (now + TTL_S, payload)
-    return dict(payload)
+        try:
+            payload = _compute(Path(storage_root), camera_id, profile_name)
+        except Exception as e:
+            log.debug("[timelapse] usage scan failed for %s/%s: %s", camera_id, profile_name, e)
+            payload = _empty()
+        _cache[key] = (_now() + TTL_S, payload)
+        return dict(payload)
 
 
 def invalidate(camera_id: str, profile_name: str | None = None) -> None:
     """Drop cached entries. Called right after a window is encoded and
     its frame directory removed, so the panel doesn't keep reporting
-    frames that no longer exist."""
+    frames that no longer exist. Matches across every storage root —
+    the caller knows its camera, not which tree the entry was keyed to."""
     with _lock:
-        if profile_name is not None:
-            _cache.pop((camera_id, profile_name), None)
-            return
-        for key in [k for k in _cache if k[0] == camera_id]:
+        for key in [
+            k
+            for k in _cache
+            if k[1] == camera_id and (profile_name is None or k[2] == profile_name)
+        ]:
             _cache.pop(key, None)
 
 

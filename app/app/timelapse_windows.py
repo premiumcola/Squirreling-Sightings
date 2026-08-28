@@ -33,6 +33,12 @@ from datetime import datetime, timedelta
 MIN_INTERVAL_S = 8.0
 FIXED_FPS = 15
 
+# Every timelapse profile the UI can enable, in UI order. Public because
+# routes/media.py and camera_runtime both need it and reaching across a
+# package boundary for ``camera_runtime._consts._PROFILES`` made a
+# private name part of two other modules' import surface.
+TIMELAPSE_PROFILES = ("daily", "weekly", "monthly", "quarterly", "yearly", "custom")
+
 # Profiles whose window spans a fixed calendar unit. ``custom`` is
 # absent on purpose: its window is a rolling ``period_seconds`` measured
 # from whenever the loop started, so only the loop knows its key.
@@ -98,3 +104,48 @@ def next_window_start(profile_name: str, when: datetime | None = None) -> dateti
 def expected_frames(period_s: int, interval_s: float) -> int:
     """How many frames a full window should hold at this cadence."""
     return max(1, int(int(period_s) / max(MIN_INTERVAL_S, float(interval_s))))
+
+
+def window_covers_day(profile_name: str, key: str, day: str) -> bool:
+    """Can the window directory named ``key`` hold frames from ``day``?
+
+    The on-demand build endpoints ask "which directories might hold
+    2026-08-28?" and used to answer with ``key.startswith(day)``. That
+    is only ever true for ``daily`` (key == the day) and ``custom``
+    (key == ``<day>_<HHMMSS>``): ``2026-W35``, ``2026-08``, ``2026-Q3``
+    and ``2026`` never start with a full ISO date, so
+    /api/camera/<id>/timelapse answered ``no_frames`` for exactly the
+    four profiles whose windows the calendar-key change had just made
+    real.
+
+    Recomputing the profile's own key for ``day`` is the check that
+    holds for all six: a window covers the day iff the day maps back to
+    that window. ``custom`` has no clock-derived key, so it keeps the
+    prefix test — its key literally starts with the day it opened on.
+    An unknown directory name falls back to the prefix test too.
+    """
+    if not key or not day:
+        return False
+    try:
+        when = datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        return False
+    expected = window_key(profile_name, when)
+    if expected is None:
+        return key.startswith(day)
+    return key == expected
+
+
+def day_bounds(day: str) -> tuple[float, float] | None:
+    """``(start_ts, end_ts)`` POSIX bounds of ``day``, or ``None``.
+
+    A weekly / monthly / yearly window holds every day of its period in
+    ONE directory whose frame names are ``HHMMSS_ff.jpg`` — the day is
+    not recoverable from the filename, only from the mtime. Callers that
+    want "the frames of this one day" intersect with these bounds.
+    """
+    try:
+        start = datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        return None
+    return start.timestamp(), (start + timedelta(days=1)).timestamp()

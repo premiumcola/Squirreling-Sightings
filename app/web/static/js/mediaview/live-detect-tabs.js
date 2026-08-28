@@ -5,7 +5,12 @@
 import { esc } from '../core/dom.js';
 import { S } from './live-detect-state.js';
 import { getActiveTab, panelEl, onTabChange } from './live-detect-skeleton.js';
-import { renderDebugPanel, startSnapshotPrefetch, stopSnapshotPrefetch } from './live-detect-debug/index.js';
+import {
+  renderDebugPanel,
+  startSnapshotPrefetch,
+  stopSnapshotPrefetch,
+  syncCompactForDebugTab,
+} from './live-detect-debug/index.js';
 import { _renderTraceTab } from './live-detect-panels.js';
 
 export function _renderDebugTab(data) {
@@ -34,6 +39,10 @@ if (typeof onTabChange === 'function') {
     } else {
       stopSnapshotPrefetch();
     }
+    // SIMU-07 · compact mode (video + swimlane folded away) is a Debug-tab
+    // affordance: re-applied from the remembered session choice on the way
+    // in, released on the way out so the picture returns by itself.
+    syncCompactForDebugTab(id === 'debug');
     // Q2-3 · repaint the Trace tab on switch-in so it shows the
     // buffered ticks immediately rather than waiting for the next tick.
     if (id === 'trace') _renderTraceTab();

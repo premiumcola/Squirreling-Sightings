@@ -1,8 +1,10 @@
-import { _renderCopyBar, _wireCopyBar } from './_copy-bar.js';
+import { _wireCopyBar, currentFindings, setLiveCtx } from './_copy-bar.js';
+import { _renderVerdictBar, _wireVerdictBar, _refreshVerdict } from './_verdict.js';
 import { _renderCluster1, _renderCluster1Evidence, _wireCluster1 } from './_clusters-1.js';
 import { _renderCluster2, _renderCluster2Evidence, _wireCluster2 } from './_clusters-2.js';
 import { _renderCluster3, _wireCluster3, _renderCluster4, _renderCluster5 } from './_clusters-345.js';
 export { startSnapshotPrefetch, stopSnapshotPrefetch } from './_copy-bar.js';
+export { syncCompactForDebugTab, applyCompact, isCompact } from './_verdict.js';
 // ─── mediaview/live-detect-debug.js ───────────────────────────────────────
 // SIMU-05 · Debug tab content renderer.
 //
@@ -104,13 +106,17 @@ export function renderDebugPanel(host, ctx = {}) {
   const cam = (state.cameras || []).find((c) => c.id === camId) || {};
   const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : [];
   const fp = `${camId}|${filterArr.join(',')}`;
+  // SIMU-07 · publish the current tick context so the clipboard write
+  // reports live values (hold / next-tick) instead of whatever was on
+  // screen when the panel skeleton was last rebuilt.
+  setLiveCtx(ctx);
   if (host.dataset.mvLdDebugFp === fp) {
     _refreshDynamic(host, ctx, cam);
     return;
   }
   host.innerHTML =
     '<div class="mv-ld-debug">' +
-    _renderCopyBar() +
+    _renderVerdictBar(currentFindings()) +
     _renderLiveStatusHeader(ctx) +
     _renderCluster1(ctx, cam) +
     _renderCluster2(ctx, cam) +
@@ -123,6 +129,7 @@ export function renderDebugPanel(host, ctx = {}) {
   _wireCluster2(host, cam, ctx);
   _wireCluster3(host, cam, ctx);
   _wireCopyBar(host, ctx);
+  _wireVerdictBar(host);
   _applyClusterCollapse(host);
 }
 
@@ -130,6 +137,10 @@ export function renderDebugPanel(host, ctx = {}) {
 // destroying the structural skeleton — slider drag state survives a
 // tick refresh because the slider DOM persists.
 function _refreshDynamic(host, ctx, cam) {
+  // The verdict is the one thing on screen the user actually reads, so
+  // it follows the 5-s snapshot prefetch. Rows only — replacing the head
+  // would un-wire the copy + compact buttons sitting above them.
+  _refreshVerdict(host, currentFindings());
   const headerHost = host.querySelector('.mv-ld-debug-header');
   if (headerHost) {
     headerHost.outerHTML = _renderLiveStatusHeader(ctx);

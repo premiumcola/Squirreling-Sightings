@@ -89,9 +89,18 @@ def _blob_containment(det_box, blob_box):
     moved accounted for by this box? For the arm-in-person case it is 1.0.
 
     Containment is >= IoU for every pair of boxes (the union in the
-    denominator is never smaller than the blob alone), so this change can
-    only ever make the gate MORE willing to say "explained" — i.e. it can
-    only reduce how often the rescue fires, never increase it.
+    denominator is never smaller than the blob alone). That is true, and
+    an earlier version of this comment drew a false conclusion from it:
+    that the gate could therefore only ever fire LESS often. It cannot,
+    because the threshold moved too — IoU >= 0.30 became containment
+    >= 0.50, so the two gates are not comparable term by term.
+
+    A worked counterexample, both boxes 50 px^2 with a 24 px^2 overlap:
+    IoU = 24/76 = 0.32 cleared the old bar, containment = 24/50 = 0.48
+    misses the new one. There the rescue now fires where it previously
+    did not. The band is narrow, but it is not empty, and the cost of
+    the change is bounded by the cooldown below rather than by this
+    inequality.
 
     The honest degenerate case: a detection box covering most of the frame
     contains every blob and would suppress the rescue wholesale. That box

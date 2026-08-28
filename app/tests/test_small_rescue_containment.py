@@ -81,12 +81,13 @@ def test_the_arm_case_the_old_iou_gate_got_backwards():
 
 
 def test_containment_never_undercuts_iou():
-    """The property that makes this change safe to ship.
+    """Containment >= IoU for any pair of boxes.
 
-    Containment divides by the blob alone, IoU by the union, and the union
-    is never smaller — so swapping the measure can only make the gate more
-    willing to say "explained", i.e. can only REDUCE how often the rescue
-    fires. The fix cannot cost CPU.
+    True, and worth pinning — but it does NOT imply the gate fires less
+    often, which an earlier version of this docstring claimed. That
+    conclusion only holds at an unchanged threshold, and the threshold
+    moved with the measure (IoU >= 0.30 became containment >= 0.50). See
+    the counterexample below.
     """
     from app.bbox_utils import iou
     from app.camera_runtime._main_loop import _blob_containment
@@ -118,3 +119,37 @@ def test_a_weak_box_covering_the_blob_still_does_not_confirm_it():
     weak = [_Det("cat", 0.30, (1000, 400, 1600, 1100))]
 
     assert _confirmable_on_blob(weak, _Blob(), _spawn) is False
+
+
+def test_the_new_gate_can_fire_where_the_old_one_did_not():
+    """The counterexample to "this change cannot cost CPU".
+
+    That claim was shipped in a code comment and enshrined by the
+    docstring above. It rests on containment >= IoU, which is true — but
+    the threshold moved with the measure, so the two gates are not
+    comparable term by term. Two 50 px^2 boxes overlapping by 24 px^2:
+    IoU = 24/76 = 0.32 cleared the old bar of 0.30, containment =
+    24/50 = 0.48 misses the new bar of 0.50. The rescue fires here now
+    and did not before.
+
+    The band is narrow. It is not empty, and the cost of the change is
+    bounded by the per-camera cooldown, not by an inequality that does
+    not say what it was read to say.
+    """
+    from app.bbox_utils import iou
+    from app.camera_runtime._main_loop import (
+        _RESCUE_BLOB_CONTAINMENT,
+        _blob_containment,
+    )
+
+    # Two equal-area boxes (50 px^2) offset so the overlap is 6 x 4 = 24.
+    det = (0, 0, 10, 5)
+    blob = (4, 1, 14, 6)
+    inter_cont = _blob_containment(det, blob)
+    inter_iou = iou(det, blob)
+
+    assert abs(inter_cont - 0.48) < 0.01, f"containment was {inter_cont}"
+    assert abs(inter_iou - 0.32) < 0.02, f"iou was {inter_iou}"
+    # Old gate said "explained" (no rescue); the new one does not.
+    assert inter_iou >= 0.30
+    assert inter_cont < _RESCUE_BLOB_CONTAINMENT

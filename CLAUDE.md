@@ -357,19 +357,41 @@ docker logs squirreling-sightings --tail 50
 `docker compose up --build` gibt es hier nicht — auf dem Server wird nie
 gebaut. Ein `build:`-Key im Compose-File ist ein Fehler.
 
-**Coral:** der Stick steckt am Host (`1a6e:089a`). Das Standard-Image
-läuft auf Python 3.11, wofür `pycoral` kein Wheel liefert — Tier 1 der
-Detektoren schlägt dort also immer fehl. Die TPU wird stattdessen über
-**Tier 1b** erreicht: `detectors/_edgetpu.py` lädt `libedgetpu.so.1` als
-tflite-Delegate, ganz ohne pycoral. Voraussetzungen: `libedgetpu1-std`
-im Image (ist drin), ein `*_edgetpu.tflite`-Modell in `models/` und der
-USB-Passthrough aus der compose (`/dev/bus/usb`).
+**Coral:** der Stick steckt am Host — `1a6e:089a` kalt, nach dem ersten
+Firmware-Upload meldet er sich als `18d1:9302` neu an. Beide IDs sind
+dasselbe Gerät; `lifecycle.classify_coral_usb()` kennt beide Zustände.
 
-Erkennbar im Log: `[det] Coral TPU aktiv (EdgeTPU-Delegate): …`. Wenn
-der Delegate nicht greift, steht der Grund als WARNING davor — nie
-stillschweigend auf CPU zurückfallen lassen. `docker/Dockerfile.coral`
-(Python 3.9, echtes pycoral) ist nur noch der Rückfallweg, falls der
-Delegate scheitert.
+Das produktive Image ist **`ghcr.io/…:coral`** (`docker/Dockerfile.coral`,
+Python 3.9 · tflite-runtime 2.5.0.post1 · echtes pycoral). Das ist kein
+Rückfallweg, sondern der einzige Weg, der rechnet.
+
+Der Grund, damit er nicht ein drittes Mal gesucht wird: das
+Python-3.11-Standard-Image kann die TPU **nicht** benutzen. Tier 1
+(pycoral) fällt aus, weil es kein cp311-Wheel gibt. Tier 1b
+(`detectors/_edgetpu.py`, Delegate ohne pycoral) lädt zwar sauber und
+öffnet das Gerät — scheitert aber beim ersten `invoke()` mit
+`Node number N (EdgeTpuDelegateForCustomOp) failed to invoke`. Ursache
+ist eine ABI-Drift: für Python 3.11 gibt es ausschließlich
+`tflite-runtime==2.14.0`, und libedgetpu 16.0 ist gegen TFLite ~2.5–2.13
+gebaut. Kein Pin löst das — 2.13 hat schlicht kein cp311-Wheel
+(am 2026-08-28 auf dem Host verifiziert). Die Node-Nummer wechselt je
+Modell (4 / 8 / 1 / 1), was den Fehler wie ein Modellproblem aussehen
+lässt; er ist keins.
+
+Auf dem `:coral`-Image laufen alle vier Modelle, gemessen 2026-08-28:
+
+| Modell | Zeit |
+|---|---|
+| `mobilenet_v2_1.0_224_quant_edgetpu` | 4.1 ms |
+| `inat_bird_quant_edgetpu` | 4.2 ms |
+| `coco_ssd_mobilenet_v2_…_edgetpu` | 10.5 ms |
+| `efficientdet_lite0_edgetpu` | 40.4 ms |
+
+Diagnose bei Verdacht — `app/scripts/tpu_probe.py` im Container, **mit
+gestoppter Live-Instanz**, da die TPU genau einen Besitzer hat.
+Erkennbar im Log: `[det] Coral TPU aktiv …`. Greift die TPU nicht, steht
+der Grund als WARNING davor — nie stillschweigend auf CPU zurückfallen
+lassen.
 
 ## Local Development (without Docker)
 

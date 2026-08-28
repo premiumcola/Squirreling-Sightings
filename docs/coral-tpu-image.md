@@ -177,10 +177,15 @@ The old image is still in the local store, so if ghcr is unreachable
 
 ## 4 · What can still go wrong
 
-This image has never been built. The pins were verified against the
-Coral package index by hand — wheel names, cp39 availability, and the
-dependency metadata all check out — but only a real build on the box
-settles the rest.
+**Built and verified on the box, 2026-08-28.** `tpu_probe.py` inside
+`ghcr.io/premiumcola/squirreling-sightings:coral` reported Python 3.9.25,
+tflite-runtime 2.5.0.post1, pycoral present, and all four models running
+on the TPU (4.1 / 4.2 / 10.5 / 40.4 ms). The section below is kept as the
+failure catalogue for future rebuilds, not as a list of open risks.
+
+The same probe on the Python-3.11 image fails every model at `invoke`,
+which is what this image exists to fix — see CLAUDE.md · Deployment ·
+Coral for the ABI reasoning.
 
 **At build time (CI turns red):**
 

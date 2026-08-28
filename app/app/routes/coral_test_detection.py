@@ -795,8 +795,48 @@ def api_test_detection(cam_id: str):
                 trace.append(f"[cooldown] {top_label}@{cam_id}: never pushed → would PASS")
     except Exception as e:
         trace.append(f"[cooldown] lookup failed: {e}")
+    # The per-label PUSH threshold — a second, independent bar that has
+    # nothing to do with the detection thresholds above. It is the gate
+    # that actually silences most alerts (shipped defaults: person 0.85,
+    # squirrel 0.80, cat+bird push:false, against a detection floor of
+    # 0.45), and the simulator used to omit it entirely: it reported
+    # "would route through the push pipeline" for a detection the push
+    # pipeline then dropped without a word. A diagnostic that cannot see
+    # the gate that kills the thing it is diagnosing is worse than none.
+    push_blocked = False
+    try:
+        eff_cfg = app_state.get_effective_config()
+        push_cfg = ((eff_cfg.get("telegram") or {}).get("push") or {}).get("labels") or {}
+        for d in pass_dets:
+            lbl = d["label"]
+            lbl_cfg = push_cfg.get(lbl) or {}
+            if not lbl_cfg.get("push", False):
+                push_blocked = True
+                trace.append(f"[push_flag] {lbl}: push=false → would SKIP (kein Alarm)")
+                continue
+            bar = float(lbl_cfg.get("threshold", 0.0) or 0.0)
+            score = float(d.get("score", 0.0))
+            if score < bar:
+                push_blocked = True
+                trace.append(
+                    f"[push_threshold] {lbl}: {int(round(score * 100))}% < "
+                    f"{int(round(bar * 100))}% → would SKIP (erkannt, aber nicht gemeldet)"
+                )
+            else:
+                trace.append(
+                    f"[push_threshold] {lbl}: {int(round(score * 100))}% ≥ "
+                    f"{int(round(bar * 100))}% → would PASS"
+                )
+    except Exception as e:
+        trace.append(f"[push_threshold] lookup failed: {e}")
+
     if not pass_dets:
         trace.append("[final] no push (no detection passed)")
+    elif push_blocked:
+        trace.append(
+            "[final] KEIN Alarm — die Erkennung überlebt alle Tore oben, scheitert "
+            "aber an der Push-Schwelle. Clip wird aufgezeichnet, Nachricht nicht gesendet."
+        )
     else:
         trace.append(
             f"[final] {len(pass_dets)} detection(s) would route through the push pipeline "

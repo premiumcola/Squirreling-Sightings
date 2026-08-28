@@ -588,6 +588,14 @@ body.sidebar-locked {
     bottom: calc(var(--m-dock-bottom-gap, 8px) + var(--m-dock-h, 70px) + 8px);
     z-index: 40;
   }
+  /* …and because it is fixed, it occludes the end of the list. The list
+     reserves its own height (8 + 44 + 8 padding + 12 breathing room)
+     ON TOP of the dock clearance, so the last rows can be scrolled out
+     from behind it. The class is toggled by _list.js only while
+     Auswahl-Modus is on, so nothing is reserved the rest of the time. */
+  #stormsBody.is-selecting .st-rows {
+    padding-bottom: calc(var(--m-dock-bottom-gap, 8px) + var(--m-dock-h, 70px) + 80px);
+  }
 
   /* Shorter plot so the Kennzahlen below stay in view on a 375 px
      screen without a second scroll. */

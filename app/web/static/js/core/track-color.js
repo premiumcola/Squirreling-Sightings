@@ -57,7 +57,11 @@ export function trackColor(track) {
 // `track_num` and cycled. Deliberately excludes green (#22c55e) so a track
 // colour can never be confused with the green LIVE marker. Distinct from
 // trackColor() above, which serves recorded clips (sidecar-stamped / hashed).
-const _LIVE_PALETTE = [
+//
+// Exported because it is the app's one "N distinguishable series" palette:
+// the Gewitter-Vergleich's four compare slots draw from it rather than
+// declaring hexes of their own, so a palette change lands in one place.
+export const LIVE_PALETTE = [
   '#a78bfa',
   '#f6b73c',
   '#2dd4bf',
@@ -72,12 +76,12 @@ const _LIVE_PALETTE = [
 export const LIVE_MOTION_COLOR = '#cbd5e1';
 
 /**
- * Stable colour for a live track number, cycled through _LIVE_PALETTE. The
+ * Stable colour for a live track number, cycled through LIVE_PALETTE. The
  * same track_num always maps to the same colour for the track's lifetime.
  * A missing / non-positive number (motion-only, unassociated) → neutral grey.
  */
 export function liveTrackColor(trackNum) {
   const n = Number(trackNum);
   if (!Number.isFinite(n) || n <= 0) return LIVE_MOTION_COLOR;
-  return _LIVE_PALETTE[(n - 1) % _LIVE_PALETTE.length];
+  return LIVE_PALETTE[(n - 1) % LIVE_PALETTE.length];
 }

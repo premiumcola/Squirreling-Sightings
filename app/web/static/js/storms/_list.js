@@ -33,6 +33,7 @@ import {
   fmtNumberDe,
   fmtTime,
   leadPeak,
+  thresholdFor,
 } from './_helpers.js';
 
 const FILM_ICON =
@@ -172,9 +173,17 @@ function _rowHtml(ep, rank) {
   const meta = classMeta(cls);
   const pct = Math.max(0, Math.min(1, Number(ep.intensity) || 0)) * 100;
   const lead = leadPeak(ep);
-  // The numeric intensity is NOT printed here — it appears once, in the
-  // detail header. The bar carries it visually.
-  const bar = `<span class="st-bar" aria-hidden="true"><i style="width:${pct.toFixed(0)}%;background:${meta.color}"></i></span>`;
+  // One channel, one meaning. The bar is INTENSITY only, in the section
+  // accent: four of the five class colours are near-identical
+  // desaturated blue-greys (they are the app's weather palette, where
+  // they always sit beside their own icon and label), so a 4 px bar
+  // tinted with them carried no information at all — and one of them IS
+  // the section accent. The class moves to the glyph, which has the room
+  // to be told apart by SHAPE and keeps its own colour there.
+  const bar = `<span class="st-bar" aria-hidden="true"><i style="width:${pct.toFixed(0)}%"></i></span>`;
+  const icon = meta.icon
+    ? `<span class="st-row-ic" style="color:${meta.color}" role="img" aria-label="${esc(meta.de)}" title="${esc(meta.de)}">${meta.icon}</span>`
+    : '';
   const leadTxt = lead
     ? `<span class="st-lead">${esc(fmtMetric(lead.key, lead.value))}</span>`
     : '';
@@ -189,7 +198,7 @@ function _rowHtml(ep, rank) {
   return `<div class="st-row" data-id="${esc(ep.id)}">
       ${pick}
       <a class="st-row-body" href="#/gewitter/${encodeURIComponent(ep.id)}">
-        <span class="st-row-title">${_rankChip(rank, activeYear())}<span class="st-row-name">${esc(episodeTitle(ep))}</span></span>
+        <span class="st-row-title">${_rankChip(rank, activeYear())}${icon}<span class="st-row-name">${esc(episodeTitle(ep))}</span></span>
         <span class="st-row-meta">${esc(fmtDayMonth(ep.started_at))} · ${esc(fmtTime(ep.started_at))} · ${esc(fmtDuration(ep.duration_min))}</span>
         <span class="st-row-foot">${bar}${leadTxt}${foot}</span>
       </a>
@@ -212,14 +221,19 @@ function _pickHtml(ep) {
 // for reads as ready; one that says only "keine Daten" reads as broken.
 function _emptyHtml() {
   const thr = _wsStatsState.data?.thresholds || {};
+  // `thresholdFor`, not `Number.isFinite`: the payload carries `null`
+  // for a field with no configured event, and `Number(null)` is a
+  // finite 0. Printing "Schnee 0,00 cm/h" would disprove the exact
+  // thing this line exists to prove.
   const bits = [
     ['lightning_potential', 'Blitz'],
     ['precipitation', 'Regen'],
     ['snowfall', 'Schnee'],
   ]
-    .map(([k, lbl]) =>
-      Number.isFinite(Number(thr[k])) ? `${lbl} ${fmtMetric(k, Number(thr[k]))}` : '',
-    )
+    .map(([k, lbl]) => {
+      const t = thresholdFor(thr, k);
+      return Number.isFinite(t) ? `${lbl} ${fmtMetric(k, t)}` : '';
+    })
     .filter(Boolean);
   const line = bits.length
     ? `<div class="st-empty-thr">Aktuelle Schwellen: ${esc(bits.join(' · '))}</div>`
@@ -247,6 +261,10 @@ function _selectBarHtml() {
 
 export function renderList(host, onNavigate) {
   const all = episodesOfYear();
+  // Auswahl-Modus puts a FIXED action bar over the bottom of the list on
+  // phones; the class is what lets the stylesheet reserve room for it,
+  // so the last rows can still be scrolled clear of it.
+  host.classList.toggle('is-selecting', !!stormsState.selecting);
   if (!all.length) {
     host.innerHTML = _emptyHtml();
     return;

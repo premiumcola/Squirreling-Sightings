@@ -203,6 +203,42 @@ def test_there_is_no_alignment_toggle():
         ), f"{name} introduces an alignment toggle — §3.2 is decided"
 
 
+def test_no_shipped_comment_cites_a_spec_section():
+    """Section numbers point at a document that is not in this repo, so
+    a reader has no way to follow them — `_state.js` carried "never
+    paginated (see §9.3)" and §9.3 exists nowhere. The reason belongs in
+    the comment, not behind a citation."""
+    sources = dict(_storm_sources())
+    sources.update({p.name: _read(p) for p in sorted(_CHART.glob("*.js"))})
+    sources["metric-direction.js"] = _read(_JS / "weather" / "metric-direction.js")
+    for name, src in sources.items():
+        assert "§" not in src, f"{name} cites a spec section that no reader can look up"
+
+
+def test_metric_direction_is_asked_never_re_declared():
+    """The direction was known in three places and consulted in some:
+    the chart's peak dot planted itself on the clearest moment of a fog
+    and the table bolded the best visibility as the worst. One helper,
+    every consumer — two sites agreeing by convention drift again."""
+    shared = _read(_JS / "weather" / "metric-direction.js")
+    assert "'visibility'" in shared, "the shared helper must own the inverted set"
+    consumers = {
+        "_multi.js": _read(_CHART / "_multi.js"),
+        "_compare_table.js": _read(_STORMS / "_compare_table.js"),
+        "_helpers.js": _read(_STORMS / "_helpers.js"),
+    }
+    for name, src in consumers.items():
+        assert "metric-direction.js" in src, f"{name} must ask the shared helper"
+    # Nobody else may hard-code the direction. The metric KEY may of
+    # course appear (STORM_METRICS lists it); what may not is a second
+    # copy of "which way is worse".
+    others = dict(_storm_sources())
+    others.update({p.name: _read(p) for p in sorted(_CHART.glob("*.js"))})
+    for name, src in others.items():
+        for smell in ("INVERTED", "new Set(['visibility'", "=== 'visibility'"):
+            assert smell not in src, f"{name} re-declares the metric direction ({smell})"
+
+
 def test_compare_shares_one_absolute_y_scale():
     """Per-line normalisation would draw a 12 mm/h cloudburst and a
     3 mm/h shower as identical curves — the opposite of comparing."""
@@ -220,16 +256,19 @@ def test_compare_shares_one_absolute_y_scale():
 def test_compare_caps_at_four_and_says_so():
     state = _read(_STORMS / "_state.js")
     assert "STORM_MAX_COMPARE = 4" in state
-    assert (
-        len(
-            re.findall(
-                r"#[0-9a-fA-F]{6}",
-                _read(_STORMS / "_state.js").split("STORM_SLOT_COLORS")[1].split("]")[0],
-            )
-        )
-        == 4
-    ), "the slot palette must hold exactly 4 colours"
     assert "Maximal 4 Gewitter vergleichen" in _read(_STORMS / "_list.js")
+
+
+def test_slot_colours_are_imported_not_redeclared():
+    """The four compare-slot colours are the app's existing
+    "N distinguishable series" palette (core/track-color.js). A hex
+    literal here forks the palette; that the four are four, distinct and
+    from that palette is asserted behaviourally in
+    test_storms_frontend_logic.py."""
+    src = _read(_STORMS / "_state.js")
+    block = src[src.index("STORM_SLOT_COLORS") :].split("\n\n")[0]
+    assert not re.search(r"#[0-9a-fA-F]{6}", block), "a slot colour is hardcoded"
+    assert "LIVE_PALETTE" in src
 
 
 def test_slot_assignment_is_by_slot_not_by_pick_order():

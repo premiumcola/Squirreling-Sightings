@@ -18,8 +18,9 @@ import { byId } from '../core/dom.js';
 import { stormsState, STORM_MAX_COMPARE, slotAssign, slotsClear } from './_state.js';
 import { fetchEpisodes, fetchEpisode } from './_api.js';
 import { renderList } from './_list.js';
-import { renderDetail } from './_detail.js';
+import { renderDetail, remountDetailChart } from './_detail.js';
 import { renderCompare } from './_compare.js';
+import { renderDeadEnd } from './_helpers.js';
 
 const BODY_ID = 'stormsBody';
 
@@ -65,12 +66,13 @@ async function _showList(host) {
 async function _showDetail(host, id) {
   stormsState.view = 'detail';
   stormsState.detailId = id;
+  host.classList.remove('is-selecting');
   await _ensureLoaded();
   host.innerHTML = '<div class="ws-empty">Gewitter wird geladen …</div>';
   const rec = (await _full(id)) || _listRecord(id);
   if (stormsState.detailId !== id) return; // a newer navigation won
   if (!rec) {
-    host.innerHTML = '<div class="ws-empty">Dieses Gewitter ist nicht mehr im Archiv.</div>';
+    renderDeadEnd(host, 'Dieses Gewitter ist nicht mehr im Archiv.', _navigate);
     return;
   }
   stormsState.detail = rec;
@@ -79,6 +81,7 @@ async function _showDetail(host, id) {
 
 async function _showCompare(host, ids) {
   stormsState.view = 'compare';
+  host.classList.remove('is-selecting');
   await _ensureLoaded();
   host.innerHTML = '<div class="ws-empty">Vergleich wird geladen …</div>';
   const wanted = ids.slice(0, STORM_MAX_COMPARE);
@@ -119,16 +122,31 @@ function _route() {
   _showList(host);
 }
 
-// Re-render on resize so the SVG charts keep their 1:1 viewBox mapping
-// through a rotation or a window drag. Debounced; the list state is
-// unaffected but re-rendering it is cheap and keeps one code path.
+// Re-draw on resize so the SVG charts keep their 1:1 viewBox mapping
+// through a rotation or a window drag. Debounced.
+//
+// Detail re-mounts ONLY its chart. It used to run the whole router,
+// which overwrites the host with a loading placeholder — and the detail
+// header holds two text editors that autosave on blur, so a window drag
+// with a half-typed name open removed the input without firing blur and
+// the text was gone. Compare carries no editors and re-renders whole.
+function _onResize() {
+  if (stormsState.view === 'detail') {
+    if (stormsState.detail) {
+      remountDetailChart(stormsState.detail);
+      return;
+    }
+  }
+  _route();
+}
+
 let _resizeTimer = null;
 window.addEventListener(
   'resize',
   () => {
     if (!_host() || stormsState.view === 'list') return;
     if (_resizeTimer) clearTimeout(_resizeTimer);
-    _resizeTimer = setTimeout(_route, 180);
+    _resizeTimer = setTimeout(_onResize, 180);
   },
   { passive: true },
 );

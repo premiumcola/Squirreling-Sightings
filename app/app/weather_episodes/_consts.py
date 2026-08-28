@@ -19,6 +19,18 @@ EPISODE_FILE = "weather_episodes.jsonl"
 KIND_EPISODE = "episode"
 KIND_PATCH = "patch"
 KIND_DELETE = "delete"
+# How many recordings overlap this episode's window. Written ONCE, by
+# whoever last scanned the media stores for that window — never by the
+# list route. See ``_archive._stamp_footage`` for why the count lives in
+# the ledger instead of being recomputed per request.
+KIND_FOOTAGE = "footage"
+
+# Episodes to count per sweep when the archive predates the stamped
+# count. Three, not "all": the sweep runs on the weather poll's thread
+# every 5 minutes, and a fresh deploy with a full window of storms must
+# not turn one poll into a minutes-long media walk. At this rate a
+# 60-storm archive is fully stamped inside 100 minutes.
+FOOTAGE_BACKFILL_PER_SWEEP = 3
 
 # Margin + settle defaults. Mirrored into WEATHER_DEFAULTS["episodes"]
 # (app/app/settings/_consts.py) so the values are user-configurable and
@@ -81,11 +93,19 @@ EVENT_PRIORITY: tuple[str, ...] = ("thunder", "snow", "heavy_rain", "fog")
 # Wind has no configured event threshold but is what separates a squall
 # from a downpour, so it is measured even though it cannot start an
 # episode on its own.
+#
+# `visibility` is on this list too, and it is the one field where "peak"
+# means MINIMUM: a low visibility is the alarm (FIELD_DIRECTION above,
+# and _detect_fog). _build._peaks reads the direction rather than always
+# taking a max, so the stored value is the worst reading either way.
+# This list is mirrored by STORM_METRICS in web/static/js/storms/_state.js
+# — a field missing here renders its pill permanently disabled there.
 PEAK_FIELDS: tuple[str, ...] = (
     "lightning_potential",
     "precipitation",
     "wind_gusts_10m",
     "snowfall",
+    "visibility",
 )
 
 # ── Intensity reference values — see _intensity.py for the formula ─────

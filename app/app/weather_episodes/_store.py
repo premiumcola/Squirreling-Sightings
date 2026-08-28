@@ -22,6 +22,7 @@ from ._consts import (
     EPISODE_FILE,
     KIND_DELETE,
     KIND_EPISODE,
+    KIND_FOOTAGE,
     KIND_PATCH,
     PATCHABLE_FIELDS,
     log,
@@ -41,6 +42,7 @@ def _fold(storage_root) -> dict:
     bases: dict = {}
     order: list = []
     patches: dict = {}
+    counts: dict = {}
     deleted: set = set()
     for rec in iter_jsonl(episodes_path(storage_root)):
         kind = rec.get("kind")
@@ -55,6 +57,11 @@ def _fold(storage_root) -> dict:
             fields = rec.get("fields")
             if isinstance(fields, dict):
                 patches.setdefault(rid, []).append(fields)
+        elif kind == KIND_FOOTAGE:
+            try:
+                counts[rid] = max(0, int(rec.get("count")))
+            except (TypeError, ValueError):
+                continue
         elif kind == KIND_DELETE:
             deleted.add(rid)
     out: dict = {}
@@ -67,6 +74,8 @@ def _fold(storage_root) -> dict:
             for key in PATCHABLE_FIELDS:
                 if key in fields:
                     rec[key] = fields[key]
+        if rid in counts:
+            rec["footage_count"] = counts[rid]
         out[rid] = rec
     return out
 
@@ -76,6 +85,10 @@ def _strip_samples(rec: dict) -> dict:
 
     A 30-day archive of storms carries tens of thousands of samples; a
     list endpoint that shipped them would be megabytes per request.
+
+    ``footage_count`` rides along when the fold found a stamped one. It
+    is absent — never "0" — for an episode nobody has counted yet, so
+    the row chip stays hidden instead of claiming there is no footage.
     """
     out = {k: v for k, v in rec.items() if k != "samples"}
     out["sample_count"] = rec.get("sample_count", len(rec.get("samples") or []))
@@ -83,7 +96,12 @@ def _strip_samples(rec: dict) -> dict:
 
 
 def list_episodes(storage_root, *, include_samples: bool = False) -> list:
-    """Every live episode, newest first. ISO timestamps sort lexically."""
+    """Every live episode, newest first. ISO timestamps sort lexically.
+
+    Reads the ledger and NOTHING else. The footage chip's number comes
+    from the fold (a stamped ``footage`` record), so opening the archive
+    costs one append-only file read — not a walk of the motion tree.
+    """
     records = list(_fold(storage_root).values())
     records.sort(key=lambda r: r.get("started_at") or "", reverse=True)
     if include_samples:
@@ -115,6 +133,25 @@ def append_episode(storage_root, record: dict) -> bool:
     payload["kind"] = KIND_EPISODE
     payload["archived_at"] = round(time.time(), 1)
     return append_jsonl(episodes_path(storage_root), payload)
+
+
+def append_footage_count(storage_root, episode_id: str, count: int) -> bool:
+    """Stamp how many recordings overlap this episode's window.
+
+    Written by whoever last scanned the media stores for that window —
+    the sweep for a new or unstamped episode, the footage route for one
+    the operator just opened. Re-stamping is an append like everything
+    else here; the fold takes the newest.
+    """
+    return append_jsonl(
+        episodes_path(storage_root),
+        {
+            "kind": KIND_FOOTAGE,
+            "id": episode_id,
+            "ts": round(time.time(), 1),
+            "count": max(0, int(count)),
+        },
+    )
 
 
 def patch_episode(storage_root, episode_id: str, fields: dict):

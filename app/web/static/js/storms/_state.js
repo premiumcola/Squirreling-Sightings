@@ -6,6 +6,7 @@
 // re-declared, so a palette change lands in one place.
 
 import { WEATHER_TYPES } from '../core/weather-types.js';
+import { LIVE_PALETTE } from '../core/track-color.js';
 import { WEATHER_STATS_PALETTE } from '../weather/stats.js';
 
 // New glyphs — the sprite and WEATHER_TYPES between them cover Gewitter
@@ -35,16 +36,24 @@ export const STORM_CLASSES = {
 
 export const STORM_CLASS_ORDER = Object.keys(STORM_CLASSES);
 
-// Compare slot colours, in this exact order. All four are already in the
-// app's _LIVE_PALETTE vocabulary (core/track-color.js), so no new hue
-// enters the design system. Checked against WEATHER_STATS_PALETTE and
-// the class colours: no collision — and by the one-colour-one-meaning
-// rule they never co-occur anyway.
-export const STORM_SLOT_COLORS = ['#38bdf8', '#f6b73c', '#e879f9', '#2dd4bf'];
 export const STORM_MAX_COMPARE = 4;
 
-// The five storm-relevant history fields. cloud_cover and sun_altitude
-// are excluded on purpose: diagnostics, never a storm signal.
+// Compare slot colours — the first four of the app's "N distinguishable
+// series" palette (core/track-color.js · LIVE_PALETTE), taken by
+// reference rather than copied so a palette change lands in one place.
+// By the one-colour-one-meaning rule they never co-occur with the live
+// track colours anyway: colour means "which episode" inside this view
+// and nothing else.
+export const STORM_SLOT_COLORS = LIVE_PALETTE.slice(0, STORM_MAX_COMPARE);
+
+// The five storm-relevant history fields — the mirror of PEAK_FIELDS in
+// app/app/weather_episodes/_consts.py. A field listed here but absent
+// there renders a pill that can never light up. cloud_cover and
+// sun_altitude are excluded on purpose: diagnostics, never a storm
+// signal.
+// Which DIRECTION counts as worse for each of them is deliberately NOT
+// stated here — weather/metric-direction.js owns that single fact and
+// every consumer (chart dot, table bold, severity ratio) asks it.
 export const STORM_METRICS = [
   'lightning_potential',
   'precipitation',
@@ -65,7 +74,9 @@ export const STORM_METRIC_SHORT = {
 
 export const stormsState = {
   view: 'list', // 'list' | 'detail' | 'compare'
-  episodes: [], // full list, newest first — never paginated (see §9.3)
+  // Full list, newest first. Never paginated: the year's Top-3 ranking
+  // is computed client-side and a partial page makes it wrong.
+  episodes: [],
   loaded: false,
   unavailable: false, // endpoint missing / unreachable → empty archive, not an error page
   year: null, // selected year, null = newest present

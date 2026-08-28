@@ -123,8 +123,25 @@
   color: #0d1520;
 }
 
+/* Klassen-Glyph — the class channel on a row. It lives here rather than
+   in the bar's colour because the five class colours are the app-wide
+   weather palette, four of which are near-identical blue-greys; a shape
+   tells them apart at a glance where 4 px of tint cannot. */
+.st-row-ic {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-right: 6px;
+}
+.st-row-ic svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Intensitätsbalken — the numeric value is not printed on the row; it
-   appears once, in the detail header. The bar carries it visually. */
+   appears once, in the detail header. The bar carries it visually, and
+   it carries NOTHING else: one fixed accent, so its length is the only
+   variable and reads as a magnitude. */
 .st-bar {
   flex: 1 1 auto;
   min-width: 40px;
@@ -138,6 +155,7 @@
   display: block;
   height: 100%;
   border-radius: 2px;
+  background: #7faec9;
 }
 .st-lead {
   font-size: 12px;
@@ -232,6 +250,18 @@
 
 /* ── Leerzustand ───────────────────────────────────────────────────── */
 
+/* Sackgassen-Zustand — a state the operator cannot act on always ships
+   the way back out with it. */
+.st-deadend {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.st-deadend-back {
+  min-height: 44px;
+}
+
 .st-empty-title {
   font-size: 14px;
   font-weight: 600;
@@ -291,11 +321,19 @@
 }
 
 /* Metrik-Pills — one row of five, never a scroll strip: at 375 px five
-   ~56 px pills plus 4 px gaps measure 296 px inside a 327 px column. */
+   ~56 px pills plus 4 px gaps measure 296 px inside a 327 px column.
+
+   Segment geometry is .ws-stats-pills' (23-weather-3.css): the DARK
+   well sits on the container and every button is transparent on top of
+   it. A dark fill on the button itself renders darker than the panel it
+   sits on — dark-on-dark, which the design rules forbid outright. */
 .st-mpills {
   display: flex;
   gap: 4px;
   margin-bottom: 8px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
 }
 .st-mpill {
   flex: 1 1 0;
@@ -304,11 +342,15 @@
   padding: 6px 4px;
   border: 0;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.18);
+  background: transparent;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  /* "Schnee" wraps to two lines in a 64 px pill otherwise. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .st-mpill.is-on {
   background: rgba(127, 174, 201, 0.22);

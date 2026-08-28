@@ -65,15 +65,26 @@ export async function loadWeatherStats() {
   }
 }
 
+// Decimal places per history field. The single source for it: the
+// Gewitter-Archiv formats the same numbers in German notation and reads
+// its banding from here, so a value cannot read as "12,4" in one panel
+// and "12,40" in the other.
+const _WS_INTEGER_FIELDS = new Set([
+  'sun_altitude',
+  'cloud_cover',
+  'wind_gusts_10m',
+  'visibility',
+  'lightning_potential',
+]);
+
+export function wsFieldDigits(key) {
+  return _WS_INTEGER_FIELDS.has(key) ? 0 : 2;
+}
+
 export function _wsFmtVal(key, v) {
   if (v == null || !isFinite(v)) return '—';
   const u = (_wsStatsState.data?.units || {})[key] || '';
-  let s;
-  if (key === 'sun_altitude') s = v.toFixed(0);
-  else if (key === 'cloud_cover' || key === 'wind_gusts_10m') s = v.toFixed(0);
-  else if (key === 'visibility') s = v.toFixed(0);
-  else if (key === 'lightning_potential') s = v.toFixed(0);
-  else s = v.toFixed(2);
+  const s = v.toFixed(wsFieldDigits(key));
   return u ? s + ' ' + u : s;
 }
 

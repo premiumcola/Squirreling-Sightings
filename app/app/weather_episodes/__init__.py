@@ -47,8 +47,10 @@ from ._consts import (
     USER_NAME_MAX,
     USER_NOTE_MAX,
 )
+from ._footage import build_footage_index, episode_footage, episode_window
 from ._intensity import axis_scores, intensity_score
 from ._store import (
+    append_footage_count,
     delete_episode,
     episodes_path,
     existing_ids,
@@ -66,9 +68,13 @@ __all__ = [
     "USER_CLASSES",
     "USER_NAME_MAX",
     "USER_NOTE_MAX",
+    "append_footage_count",
     "axis_scores",
+    "build_footage_index",
     "delete_episode",
     "detect_episodes",
+    "episode_footage",
+    "episode_window",
     "episodes_path",
     "existing_ids",
     "get_episode",

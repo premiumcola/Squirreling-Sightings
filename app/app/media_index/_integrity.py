@@ -1,24 +1,32 @@
 """Read-only integrity report — "Integrität prüfen".
 
-Deletes nothing, writes nothing, registers nothing. Every finding is a
-diagnosis with the relative path attached, so the operator decides what
-happens next. That restraint is deliberate: three of the categories
-below (``raw_reste``, ``ereignis_ohne_verweis`` on a live recording,
-judged events past retention) are files that must NOT be deleted, and a
-"alles bereinigen" button next to them would be the next data-loss
-incident in a repo that has already had one.
+Deletes nothing, writes nothing, registers nothing — and, since the
+report stopped reaching through ``store.list_events``, creates nothing
+either: that path mkdir'd ``motion_detection/<id>/`` for every id it
+inspected, so the second run reported a directory the first had
+fabricated. Every finding is a diagnosis with the relative path
+attached, so the operator decides what happens next. That restraint is
+deliberate: three of the categories below (``roh_clips``,
+``ereignis_ohne_verweis`` on a live recording, judged events past
+retention) are files that must NOT be deleted, and an "alles bereinigen"
+button next to them would be the next data-loss incident in a repo that
+has already had one.
 
-The whole pass is O(N) — the walk from :mod:`._scan` plus one JSON parse
-per manifest. No ``rglob`` inside a loop anywhere.
+The whole pass is O(N) and each tree is walked ONCE: the per-camera
+index is built a single time and handed to every section, including the
+unclaimed-directory and unswept-tree summaries that used to re-walk it.
+No ``rglob`` inside a loop anywhere. It still costs minutes on a large
+archive — see ``routes/media.py``, which runs it on a background thread
+rather than on the request worker.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
 from ._scan import MEDIA_TREES, CameraIndex, camera_dirs_on_disk, scan_camera, tree_size_bytes
+from ._timelapse import is_rolling_preview
 from ._types import (
     MEDIA_NO_REF,
     MEDIA_OK,
@@ -28,9 +36,7 @@ from ._types import (
     is_timelapse_event,
     media_state,
 )
-from ._visible import visible_media_events
-
-log = logging.getLogger(__name__)
+from ._visible import filter_visible
 
 #: Findings are a diagnosis, not a work queue — a full listing of a
 #: broken archive would be megabytes of JSON nobody reads.
@@ -111,8 +117,9 @@ def _media_findings(index: CameraIndex, manifests: dict) -> list:
     known = set(manifests)
     medien_ohne_eintrag = [
         {"pfad": rel, "detail": f"{_mb(index.size_of(rel) or 0)} MB"}
-        for event_id, rel in sorted(index.media.items())
+        for event_id, rels in sorted(index.media.items())
         if event_id not in known
+        for rel in sorted(rels)
     ]
     verwaist = [
         {"pfad": rel, "detail": "kein zugehöriges Ereignis"}
@@ -158,9 +165,15 @@ def _media_findings(index: CameraIndex, manifests: dict) -> list:
     ]
 
 
-def _video_findings(storage_root: Path, index: CameraIndex, manifests: dict) -> list:
+def _video_findings(storage_root: Path, index: CameraIndex) -> list:
     """ "Es muss ein echtes Video abliegen" — container check over every
-    mp4 in both trees, plus the timelapse badge/grid reconciliation."""
+    mp4 the walk saw.
+
+    That is every walked tree, not just the two counted ones: the probe
+    read ``index.sizes``, so restricting it meant "Keine echten Videos"
+    never looked at ``weather/`` or ``adhoc_clips/`` although the report
+    already charged the operator for their bytes.
+    """
     defekt = []
     for rel, size in sorted(index.sizes.items()):
         if not rel.endswith(".mp4"):
@@ -172,17 +185,6 @@ def _video_findings(storage_root: Path, index: CameraIndex, manifests: dict) -> 
         {"pfad": rel, "detail": "0 Byte"}
         for rel, size in sorted(index.sizes.items())
         if size == 0 and not rel.endswith(".mp4")
-    ]
-    registrierte_stems = {event_id[3:] for event_id in manifests if event_id.startswith("tl_")}
-    tl_ohne_eintrag = [
-        {"pfad": rel, "detail": f"{_mb(index.size_of(rel) or 0)} MB"}
-        for stem, rel in sorted(index.tl_media.items())
-        if stem not in registrierte_stems
-    ]
-    tl_ohne_video = [
-        {"pfad": index.tl_manifests[f"tl_{stem}"], "detail": "MP4 fehlt"}
-        for stem in sorted(registrierte_stems)
-        if stem not in index.tl_media and f"tl_{stem}" in index.tl_manifests
     ]
     return [
         _finding(
@@ -199,20 +201,6 @@ def _video_findings(storage_root: Path, index: CameraIndex, manifests: dict) -> 
             leer,
         ),
         _finding(
-            "timelapse_ohne_eintrag",
-            "Timelapse ohne Eintrag",
-            "MP4 liegt unter timelapse/, ist im Archiv aber nicht registriert — genau "
-            "diese Lücke ließ die Kachel fehlen, während der Zähler mitzählte. "
-            "„Neu scannen“ holt sie nach.",
-            tl_ohne_eintrag,
-        ),
-        _finding(
-            "timelapse_ohne_video",
-            "Timelapse-Eintrag ohne Video",
-            "Registrierte Timelapse, deren MP4 verschwunden ist.",
-            tl_ohne_video,
-        ),
-        _finding(
             "roh_clips",
             "Roh-Clips (.raw.mp4)",
             "Zwischendatei der Aufnahme. Sie bleibt absichtlich liegen, wenn die "
@@ -227,23 +215,96 @@ def _video_findings(storage_root: Path, index: CameraIndex, manifests: dict) -> 
     ]
 
 
-def build_camera_report(storage_root: Path, store, cam_id: str, name: str, aktiv: bool) -> dict:
-    """Full per-camera report. One walk, one parse per manifest."""
-    index = scan_camera(storage_root, cam_id, trees=MEDIA_TREES)
+def _timelapse_findings(index: CameraIndex, manifests: dict) -> list:
+    """The timelapse badge/grid reconciliation, plus the previews that
+    are deliberately outside it."""
+    registrierte_stems = {event_id[3:] for event_id in manifests if event_id.startswith("tl_")}
+    # Rolling previews are ephemeral by design and never registered, so
+    # they are not a gap — listing them under "Timelapse ohne Eintrag"
+    # would make the report permanently red for working behaviour.
+    tl_ohne_eintrag = [
+        {"pfad": rel, "detail": f"{_mb(index.size_of(rel) or 0)} MB"}
+        for stem, rel in sorted(index.tl_media.items())
+        if stem not in registrierte_stems and not is_rolling_preview(stem)
+    ]
+    rolling = [
+        {"pfad": rel, "detail": f"{_mb(index.size_of(rel) or 0)} MB"}
+        for stem, rel in sorted(index.tl_media.items())
+        if is_rolling_preview(stem)
+    ]
+    tl_ohne_video = [
+        {"pfad": index.tl_manifests[f"tl_{stem}"], "detail": "MP4 fehlt"}
+        for stem in sorted(registrierte_stems)
+        if stem not in index.tl_media and f"tl_{stem}" in index.tl_manifests
+    ]
+    return [
+        _finding(
+            "timelapse_ohne_eintrag",
+            "Timelapse ohne Eintrag",
+            "MP4 liegt unter timelapse/, ist im Archiv aber nicht registriert — genau "
+            "diese Lücke ließ die Kachel fehlen, während der Zähler mitzählte. "
+            "„Neu scannen“ holt sie nach.",
+            tl_ohne_eintrag,
+        ),
+        _finding(
+            "timelapse_ohne_video",
+            "Timelapse-Eintrag ohne Video",
+            "Registrierte Timelapse, deren MP4 verschwunden ist.",
+            tl_ohne_video,
+        ),
+        _finding(
+            "rolling_vorschauen",
+            "Rolling-Vorschauen",
+            "„Letzte N Minuten“ — auf Knopfdruck gebaut und bewusst nicht im Archiv "
+            "registriert. Sie liegen unter timelapse/ und werden von keiner "
+            "Bereinigung erfasst; löschen entscheidest du.",
+            rolling,
+            schwere="info",
+        ),
+    ]
+
+
+def build_camera_report(
+    storage_root: Path, cam_id: str, name: str, aktiv: bool, index: CameraIndex = None
+) -> dict:
+    """Full per-camera report. One walk, one parse per manifest.
+
+    ``index`` lets the caller hand in a walk it already did — the
+    unclaimed-directory section builds the same index, and walking
+    ``timelapse_frames`` ("potentially gigabytes of raw jpgs") three
+    times for one report was most of its cost.
+    """
+    if index is None:
+        index = scan_camera(storage_root, cam_id, trees=MEDIA_TREES)
     manifests = _load_manifests(storage_root, index)
-    visible = visible_media_events(store, index.size_of, cam_id)
+    # The manifests are already parsed; running them back through
+    # `store.list_events` parsed every one of them a second time.
+    payloads = sorted(
+        (p for p in manifests.values() if p),
+        key=lambda p: p.get("time", ""),
+        reverse=True,
+    )
+    visible = filter_visible(payloads, index.size_lookup(storage_root))
     grid_tl = sum(1 for ev in visible if is_timelapse_event(ev))
     grid_motion = len(visible) - grid_tl
-    befunde = _media_findings(index, manifests) + _video_findings(storage_root, index, manifests)
+    archiv_dateien = sum(1 for stem in index.tl_media if not is_rolling_preview(stem))
+    befunde = (
+        _media_findings(index, manifests)
+        + _video_findings(storage_root, index)
+        + _timelapse_findings(index, manifests)
+    )
     return {
         "camera_id": cam_id,
         "name": name or cam_id,
         "aktiv": aktiv,
+        # Rolling previews are never registered on purpose, so counting
+        # their files here would report permanent drift for behaviour
+        # that is working as designed. They get their own finding.
         "zaehler": {
             "ereignisse": grid_motion,
             "timelapse": grid_tl,
-            "timelapse_dateien": len(index.tl_media),
-            "abweichung": len(index.tl_media) - grid_tl,
+            "timelapse_dateien": archiv_dateien,
+            "abweichung": archiv_dateien - grid_tl,
         },
         "groessen": {
             "aufnahmen_mb": _mb(index.tree_bytes.get("motion_detection", 0)),
@@ -256,67 +317,88 @@ def build_camera_report(storage_root: Path, store, cam_id: str, name: str, aktiv
     }
 
 
-def _unclaimed_section(storage_root: Path, configured: set) -> list:
+def _unclaimed_section(unclaimed: list) -> list:
     """Per-camera directories no configured camera claims — the check
     that answers "liegt bei Werkstatt vielleicht doch etwas ab?" without
-    guessing at id shapes and without deleting anything."""
-    out = []
-    for cam_id, trees in sorted(camera_dirs_on_disk(storage_root).items()):
-        if cam_id in configured:
-            continue
-        index = scan_camera(storage_root, cam_id, trees=MEDIA_TREES)
-        total = sum(index.tree_bytes.values())
-        out.append(
-            {
-                "camera_id": cam_id,
-                "verzeichnisse": trees,
-                "groesse_mb": _mb(total),
-                "dateien": len(index.sizes),
-            }
-        )
-    return out
+    guessing at id shapes and without deleting anything.
 
-
-def _unswept_section(storage_root: Path) -> list:
-    """Trees the nightly sweep never touches, with who (if anyone) owns
-    them. Reported, never auto-deleted — see the module docstring."""
-    rows = [
-        ("timelapse", "nur manuell (Timelapse löschen)"),
-        ("weather", "nur manuell (Wetter-Sichtung löschen)"),
-        ("adhoc_clips", None),
-        ("timelapse_frames", "Encode-Schleife nach dem Rendern"),
-        (".trash", "trash.cleanup_expired (täglich)"),
+    Takes the already-built ``(cam_id, trees, index)`` triples so no tree
+    is walked a second time for the summary row."""
+    return [
+        {
+            "camera_id": cam_id,
+            "verzeichnisse": trees,
+            "groesse_mb": _mb(sum(index.tree_bytes.values())),
+            "dateien": len(index.sizes),
+        }
+        for cam_id, trees, index in unclaimed
     ]
+
+
+#: Trees outside ``motion_detection/`` and who, if anyone, sweeps them.
+_UNSWEPT_TREES = (
+    ("timelapse", "nur manuell (Timelapse löschen)"),
+    ("weather", "nur manuell (Wetter-Sichtung löschen)"),
+    ("adhoc_clips", None),
+    ("timelapse_frames", "Encode-Schleife nach dem Rendern"),
+)
+
+
+def _unswept_section(storage_root: Path, indexes: list) -> list:
+    """Trees the nightly sweep never touches, with who (if anyone) owns
+    them. Reported, never auto-deleted — see the module docstring.
+
+    Byte totals come from the per-camera walks that already happened;
+    only ``.trash`` (not a per-camera tree) needs a walk of its own."""
+    per_tree: dict = {}
+    for index in indexes:
+        for tree, size in index.tree_bytes.items():
+            per_tree[tree] = per_tree.get(tree, 0) + size
     out = []
-    for tree, swept in rows:
-        root = storage_root / tree
-        if not root.is_dir():
+    for tree, swept in _UNSWEPT_TREES:
+        if not (storage_root / tree).is_dir():
             continue
+        out.append({"pfad": tree, "groesse_mb": _mb(per_tree.get(tree, 0)), "gefegt_von": swept})
+    if (storage_root / ".trash").is_dir():
         out.append(
             {
-                "pfad": tree,
-                "groesse_mb": _mb(tree_size_bytes(storage_root, tree)),
-                "gefegt_von": swept,
+                "pfad": ".trash",
+                "groesse_mb": _mb(tree_size_bytes(storage_root, ".trash")),
+                "gefegt_von": "trash.cleanup_expired (täglich)",
             }
         )
     return out
 
 
 def build_report(storage_root: Path, store, cameras: list) -> dict:
-    """The whole ``GET /api/media/integrity`` payload."""
+    """The whole ``/api/media/integrity`` payload.
+
+    ``store`` is accepted for call-site compatibility and deliberately
+    unused: reaching through it was what made this read-only report
+    create directories.
+    """
+    del store
     configured = {c["id"] for c in cameras}
+    indexes = {c["id"]: scan_camera(storage_root, c["id"], trees=MEDIA_TREES) for c in cameras}
+    unclaimed = [
+        (cam_id, trees, scan_camera(storage_root, cam_id, trees=MEDIA_TREES))
+        for cam_id, trees in sorted(camera_dirs_on_disk(storage_root).items())
+        if cam_id not in configured
+    ]
     per_camera = [
-        build_camera_report(storage_root, store, c["id"], c.get("name") or c["id"], True)
+        build_camera_report(
+            storage_root, c["id"], c.get("name") or c["id"], True, index=indexes[c["id"]]
+        )
         for c in cameras
     ]
-    unclaimed = _unclaimed_section(storage_root, configured)
-    for row in unclaimed:
-        per_camera.append(
-            build_camera_report(storage_root, store, row["camera_id"], row["camera_id"], False)
-        )
+    per_camera.extend(
+        build_camera_report(storage_root, cam_id, cam_id, False, index=index)
+        for cam_id, _trees, index in unclaimed
+    )
+    all_indexes = list(indexes.values()) + [index for _c, _t, index in unclaimed]
     return {
         "ok": True,
         "kameras": per_camera,
-        "fremde_verzeichnisse": unclaimed,
-        "ungefegte_verzeichnisse": _unswept_section(storage_root),
+        "fremde_verzeichnisse": _unclaimed_section(unclaimed),
+        "ungefegte_verzeichnisse": _unswept_section(storage_root, all_indexes),
     }

@@ -4,12 +4,12 @@ daily sweep hard-deletes them. Users can restore individual events or
 empty the trash now via the ``/api/trash/*`` endpoints in
 ``routes/trash.py``.
 
-Mediathek scope only in this iteration — motion-event deletes route
-through ``move_to_trash`` instead of ``EventStore.delete_event``. The
-weather-sighting / timelapse delete handlers still hard-delete, and so
-does ``EventStore.cleanup_old``; their trash routing lands in a
-follow-up so this commit stays focused on the dominant deletion path
-(Mediathek).
+Motion-event deletes route through ``move_to_trash`` instead of
+``EventStore.delete_event``. The nightly retention sweep routes through
+:func:`retire_to_trash` for the same reason: it used to be a hard
+``unlink`` with no grace and no undo, which made every change to
+``storage.retention_days`` irreversible the first night it took effect.
+The weather-sighting / timelapse delete handlers still hard-delete.
 
 Layout::
 
@@ -44,8 +44,19 @@ log = logging.getLogger("trash")
 _DEFAULT_GRACE_DAYS = 7
 
 
+def trash_root_for(store_root) -> Path:
+    """``.trash`` under an explicitly given storage root.
+
+    ``EventStore`` knows its own root and must not have to reach through
+    ``app_state`` to find the trash — the retention sweep runs on the
+    store instance it was called on, including in tests where no boot
+    singleton exists.
+    """
+    return Path(store_root) / ".trash"
+
+
 def _trash_root() -> Path:
-    return Path(app_state.store.root) / ".trash"
+    return trash_root_for(app_state.store.root)
 
 
 def _grace_days() -> int:
@@ -142,6 +153,77 @@ def move_to_trash(cam_id: str, event_id: str) -> dict:
     return flags
 
 
+def _merge_meta(meta_path: Path, entry: dict) -> dict:
+    """Fold ``entry`` into an existing ``meta.json`` instead of replacing
+    it. A retention sweep can touch the same event id twice (its files
+    have independent mtimes), and the second pass must not drop the
+    restore paths the first one recorded."""
+    meta: dict = {}
+    if meta_path.exists():
+        try:
+            loaded = json.loads(meta_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                meta = loaded
+        except Exception:
+            log.debug("[storage] trash meta %s unreadable, rewriting", meta_path, exc_info=True)
+    files = list(meta.get("files") or [])
+    for rel in entry.get("files") or []:
+        if rel not in files:
+            files.append(rel)
+    meta.update(entry)
+    meta["files"] = files
+    return meta
+
+
+def retire_to_trash(store_root, cam_id: str, event_id: str, paths: list) -> int:
+    """Move retention-expired files into the trash instead of unlinking.
+
+    Same selection the sweep always made — one file at a time, by mtime —
+    but recoverable for ``trash.grace_days`` days afterwards. Each file's
+    original storage-relative path is recorded in ``meta.json`` so
+    :func:`restore` can put it back exactly where it was, which matters
+    for the sweep because it retires loose files (a ``.best.jpg`` whose
+    manifest is newer) that no ``event`` payload describes.
+
+    Returns the number of files actually moved. A file that cannot be
+    moved stays where it is — the sweep must never destroy what it
+    cannot file away.
+    """
+    root = Path(store_root)
+    target_dir = trash_root_for(root) / cam_id / event_id
+    moved: list[str] = []
+    for path in paths:
+        try:
+            rel = Path(path).relative_to(root).as_posix()
+        except ValueError:
+            log.warning(
+                "[storage] %s liegt ausserhalb von %s — nicht in den Papierkorb", path, root
+            )
+            continue
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(path), str(target_dir / Path(path).name))
+        except Exception as e:
+            log.warning("[storage] Papierkorb-Verschiebung von %s fehlgeschlagen: %s", rel, e)
+            continue
+        moved.append(rel)
+    if not moved:
+        return 0
+    meta_path = target_dir / "meta.json"
+    meta = _merge_meta(
+        meta_path,
+        {
+            "cam_id": cam_id,
+            "event_id": event_id,
+            "trashed_at": datetime.now().isoformat(timespec="seconds"),
+            "retired_by": "retention",
+            "files": moved,
+        },
+    )
+    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
+    return len(moved)
+
+
 def list_trashed() -> list[dict]:
     """All trashed events with metadata + days-until-expiry. Sorted
     newest-first so the UI shows the most-recently-deleted on top."""
@@ -181,6 +263,24 @@ def list_trashed() -> list[dict]:
     return out
 
 
+def _restore_recorded_files(ev_dir: Path, store_root: Path, rels: list) -> int:
+    """Put every file listed in ``meta['files']`` back at its recorded
+    storage-relative path. Returns how many made it back."""
+    moved = 0
+    for rel in rels:
+        src = ev_dir / Path(rel).name
+        if not src.exists():
+            continue
+        target = store_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.move(str(src), str(target))
+            moved += 1
+        except Exception as e:
+            log.warning("[storage] Wiederherstellen von %s fehlgeschlagen: %s", rel, e)
+    return moved
+
+
 def restore(cam_id: str, event_id: str) -> bool:
     """Move every file in the trash entry back under its original
     motion_detection path. The original date subdir is reconstructed
@@ -196,7 +296,9 @@ def restore(cam_id: str, event_id: str) -> bool:
         return False
     store_root = Path(app_state.store.root)
     event = meta.get("event") or {}
-    moved_back = 0
+    # Files the retention sweep retired carry their own original
+    # relpaths — they may be loose companions no `event` payload names.
+    moved_back = _restore_recorded_files(ev_dir, store_root, meta.get("files") or [])
     # Snapshot + video go back to their canonical relpaths.
     for relkey in ("snapshot_relpath", "video_relpath"):
         relpath = event.get(relkey)

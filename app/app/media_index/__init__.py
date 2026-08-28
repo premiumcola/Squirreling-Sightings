@@ -19,7 +19,11 @@ from ._scan import (
     scan_camera,
     tree_size_bytes,
 )
-from ._timelapse import register_camera_timelapses, register_timelapse_events
+from ._timelapse import (
+    is_rolling_preview,
+    register_camera_timelapses,
+    register_timelapse_events,
+)
 from ._types import (
     MIN_VIDEO_BYTES,
     STATE_LABEL_DE,
@@ -29,7 +33,13 @@ from ._types import (
     media_state,
     size_lookup_fs,
 )
-from ._visible import ALL_EVENTS, OBJECT_LABELS, camera_stats, visible_media_events
+from ._visible import (
+    ALL_EVENTS,
+    OBJECT_LABELS,
+    camera_stats,
+    filter_visible,
+    visible_media_events,
+)
 
 __all__ = [
     "ALL_EVENTS",
@@ -44,6 +54,8 @@ __all__ = [
     "build_report",
     "camera_dirs_on_disk",
     "camera_stats",
+    "filter_visible",
+    "is_rolling_preview",
     "has_real_media",
     "is_timelapse_event",
     "media_state",

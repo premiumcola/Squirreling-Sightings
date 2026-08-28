@@ -1,5 +1,10 @@
 // ─── mediathek/integrity.js ────────────────────────────────────────────────
-// "Integrität prüfen" — read-only report for GET /api/media/integrity.
+// "Integrität prüfen" — read-only report.
+//
+// POST /api/media/integrity starts a background run,
+// GET /api/media/integrity/status polls it. Not a GET that blocks:
+// the check walks every media tree of every camera, so on the live
+// archive it held a Flask worker for minutes.
 //
 // Renders INLINE inside the Mediathek-Wartung accordion rather than in a
 // modal: the report is long, scrollable and read-only, and an inline
@@ -11,7 +16,7 @@
 // that must not be removed, and a "alles bereinigen" button next to
 // them would be the next data-loss incident.
 import { byId, esc } from '../core/dom.js';
-import { j } from '../core/api.js';
+import { apiGet, apiPost } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 
 const SEVERITY_LABEL = { warn: 'Prüfen', info: 'Hinweis' };
@@ -134,14 +139,38 @@ function _render(report) {
   const box = byId('mediaIntegrityReport');
   if (!box) return;
   const cams = report.kameras || [];
-  const total = cams.reduce((n, c) => n + (c.befunde || []).length, 0);
-  const head = `<div class="mi-head">${cams.length} Kamera(s) geprüft · ${total} Befund(e) · nur Bericht, es wird nichts gelöscht</div>`;
+  // Sum `anzahl`, not the number of finding blocks: counting categories
+  // reported 50 broken videos as "1 Befund", which is the opposite of
+  // what the number is for.
+  const total = cams.reduce(
+    (n, c) => n + (c.befunde || []).reduce((m, f) => m + (Number(f.anzahl) || 0), 0),
+    0,
+  );
+  const kinds = cams.reduce((n, c) => n + (c.befunde || []).length, 0);
+  const kindPart = kinds ? ` in ${kinds} Kategorie(n)` : '';
+  const head = `<div class="mi-head">${cams.length} Kamera(s) geprüft · ${total} Befund(e)${kindPart} · nur Bericht, es wird nichts gelöscht</div>`;
   box.innerHTML =
     head +
     cams.map(_cameraBlock).join('') +
     _foreignBlock(report.fremde_verzeichnisse || []) +
     _unsweptBlock(report.ungefegte_verzeichnisse || []);
   box.hidden = false;
+}
+
+const POLL_MS = 1500;
+
+// The check walks every media tree of every camera — on the live
+// archive that is minutes, which is why the server runs it on a
+// background thread and this polls for the result instead of holding a
+// request open (and a worker hostage) until it finishes.
+async function _awaitReport() {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    const status = await apiGet('/api/media/integrity/status');
+    if (status?.error) throw new Error(status.error);
+    if (!status?.running && status?.report) return status.report;
+    if (!status?.running && !status?.report) throw new Error('Bericht nicht verfügbar');
+  }
 }
 
 byId('mediaIntegrityBtn')?.addEventListener('click', async () => {
@@ -152,16 +181,11 @@ byId('mediaIntegrityBtn')?.addEventListener('click', async () => {
   const box = byId('mediaIntegrityReport');
   if (box) {
     box.hidden = false;
-    box.innerHTML = '<div class="mi-head">Archiv wird geprüft …</div>';
+    box.innerHTML = '<div class="mi-head">Archiv wird geprüft … das kann dauern.</div>';
   }
   try {
-    const report = await j('/api/media/integrity');
-    if (!report?.ok) {
-      showToast('Integritätsprüfung: ' + (report?.error || 'Fehler'), 'error');
-      if (box) box.hidden = true;
-      return;
-    }
-    _render(report);
+    await apiPost('/api/media/integrity');
+    _render(await _awaitReport());
   } catch (e) {
     showToast('Integritätsprüfung fehlgeschlagen: ' + (e.message || e), 'error');
     if (box) box.hidden = true;

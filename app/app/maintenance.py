@@ -17,17 +17,37 @@ import time
 
 from . import app_state
 from .lifecycle import _BOOT_TS, _disk_free_gb_cached, _format_uptime
+from .storage_retention import nightly_window
+
+
+#: Fallback when neither layer carries a usable ``retention_days``.
+DEFAULT_RETENTION_DAYS = 14
+
+
+def _storage_layer(source, key):
+    """``storage.<key>`` out of one config layer, or None."""
+    if isinstance(source, dict):
+        section = source.get("storage")
+        if isinstance(section, dict) and section.get(key) is not None:
+            return section[key]
+    return None
 
 
 def _storage_setting(key: str, fallback):
     """``settings.json`` first, ``config.yaml`` second — the resolution
     order the UI implies. Read-only, so the additive-merge rule holds."""
     for source in (getattr(app_state.settings, "data", None), app_state.base_cfg):
-        if isinstance(source, dict):
-            section = source.get("storage")
-            if isinstance(section, dict) and section.get(key) is not None:
-                return section[key]
+        value = _storage_layer(source, key)
+        if value is not None:
+            return value
     return fallback
+
+
+def _days(value, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def resolve_retention_days(override=None) -> int:
@@ -38,11 +58,23 @@ def resolve_retention_days(override=None) -> int:
     screen was not the number being enforced, and moving the slider
     changed nothing except the manual button. Both callers now come
     through here.
+
+    ``override`` is honoured whenever it is given, including ``0``. The
+    old ``override or …`` swallowed an explicit zero and fell back to
+    the configured window, which hid the one value the sweep must
+    refuse outright instead of quietly reinterpreting.
     """
-    try:
-        return int(override or _storage_setting("retention_days", 14))
-    except (TypeError, ValueError):
-        return 14
+    if override is not None:
+        return _days(override, DEFAULT_RETENTION_DAYS)
+    return _days(_storage_setting("retention_days", DEFAULT_RETENTION_DAYS), DEFAULT_RETENTION_DAYS)
+
+
+def config_retention_days() -> int:
+    """The window ``config.yaml`` asks for — i.e. what the nightly sweep
+    enforced before ``settings.json`` entered the resolution order. It is
+    the baseline the widening guard measures a change against on an
+    install that has never recorded one."""
+    return _days(_storage_layer(app_state.base_cfg, "retention_days"), DEFAULT_RETENTION_DAYS)
 
 
 def auto_cleanup_enabled() -> bool:
@@ -55,11 +87,15 @@ def auto_cleanup_enabled() -> bool:
 
 def _run_daily_cleanup():
     log = logging.getLogger(__name__)
-    retention = resolve_retention_days()
     if not auto_cleanup_enabled():
         log.info("[storage] autoclean deaktiviert (storage.auto_cleanup_enabled) — übersprungen")
     else:
         try:
+            # `nightly_window` is the guard between "the slider says 7"
+            # and "the unattended sweep deletes everything older than 7
+            # tonight". A narrower window is announced and deferred
+            # until the operator confirms it with "Jetzt bereinigen".
+            retention = nightly_window(resolve_retention_days(), config_retention_days())
             removed = app_state.store.cleanup_old(retention)
             if removed:
                 log.info("[storage] Removed %d old event files (>%dd)", removed, retention)

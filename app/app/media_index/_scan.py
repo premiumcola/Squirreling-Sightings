@@ -14,6 +14,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from ._types import size_lookup_fs
+
 #: Trees that hold per-camera media. ``motion_detection`` and
 #: ``timelapse`` are the two the Mediathek counts; the other three are
 #: walked for their size only, because nothing in the UI shows them and
@@ -48,7 +50,7 @@ class CameraIndex:
     tracks: dict = field(default_factory=dict)  # event_id -> relpath
     best_frames: dict = field(default_factory=dict)  # event_id -> relpath
     raws: dict = field(default_factory=dict)  # event_id -> relpath
-    media: dict = field(default_factory=dict)  # event_id -> relpath
+    media: dict = field(default_factory=dict)  # event_id -> [relpath, …]
     tl_media: dict = field(default_factory=dict)  # stem -> relpath
     tl_sidecars: dict = field(default_factory=dict)  # stem -> relpath
     tree_bytes: dict = field(default_factory=dict)  # tree name -> bytes
@@ -57,13 +59,37 @@ class CameraIndex:
         """``SizeLookup`` answered from the walk — no stat, no I/O."""
         return self.sizes.get(relpath)
 
+    def size_lookup(self, storage_root: Path):
+        """``size_of`` with one ``stat`` for anything outside the walk.
+
+        The badge route answered from the index and the grid route
+        stat()ed the whole tree, so the two agreed only as long as no
+        manifest pointed outside the walked trees — a single event whose
+        clip lives under ``weather/`` would have produced a tile the
+        badge did not count. Both routes take this lookup, so the
+        fallback is part of the shared answer rather than one route's
+        private generosity.
+        """
+        fs = size_lookup_fs(storage_root)
+
+        def _size_of(relpath: str):
+            size = self.sizes.get(relpath)
+            return fs(relpath) if size is None else size
+
+        return _size_of
+
     @property
     def counted_bytes(self) -> int:
         return sum(self.tree_bytes.get(t, 0) for t in COUNTED_TREES)
 
     @property
+    def media_files(self) -> list:
+        """Every media relpath under ``motion_detection/``, sorted."""
+        return sorted(rel for rels in self.media.values() for rel in rels)
+
+    @property
     def media_file_count(self) -> int:
-        return len(self.media)
+        return sum(len(rels) for rels in self.media.values())
 
 
 def _walk_sizes(root: Path, storage_root: Path) -> dict:
@@ -115,7 +141,12 @@ def _classify_motion(rel: str, index: CameraIndex) -> None:
     lower = name.lower()
     for suffix in _MEDIA_SUFFIXES:
         if lower.endswith(suffix):
-            index.media[name[: -len(suffix)]] = rel
+            # A list, not a single relpath: `<id>.jpg` and `<id>.mp4`
+            # share a stem, so keying one per stem lost a file — the
+            # camera card reported 1 media file for a 2-file event, and
+            # the same undercount decided whether an archived camera was
+            # listed at all.
+            index.media.setdefault(name[: -len(suffix)], []).append(rel)
             return
 
 
@@ -134,22 +165,27 @@ def scan_camera(storage_root: Path, camera_id: str, trees=COUNTED_TREES) -> Came
     """Build the on-disk picture for one camera.
 
     ``motion_detection/<cam>`` and ``timelapse/<cam>`` are walked fully
-    and classified; any other tree in ``trees`` is walked for its byte
-    total only. The default deliberately excludes ``timelapse_frames``
-    (potentially gigabytes of raw jpgs) so the dashboard's per-load stats
-    call stays cheap — the integrity check passes :data:`MEDIA_TREES` to
-    see the whole disk, which is where those bytes get reported.
+    and classified; any other tree in ``trees`` contributes its sizes
+    without classification. The default deliberately excludes
+    ``timelapse_frames`` (potentially gigabytes of raw jpgs) so the
+    dashboard's per-load stats call stays cheap — the integrity check
+    passes :data:`MEDIA_TREES` to see the whole disk.
+
+    ``sizes`` covers every walked tree, not just the two counted ones.
+    The mp4 container probe reads that dict, so restricting it meant
+    "Keine echten Videos" never looked at ``weather/`` or
+    ``adhoc_clips/`` even though the report already charged the operator
+    for their bytes.
     """
     index = CameraIndex(camera_id=camera_id)
     for tree in trees:
         sizes = _walk_sizes(storage_root / tree / camera_id, storage_root)
         index.tree_bytes[tree] = sum(sizes.values())
+        index.sizes.update(sizes)
         if tree == "motion_detection":
-            index.sizes.update(sizes)
             for rel in sizes:
                 _classify_motion(rel, index)
         elif tree == "timelapse":
-            index.sizes.update(sizes)
             for rel in sizes:
                 _classify_timelapse(rel, index)
     return index

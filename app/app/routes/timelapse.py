@@ -331,6 +331,9 @@ def api_camera_timelapse_rolling(cam_id):
     )
     if not path:
         return jsonify({"ok": False, "error": "build_failed"}), 500
-    _register_built(cam_id)
+    # Deliberately NOT registered: this is the "letzte N Minuten"
+    # preview, rebuilt on every press. Filing it in the EventStore made
+    # each press leave a permanent archive tile behind, in a tree the
+    # retention sweep never sweeps.
     rel = Path(path).relative_to(storage_root)
     return jsonify({"ok": True, "minutes": minutes, "url": f"/media/{rel.as_posix()}"})

@@ -21,7 +21,16 @@
 //
 // All window.* bridges are still set at the bottom so other still-
 // resident code paths (and inline onclicks in HTML) keep resolving.
-import { byId, esc, safeHexColor } from '../core/dom.js';
+import { byId, esc, hexToRgba, safeHexColor } from '../core/dom.js';
+// hexToRgba now lives in core/dom.js next to safeHexColor; re-exported
+// here because camedit/timelapse-settings.js documents it as part of
+// this module's surface.
+export { hexToRgba } from '../core/dom.js';
+// _buildMocChips is used locally (overview + archived cards); _mocChip
+// only needs re-exporting for callers. Both statements are required —
+// a re-export does not put the symbol in this file's scope.
+import { _buildMocChips } from './_chips.js';
+export { _buildMocChips, _mocChip } from './_chips.js';
 import { state } from '../core/state.js';
 import { j } from '../core/api.js';
 import { showToast } from '../core/toast.js';
@@ -33,7 +42,6 @@ import {
   getCameraIcon,
   getCameraColor,
 } from '../core/icons.js';
-import { CAT_COLORS } from '../timeline.js';
 import { loadMediaStorageStats, refreshTimelineAndStats } from '../chrome/storage-stats.js';
 import { _exitMediaSelectMode, _updateMediaSelectToggle } from './bulk-delete.js';
 import { loadMedia } from './media-loader.js';
@@ -93,14 +101,6 @@ export const CAM_COLORS = [
 export function camColor(camId) {
   const idx = state.cameras.findIndex((c) => c.id === camId);
   return CAM_COLORS[(idx < 0 ? 0 : idx) % CAM_COLORS.length];
-}
-export function hexToRgba(hex, alpha) {
-  const h = (hex || '').replace('#', '');
-  if (h.length !== 6) return `rgba(147,197,253,${alpha})`;
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
 }
 export function getMediaAccentColor(labels) {
   if (Array.isArray(labels)) {
@@ -329,50 +329,6 @@ export const _MOC_ALL_SVG = `<svg width="96" height="96" viewBox="0 0 80 80" fil
   </g>
 </svg>`;
 
-// Count chips for media overview cards
-export const _MOC_OBJECT_TYPES = { person: 1, cat: 1, bird: 1, car: 1, dog: 1 };
-export function _mocChip(type, count, title) {
-  // Object-label chips (person/cat/bird/car): CAT_COLORS + objIconSvg
-  if (_MOC_OBJECT_TYPES[type]) {
-    const col = CAT_COLORS[type] || '#8888aa';
-    return `<span class="moc-count-chip" title="${esc(title)}" style="background:${hexToRgba(col, 0.18)};color:${col};border-radius:8px">${objIconSvg(type, 10)} ${count}</span>`;
-  }
-  const icons = {
-    event: `<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="3.8" stroke="#4a6477" stroke-width="1.3"/><path d="M5 3v2l1.5 1" stroke="#4a6477" stroke-width="1.1" stroke-linecap="round"/></svg>`,
-    snap: `<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1" y="2.5" width="8" height="6" rx="1.5" stroke="#4a6477" stroke-width="1.2"/><circle cx="5" cy="5.5" r="1.6" fill="#4a6477"/><path d="M3.5 2.5l.4-1h2.2l.4 1" stroke="#4a6477" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    tl: `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#c4b5fd" stroke-width="1" stroke-linecap="round"><line x1="2.5" y1="1" x2="7.5" y2="1"/><line x1="2.5" y1="9" x2="7.5" y2="9"/><polygon points="3,1.5 7,1.5 5,5" fill="#c4b5fd" opacity=".8"/><polygon points="5,5 3,8.5 7,8.5" stroke="#a855f7" stroke-width="1" fill="none"/></svg>`,
-    motion: objIconSvg('motion', 10),
-  };
-  const styles = {
-    event: { bg: 'rgba(255,255,255,.07)', color: 'var(--muted)', radius: '6px' },
-    snap: { bg: 'rgba(255,255,255,.07)', color: 'var(--muted)', radius: '6px' },
-    tl: { bg: 'rgba(168,85,247,.18)', color: '#c084fc', radius: '8px' },
-    motion: { bg: 'rgba(147,197,253,.15)', color: '#93c5fd', radius: '8px' },
-  };
-  const st = styles[type] || styles.event;
-  return `<span class="moc-count-chip" title="${esc(title)}" style="background:${st.bg};color:${st.color};border-radius:${st.radius}">${icons[type] || icons.event} ${count}</span>`;
-}
-
-// Build the full chip HTML for a stats entry: objects → motion_only → timelapse
-export function _buildMocChips(stats) {
-  const lc = stats.label_counts || {};
-  const order = ['person', 'cat', 'bird', 'car', 'dog', 'squirrel'];
-  // label_counts.motion is authoritative — the server counts each event
-  // once, under its most specific label. The old derivation
-  // (event_count − objects) invented events whenever event_count held
-  // something the object labels did not: a timelapse manifest showed up
-  // as "Bewegung 1" on a camera with zero motion events.
-  const motionOnly = lc.motion || 0;
-  let html = '';
-  for (const k of order) {
-    const n = lc[k] || 0;
-    if (n > 0) html += _mocChip(k, n, OBJ_LABEL[k] || k);
-  }
-  if (motionOnly > 0) html += _mocChip('motion', motionOnly, 'Bewegung');
-  if ((stats.timelapse_count || 0) > 0) html += _mocChip('tl', stats.timelapse_count, 'Timelapse');
-  return html;
-}
-
 // ── Overview ────────────────────────────────────────────────────────────────
 export function renderMediaOverview() {
   const ov = byId('mediaOverview');
@@ -479,10 +435,7 @@ export function renderMediaOverview() {
         <div class="moc-body">
           <div class="moc-name" style="display:flex;align-items:center;gap:6px">${_ARCHIVE_ICON} <span>${esc(a.name)}</span></div>
           <div class="moc-desc">Archiviert · <code style="font-size:10px;opacity:.6">${esc(a.id)}</code></div>
-          <div class="moc-counts">
-            ${a.event_count ? _mocChip('motion', a.event_count, 'Bewegung') : ''}
-            ${a.timelapse_count ? _mocChip('tl', a.timelapse_count, 'Timelapse') : ''}
-          </div>
+          <div class="moc-counts">${_buildMocChips(a)}</div>
           <div style="margin-top:8px">
             <button class="btn-action ghost btn-merge-archived" title="In aktive Kamera zusammenführen" data-merge-action="open" data-merge-id="${esc(a.id)}" data-merge-name="${esc(a.name)}">
               Zusammenführen ↗

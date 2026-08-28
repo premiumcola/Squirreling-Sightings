@@ -199,10 +199,10 @@ def test_weather_and_adhoc_bytes_surface_even_though_no_card_shows_them(tmp_stor
 
 # ── the invariant: badge and grid come from one list ───────────────────────
 def test_timelapse_badge_equals_grid_after_registration(tmp_storage_root, store):
-    """Squirrel Town: three mp4s on disk, one of them with a metadata
-    sidecar. The old badge said 3, the old grid said 1."""
+    """Squirrel Town: three archive mp4s on disk, one of them with a
+    metadata sidecar. The old badge said 3, the old grid said 1."""
     tl = tmp_storage_root / "timelapse" / CAM
-    for stem in ("2026-04-30_day", "2026-08-25_rolling10min", "2026-08-26_rolling10min"):
+    for stem in ("2026-04-30_day", "2026-05-01_day", "2026-05-02_night"):
         _write(tl / f"{stem}.mp4", _REAL_MP4)
     (tl / "2026-04-30_day.json").write_text(
         json.dumps({"time": f"{DATE}T12:00:00", "profile": "day"}), encoding="utf-8"

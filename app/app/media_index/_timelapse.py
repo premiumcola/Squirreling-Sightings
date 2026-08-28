@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,24 @@ from ._scan import COUNTED_TREES, scan_camera
 from ._types import MIN_VIDEO_BYTES
 
 log = logging.getLogger(__name__)
+
+#: ``build_period(period="rolling10min")`` names its output
+#: ``<day>_rolling<N>min.mp4``. That is the "letzte 10 Minuten" preview
+#: button — a look at what the camera just did, rebuilt on demand and
+#: superseded by the next press.
+_ROLLING_STEM = re.compile(r"_rolling\d+min$")
+
+
+def is_rolling_preview(stem: str) -> bool:
+    """True for the on-demand rolling preview of the last N minutes.
+
+    Registering these as EventStore entries turned a throwaway preview
+    into a permanent archive tile in a tree the retention sweep never
+    touches — every press of the button added one more forever. They
+    stay on disk (nothing here deletes) and the integrity report lists
+    them, but they are not archive events.
+    """
+    return bool(_ROLLING_STEM.search(stem))
 
 
 def _event_time(stem: str, mp4: Path) -> str:
@@ -102,7 +121,7 @@ def register_camera_timelapses(
     known = set(index.manifests) | set(index.tl_manifests)
     registered = 0
     for stem, rel in sorted(index.tl_media.items()):
-        if f"tl_{stem}" in known:
+        if f"tl_{stem}" in known or is_rolling_preview(stem):
             continue
         size = index.size_of(rel) or 0
         if size < MIN_VIDEO_BYTES:

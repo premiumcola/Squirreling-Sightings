@@ -24,15 +24,13 @@ from ..camera_runtime._recording._stages import (
     annotate_stage,
     is_pending,
 )
+from ..labels import COUNTED_LABELS, OBJECT_LABELS, primary_label
 from ._types import has_real_media, is_timelapse_event
 
 #: ``list_events`` takes a slice; every caller here needs the whole set
 #: before it can filter or count. A camera tree larger than this has
 #: bigger problems than the constant.
 ALL_EVENTS = 1_000_000
-
-OBJECT_LABELS = ("person", "cat", "bird", "car", "dog", "squirrel")
-TRACKED_LABELS = frozenset(OBJECT_LABELS) | {"motion"}
 
 
 def visible_media_events(
@@ -59,7 +57,6 @@ def visible_media_events(
     a single pass over the camera tree answers both "which items" and
     "how many".
     """
-    now = now or datetime.now()
     raw = store.list_events(
         camera_id,
         label=label,
@@ -70,8 +67,25 @@ def visible_media_events(
         offset=0,
         media_only=False,
     )
+    return filter_visible(raw, size_of, clip_max_s=clip_max_s, now=now)
+
+
+def filter_visible(events, size_of, *, clip_max_s: int = DEFAULT_CLIP_MAX_S, now: datetime = None):
+    """The visibility rule applied to manifests already in memory.
+
+    The integrity report parses every manifest anyway; routing it back
+    through ``store.list_events`` made it read and parse the same JSON a
+    second time — and, before ``camera_dir``, made a read-only report
+    create the very directories it then reported. It shares this
+    function instead, so there is still exactly one definition of
+    "visible".
+
+    ``events`` is assumed newest-first (``list_events`` sorts); callers
+    passing an unsorted dict sort it themselves.
+    """
+    now = now or datetime.now()
     visible = []
-    for obj in raw:
+    for obj in events:
         pending = is_pending(obj)
         if not (pending or has_real_media(obj, size_of)):
             continue
@@ -79,18 +93,6 @@ def visible_media_events(
             annotate_stage(obj, now, clip_max_s)
         visible.append(obj)
     return visible
-
-
-def _primary_label(event: dict):
-    """The one bucket an event is counted under, so the filter pills sum
-    to the archive size instead of the inflated multi-label total."""
-    labels = event.get("labels") or []
-    for lab in labels:
-        if lab in OBJECT_LABELS:
-            return lab
-    if "motion" in labels or not labels:
-        return "motion"
-    return None
 
 
 def camera_stats(index, visible, name_hint: str = "") -> dict:
@@ -123,8 +125,13 @@ def camera_stats(index, visible, name_hint: str = "") -> dict:
                 lab in OBJECT_LABELS for lab in (event.get("labels") or [])
             ):
                 latest_object_snap_url = f"/media/{rel}"
-        primary = _primary_label(event)
-        if primary in TRACKED_LABELS:
+        # Exactly one bucket per event, and never None: a `["fox"]`
+        # event used to match no object label and no "motion" either, so
+        # it fell out of label_counts entirely and rendered a tile with
+        # no badge above it. `primary_label` ends in a motion fallback
+        # for precisely that case.
+        primary = primary_label(event.get("labels"))
+        if primary in COUNTED_LABELS:
             label_counts[primary] = label_counts.get(primary, 0) + 1
     return {
         "id": camera_id,

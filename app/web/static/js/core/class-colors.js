@@ -18,6 +18,11 @@ export const CLASS_COLORS = {
   squirrel: '#c8651a',
   fox: '#ff7a1a',
   hedgehog: '#a67c52',
+  // marten + deer complete the wildlife cascade's categories
+  // (detectors/_wildlife_rules.py). Without them a Marder sighting got
+  // a tile and a grey chip while the server already knew its colour.
+  marten: '#7c5cff',
+  deer: '#8a6a3f',
   car: '#00c2ff',
   motion: '#cbd5e1',
   alle: '#8888aa',

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import threading as _threading_fix
+from datetime import datetime as _dt
 
 import cv2
 from flask import Blueprint, jsonify, request
@@ -27,7 +28,6 @@ from ..media_index import (
     camera_stats,
     register_timelapse_events,
     scan_camera,
-    size_lookup_fs,
     visible_media_events,
 )
 
@@ -36,6 +36,9 @@ bp = Blueprint("media", __name__)
 
 _thumb_task = {"running": False, "done": 0, "total": 0, "errors": 0, "recent": []}
 _fix_thumbs_lock = _threading_fix.Lock()
+
+_integrity_task = {"running": False, "report": None, "error": None, "finished_at": None}
+_integrity_lock = _threading_fix.Lock()
 
 
 def _clip_max_s() -> int:
@@ -49,6 +52,28 @@ def _clip_max_s() -> int:
         return DEFAULT_CLIP_MAX_S
 
 
+def _cam_visible(cam_id: str, **filters):
+    """``(index, visible)`` for ``cam_id`` — the one pair both the badge
+    route and the grid route work from.
+
+    The lookup is ``index.size_lookup``, not the bare index and not a
+    bare ``stat``: the badge answered from the walked trees and the grid
+    stat()ed anything, so a manifest pointing outside
+    ``motion_detection/`` / ``timelapse/`` counted in one and not the
+    other. Same lookup, same list, same numbers.
+    """
+    storage_root = app_state.storage_root
+    index = scan_camera(storage_root, cam_id)
+    visible = visible_media_events(
+        app_state.store,
+        index.size_lookup(storage_root),
+        cam_id,
+        clip_max_s=_clip_max_s(),
+        **filters,
+    )
+    return index, visible
+
+
 def _cam_stats_dict(cam_id: str, name_hint: str = "") -> dict:
     """Camera card numbers for ``cam_id``.
 
@@ -57,9 +82,7 @@ def _cam_stats_dict(cam_id: str, name_hint: str = "") -> dict:
     ``/api/camera/<id>/media`` renders. There is no second count to
     diverge from.
     """
-    storage_root = app_state.storage_root
-    index = scan_camera(storage_root, cam_id)
-    visible = visible_media_events(app_state.store, index.size_of, cam_id, clip_max_s=_clip_max_s())
+    index, visible = _cam_visible(cam_id)
     return camera_stats(index, visible, name_hint=name_hint)
 
 
@@ -112,22 +135,63 @@ def api_media_rescan():
         return jsonify({"ok": False, "error": traceback.format_exc()}), 500
 
 
-@bp.get('/api/media/integrity')
+@bp.post('/api/media/integrity')
 def api_media_integrity():
     """Read-only integrity report — reports, never repairs.
 
-    GET because it mutates nothing: no unlink, no write, no
-    registration. Findings carry the relative path so the operator acts
-    deliberately; several categories (.raw fallbacks, in-flight
+    Mutates nothing: no unlink, no write, no registration, and since
+    the report stopped reaching through the EventStore, no directory
+    creation either. Findings carry the relative path so the operator
+    acts deliberately; several categories (.raw fallbacks, in-flight
     recording stubs) are files that must NOT be deleted, which is why
     there is no bulk-cleanup counterpart to this endpoint.
+
+    POST, and on a background thread, because it walks every media tree
+    of every camera — ``timelapse_frames`` can be gigabytes of jpgs, and
+    running that on the request worker blocked it for minutes. Poll
+    ``GET /api/media/integrity/status`` for the result, the same shape
+    fix-thumbnails uses.
     """
+    storage_root = app_state.storage_root
     cameras = app_state.get_effective_config().get("cameras", [])
-    try:
-        return jsonify(build_report(app_state.storage_root, app_state.store, cameras))
-    except Exception as e:
-        logging.getLogger(__name__).warning("[storage] Integritätsprüfung fehlgeschlagen: %s", e)
-        return jsonify({"ok": False, "error": str(e)}), 500
+    log_i = logging.getLogger(__name__)
+    with _integrity_lock:
+        if _integrity_task["running"]:
+            return jsonify({"ok": True, "already_running": True})
+        _integrity_task.update(running=True, report=None, error=None, finished_at=None)
+
+    def _worker():
+        try:
+            report = build_report(storage_root, None, cameras)
+            error = None
+        except Exception as e:
+            log_i.warning("[storage] Integritätsprüfung fehlgeschlagen: %s", e)
+            report, error = None, str(e)
+        with _integrity_lock:
+            _integrity_task.update(
+                running=False,
+                report=report,
+                error=error,
+                finished_at=_dt.now().isoformat(timespec="seconds"),
+            )
+
+    _threading_fix.Thread(target=_worker, daemon=True).start()
+    return jsonify({"ok": True, "already_running": False})
+
+
+@bp.get('/api/media/integrity/status')
+def api_media_integrity_status():
+    """Progress / result of the background integrity run."""
+    with _integrity_lock:
+        return jsonify(
+            {
+                "ok": _integrity_task["error"] is None,
+                "running": _integrity_task["running"],
+                "error": _integrity_task["error"],
+                "finished_at": _integrity_task["finished_at"],
+                "report": _integrity_task["report"],
+            }
+        )
 
 
 @bp.post('/api/media/fix-thumbnails')
@@ -243,21 +307,31 @@ def api_media_purge_orphans():
 
 @bp.post('/api/media/cleanup')
 def api_media_cleanup():
+    """ "Jetzt bereinigen" — the attended sweep.
+
+    Pressing this with an explicit ``retention_days`` is also the
+    confirmation the nightly sweep waits for before it may act on a
+    narrower window than the one it last enforced. The operator is
+    looking at the number on screen; the unattended timer is not.
+    """
     from ..maintenance import resolve_retention_days
+    from ..storage_retention import acknowledge_window
 
     payload = request.get_json(force=True) or {}
-    retention = resolve_retention_days(payload.get("retention_days"))
+    override = payload.get("retention_days")
+    retention = resolve_retention_days(override)
     try:
         removed = app_state.store.cleanup_old(retention)
-        return jsonify({"ok": True, "removed": removed})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+    if override is not None:
+        acknowledge_window(retention)
+    return jsonify({"ok": True, "removed": removed})
 
 
 @bp.get('/api/camera/<cam_id>/media')
 def api_camera_media(cam_id):
     settings = app_state.settings
-    store = app_state.store
     label = request.args.get('label')
     labels_raw = request.args.get('labels')
     labels = [l.strip() for l in labels_raw.split(',') if l.strip()] if labels_raw else None
@@ -268,16 +342,7 @@ def api_camera_media(cam_id):
     cfg_default = app_state.get_effective_config().get("storage", {}).get("media_limit_default", 24)
     limit = request.args.get('limit', type=int) or cfg_default
     offset = request.args.get('offset', type=int) or 0
-    visible = visible_media_events(
-        store,
-        size_lookup_fs(app_state.storage_root),
-        cam_id,
-        label=label,
-        labels=labels,
-        start=start,
-        end=end,
-        clip_max_s=_clip_max_s(),
-    )
+    _index, visible = _cam_visible(cam_id, label=label, labels=labels, start=start, end=end)
     total_count = len(visible)
     items = visible[offset : offset + limit]
     for item in items:

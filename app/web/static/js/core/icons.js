@@ -28,6 +28,8 @@ export const OBJ_LABEL = {
   squirrel: 'Eichhörnchen',
   fox: 'Fuchs',
   hedgehog: 'Igel',
+  marten: 'Marder',
+  deer: 'Reh',
   motion: 'Bewegung',
   alarm: 'Alarm',
   timelapse: 'Timelapse',
@@ -46,6 +48,10 @@ export const OBJ_SVG = {
   bird: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><ellipse cx="13" cy="13.5" rx="5.8" ry="5" fill="#62d26f"/><circle cx="5.5" cy="8.5" r="3.3" fill="#62d26f"/><path d="M 4 10 Q 6 11.5, 9 12.5 L 9 14 Q 5.5 14.5, 4 11.5 Z" fill="#62d26f"/><path d="M 2.5 8.5 L -0.3 9.3 L 3 10.5 Z" fill="#f59e0b"/><circle cx="5" cy="8" r="0.6" fill="#0e1217"/><circle cx="5.18" cy="7.82" r="0.2" fill="#fff"/><path d="M 9.5 12 Q 13 12.8, 17 13.5 Q 18.5 13.5, 19 14" stroke="#0e1217" stroke-width="0.5" fill="none" opacity="0.5" stroke-linecap="round"/><path d="M 14 13 L 15.8 14.5" stroke="#0e1217" stroke-width="0.4" opacity="0.4" stroke-linecap="round"/><path d="M 15.5 12.5 L 17.3 14" stroke="#0e1217" stroke-width="0.4" opacity="0.4" stroke-linecap="round"/><path d="M 17 12 L 18.5 13.5" stroke="#0e1217" stroke-width="0.4" opacity="0.4" stroke-linecap="round"/><path d="M 18.5 15 L 22 18 L 18 17 Z" fill="#62d26f"/><path d="M 10 18 Q 9 19.5, 9.5 21.5" stroke="#62d26f" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M 13.5 18 Q 14 19.5, 13 21.5" stroke="#62d26f" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M 8 21.5 L 9.5 21.5 L 11 21.8" stroke="#62d26f" stroke-width="1" stroke-linecap="round"/><path d="M 11.5 21.5 L 13 21.5 L 14.5 21.8" stroke="#62d26f" stroke-width="1" stroke-linecap="round"/></svg>`,
   car: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="11" width="20" height="8" rx="2.5" fill="#f87171"/><rect x="6" y="7" width="11" height="5" rx="2" fill="#fca5a5"/><circle cx="7" cy="20" r="2.5" fill="#1e293b"/><circle cx="17" cy="20" r="2.5" fill="#1e293b"/><circle cx="7" cy="20" r="1.2" fill="#7f1d1d"/><circle cx="17" cy="20" r="1.2" fill="#7f1d1d"/><rect x="14.5" y="8" width="3" height="3.5" rx=".75" fill="rgba(255,255,255,.35)"/></svg>`,
   motion: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M1 12 C4 5 7 5 9 12 C11 19 14 19 16 12 C18 5 21 5 23 12" stroke="#cbd5e1" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>`,
+  // Generic paw — the fallback objIconSvg reaches for when a class has
+  // no glyph of its own (fox, hedgehog, marten, deer, and whatever a
+  // future model adds). currentColor so the chip's class tint carries.
+  wildlife: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="16" rx="5.2" ry="4.2"/><ellipse cx="5.6" cy="11.6" rx="2.3" ry="3"/><ellipse cx="18.4" cy="11.6" rx="2.3" ry="3"/><ellipse cx="9.2" cy="6.6" rx="2.2" ry="2.9"/><ellipse cx="14.8" cy="6.6" rx="2.2" ry="2.9"/></svg>`,
   alarm: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3C7 3 4 7.5 4 12C4 17 7 19 7 19H17C17 19 20 17 20 12C20 7.5 17 3 12 3Z" fill="#ef4444"/><rect x="11" y="19" width="2" height="2.5" rx=".75" fill="#ef4444"/><rect x="9.5" y="21.5" width="5" height="1.5" rx=".75" fill="#ef4444"/><rect x="11.2" y="8" width="1.6" height="5.5" rx=".75" fill="#fff"/><circle cx="12" cy="15.5" r="1.1" fill="#fff"/></svg>`,
   timelapse: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round"><line x1="6" y1="3" x2="18" y2="3"/><line x1="6" y1="21" x2="18" y2="21"/><polygon points="7,4 17,4 12,12" fill="#a855f7" opacity=".8"/><polygon points="12,12 7,20 17,20" fill="#a855f7" opacity=".5"/></svg>`,
   motion_objects: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15A2.5 2.5 0 0 1 9.5 22a2.5 2.5 0 0 1-2.5-2.5V17a2.5 2.5 0 0 1-2-4.5 2.5 2.5 0 0 1 0-4A2.5 2.5 0 0 1 7 4.5 2.5 2.5 0 0 1 9.5 2z" fill="rgba(244,114,182,.22)" stroke="#f472b6" stroke-width="1.5" stroke-linejoin="round"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15A2.5 2.5 0 0 0 14.5 22a2.5 2.5 0 0 0 2.5-2.5V17a2.5 2.5 0 0 0 2-4.5 2.5 2.5 0 0 0 0-4A2.5 2.5 0 0 0 17 4.5 2.5 2.5 0 0 0 14.5 2z" fill="rgba(244,114,182,.22)" stroke="#f472b6" stroke-width="1.5" stroke-linejoin="round"/><path d="M1 12 C3 8 5.5 8 7 12 C8.5 16 11 16 12 12 C13 8 15.5 8 17 12 C18.5 16 21 16 23 12" stroke="#cbd5e1" stroke-width="1.6" stroke-linecap="round" fill="none" opacity=".95"/><circle cx="7" cy="12" r="1.1" fill="#c084fc"/><circle cx="17" cy="12" r="1.1" fill="#c084fc"/></svg>`,
@@ -76,7 +82,11 @@ export function objBubble(label, size = 22) {
 // surrounding bubble. Used when a callsite already provides its own
 // container (e.g. inside a pill or chip).
 export function objIconSvg(label, size = 18) {
-  const raw = OBJ_SVG[label] || OBJ_SVG.alarm;
+  // Fall back to the neutral paw, not to the red alarm bell: the
+  // wildlife cascade emits fox / hedgehog / marten / deer, none of
+  // which has its own glyph, and a Fuchs chip wearing an alarm icon
+  // reads as an alert that never happened.
+  const raw = OBJ_SVG[label] || OBJ_SVG.wildlife;
   return raw.replace('width="16" height="16"', `width="${size}" height="${size}"`);
 }
 

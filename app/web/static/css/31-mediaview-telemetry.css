@@ -1,0 +1,301 @@
+/* ── MediaView · Telemetrie "Analyse & Auslastung" ────────────────────
+   Debug-tab Cluster 6 plus the one-line cost hint under the mode switch.
+   Inherits the .mv-ld-* cluster surface — no new palette, no new radii.
+   Mobile-first: everything here has to read at 375 px, so the blocks are
+   stacked, the bars are full-width, and nothing scrolls sideways. */
+
+/* ── Cost hint under the mode switch ─────────────────────────────── */
+.mv-tele-cost {
+  display: flex;
+  width: 100%;
+  padding: 2px 4px 0;
+}
+.mv-tele-cost-line {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: rgba(226, 232, 240, 0.62);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  /* One line at 375 px. Truncation beats a reflow that pushes the stage
+     down every time the mode changes. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mv-tele-cost-line[data-tone='tight'] {
+  color: #ffd9a8;
+}
+.mv-tele-cost-line[data-tone='over'] {
+  color: #ffb4a8;
+}
+
+/* ── Blocks ──────────────────────────────────────────────────────── */
+.mv-tele-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 10px;
+}
+.mv-tele-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.55);
+}
+.mv-tele-reason {
+  color: rgba(226, 232, 240, 0.72);
+}
+
+/* ── Duty bar ────────────────────────────────────────────────────── */
+.mv-tele-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  border-radius: 999px;
+  /* Depth via contrast, no hairline: the track is the same family as the
+     fill at lower contrast. */
+  background: rgba(148, 163, 184, 0.16);
+  overflow: hidden;
+}
+.mv-tele-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(56, 189, 248, 0.55);
+}
+.mv-tele-bar-lead,
+.mv-tele-bar-trail {
+  position: relative;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e2e8f0;
+  padding: 0 10px;
+}
+.mv-tele-bar-trail {
+  margin-left: auto;
+  font-weight: 500;
+  color: rgba(226, 232, 240, 0.6);
+}
+
+/* ── Stacked time breakdown ──────────────────────────────────────── */
+.mv-tele-stack {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.14);
+}
+.mv-tele-seg {
+  /* min-width:0 so a segment can shrink to nothing instead of forcing the
+     row to scroll sideways. */
+  min-width: 0;
+  background: rgba(148, 163, 184, 0.42);
+}
+.mv-tele-seg[data-bucket='invoke'] {
+  /* Only the accelerator's own time gets the accent — "how much of this
+     is actually the accelerator" has to be answerable at a glance. */
+  background: rgba(56, 189, 248, 0.7);
+}
+.mv-tele-seg[data-bucket='wait'] {
+  background: rgba(251, 191, 36, 0.5);
+}
+.mv-tele-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.mv-tele-chip {
+  font-size: 10.5px;
+  color: rgba(226, 232, 240, 0.62);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.mv-tele-chip::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  margin-right: 5px;
+  background: rgba(148, 163, 184, 0.42);
+}
+.mv-tele-chip[data-bucket='invoke']::before {
+  background: rgba(56, 189, 248, 0.7);
+}
+.mv-tele-chip[data-bucket='wait']::before {
+  background: rgba(251, 191, 36, 0.5);
+}
+
+/* ── Stage cards (device + model) ────────────────────────────────── */
+.mv-tele-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.1);
+}
+.mv-tele-stage[data-tone='warn'] {
+  background: rgba(251, 191, 36, 0.14);
+}
+.mv-tele-stage-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mv-tele-stage-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-right: auto;
+}
+.mv-tele-stage-cams {
+  font-weight: 400;
+  color: rgba(226, 232, 240, 0.5);
+}
+.mv-tele-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+}
+.mv-tele-badge[data-tone='warn'] {
+  background: rgba(251, 191, 36, 0.28);
+  color: #ffe3ab;
+}
+.mv-tele-badge[data-tone='mute'] {
+  background: rgba(148, 163, 184, 0.14);
+  color: rgba(226, 232, 240, 0.62);
+}
+.mv-tele-stage-model {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Mode comparison ─────────────────────────────────────────────── */
+.mv-tele-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mv-tele-mode-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.1);
+}
+.mv-tele-mode-row[data-verdict='over'] {
+  background: rgba(248, 113, 113, 0.16);
+}
+.mv-tele-mode-row[data-verdict='tight'] {
+  background: rgba(251, 191, 36, 0.14);
+}
+.mv-tele-mode-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+.mv-tele-mode-sub {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: rgba(226, 232, 240, 0.55);
+}
+.mv-tele-mode-duty {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+.mv-tele-mode-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-size: 10px;
+  color: rgba(226, 232, 240, 0.5);
+}
+.mv-tele-verdict {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.22);
+  color: #e2e8f0;
+}
+.mv-tele-verdict[data-v='tight'] {
+  background: rgba(251, 191, 36, 0.3);
+  color: #ffe3ab;
+}
+.mv-tele-verdict[data-v='over'] {
+  background: rgba(248, 113, 113, 0.3);
+  color: #ffd0c9;
+}
+
+.mv-tele-headline {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.14);
+}
+.mv-tele-headline[data-tone='over'] {
+  background: rgba(248, 113, 113, 0.18);
+  color: #ffd0c9;
+}
+
+/* ── "Wie sicher ist das?" fold ──────────────────────────────────── */
+.mv-tele-fold > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.72);
+  cursor: pointer;
+  list-style: none;
+}
+.mv-tele-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.mv-tele-fold-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.62);
+}
+
+@media (hover: hover) {
+  .mv-tele-fold > summary:hover {
+    color: #e2e8f0;
+  }
+}
+
+/* Narrow phones: the stall/duty numbers get their own line rather than
+   squeezing the mode name to nothing. */
+@media (max-width: 400px) {
+  .mv-tele-mode-row {
+    grid-template-columns: 1fr auto;
+  }
+  .mv-tele-mode-tag {
+    grid-column: 2;
+  }
+}

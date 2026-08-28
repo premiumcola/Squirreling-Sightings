@@ -3,6 +3,8 @@ import { _renderVerdictBar, _wireVerdictBar, _refreshVerdict } from './_verdict.
 import { _renderCluster1, _renderCluster1Evidence, _wireCluster1 } from './_clusters-1.js';
 import { _renderCluster2, _renderCluster2Evidence, _wireCluster2 } from './_clusters-2.js';
 import { _renderCluster3, _wireCluster3, _renderCluster4, _renderCluster5 } from './_clusters-345.js';
+import { _renderCluster6 } from './_clusters-6.js';
+import { fetchTelemetry, onTelemetry } from '../telemetry/index.js';
 export { startSnapshotPrefetch, stopSnapshotPrefetch } from './_copy-bar.js';
 export { syncCompactForDebugTab, applyCompact, isCompact } from './_verdict.js';
 // ─── mediaview/live-detect-debug.js ───────────────────────────────────────
@@ -15,6 +17,7 @@ export { syncCompactForDebugTab, applyCompact, isCompact } from './_verdict.js';
 //   - Cluster 3 · False positives (quick-filter pills + zone link)
 //   - Cluster 4 · Performance (read-only with auto-diagnose)
 //   - Cluster 5 · Tracker events (read-only log)
+//   - Cluster 6 · Accelerator utilisation + per-stage models
 //
 // renderDebugPanel(host, ctx) takes the tick context the caller
 // already has on hand and rebuilds the panel. SIMU-05a · just the
@@ -36,7 +39,7 @@ const _clusterCollapsed = _loadClusterCollapse();
 // Down-chevron; CSS rotates it -90° (points right) when collapsed.
 function _loadClusterCollapse() {
   // Default: every cluster collapsed. A stored map overrides per id.
-  const def = { 1: true, 2: true, 3: true, 4: true, 5: true };
+  const def = { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true };
   try {
     const raw = JSON.parse(localStorage.getItem(_CLUSTER_COLLAPSE_KEY) || '{}');
     for (const k of Object.keys(def)) {
@@ -123,6 +126,7 @@ export function renderDebugPanel(host, ctx = {}) {
     _renderCluster3(ctx, cam) +
     _renderCluster4(ctx) +
     _renderCluster5(ctx) +
+    _renderCluster6() +
     '</div>';
   host.dataset.mvLdDebugFp = fp;
   _wireCluster1(host, cam, ctx);
@@ -130,7 +134,30 @@ export function renderDebugPanel(host, ctx = {}) {
   _wireCluster3(host, cam, ctx);
   _wireCopyBar(host, ctx);
   _wireVerdictBar(host);
+  _wireTelemetry(host);
   _applyClusterCollapse(host);
+}
+
+// Cluster 6 refreshes on the telemetry module's own 5 s timer, not on the
+// sim tick: its numbers are ~20 s rolling means, so repainting them twice
+// a second would imply a precision they do not have. One subscription per
+// host, released implicitly when the host is rebuilt.
+let _teleOff = null;
+function _wireTelemetry(host) {
+  if (host.dataset.mvLdTeleWired === '1') return;
+  host.dataset.mvLdTeleWired = '1';
+  // The debug host is rebuilt per session; release the previous session's
+  // subscription so listeners don't accumulate across cam switches.
+  _teleOff?.();
+  _teleOff = onTelemetry(() => {
+    if (!host.isConnected) return;
+    const c6 = host.querySelector('[data-cluster-id="6"]');
+    if (c6) {
+      c6.outerHTML = _renderCluster6();
+      _applyClusterCollapse(host);
+    }
+  });
+  fetchTelemetry();
 }
 
 // Refresh the dynamic content (live-status + evidence boxes) without
@@ -153,6 +180,9 @@ function _refreshDynamic(host, ctx, cam) {
   if (c4) c4.outerHTML = _renderCluster4(ctx);
   const c5 = host.querySelector('[data-cluster-id="5"]');
   if (c5) c5.outerHTML = _renderCluster5(ctx);
+  // Cluster 6 is NOT swapped here — it has its own refresh cadence and a
+  // tick-rate repaint would just re-render identical 20-s means.
+  fetchTelemetry();
   // Clusters 4/5 were swapped wholesale (fresh nodes) → re-stamp their
   // collapse state so a tick refresh can't silently re-expand them.
   _applyClusterCollapse(host);

@@ -44,7 +44,8 @@ export const S = {
   // raw tick-loop state — owned by the poll loop, read by the Debug tab
   tickState: {
     lastTickAt: 0, // _tick() entered
-    lastRespAt: 0, // last successful fetch resolved
+    lastRespAt: 0, // last SUCCESSFUL fetch resolved (cadence + frame age)
+    lastContactAt: 0, // last response of ANY status (the disconnect signal)
     lastStatus: '—', // HTTP status code (200/503) or 'abort'/'neterr'
     nextTickAt: 0, // setTimeout deadline
     startedAt: 0, // openLiveDetect wall-clock

@@ -10,6 +10,8 @@ import { _renderTrailsOverlay } from './live-detect-overlays.js';
 import { _renderDetectionsPanel, _renderLiveSwimlane, _appendTrace, _renderTraceTab } from './live-detect-panels.js';
 import { _refreshCadenceRow } from './live-detect-diag.js';
 import { _renderDebugTab, _renderDiagPanel } from './live-detect-tabs.js';
+import { _showModeRefusedBanner, _showBusyNotice } from './live-detect-stall.js';
+import { mvModeInvokes } from './mode-indicator.js';
 import {
   _HOLD_MS_CEILING,
   _HOLD_MS_FLOOR,
@@ -18,6 +20,8 @@ import {
   _TICK_FLOOR_MAIN_MS,
   _TICK_MAX_MS,
   _TICK_FACTOR,
+  _INFLIGHT_ABORT_CEILING_MS,
+  _TICK_RETRY_WHILE_INFLIGHT_MS,
 } from './live-detect.js';
 
 export function _logSimDiag() {
@@ -58,9 +62,48 @@ export function _logSimDiag() {
 // the new stream / mode takes visible effect on the next frame instead of
 // waiting out the current cadence delay.
 
+// P7 · the in-flight contract, enforced for EVERY caller and not only in
+// the stall watchdog. `_tick` used to abort at its head unconditionally,
+// which made the documented "a request younger than 30 s is never
+// aborted" false for the path the operator uses most: _forceImmediateTick
+// (mode or stream change) calls straight in here. Flask cannot cancel a
+// request — the handler runs all ten of its inferences to completion
+// whatever we do to the socket — so aborting hides the cost from the UI
+// without removing it from the box, and the backend's single slot then
+// answers the replacement with 429 busy anyway. Wait instead, and say so
+// on screen (the busy notice) rather than racing.
+//
+// Returns true when the caller must stand down; it has re-armed itself.
+function _deferWhileInflight(session) {
+  const inflightMs = session.inflightSince ? Date.now() - session.inflightSince : 0;
+  if (inflightMs <= 0 || inflightMs >= _INFLIGHT_ABORT_CEILING_MS) return false;
+  if (session.tickHandle) clearTimeout(session.tickHandle);
+  session.tickHandle = setTimeout(_tick, _TICK_RETRY_WHILE_INFLIGHT_MS);
+  return true;
+}
+
+// B23' · an ok=false response. Stash the code+message for the fold's
+// "Letzter Tick" banner (status first so screenshots are greppable), and
+// let the two 429 codes paint their own explanation — leaving either of
+// them wordless is what let the stall watchdog's guess stand in for the
+// real reason.
+function _handleTickFailure(status, data) {
+  const code = data?.code || status || '?';
+  const msg = data?.error || data?.message || '';
+  const text = msg ? `${code} · ${msg}` : String(code);
+  S.tickState.lastTickError = text;
+  S.session?.fold?.setLastError?.(text);
+  if (data?.code === 'mode_too_expensive') {
+    _showModeRefusedBanner(msg || text, () => _fallbackToOff());
+  } else if (data?.code === 'busy') {
+    _showBusyNotice();
+  }
+}
+
 export async function _tick() {
   const session = S.session;
   if (!session) return;
+  if (_deferWhileInflight(session)) return;
   S.tickState.lastTickAt = Date.now();
   try {
     session.abort?.abort();
@@ -70,6 +113,10 @@ export async function _tick() {
   session.abort = new AbortController();
   const controller = session.abort;
   const cycleStart = performance.now();
+  // When this request went out. The stall watchdog refuses to abort a
+  // request younger than _INFLIGHT_ABORT_CEILING_MS — aborting one only
+  // adds load, it never removes any (Flask runs the handler to the end).
+  session.inflightSince = Date.now();
   try {
     // custom: AbortController for the live-detect polling loop —
     // each tick supersedes the previous in-flight request when the
@@ -89,6 +136,11 @@ export async function _tick() {
       { method: 'POST', signal: controller.signal },
     );
     S.tickState.lastStatus = r.status;
+    // P2 · contact is contact, whatever the status. A backend answering
+    // 429 or 503 promptly is NOT a disconnected camera, and stamping this
+    // only on ok=true is what made a refusing endpoint show
+    // "Verbindung zur Kamera unterbrochen" indefinitely.
+    S.tickState.lastContactAt = Date.now();
     // B31 / B31' · late-tick guard. The session can be replaced
     // or nulled by a concurrent stopLive / cam switch between
     // fetch-issue and fetch-resolve. We count the drop and stash
@@ -118,18 +170,13 @@ export async function _tick() {
       S.session?.fold?.setLastError?.(null);
       _renderFrame(data);
     } else {
-      // B23' · ok=false response. Stash the code+message for the
-      // fold's "Letzter Tick" banner. data may be null if the
-      // body wasn't JSON; we still know the HTTP status and can
-      // surface that. Status code goes first so screenshots are
-      // greppable, message second when available.
-      const code = data?.code || (r ? r.status : '?');
-      const msg = data?.error || data?.message || '';
-      const text = msg ? `${code} · ${msg}` : String(code);
-      S.tickState.lastTickError = text;
-      S.session?.fold?.setLastError?.(text);
+      _handleTickFailure(r?.status, data);
     }
+    if (session.abort === controller) session.inflightSince = 0;
   } catch (err) {
+    // Only the CURRENT request may clear the stamp: an abandoned one
+    // rejects late, after a replacement has already gone out.
+    if (session.abort === controller) session.inflightSince = 0;
     if (err?.name === 'AbortError') {
       S.tickState.lastStatus = 'abort';
       return;
@@ -153,7 +200,11 @@ export function _scheduleNext(session, lastCycleMs) {
   const floor = src === 'sub' ? _TICK_FLOOR_SUB_MS : _TICK_FLOOR_MAIN_MS;
   const cycleMs = Number.isFinite(lastCycleMs) ? lastCycleMs : floor;
   const projected = Math.round(cycleMs * _TICK_FACTOR);
-  const delay = Math.min(_TICK_MAX_MS, Math.max(floor, projected));
+  // P5 · the between-tick ceiling scales with what a tick costs. Clamping
+  // a 10 s 3×3 cycle to a 4 s ceiling asks the camera for a new frame
+  // before the previous answer is even back.
+  const maxDelay = _TICK_MAX_MS * mvModeInvokes(session.detMode || 'off');
+  const delay = Math.min(maxDelay, Math.max(floor, projected));
   S.tickState.nextTickAt = Date.now() + delay;
   S.tickState.lastCycleMs = cycleMs;
   S.tickState.lastFloorMs = floor;
@@ -172,6 +223,21 @@ export function _scheduleNext(session, lastCycleMs) {
   S.holdMsActive = Math.min(_HOLD_MS_CEILING, Math.max(_HOLD_MS_FLOOR, 2 * S.cycleEmaMs));
   session.tickHandle = setTimeout(_tick, delay);
   _refreshCadenceRow();
+}
+
+// Drop back to the whole-frame single pass and re-tick. Used when the
+// backend refuses the selected mode: leaving the operator on a mode that
+// cannot run would just keep the refusal on screen.
+function _fallbackToOff() {
+  if (!S.session) return;
+  S.session.detMode = 'off';
+  S.cycleEmaMs = NaN;
+  S.session.shell?.components?.setDetMode?.('off');
+  if (S.session.tickHandle) {
+    clearTimeout(S.session.tickHandle);
+    S.session.tickHandle = null;
+  }
+  _tick();
 }
 
 export function _renderFrame(data) {

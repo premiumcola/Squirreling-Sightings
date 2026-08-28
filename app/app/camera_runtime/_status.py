@@ -183,6 +183,7 @@ class StatusMixin:
             ),
             "roi_rescue_attempts": self._roi_rescue_attempts,
             "roi_rescue_hits": self._roi_rescue_hits,
+            "roi_rescue_rate_60s": self._roi_rescue_rate_60s(),
             "reconnect_count_24h": self._reconnect_count_24h(),
         }
 
@@ -205,6 +206,21 @@ class StatusMixin:
         except Exception:
             pass
         return url
+
+    def _roi_rescue_rate_60s(self) -> float:
+        """Tile-rescue attempts per second over the last 60 s.
+
+        The lifetime counter answers "did it ever fire"; the projection in
+        detectors/_projection needs "how often is it firing now". Capped by
+        the rescue cooldown at 1/1.5 s per camera, so the number is small
+        by construction. Pruned on read, same as the reconnect log."""
+        cutoff = time.time() - 60.0
+        ring = getattr(self, "_roi_rescue_log", None)
+        if ring is None:
+            return 0.0
+        while ring and ring[0] < cutoff:
+            ring.popleft()
+        return round(len(ring) / 60.0, 4)
 
     def _reconnect_count_24h(self) -> int:
         """Prune reconnect log entries older than 24 h on each read, then

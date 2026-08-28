@@ -2143,3 +2143,105 @@
     color: #fff;
   }
 }
+
+
+/* ── Live swimlane · status + the filtered fold (J6) ──────────────────
+   Colour is the TRACK NUMBER and nothing else — the same channel the
+   bbox stroke and the trail polyline use, and the same thing the legend
+   promises ("Farbe = Person-Nr."). STATUS therefore travels as line style
+   and opacity, exactly as the legend's four rows describe it. Before
+   this, a lane whose last verdict was "gefiltert" was repainted slate,
+   which is why an orange trail on the picture had no orange anywhere in
+   the strip underneath it. */
+.mv-ld-swim-cell[data-status='masked'] {
+  opacity: 0.45;
+}
+.mv-ld-swim-cell[data-status='masked'] .mv-ld-swim-conn {
+  /* Dotted connector = the "⊘ Maskiert" row of the legend, drawn in the
+     lane's own colour rather than a second hue. */
+  background: none;
+  border-top: 2px dotted var(--lane-color, #cbd5e1);
+  height: 0;
+}
+.mv-ld-swim-cell[data-status='weak'] .mv-ld-swim-conn {
+  opacity: 0.7;
+}
+.mv-ld-swim-cell[data-status='ghost'] {
+  opacity: 0.6;
+}
+
+/* The fold control for filtered-only tracks. Full-width row under the
+   lanes: 44 px so it is a real touch target on iOS, and it names the
+   count so the operator knows the size of what is folded away. */
+.mv-ld-swim-filtered {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.12);
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-ld-swim-filtered[data-on='1'] {
+  background: rgba(148, 163, 184, 0.2);
+  color: #e2e8f0;
+}
+.mv-ld-swim-filtered-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px dotted rgba(226, 232, 240, 0.75);
+}
+@media (hover: hover) {
+  .mv-ld-swim-filtered:hover {
+    background: rgba(148, 163, 184, 0.26);
+  }
+}
+
+/* ── Stall banner tones ───────────────────────────────────────────────
+   Three states, three surfaces, because they are three different facts:
+     warn    — nothing answered. Full cover: there is nothing to watch.
+     refused — the backend declined the mode. Full cover, and the body
+               carries the arithmetic plus the way back.
+     info    — answers arrive, frames are just slow. A bottom strip, NOT
+               a cover: the last frame is still worth looking at, and
+               blanking the picture for "this mode is expensive" is how a
+               performance notice gets mistaken for a dead camera. */
+.mv-ld-stall-banner[data-tone='info'] {
+  inset: auto 0 0 0;
+  background: rgba(8, 5, 16, 0.78);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-radius: 0 0 10px 10px;
+}
+.mv-ld-stall-banner[data-tone='info'] .mv-ld-stall-inner {
+  flex-direction: row;
+  gap: 10px;
+  padding: 8px 12px;
+  max-width: 100%;
+}
+.mv-ld-stall-banner[data-tone='info'] .mv-ld-stall-spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  border-top-color: #7dd3fc;
+  flex-shrink: 0;
+}
+.mv-ld-stall-banner[data-tone='info'] .mv-ld-stall-text {
+  font-size: 12px;
+  text-align: left;
+  color: rgba(226, 232, 240, 0.9);
+}
+.mv-ld-stall-banner[data-tone='refused'] .mv-ld-stall-text {
+  color: #ffd9a8;
+}

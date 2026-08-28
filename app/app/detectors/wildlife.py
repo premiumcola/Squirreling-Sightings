@@ -9,6 +9,7 @@ its own module.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 import cv2
@@ -16,6 +17,7 @@ import numpy as np
 
 from ._edgetpu import make_delegate_interpreter
 from ._label_loader import load_label_map
+from ._timing import InferenceTimingMixin
 from ._wildlife_rules import (
     _inat_wildlife_category,
     _is_sciuridae_inat,
@@ -27,7 +29,21 @@ from .discovery import discover_wildlife_paths
 log = logging.getLogger(__name__)
 
 
-class WildlifeClassifier:
+class _InatTiming(InferenceTimingMixin):
+    """Timing holder for the iNat second-opinion interpreter.
+
+    WildlifeClassifier drives TWO interpreters (MobileNet + iNat) and the
+    mixin keeps one rolling window per object, so the second interpreter
+    gets its own holder rather than a second copy of the bucket logic.
+    They are genuinely separate models on possibly different devices —
+    averaging them into one number would hide exactly the case the panel
+    exists to show."""
+
+    def __init__(self) -> None:
+        self._init_timings()
+
+
+class WildlifeClassifier(InferenceTimingMixin):
     """ImageNet MobileNetV2 (1000 classes) second-stage classifier used for
     mammals the COCO detector cannot name — fox, squirrel, hedgehog.
 
@@ -83,11 +99,20 @@ class WildlifeClassifier:
         self._inat_common = None
         self._inat_classify = None
         self._inat_cpu_mode = False
+        # Own rolling window — the iNat model is a different model on a
+        # possibly different device than MobileNet above.
+        self._inat_timing = _InatTiming()
         self._inat_min_score = 0.25
         self._inat_cfg = dict(inat_cfg) if inat_cfg else {}
         self.common = None
         self.classify = None
         self._cpu_mode = False
+        self._init_timings()
+        # The model file the ACTIVE tier really loaded — the CPU tier
+        # substitutes the non-EdgeTPU build, so the configured path is not
+        # the running one.
+        self.active_model_path: str | None = None
+        self.active_inat_model_path: str | None = None
         # Second-stage classifiers default to CPU — see _CLASSIFIER_CPU_NOTE
         # in detectors/_edgetpu.py. Set prefer_cpu: false in the
         # processing.wildlife config to put this back on the TPU.
@@ -125,6 +150,7 @@ class WildlifeClassifier:
                 self.available = True
                 self.mode = "coral"
                 self.reason = "ok"
+                self.active_model_path = model_path
                 log.info(
                     "[det] Wildlife classifier (Coral) aktiv: %s — %d labels",
                     model_path,
@@ -147,6 +173,7 @@ class WildlifeClassifier:
                 self.available = True
                 self.mode = "coral"
                 self.reason = "edgetpu_delegate"
+                self.active_model_path = model_path
                 log.info(
                     "[det] Wildlife classifier (EdgeTPU-Delegate) aktiv: %s — %d labels",
                     model_path,
@@ -178,6 +205,7 @@ class WildlifeClassifier:
                 self.reason = (
                     "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
                 )
+                self.active_model_path = try_path
                 log.info(
                     "[det] Wildlife classifier (CPU) aktiv: %s — %d labels",
                     try_path,
@@ -232,6 +260,7 @@ class WildlifeClassifier:
             self._inat_classify = classify
             self._inat_interpreter = make_interpreter(model_path, device=cfg.get("device"))
             self._inat_interpreter.allocate_tensors()
+            self.active_inat_model_path = model_path
             log.info(
                 "[det] Wildlife · iNat-Backend (Coral) aktiv: %s — %d labels",
                 model_path,
@@ -260,6 +289,7 @@ class WildlifeClassifier:
             self._inat_interpreter = tflite.Interpreter(model_path=cpu_path)
             self._inat_interpreter.allocate_tensors()
             self._inat_cpu_mode = True
+            self.active_inat_model_path = cpu_path
             log.info(
                 "[det] Wildlife · iNat-Backend (CPU) aktiv: %s — %d labels",
                 cpu_path,
@@ -349,11 +379,17 @@ class WildlifeClassifier:
         return self._top3_cpu(crop) if self._cpu_mode else self._top3_coral(crop)
 
     def _top3_coral(self, crop: np.ndarray) -> list[tuple[str, float]]:
+        t_pre = time.perf_counter()
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         width, height = self.common.input_size(self.interpreter)
         resized = cv2.resize(rgb, (width, height))
         self.common.set_input(self.interpreter, resized)
+        # No inference lock on this stage (see _device_lock's "known gap"),
+        # so wait is structurally zero — same mark for t_wait and t_invoke.
+        t_invoke = time.perf_counter()
         self.interpreter.invoke()
+        t_post = time.perf_counter()
+        self._record_timing(t_pre, t_invoke, t_invoke, t_post)
         cls = self.classify.get_classes(
             self.interpreter,
             top_k=3,
@@ -362,6 +398,7 @@ class WildlifeClassifier:
         return [(self.labels.get(int(c.id), str(c.id)), float(c.score)) for c in cls]
 
     def _top3_cpu(self, crop: np.ndarray) -> list[tuple[str, float]]:
+        t_pre = time.perf_counter()
         input_details = self.interpreter.get_input_details()
         output_details = self.interpreter.get_output_details()
         in_h = input_details[0]['shape'][1]
@@ -375,7 +412,10 @@ class WildlifeClassifier:
         else:
             inp = inp.astype(in_dtype)
         self.interpreter.set_tensor(input_details[0]['index'], inp)
+        t_invoke = time.perf_counter()
         self.interpreter.invoke()
+        t_post = time.perf_counter()
+        self._record_timing(t_pre, t_invoke, t_invoke, t_post)
         scores = self.interpreter.get_tensor(output_details[0]['index'])[0]
         # Descending sort of the array values; argsort on negative scores
         # would wrap on uint8, so sort the array itself and reverse.
@@ -415,6 +455,7 @@ class WildlifeClassifier:
             return []
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         floor = max(0.05, self._inat_min_score * 0.5)
+        t_pre = time.perf_counter()
         if self._inat_cpu_mode:
             det = self._inat_interpreter.get_input_details()
             outd = self._inat_interpreter.get_output_details()
@@ -428,7 +469,10 @@ class WildlifeClassifier:
             else:
                 inp = inp.astype(in_dtype)
             self._inat_interpreter.set_tensor(det[0]['index'], inp)
+            t_invoke = time.perf_counter()
             self._inat_interpreter.invoke()
+            t_post = time.perf_counter()
+            self._inat_timing._record_timing(t_pre, t_invoke, t_invoke, t_post)
             scores = self._inat_interpreter.get_tensor(outd[0]['index'])[0]
             top_ids = np.argsort(scores)[::-1][:3]
             out_dtype = outd[0]['dtype']
@@ -455,7 +499,10 @@ class WildlifeClassifier:
         width, height = self._inat_common.input_size(self._inat_interpreter)
         resized = cv2.resize(rgb, (width, height))
         self._inat_common.set_input(self._inat_interpreter, resized)
+        t_invoke = time.perf_counter()
         self._inat_interpreter.invoke()
+        t_post = time.perf_counter()
+        self._inat_timing._record_timing(t_pre, t_invoke, t_invoke, t_post)
         classes = self._inat_classify.get_classes(
             self._inat_interpreter,
             top_k=3,

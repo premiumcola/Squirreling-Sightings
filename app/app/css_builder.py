@@ -88,6 +88,8 @@ LOAD_ORDER = [
     # F · MediaView shared shell chrome (title bar, stage, mode
     # indicator, unified + class legends, re-trigger, panel-tab accents).
     "30g-mediaview-shell.css",
+    # Telemetrie-Panel (Cluster 6 + Kostenzeile unter dem Modus-Schalter).
+    "31-mediaview-telemetry.css",
 ]
 
 _BANNER = (

@@ -29,11 +29,38 @@ import { attachHoverAndLongPress } from '../core/tooltip.js';
 // in this segment's tooltip and as the caption on the scan box the mode
 // draws over the frame (.mv-grid-roi-label).
 export const MV_DETECTION_MODES = [
-  ['off', 'Aus', 'Ganzer Frame, ein einziger Durchlauf'],
-  ['roi', 'ROI', 'Motion-ROI — Inferenz nur auf dem Bewegungs-Ausschnitt (Motion-Crop)'],
-  ['2x2', '2×2', 'Frame in 2×2 Kacheln, jede einzeln geprüft — findet kleine/ferne Tiere besser'],
-  ['3x3', '3×3', 'Frame in 3×3 Kacheln, jede einzeln — am genauesten, langsamer'],
+  ['off', 'Aus', 'Ganzer Frame, ein einziger Durchlauf · 1 Inferenz je Bild'],
+  [
+    'roi',
+    'ROI',
+    'Motion-ROI — Inferenz nur auf dem Bewegungs-Ausschnitt (Motion-Crop) · bis 5 Inferenzen je Bild',
+  ],
+  [
+    '2x2',
+    '2×2',
+    'Frame in 2×2 Kacheln, jede einzeln geprüft — findet kleine/ferne Tiere besser · 5 Inferenzen je Bild',
+  ],
+  [
+    '3x3',
+    '3×3',
+    'Frame in 3×3 Kacheln, jede einzeln — am genauesten · 10 Inferenzen je Bild, entsprechend langsamer',
+  ],
 ];
+
+// Inferences ONE simulator tick spends per mode. Bit-for-bit the hi half
+// of `sim_invokes()` in app/app/detectors/_projection.py: the simulator
+// re-runs the full-frame pass on top of the tiles (it passes no
+// ``full_dets=``), so 3×3 is 1 + 9, not 9.
+//
+// This is the number every pacing decision in the live view scales by.
+// Treating a 3×3 tick like an "Aus" tick is precisely what made the stall
+// watchdog abort ticks that were merely expensive and blame the camera.
+export const MV_MODE_INVOKES = { off: 1, roi: 5, '2x2': 5, '3x3': 10 };
+
+/** Inferences per tick for a mode id. Unknown ids cost one. */
+export function mvModeInvokes(id) {
+  return MV_MODE_INVOKES[id] || 1;
+}
 
 // id → { label, title }, derived from the single MV_DETECTION_MODES source.
 const _MODE_LABEL = Object.fromEntries(

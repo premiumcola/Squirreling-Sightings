@@ -206,3 +206,104 @@ def test_bottom_corner_clusters_do_not_both_reserve_half_the_tile():
         rule = re.search(rf"^{re.escape(cls)} \{{(.*?)\}}", css, re.DOTALL | re.MULTILINE)
         assert rule, f"{cls} rule missing"
         assert "calc(50% - 110px)" not in rule.group(1), f"{cls} still reserves half the tile"
+
+
+# ── desktop: the panels row must survive a wide window ───────────────
+#
+# `.mv-shell-stage` is sized `aspect-ratio: 16/9` off 100 % width inside a
+# column pinned to 100dvh, and `.mv-shell-panels` was the only flexible
+# row with `flex-basis: 0`. Past ~1050 px the stage alone exceeded the
+# column, free space went negative, and the panels row resolved to 0 px —
+# then its own overflow:hidden erased the tab strip. No ancestor could
+# scroll to it either. Both guards below pin the two properties that
+# actually broke.
+
+
+def test_live_panels_row_is_bounded_from_the_stage_and_not_by_a_floor():
+    """The first attempt put `min-height: min(46dvh, 460px)` here. A floor
+    on the only flexible row of a column pinned to 100dvh does not create
+    space — flex-shrink is simply forbidden from taking it, so the deficit
+    lands on the stage, whose automatic minimum is 0. On a 375 px phone
+    that turned a 211 px picture into a ~58 px strip. The over-subscription
+    is bounded on the stage instead; the arithmetic lives in
+    test_sim_layout_budget.py."""
+    css = _read(_CSS_SHELL)
+    rule = re.search(r"#lightboxModal\.lb-live-detect \.mv-shell-panels \{(.*?)\}", css, re.DOTALL)
+    assert rule, "the live panels rule is gone"
+    body = rule.group(1)
+    assert "flex: 1 1 0" in body
+    assert not re.search(r"min-height:\s*min\(", body), "the floor is back on the panels row"
+    stage = re.search(r"#lightboxModal\.lb-live-detect \.mv-shell-stage \{(.*?)\}", css, re.DOTALL)
+    assert stage, "nothing bounds the stage"
+    assert "max-height" in stage.group(1)
+
+
+def test_desktop_gives_the_panels_their_own_column():
+    """A wide window has more room on the HORIZONTAL axis, which a single
+    stacked column cannot spend. The panels get column 2, full height."""
+    css = _read(_CSS_SHELL)
+    grid_at = css.rindex("grid-template-columns")
+    m = None
+    for hit in re.finditer(r"@media \(min-width:\s*(\d+)px\)", css):
+        if hit.start() < grid_at:
+            m = hit
+    assert m, "no desktop breakpoint guards the live grid"
+    # Above every phone in either orientation (a 430 px Pro Max is 932 px
+    # tall, and this view is not used landscape), below the 900 px window
+    # whose stacked stage could not fit — see test_sim_layout_budget.
+    assert 700 <= int(m.group(1)) <= 900, "the breakpoint misses the band it exists for"
+    desktop = css[m.start() :]
+    assert "grid-template-columns" in desktop
+    panels = re.search(
+        r"#lightboxModal\.lb-live-detect \.mv-shell-panels \{([^}]*grid-column[^}]*)\}",
+        desktop,
+        re.DOTALL,
+    )
+    assert panels, "the panels are not placed into their own grid column"
+    assert "grid-column: 2" in panels.group(1)
+
+
+def test_compact_mode_falls_back_to_one_column():
+    """ "Video ausblenden" folds the whole left column away; keeping the
+    two-column grid would leave the panels beside 1fr of nothing."""
+    css = _read(_CSS_SHELL)
+    assert "#lightboxModal.lb-live-detect .mv-shell[data-compact='1']" in css
+
+
+# ── the legend must not be placed over the picture ───────────────────
+
+
+def test_live_mounts_the_legend_inline_not_over_the_frame():
+    """The floating legend positioned itself "opposite the OSD band", but
+    where a camera burns its timestamp is invisible to this app — the flag
+    said top, the camera said bottom, and the two collided. Below the
+    frame is the only placement that cannot collide."""
+    src = _read(_SHELL)
+    assert "renderStatusLegend(legendBand, { float: false })" in src
+    assert "float: true" not in src, "live must not float the legend over the stage"
+    assert "osdBand" not in src, "the OSD-avoid guess is what produced the overlap"
+
+
+# ── swimlane colour must agree with the painted overlays ─────────────
+
+
+def test_swimlane_lane_colour_is_the_track_number_only():
+    """Colour encodes IDENTITY everywhere (bbox, trail, legend tail
+    "Farbe = Person-Nr."). The lane used to repaint a filtered track slate,
+    so an orange trail on the picture had no orange in the strip below."""
+    src = _read(_SWIMLANE)
+    body = src[src.index("function _computeLanes") : src.index("function _buildStructure")]
+    assert "liveTrackColor(lane.num)" in body
+    assert "_MASKED_COLOR" not in src, "status must not travel in the colour channel"
+    assert "lane.status = mvStatusCategory" in body, "status needs the legend's vocabulary"
+
+
+def test_filtered_tracks_are_folded_not_dropped():
+    """They stay reachable (the operator needs to see what the detector is
+    spending inferences on) but must not crowd out the real lanes."""
+    src = _read(_SWIMLANE)
+    assert "data-action=\"swim-filtered\"" in src
+    body = src[src.index("function _computeLanes") :]
+    assert (
+        "every((s) => s.verdict === 'filtered')" in body
+    ), "a lane that passed even once is a real track having a bad frame"

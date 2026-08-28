@@ -21,11 +21,22 @@ import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from ..detectors._projection import sim_invokes as _sim_invokes
 from ..tracker_core import (
     LiveTracker,
     associate_detections,
     compute_miss_grace_samples,
     resolve_track_thresholds,
+)
+from ._sim_guard import (
+    MAX_CAPTURE_LAG_S as _MAX_CAPTURE_LAG_S,
+)
+from ._sim_guard import (
+    affordability,
+    busy_payload,
+    record_cost,
+    refusal_payload,
+    sim_slot,
 )
 from ._sim_tiling import (
     VALID_MODES,
@@ -63,7 +74,8 @@ _FRESH_GRACE_S = 1.0
 # refused even though its arrival stamp looks fresh. Covers the case the
 # drain alone cannot: a CPU-starved decoder reads flat out and still
 # falls behind, so every frame arrives "just now" carrying old pixels.
-_MAX_CAPTURE_LAG_S = 2.0
+# Owned by _sim_guard: the affordability ceiling is the same budget
+# measured from the other end, and the two must never drift apart.
 
 # How long the handler polls for a frame that clears both bars before it
 # gives up and reports the stream stuck.
@@ -207,8 +219,34 @@ def _get_test_tracker(cam_id: str, cam_cfg: dict) -> dict:
     return entry
 
 
+def _requested_det_mode() -> str:
+    """The ``mode`` query arg, normalised. One owner so the admission
+    wrapper and the handler can never gate on different modes."""
+    mode = (request.args.get("mode") or "off").strip().lower()
+    return mode if mode in VALID_MODES else "off"
+
+
 @bp.post('/api/cameras/<cam_id>/test-detection')
 def api_test_detection(cam_id: str):
+    """Admission control in front of the real handler.
+
+    Both gates exist because a tiled mode used to fail DISHONESTLY: the
+    tick never completed, the client watchdog aborted and re-issued it
+    (adding another ten-inference job to a handler Flask cannot cancel),
+    and the operator was shown "Verbindung zur Kamera unterbrochen" for
+    what was really a request nobody could afford. See routes/_sim_guard.
+    """
+    det_mode = _requested_det_mode()
+    with sim_slot(cam_id) as slot:
+        if not slot.acquired:
+            return jsonify(busy_payload(cam_id)), 429
+        verdict = affordability(cam_id, det_mode)
+        if not verdict["ok"]:
+            return jsonify(refusal_payload(cam_id, det_mode, verdict)), 429
+        return _run_test_detection(cam_id)
+
+
+def _run_test_detection(cam_id: str):
     """Run Coral inference on the camera's most-recent frame and return
     each raw detection alongside a verdict — pass / belowthresh /
     filtered — computed against the camera's current configuration
@@ -252,9 +290,7 @@ def api_test_detection(cam_id: str):
     stream_pref = (request.args.get("stream") or "main").strip().lower()
     if stream_pref not in ("main", "sub"):
         stream_pref = "main"
-    det_mode = (request.args.get("mode") or "off").strip().lower()
-    if det_mode not in VALID_MODES:
-        det_mode = "off"
+    det_mode = _requested_det_mode()
 
     # ── Fresh + decoder-strip frame contract ──────────────────────────
     # Poll up to 2.5 s for a frame whose timestamp is NEWER than this
@@ -497,6 +533,14 @@ def api_test_detection(cam_id: str):
         log.warning("[test-detection] %s inference failed: %s", cam_id, e)
         return jsonify({"error": f"Inference fehlgeschlagen: {e}"}), 500
     inference_ms = int(round((_time.monotonic() - inference_t0) * 1000))
+    # Feed the admission gate its own measurement. Every mode's real cost
+    # on THIS camera comes from here — no estimate is used where a
+    # measurement exists. The invoke count is the one this tick ACTUALLY
+    # ran (full-frame pass + the regions tiled_detect built), not the
+    # table's worst case: ``roi`` splits into 1–4 crops depending on the
+    # motion box, so the table cannot say what this tick paid for.
+    sim_tiles = int((sahi_diag or {}).get("tiles") or 0)
+    record_cost(cam_id, det_mode, inference_ms, 1 + sim_tiles)
     # Resolve the global confidence floor — empty/zero on the camera
     # means "use the global processing.detection.min_score". This must
     # match what camera_runtime actually applies at runtime so the
@@ -936,6 +980,12 @@ def api_test_detection(cam_id: str):
         "capture_lag_ms": (None if served_lag_s is None else int(served_lag_s * 1000)),
         "coral_available": bool(getattr(detector, "available", False)),
         "inference_ms": int(inference_ms),
+        # What this mode COST, in the unit the operator can reason about.
+        # The simulator re-runs the full-frame pass on top of the tiles
+        # (no ``full_dets=`` reuse), so 3×3 is ten inferences per tick,
+        # not nine — the frontend paces its watchdog off this number
+        # instead of off the cadence measured in a cheaper mode.
+        "mode_invokes": int(_sim_invokes(det_mode)[1]),
         "gates": {
             "raw": int(len(raw)),
             "pass": int(len(pass_dets)),

@@ -7,6 +7,7 @@ Carved out of `_legacy_classes.py` during R02.2.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 import cv2
@@ -14,11 +15,12 @@ import numpy as np
 
 from ._edgetpu import make_delegate_interpreter
 from ._label_loader import _load_bird_latin_to_de, _pretty_bird_label, load_label_map
+from ._timing import InferenceTimingMixin
 
 log = logging.getLogger(__name__)
 
 
-class BirdSpeciesClassifier:
+class BirdSpeciesClassifier(InferenceTimingMixin):
     """Optional second stage classifier for bird crops.
 
     Tries pycoral (EdgeTPU) first, then tflite-runtime CPU fallback.
@@ -38,11 +40,20 @@ class BirdSpeciesClassifier:
         self.common = None
         self.classify = None
         self._cpu_mode = False
+        # The model file the ACTIVE tier really loaded — the CPU tier
+        # substitutes the non-EdgeTPU build, so the configured path is not
+        # the running one.
+        self.active_model_path: str | None = None
         # Second-stage classifiers default to CPU — see _CLASSIFIER_CPU_NOTE
         # in detectors/_edgetpu.py. Set prefer_cpu: false in the
         # processing.bird_species config to put this back on the TPU.
         self._prefer_cpu = bool(self.cfg.get("prefer_cpu", True))
         self._cpu_threads = self.cfg.get("cpu_threads")
+        # Same four-bucket timing the object detector reports. Without it
+        # the telemetry panel could show what device this stage runs on
+        # but not what it costs — and "CPU" alone is not an answer to
+        # "can I afford 3x3".
+        self._init_timings()
         if not self.enabled:
             return
         model_path = self.cfg.get("model_path")
@@ -70,6 +81,7 @@ class BirdSpeciesClassifier:
                 self.available = True
                 self.mode = "coral"
                 self.reason = "ok"
+                self.active_model_path = model_path
                 log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
                 return
             except Exception as e:
@@ -86,6 +98,7 @@ class BirdSpeciesClassifier:
                 self.available = True
                 self.mode = "coral"
                 self.reason = "edgetpu_delegate"
+                self.active_model_path = model_path
                 log.info("[det] Bird classifier (EdgeTPU-Delegate) aktiv: %s", model_path)
                 return
 
@@ -112,6 +125,7 @@ class BirdSpeciesClassifier:
                 self.reason = (
                     "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
                 )
+                self.active_model_path = try_path
                 log.info("[det] Bird classifier (CPU) aktiv: %s", try_path)
                 return
             except Exception as e2:
@@ -134,11 +148,18 @@ class BirdSpeciesClassifier:
         return self._classify_coral(crop)
 
     def _classify_coral(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
+        t_pre = time.perf_counter()
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         width, height = self.common.input_size(self.interpreter)
         resized = cv2.resize(rgb, (width, height))
         self.common.set_input(self.interpreter, resized)
+        # This stage holds no inference lock (see _device_lock's "known
+        # gap"), so the wait bucket is structurally zero here rather than
+        # unmeasured — t_wait and t_invoke are deliberately the same mark.
+        t_invoke = time.perf_counter()
         self.interpreter.invoke()
+        t_post = time.perf_counter()
+        self._record_timing(t_pre, t_invoke, t_invoke, t_post)
         classes = self.classify.get_classes(
             self.interpreter, top_k=3, score_threshold=self.min_score
         )
@@ -155,6 +176,7 @@ class BirdSpeciesClassifier:
         return None, None, None
 
     def _classify_cpu(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
+        t_pre = time.perf_counter()
         input_details = self.interpreter.get_input_details()
         output_details = self.interpreter.get_output_details()
         in_h = input_details[0]['shape'][1]
@@ -168,7 +190,10 @@ class BirdSpeciesClassifier:
         else:
             inp = inp.astype(in_dtype)
         self.interpreter.set_tensor(input_details[0]['index'], inp)
+        t_invoke = time.perf_counter()
         self.interpreter.invoke()
+        t_post = time.perf_counter()
+        self._record_timing(t_pre, t_invoke, t_invoke, t_post)
         scores = self.interpreter.get_tensor(output_details[0]['index'])[0]
         # Top-3 candidates, descending by score. Walk them and pick the first
         # one with a German mapping (iNat top-1 is often a North-American

@@ -16,6 +16,8 @@ one.
 
 from __future__ import annotations
 
+import collections
+
 import numpy as np
 import pytest
 
@@ -68,6 +70,9 @@ class _Cam(MainLoopMixin):
         self.detector = detector
         self._tracker = _Tracker()
         self._roi_rescue_attempts = 0
+        # Timestamp ring the real runtime carries (runtime.py) — the rescue
+        # rate the telemetry projection reads is derived from it.
+        self._roi_rescue_log = collections.deque(maxlen=64)
         self._roi_rescue_hits = 0
 
     def _filter_masked_detections(self, frame, dets):

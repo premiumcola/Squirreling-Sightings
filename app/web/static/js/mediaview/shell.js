@@ -24,43 +24,38 @@ import { renderPanelTabs } from './panel-tabs.js';
 import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { lbRenderTrackTimeline, lbClearTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { renderLiveSwimlane } from './live-swimlane.js';
+import { observeLiveChromeBudget } from './live-chrome-budget.js';
 
 // Per-mode shell behaviour. interactiveMode → live segmented control vs
-// read-only badge; osdBand → where the camera OSD timestamp sits so the
-// floating legend dodges it; contextKey → overlay-toggle persistence
+// read-only badge; contextKey → overlay-toggle persistence
 // scope; retrigger / fineFold → whether those pieces mount by default.
 const _MODE_FLAGS = {
   recorded: {
     interactiveMode: false,
-    osdBand: 'top',
     contextKey: 'mediathek',
     retrigger: true,
     fineFold: true,
   },
   timelapse: {
     interactiveMode: false,
-    osdBand: 'top',
     contextKey: 'timelapse',
     retrigger: false,
     fineFold: false,
   },
   weather: {
     interactiveMode: false,
-    osdBand: 'top',
     contextKey: 'weather',
     retrigger: false,
     fineFold: true,
   },
   live: {
     interactiveMode: true,
-    osdBand: 'top',
     contextKey: 'live',
     retrigger: false,
     fineFold: true,
   },
   'live-detect': {
     interactiveMode: true,
-    osdBand: 'top',
     contextKey: 'live',
     retrigger: false,
     fineFold: true,
@@ -171,7 +166,7 @@ function _setRoiLabel(stage, on) {
  *
  * @param {Object} config  openMediaView config — { mode, overlays{},
  *   panels{}, item, actions{}, appliedTiling?, detMode?, classes?,
- *   osdBand?, mount? }.
+ *   mount? }.
  * @returns {{ root: HTMLElement, components: Object, teardown(): void }}
  */
 export function mountMediaView(config = {}) {
@@ -180,7 +175,6 @@ export function mountMediaView(config = {}) {
   const overlays = config.overlays || {};
   const panels = config.panels || {};
   const actions = config.actions || {};
-  const osdBand = config.osdBand || flags.osdBand;
   const teardowns = [];
   const components = {};
 
@@ -236,6 +230,14 @@ export function mountMediaView(config = {}) {
     });
     if (mi) {
       components.modeIndicator = mi;
+      // Programmatic mode change (the backend refusing an unaffordable
+      // tiling, say). setValue alone would resync the segments and leave
+      // the tiling grid painted for a mode that is no longer selected —
+      // one owner for both halves.
+      components.setDetMode = (id) => {
+        mi.setValue(id);
+        setGridVisible(id !== 'off', id);
+      };
       teardowns.push(mi.teardown);
     }
   }
@@ -264,11 +266,17 @@ export function mountMediaView(config = {}) {
   if (overlays.bboxes) {
     // I4 · status legend = the LINE-TYPE legend (Bestätigt / Schwach / Ghost /
     // Maskiert · "Farbe = Person-Nr."). Colour now encodes the track number,
-    // so the class-colour legend is gone. Live floats it over the stage's
-    // bottom edge; recorded/weather keep it inline in the band below the stage.
-    const sl = flags.interactiveMode
-      ? renderStatusLegend(slot('stage'), { float: true, osdBand })
-      : renderStatusLegend(legendBand, { float: false, osdBand });
+    // so the class-colour legend is gone.
+    //
+    // EVERY mode mounts it inline in the band below the stage — live no
+    // longer floats it over the picture. The float variant auto-positioned
+    // itself "opposite the OSD timestamp band", but that band's position is
+    // a property of the CAMERA's burnt-in overlay, which no part of this
+    // app can see: the mode flag said 'top', the operator's Reolink burns
+    // it at the bottom, and the legend landed straight on top of it. There
+    // is no placement over the frame that is safe against an overlay we
+    // cannot locate — below the frame is.
+    const sl = renderStatusLegend(legendBand, { float: false });
     if (sl) {
       components.statusLegend = sl;
       teardowns.push(sl.teardown);
@@ -334,6 +342,12 @@ export function mountMediaView(config = {}) {
     const host = typeof config.mount === 'string' ? byId(config.mount) : config.mount;
     if (host) host.appendChild(root);
   }
+
+  // The live layout sizes its stage against the height the chrome rows
+  // leave over, and the playbar in that sum is content-sized (44 px per
+  // swimlane lane). Publish the measured total instead of subtracting a
+  // constant that goes stale the next time a row gains a line.
+  if (flags.interactiveMode) teardowns.push(observeLiveChromeBudget(root));
 
   return {
     root,

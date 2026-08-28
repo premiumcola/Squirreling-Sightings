@@ -33,6 +33,7 @@ import {
 } from './live-detect-overlays.js';
 import { _renderLiveSwimlane } from './live-detect-panels.js';
 import { _tick } from './live-detect-poll.js';
+import { mountModeCost } from './telemetry/index.js';
 
 export function _setupLiveChrome(camId, cameraName) {
   if (!S.session) return;
@@ -68,6 +69,14 @@ export function _setupLiveChrome(camId, cameraName) {
       onModeChange: (id) => {
         if (!S.session) return;
         S.session.detMode = id;
+        // P1 · drop the cadence EMA. It describes the cost of the mode
+        // being LEFT, and every pacing decision downstream (tick delay,
+        // hold time, the pace watchdog) reads it. Blending a 10-inference
+        // 3×3 cycle into an "Aus" average is what made the first tiled
+        // tick look overdue the moment it started.
+        S.cycleEmaMs = NaN;
+        S.holdMsActive = NaN;
+        _renderModeCost(id);
         _forceImmediateTick();
       },
       onOverlayChange: (id, on) => {
@@ -141,21 +150,38 @@ export function _setupLiveChrome(camId, cameraName) {
   // Stream Sub/Main toggle → the shell's reserved Stream slot (D3).
   _mountStreamToggle(shell);
 
+  // The cost of the selected mode, one line, directly under the switch —
+  // the question "kann ich 3×3 fahren?" is asked at the moment the chip is
+  // tapped, so the answer belongs there and not two taps away in a tab.
+  // It shows ONE row of the Cluster-6 table, never the table.
+  const controls = shell.root.querySelector('[data-slot="controls"]');
+  if (controls) {
+    S.session.modeCost = mountModeCost(controls, () => S.session?.detMode || 'off');
+  }
+
   // Paint an empty swimlane before the first tick lands.
   _renderLiveSwimlane();
 }
 
+// Repaint the cost line for a newly chosen mode. Separate from the mount
+// so the mode-change handler does not need to know how the line is built.
+function _renderModeCost(id) {
+  S.session?.modeCost?.render?.(id);
+}
+
+// Drop the pending cadence delay and tick now. P7 · no abort here. This
+// is the path a mode or stream change takes, so it was the ONE caller
+// guaranteed to hit a request that is still in flight — and aborting it
+// bought nothing: Flask runs the handler to its last inference either
+// way, and the backend's single slot then answers this "immediate" tick
+// with 429 busy. _tick carries the in-flight rule for every caller now;
+// clearing the timer is all that is left to do here.
 export function _forceImmediateTick() {
   const session = S.session;
   if (!session) return;
   if (session.tickHandle) {
     clearTimeout(session.tickHandle);
     session.tickHandle = null;
-  }
-  try {
-    session.abort?.abort();
-  } catch {
-    /* ignore */
   }
   _tick();
 }

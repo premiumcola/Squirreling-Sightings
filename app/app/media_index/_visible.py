@@ -133,11 +133,19 @@ def camera_stats(index, visible, name_hint: str = "") -> dict:
         primary = primary_label(event.get("labels"))
         if primary in COUNTED_LABELS:
             label_counts[primary] = label_counts.get(primary, 0) + 1
+    # Raw timelapse frames are walked (they are in MEDIA_TREES) but were
+    # not in COUNTED_TREES, so a yearly profile's ~4 GB of jpgs per camera
+    # sat on the disk and appeared nowhere in the storage overview. Report
+    # them inside the total AND on their own line: they are the largest
+    # single thing the operator can switch off, so a lump sum would hide
+    # exactly the number worth acting on.
+    frames_bytes = index.tree_bytes.get("timelapse_frames", 0)
     return {
         "id": camera_id,
         "camera_id": camera_id,
         "name": resolved_name,
-        "size_mb": round(index.counted_bytes / 1024 / 1024, 1),
+        "size_mb": round((index.counted_bytes + frames_bytes) / 1024 / 1024, 1),
+        "timelapse_frames_mb": round(frames_bytes / 1024 / 1024, 1),
         "jpg_count": index.media_file_count,
         "event_count": event_count,
         "timelapse_count": timelapse_count,

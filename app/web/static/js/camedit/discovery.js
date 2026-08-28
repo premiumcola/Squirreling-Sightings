@@ -17,6 +17,7 @@ import { RTSP_PATH_OPTS, _rtspEnc, _unmaskUrlsForSubmit } from './rtsp.js';
 import { getWhitelistState } from './whitelist.js';
 import { _restoreEditWrapper } from './panel.js';
 import { openWizard } from './wizard.js';
+import { applySecretField } from '../chrome/secret-field.js';
 import { _collectClassSeverity, _collectAlertCooldown } from '../alerting.js';
 import { _collectLabelThresholds, _collectConfirmationWindow } from './detection.js';
 
@@ -635,7 +636,9 @@ byId('cameraForm').onsubmit = async (e) => {
     rtsp_url: f['rtsp_url'].value,
     snapshot_url: f['snapshot_url'].value,
     username: f['rtsp_user']?.value || '',
-    password: f['rtsp_pass']?.value || '',
+    // `password` is deliberately absent — applySecretField adds it
+    // below only when the operator typed or cleared one. See the
+    // comment at the POST.
     object_filter: f['object_filter'].value
       .split(',')
       .map((x) => x.trim())
@@ -768,6 +771,16 @@ byId('cameraForm').onsubmit = async (e) => {
     zones: JSON.parse(f['zones_json'].value || '[]'),
     masks: JSON.parse(f['masks_json'].value || '[]'),
   };
+  // The RTSP password is the one field this DOM walk must NOT read
+  // straight into the payload. The server stopped shipping it
+  // (routes/_secrets.py), so the input is empty on every hydrate —
+  // and the server reads an explicit "" as "clear the stored secret".
+  // `password: f['rtsp_pass'].value || ''` would therefore have wiped
+  // the credentials of all three cameras on the next ordinary save.
+  // Omitted = unchanged · "" = cleared (Löschen button) · value =
+  // replaced. rtsp_url/snapshot_url ride along credential-free; the
+  // server folds the effective password back into them.
+  applySecretField(payload, 'password', f['rtsp_pass']);
   const _savedId = payload.id;
   _restoreEditWrapper();
   // Backend rebuilds the canonical id when manufacturer/model/name/rtsp_url

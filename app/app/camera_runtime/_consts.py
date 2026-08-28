@@ -9,6 +9,18 @@ from __future__ import annotations
 import logging
 import shutil as _shutil
 
+# Mirror of _TL_PROFILES_DEF in web/static/js/camedit/timelapse-settings.js.
+# quarterly / yearly were configurable in the UI but absent here, so a user
+# could enable them and no capture thread was ever started — silently inert.
+# The tuple itself lives in timelapse_windows (the module that also owns
+# the window keys and the cadence); this is a local alias so the
+# camera_runtime siblings keep their short import. Cross-package readers
+# import ``timelapse_windows.TIMELAPSE_PROFILES``, not this private name.
+from ..settings._consts import TL_DEFAULT_PROFILES
+from ..timelapse_windows import TIMELAPSE_PROFILES
+
+_PROFILES = TIMELAPSE_PROFILES
+
 # Does this container have an ffmpeg binary? If so, motion recording uses the
 # fast stream-copy path (direct RTSP → mp4, no CPU re-encode). Otherwise we
 # fall back to the OpenCV frame-buffer approach, which loses timestamps.
@@ -63,8 +75,13 @@ log = logging.getLogger("app.camera_runtime")
 log_tl = logging.getLogger("app.camera_runtime.timelapse")  # timelapse-specific logs
 log_cam = logging.getLogger("app.camera_runtime.camera")  # connection/stream logs
 
-_PROFILES = ("daily", "weekly", "monthly", "custom")
-_PROFILE_PERIOD_DEFAULTS = {"daily": 86400, "weekly": 604800, "monthly": 2592000, "custom": 600}
+# Fallback period per profile when settings.json carries no
+# ``period_seconds``. Derived from the shipped defaults so a third copy
+# of the same numbers cannot drift out of step with them — `custom`
+# already had (600 vs 3600) and that drift was a silent 6× shorter video.
+_PROFILE_PERIOD_DEFAULTS = {
+    name: int(spec["period_seconds"]) for name, spec in TL_DEFAULT_PROFILES.items()
+}
 
 # COCO classes whose geometry usually localises a small ground mammal even
 # when the label is wrong (squirrels read as "cat" head-on, "bear" furry,

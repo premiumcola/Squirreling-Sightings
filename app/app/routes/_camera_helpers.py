@@ -88,22 +88,6 @@ def _auto_detect_device_info(cam: dict) -> list[str]:
     return filled
 
 
-def _mask_password_in_url(url: str) -> str:
-    """Replace the password in an embedded-credential URL with '•••' so the
-    recovery preview can show the URL shape without leaking the secret."""
-    if not url or "://" not in url or "@" not in url:
-        return url
-    try:
-        scheme, rest = url.split("://", 1)
-        creds, host = rest.rsplit("@", 1)
-        if ":" in creds:
-            user, _ = creds.split(":", 1)
-            return f"{scheme}://{user}:•••@{host}"
-        return url
-    except Exception:
-        return url
-
-
 def _list_backup_files() -> list[Path]:
     """Backup sources, oldest-priority order:
     1. settings.json.bak  (last save)

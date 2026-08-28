@@ -1,17 +1,16 @@
 // ─── camedit/timelapse-settings.js ─────────────────────────────────────────
 // Stage 25 of the legacy.js → ES modules refactor — Timelapse subdomain.
 // Profiles, period/target presets, camera list + mode grid in cam-edit,
-// custom-preset chips, save handlers, status-bar pill on the dashboard,
-// loadTimelapse + toggleTimelapse for the camera-card buttons.
-// Pure code move from legacy.js, no behaviour changes.
+// custom-preset chips, save handlers, loadTimelapse + toggleTimelapse
+// for the camera-card buttons.
 //
-// _TL_FILMSTRIP travels with renderTlStatusBar — it is the only consumer
-// now that the Mediathek timelapse-card moved to orchestration.js.
+// The dashboard status pill lives in timelapse-status.js — it grew a
+// live storage panel and this file was already past the 400-line ceiling.
 // _tlFetchTimeline stays in legacy.js: despite the `tl` prefix it is
 // timeline-fetch logic, paired with the dashboard-section slider.
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { j, apiGet, apiPost } from '../core/api.js';
+import { apiGet, apiPost } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 import { loadAll } from '../live-update.js';
 // _renderTlCameraList + _updateTlActiveTags use getCameraIcon to
@@ -19,6 +18,23 @@ import { loadAll } from '../live-update.js';
 // row + the "active" tag pill. Missing this import was the cause of
 // "Fehler: getCameraIcon is not defined" on the Timelapse Settings tab.
 import { getCameraIcon } from '../core/icons.js';
+// The profile catalogue and every pure period→interval→disk
+// computation live in _timelapse-model.js; this file is the renderer.
+import {
+  _TL_PROFILES_DEF,
+  _TL_PERIOD_OPTIONS,
+  _TL_CUSTOM_PRESETS,
+  _TL_FIXED_FPS,
+  _TL_MIN_INTERVAL_S,
+  _tlClosestCustomPreset,
+  _tlClosestPeriod,
+  _tlIntervalLabel,
+  _tlSpeedupLabel,
+  _tlTargetLabel,
+  _tlCalcInterval,
+  _tlMaxTargetForPeriod,
+  _tlResultDesc,
+} from './_timelapse-model.js';
 
 async function loadTimelapse(camId) {
   let r;
@@ -72,174 +88,10 @@ async function toggleTimelapse(camId, currentlyEnabled) {
 }
 window.toggleTimelapse = toggleTimelapse;
 
-const _TL_PROFILES_DEF = [
-  {
-    key: 'daily',
-    label: 'Täglich',
-    defaultPeriod: 86400,
-    defaultTarget: 60,
-    minTarget: 10,
-    maxTarget: 180,
-    step: 5,
-  },
-  {
-    key: 'weekly',
-    label: 'Wöchentlich',
-    defaultPeriod: 604800,
-    defaultTarget: 120,
-    minTarget: 30,
-    maxTarget: 360,
-    step: 10,
-  },
-  {
-    key: 'monthly',
-    label: 'Monatlich',
-    defaultPeriod: 2592000,
-    defaultTarget: 300,
-    minTarget: 60,
-    maxTarget: 600,
-    step: 15,
-  },
-  {
-    key: 'quarterly',
-    label: 'Quartal',
-    defaultPeriod: 7776000,
-    defaultTarget: 600,
-    minTarget: 120,
-    maxTarget: 1800,
-    step: 30,
-  },
-  {
-    key: 'yearly',
-    label: 'Jährlich',
-    defaultPeriod: 31536000,
-    defaultTarget: 900,
-    minTarget: 300,
-    maxTarget: 2700,
-    step: 60,
-  },
-  {
-    key: 'custom',
-    label: 'Benutzerdefiniert',
-    defaultPeriod: 3600,
-    defaultTarget: 30,
-    minTarget: 10,
-    maxTarget: 2700,
-    step: 10,
-  },
-];
-const _TL_PERIOD_OPTIONS = [
-  { v: 900, l: '15 Min' },
-  { v: 3600, l: '1 Stunde' },
-  { v: 21600, l: '6 Stunden' },
-  { v: 43200, l: '12 Stunden' },
-  { v: 86400, l: '1 Tag' },
-  { v: 259200, l: '3 Tage' },
-  { v: 604800, l: '1 Woche' },
-  { v: 1209600, l: '2 Wochen' },
-  { v: 2592000, l: '1 Monat' },
-  { v: 7776000, l: '1 Quartal' },
-  { v: 31536000, l: '1 Jahr' },
-];
-// Period+target presets for the "Benutzerdefiniert" profile — the user picks
-// one tuple rather than two independent controls. Value is "<periodS>,<targetS>".
-const _TL_CUSTOM_PRESETS = [
-  { period: 900, target: 60, label: '15 Min → 1 Min Video' },
-  { period: 1800, target: 60, label: '30 Min → 1 Min Video' },
-  { period: 3600, target: 30, label: '1 Std → 30 Sek Video' },
-  { period: 3600, target: 60, label: '1 Std → 1 Min Video' },
-  { period: 10800, target: 60, label: '3 Std → 1 Min Video' },
-  { period: 21600, target: 60, label: '6 Std → 1 Min Video' },
-  { period: 21600, target: 120, label: '6 Std → 2 Min Video' },
-  { period: 43200, target: 60, label: '12 Std → 1 Min Video' },
-  { period: 43200, target: 120, label: '12 Std → 2 Min Video' },
-  { period: 86400, target: 30, label: '24 Std → 30 Sek Video' },
-  { period: 86400, target: 60, label: '24 Std → 1 Min Video' },
-  { period: 86400, target: 120, label: '24 Std → 2 Min Video' },
-];
-function _tlClosestCustomPreset(periodS, targetS) {
-  const pN = parseInt(periodS) || 3600,
-    tN = parseInt(targetS) || 60;
-  let best = _TL_CUSTOM_PRESETS[0],
-    bd = Infinity;
-  for (const p of _TL_CUSTOM_PRESETS) {
-    // rank exact period match above exact target match
-    const d = Math.abs(Math.log(p.period / pN)) * 2 + Math.abs(Math.log(p.target / tN));
-    if (d < bd) {
-      bd = d;
-      best = p;
-    }
-  }
-  return `${best.period},${best.target}`;
-}
-function _tlClosestPeriod(v) {
-  const n = parseInt(v) || 3600;
-  return _TL_PERIOD_OPTIONS.reduce((a, b) => (Math.abs(b.v - n) < Math.abs(a.v - n) ? b : a)).v;
-}
-// E2 · fps is now a system-wide constant (matches the backend's hard
-// 15 fps lock from settings/migrations.py · migrate_timelapse_intervals).
-// The user-tunable <select> is gone; the field still round-trips via
-// a hidden input so the save payload shape is unchanged for any
-// downstream consumer.
-const _TL_FIXED_FPS = 15;
-// _TL_MIN_INTERVAL_S mirrors the backend's 8 s capture-interval floor.
-// _tlCalcInterval rounds up to this floor; the slider max bound on each
-// non-custom profile is derived from period / (floor × fps) so the user
-// can't choose a target the encoder would have to back-fill below 8 s.
-const _TL_MIN_INTERVAL_S = 8;
-function _tlFmtInterval(secs) {
-  const s = Number(secs);
-  if (!isFinite(s) || s <= 0) return '—';
-  if (s < 10) {
-    // 0.6 → "0,6s"  ·  5 → "5s"  ·  5.5 → "5,5s"
-    const r = Math.round(s * 10) / 10;
-    const str = r === Math.floor(r) ? String(Math.floor(r)) : r.toFixed(1).replace('.', ',');
-    return `${str}s`;
-  }
-  if (s < 60) return `${Math.round(s)}s`;
-  if (s < 3600) return `${Math.round(s / 60)}min`;
-  if (s < 86400) return `${Math.round(s / 3600)}h`;
-  return `${Math.round(s / 86400)}d`;
-}
-function _tlSpeedupLabel(v) {
-  if (v >= 10000) return (Math.round(v / 100) / 10).toFixed(1) + 'k×';
-  return v + '×';
-}
 /* Custom inline SVG icon set for timelapse compact cards — black/white/violet only */
 const _TL_ICO_SPAN = `<svg width="16" height="14" viewBox="0 0 14 12" fill="none" aria-hidden="true"><rect x="0.75" y="0.75" width="2" height="10.5" rx="1" fill="currentColor"/><line x1="3.5" y1="6" x2="7" y2="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><polygon points="7,3 13.5,6 7,9" fill="currentColor"/></svg>`;
 const _TL_ICO_FRAMES = `<svg width="15" height="13" viewBox="0 0 13 11" fill="none" aria-hidden="true"><rect x="2.5" y="0.75" width="8" height="9.5" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="0.5" y="2.25" width="2" height="1.75" rx="0.5" fill="currentColor"/><rect x="0.5" y="7" width="2" height="1.75" rx="0.5" fill="currentColor"/><rect x="10.5" y="2.25" width="2" height="1.75" rx="0.5" fill="currentColor"/><rect x="10.5" y="7" width="2" height="1.75" rx="0.5" fill="currentColor"/></svg>`;
 const _TL_ICO_SPEED = `<svg width="14" height="13" viewBox="0 0 12 11" fill="none" aria-hidden="true"><path d="M1 1.25L5 5.5L1 9.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 1.25L10 5.5L6 9.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-function _tlIntervalLabel(interval_s) {
-  if (interval_s < 60) return interval_s + 's';
-  if (interval_s < 3600) return Math.round(interval_s / 60) + 'min';
-  if (interval_s < 86400) return Math.round(interval_s / 3600) + 'h';
-  return Math.round(interval_s / 86400) + 'd';
-}
-function _tlTargetLabel(secs) {
-  const n = parseInt(secs) || 0;
-  if (n < 60) return n + 's';
-  return Math.round(n / 60) + 'min';
-}
-function _tlCalcInterval(periodS, targetS, fps) {
-  // E2 · floor lifted 2 → 8 to match the system-wide capture floor.
-  // Returns {interval_s, clamped} so the caller (e.g. _tlResultDesc)
-  // can surface a "video will be shorter than chosen" hint when the
-  // raw arithmetic wants something tighter than 8 s.
-  const pN = parseInt(periodS) || 86400;
-  const tN = Math.max(1, parseInt(targetS) || 60);
-  const fN = Math.max(1, parseInt(fps) || _TL_FIXED_FPS);
-  const raw = pN / (tN * fN);
-  if (raw < _TL_MIN_INTERVAL_S) return { interval_s: _TL_MIN_INTERVAL_S, clamped: true, raw: raw };
-  return { interval_s: Math.round(raw), clamped: false, raw: raw };
-}
-// E2 · derived max target so the slider can't be dragged into the
-// clamp zone for a given period. Non-custom profiles call this when
-// rendering + when the period changes.
-function _tlMaxTargetForPeriod(periodS, profileMax) {
-  const pN = parseInt(periodS) || 86400;
-  const ceiling = Math.floor(pN / (_TL_MIN_INTERVAL_S * _TL_FIXED_FPS));
-  return Math.max(1, Math.min(profileMax || ceiling, ceiling));
-}
 function _updateTlActiveTags(cameras) {
   const wrap = byId('tlActiveTags');
   if (!wrap) return;
@@ -385,52 +237,6 @@ window.selectTlCam = function (camId) {
   const content = byId('tlCamContent');
   if (cam && content) content.innerHTML = _renderTlModesGrid(cam);
 };
-// Renamed from _tlPeriodLabel — the original name collided with the
-// item-shaped _tlPeriodLabel below at line ~5966. As a regular
-// <script> the duplicate function declaration silently overrode this
-// one, leaving "Timelapse" as the period label everywhere this was
-// called; in module mode the duplicate is a SyntaxError. Restoring
-// the original numeric→German-duration intent fixes a long-latent UI
-// bug as a side effect of the rename.
-function _tlDurationLabel(s) {
-  const n = parseInt(s) || 0;
-  if (n >= 31536000)
-    return Math.round(n / 31536000) + ' Jahr' + (Math.round(n / 31536000) !== 1 ? 'e' : '');
-  if (n >= 2592000)
-    return Math.round(n / 2592000) + ' Monat' + (Math.round(n / 2592000) !== 1 ? 'e' : '');
-  if (n >= 604800)
-    return Math.round(n / 604800) + ' Woche' + (Math.round(n / 604800) !== 1 ? 'n' : '');
-  if (n >= 86400) return Math.round(n / 86400) + ' Tag' + (Math.round(n / 86400) !== 1 ? 'e' : '');
-  if (n >= 3600) return Math.round(n / 3600) + ' Stunde' + (Math.round(n / 3600) !== 1 ? 'n' : '');
-  return Math.round(n / 60) + ' Min';
-}
-function _tlResultDesc(periodS, targetS, fps) {
-  const pN = parseInt(periodS) || 86400,
-    tN = parseInt(targetS) || 60,
-    fN = parseInt(fps) || _TL_FIXED_FPS;
-  const ci = _tlCalcInterval(pN, tN, fN);
-  // E2 · when the clamp fires, the EFFECTIVE total frame count is
-  // capped at period/floor and the realised video is shorter than
-  // the user asked for. Surface that explicitly instead of silently
-  // padding the encoder. ``effectiveFrames`` is what actually lands
-  // on disk; ``realisedDuration`` is what the user will see in the
-  // mediathek.
-  const intervalS = ci.interval_s;
-  const effectiveFrames = Math.max(1, Math.floor(pN / intervalS));
-  const realisedDuration = effectiveFrames / fN;
-  const requestedFrames = Math.max(1, Math.round(tN * fN));
-  const totalFrames = ci.clamped ? effectiveFrames : requestedFrames;
-  const periodLabel = _tlDurationLabel(pN);
-  const intervalLabel = _tlFmtInterval(intervalS);
-  const compression = Math.round(pN / Math.max(1, tN));
-  // ~40 KB per JPEG at q≈72; sub-1s interval drops to q=50 ≈ 26 KB.
-  const perFrameKb = intervalS < 1 ? 26 : 40;
-  const diskMb = Math.max(1, Math.round((totalFrames * perFrameKb) / 1024));
-  const targetLine = ci.clamped
-    ? `<div class="tl-drow tl-drow-warn"><span class="tl-drow-ico">⚠</span><span class="tl-drow-text">Intervall auf Minimum ${_TL_MIN_INTERVAL_S} s begrenzt — Video wird ${Math.round(realisedDuration)} s statt ${tN} s lang</span></div>`
-    : '';
-  return `<div class="tl-drow"><span class="tl-drow-ico">⏱</span><span class="tl-drow-text">${periodLabel} → ${tN}s Video</span></div>${targetLine}<div class="tl-drow"><span class="tl-drow-ico">📸</span><span class="tl-drow-text">${totalFrames} Frames · Alle ${intervalLabel} ein Foto</span></div><div class="tl-drow tl-drow-accent"><span class="tl-drow-ico">⚡</span><span class="tl-drow-text">${compression}× Zeitraffer · ~${diskMb} MB Speicher</span></div>`;
-}
 // _renderTlProfileCards replaced by _renderTlModesGrid (4-column grid)
 window._tlRefreshDesc = function (camId, profKey) {
   const targetEl = byId(`tlProfTarget_${camId}_${profKey}`);
@@ -480,58 +286,6 @@ window.saveTlCameraProfiles = async function (camId) {
   }
 };
 
-// ── Timelapse Status Bar (Dashboard in Cameras section) ───────────────────────
-window._tlStatus = null;
-async function loadTlStatus() {
-  try {
-    window._tlStatus = await j('/api/timelapse/status');
-    renderTlStatusBar();
-  } catch (_err) {
-    /* silent */
-  }
-}
-function renderTlStatusBar() {
-  const bar = byId('tlStatusBar');
-  if (!bar) return;
-  const s = window._tlStatus;
-  if (!s || s.active_count === 0) {
-    bar.innerHTML = '';
-    return;
-  }
-  const activeCams = (s.cameras || []).filter((c) => c.any_active);
-  const panelId = 'tlSbPanel';
-  bar.innerHTML = `
-    <div class="tl-sb-pill" onclick="byId('${panelId}').classList.toggle('hidden')">
-      ${_TL_FILMSTRIP}
-      <span>Timelapse aktiv</span>
-      <span class="tl-sb-count">${activeCams.length}</span>
-    </div>
-    <div class="tl-sb-panel hidden" id="${panelId}">
-      ${activeCams
-        .map(
-          (cam) => `
-        <div class="tl-sb-cam">
-          <div class="tl-sb-cam-name">${esc(cam.name)}</div>
-          <div class="tl-sb-profiles">
-            ${_TL_PROFILES_DEF
-              .map((p) => {
-                const prof = cam.profiles[p.key];
-                if (!prof?.enabled) return '';
-                return `<div class="tl-sb-profile">
-                <span class="tl-sb-prof-name">${esc(p.label)}</span>
-                <span class="tl-sb-prof-frames">${prof.frame_count} Frames heute</span>
-                <span class="tl-sb-prof-interval">alle ~${_tlIntervalLabel(prof.interval_s)}</span>
-              </div>`;
-              })
-              .join('')}
-          </div>
-        </div>`,
-        )
-        .join('')}
-      <div class="tl-sb-footer small muted">Stand: ${esc(s.today || '—')}</div>
-    </div>`;
-}
-
 // (Wizard form seeds + tab/prev/next/finish bindings moved into
 //  camedit/wizard.js in stage 25 C.)
 
@@ -539,17 +293,18 @@ function renderTlStatusBar() {
 // mediaCardHTML, _MOC_*, renderMediaOverview, _setActiveMocCard,
 // drilldown openers, _goToPage, renderMediaPagination, _ensureProcessingPoll,
 // renderMediaGrid, _MEDIA_TITLE_SVG, updateMediaSectionTitle, syncMediaPills:
-// all extracted to mediathek/orchestration.js in stage 23. _TL_FILMSTRIP
-// stays here — still referenced by the timelapse-card snippet above.
-const _TL_FILMSTRIP = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><line x1="6" y1="3" x2="18" y2="3"/><line x1="6" y1="21" x2="18" y2="21"/><polygon points="7,4 17,4 12,12" fill="#c4b5fd" opacity=".8"/><polygon points="12,12 7,20 17,20" fill="#c4b5fd" opacity=".5"/></svg>`;
+// all extracted to mediathek/orchestration.js in stage 23. The dashboard
+// status pill (and _TL_FILMSTRIP with it) moved to timelapse-status.js
+// when this file passed the 400-line ceiling.
 
 // Public surface — bridges in legacy.js consume these by name.
 
-export { loadTimelapse, toggleTimelapse, loadTlStatus, _updateTlActiveTags };
+export { loadTimelapse, toggleTimelapse, _updateTlActiveTags };
+// Consumed by timelapse-status.js — the profile catalogue and the
+// interval formatter are shared, not duplicated.
+export { _TL_PROFILES_DEF, _tlIntervalLabel };
 
 // ── window.* bridges ────────────────────────────────────────────────────────
-// loadAll() in live-update.js looks these up by global name; without
-// them the dashboard timelapse status pill stays empty and the cam-
-// edit Timelapse-Tab "active" tags never refresh.
-window.loadTlStatus = loadTlStatus;
+// loadAll() in live-update.js looks this up by global name; without it
+// the cam-edit Timelapse-Tab "active" tags never refresh.
 window._updateTlActiveTags = _updateTlActiveTags;

@@ -617,12 +617,25 @@ class SunTimelapseMixin:
             # Within limits but still record the drift for the UI to
             # show "right on time" without a warning pill.
             test_session.phase_drift_min = drift_min
-        # E1 · 8 s capture floor. The Reolink snapshot-API caches its
-        # last-served buffer for ~5–14 consecutive pulls on a 3 s
-        # cadence; an 8 s interval pushes the cache window past every
-        # subsequent grab so each frame is a fresh fetch. Anything
-        # below 8 s on legacy settings is clamped + logged so a future
-        # regression at the storage layer surfaces immediately.
+        # E1 · 8 s capture floor.
+        #
+        # Correction to the original note here: this path does NOT talk
+        # to the Reolink snapshot API, so a camera-side snapshot cache
+        # cannot be the mechanism. Frames come from
+        # ``rt.snapshot_jpeg_hires()`` — the in-process main-stream
+        # buffer the detection loop already keeps fresh. The real
+        # Reolink-snapshot path is camera_runtime/_capture.py's
+        # ``requests.get(snapshot_url)``, reached only when a camera has
+        # no rtsp_url, and it is paced by ``snapshot_interval_s`` (which
+        # the settings migration clamps to the same 8 s).
+        #
+        # What the floor actually buys here: at 3 s against a static sky
+        # consecutive buffer reads are perceptually identical and the
+        # pHash dedup drops them, so the capture cost bought nothing.
+        # 8 s gives the scene time to change. Same observed win,
+        # different mechanism — it is a tuning choice, not a hardware
+        # constraint. Anything below 8 s on legacy settings is clamped +
+        # logged so a storage-layer regression surfaces immediately.
         _raw_interval = int(pcfg.get("interval_s", 8) or 8)
         if _raw_interval < 8:
             log.warning(

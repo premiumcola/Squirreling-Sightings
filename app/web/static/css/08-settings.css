@@ -183,11 +183,60 @@
   color: #fff;
 }
 .pw-eye svg,
-.url-eye svg {
+.url-eye svg,
+.pw-clear svg {
   display: block;
   width: 20px;
   height: 20px;
   flex-shrink: 0;
+}
+/* "Gespeichertes Geheimnis löschen" — sits left of the eye, and is
+   rendered `hidden` until the server says one IS stored. Without it
+   the operator had no way to remove a mistyped bot token: an empty
+   field means "unchanged", so the payload never carried a "". Same
+   44 × 44 hit area as the eye for the iOS tap-target floor. */
+.pw-clear {
+  position: absolute;
+  right: 47px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 2;
+}
+.pw-clear[hidden] {
+  display: none;
+}
+@media (hover: hover) {
+  .pw-clear:hover {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+  }
+}
+/* A clear is pending until the form is saved — say so in the field
+   itself, not only in the placeholder, so it survives a tab switch. */
+.pw-input--cleared {
+  color: #f87171;
+}
+.pw-input--cleared::placeholder {
+  color: rgba(248, 113, 113, 0.75);
+}
+/* Room for BOTH buttons when a secret is stored. */
+.pw-wrap input {
+  padding-right: 96px !important;
 }
 /* URL-field eye toggle — masks the password portion of an rtsp://… or
    http://user:pass@… URL while keeping the real value stored in

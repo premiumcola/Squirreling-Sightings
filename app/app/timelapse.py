@@ -6,10 +6,11 @@ import logging
 import os
 import subprocess
 import tempfile
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import cv2
+
+from .timelapse_frames import frames_for_day_stamped
 
 log = logging.getLogger(__name__)
 
@@ -46,19 +47,11 @@ def _duration_label(target_s: int) -> str:
 class TimelapseBuilder:
     def __init__(self, storage_root: str | Path):
         self.root = Path(storage_root)
-        self.media_root = self.root / "media"
         self.out_root = self.root / "timelapse"
         self.out_root.mkdir(parents=True, exist_ok=True)
 
     def _timelapse_frames_dir(self, camera_id: str) -> Path:
         return self.root / "timelapse_frames" / camera_id
-
-    def _camera_images_for_day(self, camera_id: str, day: str):
-        cam_dir = self.media_root / camera_id
-        if not cam_dir.exists():
-            return []
-        prefix = day.replace("-", "") + "-"
-        return sorted(cam_dir.glob(f"{prefix}*.jpg"))
 
     @staticmethod
     def _is_valid_frame(img) -> tuple[bool, str]:
@@ -571,7 +564,8 @@ class TimelapseBuilder:
         path = self._write_video_ffmpeg(valid_paths, out_path, fps, ref_size)
         if path is None:
             log.debug(
-                "[timelapse] ffmpeg unavailable/failed, falling back to OpenCV for %s", out_path.name
+                "[timelapse] ffmpeg unavailable/failed, falling back to OpenCV for %s",
+                out_path.name,
             )
             path = self._write_video_opencv(valid_paths, out_path, fps, ref_size)
 
@@ -663,60 +657,17 @@ class TimelapseBuilder:
         stem = f"{window_key}_{profile_name}_{p_label}_to_{d_label}"
         return f"{stem}_{cam_slug}" if cam_slug else stem
 
-    # ── Profile-based (new) ───────────────────────────────────────────────────
+    # ── Frame discovery ───────────────────────────────────────────────────────
 
-    def frame_count(self, camera_id: str, profile_name: str, day: str) -> int:
-        """Count captured frames for a profile and day."""
-        d = self.root / "timelapse_frames" / camera_id / profile_name / day
-        if not d.exists():
-            return 0
-        return len(list(d.glob("*.jpg")))
+    def frames_for_day_stamped(self, camera_id: str, day: str) -> list[tuple[float, Path]]:
+        """``(mtime, path)`` for every frame of ``day``, oldest first.
+        See :mod:`timelapse_frames` for what "for ``day``" means per
+        profile."""
+        return frames_for_day_stamped(self._timelapse_frames_dir(camera_id), day)
 
-    def build_profile(
-        self,
-        camera_id: str,
-        profile_name: str,
-        day: str,
-        target_duration_s: int = 60,
-        target_fps: int = 30,
-        force: bool = False,
-        cam_slug: str = "",
-        qa_ctx: dict | None = None,
-    ) -> str | None:
-        """Build timelapse for a specific profile (new per-profile path structure).
-
-        ``cam_slug`` is appended to the output filename stem so two
-        cameras producing the same-day same-profile build don't
-        collide on the user's drive. Empty string leaves the legacy
-        ``{day}_{profile}.mp4`` filename intact for backward
-        compatibility with callers that haven't been updated.
-
-        ``qa_ctx`` carries optional context (camera_id, profile_name,
-        validator_profile_used, settings_store, frames_dir) for the
-        post-build QA sidecar. Auto-populated below from the args
-        we already have; callers can override by passing a richer
-        dict (e.g. adding ``settings_store`` to enable fps auto-
-        adjust).
-        """
-        frames_dir = self.root / "timelapse_frames" / camera_id / profile_name / day
-        if not frames_dir.exists():
-            return None
-        images = sorted(frames_dir.glob("*.jpg"))
-        if len(images) < 2:
-            return None
-        out_dir = self.out_root / camera_id
-        out_dir.mkdir(parents=True, exist_ok=True)
-        stem = f"{day}_{profile_name}" + (f"_{cam_slug}" if cam_slug else "")
-        out_path = out_dir / f"{stem}.mp4"
-        if out_path.exists() and not force:
-            return str(out_path)
-        ctx = dict(qa_ctx or {})
-        ctx.setdefault("camera_id", camera_id)
-        ctx.setdefault("profile_name", profile_name)
-        ctx.setdefault("frames_dir", frames_dir)
-        return self._write_video(images, out_path, target_duration_s, target_fps, qa_ctx=ctx)
-
-    # ── Legacy (flat date directory) ─────────────────────────────────────────
+    def frames_for_day(self, camera_id: str, day: str) -> list[Path]:
+        """Every captured frame for ``day``, chronologically."""
+        return [p for _, p in self.frames_for_day_stamped(camera_id, day)]
 
     def build_period(
         self,
@@ -730,17 +681,15 @@ class TimelapseBuilder:
         cam_slug: str = "",
         qa_ctx: dict | None = None,
     ) -> str | None:
-        """Build from legacy flat ``timelapse_frames/<cam>/<day>/``
-        directory. ``cam_slug`` appended to the stem for unique
-        cross-camera download filenames; see :func:`make_output_name`.
+        """Build one day's timelapse on demand, from whichever layout
+        holds that day's frames (see :meth:`frames_for_day`).
+        ``cam_slug`` appended to the stem for unique cross-camera
+        download filenames; see :func:`make_output_name`.
         """
         if images_override is not None:
             images = list(images_override)
         else:
-            frames_dir = self._timelapse_frames_dir(camera_id) / day
-            if not frames_dir.exists():
-                return None
-            images = sorted(frames_dir.glob("*.jpg"))
+            images = self.frames_for_day(camera_id, day)
 
         if len(images) < 2:
             return None
@@ -755,50 +704,8 @@ class TimelapseBuilder:
         ctx.setdefault("camera_id", camera_id)
         ctx.setdefault("profile_name", period)
         if images_override is None:
-            ctx.setdefault("frames_dir", self._timelapse_frames_dir(camera_id) / day)
+            # Capture stats live next to the frames; with the frames
+            # possibly spread over several window dirs, point the QA
+            # sidecar at the directory the first image came from.
+            ctx.setdefault("frames_dir", images[0].parent)
         return self._write_video(images, out_path, target_duration_s, target_fps, qa_ctx=ctx)
-
-    def build_for_day(
-        self,
-        camera_id: str,
-        day: str,
-        fps: int = 25,
-        force: bool = False,
-        cam_slug: str = "",
-        qa_ctx: dict | None = None,
-    ) -> str | None:
-        """Backward-compatible wrapper. Tries timelapse_frames first,
-        falls back to event snapshots. ``cam_slug`` flows through to
-        both build paths so neither variant collides on cross-camera
-        downloads."""
-        path = self.build_period(
-            camera_id,
-            day,
-            target_duration_s=60,
-            target_fps=fps,
-            period="day",
-            force=force,
-            cam_slug=cam_slug,
-            qa_ctx=qa_ctx,
-        )
-        if path:
-            return path
-
-        # Fallback: build from legacy event snapshot files
-        images = self._camera_images_for_day(camera_id, day)
-        if len(images) < 2:
-            return None
-        out_dir = self.out_root / camera_id
-        out_dir.mkdir(parents=True, exist_ok=True)
-        stem = day + (f"_{cam_slug}" if cam_slug else "")
-        out_path = out_dir / f"{stem}.mp4"
-        if out_path.exists() and not force:
-            return str(out_path)
-        ctx = dict(qa_ctx or {})
-        ctx.setdefault("camera_id", camera_id)
-        ctx.setdefault("profile_name", "day")
-        return self._write_video(images, out_path, 60, fps, qa_ctx=ctx)
-
-    def build_yesterday_if_missing(self, camera_id: str, fps: int = 25, cam_slug: str = ""):
-        day = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        return self.build_for_day(camera_id, day, fps=fps, force=False, cam_slug=cam_slug)

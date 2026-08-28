@@ -135,24 +135,62 @@ class LifecycleMixin:
                 name=f"flap-diag-{self.camera_id}",
                 daemon=True,
             ).start()
-        # Per-profile timelapse threads — read from self.frame (no direct camera access)
-        for prof_name in _PROFILES:
-            t = threading.Thread(
-                target=self._supervised,
-                args=(
-                    lambda pn=prof_name: self._timelapse_profile_loop(pn),
-                    f"timelapse_{prof_name}",
-                ),
-                daemon=True,
-            )
-            t.start()
-            self._tl_threads[prof_name] = t
+        # One supervisor rather than one thread per profile — read from
+        # self.frame, no direct camera access.
+        threading.Thread(
+            target=self._timelapse_thread_supervisor,
+            name=f"timelapse-sup-{self.camera_id}",
+            daemon=True,
+        ).start()
         # Legacy loop for cameras with old timelapse.enabled=True and no profiles configured
         tl = self.cfg.get("timelapse") or {}
         has_profiles = any((tl.get("profiles") or {}).get(p, {}).get("enabled") for p in _PROFILES)
         if tl.get("enabled") and not has_profiles:
             self._tl_thread = threading.Thread(target=self._timelapse_loop, daemon=True)
             self._tl_thread.start()
+
+    def _timelapse_thread_supervisor(self):
+        """Start a capture thread for a profile the first time it is enabled.
+
+        ``start()`` used to spawn one thread per entry in ``_PROFILES``
+        regardless of config. When the tuple went from four profiles to
+        six that became six threads per camera — eighteen across the
+        three cameras here — of which the default config leaves every
+        single one doing nothing but ``sleep(10)`` forever.
+
+        Enabling a profile does NOT restart the runtime (only the
+        connection fields do), so the thread cannot simply be spawned
+        from ``start()`` behind an ``enabled`` check: it would never
+        appear for a profile switched on later. Polling for it is what
+        makes lazy start safe. A started loop is never torn down —
+        disabling a profile parks its own loop on the same 10 s sleep,
+        and re-enabling it must not race a half-stopped thread.
+        """
+        while self.running:
+            profiles = (self.cfg.get("timelapse") or {}).get("profiles") or {}
+            for prof_name in _PROFILES:
+                if prof_name in self._tl_threads:
+                    continue
+                if not (profiles.get(prof_name) or {}).get("enabled"):
+                    continue
+                t = threading.Thread(
+                    target=self._supervised,
+                    args=(
+                        lambda pn=prof_name: self._timelapse_profile_loop(pn),
+                        f"timelapse_{prof_name}",
+                    ),
+                    daemon=True,
+                )
+                self._tl_threads[prof_name] = t
+                t.start()
+                log.info(
+                    "[%s][timelapse] capture thread started for profile %s",
+                    self.camera_id,
+                    prof_name,
+                )
+            deadline = time.time() + 10.0
+            while self.running and time.time() < deadline:
+                time.sleep(1)
 
     def _flap_diag_loop(self):
         """V81 · parallel network probe gated by FLAP_DIAG env var.

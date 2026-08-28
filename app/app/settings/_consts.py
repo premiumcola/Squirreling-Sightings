@@ -136,11 +136,32 @@ WEATHER_DEFAULTS: dict = {
 }
 
 
+# Keys mirror camera_runtime._consts._PROFILES and the frontend's
+# _TL_PROFILES_DEF — all three lists must carry the same profile names or
+# a profile is configurable somewhere and inert everywhere else.
+# Shipped timelapse profile defaults. Mirror of _TL_PROFILES_DEF in
+# web/static/js/camedit/timelapse-settings.js — the two disagreed on
+# `custom` and the backend's copy was the wrong one.
+#
+# Every entry has to satisfy period_seconds >= target_seconds * FIXED_FPS
+# * MIN_INTERVAL_S, or the 8 s capture floor clamps the profile and the
+# operator gets a shorter video than the label promises. `custom` shipped
+# 600 s / 30 s at 15 fps → 1.33 s raw interval → clamped to 8 s → 75
+# frames → a FIVE-second video behind one WARNING, a silent 6× cut.
+#
+# The floor is what keeps the capture loop from competing with detection,
+# so the floor stays and the shipped period moves: 3600 s is the shortest
+# window that yields the advertised 30 s at exactly the 8 s floor
+# (3600 / 8 = 450 = 30 × 15), and it is what the UI has always offered as
+# the `custom` default. test_shipped_profile_defaults_are_never_clamped
+# pins the invariant for all six.
 TL_DEFAULT_PROFILES = {
     "daily": {"enabled": False, "target_seconds": 60, "period_seconds": 86400},
     "weekly": {"enabled": False, "target_seconds": 180, "period_seconds": 604800},
     "monthly": {"enabled": False, "target_seconds": 300, "period_seconds": 2592000},
-    "custom": {"enabled": False, "target_seconds": 30, "period_seconds": 600},
+    "quarterly": {"enabled": False, "target_seconds": 600, "period_seconds": 7776000},
+    "yearly": {"enabled": False, "target_seconds": 900, "period_seconds": 31536000},
+    "custom": {"enabled": False, "target_seconds": 30, "period_seconds": 3600},
 }
 
 

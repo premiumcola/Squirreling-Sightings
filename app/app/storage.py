@@ -220,6 +220,16 @@ class EventStore:
         items = []
         cam_dir = self._cam_dir(camera_id)
         for file in cam_dir.rglob("*.json"):
+            # `<event_id>.tracks.json` is the tracking worker's sidecar
+            # for ONE existing event, not an event. Two other call sites
+            # (routes/media, judged_event_ids) already filtered it; this
+            # one did not, so every indexed clip was counted twice —
+            # stats_range reported double the events, and the same
+            # defect flowed through aggregate_summary into the Telegram
+            # daily report. A sidecar carries no "time" key, so the
+            # start/end guard below could not reject it either.
+            if file.name.endswith(".tracks.json"):
+                continue
             try:
                 obj = json.loads(file.read_text(encoding="utf-8"))
             except Exception as e:
@@ -389,6 +399,12 @@ class EventStore:
         }
 
     def aggregate_summary(self, days: int = 1):
+        """Sightings roll-up behind the Telegram daily / weekly report.
+
+        Timelapse entries are excluded: they are one rendered video per
+        window, not a sighting, and counting them made the report claim
+        events on a day the camera saw nothing.
+        """
         from collections import Counter
 
         start = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
@@ -400,7 +416,11 @@ class EventStore:
         for cam_dir in self.events_dir.iterdir() if self.events_dir.exists() else []:
             if not cam_dir.is_dir():
                 continue
-            events = self.list_events(cam_dir.name, start=start, limit=5000)
+            events = [
+                e
+                for e in self.list_events(cam_dir.name, start=start, limit=5000)
+                if e.get("type") != "timelapse" and "timelapse" not in (e.get("labels") or [])
+            ]
             cam_count = len(events)
             total += cam_count
             per_camera[cam_dir.name] = cam_count
@@ -533,6 +553,12 @@ class EventStore:
         Returns count of newly registered events."""
         import logging as _log
 
+        # Function-local: media_index reaches camera_runtime, which
+        # reaches back here. At call time every module is fully loaded,
+        # so the deferred import keeps the module graph acyclic while
+        # still using the ONE definition of "big enough to be a video".
+        from .media_index import MIN_VIDEO_BYTES
+
         log = _log.getLogger(__name__)
         scanned = 0
         for cam_id in camera_ids:
@@ -551,9 +577,31 @@ class EventStore:
             for media_file in sorted(media_files):
                 if media_file.suffix.lower() not in (".jpg", ".jpeg", ".mp4"):
                     continue
+                # `<id>.raw.mp4` is the ffmpeg stream-copy intermediate and
+                # `<id>.best.jpg` the Telegram best-frame cache. Both belong
+                # to an event that already exists; their stems (`<id>.raw`,
+                # `<id>.best`) are not in existing_ids, so the old scan
+                # minted a second ghost `motion` event per incident on every
+                # click — and purge_orphans could never remove it, because
+                # the file it points at really is there.
+                if media_file.name.endswith((".raw.mp4", ".best.jpg")):
+                    continue
                 event_id = media_file.stem
                 if event_id in existing_ids:
                     continue
+                # "Es müssen immer echte Videos abliegen" — a 0-byte or
+                # truncated mp4 is a crashed encode, not a clip. Registering
+                # it would manufacture a tile that plays nothing.
+                if media_file.suffix.lower() == ".mp4":
+                    try:
+                        if media_file.stat().st_size < MIN_VIDEO_BYTES:
+                            log.warning(
+                                "[MediaScan] %s ist kein abspielbares Video — übersprungen",
+                                media_file.name,
+                            )
+                            continue
+                    except OSError:
+                        continue
                 # Parse timestamp from filename (YYYYMMDD-HHMMSS-*)
                 try:
                     ts = datetime.strptime(event_id[:15], "%Y%m%d-%H%M%S")

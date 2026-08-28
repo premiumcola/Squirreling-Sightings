@@ -4,6 +4,11 @@ Migrated from server.py during R01.4. The fix-thumbnails background
 task keeps its module-level state (`_thumb_task`, `_fix_thumbs_lock`)
 inside this blueprint — it's bp-private and replacing the singleton
 during a config reload would lose progress on an in-flight job.
+
+Counting lives in :mod:`app.media_index`, not here. The badge route and
+the grid route call the same ``visible_media_events`` and count the same
+list, so they cannot drift apart the way the file-glob badge and the
+manifest-counting grid did.
 """
 
 from __future__ import annotations
@@ -11,144 +16,77 @@ from __future__ import annotations
 import json as _json
 import logging
 import threading as _threading_fix
-from datetime import datetime
 
 import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
-from ..camera_runtime._recording._stages import (
-    DEFAULT_CLIP_MAX_S,
-    annotate_stage,
-    is_pending,
+from ..camera_runtime._recording._stages import DEFAULT_CLIP_MAX_S
+from ..media_index import (
+    build_report,
+    camera_stats,
+    register_timelapse_events,
+    scan_camera,
+    size_lookup_fs,
+    visible_media_events,
 )
 
 bp = Blueprint("media", __name__)
-
-#: list_events takes a slice; the media library paginates client-side and
-#: the visibility filter below has to see every candidate before it can
-#: count them. Effectively "no limit" — a camera tree that large has
-#: bigger problems than this constant.
-_ALL_EVENTS = 1_000_000
 
 
 _thumb_task = {"running": False, "done": 0, "total": 0, "errors": 0, "recent": []}
 _fix_thumbs_lock = _threading_fix.Lock()
 
 
+def _clip_max_s() -> int:
+    try:
+        return int(
+            (app_state.get_effective_config().get("processing") or {}).get(
+                "clip_max_duration_s", DEFAULT_CLIP_MAX_S
+            )
+        )
+    except (TypeError, ValueError, AttributeError):
+        return DEFAULT_CLIP_MAX_S
+
+
+def _cam_stats_dict(cam_id: str, name_hint: str = "") -> dict:
+    """Camera card numbers for ``cam_id``.
+
+    Both halves come from the shared index: sizes from the single walk,
+    counts from ``visible_media_events`` — the exact list
+    ``/api/camera/<id>/media`` renders. There is no second count to
+    diverge from.
+    """
+    storage_root = app_state.storage_root
+    index = scan_camera(storage_root, cam_id)
+    visible = visible_media_events(app_state.store, index.size_of, cam_id, clip_max_s=_clip_max_s())
+    return camera_stats(index, visible, name_hint=name_hint)
+
+
 @bp.get('/api/media/storage-stats')
 def api_media_storage_stats():
     storage_root = app_state.storage_root
-    events_dir = storage_root / "motion_detection"
-    tl_root = storage_root / "timelapse"
     active_cams = app_state.get_effective_config().get("cameras", [])
     active_ids = {c["id"] for c in active_cams}
 
-    TRACKED_LABELS = {'person', 'cat', 'bird', 'car', 'dog', 'squirrel', 'motion'}
-    OBJECT_LABELS = {'person', 'cat', 'bird', 'car', 'dog', 'squirrel'}
-
-    def _cam_stats_dict(cam_id: str, name_hint: str = "") -> dict:
-        size_bytes = 0
-        jpg_count = 0
-        json_count = 0
-        latest_snap_url = None
-        latest_object_snap_url = None
-        resolved_name = name_hint or cam_id
-        label_counts: dict = {}
-        cam_dir = events_dir / cam_id
-        if cam_dir.exists():
-            # Count all event media: photos (.jpg/.jpeg) AND video clips (.mp4).
-            # Timelapse .mp4s live under storage/timelapse/ (scanned below) — not here.
-            for pattern in ("*.jpg", "*.jpeg", "*.mp4"):
-                for p in cam_dir.rglob(pattern):
-                    try:
-                        size_bytes += p.stat().st_size
-                        jpg_count += 1
-                    except Exception:
-                        pass
-            # L2 · count EVENT JSONs only. The post-clip tracking
-            # worker writes a `<event>.tracks.json` sidecar next to
-            # each motion clip — those are NOT events, they're
-            # diagnostic data for ONE existing event. Including them
-            # inflated event_count (and downstream motionOnly =
-            # event_count - objTotal) by ~one per indexed clip,
-            # producing the "Garten 7 files but 11 motion" badge
-            # mismatch the user reported.
-            json_files = [p for p in cam_dir.rglob("*.json") if not p.name.endswith(".tracks.json")]
-            json_count = len(json_files)
-            # Sorted reverse → newest first; break out of the snap searches once both are populated.
-            for jf in sorted(json_files, reverse=True):
-                try:
-                    ev = _json.loads(jf.read_text(encoding="utf-8"))
-                    if resolved_name == cam_id:
-                        resolved_name = ev.get("camera_name", cam_id)
-                    rel = ev.get("snapshot_relpath")
-                    vid_rel = ev.get("video_relpath")
-                    labels = ev.get("labels") or []
-                    snap_exists = bool(rel and (storage_root / rel).exists())
-                    media_exists = snap_exists or bool(
-                        vid_rel and (storage_root / vid_rel).exists()
-                    )
-                    if snap_exists:
-                        if not latest_snap_url:
-                            latest_snap_url = f"/media/{rel}"
-                        if not latest_object_snap_url and any(l in OBJECT_LABELS for l in labels):
-                            latest_object_snap_url = f"/media/{rel}"
-                    # Count each event ONCE under its most-specific label so the
-                    # filter pills sum to the actual archive size (not the inflated
-                    # multi-label total). Object labels win over motion; if no
-                    # object label is present, motion catches the rest.
-                    if media_exists:
-                        primary = next((l for l in labels if l in OBJECT_LABELS), None)
-                        if primary is None and 'motion' in labels:
-                            primary = 'motion'
-                        if primary is None and not labels:
-                            primary = 'motion'
-                        if primary in TRACKED_LABELS:
-                            label_counts[primary] = label_counts.get(primary, 0) + 1
-                except Exception:
-                    continue
-        tl_dir = tl_root / cam_id
-        tl_count = 0
-        if tl_dir.exists():
-            tl_count = len(list(tl_dir.glob("*.mp4")))
-            for p in tl_dir.rglob("*"):
-                try:
-                    if p.is_file():
-                        size_bytes += p.stat().st_size
-                except Exception:
-                    pass
-        return {
-            "id": cam_id,
-            "name": resolved_name,
-            "size_mb": round(size_bytes / 1024 / 1024, 1),
-            "jpg_count": jpg_count,
-            "event_count": json_count,
-            "timelapse_count": tl_count,
-            "latest_snap_url": latest_snap_url,
-            "latest_object_snap_url": latest_object_snap_url,
-            "label_counts": label_counts,
-        }
-
     result = [_cam_stats_dict(c["id"], name_hint=c.get("name", c["id"])) for c in active_cams]
 
-    # Archived: media folders for cameras no longer in active config
+    # Archived: media folders for cameras no longer in active config.
+    # Both trees are scanned so a camera whose id changed (rename / new
+    # IP) still surfaces instead of looking like an empty camera.
     archived = []
-    seen = set()
-    if events_dir.exists():
-        for d in sorted(events_dir.iterdir()):
-            if not d.is_dir() or d.name in active_ids:
-                continue
-            s = _cam_stats_dict(d.name)
-            if s["jpg_count"] or s["event_count"] or s["timelapse_count"]:
-                archived.append(s)
-                seen.add(d.name)
-    if tl_root.exists():
-        for d in sorted(tl_root.iterdir()):
-            if not d.is_dir() or d.name in active_ids or d.name in seen:
-                continue
-            if any(d.glob("*.mp4")):
-                archived.append(_cam_stats_dict(d.name))
+    for name in sorted(
+        {
+            d.name
+            for tree in ("motion_detection", "timelapse")
+            if (storage_root / tree).is_dir()
+            for d in (storage_root / tree).iterdir()
+            if d.is_dir() and d.name not in active_ids
+        }
+    ):
+        stats = _cam_stats_dict(name)
+        if stats["jpg_count"] or stats["event_count"] or stats["timelapse_count"]:
+            archived.append(stats)
 
     return jsonify({"cameras": result, "archived": archived})
 
@@ -162,11 +100,34 @@ def api_media_rescan():
     public_base = (effective.get("server", {}).get("public_base_url") or "").rstrip("/")
     try:
         count = store.scan_media_files(cam_ids, public_base_url=public_base)
-        return jsonify({"ok": True, "registered": count})
+        # The old rescan walked motion_detection/ only, so a timelapse
+        # mp4 could never be registered no matter how often the button
+        # was pressed — the badge counted it, the grid could not show
+        # it, and "Neu scannen" was structurally unable to close the gap.
+        tl_count = register_timelapse_events(app_state.storage_root, store, public_base)
+        return jsonify({"ok": True, "registered": count + tl_count, "timelapse": tl_count})
     except Exception:
         import traceback
 
         return jsonify({"ok": False, "error": traceback.format_exc()}), 500
+
+
+@bp.get('/api/media/integrity')
+def api_media_integrity():
+    """Read-only integrity report — reports, never repairs.
+
+    GET because it mutates nothing: no unlink, no write, no
+    registration. Findings carry the relative path so the operator acts
+    deliberately; several categories (.raw fallbacks, in-flight
+    recording stubs) are files that must NOT be deleted, which is why
+    there is no bulk-cleanup counterpart to this endpoint.
+    """
+    cameras = app_state.get_effective_config().get("cameras", [])
+    try:
+        return jsonify(build_report(app_state.storage_root, app_state.store, cameras))
+    except Exception as e:
+        logging.getLogger(__name__).warning("[storage] Integritätsprüfung fehlgeschlagen: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.post('/api/media/fix-thumbnails')
@@ -282,76 +243,15 @@ def api_media_purge_orphans():
 
 @bp.post('/api/media/cleanup')
 def api_media_cleanup():
-    settings = app_state.settings
-    base_cfg = app_state.base_cfg
+    from ..maintenance import resolve_retention_days
+
     payload = request.get_json(force=True) or {}
-    storage_sec = settings.data.get("storage", {})
-    retention = int(
-        payload.get("retention_days")
-        or storage_sec.get("retention_days")
-        or base_cfg.get("storage", {}).get("retention_days", 14)
-    )
+    retention = resolve_retention_days(payload.get("retention_days"))
     try:
         removed = app_state.store.cleanup_old(retention)
         return jsonify({"ok": True, "removed": removed})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
-
-
-def _has_media_file(obj: dict) -> bool:
-    """Mirror of EventStore's ``media_only`` test: does this event point
-    at anything the viewer can actually display?"""
-    return bool(
-        obj.get("snapshot_relpath")
-        or obj.get("snapshot_url")
-        or obj.get("video_relpath")
-        or obj.get("video_url")
-    )
-
-
-def _visible_media_events(store, cam_id, *, label, labels, start, end):
-    """Every event the media library should show for ``cam_id``.
-
-    ``media_only=True`` asks "is there a file on disk", and for an
-    in-flight clip the honest answer is no — the recording stub carries
-    null video/snapshot fields until the re-encode lands. That dropped
-    every clip out of the library for the whole minute it was being
-    produced, which is precisely the window the user wants to watch.
-    So the store scan runs unfiltered and the media test is applied
-    here, widened by "or it is still being produced".
-
-    Doing the filtering here also collapses what used to be two full
-    rglob passes over the camera's event tree (list + count) into one.
-    """
-    now = datetime.now()
-    clip_max = DEFAULT_CLIP_MAX_S
-    try:
-        clip_max = int(
-            (app_state.get_effective_config().get("processing") or {}).get(
-                "clip_max_duration_s", DEFAULT_CLIP_MAX_S
-            )
-        )
-    except (TypeError, ValueError, AttributeError):
-        pass
-    raw = store.list_events(
-        cam_id,
-        label=label,
-        labels=labels,
-        start=start,
-        end=end,
-        limit=_ALL_EVENTS,
-        offset=0,
-        media_only=False,
-    )
-    visible = []
-    for obj in raw:
-        pending = is_pending(obj)
-        if not (pending or _has_media_file(obj)):
-            continue
-        if pending:
-            annotate_stage(obj, now, clip_max)
-        visible.append(obj)
-    return visible
 
 
 @bp.get('/api/camera/<cam_id>/media')
@@ -368,7 +268,16 @@ def api_camera_media(cam_id):
     cfg_default = app_state.get_effective_config().get("storage", {}).get("media_limit_default", 24)
     limit = request.args.get('limit', type=int) or cfg_default
     offset = request.args.get('offset', type=int) or 0
-    visible = _visible_media_events(store, cam_id, label=label, labels=labels, start=start, end=end)
+    visible = visible_media_events(
+        store,
+        size_lookup_fs(app_state.storage_root),
+        cam_id,
+        label=label,
+        labels=labels,
+        start=start,
+        end=end,
+        clip_max_s=_clip_max_s(),
+    )
     total_count = len(visible)
     items = visible[offset : offset + limit]
     for item in items:

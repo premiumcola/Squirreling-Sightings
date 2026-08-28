@@ -144,6 +144,14 @@ gruppiert, nicht alphabetisch.
 - **`storage.py`** — `EventStore`. Per-Kamera-Event-JSONs unter
   `storage/events/<cam_id>/<date>/`. `add_event`, `list_events`,
   `stats_range`, `scan_media_files`.
+- **`media_index/`** — Paket (6 Dateien). Die EINE Quelle dafür, was die
+  Mediathek enthält. `_types.py` hält den einzigen Medien-Existenztest
+  (`media_state` — Datei da UND nicht leer), `_scan.py` einen O(N)-Walk
+  pro Kamera, `_visible.py` die Ereignisliste, die Badge **und** Grid
+  gemeinsam zählen, `_timelapse.py` die Registrierung der
+  Timelapse-MP4s im EventStore, `_integrity.py` den reinen Lesebericht
+  hinter „Integrität prüfen“ (`GET /api/media/integrity`) — der löscht
+  nichts, meldet nur.
 - **`storage_migration.py`** — idempotenter Boot-Reconcile. Wandert über
   alle Kameras, baut die kanonische ID via `camera_id.build_camera_id`
   und konsolidiert Legacy-Folder unter dem neuen Schema. Backup vor

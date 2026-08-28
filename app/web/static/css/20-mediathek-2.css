@@ -220,3 +220,169 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Integritätsbericht (Mediathek-Wartung) ───────────────────────────── */
+/* Inline report block, not a modal: read-only, arbitrarily long, and an
+   inline block avoids the dvh / position:fixed / safe-area failure modes
+   that keep biting the overlay components on iOS. Sits inside
+   .media-special-actions-row (flex, wrap), so it claims a full row of
+   its own instead of squeezing between the buttons. Depth comes from
+   background contrast — no hairline borders anywhere. */
+.mi-report {
+  flex: 1 1 100%;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  color: var(--text);
+}
+.mi-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.mi-cam {
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.mi-cam:last-child {
+  margin-bottom: 0;
+}
+.mi-cam-name {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mi-cam-id {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.mi-counters,
+.mi-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.mi-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+}
+.mi-chip-ok {
+  background: rgba(98, 210, 111, 0.16);
+  color: #7fd98c;
+}
+.mi-chip-warn {
+  background: rgba(255, 176, 46, 0.18);
+  color: #ffc266;
+}
+.mi-size {
+  display: inline-flex;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.mi-size-k {
+  color: var(--muted);
+}
+.mi-size-v {
+  font-weight: 700;
+}
+.mi-empty {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+.mi-finding {
+  margin-top: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+/* ≥44 px tap target — the summary row IS the control that opens a
+   finding, so it carries the touch budget itself. */
+.mi-finding > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+.mi-finding > summary::-webkit-details-marker {
+  display: none;
+}
+@media (hover: hover) {
+  .mi-finding > summary:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+.mi-badge {
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mi-badge-warn {
+  background: rgba(255, 176, 46, 0.2);
+  color: #ffc266;
+}
+.mi-badge-info {
+  background: rgba(147, 197, 253, 0.18);
+  color: #93c5fd;
+}
+.mi-finding-title {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+.mi-finding-count {
+  font-weight: 700;
+  color: var(--muted);
+}
+.mi-hint {
+  margin: 0;
+  padding: 0 10px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.mi-entries {
+  margin: 0;
+  padding: 0 10px 10px 26px;
+  font-size: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.mi-entries li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.mi-entries code {
+  font-size: 11px;
+}
+.mi-detail {
+  color: var(--muted);
+}

@@ -85,7 +85,19 @@ def _stub(event_id: str, *, stage: str, since: datetime, **extra) -> dict:
     return ev
 
 
-def _finished(event_id: str) -> dict:
+def _finished(root: Path, event_id: str) -> dict:
+    """A finished clip — manifest AND the files it points at.
+
+    The files are not decoration. Since the media-index rewrite an event
+    only counts when its media is really on disk and non-empty, so a
+    manifest pointing at a deleted mp4 is deliberately invisible. The
+    mp4 body is padded past ``MIN_VIDEO_BYTES`` for the same reason: a
+    0-byte file is not a clip.
+    """
+    day = root / "motion_detection" / CAM / DATE
+    day.mkdir(parents=True, exist_ok=True)
+    (day / f"{event_id}.mp4").write_bytes(b"\x00" * 4096)
+    (day / f"{event_id}.jpg").write_bytes(b"\xff\xd8\xff")
     return {
         "event_id": event_id,
         "camera_id": CAM,
@@ -139,7 +151,7 @@ def test_metadata_only_events_stay_hidden(client, tmp_storage_root):
 
 
 def test_finished_clips_are_unaffected(client, tmp_storage_root):
-    _write_event(tmp_storage_root, _finished("20260827-100000-000000"))
+    _write_event(tmp_storage_root, _finished(tmp_storage_root, "20260827-100000-000000"))
     body = _items(client)
     assert [i["event_id"] for i in body["items"]] == ["20260827-100000-000000"]
     assert "stage_stalled" not in body["items"][0]
@@ -177,7 +189,7 @@ def test_legacy_processing_events_still_resolve(client, tmp_storage_root):
 
 # ── ordering + pagination must survive the rewrite ─────────────────────────
 def test_newest_first_ordering_and_offset_still_hold(client, tmp_storage_root):
-    _write_event(tmp_storage_root, _finished("20260827-100000-000000"))
+    _write_event(tmp_storage_root, _finished(tmp_storage_root, "20260827-100000-000000"))
     _write_event(
         tmp_storage_root,
         _stub("20260827-235900-000000", stage="recording", since=datetime.now()),

@@ -14,54 +14,33 @@ import logging
 import shutil as _shutil
 import threading
 import time as _time
-from datetime import datetime
 from pathlib import Path
 
 import cv2 as _cv2
 
+from .media_index import register_timelapse_events
 from .storage import event_date_subdir
 
 log = logging.getLogger(__name__)
 
 
-def migrate_timelapse_events(*, storage_root: Path, settings) -> None:
-    """One-time migration: remove timelapse-type events that were incorrectly stored
-    in the EventStore (storage/motion_detection/<cam_id>/) under old code. These are now tracked
-    as sidecar JSONs next to the .mp4 files in storage/timelapse/<cam_id>/.
-    Covers both date-subdirectory and camera-level tl_*.json placements."""
+def cleanup_stale_timelapse_frames(*, storage_root: Path, settings) -> None:
+    """Drop ``timelapse_frames/`` directories for deleted cameras and for
+    profiles that are switched off.
+
+    This used to ALSO delete every ``tl_*.json`` from
+    ``motion_detection/``, on the theory that timelapses were tracked by
+    sidecars next to the mp4 instead. It was written as a one-shot but
+    ran on every boot — while :func:`migrate_timelapse_to_eventstore`,
+    started six statements later in a second unordered daemon thread,
+    recreated exactly those files. Two migrations with opposite intent
+    raced at every start, so how many timelapse tiles the Mediathek
+    showed depended on which thread won. The deleter is gone; the
+    EventStore entry is now the single record of a timelapse.
+    """
 
     def _do_migrate():
-        try:
-            removed = 0
-            events_root = storage_root / "motion_detection"
-            if not events_root.exists():
-                return
-            for cam_dir in events_root.iterdir():
-                if not cam_dir.is_dir():
-                    continue
-                # Remove tl_ files directly in the camera directory (flat placement)
-                for jf in list(cam_dir.glob("tl_*.json")):
-                    try:
-                        jf.unlink()
-                        removed += 1
-                    except Exception:
-                        pass
-                # Remove tl_ files inside date subdirectories
-                for date_dir in cam_dir.iterdir():
-                    if not date_dir.is_dir():
-                        continue
-                    for jf in list(date_dir.glob("tl_*.json")):
-                        try:
-                            jf.unlink()
-                            removed += 1
-                        except Exception:
-                            pass
-            if removed:
-                log.info("[migration] Removed %d stale timelapse events from EventStore", removed)
-        except Exception as e:
-            log.warning("[migration] Timelapse event migration failed: %s", e)
-
-        # Also clean up stale timelapse_frames dirs for cameras that no longer exist
+        # Clean up stale timelapse_frames dirs for cameras that no longer exist
         try:
             frames_root = storage_root / "timelapse_frames"
             if not frames_root.exists():
@@ -229,7 +208,7 @@ def _relocate_root_event_jsons_sync(storage_root: Path) -> int:
         for jf in list(cam_dir.glob("*.json")):
             name = jf.name
             if name.startswith("tl_"):
-                continue  # timelapse — migrate_timelapse_events owns these
+                continue  # timelapse — the tl_ event lives at the camera root
             if name.endswith(".tracks.json"):
                 event_id = name[: -len(".tracks.json")]
             else:
@@ -259,7 +238,7 @@ def relocate_root_event_jsons(*, storage_root: Path) -> None:
 
     Leaves untouched: files whose id isn't an 8-digit date prefix
     (custom/legacy ids), and ``tl_*.json`` timelapse entries (owned by
-    :func:`migrate_timelapse_events`). Skips a move when the target
+    :func:`migrate_timelapse_to_eventstore`). Skips a move when the target
     already exists (no overwrite). Safe to re-run — the non-recursive
     glob only sees still-loose files, so once everything is relocated it
     finds nothing and logs nothing."""
@@ -279,81 +258,24 @@ def relocate_root_event_jsons(*, storage_root: Path) -> None:
 
 
 def migrate_timelapse_to_eventstore(*, storage_root: Path, settings, store, base_cfg: dict) -> None:
-    """Register existing timelapse sidecars as unified EventStore entries.
-    Walks storage/timelapse/<cam>/*.json; for each sidecar that has no matching
-    motion_detection/<cam>/tl_<stem>.json yet, builds a tl_event dict and calls
-    store.add_event(). Safe to re-run; skips entries that already exist."""
+    """Register every timelapse mp4 as an EventStore entry.
+
+    The old implementation iterated ``timelapse/<cam>/*.json`` and
+    required a metadata sidecar next to the mp4. Only the camera runtime
+    writes that sidecar — every timelapse produced through an HTTP route
+    ("jetzt bauen", QA-Rebuild, rolling) has an mp4, a thumbnail and a QA
+    file but no sidecar, so it could never be registered and never
+    appeared in the grid while the badge counted it. Registration now
+    starts from the mp4 (:mod:`app.media_index`), which is the file the
+    operator actually cares about.
+    """
 
     def _do():
-        tl_root = storage_root / "timelapse"
-        if not tl_root.exists():
-            return
-        cfg = settings.export_effective_config(base_cfg)
-        public_base = (cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
-        registered = 0
-        for cam_dir in tl_root.iterdir():
-            if not cam_dir.is_dir():
-                continue
-            cam_id = cam_dir.name
-            event_cam_dir = store.events_dir / cam_id
-            existing_ids: set = set()
-            if event_cam_dir.exists():
-                for jf in event_cam_dir.rglob("*.json"):
-                    existing_ids.add(jf.stem)
-            for sc in cam_dir.glob("*.json"):
-                try:
-                    meta = _json.loads(sc.read_text(encoding="utf-8"))
-                except Exception:
-                    continue
-                stem = sc.stem
-                event_id = f"tl_{stem}"
-                if event_id in existing_ids:
-                    continue
-                mp4 = cam_dir / f"{stem}.mp4"
-                if not mp4.exists():
-                    continue
-                thumb = cam_dir / f"{stem}.jpg"
-                video_rel = f"timelapse/{cam_id}/{mp4.name}"
-                thumb_rel = f"timelapse/{cam_id}/{thumb.name}" if thumb.exists() else None
-                tl_event = {
-                    "event_id": event_id,
-                    "camera_id": cam_id,
-                    "camera_name": cam_id,
-                    "type": "timelapse",
-                    "labels": ["timelapse"],
-                    "top_label": "timelapse",
-                    "time": meta.get("time") or datetime.now().isoformat(timespec="seconds"),
-                    "profile": meta.get("profile"),
-                    "window_key": meta.get("window_key"),
-                    "period_s": meta.get("period_s", 0),
-                    "target_s": meta.get("target_s", 0),
-                    "frame_count": meta.get("frame_count", 0),
-                    "filename": mp4.name,
-                    "video_relpath": video_rel,
-                    "video_url": f"{public_base}/media/{video_rel}"
-                    if public_base
-                    else f"/media/{video_rel}",
-                    "snapshot_relpath": thumb_rel,
-                    "snapshot_url": (
-                        f"{public_base}/media/{thumb_rel}" if public_base else f"/media/{thumb_rel}"
-                    )
-                    if thumb_rel
-                    else None,
-                    "thumb_url": (
-                        f"{public_base}/media/{thumb_rel}" if public_base else f"/media/{thumb_rel}"
-                    )
-                    if thumb_rel
-                    else None,
-                    "size_mb": meta.get("size_mb", 0),
-                    "duration_s": 0.0,
-                    "file_size_bytes": mp4.stat().st_size if mp4.exists() else 0,
-                }
-                try:
-                    store.add_event(cam_id, tl_event)
-                    registered += 1
-                except Exception as e:
-                    log.warning("[migration] timelapse register failed for %s: %s", stem, e)
-        if registered:
-            log.info("[migration] registered %d timelapse events in EventStore", registered)
+        try:
+            cfg = settings.export_effective_config(base_cfg)
+            public_base = (cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
+            register_timelapse_events(storage_root, store, public_base)
+        except Exception as e:
+            log.warning("[migration] timelapse registration failed: %s", e)
 
     threading.Thread(target=_do, daemon=True).start()

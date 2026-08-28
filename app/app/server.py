@@ -547,7 +547,7 @@ _install_shutdown_hooks()
 # its own daemon thread; safe to re-run; idempotent.
 from . import migrations as _migrations
 
-_migrations.migrate_timelapse_events(storage_root=storage_root, settings=settings)
+_migrations.cleanup_stale_timelapse_frames(storage_root=storage_root, settings=settings)
 # Tidy loose root-level <event_id>.json (+ .tracks.json) into their date
 # subfolders so the camera root stops collecting clutter. Reads use
 # rglob, so this is purely cosmetic for the on-disk layout.

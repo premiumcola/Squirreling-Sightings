@@ -357,8 +357,12 @@ export function _mocChip(type, count, title) {
 export function _buildMocChips(stats) {
   const lc = stats.label_counts || {};
   const order = ['person', 'cat', 'bird', 'car', 'dog', 'squirrel'];
-  const objTotal = order.reduce((n, k) => n + (lc[k] || 0), 0);
-  const motionOnly = Math.max(0, (stats.event_count || 0) - objTotal);
+  // label_counts.motion is authoritative — the server counts each event
+  // once, under its most specific label. The old derivation
+  // (event_count − objects) invented events whenever event_count held
+  // something the object labels did not: a timelapse manifest showed up
+  // as "Bewegung 1" on a camera with zero motion events.
+  const motionOnly = lc.motion || 0;
   let html = '';
   for (const k of order) {
     const n = lc[k] || 0;

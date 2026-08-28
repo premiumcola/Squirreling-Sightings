@@ -19,21 +19,63 @@ from . import app_state
 from .lifecycle import _BOOT_TS, _disk_free_gb_cached, _format_uptime
 
 
-def _run_daily_cleanup():
-    retention = int(app_state.base_cfg.get("storage", {}).get("retention_days", 14))
+def _storage_setting(key: str, fallback):
+    """``settings.json`` first, ``config.yaml`` second — the resolution
+    order the UI implies. Read-only, so the additive-merge rule holds."""
+    for source in (getattr(app_state.settings, "data", None), app_state.base_cfg):
+        if isinstance(source, dict):
+            section = source.get("storage")
+            if isinstance(section, dict) and section.get(key) is not None:
+                return section[key]
+    return fallback
+
+
+def resolve_retention_days(override=None) -> int:
+    """The retention window actually in force.
+
+    The nightly sweep used to read ``config.yaml`` only, while the
+    Aufbewahrung slider writes ``settings.json`` — so the number on
+    screen was not the number being enforced, and moving the slider
+    changed nothing except the manual button. Both callers now come
+    through here.
+    """
     try:
-        removed = app_state.store.cleanup_old(retention)
-        if removed:
-            logging.getLogger(__name__).info(
-                f"[storage] Removed {removed} old event files (>{retention}d)"
-            )
-    except Exception as e:
-        logging.getLogger(__name__).warning(f"[storage] Failed: {e}")
+        return int(override or _storage_setting("retention_days", 14))
+    except (TypeError, ValueError):
+        return 14
+
+
+def auto_cleanup_enabled() -> bool:
+    """``storage.auto_cleanup_enabled`` — persisted, validated, echoed
+    back to the UI, and until now read by nothing at all: the toggle was
+    decorative and the sweep ran regardless. Defaults to on so an
+    install that never touched the switch keeps its current behaviour."""
+    return bool(_storage_setting("auto_cleanup_enabled", True))
+
+
+def _run_daily_cleanup():
+    log = logging.getLogger(__name__)
+    retention = resolve_retention_days()
+    if not auto_cleanup_enabled():
+        log.info("[storage] autoclean deaktiviert (storage.auto_cleanup_enabled) — übersprungen")
+    else:
+        try:
+            removed = app_state.store.cleanup_old(retention)
+            if removed:
+                log.info("[storage] Removed %d old event files (>%dd)", removed, retention)
+        except Exception as e:
+            log.warning("[storage] Failed: %s", e)
     # trash.cleanup_expired() shipped with the docstring "wire into the
     # existing daily maintenance cron in a follow-up commit" — that
     # commit never landed, so storage/.trash grew unbounded and only
     # emptied via a manual POST /api/trash/empty (11 GB of May entries
     # were found once). This is that follow-up.
+    #
+    # Deliberately NOT gated on auto_cleanup_enabled: the trash holds
+    # content the operator already deleted, under its own documented
+    # grace period. Freezing it with the archive-retention switch would
+    # turn "keep my recordings longer" into "never reclaim deleted
+    # space", which is not what that toggle says.
     try:
         from .trash import cleanup_expired
 

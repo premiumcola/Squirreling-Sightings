@@ -6,9 +6,10 @@ empty the trash now via the ``/api/trash/*`` endpoints in
 
 Mediathek scope only in this iteration — motion-event deletes route
 through ``move_to_trash`` instead of ``EventStore.delete_event``. The
-weather-sighting / timelapse delete handlers still hard-delete; their
-trash routing lands in a follow-up so this commit stays focused on
-the dominant deletion path (Mediathek).
+weather-sighting / timelapse delete handlers still hard-delete, and so
+does ``EventStore.cleanup_old``; their trash routing lands in a
+follow-up so this commit stays focused on the dominant deletion path
+(Mediathek).
 
 Layout::
 

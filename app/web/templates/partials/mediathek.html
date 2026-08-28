@@ -187,5 +187,25 @@
     </svg>
     Tracking neu generieren
   </button>
+  {# Read-only. Reports what is on the disk versus what the archive claims;
+     never deletes, never registers — see mediathek/integrity.js. #}
+  <button type="button" id="mediaIntegrityBtn" class="btn btn-action action-green">
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 1.5l5 2v4c0 3-2.1 5.4-5 7-2.9-1.6-5-4-5-7v-4z" />
+      <polyline points="5.6,7.9 7.3,9.6 10.6,6.3" />
+    </svg>
+    Integrität prüfen
+  </button>
+  <div id="mediaIntegrityReport" class="mi-report" hidden></div>
   {% endcall %}
 </section>

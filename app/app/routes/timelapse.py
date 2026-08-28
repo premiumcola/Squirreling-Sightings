@@ -17,9 +17,27 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from ..media_index import register_camera_timelapses
 from ._helpers import safe_day_param
 
 bp = Blueprint("timelapse", __name__)
+
+
+def _register_built(cam_id: str) -> None:
+    """Register a freshly built mp4 as an EventStore entry.
+
+    ``TimelapseBuilder`` writes the mp4, the thumbnail and the QA
+    sidecar — but never an event, so a timelapse built through any HTTP
+    route showed up in the Timelapse badge (which counted files) and
+    never in the grid (which counts events). Registering right after the
+    build closes that gap at the source instead of waiting for the next
+    boot or rescan.
+    """
+    with contextlib.suppress(Exception):
+        public_base = (
+            app_state.get_effective_config().get("server", {}).get("public_base_url") or ""
+        ).rstrip("/")
+        register_camera_timelapses(app_state.storage_root, app_state.store, cam_id, public_base)
 
 
 @bp.get('/api/timelapse/status')
@@ -147,9 +165,11 @@ def api_camera_timelapse(cam_id):
                 cam_slug=cam_slug,
                 qa_ctx=qa_ctx,
             )
+            _register_built(cam_id)
 
         _thr.Thread(target=_bg_build, daemon=True).start()
         return jsonify({"ok": False, "error": "building", "day": day, "retry_after": 15}), 202
+    _register_built(cam_id)
     rel = Path(path).relative_to(storage_root)
     return jsonify({"ok": True, "day": day, "url": f"/media/{rel.as_posix()}"})
 
@@ -311,5 +331,6 @@ def api_camera_timelapse_rolling(cam_id):
     )
     if not path:
         return jsonify({"ok": False, "error": "build_failed"}), 500
+    _register_built(cam_id)
     rel = Path(path).relative_to(storage_root)
     return jsonify({"ok": True, "minutes": minutes, "url": f"/media/{rel.as_posix()}"})

@@ -3,7 +3,7 @@
 // chart + explainer + legend + pill bar + auto-refresh observer.
 //
 // R11 split: rendering now lives in focused sub-modules:
-//   * stats-chart.js       — SVG chart (axes, lines, hover tooltip)
+//   * stats-chart/         — SVG chart (paths, axes, hover tooltip)
 //   * stats-thresholds.js  — threshold overlay (composed inside chart)
 //   * stats-summary.js     — numeric chip strip + explainer card
 //
@@ -14,7 +14,7 @@
 //   * shared utilities used across modules (_wsFmtVal, palette, field
 //     order, threshold/label/unit hints used by settings.js)
 import { byId } from '../core/dom.js';
-import { renderWeatherStatsChart } from './stats-chart.js';
+import { renderWeatherStatsChart } from './stats-chart/index.js';
 import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-summary.js';
 import { apiGet } from '../core/api.js';
 
@@ -167,7 +167,7 @@ export { initWeatherStats };
 
 // Re-export render functions so existing consumers that import them by
 // name from this module keep working without source changes.
-export { renderWeatherStatsChart } from './stats-chart.js';
+export { renderWeatherStatsChart } from './stats-chart/index.js';
 export { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-summary.js';
 
 // ── window.* bridge ─────────────────────────────────────────────────────────

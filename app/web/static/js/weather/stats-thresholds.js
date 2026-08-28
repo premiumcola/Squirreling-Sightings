@@ -41,7 +41,7 @@ export function _buildThresholdSvg({ isolated, data, lineMetas, pad, cw, ch }) {
           <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + cw}" y2="${y.toFixed(1)}"
                 stroke="${colour}" stroke-width="1" stroke-dasharray="5 4" opacity="0.55"
                 vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision" />
-          <text class="ws-chart-threshold-label" x="${(pad.l + cw + 4).toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${colour}" opacity="0.85" text-rendering="optimizeLegibility">${lbl}</text>
+          <text class="ws-chart-threshold-label" x="${(pad.l + cw + 4).toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="10" fill="${colour}" opacity="0.85" text-rendering="optimizeLegibility">${lbl}</text>
         `;
       } else {
         noThresholdHint =
@@ -101,7 +101,7 @@ export function _buildThresholdSvg({ isolated, data, lineMetas, pad, cw, ch }) {
               vector-effect="non-scaling-stroke" shape-rendering="geometricPrecision">
           <title>${aria}</title>
         </line>
-        <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="9" fill="${colour}" opacity="${opacity}" text-rendering="geometricPrecision">${labelText}</text>
+        <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="10" fill="${colour}" opacity="${opacity}" text-rendering="geometricPrecision">${labelText}</text>
       `;
     }
   }

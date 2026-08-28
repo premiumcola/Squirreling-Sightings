@@ -16,6 +16,8 @@ from datetime import datetime
 from flask import Blueprint, jsonify
 
 from .. import app_state
+from ..detection_feedback import corpus_stats, judged_alerts
+from ..thresholds import recommend_push
 
 bp = Blueprint("telegram_bp", __name__)
 
@@ -35,6 +37,77 @@ def api_telegram_status():
         return jsonify(tg.get_polling_status())
     except Exception as e:
         return jsonify({"state": "off", "since_seconds": 0, "enabled": False, "error": str(e)}), 500
+
+
+@bp.get('/api/telegram/push/calibration')
+def api_push_calibration():
+    """THR-2 · read-only push-threshold advice, per camera and label.
+
+    Reports for every (camera, label) the corpus has ever seen: the
+    threshold in force, what the verdict ledger would propose instead —
+    or "not enough data yet" — and the evidence behind either answer.
+
+    **NOTHING here applies anything.** No settings write, no runtime
+    rebuild, not even a cached side effect. The user has been explicit
+    that they would rather be told "not yet" than handed a confident
+    wrong number, and a surface that recommends is only trustworthy for
+    as long as it cannot also act.
+
+    One full ledger pass for the roll-up, plus one more per stratum that
+    actually clears the evidence bar — the score lists are only needed
+    where a number will be computed, and on a fresh install that is
+    nowhere.
+
+    Shape:
+      {
+        "ok": bool,
+        "corpus": {n_alerts, n_judged, answer_rate, n_strata},
+        "items": [ PushRecommendation.as_dict(), ... ],
+        "ready": int,       # strata with a recommendation
+        "advisory_only": true
+      }
+    """
+    root = app_state.storage_root
+    if root is None:
+        return jsonify({"ok": False, "error": "storage root not initialised"}), 503
+    settings = app_state.settings
+    push_cfg = (settings.export_effective_config(app_state.base_cfg).get("telegram") or {}).get(
+        "push"
+    ) or {}
+    try:
+        stats = corpus_stats(root)
+    except Exception as e:
+        logging.getLogger(__name__).warning("[tg] calibration: corpus read failed: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    items = []
+    for stratum in stats.get("strata") or []:
+        cam_id, label = stratum.get("cam"), stratum.get("label")
+        # judged_alerts re-reads the ledger, so only pay for it where a
+        # threshold will actually be computed. A stratum under the bar
+        # gets its refusal from the row alone.
+        pairs = judged_alerts(root, cam_id=cam_id, label=label) if stratum.get("ready") else None
+        items.append(
+            recommend_push(
+                stratum,
+                pairs,
+                cam_cfg=settings.get_camera(cam_id) or {},
+                push_cfg=push_cfg,
+            ).as_dict()
+        )
+    return jsonify(
+        {
+            "ok": True,
+            "corpus": {
+                "n_alerts": stats.get("n_alerts", 0),
+                "n_judged": stats.get("n_judged", 0),
+                "answer_rate": stats.get("answer_rate", 0.0),
+                "n_strata": len(items),
+            },
+            "items": items,
+            "ready": sum(1 for it in items if it["recommended"] is not None),
+            "advisory_only": True,
+        }
+    )
 
 
 @bp.post('/api/telegram/test')

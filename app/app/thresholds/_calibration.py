@@ -360,6 +360,40 @@ def recommend_push(
     capped = ctx["severity"] == SEVERITY_ALARM and value > ctx["current"]
     if capped:
         value = ctx["current"]
+
+    # The clamps above are applied AFTER the window was computed, so the
+    # value that leaves here is not necessarily the value the window
+    # guaranteed anything about. Concretely: if every confirmed-true
+    # score sits below PUSH_FLOOR, the clamp lifts the recommendation to
+    # the floor — where it now blocks *every* true positive, a recall of
+    # zero. The prose downstream would still quote MIN_TRUE_RECALL,
+    # because it reads the constant rather than the outcome.
+    #
+    # A calibration tool that states a false guarantee is worse than one
+    # that refuses: the operator acts on it. So verify the invariant
+    # against the data at the value actually being recommended, and
+    # refuse when it no longer holds.
+    achieved = _simulate(pairs, value)
+    n_true = len(true_scores)
+    recall = (achieved["kept_true"] / n_true) if n_true else 0.0
+    if recall < MIN_TRUE_RECALL:
+        return _refusal(
+            ctx,
+            [
+                "kein Schwellwert erfüllt die Recall-Zusage: bei {:.2f} blieben nur "
+                "{}/{} bestätigte Treffer über ({:.0%} statt {:.0%}). Die Grenzwerte "
+                "{:.2f}–{:.2f} und die beurteilten Scores sind hier unvereinbar.".format(
+                    value,
+                    achieved["kept_true"],
+                    n_true,
+                    recall,
+                    MIN_TRUE_RECALL,
+                    PUSH_FLOOR,
+                    PUSH_CEILING,
+                )
+            ],
+            evidence,
+        )
     evidence.update(
         {
             # Restated from the score lists actually used, not from the

@@ -200,13 +200,28 @@ def test_never_proposes_above_the_ceiling():
 
 
 def test_never_proposes_below_the_floor():
+    """Below-floor evidence must produce a refusal, not a floored value.
+
+    This sample is the case the floor clamp was written for — and the
+    case that showed the clamp was unsafe. Every confirmed-true score is
+    0.10, under PUSH_FLOOR. Clamping the proposal up to 0.20 satisfies
+    "not below the floor" while blocking all 30 confirmed sightings: a
+    recall of zero, under prose that quoted MIN_TRUE_RECALL. The number
+    was legal and the promise attached to it was false.
+
+    The property still holds — nothing below the floor is ever proposed.
+    It now holds by proposing nothing.
+    """
     true_scores = [0.10] * 30
     false_scores = [0.05] * 30
     push = {"labels": {"person": {"push": True, "threshold": 0.85}}}
     rec = recommend_push(
         _stratum(true_scores, false_scores), _pairs(true_scores, false_scores), {}, push
     )
-    assert rec.recommended >= PUSH_FLOOR
+    assert rec.recommended is None or rec.recommended >= PUSH_FLOOR
+    assert (
+        rec.recommended is None
+    ), "a value here would keep 0 of 30 confirmed sightings while claiming 95 %"
 
 
 def test_alarm_label_is_never_proposed_upward():

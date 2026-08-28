@@ -471,7 +471,11 @@ input[type='range']::-webkit-slider-thumb {
   border-radius: 50%;
   border: none;
   background: var(--text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  /* No thumb shadow: iOS Safari renders a box-shadow on a slider
+     thumb out of the shadow DOM as a RECTANGLE, so a round knob
+     came with a grey block behind the whole control. The thumb is
+     light on a dark track — the contrast carries it, which is what
+     CLAUDE.md asks for anyway. */
   margin-top: -7px;
   cursor: pointer;
 }
@@ -481,7 +485,6 @@ input[type='range']::-moz-range-thumb {
   border-radius: 50%;
   border: none;
   background: var(--text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   cursor: pointer;
 }
 input[type='range']:focus-visible::-webkit-slider-thumb {

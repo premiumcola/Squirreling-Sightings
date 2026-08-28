@@ -210,6 +210,16 @@
   margin-bottom: 0;
   padding-bottom: 0;
 }
+/* The gap above the filter pills read as larger than the one below
+   them, which is what made the block look lopsided. Two things add to
+   it: .section-head's own 12 px, and the fact that the head is a
+   centred flex row whose height is set by the 44 px trash button, not
+   by the title — so the h3 floats in a taller box and donates the
+   difference downwards. Trimming the margin brings the two gaps to
+   roughly the same size without shrinking the touch target. */
+#media > .section-head {
+  margin-bottom: 4px;
+}
 .media-drill-head .media-filter-bar {
   flex: 1;
 }

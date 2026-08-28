@@ -746,12 +746,10 @@
 .stat-dc-slider input[type='range']::-webkit-slider-thumb {
   background: #cbd5e1;
   border: 2px solid #1f1f24;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 .stat-dc-slider input[type='range']::-moz-range-thumb {
   background: #cbd5e1;
   border: 2px solid #1f1f24;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 .stat-dc-slider input[type='range']:focus-visible::-webkit-slider-thumb {
   outline: 2px solid rgba(203, 213, 225, 0.6);

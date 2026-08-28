@@ -29,8 +29,17 @@ LABEL_DE: dict[str, str] = {
     "notification": "Benachrichtigung",
 }
 
-# Object labels (more specific than motion). Order matters: when an event
-# carries multiple labels we pick the highest-priority one as "primary".
+# Object labels (more specific than motion). Order matters and is NOT the
+# canonical order: this is a PRIORITY list — when an event carries several
+# labels, the first match wins as "primary". `app/app/labels.py` owns the
+# membership; this file owns the ranking.
+#
+# `marten` and `deer` were missing here while the canonical list carried
+# them, so a marten event resolved to `motion` and the whole class was
+# invisible to every consumer of most_specific_label — including the
+# Telegram question that is supposed to ask about it.
+# test_label_priority_covers_every_class pins the two sets equal, so a
+# future class added to labels.py fails the suite instead of vanishing.
 OBJECT_LABELS: tuple[str, ...] = (
     "person",
     "car",
@@ -39,6 +48,8 @@ OBJECT_LABELS: tuple[str, ...] = (
     "squirrel",
     "fox",
     "hedgehog",
+    "marten",
+    "deer",
     "bird",
 )
 

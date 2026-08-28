@@ -167,6 +167,15 @@ def api_settings_cameras_save():
     # were filled so the UI can show an "automatisch erkannt" hint.
     auto_detected = _auto_detect_device_info(payload)
     try:
+        # Same rail as the detection-tuning route: a POST carrying the
+        # whole camera dict could set label_thresholds["person"] to 0.95
+        # and blind a security camera with no dialog anywhere.
+        if isinstance(payload.get("label_thresholds"), dict):
+            from ..thresholds._apply import clamp_person_label_threshold
+
+            payload["label_thresholds"] = clamp_person_label_threshold(
+                payload, payload["label_thresholds"]
+            )
         new_id = settings.upsert_camera(payload)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 422
@@ -334,6 +343,12 @@ def api_camera_detection_tuning(cam_id):
                     400,
                 )
             cleaned[str(k)] = round(fv, 4)
+        # A security camera's person spawn may not be raised past the
+        # floor by a route that shows no confirmation dialog. The Netz's
+        # own writes go through clamp_manual_e; these two do not.
+        from ..thresholds._apply import clamp_person_label_threshold
+
+        cleaned = clamp_person_label_threshold(cam, cleaned)
         cam["label_thresholds"] = cleaned
     if "object_filter" in payload:
         of = payload.get("object_filter") or []

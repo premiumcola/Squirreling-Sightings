@@ -35,10 +35,13 @@ unexplainable.
 
 from __future__ import annotations
 
+import logging
 import math
 
 from ..settings._consts import LABEL_THRESHOLD_DEFAULTS, TELEGRAM_PUSH_DEFAULTS
 from ..tracker_core._consts import TRACK_SPAWN_SCORE
+
+log = logging.getLogger(__name__)
 
 # ── the mapping constants ─────────────────────────────────────────────
 STEP = 0.006
@@ -314,3 +317,38 @@ def manual_patch(label: str, e) -> dict:
         "push_thresholds": {label: thr["push"]},
         "net_pin": {label: {"E": ev, "by": "manual"}},
     }
+
+
+def clamp_person_label_threshold(cam_cfg: dict | None, label_thresholds: dict) -> dict:
+    """Cap `label_thresholds["person"]` at the security-camera floor.
+
+    `clamp_manual_e` guards the NET's writes. It does not guard the two
+    routes that write `label_thresholds` directly — `POST
+    /api/settings/cameras` (the whole camera dict) and `PATCH
+    /api/cameras/<id>/detection-tuning`. Both accepted `person: 0.95`,
+    which on Werkstatt or Garten means a person has to be recognised
+    with 95 % confidence before a track even starts: the camera is
+    blind and nothing says so.
+
+    `AUTO_E_FLOOR_PERSON_SECURITY` (E 35) maps to a person spawn of
+    0.54, so that is the ceiling. Wildlife-role cameras are untouched —
+    a bird feeder has no intruder to miss.
+
+    Returns a new dict; never mutates the caller's.
+    """
+    out = dict(label_thresholds or {})
+    if "person" not in out or not person_floor_applies(cam_cfg, "person"):
+        return out
+    ceiling = spawn_for("person", AUTO_E_FLOOR_PERSON_SECURITY)
+    try:
+        wanted = float(out["person"])
+    except (TypeError, ValueError):
+        return out
+    if wanted > ceiling:
+        log.warning(
+            "[det] person-Schwelle %.2f über dem Sicherheits-Limit – auf %.2f begrenzt",
+            wanted,
+            ceiling,
+        )
+        out["person"] = ceiling
+    return out

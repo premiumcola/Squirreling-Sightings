@@ -18,6 +18,24 @@
   color: #e2e8f0;
 }
 
+/* SIMU-07 · compact mode. Set by the Debug tab's "Video ausblenden"
+   toggle (live-detect-debug/_verdict.js) while that tab is active.
+   On a 375 px iPhone the stage + legend band + swimlane eat roughly
+   two thirds of the screen; folding them away is what makes the debug
+   content readable without scrolling past a picture the operator is
+   not looking at right now.
+
+   `display:none` rather than height:0 — the stage holds an <img> whose
+   decode cost is pure waste while it is invisible, and the swimlane
+   would otherwise keep its own scroll position alive. The title bar and
+   the panel tabs stay: those are how the user gets back. */
+.mv-shell[data-compact='1'] .mv-shell-stage,
+.mv-shell[data-compact='1'] .mv-shell-controls,
+.mv-shell[data-compact='1'] .mv-shell-legendband,
+.mv-shell[data-compact='1'] .mv-shell-playbar {
+  display: none;
+}
+
 /* ── Title bar ───────────────────────────────────────────────────── */
 .mv-titlebar {
   display: flex;

@@ -1123,6 +1123,10 @@
    the problem is. */
 .mv-ld-debug {
   padding: 12px;
+  /* In compact mode the debug panel is the bottom-most content in the
+     modal, so the last cluster would otherwise sit under the iPhone
+     home indicator. */
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
 .mv-ld-debug-header {
@@ -1767,56 +1771,149 @@
   word-break: break-word;
 }
 
-/* SIMU-06b · Copy-Debug-Snapshot button. Sits sticky at the top of
-   the Debug panel so it stays visible while scrolling through the
-   five clusters. The bar itself has a subtle blur backdrop so the
-   button reads cleanly over scrolling content. */
-.mv-ld-debug-copy-bar {
+/* SIMU-07 · the Debug tab's sticky head — the two things the tab is
+   FOR, above the fold and reachable without a single scroll:
+
+     row 1  Kopieren + Video-ausblenden (two 44 px targets, half-width
+            each so a thumb hits either one on a 375 px screen)
+     row 2  the verdict — max three plain-language lines
+
+   The long snapshot is never rendered; it lives in the clipboard. That
+   is the whole reason this head can afford to be generous. */
+.mv-ld-debug-head {
   position: sticky;
   top: 0;
   z-index: 30;
-  display: flex;
-  justify-content: flex-end;
-  margin: -12px -12px 0;
-  padding: 8px 12px;
-  background: linear-gradient(180deg, rgba(10, 24, 18, 0.92) 60%, rgba(10, 24, 18, 0) 100%);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
-  pointer-events: none;
+  margin: -12px -12px 12px;
+  padding: 10px 12px;
+  /* Opaque, not a gradient fade: cluster text scrolling underneath a
+     semi-transparent bar made both unreadable. Depth comes from the
+     colour step against the panel, not from a border. */
+  background: #10241a;
+  border-radius: 0 0 10px 10px;
 }
 
-.mv-ld-debug-copy {
+.mv-ld-debug-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mv-ld-debug-copy,
+.mv-ld-debug-compact {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  height: 26px;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 44px;
-  padding: 4px 12px;
-  border-radius: 6px;
-  background: rgba(28, 58, 82, 0.55);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
-  border: 1.2px solid #6ec1ff;
-  color: #d6ecff;
-  font-size: 10px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
   outline: 0;
   white-space: nowrap;
-  /* Touch buffer extends above and below the visible 26 px chip so
-     the 44 px iOS minimum lands without changing the chip footprint. */
-  align-self: center;
+  overflow: hidden;
+}
+
+/* Primary action — a filled, genuinely light-on-mid chip. The old
+   translucent version was dark-on-dark against the panel. */
+.mv-ld-debug-copy {
+  background: #2b7fc4;
+  color: #f2f9ff;
+}
+
+.mv-ld-debug-compact {
+  background: #23443a;
+  color: #d6f0e0;
+}
+
+.mv-ld-debug-compact[aria-pressed='true'] {
+  background: #3d6b57;
+  color: #ffffff;
 }
 
 @media (hover: hover) {
   .mv-ld-debug-copy:hover {
-    background: rgba(36, 74, 104, 0.7);
-    color: #ffffff;
-    border-color: #94d8ff;
+    background: #3a94dc;
   }
+
+  .mv-ld-debug-compact:hover {
+    background: #2f5a4b;
+  }
+}
+
+.mv-ld-debug-copy-lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The verdict. One row per finding, tone as a filled dot — flat, no
+   rules, no boxes. Three rows max; the rest ride in the copied text. */
+.mv-ld-verdict {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mv-ld-verdict-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--mv-ld-text, #b6d4be);
+}
+
+.mv-ld-verdict-row::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6ee7b7;
+  transform: translateY(-1px);
+}
+
+.mv-ld-verdict-row[data-tone='red'] {
+  color: #ffd9de;
+}
+
+.mv-ld-verdict-row[data-tone='red']::before {
+  background: #fb7185;
+}
+
+.mv-ld-verdict-row[data-tone='warn'] {
+  color: #ffe6bd;
+}
+
+.mv-ld-verdict-row[data-tone='warn']::before {
+  background: #ffcd6e;
+}
+
+.mv-ld-verdict-row[data-tone='info']::before {
+  background: #6ec1ff;
+}
+
+.mv-ld-verdict-row[data-tone='mute'] {
+  color: var(--mv-ld-muted, #5a7a68);
+}
+
+.mv-ld-verdict-row[data-tone='mute']::before {
+  background: var(--mv-ld-muted, #5a7a68);
+}
+
+.mv-ld-verdict-more {
+  font-size: 11px;
+  color: var(--mv-ld-muted, #5a7a68);
+  padding-left: 16px;
 }
 
 .mv-ld-debug-copy-glyph {
@@ -1842,7 +1939,7 @@
   }
 }
 
-.mv-ld-copy-ico {
+.mv-ld-debug-copy-glyph svg {
   display: block;
 }
 

@@ -1,26 +1,11 @@
-// SIMU-06b · Copy-Debug-Snapshot button. Sticky inside the Debug
-// panel so it stays visible as the user scrolls through clusters.
-// Cyan-bordered glass, inline copy-icon + label. The whole bar
-// (top-right anchored, transparent left half) lets clicks through
-// to the underlying panel; only the button itself accepts input.
-export function _renderCopyBar() {
-  const iconSvg =
-    '<svg class="mv-ld-copy-ico" width="14" height="14" viewBox="0 0 24 24" ' +
-    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
-    'stroke-linejoin="round" aria-hidden="true">' +
-    '<rect x="9" y="9" width="12" height="12" rx="2" ry="2"/>' +
-    '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-  // SIMU-FIX-04d · the toast lives at document.body level (via
-  // _ensureToastEl) so it escapes any layout containment from
-  // zone-detail / the modal. Only the copy-button stays in the bar.
-  return `
-    <div class="mv-ld-debug-copy-bar">
-      <button type="button" class="mv-ld-debug-copy" data-action="copy-snapshot">
-        <span class="mv-ld-debug-copy-glyph">${iconSvg}</span>
-        <span class="mv-ld-debug-copy-lbl">Alle Debug-Infos kopieren</span>
-      </button>
-    </div>`;
-}
+// SIMU-06b/07 · the copy path. The button itself is rendered by
+// _verdict.js (it shares the sticky head with the verdict lines); this
+// module owns the snapshot cache, the placeholder substitution and the
+// iOS-safe clipboard write.
+//
+// Copying is the primary action of this whole view: the operator
+// diagnoses an Unraid box from an iPhone, and pasting a document beats
+// typing `docker logs … | grep …` on a phone keyboard every time.
 
 // SIMU-FIX-04d · shared toast element pinned to document.body so it
 // renders at the true viewport bottom-center with z-index 9999,
@@ -44,17 +29,36 @@ export function _ensureToastEl() {
 // async hop between gesture-arrival and clipboard-call. The cache
 // is refreshed every 5 s so it can't go stale.
 let _snapshotCache = null;
+let _findingsCache = null;
 let _snapshotCacheTimer = 0;
 let _snapshotCacheCamId = null;
+
+// SIMU-07 · the render context captured at wire-time goes stale the
+// moment the tick loop advances (holdMs / cycle EMA are plain numbers,
+// not live references). The panel re-publishes the current context on
+// every tick so the clipboard write reports what is on screen NOW.
+let _liveCtx = {};
+export function setLiveCtx(ctx) {
+  _liveCtx = ctx || {};
+}
+
+// The auto-diagnosis, computed server-side and rendered on screen by
+// _verdict.js. Same list the copied document carries under "## Befund",
+// so screen and paste can never disagree.
+export function currentFindings() {
+  return _findingsCache;
+}
 
 export function _prefetchSnapshot(ctx) {
   const camId = (ctx.session || {}).camId || '';
   if (!camId) return;
   _snapshotCacheCamId = camId;
-  fetch(`/api/cameras/${encodeURIComponent(camId)}/debug-snapshot`)
-    .then((r) => (r.ok ? r.text() : null))
-    .then((md) => {
-      if (md && _snapshotCacheCamId === camId) _snapshotCache = md;
+  fetch(`/api/cameras/${encodeURIComponent(camId)}/debug-snapshot?format=json`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data || _snapshotCacheCamId !== camId) return;
+      if (typeof data.markdown === 'string') _snapshotCache = data.markdown;
+      if (Array.isArray(data.findings)) _findingsCache = data.findings;
     })
     .catch(() => {
       /* cache stays stale; click-handler falls back to live fetch */
@@ -73,15 +77,30 @@ export function stopSnapshotPrefetch() {
     _snapshotCacheTimer = 0;
   }
   _snapshotCache = null;
+  _findingsCache = null;
   _snapshotCacheCamId = null;
 }
 
+// Values only the browser knows. The server emits them as tokens rather
+// than printing a plausible "?" — see routes/_debug_snapshot/_helpers.py.
+function _fillPlaceholders(md, ctx) {
+  const t = ctx.tickState || {};
+  const next = Number.isFinite(t.lastDelayMs) ? `${Math.round(t.lastDelayMs)} ms` : 'noch offen';
+  const hold = Number.isFinite(ctx.holdMs) ? `${Math.round(ctx.holdMs)} ms` : 'noch offen';
+  return md
+    .replace('<<frontend_state_ua>>', navigator.userAgent || '')
+    .replace('<<tick_next_ms>>', next)
+    .replace('<<hold_ms>>', hold)
+    .replace('<<frontend_state>>', _buildFrontendStateBlock(ctx));
+}
+
 // SIMU-06c · wire the copy button. Reads the cached snapshot, splices
-// in the live "Frontend State" block, writes to the iOS clipboard
+// in the live frontend-only values, writes to the iOS clipboard
 // SYNCHRONOUSLY (inside the gesture), shows confirmation toast.
 export function _wireCopyBar(host, ctx) {
   const btn = host.querySelector('[data-action="copy-snapshot"]');
   if (!btn) return;
+  setLiveCtx(ctx);
   // SIMU-FIX-04d · the toast lives at document.body level, not
   // inside the copy-bar — so it always renders at the true viewport
   // bottom-center with z-index 9999, never clipped by the modal's
@@ -93,19 +112,13 @@ export function _wireCopyBar(host, ctx) {
     btn.classList.add('mv-ld-debug-copy-busy');
     let md = _snapshotCache;
     if (!md) {
-      _showToast(
-        toast,
-        'Snapshot lädt … bitte gleich erneut tippen',
-        'ok',
-        2200,
-      );
-      _prefetchSnapshot(ctx);
+      _showToast(toast, 'Snapshot lädt … bitte gleich erneut tippen', 'ok', 2200);
+      _prefetchSnapshot(_liveCtx);
       btn.dataset.busy = '0';
       btn.classList.remove('mv-ld-debug-copy-busy');
       return;
     }
-    md = md.replace('<<frontend_state_ua>>', navigator.userAgent || '');
-    md = md.replace('<<frontend_state>>', _buildFrontendStateBlock(ctx));
+    md = _fillPlaceholders(md, _liveCtx);
     // SIMU-FIX-05c · invoke clipboard write SYNCHRONOUSLY (no await
     // before writeText). Errors fall through to the textarea +
     // execCommand fallback, also invoked synchronously. Both calls
@@ -130,18 +143,16 @@ export function _wireCopyBar(host, ctx) {
       ok = _execCopyFallback(md, toast);
     }
     if (!ok) {
-      _showToast(
-        toast,
-        'Kopieren fehlgeschlagen — versuche es erneut',
-        'error',
-        3000,
-      );
+      _showToast(toast, 'Kopieren fehlgeschlagen — versuche es erneut', 'error', 3000);
     }
     btn.dataset.busy = '0';
     btn.classList.remove('mv-ld-debug-copy-busy');
   });
 }
 
+// Fallback for older Safari / iOS WKWebView: spawn a textarea, select,
+// execCommand('copy'), then yank it. Works back to iOS 10 but requires a
+// same-tick user gesture, which the button click already provides.
 export function _execCopyFallback(md, toast) {
   const ta = document.createElement('textarea');
   ta.value = md;
@@ -172,9 +183,7 @@ export function _buildFrontendStateBlock(ctx) {
   const ovEl = document.getElementById('lightboxLiveOverlay');
   const ovRect = ovEl ? ovEl.getBoundingClientRect() : null;
   const ovStyle = ovEl ? window.getComputedStyle(ovEl) : null;
-  const overlaysState = window._mvLdOverlaysSnapshot
-    ? window._mvLdOverlaysSnapshot()
-    : 'unknown';
+  const overlaysState = window._mvLdOverlaysSnapshot ? window._mvLdOverlaysSnapshot() : 'unknown';
   const activeTab = (() => {
     try {
       return localStorage.getItem('tam.ld.activetab') || 'detections';
@@ -192,6 +201,13 @@ export function _buildFrontendStateBlock(ctx) {
       return false;
     }
   })();
+  const compact = (() => {
+    try {
+      return sessionStorage.getItem('tam.ld.debug.compact') === '1';
+    } catch {
+      return false;
+    }
+  })();
   const lines = [
     `bbox_space:          ${bboxSpace}`,
     sourceFs ? `source_frame_size:   ${sourceFs.w}×${sourceFs.h}` : null,
@@ -204,35 +220,11 @@ export function _buildFrontendStateBlock(ctx) {
     `overlays:            ${overlaysState}`,
     `active_tab:          ${activeTab}`,
     `timeline_collapsed:  ${timelineCollapsed}`,
+    `debug_compact_mode:  ${compact}`,
     `viewport:            ${window.innerWidth}×${window.innerHeight} dpr=${window.devicePixelRatio}`,
     `timestamp_frontend:  ${new Date().toISOString()}`,
   ].filter(Boolean);
   return '```\n' + lines.join('\n') + '\n```';
-}
-
-async function _writeClipboard(text) {
-  if (navigator.clipboard?.writeText) {
-    return navigator.clipboard.writeText(text);
-  }
-  // Fallback for older Safari / iOS WKWebView: spawn a textarea,
-  // select, execCommand('copy'), then yank it. Works back to iOS 10
-  // but requires a same-tick user gesture which the button click
-  // already provides.
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.setAttribute('readonly', '');
-  ta.style.cssText = 'position:fixed;top:-9999px;left:0;opacity:0';
-  document.body.appendChild(ta);
-  ta.select();
-  ta.setSelectionRange(0, text.length);
-  let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } catch {
-    ok = false;
-  }
-  document.body.removeChild(ta);
-  if (!ok) throw new Error('clipboard write blocked');
 }
 
 let _toastTimer = 0;

@@ -1,4 +1,4 @@
-"""Operator report on the alert/verdict corpus. READ-ONLY.
+"""Operator report on the alert/verdict corpus, plus THR-2 advice. READ-ONLY.
 
 The ledger (``storage/_diag/detection_feedback.jsonl``) has been writing
 alerts and verdicts since C4 and nothing has ever read it back. This is
@@ -16,8 +16,16 @@ Three downstream uses, three different bars, reported separately because
 they are three different statistical questions — see "What has enough
 data" below.
 
+Since THR-2 it also prints the push-threshold recommendation for every
+stratum that clears the bar — the same advice `/api/telegram/push/
+calibration` serves, from the same `app.thresholds.recommend_push`, so
+the shell and the UI can never disagree. Advisory only: the report
+proposes, a human types.
+
 Writes ``storage/_diag/corpus_report_<ts>.md``. Touches nothing else — no
-settings, no events, no network, and it never compacts the ledger.
+settings (it parses ``settings.json`` read-only and never builds a
+``SettingsStore``, whose ``load()`` writes), no events, no network, and
+it never compacts the ledger.
 
 From the repo checkout:
     python3 app/scripts/corpus_report.py
@@ -32,8 +40,10 @@ import time
 from pathlib import Path
 
 try:  # package invocation: python3 -m scripts.corpus_report
+    from . import _corpus_reco
     from ._common import add_app_to_path, storage_root
 except ImportError:  # direct path: python3 app/scripts/corpus_report.py
+    import _corpus_reco
     from _common import add_app_to_path, storage_root
 
 _DAY = 86400.0
@@ -334,12 +344,15 @@ def _caveats_block(policy: dict) -> list:
         "every event in the selection; a bulk sweep of an old day is not the same evidence "
         "as a deliberate tap on one picture. The `source` field is in the ledger for a "
         "future weighting; this report does not weight it.",
-        "- This report recommends nothing and changes nothing. It reports what is there.",
+        "- **This report changes nothing.** It reads the ledger and the saved settings and "
+        "writes one markdown file. The recommendations above are proposals for a human to "
+        "type in; no code path applies them, and the `adapted` layer they would enter "
+        "through is still fed by nobody.",
         "",
     ]
 
 
-def _render(df, stats: dict, policy: dict, span, ts: str) -> str:
+def _render(df, stats: dict, policy: dict, span, ts: str, recs: list) -> str:
     lines = [
         "# Detection corpus report",
         "",
@@ -347,6 +360,7 @@ def _render(df, stats: dict, policy: dict, span, ts: str) -> str:
         "",
     ]
     lines += _verdict_block(stats, policy, span)
+    lines += _corpus_reco.block(recs)
     lines += _thresholds_block(policy)
     lines += _centroid_block(stats["centroid"], policy)
     lines += _health_block(stats)
@@ -364,12 +378,13 @@ def main():
     root = storage_root()
     stats = df.corpus_stats(root)
     policy = _policy(df)
+    recs = _corpus_reco.build(df, root, stats)
     ts = time.strftime("%Y%m%d_%H%M%S")
 
     diag = Path(root) / "_diag"
     diag.mkdir(parents=True, exist_ok=True)
     out_path = diag / f"corpus_report_{ts}.md"
-    out_path.write_text(_render(df, stats, policy, _span(df, root), ts), encoding="utf-8")
+    out_path.write_text(_render(df, stats, policy, _span(df, root), ts, recs), encoding="utf-8")
 
     ready = sum(1 for s in stats["strata"] if s["ready"])
     print(f"[corpus] {out_path}")
@@ -380,6 +395,7 @@ def main():
     )
     if not ready:
         print("[corpus] NOT ENOUGH DATA — no threshold should be moved on this corpus yet.")
+    print(_corpus_reco.summary(recs))
     return out_path
 
 

@@ -1,4 +1,4 @@
-"""THR-1 · the ONE place where the threshold ladder is resolved.
+"""THR-1 · resolving the threshold ladder. Public via ``thresholds``.
 
 Four independent gates decide whether a sighting ever reaches the user,
 and until now every one of them was read at its own call site with its
@@ -40,12 +40,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .settings._consts import (
+from ..settings._consts import (
     CONFIRMATION_WINDOW_DEFAULTS,
     LABEL_THRESHOLD_DEFAULTS,
     TELEGRAM_PUSH_DEFAULTS,
 )
-from .tracker_core._consts import TRACK_FLOOR_SCORE, TRACK_SPAWN_SCORE
+from ..tracker_core._consts import TRACK_FLOOR_SCORE, TRACK_SPAWN_SCORE
 
 SOURCE_CAMERA = "camera"
 SOURCE_ADAPTED = "adapted"

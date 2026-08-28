@@ -813,6 +813,45 @@ class LiveTracker:
         if iou_threshold is not None:
             self.iou_threshold = float(iou_threshold)
 
+    def step_matches(
+        self,
+        detections,
+        *,
+        t_s: float,
+        fps: float,
+        spawn_for: Callable[[str], float] | None = None,
+        frame_w: int = 0,
+        frame_h: int = 0,
+    ) -> list:
+        """One tracker step, returning the ``(detection, track)`` pairs.
+
+        ``step`` is this with the tracks dropped. The pairs exist for
+        callers that need the track identity as well as the survivor —
+        the Simulieren panel renders a stable ``#N`` badge per track and
+        used to hand-roll its own ``associate_detections`` call to get
+        them, which is how it ended up bumping ``_frame_idx`` by hand and
+        computing the miss grace against the camera's CONFIGURED frame
+        rate instead of the cadence its own ticks arrive on. Same entry
+        point for both callers now; only the ``fps`` differs, which is
+        the one thing that legitimately does.
+        """
+        self._frame_idx += 1
+        grace = compute_miss_grace_samples(self.grace_seconds, fps)
+        if spawn_for is None:
+            spawn_for = lambda _lbl: self.spawn_default  # noqa: E731
+        return associate_detections(
+            self.state,
+            list(detections),
+            frame_idx=self._frame_idx,
+            t_s=float(t_s),
+            spawn_score=self.spawn_default,
+            spawn_for=spawn_for,
+            miss_grace_samples=grace,
+            iou_threshold=self.iou_threshold,
+            frame_w=frame_w,
+            frame_h=frame_h,
+        )
+
     def step(
         self,
         detections,
@@ -842,19 +881,11 @@ class LiveTracker:
         features were inert there while working fine in the post-clip
         worker, which does pass them.
         """
-        self._frame_idx += 1
-        grace = compute_miss_grace_samples(self.grace_seconds, fps)
-        if spawn_for is None:
-            spawn_for = lambda _lbl: self.spawn_default  # noqa: E731
-        matches = associate_detections(
-            self.state,
-            list(detections),
-            frame_idx=self._frame_idx,
-            t_s=float(t_s),
-            spawn_score=self.spawn_default,
+        matches = self.step_matches(
+            detections,
+            t_s=t_s,
+            fps=fps,
             spawn_for=spawn_for,
-            miss_grace_samples=grace,
-            iou_threshold=self.iou_threshold,
             frame_w=frame_w,
             frame_h=frame_h,
         )

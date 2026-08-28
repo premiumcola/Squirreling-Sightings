@@ -20,6 +20,13 @@ import cv2
 import numpy as np
 import requests
 
+from ..detect_setup import (
+    apply_bottom_crop,
+    apply_object_filter,
+    apply_size_floor,
+    build_detection_setup,
+    make_spawn_for,
+)
 from ..detection_confirmer import DetectionConfirmer
 from ..detection_tiling import normalise_mode, tiled_detect
 from ..motion_samples import record_sample as record_motion_sample
@@ -207,8 +214,13 @@ class MainLoopMixin:
             motion_box=mbox,
             full_dets=raw_detections,
         )
-        if allowed:
-            roi_dets = [d for d in roi_dets if d.label in allowed]
+        # Same gate order as the full-frame path: size floor, then class
+        # filter, then mask, then zones. A tile-projected box is judged
+        # by the size it has in the SCENE, which is why the full frame's
+        # dimensions go in here and not the crop's.
+        _h_px, _w_px = proc_frame.shape[:2]
+        roi_dets, _ = apply_size_floor(roi_dets, _w_px, _h_px)
+        roi_dets, _ = apply_object_filter(roi_dets, allowed)
         roi_dets = self._filter_masked_detections(proc_frame, roi_dets)
         roi_dets = self._filter_zoned_detections(proc_frame, roi_dets)
         # Only boxes that came out of a magnified region are "via roi" — the
@@ -371,12 +383,21 @@ class MainLoopMixin:
                     )
                 self.last_error = None
                 self._error_streak = 0
+                # One resolution of the detection configuration for this
+                # frame — the SAME builder the Simulieren panel uses, so
+                # the panel can no longer be tiling in 3×3 while the
+                # camera runs `off`, or inferring at a hard-coded 0.20
+                # while the loop runs the tracker floor. roi_mode comes
+                # from the warn-once cache; everything else is resolved
+                # in detect_setup.
+                setup = build_detection_setup(
+                    self.camera_id,
+                    self.cfg,
+                    roi_mode=self._effective_roi_mode(),
+                    global_cfg=self.global_cfg,
+                )
                 # Apply bottom crop before processing (removes corrupt H.264 bottom strip)
-                bottom_crop_px = int(self.cfg.get("bottom_crop_px", 0))
-                if bottom_crop_px > 0 and frame.shape[0] > bottom_crop_px:
-                    proc_frame = frame[:-bottom_crop_px, :, :]
-                else:
-                    proc_frame = frame
+                proc_frame = apply_bottom_crop(frame, setup.bottom_crop_px)
                 # Skip frames with corrupt bottom strip (high-saturation codec artifact)
                 if self._has_corrupt_strip(proc_frame):
                     log.debug("[%s] corrupt strip detected, frame skipped", self.camera_id)
@@ -431,7 +452,7 @@ class MainLoopMixin:
                 # via the tracker's tentative-tier path. Cold-start
                 # gating still happens here because the confirmer's 3-of-5s
                 # rule trumps the tracker for fresh sightings.
-                label_thresholds = self.cfg.get("label_thresholds") or None
+                label_thresholds = setup.label_thresholds or None
                 _t0 = time.time()
                 # Pull EVERY hit above the tracker's continuation floor —
                 # the tracker classifies them into confirmed (≥ spawn) vs
@@ -440,16 +461,23 @@ class MainLoopMixin:
                 # would defeat the point of the tracker's two-tier flow.
                 raw_detections = self.detector.detect_frame_raw(
                     proc_frame,
-                    threshold=self._tracker.floor,
+                    threshold=setup.floor,
                 )
-                detections = list(raw_detections)
                 # Rolling-average Coral inference latency for the /status
                 # bubble. Cost is unchanged from detect_frame() — same
                 # underlying invoke; only the post-filter threshold differs.
                 self._inference_times_ms.append((time.time() - _t0) * 1000.0)
-                allowed = set(self.cfg.get("object_filter") or [])
-                if allowed:
-                    detections = [d for d in detections if d.label in allowed]
+                # Per-label bbox size floor. detect_frame_raw runs no
+                # label filters, so this guard — written for exactly the
+                # small-false-person case the twilight scenes produce —
+                # was unreachable on this path until detect_setup hoisted
+                # it out of the detector's unused detect_frame branch.
+                _fh_px, _fw_px = proc_frame.shape[:2]
+                raw_detections, _ = apply_size_floor(
+                    list(raw_detections), _fw_px, _fh_px, self.camera_id
+                )
+                allowed = setup.object_filter
+                detections, _ = apply_object_filter(list(raw_detections), allowed)
                 # Exclusion mask first: drop detections inside masked
                 # regions before zone filtering or the tracker runs. A
                 # tracked subject must NOT survive into a masked region.
@@ -468,13 +496,7 @@ class MainLoopMixin:
                 # genuine cold-start gating stays the confirmer's job.
                 # Resolved BEFORE the rescue gate below, which needs the same
                 # notion of "strong enough to be believed".
-                spawn_for = lambda _lbl: self._tracker.spawn_default
-                if label_thresholds:
-                    _lt = dict(label_thresholds)
-                    _default = self._tracker.spawn_default
-                    spawn_for = lambda lbl, _lt=_lt, _d=_default: (
-                        float(_lt[lbl]) if lbl in _lt else _d
-                    )
+                spawn_for = make_spawn_for(label_thresholds, self._tracker.spawn_default)
                 # ── D2 · ROI / tiling rescue ─────────────────────────────
                 # D1 saw a coherent moving blob and the full-frame pass
                 # produced nothing CONFIRMABLE on it — see
@@ -487,7 +509,7 @@ class MainLoopMixin:
                 # describe a state that persists for seconds, not an event.
                 # Without the cooldown that is one magnified re-detect per
                 # frame for the whole crossing. See _RESCUE_MIN_INTERVAL_S.
-                det_mode = self._effective_roi_mode()
+                det_mode = setup.det_mode
                 if (
                     det_mode != "off"
                     and _coherent_blob is not None
@@ -505,7 +527,6 @@ class MainLoopMixin:
                 # conservative 3 Hz when the rolling measurement hasn't
                 # warmed up yet (first ~5 s of a camera's session).
                 _eff_fps = max(1.0, float(getattr(self, "_main_fps", 0.0) or 3.0))
-                _fh_px, _fw_px = proc_frame.shape[:2]
                 detections = self._tracker.step(
                     detections,
                     t_s=time.monotonic(),

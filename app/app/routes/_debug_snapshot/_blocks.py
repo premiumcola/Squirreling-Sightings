@@ -172,7 +172,11 @@ def _detections_block(last: dict, cluster_ev: dict) -> str:
         )
 
     passed = [d for d in out if d.get("verdict") == "pass"]
-    below = [d for d in out if d.get("verdict") == "belowthresh"]
+    # "tentative" is the two-tier tracker's under-spawn tier: the box
+    # holds its track but does not count toward confirmation. It replaced
+    # "belowthresh", which meant "under detection_min_score" — a bar the
+    # live pipeline no longer applies at all.
+    below = [d for d in out if d.get("verdict") == "tentative"]
     off = (cluster_ev.get("cluster3") or {}).get("off_filter_60s_counts") or {}
     top_off = sorted(off.items(), key=lambda kv: kv[1], reverse=True)[:5]
     return _fenced(

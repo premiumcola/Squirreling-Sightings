@@ -314,19 +314,28 @@ def api_media_cleanup():
     narrower window than the one it last enforced. The operator is
     looking at the number on screen; the unattended timer is not.
     """
-    from ..maintenance import resolve_retention_days
-    from ..storage_retention import acknowledge_window
+    from ..maintenance import config_retention_days, resolve_retention_days
+    from ..storage_retention import acknowledge_window, nightly_window
 
     payload = request.get_json(force=True) or {}
     override = payload.get("retention_days")
     retention = resolve_retention_days(override)
+    if override is None:
+        # An empty field posts {}, and a click on a number the operator
+        # never typed is not a confirmation of it. Without this the
+        # attended path ran the narrowed window immediately while the
+        # unattended one was still deferring it — the button was a way
+        # around its own guard. Fall back to the same deferral: pressing
+        # the button confirms nothing, so it may delete no more than the
+        # nightly sweep already would.
+        retention = nightly_window(retention, config_retention_days())
     try:
         removed = app_state.store.cleanup_old(retention)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     if override is not None:
         acknowledge_window(retention)
-    return jsonify({"ok": True, "removed": removed})
+    return jsonify({"ok": True, "removed": removed, "retention_days": retention})
 
 
 @bp.get('/api/camera/<cam_id>/media')

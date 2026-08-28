@@ -61,8 +61,13 @@ export async function refreshTimelineAndStats() {
 // module is safe to import on pages without these controls.
 byId('cleanupNowBtn')?.addEventListener('click', async () => {
   if (
+    // Says Papierkorb, because that is where they go now — the sweep
+    // routes through storage/.trash instead of unlinking, so they stay
+    // restorable for the grace period. Promising a deletion that does
+    // not happen is the same defect as promising a keep that does not.
     !(await showConfirm(
-      'Jetzt bereinigen? Alle Dateien älter als die konfigurierte Aufbewahrungszeit werden gelöscht.',
+      'Jetzt bereinigen? Alle Dateien älter als die Aufbewahrungszeit wandern in den Papierkorb ' +
+        'und bleiben dort wiederherstellbar.',
     ))
   )
     return;
@@ -74,7 +79,14 @@ byId('cleanupNowBtn')?.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    showToast(`Bereinigung abgeschlossen. ${r.removed || 0} Dateien entfernt.`, 'success');
+    // `retention_days` is what the server ACTUALLY enforced, which is
+    // not always what the field said: leaving it empty defers to the
+    // nightly window, and a pending narrowing keeps the wider one.
+    const win = r.retention_days ? ` (${r.retention_days} Tage)` : '';
+    showToast(
+      `Bereinigung abgeschlossen${win}. ${r.removed || 0} Dateien im Papierkorb.`,
+      'success',
+    );
     await loadMediaStorageStats();
   } catch (e) {
     showToast('Fehler: ' + e.message, 'error');

@@ -51,7 +51,7 @@ from ._consts import (  # noqa: F401 — public API re-export
     TRACK_REID_SIZE_RATIO,
     TRACK_SPAWN_SCORE,
 )
-from ._adopt import spawn_blocking_track, try_reidentify
+from ._adopt import nearby_track, spawn_blocking_track, try_reidentify
 from ._merge import merge_active_duplicates
 from ._motion import (  # noqa: F401 — public API re-export
     bootstrap_gate,
@@ -597,19 +597,22 @@ def associate_detections(
     # birth frame — halving the intended grace period.
     original_count = len(state.active)
 
-    # Phase 3 — unmatched confirmed dets. The flow now is:
+    # Phase 3 — unmatched confirmed dets. The flow is:
     #
     #   1. SPAWN-BLOCK check (J2). If the det's bbox strongly
-    #      overlaps an active track's LAST-OBSERVED bbox (any
-    #      label, IoU > SPAWN_BLOCK_IOU), the det is either a
-    #      same-label duplicate (likely a direction-reversal that
-    #      slipped past Phase 1's prediction-based matcher) or a
-    #      cross-label misclassification of an already-tracked
-    #      subject. Same-label → ATTACH to that track. Cross-label
-    #      → DROP. Either way no fresh id spawns.
-    #   2. RE-ID against recently-closed same-label tracks for
+    #      overlaps an active track's predicted or last-observed
+    #      bbox (any label, IoU > SPAWN_BLOCK_IOU), the det is either
+    #      a same-label duplicate or a cross-label misclassification
+    #      of an already-tracked subject. Either way it ATTACHES to
+    #      that track and no fresh id spawns.
+    #   2. PROXIMITY check (J6). No overlap, but a same-label track
+    #      with no detection of its own this frame sits within a
+    #      bbox dimension of the det — the subject moved further
+    #      than the prediction expected (a direction reversal is the
+    #      classic case). Attach rather than spawn beside it.
+    #   3. RE-ID against recently-closed same-label tracks for
     #      "person walked back in after grace expired".
-    #   3. Fallback: spawn a fresh id.
+    #   4. Fallback: spawn a fresh id.
     #
     # Unmatched tentative dets are still dropped (no spawn) so a
     # flicker of low-conf noise can't seed a new track id.
@@ -623,6 +626,12 @@ def associate_detections(
             "y2": int(d.bbox[3]),
         }
         blocker = spawn_blocking_track(state.active, predicted, d)
+        if blocker is None:
+            # J6 · only tracks that existed at frame entry are
+            # candidates, so `predicted` stays index-aligned and a
+            # track spawned earlier in this very loop can't adopt the
+            # next detection of the same frame.
+            blocker = nearby_track(state.active[: len(predicted)], predicted, d, taken_tracks)
         if blocker is not None:
             # J5 · attach the det to the blocker REGARDLESS of label.
             # The per-sample label is preserved on the new sample and

@@ -10,11 +10,16 @@ before it is allowed an id of its own:
 * :func:`spawn_blocking_track` (J2) — strong overlap with ANY active
   track. Either a same-label duplicate the NMS gate let through, or a
   cross-label misclassification of an already-tracked subject.
+* :func:`nearby_track` (J6) — a same-label active track whose position
+  estimate sits within a bbox dimension of the detection. Scale-aware
+  where a raw IoU is not, and the gate that keeps a turning person on
+  one id; see the arithmetic at ``SPAWN_NEAR_DIST_FACTOR``.
 * :func:`try_reidentify` — a recently CLOSED same-label track, for the
   "walked back in after the grace expired" case.
 
-Ordering is the caller's business; the gates here are pure predicates
-over tracker state and hold no state of their own.
+Ordering is the caller's business, but extending a LIVE track always
+beats resurrecting a dead one and both beat a fresh id. The gates here
+are pure predicates over tracker state and hold no state of their own.
 """
 
 from __future__ import annotations
@@ -23,15 +28,97 @@ from ..bbox_utils import iou
 from ._consts import (
     REID_OCCUPIED_IOU,
     SPAWN_BLOCK_IOU,
+    SPAWN_NEAR_DIST_FACTOR,
+    SPAWN_NEAR_H_RATIO,
     TRACK_REID_DIST_FACTOR,
     TRACK_REID_MAX_SECONDS,
     TRACK_REID_SIZE_RATIO,
 )
+from ._motion import recent_observed_samples
 
 
 def _bbox_tuple(bb: dict) -> tuple[int, int, int, int]:
     """A tracks.json sample bbox dict as an ``(x1, y1, x2, y2)`` tuple."""
     return (int(bb["x1"]), int(bb["y1"]), int(bb["x2"]), int(bb["y2"]))
+
+
+def last_observed_bbox(track):
+    """The track's last DETECT-source bbox as a tuple, or None.
+
+    Deliberately NOT ``samples[-1]``: during the miss-grace window that
+    is a ``predicted`` sample, i.e. the tracker's own extrapolation. A
+    gate that reads it believes it is checking an observation while it
+    is really checking the motion model against itself — and loses its
+    one reference that is independent of the model exactly when the
+    model is the thing that went wrong."""
+    obs = recent_observed_samples(track, 1)
+    return _bbox_tuple(obs[0]["bbox"]) if obs else None
+
+
+def _axis_normalised_offset(det_bbox, ref) -> float:
+    """Centroid offset between a detection and a reference box, with dx
+    normalised by width and dy by height (the larger of the two boxes on
+    each axis). 1.0 means "one box away" on whichever axis it moved.
+
+    Normalising per axis rather than by one radius is what makes the
+    gate survive an aspect change: a person's box widens as they turn,
+    but the offset that matters is still measured in widths."""
+    dw = max(1.0, float(det_bbox[2] - det_bbox[0]))
+    dh = max(1.0, float(det_bbox[3] - det_bbox[1]))
+    rw = max(1.0, float(ref[2] - ref[0]))
+    rh = max(1.0, float(ref[3] - ref[1]))
+    ox = ((det_bbox[0] + det_bbox[2]) - (ref[0] + ref[2])) / 2.0 / max(dw, rw)
+    oy = ((det_bbox[1] + det_bbox[3]) - (ref[1] + ref[3])) / 2.0 / max(dh, rh)
+    return (ox * ox + oy * oy) ** 0.5
+
+
+def nearby_track(active, predicted, det, taken):
+    """J6 · return the ACTIVE same-label track whose position estimate
+    is within ``SPAWN_NEAR_DIST_FACTOR`` bbox dimensions of ``det``, or
+    None. The closest candidate wins.
+
+    Three gates hold it to the one case it is for — a track that lost
+    its subject to a bad prediction:
+
+    * ``taken`` carries the indices of tracks that already got a
+      detection on this frame. They are NOT candidates: an orphan may
+      only join a track that has nothing of its own, so two subjects
+      standing close can never collapse onto one id.
+    * same label, unlike the J2 block. Distance alone is too weak a
+      signal to absorb a cross-label detection.
+    * comparable HEIGHT (``SPAWN_NEAR_H_RATIO``) — the stable dimension
+      of an upright subject. Width is not gated: widening is what the
+      turn does.
+
+    ``active`` and ``predicted`` must be index-aligned, so callers pass
+    the tracks that existed at frame entry. A track spawned earlier in
+    the same frame is not a candidate — it has no prediction, and
+    adopting into it would merge two subjects that arrived together.
+    """
+    best_track = None
+    best_dist = float(SPAWN_NEAR_DIST_FACTOR)
+    for ti, tr in enumerate(active):
+        if ti in taken or tr.label != det.label:
+            continue
+        last_tuple = last_observed_bbox(tr)
+        if last_tuple is None:
+            continue
+        det_h = max(1.0, float(det.bbox[3] - det.bbox[1]))
+        ref_h = max(1.0, float(last_tuple[3] - last_tuple[1]))
+        if max(det_h, ref_h) / min(det_h, ref_h) > SPAWN_NEAR_H_RATIO:
+            continue
+        # Both the last observation and the prediction are plausible
+        # positions for the subject; the detection only has to be near
+        # ONE of them. On a reversal the last observation is the closer
+        # of the two, which is precisely the case the prediction missed.
+        refs = [last_tuple]
+        if ti < len(predicted):
+            refs.append(predicted[ti])
+        dist = min(_axis_normalised_offset(det.bbox, ref) for ref in refs)
+        if dist < best_dist:
+            best_dist = dist
+            best_track = tr
+    return best_track
 
 
 def spawn_blocking_track(active, predicted, det):
@@ -42,7 +129,8 @@ def spawn_blocking_track(active, predicted, det):
     misclassification of an already-tracked subject. Tests the
     detection against both the track's predicted bbox (already computed
     by the caller at frame entry, so index-aligned with ``active``) and
-    its last sample, and picks the highest IoU when several qualify.
+    its last OBSERVED bbox, and picks the highest IoU when several
+    qualify.
     """
     best_track = None
     best_iou = SPAWN_BLOCK_IOU
@@ -50,7 +138,7 @@ def spawn_blocking_track(active, predicted, det):
         if not tr.samples:
             continue
         pred = predicted[ti] if ti < len(predicted) else None
-        last_tuple = _bbox_tuple(tr.samples[-1]["bbox"])
+        last_tuple = last_observed_bbox(tr) or _bbox_tuple(tr.samples[-1]["bbox"])
         iou_pred = iou(det.bbox, pred) if pred is not None else 0.0
         iou_last = iou(det.bbox, last_tuple)
         best_for_track = max(iou_pred, iou_last)

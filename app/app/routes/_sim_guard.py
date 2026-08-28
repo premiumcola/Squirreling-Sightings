@@ -146,18 +146,32 @@ def measured_per_invoke_ms(cam_id: str, mode: str) -> float | None:
     return sum(samples) / len(samples)
 
 
-def _per_invoke_ms(cam_id: str) -> float | None:
-    """Cost of ONE inference on this camera, over every measured mode.
+def _per_invoke_ms(cam_id: str, mode: str) -> float | None:
+    """Cost of ONE inference on this camera, for judging ``mode``.
 
-    The cheapest estimate wins: a tiled mode's per-invoke figure carries
-    the crop + letterbox overhead of its own tiling, so using it to judge
-    another mode over-charges. An optimistic estimate can only ever cause
-    a mode to be ALLOWED and then measured properly — the failure that
-    matters is refusing a mode that would have run.
+    The mode's OWN measurement wins whenever it exists. Only 3x3 can say
+    what 3x3 costs — its per-invoke figure carries the crop and letterbox
+    overhead of its own tiling, which no other mode pays.
+
+    The cheapest other measurement stands in only while the mode has
+    never run. That optimism is deliberate and bounded: a mode has to be
+    allowed once in order to be measured at all, and the very next tick
+    replaces the stand-in with its own figure.
+
+    The previous version took the cross-mode minimum unconditionally. It
+    read well — "an optimistic estimate can only cause a mode to be
+    ALLOWED and then measured properly" — but it never corrected itself.
+    One cheap `off` sample sat in the ring and disarmed the refusal
+    permanently, even after 3x3 had measured itself at five seconds a
+    tick. An estimate that cannot be revised by measurement is not an
+    estimate.
     """
+    own = measured_per_invoke_ms(cam_id, mode)
+    if own is not None:
+        return own
     best: float | None = None
-    for mode in ("off", "roi", "2x2", "3x3"):
-        per = measured_per_invoke_ms(cam_id, mode)
+    for other in ("off", "roi", "2x2", "3x3"):
+        per = measured_per_invoke_ms(cam_id, other)
         if per is None:
             continue
         if best is None or per < best:
@@ -179,7 +193,7 @@ def affordability(cam_id: str, mode: str) -> dict:
     same mode reproduces the measurement exactly.
     """
     _lo_n, hi_n = sim_invokes(mode)
-    per = _per_invoke_ms(cam_id)
+    per = _per_invoke_ms(cam_id, mode)
     if per is None:
         return {"ok": True, "estimated_ms": None, "per_invoke_ms": None, "invokes": hi_n}
     estimated = per * hi_n

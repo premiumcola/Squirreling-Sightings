@@ -327,3 +327,54 @@ def test_the_inference_count_mirrors_the_python_table():
     for mode, count in pairs.items():
         assert int(count) == sim_invokes(mode)[1], f"{mode} drifted from the Python table"
     assert set(pairs) == {"off", "roi", "2x2", "3x3"}
+
+
+# ── the estimate must be revisable by measurement ─────────────────────
+#
+# The first version of the gate resolved the per-invoke cost as a
+# cross-mode min() over every measured mode. The reasoning in its
+# docstring was sound for the FIRST attempt at a mode — you have to run
+# something once to measure it — but it applied that optimism forever.
+# One cheap `off` sample stayed in the ring and disarmed the refusal
+# permanently, so a camera that had already measured 3×3 at five seconds
+# a tick was still told 3×3 was affordable. The whole gate was decorative
+# in exactly the path the operator walks: they use `off`, then switch up.
+
+
+def _fresh(cam: str) -> None:
+    with G._COST_GUARD:
+        for key in [k for k in G._COSTS if k[0] == cam]:
+            del G._COSTS[key]
+
+
+def test_a_cheap_off_sample_cannot_disarm_the_refusal_for_3x3():
+    """THE regression test. Walk the operator's actual path."""
+    cam = "cam_disarm"
+    _fresh(cam)
+    # 1 · they watch in `off` for a while — one inference, fast.
+    G.record_cost(cam, "off", 40.0, 1)
+    assert (
+        G.affordability(cam, "3x3")["ok"] is True
+    ), "an unmeasured 3×3 must be allowed to run once — that is what measures it"
+    # 2 · they switch to 3×3 and it takes five seconds per tick.
+    G.record_cost(cam, "3x3", 5000.0, 10)
+    aff = G.affordability(cam, "3x3")
+    assert aff["per_invoke_ms"] == 500, f"3×3 must cost what 3×3 measured, got {aff}"
+    assert aff["ok"] is False, "after measuring itself at 5 s a tick, 3×3 must be refused"
+
+
+def test_the_cheap_stand_in_still_applies_to_a_mode_never_run():
+    """The optimism is kept where it belongs — only before first contact."""
+    cam = "cam_standin"
+    _fresh(cam)
+    G.record_cost(cam, "off", 40.0, 1)
+    assert G.affordability(cam, "2x2")["per_invoke_ms"] == 40
+
+
+def test_an_expensive_neighbour_does_not_condemn_an_unmeasured_mode():
+    """The stand-in is the cheapest sample, so a costly 3×3 cannot veto ROI."""
+    cam = "cam_neighbour"
+    _fresh(cam)
+    G.record_cost(cam, "off", 30.0, 1)
+    G.record_cost(cam, "3x3", 5000.0, 10)
+    assert G.affordability(cam, "roi")["ok"] is True

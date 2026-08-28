@@ -17,6 +17,10 @@ storage/weather_history.json.tmp
 app/storage/weather_history.json
 app/storage/weather_history.json.tmp
 
+# Storm-episode archive - permanent per-install weather record
+storage/weather_episodes.jsonl
+app/storage/weather_episodes.jsonl
+
 # Identity registries - personal data (face/fur histograms, cat names)
 storage/cat_registry.json
 storage/person_registry.json

@@ -1,0 +1,106 @@
+"""Constants for the storm-episode archive.
+
+Kept in its own module so the segmentation, scoring, record-building
+and persistence modules can share them without importing each other.
+"""
+
+from __future__ import annotations
+
+import logging
+
+log = logging.getLogger(__name__)
+
+# Append-only ledger beside settings.json / weather_history.json.
+EPISODE_FILE = "weather_episodes.jsonl"
+
+# Record kinds in the ledger. `episode` is the immutable base record;
+# `patch` carries a user edit; `delete` is a tombstone. Nothing is ever
+# rewritten in place — the read side folds patches over bases.
+KIND_EPISODE = "episode"
+KIND_PATCH = "patch"
+KIND_DELETE = "delete"
+
+# Margin + settle defaults. Mirrored into WEATHER_DEFAULTS["episodes"]
+# (app/app/settings/_consts.py) so the values are user-configurable and
+# backfilled additively on every settings load.
+DEFAULT_PRE_MIN = 90
+DEFAULT_POST_MIN = 90
+DEFAULT_SETTLE_MIN = 30
+
+EPISODE_DEFAULTS: dict = {
+    "enabled": True,
+    # Minutes of samples kept BEFORE onset. The build-up is the part
+    # worth studying — and the part a future classifier would have to
+    # learn to recognise before the storm arrives.
+    "pre_min": DEFAULT_PRE_MIN,
+    # Minutes of samples kept AFTER the last threshold crossing.
+    "post_min": DEFAULT_POST_MIN,
+    # How long a metric must stay below its threshold before the episode
+    # counts as over. Without it a pulsing storm fragments into six.
+    "settle_min": DEFAULT_SETTLE_MIN,
+}
+
+# Labels the user may assign by hand. `null` clears the field.
+USER_CLASSES: tuple[str, ...] = ("thunder", "heavy_rain", "storm", "hail", "harmless")
+
+# The only fields a PATCH may touch — everything else is detector output
+# and stays immutable.
+PATCHABLE_FIELDS: tuple[str, ...] = ("user_class", "user_name", "user_note")
+
+USER_NAME_MAX = 120
+USER_NOTE_MAX = 2000
+
+# Which key inside WEATHER_DEFAULTS["events"][<evt>] holds the trigger
+# line. Every event uses "threshold" except fog, which is configured as
+# a visibility ceiling.
+EVENT_THRESHOLD_KEY: dict[str, str] = {"fog": "vis_max_m"}
+DEFAULT_THRESHOLD_KEY = "threshold"
+
+# Crossing direction per history field. "above" = value >= threshold
+# (matches _detect_thunder), "below" = value < threshold (matches
+# _detect_fog, where a LOW visibility is the alarm).
+FIELD_DIRECTION: dict[str, str] = {
+    "precipitation": "above",
+    "snowfall": "above",
+    "lightning_potential": "above",
+    "visibility": "below",
+}
+
+# auto_class when several events fire inside one episode. Fixed order,
+# not a magnitude race: a downpour with lightning in it is a
+# thunderstorm, and frozen precipitation is the notable half of a
+# rain/snow mix.
+EVENT_PRIORITY: tuple[str, ...] = ("thunder", "snow", "heavy_rain", "fog")
+
+# Peak metrics carried on every record, whether or not they triggered.
+# Wind has no configured event threshold but is what separates a squall
+# from a downpour, so it is measured even though it cannot start an
+# episode on its own.
+PEAK_FIELDS: tuple[str, ...] = (
+    "lightning_potential",
+    "precipitation",
+    "wind_gusts_10m",
+    "snowfall",
+)
+
+# ── Intensity reference values — see _intensity.py for the formula ─────
+# The first three mirror the severity scales already used by the live
+# detectors (_detection.py: `lp / 3000.0`, `scale=20.0`, `scale=5.0`) so
+# the archive and the alert path agree on what "bad" means.
+INTENSITY_REFERENCE: dict[str, float] = {
+    "lightning_potential": 3000.0,  # J/kg — icon-d2 extreme convective
+    "precipitation": 20.0,  # mm/h — cloudburst
+    "snowfall": 5.0,  # cm/h — heavy snowfall
+    "wind_gusts_10m": 120.0,  # km/h — Beaufort 12 starts at 118
+}
+
+# Episode totals (not peaks) get their own reference scale.
+INTENSITY_TOTAL_REFERENCE: dict[str, float] = {
+    "precipitation_mm": 40.0,  # mm over the whole episode
+}
+
+# Longest gap between two samples that still counts as continuous when
+# integrating precipitation into a total. A poll outage wider than this
+# contributes its cap, not its real width, so a two-day hole cannot
+# invent 500 mm of rain.
+MAX_INTEGRATION_GAP_MIN = 60.0

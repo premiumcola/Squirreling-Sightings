@@ -23,8 +23,13 @@ KIND_DELETE = "delete"
 # Margin + settle defaults. Mirrored into WEATHER_DEFAULTS["episodes"]
 # (app/app/settings/_consts.py) so the values are user-configurable and
 # backfilled additively on every settings load.
-DEFAULT_PRE_MIN = 90
-DEFAULT_POST_MIN = 90
+# 60, not 90, on the operator's call: "nicht zu lang, ja, eine Stunde
+# oder so davor jeweils und danach". It also shortens the finalisation
+# delay, which is `max(settle_min, pre_min + post_min)` past an episode's
+# end — 120 min at these values instead of 180, so a storm that ends at
+# 14:00 is archived at 16:00 rather than 17:00.
+DEFAULT_PRE_MIN = 60
+DEFAULT_POST_MIN = 60
 DEFAULT_SETTLE_MIN = 30
 
 EPISODE_DEFAULTS: dict = {

@@ -7,6 +7,8 @@ runtime view (export_effective_config / runtime_*)."""
 
 from __future__ import annotations
 
+from ..weather_episodes._consts import EPISODE_DEFAULTS
+
 # Default Telegram push schema. Single source of truth feeding both
 # fresh installs (build_defaults) and the additive backfill on existing
 # data (migrate_telegram_push_defaults).
@@ -128,12 +130,9 @@ WEATHER_DEFAULTS: dict = {
     #   settle_min         — how long every metric must stay below its
     #     threshold before the episode counts as over. Without it a
     #     pulsing storm fragments into six separate episodes.
-    "episodes": {
-        "enabled": True,
-        "pre_min": 90,
-        "post_min": 90,
-        "settle_min": 30,
-    },
+    # Sourced from the package that consumes them, not restated here —
+    # a second copy of these numbers drifts the moment one is tuned.
+    "episodes": dict(EPISODE_DEFAULTS),
 }
 
 

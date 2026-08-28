@@ -5,8 +5,28 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
+
+from . import storage_retention
+
+# The judgement helpers and the retention sweep live in
+# `storage_retention` together — this file only owns the store. They stay
+# importable from here because that is where every caller (and the
+# retention test) already looks for them.
+from .storage_retention import (
+    JUDGEMENT_FIELDS,
+    is_judged_event,
+    keep_judged_events_enabled,
+)
+
+__all__ = [
+    "JUDGEMENT_FIELDS",
+    "EventStore",
+    "event_date_subdir",
+    "is_judged_event",
+    "keep_judged_events_enabled",
+]
 
 log = logging.getLogger(__name__)
 
@@ -36,47 +56,6 @@ def _atomic_write_text(path: Path, text: str) -> None:
         with contextlib.suppress(OSError):
             tmp.unlink()
         raise
-
-
-# Fields in the event JSON that mark a human verdict. Both are written
-# exclusively by POST /api/camera/<cam>/events/<id>/confirm
-# (routes/events.py) — the detection pipeline never writes them, because
-# `detection_confirmer` keeps its two-frame state in memory only.
-# `labels` is deliberately NOT a marker: add_event fills it from the
-# detector on every single event, so a user-edited and an auto-labelled
-# event are indistinguishable on disk.
-JUDGEMENT_FIELDS = ("confirmed", "confirmed_at")
-
-
-def is_judged_event(payload: object) -> bool:
-    """True when an event payload carries a human verdict.
-
-    Falsy values (``confirmed: false``, empty ``confirmed_at``) and
-    non-dict payloads count as unjudged, so a half-parsed or default
-    manifest never becomes immortal.
-    """
-    if not isinstance(payload, dict):
-        return False
-    return any(payload.get(field) for field in JUDGEMENT_FIELDS)
-
-
-def keep_judged_events_enabled(default: bool = True) -> bool:
-    """Resolve ``storage.keep_judged_events``: settings.json first,
-    then config.yaml, else ``default`` (True).
-
-    Read-only — nothing is written back, so the additive-merge rule for
-    settings.json holds. The import is local because `app_state` is a
-    boot-time singleton module and storage.py is built before it.
-    """
-    from . import app_state
-
-    for source in (getattr(app_state.settings, "data", None), app_state.base_cfg):
-        if not isinstance(source, dict):
-            continue
-        section = source.get("storage")
-        if isinstance(section, dict) and "keep_judged_events" in section:
-            return bool(section["keep_judged_events"])
-    return default
 
 
 def event_date_subdir(event_id: str) -> str | None:
@@ -114,9 +93,22 @@ class EventStore:
         self.events_dir.mkdir(parents=True, exist_ok=True)
 
     def _cam_dir(self, camera_id: str) -> Path:
+        """Writable camera dir, created on demand. Write paths only."""
         p = self.events_dir / camera_id
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    def camera_dir(self, camera_id: str) -> Path:
+        """Read-only view of the camera dir — never created.
+
+        Every read used to go through ``_cam_dir``, which mkdirs. So the
+        read-only integrity report materialised
+        ``motion_detection/<id>/`` for every id it inspected, unclaimed
+        ghost ids included, and its second run then reported the
+        directory its first run had fabricated. Reads take this path;
+        only :meth:`add_event` may create.
+        """
+        return self.events_dir / camera_id
 
     def add_event(self, camera_id: str, payload: dict):
         payload = dict(payload)
@@ -139,7 +131,7 @@ class EventStore:
         return path
 
     def get_event(self, camera_id: str, event_id: str) -> dict | None:
-        cam_dir = self._cam_dir(camera_id)
+        cam_dir = self.camera_dir(camera_id)
         matches = list(cam_dir.rglob(f"{event_id}.json"))
         if not matches:
             return None
@@ -175,7 +167,7 @@ class EventStore:
         return None
 
     def update_event(self, camera_id: str, event_id: str, payload: dict) -> bool:
-        cam_dir = self._cam_dir(camera_id)
+        cam_dir = self.camera_dir(camera_id)
         matches = list(cam_dir.rglob(f"{event_id}.json"))
         if not matches:
             return False
@@ -185,7 +177,7 @@ class EventStore:
     def delete_event_by_id(self, camera_id: str, event_id: str) -> bool:
         """Remove every event-JSON matching `<event_id>.json` under the camera tree.
         Returns True if at least one file was unlinked."""
-        cam_dir = self._cam_dir(camera_id)
+        cam_dir = self.camera_dir(camera_id)
         matches = list(cam_dir.rglob(f"{event_id}.json"))
         for m in matches:
             try:
@@ -218,8 +210,18 @@ class EventStore:
         species_key = (bird_species or "").lower().strip() or None
 
         items = []
-        cam_dir = self._cam_dir(camera_id)
+        cam_dir = self.camera_dir(camera_id)
         for file in cam_dir.rglob("*.json"):
+            # `<event_id>.tracks.json` is the tracking worker's sidecar
+            # for ONE existing event, not an event. Two other call sites
+            # (routes/media, judged_event_ids) already filtered it; this
+            # one did not, so every indexed clip was counted twice —
+            # stats_range reported double the events, and the same
+            # defect flowed through aggregate_summary into the Telegram
+            # daily report. A sidecar carries no "time" key, so the
+            # start/end guard below could not reject it either.
+            if file.name.endswith(".tracks.json"):
+                continue
             try:
                 obj = json.loads(file.read_text(encoding="utf-8"))
             except Exception as e:
@@ -310,119 +312,22 @@ class EventStore:
         start: str | None = None,
         end: str | None = None,
     ):
-        from collections import Counter, defaultdict
+        """Statistik range payload — see
+        :func:`app.app.storage_stats.stats_range`."""
+        from .storage_stats import stats_range
 
-        events = self.list_events(camera_id, label=label, start=start, end=end, limit=5000)
-        by_day = defaultdict(Counter)
-        by_hour = Counter()
-        top = Counter()
-        species_top = Counter()
-        cat_names = Counter()
-        photo_count = 0
-        video_count = 0
-        for e in events:
-            t = e.get("time", "")
-            day = t[:10] if len(t) >= 10 else "unbekannt"
-            hour = t[11:13] if len(t) >= 13 else "??"
-            labels = e.get("labels", []) or ["motion"]
-            for lab in labels:
-                by_day[day][lab] += 1
-                top[lab] += 1
-            if e.get("bird_species"):
-                species_top[e["bird_species"]] += 1
-            if e.get("cat_name"):
-                cat_names[e["cat_name"]] += 1
-            by_hour[hour] += 1
-            if e.get("snapshot_url"):
-                photo_count += 1
-            if e.get("video_url"):
-                video_count += 1
-        colors = {
-            "motion": "#36a2ff",
-            "person": "#ff6b6b",
-            "cat": "#9b8cff",
-            "dog": "#7c2d12",
-            "bird": "#62d26f",
-            "squirrel": "#7c4a1f",
-            "fox": "#ff7a1a",
-            "hedgehog": "#a67c52",
-            "marten": "#7c5cff",
-            "car": "#00c2ff",
-            "other": "#64748b",
-        }
-        day_items = []
-        for day in sorted(by_day.keys()):
-            segs = []
-            total = 0
-            for lab, count in by_day[day].most_common():
-                segs.append(
-                    {
-                        "label": lab,
-                        "label_de": lab,
-                        "count": count,
-                        "color": colors.get(lab, colors['other']),
-                    }
-                )
-                total += count
-            day_items.append({"day": day, "total": total, "segments": segs})
-        return {
-            "total_events": len(events),
-            "photos": photo_count,
-            "videos": video_count,
-            "top_objects": [
-                {
-                    "label": lab,
-                    "label_de": lab,
-                    "count": cnt,
-                    "color": colors.get(lab, colors['other']),
-                }
-                for lab, cnt in top.most_common(8)
-            ],
-            "top_bird_species": [
-                {"label": lab, "count": cnt} for lab, cnt in species_top.most_common(8)
-            ],
-            "top_cat_names": [
-                {"label": lab, "count": cnt} for lab, cnt in cat_names.most_common(8)
-            ],
-            "by_day": day_items,
-            "by_hour": [{"hour": h, "count": by_hour[h]} for h in sorted(by_hour.keys())],
-        }
+        return stats_range(self, camera_id, label=label, start=start, end=end)
 
     def aggregate_summary(self, days: int = 1):
-        from collections import Counter
+        """Telegram daily / weekly roll-up — see
+        :func:`app.app.storage_stats.aggregate_summary`."""
+        from .storage_stats import aggregate_summary
 
-        start = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
-        per_camera = {}
-        top = Counter()
-        bird_species = Counter()
-        cat_names = Counter()
-        total = 0
-        for cam_dir in self.events_dir.iterdir() if self.events_dir.exists() else []:
-            if not cam_dir.is_dir():
-                continue
-            events = self.list_events(cam_dir.name, start=start, limit=5000)
-            cam_count = len(events)
-            total += cam_count
-            per_camera[cam_dir.name] = cam_count
-            for e in events:
-                for lab in e.get("labels", []) or ["motion"]:
-                    top[lab] += 1
-                if e.get("bird_species"):
-                    bird_species[e["bird_species"]] += 1
-                if e.get("cat_name"):
-                    cat_names[e["cat_name"]] += 1
-        return {
-            "days": days,
-            "total_events": total,
-            "per_camera": per_camera,
-            "top_objects": top.most_common(8),
-            "top_bird_species": bird_species.most_common(8),
-            "top_cat_names": cat_names.most_common(8),
-        }
+        return aggregate_summary(self, days)
 
     def delete_event(self, camera_id: str, event_id: str) -> dict:
         """Delete event JSON and its snapshot/video file. Returns info about what was deleted."""
-        cam_dir = self._cam_dir(camera_id)
+        cam_dir = self.camera_dir(camera_id)
         matches = list(cam_dir.rglob(f"{event_id}.json"))
         event = None
         if matches:
@@ -528,197 +433,17 @@ class EventStore:
         return removed
 
     def scan_media_files(self, camera_ids: list[str], public_base_url: str = "") -> int:
-        """Scan storage/motion_detection for orphaned media files (.jpg/.jpeg/.mp4) not yet registered as events.
-        Covers both flat files directly in cam_dir/ and files in any depth of subdirectories.
-        Returns count of newly registered events."""
-        import logging as _log
+        """Register unclaimed media under ``motion_detection/`` — see
+        :func:`app.app.storage_scan.scan_media_files`."""
+        from .storage_scan import scan_media_files
 
-        log = _log.getLogger(__name__)
-        scanned = 0
-        for cam_id in camera_ids:
-            cam_dir = self.events_dir / cam_id
-            log.info("[MediaScan] checking cam_dir: %s exists=%s", cam_dir, cam_dir.exists())
-            if not cam_dir.exists():
-                continue
-            # Collect existing event IDs from all JSON files in the entire tree
-            existing_ids: set[str] = set()
-            for jf in cam_dir.rglob("*.json"):
-                existing_ids.add(jf.stem)
-            # Collect all media files recursively (flat + subdirs)
-            media_files: list[Path] = []
-            for suffix in ("*.jpg", "*.jpeg", "*.mp4"):
-                media_files.extend(cam_dir.rglob(suffix))
-            for media_file in sorted(media_files):
-                if media_file.suffix.lower() not in (".jpg", ".jpeg", ".mp4"):
-                    continue
-                event_id = media_file.stem
-                if event_id in existing_ids:
-                    continue
-                # Parse timestamp from filename (YYYYMMDD-HHMMSS-*)
-                try:
-                    ts = datetime.strptime(event_id[:15], "%Y%m%d-%H%M%S")
-                except ValueError:
-                    ts = datetime.now()
-                rel = media_file.relative_to(self.root)
-                is_video = media_file.suffix.lower() == ".mp4"
-                base = (public_base_url or "").rstrip("/")
-                event: dict = {
-                    "event_id": event_id,
-                    "camera_id": cam_id,
-                    "camera_name": cam_id,
-                    "time": ts.isoformat(timespec="seconds"),
-                    "labels": ["motion"],
-                    "top_label": "motion",
-                    "alarm_level": "info",
-                    "armed": True,
-                    "after_hours": False,
-                    "scanned": True,
-                }
-                if is_video:
-                    event["video_relpath"] = rel.as_posix()
-                    event["video_url"] = (
-                        f"{base}/media/{rel.as_posix()}" if base else f"/media/{rel.as_posix()}"
-                    )
-                    event["snapshot_relpath"] = None
-                    event["snapshot_url"] = None
-                    # Try to grab a thumbnail so the freshly-registered card has a preview
-                    thumb = media_file.with_suffix(".jpg")
-                    if not thumb.exists():
-                        try:
-                            import cv2 as _cv2
+        return scan_media_files(self, camera_ids, public_base_url)
 
-                            cap = _cv2.VideoCapture(str(media_file))
-                            try:
-                                total = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
-                                if total > 2:
-                                    cap.set(_cv2.CAP_PROP_POS_FRAMES, total // 2)
-                                ok_t, frame_t = cap.read()
-                            finally:
-                                cap.release()
-                            if (
-                                ok_t
-                                and frame_t is not None
-                                and _cv2.imwrite(
-                                    str(thumb), frame_t, [int(_cv2.IMWRITE_JPEG_QUALITY), 85]
-                                )
-                            ):
-                                thumb_rel = thumb.relative_to(self.root).as_posix()
-                                event["snapshot_relpath"] = thumb_rel
-                                event["snapshot_url"] = (
-                                    f"{base}/media/{thumb_rel}" if base else f"/media/{thumb_rel}"
-                                )
-                        except Exception as _e:
-                            log.debug(
-                                "[MediaScan] thumb extract failed for %s: %s", media_file.name, _e
-                            )
-                    elif thumb.exists():
-                        thumb_rel = thumb.relative_to(self.root).as_posix()
-                        event["snapshot_relpath"] = thumb_rel
-                        event["snapshot_url"] = (
-                            f"{base}/media/{thumb_rel}" if base else f"/media/{thumb_rel}"
-                        )
-                else:
-                    event["snapshot_relpath"] = rel.as_posix()
-                    event["snapshot_url"] = (
-                        f"{base}/media/{rel.as_posix()}" if base else f"/media/{rel.as_posix()}"
-                    )
-                    event["video_url"] = None
-                self.add_event(cam_id, event)
-                existing_ids.add(event_id)
-                scanned += 1
-        log.info("[MediaScan] %d neue Medien-Events registriert", scanned)
-        orphans = self.purge_orphans()
-        if orphans:
-            log.info("[MediaScan] %d verwaiste Events bereinigt", orphans)
-        return scanned
-
-    def judged_event_ids(self) -> set[str]:
-        """Event ids under ``motion_detection/`` whose JSON carries a
-        human verdict (see :func:`is_judged_event`).
-
-        Every event JSON is parsed, not just the ones past the cutoff:
-        confirming an event rewrites its JSON, so the manifest gets a
-        fresh mtime while its snapshot / clip keep the old one. Reading
-        only the old JSONs would therefore protect nothing and let the
-        media of exactly those events be deleted.
-
-        Unreadable JSON is skipped with a WARNING and counted as NOT
-        judged — a corrupt file must stay mortal, otherwise every
-        truncated manifest becomes immortal.
-        """
-        ids: set[str] = set()
-        if not self.events_dir.exists():
-            return ids
-        for jf in self.events_dir.rglob("*.json"):
-            if jf.name.endswith(".tracks.json"):
-                continue
-            try:
-                payload = json.loads(jf.read_text(encoding="utf-8"))
-            except Exception as e:
-                log.warning("[storage] unreadable event JSON %s — not treated as judged: %s", jf, e)
-                continue
-            if is_judged_event(payload):
-                ids.add(jf.stem)
-        return ids
+    def judged_event_ids(self) -> set:
+        """Event ids under ``motion_detection/`` carrying a human verdict."""
+        return storage_retention.judged_event_ids(self.events_dir)
 
     def cleanup_old(self, retention_days: int, keep_judged: bool | None = None) -> int:
-        """Delete files under ``motion_detection/`` older than
-        ``retention_days`` (hard unlink — this path does not go through
-        :mod:`trash`, so there is no grace period).
-
-        ``keep_judged`` skips events a human has judged; ``None`` (the
-        default) resolves ``storage.keep_judged_events``, itself
-        defaulting to True. The judgement corpus is the training signal
-        for threshold calibration, so it must outlive the retention
-        window.
-        """
-        cutoff = datetime.now() - timedelta(days=retention_days)
-        removed = 0
-        if not self.events_dir.exists():
-            log.info("[storage] motion_detection/ not found, nothing to clean")
-            return 0
-        if keep_judged is None:
-            keep_judged = keep_judged_events_enabled()
-        judged = self.judged_event_ids() if keep_judged else set()
-        log.info(
-            "[storage] autoclean: retention=%dd cutoff=%s | "
-            "eligible: motion snapshots + event JSON (motion_detection/) | "
-            "protected: timelapse videos (timelapse/) — separate storage, never touched by autoclean",
-            retention_days,
-            cutoff.strftime("%Y-%m-%d"),
-        )
-        preserved_files = 0
-        preserved_ids: set[str] = set()
-        for p in self.events_dir.rglob("*"):
-            if not p.is_file() or datetime.fromtimestamp(p.stat().st_mtime) >= cutoff:
-                continue
-            # Companions share the event id up to the first dot —
-            # `<id>.json`, `<id>.jpg`, `<id>.mp4`, `<id>.tracks.json`,
-            # `<id>.best.jpg`. Protecting the id keeps the snapshot and
-            # the clip next to the manifest that was judged.
-            event_id = p.name.split(".", 1)[0]
-            if event_id in judged:
-                preserved_files += 1
-                preserved_ids.add(event_id)
-                continue
-            p.unlink(missing_ok=True)
-            removed += 1
-        if preserved_files:
-            log.info(
-                "[storage] autoclean: %d files of %d judged events preserved "
-                "(storage.keep_judged_events)",
-                preserved_files,
-                len(preserved_ids),
-            )
-        if removed:
-            log.info(
-                "[storage] removed %d files (motion events + snapshots older than %dd)",
-                removed,
-                retention_days,
-            )
-        else:
-            log.info(
-                "[storage] nothing removed (all motion_detection/ files within %dd retention)",
-                retention_days,
-            )
-        return removed
+        """Retire expired files into ``storage/.trash`` — see
+        :func:`app.app.storage_retention.cleanup_old` for the rules."""
+        return storage_retention.cleanup_old(self, retention_days, keep_judged)

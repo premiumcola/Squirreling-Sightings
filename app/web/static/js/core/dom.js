@@ -45,3 +45,17 @@ export const safeHexColor = (raw, fallback = '#a8a8a8') => {
   if (typeof raw !== 'string') return fallback;
   return /^#[0-9a-f]{3,8}$/i.test(raw) ? raw : fallback;
 };
+
+// `#rrggbb` → `rgba(r,g,b,alpha)` for tinted chip / badge backgrounds.
+// Lives next to safeHexColor because it is the same family of helper
+// and now has two consumers in different modules (mediathek chips and
+// the media-card chrome) — keeping it in one of them would have meant
+// an import cycle or a second copy.
+export const hexToRgba = (hex, alpha) => {
+  const h = (hex || '').replace('#', '');
+  if (h.length !== 6) return `rgba(147,197,253,${alpha})`;
+  const r = Number.parseInt(h.slice(0, 2), 16);
+  const g = Number.parseInt(h.slice(2, 4), 16);
+  const b = Number.parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+};

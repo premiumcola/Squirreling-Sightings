@@ -142,8 +142,38 @@ gruppiert, nicht alphabetisch.
   `update_section`, JSON/YAML-Import/Export, `bootstrap_state()`,
   `export_effective_config()` (merged mit `config.yaml`-Base).
 - **`storage.py`** — `EventStore`. Per-Kamera-Event-JSONs unter
-  `storage/events/<cam_id>/<date>/`. `add_event`, `list_events`,
-  `stats_range`, `scan_media_files`.
+  `storage/events/<cam_id>/<date>/`. `add_event`, `list_events`.
+  `camera_dir()` ist der Lesepfad — er legt nichts an; nur `add_event`
+  darf ein Kameraverzeichnis erzeugen.
+- **`labels.py`** — DIE Label-Sprache. Vorher gab es drei Listen davon
+  („welche Labels sind Objekte“) und ein Fuchs-Ereignis fiel durch alle
+  Raster: Farbe ja, Schwelle ja, Kachel ja — aber kein Badge.
+  `primary_label()` endet in einem `motion`-Fallback, damit die
+  Chip-Zeile immer die Archivgrösse ergibt.
+- **`storage_retention.py`** — die nächtliche Aufbewahrungs-Bereinigung,
+  der destruktivste Code im Repo. Vier Garantien: nichts wird
+  ge-`unlink`t (alles geht in `storage/.trash` und lebt
+  `trash.grace_days` weiter), `tl_*.json` ist unsterblich (es ist der
+  einzige Nachweis eines MP4s, das die Bereinigung nie anfasst), ein
+  Fenster < 1 Tag wird abgelehnt, und eine Verkürzung wird angekündigt
+  statt unbeaufsichtigt ausgeführt (`nightly_window`) — bestätigt wird
+  sie mit „Jetzt bereinigen“.
+- **`storage_scan.py`** — „Neu scannen“: registriert Medien ohne
+  Manifest. Überspringt `.raw.mp4` / `.best.jpg` (gehören zu einem
+  bestehenden Ereignis) und zu kleine MP4s.
+- **`storage_stats.py`** — `stats_range` (Statistik-Range) und
+  `aggregate_summary` (Telegram-Tages-/Wochenreport).
+- **`media_index/`** — Paket (6 Dateien). Die EINE Quelle dafür, was die
+  Mediathek enthält. `_types.py` hält den einzigen Medien-Existenztest
+  (`media_state` — Datei da UND nicht leer), `_scan.py` einen O(N)-Walk
+  pro Kamera, `_visible.py` die Ereignisliste, die Badge **und** Grid
+  gemeinsam zählen, `_timelapse.py` die Registrierung der
+  Timelapse-MP4s im EventStore (Rolling-Vorschauen bewusst nicht — die
+  sind Wegwerf-Ansichten, keine Archiveinträge), `_integrity.py` den
+  reinen Lesebericht hinter „Integrität prüfen“
+  (`POST /api/media/integrity` + `GET …/status`, im Hintergrund-Thread,
+  weil er jeden Medienbaum jeder Kamera abläuft) — der löscht nichts,
+  schreibt nichts und legt nichts an.
 - **`storage_migration.py`** — idempotenter Boot-Reconcile. Wandert über
   alle Kameras, baut die kanonische ID via `camera_id.build_camera_id`
   und konsolidiert Legacy-Folder unter dem neuen Schema. Backup vor

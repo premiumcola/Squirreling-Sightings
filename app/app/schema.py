@@ -348,6 +348,13 @@ SECTION_SCHEMAS: dict = {
         # Key landed by THR-1; the pruning logic ships with CORP-2.
         "corpus_quota_per_label_day": int,
     },
+    # Soft-delete grace period. `trash._grace_days` has always read this
+    # key, but it was missing from the section schema, so an
+    # update_section call carrying it was rejected and the 7-day default
+    # was unreachable from anywhere but hand-editing settings.json.
+    "trash": {
+        "grace_days": int,
+    },
     "ui": {
         "wizard_completed": bool,
     },

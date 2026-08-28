@@ -3,8 +3,10 @@
 The trash is populated by ``app.trash.move_to_trash``, which the
 motion-event delete handlers in ``routes/events.py`` call instead of
 ``EventStore.delete_event`` so a delete becomes a soft-delete with a
-``trash.grace_days``-day grace period. The cleanup sweep hard-deletes
-expired entries when its hook lands in a follow-up commit.
+``trash.grace_days``-day grace period. The daily sweep in
+``maintenance._run_daily_cleanup`` hard-deletes entries past that
+period; it is an age cap, not a size cap, so a single bulk delete of a
+large archive still occupies the disk for the full grace window.
 
 Endpoint URLs match the prompt spec verbatim:
   GET  /api/trash               list trashed entries

@@ -156,12 +156,18 @@ class MotionMixin:
         # 11 000 px squirrel at the feeder cleared `wl_min_area` and was
         # rejected here regardless, so the wildlife stage was never even
         # offered the blob. Deriving the floor from the two real thresholds
-        # makes the pre-check conservative by construction — it can only skip
-        # work, never change a verdict — and makes it per-camera for free, via
-        # the existing `motion_sensitivity` / `wildlife_motion_sensitivity`
-        # knobs. A camera that wants the old, deafer behaviour back sets
+        # also makes the pre-check per-camera for free, via the existing
+        # `motion_sensitivity` / `wildlife_motion_sensitivity` knobs. A camera
+        # that wants the old, deafer behaviour back sets
         # wildlife_motion_sensitivity=0.2, which puts wl_min_area at exactly
         # the old 18 432 px.
+        #
+        # Not quite "can only skip work, never change a verdict": `contourArea`
+        # is the area of the enclosing polygon, so an annular blob (a moving
+        # outline around a static centre) can report an area larger than its
+        # own changed-pixel count and clear a floor this pre-check already
+        # rejected. That gap is a small fraction of the one the flat 0.5 %
+        # floor opened, but it is not zero and should not be claimed as zero.
         change_floor = max(1, min(int(min_area), int(wl_min_area)))
         if int(np.sum(thresh > 0)) < change_floor:
             return [], None, False, []

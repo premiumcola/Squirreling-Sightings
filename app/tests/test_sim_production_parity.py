@@ -9,23 +9,27 @@ against the camera's configured frame rate while its ticks arrived at
 about 1 Hz.
 
 These tests pin the parts of that which are testable without a camera:
-the shared configuration object, the shared gates in production's order,
-and the revived ``_LABEL_MIN_BBOX`` size floor — dead on BOTH live paths
-because both call ``detect_frame_raw``, which runs no label filters.
+the shared configuration object and the shared gates in production's
+order.
+
+They also pin what deliberately did NOT change — the ``_LABEL_MIN_BBOX``
+size floor stays unreachable — and the state boundary: the panel takes
+production's numbers and keeps its own objects.
 """
 
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from app import mask_zones
 from app.detect_setup import (
     apply_bottom_crop,
     apply_object_filter,
-    apply_size_floor,
     build_detection_setup,
     make_spawn_for,
 )
@@ -41,61 +45,63 @@ def _det(label, score, bbox):
     return Detection(label=label, score=score, bbox=bbox)
 
 
-# ── the size floor, revived on both live paths ──────────────────────────
+def _poly(pts, **extra):
+    return {"points": [{"x": x, "y": y} for x, y in pts], **extra}
 
 
-def test_a_sub_floor_person_is_dropped():
-    """The guard exists for exactly the operator's twilight false
-    positives: at 960×540 a real person is at least 81 px tall. A 40 px
-    "person" is wood grain, a shadow or a distant silhouette."""
-    small = _det("person", 0.80, (100, 100, 130, 140))
-    kept, dropped = apply_size_floor([small], 960, 540)
-
-    assert kept == []
-    assert len(dropped) == 1
-    assert "size_floor" in dropped[0][1]
+# ── the size floor stays where it was: unreachable ──────────────────────
 
 
-def test_a_full_size_person_survives_the_floor():
-    """Guard against a floor so high nothing gets through."""
-    big = _det("person", 0.60, (100, 50, 260, 480))
-    kept, dropped = apply_size_floor([big], 960, 540)
-
-    assert len(kept) == 1 and dropped == []
-
-
-def test_the_floor_only_applies_to_labels_that_have_one():
-    """A squirrel at 30 px is the whole point of this project."""
-    tiny = _det("squirrel", 0.55, (10, 10, 40, 40))
-    kept, _ = apply_size_floor([tiny], 960, 540)
-
-    assert len(kept) == 1
-
-
-def test_the_production_path_applies_the_size_floor():
-    """``camera_runtime/_main_loop`` calls ``detect_frame_raw``, which
-    runs no label filters — so the guard is only live if the loop applies
-    it itself. It did not for months."""
+def test_the_size_floor_is_not_armed_on_the_alarm_path():
+    """``_LABEL_MIN_BBOX`` is (0.15 height OR 0.02 area) and the AREA rule
+    is the one that binds: at 2560×1440 a 0.35-aspect standing person is
+    dropped below h≈500 px, i.e. roughly beyond 5.4 m on a 4 mm lens.
+    Werkstatt and Garten are security cameras where a person at 6–15 m is
+    the normal case. Arming that on the live path is a production
+    behaviour change needing a per-camera setting and an operator
+    decision, not a side effect of a diagnostic-panel commit."""
     src = (APP / "camera_runtime" / "_main_loop.py").read_text(encoding="utf-8")
 
-    assert "apply_size_floor" in src, "the alarm loop must apply the size floor"
-    assert (
-        src.count("apply_size_floor(") >= 2
-    ), "both the full-frame pass and the ROI rescue produce boxes that need the floor"
+    assert "size_floor" not in src
+    assert "apply_size_floor" not in src
 
 
-def test_the_sim_path_applies_the_size_floor():
-    src = (APP / "routes" / "_sim_pipeline.py").read_text(encoding="utf-8")
+def test_the_size_floor_is_not_armed_on_the_panel_path_either():
+    """A panel that drops what production keeps is the same class of lie
+    as a panel that keeps what production drops."""
+    for name in ("_sim_pipeline.py", "_sim_trace.py", "coral_test_detection.py"):
+        src = (APP / "routes" / name).read_text(encoding="utf-8")
+        assert "apply_size_floor" not in src, name
 
-    assert "apply_size_floor" in src
+
+def test_the_size_floor_math_is_what_the_revert_says_it_is():
+    """The numbers in the note above, checked rather than asserted: a
+    0.35-aspect person box at 2560×1440 needs h ≥ 500 px to clear the 2 %
+    area rule, so 30 % of frame height is dropped and the 15 % HEIGHT rule
+    never decides anything for a human-shaped box."""
+    from app.detectors._filters import LabelFilterMixin
+
+    min_h_frac, min_area_frac = LabelFilterMixin._LABEL_MIN_BBOX["person"]
+    frame_w, frame_h = 2560, 1440
+    frame_area = frame_w * frame_h
+
+    def survives(h_px):
+        w_px = 0.35 * h_px
+        return h_px >= min_h_frac * frame_h and w_px * h_px >= min_area_frac * frame_area
+
+    assert not survives(432), "30 % of frame height is dropped by the area rule"
+    assert survives(500), "the real cutoff is ~35 % of frame height"
+    # The height rule alone would have passed the 432 px box — it is the
+    # area rule that binds, which is why "15 % of frame height" understates
+    # the guard by more than a factor of two.
+    assert 432 >= min_h_frac * frame_h
 
 
-def test_the_size_floor_table_has_exactly_one_owner():
+def test_the_size_floor_table_still_has_exactly_one_owner():
     """Two copies of the table is how it went dead the first time."""
     filters = (APP / "detectors" / "_filters.py").read_text(encoding="utf-8")
 
     assert filters.count("(0.15, 0.02)") == 1
-    assert "_LABEL_MIN_BBOX: dict[str, tuple[float, float]] = LABEL_MIN_BBOX" in filters
 
 
 # ── one source of configuration ─────────────────────────────────────────
@@ -158,14 +164,16 @@ def test_spawn_for_has_one_implementation():
 # ── gates, in production's order ────────────────────────────────────────
 
 
-class _MaskingRuntime:
-    """Runtime stub whose mask drops cats and whose zone drops birds."""
+# A mask over the left third of a 960×540 frame (recorded against the
+# 1280×720 canvas the editor saves in) and a zone over its right half.
+_MASK_LEFT = _poly([(0, 0), (420, 0), (420, 720), (0, 720)])
+_ZONE_RIGHT = _poly([(640, 0), (1280, 0), (1280, 720), (640, 720)])
+_GARTEN_CFG = {"masks": [_MASK_LEFT], "zones": [_ZONE_RIGHT]}
 
-    def _filter_masked_detections(self, frame, dets):
-        return [d for d in dets if d.label != "cat"]
 
-    def _filter_zoned_detections(self, frame, dets):
-        return [d for d in dets if d.label != "bird"]
+def _fresh_sim_caches():
+    _sim_pipeline._SIM_MASK_ZONES.pop(CAM, None)
+    _sim_pipeline.trackers().pop(CAM, None)
 
 
 def test_masks_and_zones_reach_the_panel_as_named_verdicts():
@@ -173,15 +181,16 @@ def test_masks_and_zones_reach_the_panel_as_named_verdicts():
     panel never applied it. Applying it silently would be no better: a
     box that simply vanishes is indistinguishable from a detector that
     missed it."""
+    _fresh_sim_caches()
     frame = np.zeros((540, 960, 3), dtype=np.uint8)
-    setup = build_detection_setup(CAM, {})
+    setup = build_detection_setup(CAM, _GARTEN_CFG)
     raw = [
-        _det("cat", 0.60, (10, 10, 200, 300)),
-        _det("bird", 0.60, (300, 10, 400, 200)),
-        _det("person", 0.60, (500, 40, 700, 500)),
+        _det("cat", 0.60, (10, 10, 200, 300)),  # centre in the mask
+        _det("bird", 0.60, (400, 10, 500, 200)),  # centre outside the zone
+        _det("person", 0.60, (600, 40, 800, 500)),  # inside the zone, unmasked
     ]
 
-    kept, drops = _sim_pipeline.run_gates(_MaskingRuntime(), frame, raw, setup)
+    kept, drops = _sim_pipeline.run_gates(_GARTEN_CFG, frame, raw, setup)
 
     assert [d.label for d in kept] == ["person"]
     by_label = {d.label: (verdict, reason) for d, verdict, reason in drops}
@@ -191,10 +200,31 @@ def test_masks_and_zones_reach_the_panel_as_named_verdicts():
         assert reason, "a dropped box must name the gate in German"
 
 
+def test_the_panel_and_the_loop_run_the_same_mask_geometry():
+    """Same polygons, same verdicts — the point of sharing the functions
+    rather than the state."""
+    _fresh_sim_caches()
+    frame = np.zeros((540, 960, 3), dtype=np.uint8)
+    dets = [_det("cat", 0.60, (10, 10, 200, 300)), _det("person", 0.60, (600, 40, 800, 500))]
+
+    cache = mask_zones.MaskZoneCache()
+    loop_side = cache.zoned(
+        cache.masked(list(dets), frame, _GARTEN_CFG["masks"], CAM),
+        frame,
+        _GARTEN_CFG["zones"],
+        CAM,
+    )
+    setup = build_detection_setup(CAM, _GARTEN_CFG)
+    panel_side, _ = _sim_pipeline.run_gates(_GARTEN_CFG, frame, list(dets), setup)
+
+    assert [d.label for d in loop_side] == [d.label for d in panel_side] == ["person"]
+
+
 def test_the_object_filter_runs_before_the_tracker():
     """It used to run after, as a display verdict only — so filtered
     boxes still entered the association and consumed track ids, and the
     #N badges drifted against production's identities."""
+    _fresh_sim_caches()
     frame = np.zeros((540, 960, 3), dtype=np.uint8)
     setup = build_detection_setup(CAM, {"object_filter": ["person"]})
     raw = [
@@ -202,21 +232,104 @@ def test_the_object_filter_runs_before_the_tracker():
         _det("truck", 0.60, (10, 10, 300, 300)),
     ]
 
-    kept, drops = _sim_pipeline.run_gates(_MaskingRuntime(), frame, raw, setup)
+    kept, drops = _sim_pipeline.run_gates({}, frame, raw, setup)
 
     assert [d.label for d in kept] == ["person"]
     assert drops[0][1] == _sim_pipeline.VERDICT_FILTERED
-    # …and the gate order itself, read off the source: size floor, class
-    # filter, mask, zone — the loop's order.
+    # …and the gate order itself, read off the source: class filter,
+    # mask, zone — the loop's order.
     src = (APP / "routes" / "_sim_pipeline.py").read_text(encoding="utf-8")
     body = src[src.index("def run_gates") :]
     order = [
-        body.index("apply_size_floor"),
         body.index("apply_object_filter"),
-        body.index("_filter_masked_detections"),
-        body.index("_filter_zoned_detections"),
+        body.index("cache.masked("),
+        body.index("cache.zoned("),
     ]
     assert order == sorted(order)
+
+
+# ── the mask cache: same configuration, different object ────────────────
+
+
+class _LiveRuntimeSpy:
+    """The fields the alarm loop reads between two of its own frames.
+
+    ``_motion.py`` reads ``self._mask_image`` / ``self._zone_image``
+    directly after an ``_ensure_*`` call, so anything that writes them
+    from another thread writes into the running detector.
+    """
+
+    def __init__(self):
+        self.camera_id = CAM
+        self._mask_image = None
+        self._mask_sig = None
+        self._zone_image = None
+        self._zone_sig = None
+
+
+def test_the_panel_takes_no_runtime_and_cannot_reach_one():
+    """The worst version of this bug: a diagnostic tick that DISABLES the
+    operator's exclusion mask in production. ``run_gates`` used to call
+    ``rt._filter_masked_detections`` on the live runtime, which rebuilds
+    ``rt._mask_image`` in place."""
+    params = list(inspect.signature(_sim_pipeline.run_gates).parameters)
+
+    assert params[0] == "cam_cfg", "the gates take the CONFIG, never the runtime"
+    src = (APP / "routes" / "_sim_pipeline.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    reaches_in = [
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "rt"
+    ]
+    assert reaches_in == []
+    # …and no runtime cache field is ACCESSED anywhere in the module.
+    # Attribute nodes, not a substring search: the module comment has to
+    # be able to name the fields it explains staying away from.
+    forbidden = {"_mask_image", "_mask_sig", "_zone_image", "_zone_sig", "_tracker"}
+    touched = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)} & forbidden
+    assert touched == set()
+
+
+def test_a_sim_tick_leaves_the_live_cache_fields_untouched():
+    """Behavioural companion to the source check above."""
+    _fresh_sim_caches()
+    live = _LiveRuntimeSpy()
+    frame = np.zeros((540, 960, 3), dtype=np.uint8)
+    setup = build_detection_setup(CAM, _GARTEN_CFG)
+
+    kept, drops = _sim_pipeline.run_gates(
+        _GARTEN_CFG, frame, [_det("cat", 0.60, (10, 10, 200, 300))], setup
+    )
+
+    assert kept == [] and drops[0][1] == _sim_pipeline.VERDICT_MASKED
+    assert live._mask_image is None and live._mask_sig is None
+    assert live._zone_image is None and live._zone_sig is None
+    # The panel built its own raster instead.
+    assert _sim_pipeline.sim_mask_zones(CAM).mask_image is not None
+
+
+def test_the_raster_is_published_after_the_image_it_describes():
+    """``_ensure_mask_image`` used to set the signature FIRST. A reader
+    entering that window saw "cache current" beside a stale or unbuilt
+    image — the mask silently off for those frames. Pinned on the cache
+    and on the runtime mirror that copies from it."""
+    for path, image_attr, sig_attr in (
+        (APP / "mask_zones.py", "self.mask_image", "self.mask_sig"),
+        (APP / "camera_runtime" / "_zones.py", "self._mask_image", "self._mask_sig"),
+    ):
+        src = path.read_text(encoding="utf-8")
+        assert src.index(f"{image_attr} = ") < src.index(f"{sig_attr} = "), path.name
+
+
+def test_two_caches_do_not_share_a_raster():
+    a, b = mask_zones.MaskZoneCache(), mask_zones.MaskZoneCache()
+    a.refresh_mask([_MASK_LEFT])
+
+    assert a.mask_image is not None
+    assert b.mask_image is None and b.mask_sig is None
 
 
 # ── the tracker: same configuration, different object ───────────────────
@@ -285,6 +398,100 @@ def test_there_is_no_second_death_clock():
     assert "grace_ms" not in src
     body = src[src.index("def _emit_deaths") :]
     assert "tracker.state.active" in body, "DEATH must come from the tracker's own state"
+
+
+# ── what a tick costs, measured rather than claimed ─────────────────────
+
+
+class _CountingDetector:
+    """Counts invokes. The TPU has one owner and three live cameras."""
+
+    def __init__(self):
+        self.invokes = 0
+
+    def detect_frame_raw(self, frame, threshold=0.2):
+        self.invokes += 1
+        return []
+
+
+@pytest.mark.parametrize(
+    "mode, motion_box, expected",
+    [
+        ("off", None, 1),
+        ("2x2", None, 5),
+        ("3x3", None, 10),
+        ("roi", None, 1),  # no motion box → no crop worth magnifying
+        ("roi", (1100, 600, 300, 300), 2),  # small blob → one crop
+        ("roi", (200, 200, 1600, 900), 5),  # blob spanning the frame → four
+    ],
+)
+def test_the_reported_invoke_count_is_the_one_actually_spent(mode, motion_box, expected):
+    """The docstring used to claim ``full_dets=`` cut a 2×2 tick from
+    1+1+4 to 1+4. It never was 1+1+4 — the old sim ran no separate full
+    pass, so ``tiled_detect`` paid for the only one. Both the count spent
+    and the count reported to the admission gate are checked, because the
+    gate paces the client watchdog off the reported number."""
+    detector = _CountingDetector()
+    frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
+    setup = build_detection_setup(CAM, {})
+
+    _dets, diag, reported = _sim_pipeline.detect(detector, frame, setup, mode, motion_box)
+
+    assert detector.invokes == expected
+    assert reported == expected
+    assert reported == 1 + int(diag.get("tiles") or 0)
+
+
+def test_off_mode_still_reports_the_full_tiling_diag():
+    """A hand-rolled ``{"mode": "off", "tiles": 0}`` dropped raw / merged
+    / tile_hits / magnification / crop_px from the Diagnose panel."""
+    detector = _CountingDetector()
+    frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
+    setup = build_detection_setup(CAM, {})
+
+    _dets, diag, _n = _sim_pipeline.detect(detector, frame, setup, "off", None)
+
+    for key in ("mode", "tiles", "raw", "merged", "tile_hits", "magnification", "crop_px"):
+        assert key in diag, key
+    assert diag["mode"] == "off"
+
+
+# ── the loop resolves its configuration once, not per frame ─────────────
+
+
+def test_the_loop_does_not_rebuild_the_setup_every_frame():
+    """A frozen dataclass, two dict copies, a frozenset and a
+    resolve_track_thresholds call, ~20×/s across three cameras, for
+    values that only change on a runtime rebuild."""
+    loop = (APP / "camera_runtime" / "_main_loop.py").read_text(encoding="utf-8")
+    runtime = (APP / "camera_runtime" / "runtime.py").read_text(encoding="utf-8")
+
+    assert "build_detection_setup(" not in loop
+    assert "setup = self.detect_setup" in loop
+    assert "self.detect_setup = build_detection_setup(" in runtime
+
+
+def test_every_camera_config_change_restarts_the_runtime():
+    """Which is what makes resolving once safe: the setup's lifetime is
+    the runtime's, exactly like self._tracker's.
+
+    ``app.server`` cannot be imported here (module-level boot side
+    effects — see test_no_server_import), so the diff function is
+    executed out of its own source.
+    """
+    src = (APP / "server.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_compute_camera_diff"
+    )
+    ns: dict = {}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "server.py", "exec"), ns)
+
+    _rm, _add, restart = ns["_compute_camera_diff"](
+        {CAM}, {CAM: {"roi_mode": "off"}}, {CAM: {"roi_mode": "3x3"}}
+    )
+
+    assert restart == {CAM}
 
 
 # ── the panel says what it does not do ──────────────────────────────────

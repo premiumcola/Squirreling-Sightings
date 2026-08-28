@@ -20,16 +20,8 @@ import cv2
 import numpy as np
 import requests
 
-from ..detect_setup import (
-    apply_bottom_crop,
-    apply_object_filter,
-    apply_size_floor,
-    build_detection_setup,
-    make_spawn_for,
-)
+from ..detect_setup import apply_bottom_crop, apply_object_filter, make_spawn_for
 from ..detection_confirmer import DetectionConfirmer
-from ..detection_tiling import normalise_mode, tiled_detect
-from ..motion_samples import record_sample as record_motion_sample
 from ..detectors import (
     BirdSpeciesClassifier,
     CoralObjectDetector,
@@ -56,206 +48,17 @@ from ._consts import (
     log_cam,
     log_tl,
 )
-
-
-# How much of the coherent motion blob a detection must cover before that
-# detection counts as "this box explains the thing that moved". This is
-# CONTAINMENT of the blob in the box, not IoU — see `_blob_containment`.
-_RESCUE_BLOB_CONTAINMENT = 0.5
-
-# Minimum seconds between two magnified re-detects on the same camera.
-# The rescue's precondition (a coherent blob with no confirmable detection
-# on it) persists for the whole time a subject crosses the scene, so without
-# a brake the rescue fires on EVERY frame of that crossing — at a 150 ms
-# frame interval that is ~400 extra region inferences per minute, on a CPU
-# that is already the bottleneck because the TPU does not compute.
-#
-# 1.5 s is chosen against the confirmation contract downstream, not picked
-# round: `_loop` confirms a label at n=3 hits within seconds=5.0 by default,
-# and a 1.5 s spacing still delivers 4 attempts inside any 5 s window. A 2 s
-# cooldown would deliver exactly 3 and leave no margin — one missed frame
-# would then cost the confirmation entirely.
-_RESCUE_MIN_INTERVAL_S = 1.5
-
-_UNSET = object()
-
-
-def _blob_containment(det_box, blob_box):
-    """Fraction of ``blob_box`` that lies inside ``det_box``. Both ``x1y1x2y2``.
-
-    NOT IoU. IoU is the wrong question here and was the original mistake.
-    A motion blob comes from frame differencing, so it covers only the part
-    of the subject that actually MOVED — it is a subset of the mover, and
-    routinely a small and off-centre one. A person standing still and moving
-    an arm produces a blob over the arm; IoU between that blob and the full
-    person box is ``arm_area / person_area`` ≈ 0.08, under any sane
-    threshold, so the gate concluded "nothing explains this motion" while a
-    0.90 person box sat directly on top of it and fired the rescue anyway.
-
-    Containment asks the question the gate actually means: is the thing that
-    moved accounted for by this box? For the arm-in-person case it is 1.0.
-
-    Containment is >= IoU for every pair of boxes (the union in the
-    denominator is never smaller than the blob alone). That is true, and
-    an earlier version of this comment drew a false conclusion from it:
-    that the gate could therefore only ever fire LESS often. It cannot,
-    because the threshold moved too — IoU >= 0.30 became containment
-    >= 0.50, so the two gates are not comparable term by term.
-
-    A worked counterexample, both boxes 50 px^2 with a 24 px^2 overlap:
-    IoU = 24/76 = 0.32 cleared the old bar, containment = 24/50 = 0.48
-    misses the new one. There the rescue now fires where it previously
-    did not. The band is narrow, but it is not empty, and the cost of
-    the change is bounded by the cooldown below rather than by this
-    inequality.
-
-    The honest degenerate case: a detection box covering most of the frame
-    contains every blob and would suppress the rescue wholesale. That box
-    still has to clear its spawn floor to get here, and a detection that
-    confident is one worth believing, so it is left as-is rather than
-    guarded with an area ratio — an area ratio is exactly what would
-    re-break the arm-in-person case above.
-
-    Belongs in `bbox_utils` next to `iou` as the second primitive; kept
-    local only because that module is outside this change's file scope.
-    """
-    ax1, ay1, ax2, ay2 = det_box
-    bx1, by1, bx2, by2 = blob_box
-    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-    iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
-    inter = iw * ih
-    blob_area = max(0, bx2 - bx1) * max(0, by2 - by1)
-    if inter <= 0 or blob_area <= 0:
-        return 0.0
-    return inter / blob_area
-
-
-def _confirmable_on_blob(detections, blob, spawn_for, min_containment=_RESCUE_BLOB_CONTAINMENT):
-    """Does any surviving detection both clear its spawn floor AND explain the blob?
-
-    The D2 rescue used to be skipped whenever ``detections`` was non-empty.
-    One weak, wrong box — COCO reading a distant squirrel as "cat" at 0.30,
-    far below any spawn threshold — was therefore enough to suppress the
-    magnified re-detect entirely. That is exactly the case small and distant
-    subjects produce: the detector sees *something*, names it wrong and
-    weakly, and the suppression fires because of it.
-
-    What matters is not whether the detector returned anything, but whether
-    anything it returned is confirmable and actually explains the blob that
-    moved. Everything else leaves the rescue's reason to run intact.
-    """
-    if blob is None:
-        return False
-    bx, by, bw, bh = blob.last_bbox
-    blob_box = (bx, by, bx + bw, by + bh)
-    for d in detections:
-        if float(d.score) < float(spawn_for(d.label)):
-            continue
-        if _blob_containment(tuple(d.bbox), blob_box) >= min_containment:
-            return True
-    return False
+from ._rescue import _confirmable_on_blob
 
 
 class MainLoopMixin:
-    """The 530-line per-camera orchestrator (_loop).
+    """The per-camera orchestrator (_loop).
 
     Mixin for CameraRuntime. Methods access shared state via `self.*`
     (frame buffers, lock, config, etc.) which live on the concrete class.
+
+    The D1/D2 rescue it calls lives next door in ``_rescue.RescueMixin``.
     """
-
-    def _effective_roi_mode(self) -> str:
-        """The camera's roi_mode, warning once per distinct bad value.
-
-        `normalise_mode` logs when it has to fall back; calling it from the
-        frame loop would emit that warning several times a second. The last
-        raw value is remembered so a typo is reported when it appears and
-        when it changes, and stays quiet in between.
-        """
-        raw = self.cfg.get("roi_mode")
-        if raw == getattr(self, "_roi_mode_raw", _UNSET):
-            return self._roi_mode_effective
-        mode = normalise_mode(raw)
-        self._roi_mode_raw = raw
-        self._roi_mode_effective = mode
-        return mode
-
-    def _rescue_cooldown_ready(self, now):
-        """Has enough time passed since the last magnified re-detect?
-
-        Split out of `_loop` so the brake can be tested without standing up
-        a camera. Read-only: the timestamp is stamped by the caller once it
-        has decided to actually spend the inference, so a frame that clears
-        the cooldown but is then found to have a confirmable detection does
-        not restart the clock.
-        """
-        return (now - getattr(self, "_roi_rescue_last_ts", 0.0)) >= _RESCUE_MIN_INTERVAL_S
-
-    def _roi_rescue(self, proc_frame, raw_detections, blob, det_mode, allowed):
-        """D2 · magnified re-detect around a coherent motion blob.
-
-        Returns the detection list the rest of the frame should work with.
-        The full-frame pass the loop already ran is handed to `tiled_detect`
-        instead of being repeated, so an attempt costs the region inferences
-        only — on CPU, with the TPU down, that saved invoke is the single
-        largest cost item in this path.
-        """
-        # M2 · count every attempt, not just the successes. "How often did
-        # the rescue fire, and how often did it actually save something" is
-        # unanswerable from the log alone if only hits are recorded.
-        self._roi_rescue_attempts += 1
-        self._roi_rescue_log.append(time.time())
-        mbox = blob.last_bbox if det_mode == "roi" else None
-        roi_dets, _sahi = tiled_detect(
-            self.detector,
-            proc_frame,
-            det_mode,
-            threshold=self._tracker.floor,
-            motion_box=mbox,
-            full_dets=raw_detections,
-        )
-        # Same gate order as the full-frame path: size floor, then class
-        # filter, then mask, then zones. A tile-projected box is judged
-        # by the size it has in the SCENE, which is why the full frame's
-        # dimensions go in here and not the crop's.
-        _h_px, _w_px = proc_frame.shape[:2]
-        roi_dets, _ = apply_size_floor(roi_dets, _w_px, _h_px)
-        roi_dets, _ = apply_object_filter(roi_dets, allowed)
-        roi_dets = self._filter_masked_detections(proc_frame, roi_dets)
-        roi_dets = self._filter_zoned_detections(proc_frame, roi_dets)
-        # Only boxes that came out of a magnified region are "via roi" — the
-        # full-frame boxes travelled through the merge unchanged and marking
-        # them too would make the D4 provenance flag meaningless, and would
-        # let a pre-existing weak box count as a rescue hit.
-        seen = {id(d) for d in raw_detections}
-        gained = [d for d in roi_dets if id(d) not in seen]
-        for d in gained:
-            d.via_roi = True
-        if gained:
-            self._roi_rescue_hits += 1
-            log.info(
-                "[%s] D2 ROI rescue (%s): %d hit(s) on coherent blob "
-                "net=%.0fpx straight=%.2f zoom=%s → %s",
-                self.camera_id,
-                det_mode,
-                len(gained),
-                blob.net_displacement,
-                blob.straightness,
-                _sahi.get("magnification"),
-                ",".join(sorted({d.label for d in gained})),
-            )
-        # E1 · persist a labeled motion sample (kept ≈ animal, empty ≈
-        # wind/noise) for offline threshold calibration.
-        record_motion_sample(
-            self.global_cfg.get("storage", {}).get("root"),
-            self.camera_id,
-            blob,
-            bool(gained),
-            det_mode,
-            time.time(),
-            proc_frame.shape[1],
-        )
-        return roi_dets
 
     def _loop(self):
         if self.cfg.get("rtsp_url"):
@@ -383,19 +186,14 @@ class MainLoopMixin:
                     )
                 self.last_error = None
                 self._error_streak = 0
-                # One resolution of the detection configuration for this
-                # frame — the SAME builder the Simulieren panel uses, so
-                # the panel can no longer be tiling in 3×3 while the
-                # camera runs `off`, or inferring at a hard-coded 0.20
-                # while the loop runs the tracker floor. roi_mode comes
-                # from the warn-once cache; everything else is resolved
-                # in detect_setup.
-                setup = build_detection_setup(
-                    self.camera_id,
-                    self.cfg,
-                    roi_mode=self._effective_roi_mode(),
-                    global_cfg=self.global_cfg,
-                )
+                # The detection configuration, resolved ONCE per runtime in
+                # __init__ (beside self._tracker, off the same config) —
+                # never per frame. Every camera-config change restarts the
+                # runtime via server.restart_single_camera, so a per-frame
+                # rebuild allocated a frozen dataclass, two dict copies, a
+                # frozenset and a resolve_track_thresholds call ~20×/s
+                # across three cameras for values that cannot have changed.
+                setup = self.detect_setup
                 # Apply bottom crop before processing (removes corrupt H.264 bottom strip)
                 proc_frame = apply_bottom_crop(frame, setup.bottom_crop_px)
                 # Skip frames with corrupt bottom strip (high-saturation codec artifact)
@@ -467,15 +265,7 @@ class MainLoopMixin:
                 # bubble. Cost is unchanged from detect_frame() — same
                 # underlying invoke; only the post-filter threshold differs.
                 self._inference_times_ms.append((time.time() - _t0) * 1000.0)
-                # Per-label bbox size floor. detect_frame_raw runs no
-                # label filters, so this guard — written for exactly the
-                # small-false-person case the twilight scenes produce —
-                # was unreachable on this path until detect_setup hoisted
-                # it out of the detector's unused detect_frame branch.
                 _fh_px, _fw_px = proc_frame.shape[:2]
-                raw_detections, _ = apply_size_floor(
-                    list(raw_detections), _fw_px, _fh_px, self.camera_id
-                )
                 allowed = setup.object_filter
                 detections, _ = apply_object_filter(list(raw_detections), allowed)
                 # Exclusion mask first: drop detections inside masked
@@ -596,80 +386,7 @@ class MainLoopMixin:
                     continue
                 self._prev_good_frame = proc_frame  # no copy — proc_frame is already a new array
 
-                # N-of-M confirmation gate. Dedupe by label per frame so a
-                # frame with three concurrent persons counts as ONE hit
-                # for "person" — the window measures temporal persistence,
-                # not per-frame multiplicity. Detections still appear in
-                # the live preview overlay (drawn already paints them);
-                # only the trigger pipeline downstream filters on the
-                # confirmed labels.
-                #
-                # Score gate: only detections at-or-above the per-label
-                # spawn threshold count toward the confirmation window.
-                # The two-tier tracker keeps a track alive on tentative
-                # (< spawn) samples once it has been spawned at-or-above
-                # threshold, so an unconditional confirmer.check() would
-                # fire on the low-confidence tail of a sighting whose
-                # CURRENT score is well under the configured threshold
-                # (e.g. a person briefly seen at 60%, then dropping to
-                # 23% for many frames — old behaviour: confirmation
-                # stayed live, sub-threshold dips even re-fired after
-                # the 2× window decay). Ongoing sightings still
-                # propagate via is_confirmed so an already-running clip
-                # carries the label across its tail.
-                cw_cfg = self.cfg.get("confirmation_window") or {}
-                confirmed_object_labels: list[str] = []
-                _seen_this_frame: set[str] = set()
-                for d in detections:
-                    if d.label in _seen_this_frame:
-                        if self._confirmer.is_confirmed(self.camera_id, d.label):
-                            confirmed_object_labels.append(d.label)
-                        continue
-                    _seen_this_frame.add(d.label)
-                    cw = cw_cfg.get(d.label) or {}
-                    n = max(1, int(cw.get("n", 3)))
-                    secs = max(0.5, float(cw.get("seconds", 5.0)))
-                    spawn_threshold = spawn_for(d.label)
-                    if float(d.score) < spawn_threshold:
-                        # Sub-threshold continuation — counts in tracking
-                        # but NOT toward the recording-trigger
-                        # confirmation. Surface ongoing sightings only.
-                        if self._confirmer.is_confirmed(self.camera_id, d.label):
-                            confirmed_object_labels.append(d.label)
-                        log.debug(
-                            "[det][cam:%s] ↓ sub-threshold: %s %d%% "
-                            "(< spawn %d%%) — Bestätigung unverändert",
-                            self.camera_id,
-                            d.label,
-                            int(round(d.score * 100)),
-                            int(round(spawn_threshold * 100)),
-                        )
-                        continue
-                    fired = self._confirmer.check(self.camera_id, d.label, n, secs)
-                    if fired:
-                        cur = self._confirmer.current_count(self.camera_id, d.label)
-                        log.info(
-                            "[det][cam:%s] ✅ BESTÄTIGT: %s — %d Treffer in %.1fs → Alert ausgelöst",
-                            self.camera_id,
-                            d.label,
-                            cur,
-                            secs,
-                        )
-                        confirmed_object_labels.append(d.label)
-                    elif self._confirmer.is_confirmed(self.camera_id, d.label):
-                        confirmed_object_labels.append(d.label)
-                    else:
-                        cur = self._confirmer.current_count(self.camera_id, d.label)
-                        log.info(
-                            "[det][cam:%s] ⏳ wartend: %s %d%% (Bestätigung %d/%d in %.1fs)",
-                            self.camera_id,
-                            d.label,
-                            int(round(d.score * 100)),
-                            cur,
-                            n,
-                            secs,
-                        )
-
+                confirmed_object_labels = self._confirmed_labels(detections, spawn_for)
                 now_dt = datetime.now()
                 # Per-camera trigger mode:
                 #   motion_and_objects (default) — motion OR object fires event
@@ -734,307 +451,23 @@ class MainLoopMixin:
                         continue
 
                 if self.cfg.get("rtsp_url"):
-                    # ── RTSP: pre-buffer + per-session video recording ────────
-                    # Measure main-stream FPS over a rolling 5s window
-                    self._main_fps_frames += 1
-                    _fps_el = time.time() - self._main_fps_window_start
-                    if _fps_el >= 5.0:
-                        self._main_fps = round(self._main_fps_frames / _fps_el, 1)
-                        self._main_fps_frames = 0
-                        self._main_fps_window_start = time.time()
-
-                    # Clip boundary knobs (configurable); ffmpeg stream-copy ignores pre-buffer
-                    _clip_max = int(
-                        self.global_cfg.get("processing", {}).get("clip_max_duration_s", 120)
-                    )
-                    _post_tail = float(
-                        self.cfg.get("post_motion_tail_s")
-                        or self.global_cfg.get("processing", {}).get("post_motion_tail_s", 3.0)
-                    )
-                    # Pre-buffer only matters for the OpenCV fallback path
-                    if not _FFMPEG_AVAILABLE:
-                        self._pre_buffer.append((proc_frame.copy(), time.time()))
-
-                    if has_motion:
-                        self._last_motion_ts = now_dt
-                        if not self._recording:
-                            has_person = "person" in labels
-                            elapsed = (now_dt - self.last_event_at).total_seconds()
-                            if has_person or elapsed >= cooldown:
-                                rec_meta = self._build_event_meta(
-                                    now_dt, labels, detections, drawn, effective_bbox
-                                )
-                                # Zone trigger flag: if every detection in
-                                # this event sits in a zone with save_video
-                                # turned off, skip recording entirely. Cheap
-                                # short-circuit before ffmpeg launches.
-                                if not rec_meta.get("save_video", True):
-                                    log.debug(
-                                        "[%s] event %s: save_video=False, skipping clip",
-                                        self.camera_id,
-                                        rec_meta.get("event_id"),
-                                    )
-                                    continue
-                                started = False
-                                if _FFMPEG_AVAILABLE:
-                                    started = self._start_ffmpeg_recording(now_dt, rec_meta)
-                                if started:
-                                    self._recording = True
-                                    self._rec_start_time = now_dt
-                                    self._rec_corrupt_frames = 0
-                                    self._rec_event_meta = rec_meta
-                                    self.last_event_at = now_dt
-                                    self.event_counter_today += 1
-                                    # Ticker: tell the operator a clip just
-                                    # started. Diagnostic, not an alert — it
-                                    # deliberately bypasses the push gates,
-                                    # which are often what is being tested.
-                                    self.notify_recording_started(
-                                        rec_meta.get("labels"), rec_meta.get("event_id")
-                                    )
-                                else:
-                                    # OpenCV fallback (legacy path)
-                                    self._recording = True
-                                    self._rec_start_time = now_dt
-                                    self._rec_corrupt_frames = 0
-                                    pre_cutoff = time.time() - 3.0
-                                    self._rec_frames = [
-                                        f for f, ts in self._pre_buffer if ts >= pre_cutoff
-                                    ]
-                                    self._rec_event_meta = rec_meta
-                                    self.last_event_at = now_dt
-                                    self.event_counter_today += 1
-                                    log.info(
-                                        "[%s] Motion recording started (OpenCV, labels=%s, prebuf=%d frames)",
-                                        self.camera_id,
-                                        labels,
-                                        len(self._rec_frames),
-                                    )
-                        # Append frames only in OpenCV mode — ffmpeg records itself
-                        if self._recording and self._ffmpeg_proc is None:
-                            self._rec_frames.append(proc_frame.copy())
-
-                    elif self._recording:
-                        # F-2 · fold labels that confirmed AFTER the clip
-                        # started into the in-flight event. Motion wins the
-                        # confirmation race almost every time, so without
-                        # this the event stays "motion" and every downstream
-                        # gate reads that instead of "person".
-                        if labels and self._upgrade_event_meta(labels, detections):
-                            with contextlib.suppress(Exception):
-                                _eid = (self._rec_event_meta or {}).get("event_id")
-                                if _eid:
-                                    _ev = self.store.get_event(self.camera_id, _eid) or {}
-                                    _ev["labels"] = self._rec_event_meta["labels"]
-                                    _ev["top_label"] = self._rec_event_meta["top_label"]
-                                    _ev["alarm_level"] = self._rec_event_meta["alarm_level"]
-                                    _ev["severity"] = self._rec_event_meta["severity"]
-                                    self.store.update_event(self.camera_id, _eid, _ev)
-                        since_last = (
-                            (now_dt - self._last_motion_ts).total_seconds()
-                            if self._last_motion_ts
-                            else 999
-                        )
-                        since_start = (
-                            (now_dt - self._rec_start_time).total_seconds()
-                            if self._rec_start_time
-                            else 0
-                        )
-                        # In OpenCV mode we keep accumulating tail frames
-                        if self._ffmpeg_proc is None:
-                            self._rec_frames.append(proc_frame.copy())
-                        if since_last >= _post_tail or since_start >= _clip_max:
-                            if self._rec_corrupt_frames > 5:
-                                log.warning(
-                                    "[%s] %d corrupt frames rejected in this clip",
-                                    self.camera_id,
-                                    self._rec_corrupt_frames,
-                                )
-                            if self._ffmpeg_proc is not None:
-                                # ffmpeg mode: stop subprocess + queue re-encode
-                                self._stop_ffmpeg_and_queue_reencode()
-                                self._recording = False
-                                self._rec_start_time = None
-                                self._last_motion_ts = None
-                                self._rec_event_meta = None
-                                self._rec_corrupt_frames = 0
-                            else:
-                                # OpenCV fallback: finalize from frame buffer
-                                frames_snap = self._rec_frames[:]
-                                meta_snap = self._rec_event_meta
-                                measured_fps = (
-                                    max(5.0, min(30.0, len(frames_snap) / since_start))
-                                    if since_start > 0.5
-                                    else (self._main_fps or 10.0)
-                                )
-                                self._recording = False
-                                self._rec_frames = []
-                                self._rec_start_time = None
-                                self._last_motion_ts = None
-                                self._rec_event_meta = None
-                                self._rec_corrupt_frames = 0
-                                if meta_snap and len(frames_snap) >= 3:
-                                    threading.Thread(
-                                        target=self._finalize_motion_clip,
-                                        args=(frames_snap, meta_snap, measured_fps),
-                                        daemon=True,
-                                    ).start()
-
+                    if self._rtsp_recording_step(
+                        proc_frame=proc_frame,
+                        now_dt=now_dt,
+                        has_motion=has_motion,
+                        labels=labels,
+                        detections=detections,
+                        drawn=drawn,
+                        effective_bbox=effective_bbox,
+                        cooldown=cooldown,
+                    ):
+                        continue
                 else:
-                    # ── Snapshot camera: save JPEG event (unchanged behaviour) ─
-                    has_person = "person" in labels
-                    elapsed = (now_dt - self.last_event_at).total_seconds()
-                    if labels and (has_person or elapsed >= cooldown):
-                        self.last_event_at = now_dt
-                        self.event_counter_today += 1
-                        ts = now_dt
-                        event_id = ts.strftime("%Y%m%d-%H%M%S-%f")
-                        day_dir = (
-                            Path(self.global_cfg["storage"]["root"])
-                            / "motion_detection"
-                            / self.camera_id
-                            / ts.strftime("%Y-%m-%d")
-                        )
-                        day_dir.mkdir(parents=True, exist_ok=True)
-                        # Build event meta first so we know whether the
-                        # zone(s) the detections fell into actually want a
-                        # photo saved. save_photo:false zones still log the
-                        # event JSON but skip the JPEG write.
-                        ev_meta = self._build_event_meta(
-                            ts, labels, detections, drawn, effective_bbox
-                        )
-                        snap_path = day_dir / f"{event_id}.jpg"
-                        rel = snap_path.relative_to(Path(self.global_cfg["storage"]["root"]))
-                        public_base = (
-                            self.global_cfg.get("server", {}).get("public_base_url") or ""
-                        ).rstrip("/")
-                        snapshot_url = None
-                        if ev_meta.get("save_photo", True):
-                            save_frame = drawn.copy()
-                            if effective_bbox is not None:
-                                mx, my, mw, mh = effective_bbox
-                                cv2.rectangle(
-                                    save_frame, (mx, my), (mx + mw, my + mh), (0, 220, 0), 2
-                                )
-                            h_px, w_px = save_frame.shape[:2]
-                            if w_px > 1280:
-                                scale = 1280 / w_px
-                                save_frame = cv2.resize(
-                                    save_frame,
-                                    (1280, int(h_px * scale)),
-                                    interpolation=cv2.INTER_AREA,
-                                )
-                            cv2.imwrite(
-                                str(snap_path), save_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 60]
-                            )
-                            snapshot_url = (
-                                f"{public_base}/media/{rel.as_posix()}" if public_base else None
-                            )
-                        event = {
-                            "event_id": event_id,
-                            "camera_id": self.camera_id,
-                            "camera_name": self.cfg.get("name", self.camera_id),
-                            "armed": bool(self.cfg.get("armed", True)),
-                            "after_hours": ev_meta["after_hours"],
-                            "alarm_level": ev_meta["alarm_level"],
-                            "time": ts.isoformat(timespec="seconds"),
-                            "labels": ev_meta["labels"],
-                            "top_label": ev_meta["top_label"],
-                            "bird_species": ev_meta["bird_species"],
-                            "cat_name": ev_meta["cat_name"],
-                            "person_name": ev_meta["person_name"],
-                            "whitelisted": ev_meta["whitelisted"],
-                            "detections": ev_meta["detections"],
-                            "snapshot_url": snapshot_url,
-                            "snapshot_relpath": rel.as_posix() if snapshot_url else None,
-                            "video_url": None,
-                            "video_relpath": None,
-                        }
-                        self.store.add_event(self.camera_id, event)
-                        if self.mqtt and self.cfg.get("mqtt_enabled", True):
-                            self.mqtt.publish(f"events/{self.camera_id}", event)
-                        _send_tg = ev_meta["notify"] and self.cfg.get("telegram_enabled", True)
-                        # Defensive: "Stumm" cameras never send Telegram.
-                        if not self.cfg.get("armed", True):
-                            _send_tg = False
-                        if not ev_meta.get("send_telegram", True):
-                            _send_tg = False
-                        if _send_tg and self.notifier:
-                            # Only attach the JPEG when one was actually
-                            # written. If save_photo was off, fall back to
-                            # the in-memory thumb_bytes from ev_meta.
-                            thumb = ev_meta.get("thumb_bytes")
-                            if snapshot_url:
-                                try:
-                                    with open(snap_path, "rb") as fh:
-                                        thumb = fh.read()
-                                except Exception:
-                                    pass
-                            self.notifier.send_alert_sync(
-                                caption=(
-                                    f"ℹ️ {', '.join(ev_meta['labels'])}\n"
-                                    f"📷 {self.cfg.get('name', self.camera_id)}\n"
-                                    f"🕒 {event['time']}"
-                                ),
-                                jpeg_bytes=thumb,
-                                snapshot_url=snapshot_url,
-                                dashboard_url=public_base,
-                                camera_id=self.camera_id,
-                            )
+                    # ── Snapshot camera: save JPEG event ──────────────────────
+                    self._save_snapshot_event(
+                        now_dt, labels, detections, drawn, effective_bbox, cooldown
+                    )
                 self.last_error = None
             except Exception as e:
-                self._error_streak += 1
-                self.last_error = str(e)
-                # V81 · per-failure diagnostic. Env-gated so non-flapping
-                # installs pay zero log overhead. Uses the existing
-                # _last_rtsp_success_ts (set on every successful grab)
-                # as the "since last good frame" timestamp.
-                if os.getenv("FLAP_DIAG", "").lower() in ("1", "true", "yes"):
-                    _last_ok = self._last_rtsp_success_ts or 0.0
-                    _since = (time.time() - _last_ok) if _last_ok else -1.0
-                    _reconnects_24h = len(
-                        [t for t in self._reconnect_log if time.time() - t < 86400]
-                    )
-                    log.info(
-                        "[cam:%s][flap] streak=%d err=%s:%s since_last_ok=%.1fs reconnects_24h=%d",
-                        self.camera_id,
-                        self._error_streak,
-                        type(e).__name__,
-                        str(e)[:200],
-                        _since,
-                        _reconnects_24h,
-                    )
-                if self._error_streak == 1:
-                    log.debug("[%s] Frame lesen fehlgeschlagen: %s", self.camera_id, e)
-                elif self._error_streak == 5:
-                    log_cam.warning(
-                        "[%s] Verbindungsprobleme – %d aufeinanderfolgende Fehler: %s",
-                        self.camera_id,
-                        self._error_streak,
-                        e,
-                    )
-                elif self._error_streak == 15 or (
-                    self._error_streak > 15 and self._error_streak % 30 == 0
-                ):
-                    log.error(
-                        "[%s] Stream verloren (streak=%d): %s",
-                        self.camera_id,
-                        self._error_streak,
-                        e,
-                    )
-                try:
-                    if self.capture is not None:
-                        self.capture.release()
-                except Exception:
-                    pass
-                self.capture = None
-                self._reconnect_count += 1
-                self._reconnect_log.append(time.time())
-                # Short backoff for transient dropouts, longer for persistent failures
-                sleep_t = (
-                    2.0
-                    if self._error_streak <= 3
-                    else min(30.0, 5.0 * (self._error_streak // 5 + 1))
-                )
-                time.sleep(sleep_t)
+                self._handle_loop_error(e)
             time.sleep(interval)

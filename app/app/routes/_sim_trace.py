@@ -27,7 +27,6 @@ from ._sim_pipeline import (
     VERDICT_NO_TRACK,
     VERDICT_OUTSIDE_ZONE,
     VERDICT_PASS,
-    VERDICT_SIZE_FLOOR,
     VERDICT_TENTATIVE,
     SimPass,
 )
@@ -38,7 +37,6 @@ _VERDICT_WORD = {
     VERDICT_PASS: "PASS",
     VERDICT_TENTATIVE: "TENTATIV",
     VERDICT_NO_TRACK: "VERWORFEN",
-    VERDICT_SIZE_FLOOR: "VERWORFEN",
     VERDICT_FILTERED: "GEFILTERT",
     VERDICT_MASKED: "MASKIERT",
     VERDICT_OUTSIDE_ZONE: "AUSSERHALB",
@@ -124,8 +122,6 @@ def gate_lines(*, cam: dict, setup: DetectionSetup, sim: SimPass, active_tracks:
     n_masks = len(cam.get("masks") or [])
     n_zones = len(cam.get("zones") or [])
     return [
-        f"[size_floor] {sim.count(VERDICT_SIZE_FLOOR)} Box(en) unter der "
-        f"Größenschwelle verworfen (person: min. 15 % Bildhöhe / 2 % Fläche)",
         f"[filter] {sim.count(VERDICT_FILTERED)} Box(en) durch object_filter verworfen",
         f"[mask] {n_masks} Maske(n) konfiguriert · "
         f"{sim.count(VERDICT_MASKED)} Box(en) verworfen",

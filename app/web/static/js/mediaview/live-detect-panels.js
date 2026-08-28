@@ -23,7 +23,6 @@ import { _pinScrubberRight } from './live-detect-chrome.js';
 // Verdicts that mean "a gate removed this box". Mirrors the backend's
 // gate sequence in routes/_sim_pipeline — the tokens are the contract.
 const _DROP_VERDICTS = new Set([
-  'size_floor',
   'filtered',
   'masked',
   'outside_zone',
@@ -33,7 +32,6 @@ const _DROP_VERDICTS = new Set([
 // German gate name per verdict, shown in the row's verdict pill. The
 // full sentence lives in d.reason and rides along as the title.
 const _GATE_LABEL = {
-  size_floor: 'zu klein',
   filtered: 'gefiltert',
   masked: 'maskiert',
   outside_zone: 'außerhalb Zone',

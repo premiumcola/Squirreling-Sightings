@@ -53,7 +53,6 @@ export const MV_STATUS_ROWS = [
 //   pass         · at or above the label's spawn threshold
 //   tentative    · holds its track, does not count toward confirmation
 //   no_track     · the tracker dropped it (tentative, no IoU partner)
-//   size_floor   · under the per-label bbox size floor
 //   filtered     · class not in object_filter
 //   masked       · inside an exclusion mask
 //   outside_zone · outside every inclusion zone
@@ -66,7 +65,6 @@ export const MV_LIVE_VERDICT_CAT = {
   tentative: 'weak',
   belowthresh: 'weak',
   no_track: 'ghost',
-  size_floor: 'masked',
   filtered: 'masked',
   masked: 'masked',
   outside_zone: 'masked',

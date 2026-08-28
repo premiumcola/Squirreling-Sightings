@@ -6,8 +6,11 @@ sequence the alarm loop runs (``camera_runtime/_main_loop``), built from
 the same :class:`~app.detect_setup.DetectionSetup`:
 
     bottom crop → detect_frame_raw(threshold=floor) → [tiling]
-    → size floor → object_filter → exclusion masks → inclusion zones
+    → object_filter → exclusion masks → inclusion zones
     → tracker → spawn-threshold split
+
+There is deliberately no per-label size floor in that sequence, because
+there is none in the loop either — see the note in ``detect_setup``.
 
 The panel differs from the loop in exactly one way, and it is the
 panel's entire reason to exist: it KEEPS the boxes each gate removed and
@@ -16,8 +19,11 @@ is indistinguishable from a detector that missed it, which is how the
 operator's 11-vertex exclusion mask could sit inert in the panel for
 months without anyone being able to tell.
 
-State that must NOT be shared with production lives here too — see
-``get_test_tracker``.
+State that must NOT be shared with production lives here too: the
+tracker (``get_test_tracker``) and the compiled mask/zone rasters
+(``_SIM_MASK_ZONES``). Both take production's numbers and keep their own
+objects — a diagnostic that writes into the alarm loop's state is not a
+diagnostic.
 """
 
 from __future__ import annotations
@@ -27,10 +33,10 @@ import logging
 import time as _time
 from dataclasses import dataclass, field
 
+from .. import mask_zones
 from ..detect_setup import (
     DetectionSetup,
     apply_object_filter,
-    apply_size_floor,
     split_by_identity,
 )
 from ..tracker_core import LiveTracker
@@ -43,6 +49,16 @@ log = logging.getLogger(__name__)
 # keeps its own state and is untouched. Keyed by cam_id; bounded by the
 # small number of cameras.
 _SIM_PREV_GRAY: dict[str, object] = {}
+
+# Per-camera mask/zone raster cache, SIM-LOCAL for the same reason as the
+# tracker below. The panel used to call ``rt._filter_masked_detections`` on
+# the LIVE runtime, which rebuilds ``rt._mask_image`` / ``rt._zone_image``
+# in place — and publishes the config signature before the raster it
+# describes. A diagnostic tick landing in that window left the alarm loop
+# reading "cache current" beside an unbuilt mask, i.e. the operator's
+# exclusion mask switched off in production for as long as it took to fill
+# in. Same polygons, own rasters.
+_SIM_MASK_ZONES: dict[str, mask_zones.MaskZoneCache] = {}
 
 # SIMU-02e · per-camera tracker state for the test-detection endpoint.
 _TEST_TRACKERS: dict[str, dict] = {}
@@ -67,7 +83,6 @@ _TICK_FPS_ALPHA = 0.4
 VERDICT_PASS = "pass"
 VERDICT_TENTATIVE = "tentative"
 VERDICT_NO_TRACK = "no_track"
-VERDICT_SIZE_FLOOR = "size_floor"
 VERDICT_FILTERED = "filtered"
 VERDICT_MASKED = "masked"
 VERDICT_OUTSIDE_ZONE = "outside_zone"
@@ -138,7 +153,6 @@ def get_test_tracker(cam_id: str, setup: DetectionSetup) -> dict:
         "events": collections.deque(maxlen=1024),
         # Per-class (wall_ts, label, verdict) for the 60-s aggregate.
         "class_log": collections.deque(maxlen=2048),
-        "drops_session": 0,
     }
     _TEST_TRACKERS[cam_id] = entry
     return entry
@@ -194,16 +208,43 @@ def sim_motion_box(cam_id: str, frame):
 def detect(detector, frame, setup: DetectionSetup, det_mode: str, motion_box):
     """Full-frame pass at the tracker floor, plus tiles when a mode is on.
 
-    Two parity fixes in one call: the threshold is the tracker's
-    continuation floor (the panel used a hard-coded 0.20, identical only
-    by coincidence at defaults), and the full-frame pass is handed to
-    ``tiled_detect`` via ``full_dets=`` exactly as the production rescue
-    does — so a 2×2 tick costs 1+4 inferences, not 1+1+4, and the number
-    the panel reports is the number production would pay.
+    The parity fix here is the THRESHOLD: the panel used a hard-coded 0.20
+    where the loop uses the tracker's continuation floor — identical only
+    by coincidence at the shipped defaults.
+
+    The cost, measured against a 2560×1440 frame with a counting stub
+    detector, is ``1 + len(regions)`` invokes per tick:
+
+        off  1   ·  2×2  5   ·  3×3  10   ·  roi  1–5
+
+    ``roi`` varies because ``roi_regions`` splits the crop until it really
+    magnifies: 1 for no motion box, 2 for a small blob, up to 5 for a blob
+    spanning most of the frame.
+
+    Passing the full-frame pass into ``tiled_detect`` via ``full_dets=``
+    does NOT reduce that, and an earlier version of this docstring claimed
+    it did ("1+4 rather than 1+1+4"). It never was 1+1+4: the previous sim
+    called ``tiled_detect`` with no ``full_dets=`` and no separate
+    full-frame pass of its own, so ``tiled_detect`` ran the one full pass
+    internally — 1+4 then, 1+4 now, for every mode. The reuse buys the
+    panel a full-frame detection list it can report against, nothing more.
+
+    What this change DID make more expensive is the default. The panel
+    used to default to ``off`` (1 invoke/tick, ~1 Hz over HTTP) and only
+    tiled when the operator picked a mode from the switch; it now defaults
+    to the camera's configured ``roi_mode``. On a camera left at the
+    schema default of ``off`` nothing changes; on one configured to 3×3
+    an open panel costs 10 invokes/tick on a TPU that has exactly one
+    owner and three live cameras queueing behind it. That is what the
+    admission gate in ``routes/_sim_guard`` prices, and why it must keep
+    pricing the resolved mode rather than the requested one.
     """
     full = list(detector.detect_frame_raw(frame, threshold=setup.floor))
-    if det_mode == "off":
-        return full, {"mode": "off", "tiles": 0}, 1
+    # ``off`` still goes through tiled_detect: it returns the full ``_diag``
+    # (raw / merged / tile_hits / magnification / crop_px), and a
+    # hand-rolled ``{"mode": "off", "tiles": 0}`` silently dropped every
+    # one of those keys from the Diagnose panel. With ``full_dets=`` the
+    # call spends no inference of its own.
     merged, diag = tiled_detect(
         detector,
         frame,
@@ -215,7 +256,16 @@ def detect(detector, frame, setup: DetectionSetup, det_mode: str, motion_box):
     return merged, diag, 1 + int(diag.get("tiles") or 0)
 
 
-def run_gates(rt, proc_frame, raw: list, setup: DetectionSetup):
+def sim_mask_zones(cam_id: str) -> mask_zones.MaskZoneCache:
+    """The panel's OWN mask/zone raster cache for this camera."""
+    cache = _SIM_MASK_ZONES.get(cam_id)
+    if cache is None:
+        cache = mask_zones.MaskZoneCache()
+        _SIM_MASK_ZONES[cam_id] = cache
+    return cache
+
+
+def run_gates(cam_cfg: dict, proc_frame, raw: list, setup: DetectionSetup):
     """Production's gate sequence, keeping what each gate removed.
 
     Order is the loop's order and the ordering itself is a fix: the panel
@@ -224,28 +274,28 @@ def run_gates(rt, proc_frame, raw: list, setup: DetectionSetup):
     track ids — the ``#N`` badges drifted against production's identities
     for boxes production never tracked.
 
-    Masks and zones are the runtime's OWN methods, not a re-implementation
-    here: ``self.cfg`` inside them is the config production runs, and the
-    mask/zone raster caches they populate are the same ones the loop uses.
+    Masks and zones run through :mod:`app.mask_zones`, the same functions
+    the alarm loop's ``ZonesMixin`` calls, on the same polygons out of the
+    same camera config — but against the panel's own compiled rasters. The
+    previous version called the LIVE runtime's bound filter methods, which
+    made this read-only view a writer of the alarm loop's cache; see
+    ``_SIM_MASK_ZONES``.
     """
     drops: list = []
-    h_px, w_px = proc_frame.shape[:2]
+    cache = sim_mask_zones(setup.camera_id)
+    cfg = cam_cfg or {}
 
-    kept, size_drops = apply_size_floor(list(raw), w_px, h_px)
-    for d, reason in size_drops:
-        drops.append((d, VERDICT_SIZE_FLOOR, f"Größenfilter: {reason}"))
-
-    kept, filter_drops = apply_object_filter(kept, setup.object_filter)
+    kept, filter_drops = apply_object_filter(list(raw), setup.object_filter)
     for d, reason in filter_drops:
         drops.append((d, VERDICT_FILTERED, reason))
 
     before = kept
-    kept = rt._filter_masked_detections(proc_frame, list(kept))
+    kept = cache.masked(list(kept), proc_frame, cfg.get("masks") or [], setup.camera_id)
     for d, reason in split_by_identity(before, kept, "von einer Ausschluss-Maske abgedeckt"):
         drops.append((d, VERDICT_MASKED, reason))
 
     before = kept
-    kept = rt._filter_zoned_detections(proc_frame, list(kept))
+    kept = cache.zoned(list(kept), proc_frame, cfg.get("zones") or [], setup.camera_id)
     for d, reason in split_by_identity(before, kept, "außerhalb jeder Erkennungszone"):
         drops.append((d, VERDICT_OUTSIDE_ZONE, reason))
 

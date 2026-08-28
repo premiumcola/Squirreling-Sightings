@@ -126,10 +126,13 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
 
     # The config PRODUCTION runs, not a second reading of it. rt.cfg is
     # the runtime's live view of the camera; the store's copy is the
-    # fallback for a stub runtime.
+    # fallback for a stub runtime. Resolved once here and handed down, so
+    # the thresholds and the mask/zone polygons can never come from two
+    # different readings of the camera.
+    cam_cfg = getattr(rt, "cfg", None) or cam
     setup = build_detection_setup(
         cam_id,
-        getattr(rt, "cfg", None) or cam,
+        cam_cfg,
         global_cfg=app_state.get_effective_config(),
     )
     # The mode the admission gate PRICED is the mode this tick may run —
@@ -140,7 +143,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     entry = _sim_pipeline.get_test_tracker(cam_id, setup)
     entry["last_call_ts"] = _time.monotonic()
     try:
-        sim = _run_pass(rt, cam_id, setup, pick.frame, det_mode, entry)
+        sim = _run_pass(rt, cam_cfg, cam_id, setup, pick.frame, det_mode, entry)
     except Exception as e:  # noqa: BLE001 — a diagnostic must not 500
         log.warning("[test-detection] %s inference failed: %s", cam_id, e)
         return jsonify({"error": f"Inference fehlgeschlagen: {e}"}), 500
@@ -160,7 +163,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     )
 
 
-def _run_pass(rt, cam_id, setup, frame, det_mode, entry) -> _sim_pipeline.SimPass:
+def _run_pass(rt, cam_cfg, cam_id, setup, frame, det_mode, entry) -> _sim_pipeline.SimPass:
     """Production's sequence, with every dropped box kept and labelled."""
     proc_frame = apply_bottom_crop(frame, setup.bottom_crop_px)
     h_px, w_px = proc_frame.shape[:2]
@@ -170,7 +173,11 @@ def _run_pass(rt, cam_id, setup, frame, det_mode, entry) -> _sim_pipeline.SimPas
         rt.detector, proc_frame, setup, det_mode, motion_box
     )
     inference_ms = int(round((_time.monotonic() - t0) * 1000))
-    survivors, drops = _sim_pipeline.run_gates(rt, proc_frame, raw, setup)
+    # The camera CONFIG goes into the gates, not the runtime object: the
+    # mask and zone POLYGONS are read from it, but the compiled rasters
+    # are the panel's own — a diagnostic must not be able to rebuild the
+    # alarm loop's cache. See _sim_pipeline._SIM_MASK_ZONES.
+    survivors, drops = _sim_pipeline.run_gates(cam_cfg, proc_frame, raw, setup)
     tick_fps = _sim_pipeline.measure_tick_fps(entry)
     num_by_det, no_track = _sim_pipeline.run_tracker(entry, survivors, setup, w_px, h_px, tick_fps)
     rows = _sim_pipeline.build_rows(survivors, drops, num_by_det, no_track, setup)
@@ -352,7 +359,6 @@ def _build_diag(
             # Back-compat key for the existing frontend counters.
             "belowthresh": sim.count(_sim_pipeline.VERDICT_TENTATIVE),
             "no_track": sim.count(_sim_pipeline.VERDICT_NO_TRACK),
-            "size_floor": sim.count(_sim_pipeline.VERDICT_SIZE_FLOOR),
             "filtered": sim.count(_sim_pipeline.VERDICT_FILTERED),
             "masked": sim.count(_sim_pipeline.VERDICT_MASKED),
             "outside_zone": sim.count(_sim_pipeline.VERDICT_OUTSIDE_ZONE),
@@ -387,7 +393,7 @@ def _log_tick(*, cam_id, sim, pick, setup) -> None:
     log_fn(
         "[test-detection] cam=%s outcome=%s waited=%.2fs retries=%d "
         "frame_age_ms=%d frame_src=%s raw=%d pass=%d tentative=%d no_track=%d "
-        "size_floor=%d filtered=%d masked=%d outside_zone=%d inference_ms=%d "
+        "filtered=%d masked=%d outside_zone=%d inference_ms=%d "
         "invokes=%d tick_fps=%.2f top_raw=%s obj_filter=%s floor=%.2f",
         cam_id,
         pick.outcome,
@@ -399,7 +405,6 @@ def _log_tick(*, cam_id, sim, pick, setup) -> None:
         len(sim.pass_rows),
         sim.count(_sim_pipeline.VERDICT_TENTATIVE),
         sim.count(_sim_pipeline.VERDICT_NO_TRACK),
-        sim.count(_sim_pipeline.VERDICT_SIZE_FLOOR),
         sim.count(_sim_pipeline.VERDICT_FILTERED),
         sim.count(_sim_pipeline.VERDICT_MASKED),
         sim.count(_sim_pipeline.VERDICT_OUTSIDE_ZONE),

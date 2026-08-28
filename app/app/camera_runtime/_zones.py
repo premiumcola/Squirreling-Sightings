@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 import requests
 
+from .. import mask_zones
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
     BirdSpeciesClassifier,
@@ -46,65 +47,40 @@ from ._consts import (
     log_tl,
 )
 
-
-def _flatten_poly_points(poly, samples_per_curve: int = 12) -> list:
-    """Return the polygon as a flat list of {x,y} points, sampling any
-    curved segments via quadratic-bezier interpolation.
-
-    `samples_per_curve` is the number of intermediate points between a
-    segment's two endpoints; the endpoints themselves are always
-    included once each. Three accepted input shapes mirror the JS-side
-    _polyPoints + _polyCurves:
-      - Bare list of points: returned as-is (legacy pre-label format).
-      - Dict with no "curves" key (or all-null curves): "points" is
-        returned unchanged.
-      - Dict with curves: each segment i appends points[i] then, if
-        curves[i] is a {x,y} control point, `samples_per_curve` bezier
-        samples between points[i] and points[(i+1) % N]. Bezier formula
-        per axis: B(t) = (1-t)^2 * p0 + 2(1-t)t * cp + t^2 * p1.
-        Polygon close-back to points[0] is implicit — callers feed the
-        result to cv2.fillPoly / cv2.pointPolygonTest which close
-        automatically.
-    """
-    if isinstance(poly, list):
-        return poly
-    if not isinstance(poly, dict):
-        return []
-    pts = poly.get("points") or []
-    if not isinstance(pts, list) or len(pts) < 2:
-        return pts if isinstance(pts, list) else []
-    curves = poly.get("curves")
-    if not isinstance(curves, list) or all(c is None for c in curves):
-        return pts
-    out: list = []
-    n = len(pts)
-    for i in range(n):
-        p0 = pts[i]
-        p1 = pts[(i + 1) % n]
-        out.append({"x": int(p0.get("x", 0)), "y": int(p0.get("y", 0))})
-        cp = curves[i] if i < len(curves) else None
-        if isinstance(cp, dict) and "x" in cp and "y" in cp:
-            p0x = float(p0.get("x", 0))
-            p0y = float(p0.get("y", 0))
-            p1x = float(p1.get("x", 0))
-            p1y = float(p1.get("y", 0))
-            cpx = float(cp["x"])
-            cpy = float(cp["y"])
-            for k in range(1, samples_per_curve + 1):
-                t = k / (samples_per_curve + 1)
-                u = 1.0 - t
-                bx = u * u * p0x + 2.0 * u * t * cpx + t * t * p1x
-                by = u * u * p0y + 2.0 * u * t * cpy + t * t * p1y
-                out.append({"x": int(bx), "y": int(by)})
-    return out
+_flatten_poly_points = mask_zones.flatten_poly_points
 
 
 class ZonesMixin:
     """Inclusion/exclusion polygon helpers and detection filters.
 
-    Mixin for CameraRuntime. Methods access shared state via `self.*`
-    (frame buffers, lock, config, etc.) which live on the concrete class.
+    Mixin for CameraRuntime. The geometry itself lives in
+    :mod:`app.mask_zones`; what stays here is the runtime's OWN compiled
+    raster cache and the config plumbing around it. The split is not
+    cosmetic: the Simulieren panel used to call these bound methods on the
+    LIVE runtime, so a diagnostic tick rebuilt the alarm loop's mask cache
+    underneath it. The panel now owns a separate
+    :class:`~app.mask_zones.MaskZoneCache` and cannot reach any field the
+    loop reads.
+
+    ``self._mask_image`` / ``self._zone_image`` stay as attributes because
+    the motion gate (``_motion.py``) reads them directly; they are now
+    views onto ``self._mask_zones`` and are published image-first,
+    signature-last.
     """
+
+    @property
+    def _mask_zones(self) -> mask_zones.MaskZoneCache:
+        """This runtime's raster cache, created on first use.
+
+        A property rather than an ``__init__`` assignment so a stub runtime
+        in the tests (and the two mixin users that predate the cache) get
+        one without having to know about it.
+        """
+        cache = getattr(self, "_mask_zone_cache", None)
+        if cache is None:
+            cache = mask_zones.MaskZoneCache()
+            self._mask_zone_cache = cache
+        return cache
 
     def _ensure_mask_image(self, log_summary: bool = False):
         """Build / refresh the binary exclusion-mask image from the camera's
@@ -114,66 +90,23 @@ class ZonesMixin:
         mask config signature changes, so the per-frame filter path stays
         cheap."""
         cam_masks = self.cfg.get("masks", []) or []
-        # Signature: stable serialisation of all polygons. Compared against
-        # the cached signature to decide whether a rebuild is needed.
-        try:
-            sig = _json_mod.dumps(cam_masks, sort_keys=True, separators=(',', ':'))
-        except Exception:
-            sig = repr(cam_masks)
-        if sig == self._mask_sig:
+        if not self._mask_zones.refresh_mask(cam_masks):
             return  # no change
-        self._mask_sig = sig
-        if not cam_masks:
-            self._mask_image = None
-            if log_summary:
-                log.info("[%s] exclusion masks: none", self.camera_id)
+        # Mirror onto the attributes the motion gate reads. Image first,
+        # signature last — see mask_zones.MaskZoneCache.refresh_mask.
+        self._mask_image = self._mask_zones.mask_image
+        self._mask_sig = self._mask_zones.mask_sig
+        if not log_summary:
             return
-        h, w = 720, 1280
-        mask = np.ones((h, w), dtype=np.uint8) * 255
-        # The pre-baked image is used by motion detection and represents only
-        # GLOBAL masks (no `labels` filter). Labeled masks restrict specific
-        # object classes and are evaluated per-detection in
-        # _filter_masked_detections — they shouldn't suppress motion.
-        # pn834 — polygons may carry their own source_w / source_h
-        # (recorded by the editor at save time). Scale points into the
-        # 1280×720 canvas before fillPoly so a mask drawn against a
-        # 640×360 substream snapshot covers the correct area at this
-        # canonical resolution. Legacy polygons without source_w/h
-        # default to 1280×720 (no scale).
-        for poly in cam_masks:
-            if isinstance(poly, dict) and poly.get("labels"):
-                continue
-            pts_list = _flatten_poly_points(poly)
-            if not isinstance(pts_list, list) or len(pts_list) < 3:
-                continue
-            src_w = int(poly.get("source_w") or w) if isinstance(poly, dict) else w
-            src_h = int(poly.get("source_h") or h) if isinstance(poly, dict) else h
-            sx = float(w) / max(1, src_w)
-            sy = float(h) / max(1, src_h)
-            pts = np.array(
-                [[int(p.get('x', 0) * sx), int(p.get('y', 0) * sy)] for p in pts_list],
-                dtype=np.int32,
-            )
-            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
-            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
-            cv2.fillPoly(mask, [pts], 0)
-        self._mask_image = mask
-        if log_summary:
-            # Vertex count for the operator log reflects the AUTHORED
-            # geometry (raw points the user clicked), not the sampled
-            # bezier polyline — "12 vertices" is more meaningful than
-            # "60 vertices" when the user drew 12 corners with curves.
-            total_verts = 0
-            for p in cam_masks:
-                pts_list = p.get("points", p) if isinstance(p, dict) else p
-                if isinstance(pts_list, list):
-                    total_verts += len(pts_list)
-            log.info(
-                "[%s] Loaded %d exclusion masks (%d total vertices)",
-                self.camera_id,
-                len(cam_masks),
-                total_verts,
-            )
+        if not cam_masks:
+            log.info("[cam:%s] exclusion masks: none", self.camera_id)
+            return
+        log.info(
+            "[cam:%s] Loaded %d exclusion masks (%d total vertices)",
+            self.camera_id,
+            len(cam_masks),
+            mask_zones.authored_vertex_count(cam_masks),
+        )
 
     def _polys_for_label(self, polys_field: str, label: str | None) -> list:
         """Return the polygons (raw [{x,y},…] lists) that apply to a label.
@@ -188,7 +121,7 @@ class ZonesMixin:
         cfg_list = self.cfg.get(polys_field) or []
         out: list = []
         for poly in cfg_list:
-            pts = _flatten_poly_points(poly)
+            pts = mask_zones.flatten_poly_points(poly)
             if not isinstance(pts, list) or len(pts) < 3:
                 continue
             labels = (poly.get("labels") if isinstance(poly, dict) else None) or []
@@ -203,262 +136,62 @@ class ZonesMixin:
         points: list,
         frame_w: int,
         frame_h: int,
-        source_w: int = 1280,
-        source_h: int = 720,
+        source_w: int = mask_zones.CANVAS_W,
+        source_h: int = mask_zones.CANVAS_H,
     ) -> bool:
-        """pn834 — polygon points sit in their own source coord space
-        (recorded on save as source_w / source_h). Rescale the frame
-        centre into that space before the point-in-polygon test so a
-        polygon drawn against a 640×360 substream snapshot still
-        suppresses detections in a 2560×1440 main-stream frame
-        correctly. Legacy polygons without source_w/h fall back to
-        the historical 1280×720 default the caller passes here."""
-        sx = float(source_w) / max(1, frame_w)
-        sy = float(source_h) / max(1, frame_h)
-        try:
-            arr = np.array(
-                [[int(p.get('x', 0)), int(p.get('y', 0))] for p in points], dtype=np.int32
-            )
-        except Exception:
-            return False
-        if len(arr) < 3:
-            return False
-        return cv2.pointPolygonTest(arr, (float(cx) * sx, float(cy) * sy), False) >= 0
+        """Thin alias onto :func:`app.mask_zones.point_in_poly`."""
+        return mask_zones.point_in_poly(cx, cy, points, frame_w, frame_h, source_w, source_h)
 
     def _filter_masked_detections(self, frame, detections: list) -> list:
-        """Drop detections whose bbox-centre lands inside a masked region.
-
-        Two-stage:
-          1. Global masks are pre-baked into _mask_image and tested with a
-             single pixel lookup — fast path, applies to every label.
-          2. Labeled masks are evaluated per detection so a mask scoped to
-             {"person"} only suppresses that label and lets cats/birds
-             through the same area.
-        """
+        """Drop detections whose bbox-centre lands inside a masked region."""
         if not detections:
             return detections
-        self._ensure_mask_image()
-        h_f, w_f = frame.shape[:2]
-        # Stage 1: global mask via pre-baked image.
-        mask_resized = None
-        if self._mask_image is not None:
-            h_m, w_m = self._mask_image.shape[:2]
-            if (h_m, w_m) != (h_f, w_f):
-                mask_resized = cv2.resize(
-                    self._mask_image, (w_f, h_f), interpolation=cv2.INTER_NEAREST
-                )
-            else:
-                mask_resized = self._mask_image
-        # Pre-collect per-label labeled polygons so we don't re-scan cfg
-        # for every detection.
         cam_masks = self.cfg.get("masks") or []
-        has_labeled = any(isinstance(m, dict) and m.get("labels") for m in cam_masks)
-        kept: list = []
-        for d in detections:
-            x1, y1, x2, y2 = d.bbox
-            cx = max(0, min(w_f - 1, (x1 + x2) // 2))
-            cy = max(0, min(h_f - 1, (y1 + y2) // 2))
-            if mask_resized is not None and mask_resized[cy, cx] == 0:
-                log.debug(
-                    "[%s] Detection '%s' (%.0f%%) suppressed by global mask at (%d,%d)",
-                    self.camera_id,
-                    d.label,
-                    d.score * 100,
-                    cx,
-                    cy,
-                )
-                continue
-            if has_labeled:
-                # Walk only labeled masks here — globals were handled in
-                # stage 1 via the prebaked image.
-                dropped = False
-                for m in cam_masks:
-                    if not (isinstance(m, dict) and m.get("labels")):
-                        continue
-                    if d.label not in m.get("labels", []):
-                        continue
-                    pts = _flatten_poly_points(m)
-                    src_w = int(m.get("source_w") or 1280)
-                    src_h = int(m.get("source_h") or 720)
-                    if self._point_in_poly(cx, cy, pts, w_f, h_f, src_w, src_h):
-                        log.debug(
-                            "[%s] Detection '%s' (%.0f%%) suppressed by label-mask",
-                            self.camera_id,
-                            d.label,
-                            d.score * 100,
-                        )
-                        dropped = True
-                        break
-                if dropped:
-                    continue
-            kept.append(d)
-        return kept
+        self._ensure_mask_image()
+        return mask_zones.filter_masked(
+            detections, frame, cam_masks, self._mask_image, self.camera_id
+        )
 
     def _ensure_zone_image(self, log_summary: bool = False):
         """Build / refresh the inclusion-zone image. Inverse logic vs. mask:
         the canvas starts BLACK and each zone polygon is filled with WHITE,
-        so a pixel inside any zone is active (detect here). When no zones
-        are configured, _zone_image stays None and the whole frame is
-        active — behaviour equivalent to "no filter". Rebuilds only when
-        the zones config signature changes, so the per-frame path stays
-        cheap."""
+        so a pixel inside any zone is active (detect here). When no GLOBAL
+        zones are configured, _zone_image stays None and the whole frame is
+        active for the motion path, which has no label context. Rebuilds
+        only when the zones config signature changes."""
         cam_zones = self.cfg.get("zones", []) or []
-        try:
-            sig = _json_mod.dumps(cam_zones, sort_keys=True, separators=(',', ':'))
-        except Exception:
-            sig = repr(cam_zones)
-        if sig == self._zone_sig:
+        if not self._mask_zones.refresh_zone(cam_zones):
             return
-        self._zone_sig = sig
-        # Only GLOBAL zones (no `labels` filter) are baked into the motion-
-        # suppression image. Labeled zones live alongside, evaluated per-
-        # detection in _filter_zoned_detections so each label sees its own
-        # inclusion area.
-        global_zones = [z for z in cam_zones if not (isinstance(z, dict) and z.get("labels"))]
-        if not global_zones:
-            # Even if labeled zones exist, motion detection has no label
-            # context — so when no global zones are configured the motion
-            # path treats the entire frame as active.
-            self._zone_image = None
-            if log_summary:
-                if cam_zones:
-                    log.info(
-                        "[%s] inclusion zones: %d label-scoped (motion path unrestricted)",
-                        self.camera_id,
-                        len(cam_zones),
-                    )
-                else:
-                    log.info("[%s] inclusion zones: none (entire frame active)", self.camera_id)
+        self._zone_image = self._mask_zones.zone_image
+        self._zone_sig = self._mask_zones.zone_sig
+        if not log_summary:
             return
-        h, w = 720, 1280
-        zone = np.zeros((h, w), dtype=np.uint8)  # start all black (inactive)
-        # pn834 — same per-polygon source_w/source_h scaling as the
-        # mask path above. Polygons without source_w/h fall back to
-        # the canvas dimensions (no scale).
-        for poly in global_zones:
-            pts_list = _flatten_poly_points(poly)
-            if not isinstance(pts_list, list) or len(pts_list) < 3:
-                continue
-            src_w = int(poly.get("source_w") or w) if isinstance(poly, dict) else w
-            src_h = int(poly.get("source_h") or h) if isinstance(poly, dict) else h
-            sx = float(w) / max(1, src_w)
-            sy = float(h) / max(1, src_h)
-            pts = np.array(
-                [[int(p.get('x', 0) * sx), int(p.get('y', 0) * sy)] for p in pts_list],
-                dtype=np.int32,
-            )
-            pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
-            pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
-            cv2.fillPoly(zone, [pts], 255)  # white = active zone
-        self._zone_image = zone
-        if log_summary:
-            # Authored vertex count (raw points the user clicked), not
-            # the flattened bezier polyline — same rationale as the
-            # mask-image log above.
-            total_verts = 0
-            for p in cam_zones:
-                pts_list = p.get("points", p) if isinstance(p, dict) else p
-                if isinstance(pts_list, list):
-                    total_verts += len(pts_list)
-            log.info(
-                "[%s] Loaded %d inclusion zones (%d total vertices) — outside zones = ignored",
-                self.camera_id,
-                len(cam_zones),
-                total_verts,
-            )
+        if self._zone_image is None:
+            if cam_zones:
+                log.info(
+                    "[cam:%s] inclusion zones: %d label-scoped (motion path unrestricted)",
+                    self.camera_id,
+                    len(cam_zones),
+                )
+            else:
+                log.info("[cam:%s] inclusion zones: none (entire frame active)", self.camera_id)
+            return
+        log.info(
+            "[cam:%s] Loaded %d inclusion zones (%d total vertices) — outside zones = ignored",
+            self.camera_id,
+            len(cam_zones),
+            mask_zones.authored_vertex_count(cam_zones),
+        )
 
     def _filter_zoned_detections(self, frame, detections: list) -> list:
         """Keep only detections whose bbox-centre lands inside an applicable
-        inclusion zone.
-
-        Per-label semantics:
-          - If a label has at least one applicable zone (global or its label
-            specifically named), the detection MUST be inside one of them.
-          - If no zone applies to that label, the detection passes through
-            (this lets the user define "person only inside this polygon"
-            without restricting cat/bird).
-        """
+        inclusion zone."""
         if not detections:
             return detections
         cam_zones = self.cfg.get("zones") or []
         if not cam_zones:
             return detections  # no zones at all → unrestricted
         self._ensure_zone_image()
-        h_f, w_f = frame.shape[:2]
-        # Stage 1: prebaked global-zone image. Labels covered by at least
-        # one global zone go through this fast path. Cheap pixel lookup.
-        zone_resized = None
-        if self._zone_image is not None:
-            h_z, w_z = self._zone_image.shape[:2]
-            if (h_z, w_z) != (h_f, w_f):
-                zone_resized = cv2.resize(
-                    self._zone_image, (w_f, h_f), interpolation=cv2.INTER_NEAREST
-                )
-            else:
-                zone_resized = self._zone_image
-        # Build the per-label zone list AND a parallel "global zones"
-        # list. Both carry full polygon dicts (not just points) so we can
-        # extract trigger flags (save_photo/save_video/send_telegram) from
-        # the matching zone and tag them onto the surviving detection.
-        labeled: dict[str, list] = {}
-        global_polys: list = []
-        for z in cam_zones:
-            if not isinstance(z, dict):
-                continue
-            # Validate against the raw points (curves can't exist without
-            # 2+ points anyway — this guards against malformed polygons).
-            pts = z.get("points") or []
-            if not isinstance(pts, list) or len(pts) < 3:
-                continue
-            zlabels = z.get("labels") or []
-            if not zlabels:
-                global_polys.append(z)
-            else:
-                for L in zlabels:
-                    labeled.setdefault(L, []).append(z)
-        kept: list = []
-        for d in detections:
-            x1, y1, x2, y2 = d.bbox
-            cx = max(0, min(w_f - 1, (x1 + x2) // 2))
-            cy = max(0, min(h_f - 1, (y1 + y2) // 2))
-            global_applies = zone_resized is not None
-            label_zones = labeled.get(d.label, [])
-            if not global_applies and not label_zones:
-                # No zone targets this label at all → pass through freely.
-                kept.append(d)
-                continue
-            matched_zone = None
-            # Prefer a label-scoped zone match (more specific) over global.
-            for z in label_zones:
-                z_sw = int(z.get("source_w") or 1280)
-                z_sh = int(z.get("source_h") or 720)
-                if self._point_in_poly(cx, cy, _flatten_poly_points(z), w_f, h_f, z_sw, z_sh):
-                    matched_zone = z
-                    break
-            if matched_zone is None and global_applies and zone_resized[cy, cx] > 0:
-                # Locate which global polygon contains the point so we can
-                # forward its trigger flags. The prebaked image only tells
-                # us "yes, inside SOMETHING" — we need the dict for flags.
-                for z in global_polys:
-                    z_sw = int(z.get("source_w") or 1280)
-                    z_sh = int(z.get("source_h") or 720)
-                    if self._point_in_poly(cx, cy, _flatten_poly_points(z), w_f, h_f, z_sw, z_sh):
-                        matched_zone = z
-                        break
-            if matched_zone is not None:
-                d.zone_flags = {
-                    "save_photo": bool(matched_zone.get("save_photo", True)),
-                    "save_video": bool(matched_zone.get("save_video", True)),
-                    "send_telegram": bool(matched_zone.get("send_telegram", True)),
-                }
-                kept.append(d)
-            else:
-                log.debug(
-                    "[%s] Detection '%s' (%.0f%%) outside applicable zones at (%d,%d)",
-                    self.camera_id,
-                    d.label,
-                    d.score * 100,
-                    cx,
-                    cy,
-                )
-        return kept
+        return mask_zones.filter_zoned(
+            detections, frame, cam_zones, self._zone_image, self.camera_id
+        )

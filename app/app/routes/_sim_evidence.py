@@ -90,7 +90,6 @@ def _performance(entry: dict, cam: dict, ema_ms: float) -> dict:
     main_fps = float(getattr(runtime, "_main_fps", 0.0) or 0.0) if runtime else 0.0
     return {
         "tick_cycle_ema_ms": int(round(ema_ms)) if ema_ms > 0 else 0,
-        "dropped_ticks_session": int(entry.get("drops_session") or 0),
         "sub_fps": round(sub_fps, 1),
         "main_fps": round(main_fps, 1),
         # The cadence the tracker's miss-grace is actually computed

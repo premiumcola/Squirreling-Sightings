@@ -15,24 +15,22 @@ it; neither re-derives them. The gate helpers below are the same
 functions on both paths too, so "the panel applies the mask" and "the
 loop applies the mask" cannot mean two different things again.
 
-What this module does NOT own: tracker STATE. The sim keeps its own
-``LiveTracker`` instance — see ``routes/_sim_pipeline`` — because a
-diagnostic view that mutated the live tracker would shift real track
-ids and real grace windows and therefore real events. Configuration is
-shared; state is not.
+What this module does NOT own: STATE. The sim keeps its own
+``LiveTracker`` and its own compiled mask/zone rasters — see
+``routes/_sim_pipeline`` — because a diagnostic view that mutated the
+live tracker would shift real track ids and real grace windows and
+therefore real events, and one that rebuilt the live mask cache could
+switch the operator's exclusion mask off mid-frame. Configuration is
+shared; state is not, in either direction.
 """
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Callable
 
 from .detection_tiling import normalise_mode
-from .detectors._filters import size_floor_reason
 from .tracker_core import resolve_track_thresholds
-
-log = logging.getLogger(__name__)
 
 # Default global confidence floor when neither the camera nor
 # processing.detection.min_score says otherwise. Reported by both paths,
@@ -150,40 +148,17 @@ def apply_bottom_crop(frame, bottom_crop_px: int):
     return frame
 
 
-def apply_size_floor(
-    dets: list, frame_w: int, frame_h: int, camera_id: str = ""
-) -> tuple[list, list]:
-    """Per-label bbox size floor — the ``_LABEL_MIN_BBOX`` guard.
-
-    Written for the small-false-person case (wood grain, shadow, distant
-    silhouette at twilight) and dead on both live paths for months: it
-    lived inside ``CoralObjectDetector.detect_frame``, and neither the
-    loop nor the panel calls that — both go through
-    ``detect_frame_raw``. Hoisted here so it applies ONCE, to both.
-
-    Fractions are measured against the FULL frame, so a tile-projected
-    box is judged by the size it has in the scene, not in its crop.
-
-    ``camera_id`` turns on the DEBUG trace. The panel renders its drops,
-    the loop cannot — and a silent drop is the hardest kind of detection
-    bug to chase, so the loop gets a line it can switch on.
-    """
-    kept: list = []
-    dropped: list = []
-    for d in dets:
-        reason = size_floor_reason(d.label, d.bbox, frame_w, frame_h)
-        if reason:
-            dropped.append((d, reason))
-        else:
-            kept.append(d)
-    if camera_id and dropped and log.isEnabledFor(logging.DEBUG):
-        log.debug(
-            "[det][cam:%s] Größenfilter verwarf %d Box(en): %s",
-            camera_id,
-            len(dropped),
-            ", ".join(f"{d.label} {r}" for d, r in dropped),
-        )
-    return kept, dropped
+# NOT here: a per-label bbox size floor. ``_LABEL_MIN_BBOX`` in
+# ``detectors/_filters`` (person: 15 % frame height OR 2 % frame area,
+# OR-gated) is reachable only from ``detect_frame``, which neither live
+# path calls — both go through ``detect_frame_raw``. Arming it here would
+# have changed production behaviour, not reported it: the AREA rule is the
+# one that binds, and at 2560×1440 a 0.35-aspect standing person is dropped
+# below h≈500 px (35 % of frame height) — roughly beyond 5.4 m on a 4 mm
+# lens. Werkstatt and Garten are security cameras where a person at 6–15 m
+# is the normal case, and a bird feeder and a driveway do not want the same
+# floor. That needs a per-camera setting and an operator decision, so the
+# guard stays where it was: unreachable, and reported as such.
 
 
 def apply_object_filter(dets: list, allowed) -> tuple[list, list]:

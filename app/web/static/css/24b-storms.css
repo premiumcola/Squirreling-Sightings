@@ -1,0 +1,692 @@
+/* ═══ Gewitter-Archiv (storm episodes) ═══════════════════════════════════
+   Surface vocabulary is deliberately the same as the Wetter-Mediathek
+   directly above: rgba(255,255,255,.03) surfaces, rgba(0,0,0,.18) wells,
+   accent tints for depth. No thin borders anywhere — depth comes from
+   colour contrast. Radii: rows 12, pills 999, chips 8, chart well 10.
+   Accent is the Wetter accent 127,174,201. */
+
+.storms-block {
+  margin: 0;
+}
+
+/* ── Kopf ──────────────────────────────────────────────────────────── */
+
+.st-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.st-head-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.st-yearline {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sort / year segments reuse .ws-stats-pills geometry. The 32 px
+   min-height on .ws-stats-pill is a desktop-era leftover; inside the
+   storms scope every pill is a primary touch target, so it is raised to
+   44 here rather than only under a media query. */
+.st-pill {
+  min-height: 44px;
+}
+
+.st-compare-enter {
+  min-height: 44px;
+}
+.st-compare-enter[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── Zeilen ────────────────────────────────────────────────────────── */
+
+.st-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.st-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+@media (hover: hover) {
+  .st-row:hover {
+    background: rgba(127, 174, 201, 0.08);
+  }
+}
+.st-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.st-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.st-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-row-meta {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.st-row-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Rank chip. Platz 1 is a filled accent chip with a white numeral;
+   2 and 3 are tinted with an accent numeral. Rendered only when the
+   year holds ≥ 3 episodes — a "1" among two items is noise. */
+.st-rank {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(127, 174, 201, 0.22);
+  color: #cfe1ee;
+}
+.st-rank--1 {
+  background: #7faec9;
+  color: #0d1520;
+}
+
+/* Intensitätsbalken — the numeric value is not printed on the row; it
+   appears once, in the detail header. The bar carries it visually. */
+.st-bar {
+  flex: 1 1 auto;
+  min-width: 40px;
+  max-width: 160px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.st-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+.st-lead {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.st-foot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pick button — its own <button>, never nested in the row link. */
+.st-pick {
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: #cfe1ee;
+}
+.st-pick[disabled] {
+  opacity: 0.35;
+  cursor: default;
+}
+.st-pick-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.st-pick.is-on .st-pick-box {
+  background: #7faec9;
+  color: #0d1520;
+}
+
+.st-more-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Auswahl-Modus Aktionsleiste ───────────────────────────────────── */
+
+.st-selbar {
+  position: sticky;
+  bottom: 8px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(20, 28, 40, 0.94);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+}
+.st-selbar-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cfe1ee;
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+}
+.st-selbar .btn {
+  min-height: 44px;
+}
+/* Never dark-on-dark: the cancel button sits on the bar's own dark
+   surface, so it carries a lifted fill rather than a transparent one. */
+.st-selbar-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+/* ── Leerzustand ───────────────────────────────────────────────────── */
+
+.st-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.st-empty-sub {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 44ch;
+  margin: 0 auto;
+}
+/* The threshold line proves the system is armed and watching — an empty
+   state that shows what it is waiting for reads as ready. */
+.st-empty-thr {
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(127, 174, 201, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Detail / Vergleich gemeinsam ──────────────────────────────────── */
+
+.st-dtop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.st-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px 0 0;
+  color: #7faec9;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.st-dwhen {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.st-chart-wrap {
+  height: 220px;
+  /* A 213 px-tall plot filling the phone's width would otherwise swallow
+     a vertical page scroll that starts on the chart. */
+  touch-action: pan-y;
+}
+.st-axis-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Metrik-Pills — one row of five, never a scroll strip: at 375 px five
+   ~56 px pills plus 4 px gaps measure 296 px inside a 327 px column. */
+.st-mpills {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.st-mpill {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.st-mpill.is-on {
+  background: rgba(127, 174, 201, 0.22);
+  color: #cfe1ee;
+}
+.st-mpill[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Detail ────────────────────────────────────────────────────────── */
+
+.st-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.st-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cc, #7faec9);
+}
+.st-name-pen {
+  color: var(--muted);
+  display: inline-flex;
+}
+/* 16 px is mandatory on both inputs — below it iOS auto-zooms on focus. */
+.st-name-input,
+.st-note-input {
+  width: 100%;
+  font-size: 16px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.24);
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+.st-dmeta {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 10px;
+}
+
+/* Klassen-Chips. Above 480 px a single icon-left row; the wrap grid for
+   phones lives in 25-mobile.css. All five options are visible at once —
+   this is the primary action of the page, so it is never a scroll
+   strip. */
+.st-cstrip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.st-cchip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.st-cchip-ic {
+  display: inline-flex;
+  color: var(--cc);
+}
+.st-cchip-ic svg {
+  width: 18px;
+  height: 18px;
+}
+/* The detector's verdict and the operator's pick are the SAME control in
+   two states — auto is the selected fill at 40 %. */
+.st-cchip.is-auto {
+  background: color-mix(in srgb, var(--cc) 14%, transparent);
+  color: #cfe1ee;
+}
+.st-cchip.is-sel {
+  background: color-mix(in srgb, var(--cc) 35%, transparent);
+  color: #ffffff;
+}
+.st-chip-auto {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+.st-auto-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.st-eff {
+  display: none;
+}
+
+.st-note {
+  margin-bottom: 12px;
+}
+.st-note-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: #7faec9;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.st-note-txt {
+  font-size: 13px;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Chart 60 % / Aufnahmen 40 %, side by side only where "daneben" is
+   actually achievable. data-cols="1" is the collapse the renderer sets
+   when there is no footage at all: an empty column beside a chart is the
+   thing that makes a page look broken. */
+.st-dcols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 900px) {
+  .st-dcols[data-cols='2'] {
+    grid-template-columns: 60% 1fr;
+  }
+}
+.st-kvs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.st-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.st-kv-k {
+  font-size: 12px;
+  color: var(--muted);
+}
+.st-kv-v {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.st-cmp-from-detail {
+  min-height: 44px;
+}
+
+/* ── Aufnahmen ─────────────────────────────────────────────────────── */
+
+.st-fgroup {
+  margin-bottom: 14px;
+}
+.st-fgroup-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(127, 174, 201, 0.85);
+  margin-bottom: 6px;
+}
+.st-fgrid {
+  display: grid;
+  gap: 8px;
+}
+.st-fg--hero .st-fgrid {
+  grid-template-columns: 1fr;
+}
+.st-fg--duo .st-fgrid {
+  grid-template-columns: repeat(2, 1fr);
+}
+.st-tile-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.68);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.45;
+}
+.st-tile-sub {
+  font-size: 10px;
+  color: #cfe1ee;
+  padding: 0 6px;
+  opacity: 0.85;
+}
+/* Chart ↔ tile cross-highlight: an inner ring, not a border. */
+.st-tile.is-cross {
+  box-shadow: inset 0 0 0 2px #7faec9;
+}
+@media (hover: hover) {
+  .st-tile:hover {
+    background: rgba(127, 174, 201, 0.08);
+  }
+}
+.st-fstrip {
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--muted);
+  font-size: 12px;
+}
+.st-fhint {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(127, 174, 201, 0.08);
+}
+.st-fhint-txt {
+  font-size: 13px;
+  color: #cfe1ee;
+}
+.st-fhint .btn {
+  min-height: 44px;
+}
+.st-fhint--muted {
+  background: transparent;
+  padding: 8px 0 0;
+}
+.st-fhint--muted .st-fhint-txt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.st-fmore {
+  margin-top: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cfe1ee;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── Vergleich ─────────────────────────────────────────────────────── */
+
+/* Legend strip — scrollable at 4 chips on a 375 px screen. The edge-fade
+   + .is-end handling comes from the shared strip rule in 25-mobile.css
+   (this class is in that selector group and in tab-strip.js's SELECTOR). */
+.st-legend-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.st-lchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 4px 4px 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  max-width: 240px;
+}
+.st-lslot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 8px;
+  background: var(--sc);
+  color: #0a0e14;
+  font-size: 11px;
+  font-weight: 700;
+}
+/* The class is conveyed by the glyph, drawn monochrome in the SLOT
+   colour: in this view colour means "which episode", full stop. */
+.st-lic {
+  display: inline-flex;
+  color: var(--sc);
+}
+.st-lic svg {
+  width: 14px;
+  height: 14px;
+}
+.st-lname {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.st-lx {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.st-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+.st-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.st-table th,
+.st-table td {
+  padding: 7px 6px;
+  text-align: right;
+  color: var(--muted);
+  font-weight: 500;
+}
+.st-table th[scope='row'] {
+  text-align: left;
+  color: var(--text);
+  min-width: 72px;
+}
+.st-th-slot {
+  color: #cfe1ee;
+  font-weight: 700;
+}
+.st-table tbody tr:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.03);
+}
+/* The row maximum is the only emphasis in the table. */
+.st-table td.is-max {
+  color: var(--text);
+  font-weight: 700;
+}
+.st-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Discovery chip in the Wetter head. */
+.ws-jump-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(127, 174, 201, 0.14);
+  color: #cfe1ee;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}

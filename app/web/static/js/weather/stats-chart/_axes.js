@@ -62,23 +62,40 @@ export function buildXTicks({ samples, pad, cw, ch, vbH, hours }) {
 //               it is what the axis actually measures, and saying so is
 //               better than labelling nothing or — worse — printing one
 //               line's units next to seven lines' curves.
+// One labelled value axis + its gridlines, drawn against an explicit
+// {lo, hi} in the value's own unit. Extracted from buildYAxis's
+// isolated branch so the storm compare chart — whose Y axis is shared
+// and absolute across up to four episodes — reuses the exact same tick
+// logic instead of growing a second one. `colour` is the label colour:
+// the Wetter chart passes the metric's palette entry, compare passes a
+// neutral white (there, colour already means "which episode").
+export function buildValueAxis({ lo, hi, unit, colour, pad, cw, ch }) {
+  const { ticks } = niceAxisTicks(lo, hi, 4);
+  const span = hi - lo || 1;
+  const fmt = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 1 : 0));
+  let svg = '';
+  for (const v of ticks) {
+    // Skip ticks outside the data range (niceNum can over-shoot).
+    if (v < lo - span * 0.05 || v > hi + span * 0.05) continue;
+    const y = pad.t + ch - ((v - lo) / span) * ch;
+    svg += gridLine(pad, cw, y);
+    svg += `<text x="${pad.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="${colour}" opacity="0.75">${fmt(v)}${unit ? ' ' + unit : ''}</text>`;
+  }
+  return svg;
+}
+
 export function buildYAxis({ isolated, lineMetas, data, pad, cw, ch }) {
   if (isolated && lineMetas[isolated]) {
     const meta = lineMetas[isolated];
-    const unit = (data?.units || {})[isolated] || '';
-    const colour = WEATHER_STATS_PALETTE[isolated] || '#94a3b8';
-    const { ticks } = niceAxisTicks(meta.lo, meta.hi, 4);
-    const span = meta.hi - meta.lo || 1;
-    const fmt = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 1 : 0));
-    let svg = '';
-    for (const v of ticks) {
-      // Skip ticks outside the data range (niceNum can over-shoot).
-      if (v < meta.lo - span * 0.05 || v > meta.hi + span * 0.05) continue;
-      const y = pad.t + ch - ((v - meta.lo) / span) * ch;
-      svg += gridLine(pad, cw, y);
-      svg += `<text x="${pad.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="${colour}" opacity="0.75">${fmt(v)}${unit ? ' ' + unit : ''}</text>`;
-    }
-    return svg;
+    return buildValueAxis({
+      lo: meta.lo,
+      hi: meta.hi,
+      unit: (data?.units || {})[isolated] || '',
+      colour: WEATHER_STATS_PALETTE[isolated] || '#94a3b8',
+      pad,
+      cw,
+      ch,
+    });
   }
   let svg = '';
   for (let g = 0; g <= 4; g++) {

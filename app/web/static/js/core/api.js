@@ -46,6 +46,17 @@ export const apiPut = (url, body) =>
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
+// PATCH — partial update of a single record. Added for the storm-episode
+// archive, whose only write endpoint is a partial user_class /
+// user_name / user_note patch; PUT would imply a full replacement the
+// server does not offer.
+export const apiPatch = (url, body) =>
+  _request(url, {
+    method: 'PATCH',
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
 export const apiDelete = (url, body) =>
   _request(url, {
     method: 'DELETE',

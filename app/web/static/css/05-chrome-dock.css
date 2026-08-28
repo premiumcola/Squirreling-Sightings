@@ -74,6 +74,16 @@
 }
 
 @media (max-width: 768px) {
+  /* Dock metrics promoted to :root so any other fixed element can clear
+     the floating dock without hardcoding its height. --m-dock-h is
+     8 px inner-pad + 54 px button min-height + 8 px inner-pad; the
+     bottom gap already folds in env(safe-area-inset-bottom). The
+     Gewitter-Archiv's compare action bar derives its `bottom` from
+     these two, so a future dock resize propagates automatically. */
+  :root {
+    --m-dock-h: 70px;
+    --m-dock-bottom-gap: max(8px, calc(env(safe-area-inset-bottom, 0px) + 6px));
+  }
   .m-dock {
     /* Concentric corner geometry — three nested radii.
        --m-dock-margin     : equal on left, right, and floor of bottom.

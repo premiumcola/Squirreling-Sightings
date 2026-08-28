@@ -50,7 +50,8 @@ textarea {
   .cam-recovery-tabs,
   .media-filter-bar,
   .cam-tab-bar,
-  .ws-filter-bar
+  .ws-filter-bar,
+  .st-legend-strip
 ) {
   overflow-x: auto;
   overflow-y: hidden;
@@ -67,7 +68,8 @@ textarea {
   .cam-recovery-tabs,
   .media-filter-bar,
   .cam-tab-bar,
-  .ws-filter-bar
+  .ws-filter-bar,
+  .st-legend-strip
 )::-webkit-scrollbar {
   display: none;
 }
@@ -81,7 +83,8 @@ textarea {
   .cam-recovery-tabs,
   .media-filter-bar,
   .cam-tab-bar,
-  .ws-filter-bar
+  .ws-filter-bar,
+  .st-legend-strip
 ):not(.is-end) {
   -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
   mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
@@ -528,6 +531,75 @@ body.sidebar-locked {
   .tl-xlabel {
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── Gewitter-Archiv mobile ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Legend strip scrolls horizontally at 4 chips; layout flip only —
+     the pan-x lock, edge-fade and scrollbar-hide come from the shared
+     :where() rule above. */
+  .st-legend-strip {
+    flex-wrap: nowrap;
+  }
+  .st-legend-strip > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+
+  /* Klassen-Chips: a 3-column wrap grid, chips stacked (icon above
+     label), two rows of 3 + 2. (327 − 2×8) / 3 = 103 px at 375 px; the
+     56 px height clears the 44 px target with room. Deliberately NOT a
+     scroll strip — this is the primary action of the page and all five
+     options must be visible at once. */
+  @media (max-width: 480px) {
+    .st-cstrip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      justify-items: stretch;
+    }
+    .st-cchip {
+      flex-direction: column;
+      gap: 2px;
+      min-height: 56px;
+      padding: 6px 4px;
+      justify-content: center;
+    }
+    .st-cchip-lbl {
+      font-size: 11px;
+    }
+    .st-chip-auto {
+      position: absolute;
+      top: 3px;
+      right: 5px;
+    }
+  }
+
+  /* The compare action bar is the only fixed element on the page. It
+     clears the floating dock from the dock's own promoted metrics, so a
+     future dock resize propagates automatically. Anchored to `bottom`,
+     never sized in vh — address-bar collapse moves it with the viewport
+     bottom, which is the correct behaviour, not a jump. */
+  .st-selbar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(var(--m-dock-bottom-gap, 8px) + var(--m-dock-h, 70px) + 8px);
+    z-index: 40;
+  }
+
+  /* Shorter plot so the Kennzahlen below stay in view on a 375 px
+     screen without a second scroll. */
+  .st-chart-wrap {
+    height: 200px;
+  }
+
+  .st-row-name {
+    font-size: 13px;
+  }
+  .st-lname {
+    max-width: 120px;
   }
 }
 

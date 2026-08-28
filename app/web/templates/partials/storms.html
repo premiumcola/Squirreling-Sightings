@@ -1,0 +1,22 @@
+{# Gewitter-Archiv — the storm-episode browser. One section, three states (Liste / Detail /
+Vergleich), all rendered into #stormsBody by static/js/storms/. Only one state is in the DOM at a
+time, so there is no modal-inside-a-modal on iOS and the browser back button navigates between them
+for free. Placed directly below #weather: thematically adjacent, and it means the Wetter dock button
+already lands the operator one scroll above the archive. #}
+<section id="storms" class="panel section" data-accent="127,174,201">
+  <div class="storms-block" id="stormsBlock">
+    <!-- Populated by storms/index.js on first visibility. The static
+         fallback below is what a browser with JS disabled shows, and
+         also what is on screen for the moment between paint and
+         hydration — deliberately the calm empty state, not a spinner. -->
+    <div class="storms-body" id="stormsBody">
+      <div class="ws-empty st-empty">
+        <div class="st-empty-title">Noch kein Gewitter aufgezeichnet.</div>
+        <div class="st-empty-sub">
+          Das Archiv füllt sich automatisch, sobald Blitz-Potential, Niederschlag oder Böen die
+          Schwelle überschreiten.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

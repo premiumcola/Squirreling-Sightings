@@ -68,6 +68,10 @@ LOAD_ORDER = [
     "22-cam-edit-3.css",
     "23-weather-3.css",
     "24-cam-edit-4.css",
+    # Gewitter-Archiv — sits before 25-mobile.css so every mobile
+    # override there still wins the cascade. Letter suffix matches the
+    # existing 06a–06f / 30a–30g families.
+    "24b-storms.css",
     "25-mobile.css",
     "27-coral-test-modes.css",
     "28-quests.css",

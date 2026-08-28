@@ -15,6 +15,12 @@ import { bindChartHover } from './_hover.js';
 
 const PAD = { l: 42, r: 72, t: 12, b: 26 };
 
+// Exported so a consumer can map its own timestamps onto a rendered
+// chart's plot area (the storm detail view paints a footage band across
+// it). Re-deriving these four numbers at the callsite would be a second
+// copy of the geometry, which is exactly what drifts.
+export const STATS_CHART_PAD = PAD;
+
 // The viewBox is authored at the wrapper's own CSS-pixel size, so one
 // user unit is one CSS pixel and the scale is exactly 1:1.
 //
@@ -57,34 +63,34 @@ function _observe(wrap) {
   wrap._wsChartObserver = ro;
 }
 
-export function renderWeatherStatsChart() {
-  const wrap = byId('weatherStatsChartWrap');
-  if (!wrap) return;
-  _observe(wrap);
-  const data = _wsStatsState.data;
-  const samples = data?.samples || [];
-  if (samples.length < 2) {
-    wrap.innerHTML =
-      '<div class="ws-stats-empty">Noch zu wenige Messpunkte — der Verlauf füllt sich alle 5 min.</div>';
-    return;
+// Optional labelled vertical markers at absolute timestamps — the storm
+// detail chart pins Beginn / Höhepunkt / Ende onto the episode's own
+// verlauf. Off by default, so the Wetter panel is unaffected.
+function _markersSvg(markers, samples, pad, cw, ch) {
+  const tFirst = new Date(samples[0]?.ts).getTime();
+  const tLast = new Date(samples[samples.length - 1]?.ts).getTime();
+  const span = tLast - tFirst;
+  if (!Number.isFinite(span) || span <= 0) return '';
+  let svg = '';
+  for (const m of markers) {
+    const t = new Date(m.ts).getTime();
+    if (!Number.isFinite(t) || t < tFirst || t > tLast) continue;
+    const x = pad.l + ((t - tFirst) / span) * cw;
+    const colour = m.colour || 'rgba(255,255,255,.45)';
+    svg += `<line x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${pad.t + ch}" stroke="${colour}" stroke-width="1" stroke-dasharray="4 3"/>`;
+    if (m.label) {
+      svg += `<text x="${x.toFixed(1)}" y="${pad.t - 2}" text-anchor="middle" font-size="10" fill="${colour}">${m.label}</text>`;
+    }
   }
-  // Unmeasurable wrapper (display:none, not laid out yet). Drawing into
-  // FALLBACK here would reintroduce exactly the stretch this package
-  // exists to remove, so leave the DOM alone; the observer re-renders as
-  // soon as the panel has a size.
-  const size = _sizeOf(wrap);
-  if (!size) return;
-  const VB_W = size.w;
-  const VB_H = size.h;
-  const cw = VB_W - PAD.l - PAD.r;
-  const ch = VB_H - PAD.t - PAD.b;
-  if (cw <= 0 || ch <= 0) return;
-  const isolated = _wsStatsState.isolated;
-  const fields = isolated ? [isolated] : _WS_FIELD_ORDER;
-  const hours = _wsStatsState.hours || 24;
+  return svg;
+}
 
+// Body of the chart: axes + lines + threshold overlay, as one SVG
+// string. Split out of renderStatsChartInto purely to keep both under
+// the 60-line function ceiling.
+function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }) {
+  const { VB_W, VB_H, cw, ch } = geo;
   const tickSvg = buildXTicks({ samples, pad: PAD, cw, ch, vbH: VB_H, hours });
-
   // Lines — collect per-field meta so the threshold pass can renormalise
   // each tick against the same {lo, hi} the line was drawn against.
   let linesSvg = '';
@@ -108,18 +114,70 @@ export function renderWeatherStatsChart() {
     cw,
     ch,
   });
-
-  wrap.innerHTML = `
+  const svg = `
     <svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none" role="img" aria-label="Wetterverlauf">
       ${yAxisSvg}
       ${tickSvg}
       ${linesSvg}
       ${thresholdSvg}
+      ${markers && markers.length ? _markersSvg(markers, samples, PAD, cw, ch) : ''}
       <line class="ws-chart-guide" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
       <rect class="ws-chart-hover-area" x="${PAD.l}" y="${PAD.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
-    </svg>
-    ${noThresholdHint}
-    <div class="ws-chart-tooltip" hidden></div>
-  `;
-  bindChartHover(wrap, samples, fields, PAD, cw, VB_W, data);
+    </svg>`;
+  return svg + noThresholdHint + '<div class="ws-chart-tooltip" hidden></div>';
+}
+
+// Render a history payload into ANY wrapper. Extracted from
+// renderWeatherStatsChart, which was hard-wired to
+// #weatherStatsChartWrap + the module-global _wsStatsState — the storm
+// detail view needs the same chart with its OWN isolated field, since
+// the global one belongs to the Wetter panel above it.
+//
+// `opts.isolated` — field key to draw alone (null = every line).
+// `opts.hours`    — window size, only used for the legacy x-tick fallback.
+// `opts.markers`  — [{ ts, label, colour }] vertical guides at absolute times.
+// `opts.hover`    — forwarded to bindChartHover (head / rows / onGuide).
+export function renderStatsChartInto(wrap, data, opts = {}) {
+  if (!wrap) return;
+  const samples = data?.samples || [];
+  if (samples.length < 2) {
+    wrap.innerHTML =
+      '<div class="ws-stats-empty">Noch zu wenige Messpunkte — der Verlauf füllt sich alle 5 min.</div>';
+    return;
+  }
+  // Unmeasurable wrapper (display:none, not laid out yet). Drawing into
+  // FALLBACK here would reintroduce exactly the stretch this package
+  // exists to remove, so leave the DOM alone; the observer re-renders as
+  // soon as the panel has a size.
+  const size = _sizeOf(wrap);
+  if (!size) return;
+  const geo = {
+    VB_W: size.w,
+    VB_H: size.h,
+    cw: size.w - PAD.l - PAD.r,
+    ch: size.h - PAD.t - PAD.b,
+  };
+  if (geo.cw <= 0 || geo.ch <= 0) return;
+  const isolated = opts.isolated || null;
+  const fields = isolated ? [isolated] : _WS_FIELD_ORDER;
+  wrap.innerHTML = _buildChartSvg({
+    samples,
+    data,
+    isolated,
+    fields,
+    hours: opts.hours || 24,
+    geo,
+    markers: opts.markers,
+  });
+  bindChartHover(wrap, samples, fields, PAD, geo.cw, geo.VB_W, data, opts.hover || {});
+}
+
+export function renderWeatherStatsChart() {
+  const wrap = byId('weatherStatsChartWrap');
+  if (!wrap) return;
+  _observe(wrap);
+  renderStatsChartInto(wrap, _wsStatsState.data, {
+    isolated: _wsStatsState.isolated,
+    hours: _wsStatsState.hours || 24,
+  });
 }

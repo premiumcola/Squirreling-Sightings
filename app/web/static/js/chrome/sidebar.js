@@ -105,6 +105,7 @@ function _initSidebarNav() {
     'media',
     'achievements',
     'weather',
+    'storms',
     'cameras',
     'settings',
     'logs',

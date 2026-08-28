@@ -13,7 +13,7 @@
 //   observer adopts strips as they appear.
 
 const SELECTOR =
-  '.set-tabs, .coral-tabs, .cam-recovery-tabs, .media-filter-bar, .cam-tab-bar, .ws-filter-bar';
+  '.set-tabs, .coral-tabs, .cam-recovery-tabs, .media-filter-bar, .cam-tab-bar, .ws-filter-bar, .st-legend-strip';
 const _adopted = new WeakSet();
 
 function _updateEndState(strip) {

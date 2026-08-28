@@ -60,6 +60,7 @@ import './weather/stats.js'; // stage 24 A
 import './weather/sightings.js'; // stage 24 B
 import './weather/settings.js'; // stage 24 C
 import './weather/maintenance.js'; // rescan + thumb regen
+import './storms/index.js'; // Gewitter-Archiv (storm episodes)
 import './camedit/coral-test.js'; // stage 25 A
 import './camedit/timelapse-settings.js'; // stage 25 B
 import './camedit/wizard.js'; // stage 25 C

@@ -28,46 +28,27 @@ export function catmullRomPath(pts, tension) {
   return d;
 }
 
-export function buildLinePath(samples, key, x0, y0, w, h) {
-  // Per-line normalisation: each parameter gets its own min/max so a 30
-  // mm/h precipitation peak doesn't flatten the 0.5 cm/h snow line.
-  // Null values split the trace into independent runs — Catmull-Rom is
-  // applied per-run so a single missing sample doesn't smear an
-  // interpolated curve across the gap. Runs of <6 points fall back to
-  // straight L-segments because a 3- or 4-point spline tends to
-  // overshoot wildly on sparse data.
-  const vals = [];
-  for (const s of samples) {
-    const v = (s.values || {})[key];
-    vals.push(typeof v === 'number' && isFinite(v) ? v : null);
+// Index → x-pixel mapper. Default is the legacy even i/(N-1) spacing.
+// `opts.xValues` supplies an explicit numeric x per sample (the storm
+// compare view passes relative minutes), mapped across the domain
+// [xLo, xHi] — which defaults to the min/max of xValues but is normally
+// passed in so several series of different lengths share one axis.
+function _xMapper(opts, x0, w, N) {
+  const xs = opts.xValues;
+  if (!Array.isArray(xs) || xs.length !== N) {
+    return (i) => x0 + (N === 1 ? 0 : (i / (N - 1)) * w);
   }
-  const def = vals.filter((v) => v != null);
-  if (def.length < 2) return null;
-  let lo = Math.min(...def),
-    hi = Math.max(...def);
-  if (hi - lo < 1e-9) {
-    lo -= 0.5;
-    hi += 0.5;
-  } // flat line: pin to mid-band
-  const N = vals.length;
-  // Group into contiguous runs of [x, y] points.
-  const runs = [];
-  let cur = [];
-  for (let i = 0; i < N; i++) {
-    const v = vals[i];
-    if (v == null) {
-      if (cur.length) {
-        runs.push(cur);
-        cur = [];
-      }
-      continue;
-    }
-    const x = x0 + (N === 1 ? 0 : (i / (N - 1)) * w);
-    const norm = (v - lo) / (hi - lo);
-    const y = y0 + h - norm * h;
-    cur.push([x, y]);
-  }
-  if (cur.length) runs.push(cur);
+  const finite = xs.filter((v) => Number.isFinite(v));
+  const xLo = Number.isFinite(opts.xLo) ? opts.xLo : Math.min(...finite);
+  const xHi = Number.isFinite(opts.xHi) ? opts.xHi : Math.max(...finite);
+  const xSpan = xHi - xLo || 1;
+  return (i) => x0 + ((xs[i] - xLo) / xSpan) * w;
+}
+
+// Render contiguous runs of [x, y] points into one path string. Runs of
+// <6 points fall back to straight L-segments because a 3- or 4-point
+// spline tends to overshoot wildly on sparse data.
+function _runsToPath(runs) {
   let d = '';
   for (const run of runs) {
     if (run.length >= 6) {
@@ -79,5 +60,52 @@ export function buildLinePath(samples, key, x0, y0, w, h) {
       }
     }
   }
-  return { path: d, lo, hi };
+  return d;
+}
+
+// `opts` (all optional, all defaulting to the pre-existing behaviour):
+//   lo / hi          — force a shared value scale instead of per-line
+//                      min/max. The storm compare view REQUIRES this:
+//                      every line there is the same metric, so
+//                      normalising each to its own extent would draw a
+//                      12 mm/h cloudburst and a 3 mm/h shower as
+//                      identical curves.
+//   xValues / xLo / xHi — see _xMapper.
+export function buildLinePath(samples, key, x0, y0, w, h, opts = {}) {
+  // Per-line normalisation (default): each parameter gets its own
+  // min/max so a 30 mm/h precipitation peak doesn't flatten the 0.5
+  // cm/h snow line. Null values split the trace into independent runs —
+  // Catmull-Rom is applied per-run so a single missing sample doesn't
+  // smear an interpolated curve across the gap.
+  const vals = [];
+  for (const s of samples) {
+    const v = (s.values || {})[key];
+    vals.push(typeof v === 'number' && isFinite(v) ? v : null);
+  }
+  const def = vals.filter((v) => v != null);
+  if (def.length < 2) return null;
+  let lo = Number.isFinite(opts.lo) ? opts.lo : Math.min(...def);
+  let hi = Number.isFinite(opts.hi) ? opts.hi : Math.max(...def);
+  if (hi - lo < 1e-9) {
+    lo -= 0.5;
+    hi += 0.5;
+  } // flat line: pin to mid-band
+  const N = vals.length;
+  const xAt = _xMapper(opts, x0, w, N);
+  const runs = [];
+  let cur = [];
+  for (let i = 0; i < N; i++) {
+    const v = vals[i];
+    if (v == null) {
+      if (cur.length) {
+        runs.push(cur);
+        cur = [];
+      }
+      continue;
+    }
+    const norm = (v - lo) / (hi - lo);
+    cur.push([xAt(i), y0 + h - norm * h]);
+  }
+  if (cur.length) runs.push(cur);
+  return { path: _runsToPath(runs), lo, hi };
 }

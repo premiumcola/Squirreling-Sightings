@@ -62,6 +62,33 @@ export function niceAxisTicks(lo, hi, target) {
   return { ticks, step, niceLo, niceHi };
 }
 
+// Relative-minute X ticks — used by the storm compare chart, whose axis
+// is "minutes before / after the episode's peak" rather than wall-clock.
+// Same `cw / 90` density rule as buildXTicks so the two charts read at
+// the same cadence. The sign is a real U+2212 minus, not a hyphen, so
+// "−60′" doesn't look like a list bullet at 11 px.
+export function fmtRelMinute(m) {
+  const n = Math.round(m);
+  if (n === 0) return '0';
+  return (n < 0 ? '−' : '+') + Math.abs(n) + '′';
+}
+
+export function buildRelTicks({ minMin, maxMin, pad, cw, ch, vbH }) {
+  const span = maxMin - minMin;
+  if (!Number.isFinite(span) || span <= 0) return '';
+  const target = Math.max(3, Math.min(8, Math.round(cw / 90)));
+  const { ticks } = niceAxisTicks(minMin, maxMin, target);
+  const baseY = (vbH - 8).toFixed(1);
+  let svg = '';
+  for (const v of ticks) {
+    if (v < minMin || v > maxMin) continue;
+    const x = pad.l + ((v - minMin) / span) * cw;
+    svg += `<line x1="${x.toFixed(1)}" y1="${(pad.t + ch).toFixed(1)}" x2="${x.toFixed(1)}" y2="${(pad.t + ch + 5).toFixed(1)}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
+    svg += `<text x="${x.toFixed(1)}" y="${baseY}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,.55)">${fmtRelMinute(v)}</text>`;
+  }
+  return svg;
+}
+
 // Time-tick step ladder used by the chart's X-axis. Each entry is a
 // candidate spacing in milliseconds; the picker snaps to the entry
 // that gets the visible tick count closest to `target` for the

@@ -26,6 +26,7 @@ from ..thresholds._apply import (
     adapted_layer,
     camera_role,
     clamp_e,
+    clamp_manual_e,
     effective_e,
     manual_patch,
     provenance,
@@ -160,13 +161,20 @@ FROZEN_KEYS = [
 ]
 
 
-def apply_axes(cam_id: str, axes: dict, *, pin: bool) -> dict:
+def apply_axes(cam_id: str, axes: dict, *, pin: bool, confirmed: bool = False) -> dict:
     """Write dragged axes onto the CAMERA layer, additively.
 
     The same path the learner's proposal-adoption uses, so a drag and an
     adopted proposal can never disagree about where the number lives.
     ``label_thresholds`` and ``push_thresholds`` are the camera layer;
     ``net_pin`` records that a human put them there.
+
+    ``confirmed`` is the operator's answer to the person-floor dialog and
+    the ONLY thing that lets ``person`` on a security camera go below
+    ``AUTO_E_FLOOR_PERSON_SECURITY``. It defaults to False so a path that
+    forgets to ask cannot blind a camera by omission — the value is
+    clamped to the floor and the caller is told which axes moved, in
+    ``written[label]["clamped"]``.
     """
     cam = camera(cam_id)
     if cam is None:
@@ -178,7 +186,8 @@ def apply_axes(cam_id: str, axes: dict, *, pin: bool) -> dict:
     adapted = dict(merged.get("net_adapted") or {})
     written = {}
     for label, raw in (axes or {}).items():
-        e = clamp_e(raw)
+        e = clamp_manual_e(cam, label, raw, confirmed=confirmed)
+        clamped = e != clamp_e(raw)
         patch = manual_patch(label, e)
         lt[label] = patch["label_thresholds"][label]
         pt[label] = patch["push_thresholds"][label]
@@ -188,7 +197,7 @@ def apply_axes(cam_id: str, axes: dict, *, pin: bool) -> dict:
             # learner's own value for it: two forces writing one number
             # through two keys is exactly the drift this replaces.
             adapted.pop(label, None)
-        written[label] = {"E": e, **thresholds_for(label, e)}
+        written[label] = {"E": e, "clamped": clamped, **thresholds_for(label, e)}
     merged["label_thresholds"] = lt
     merged["push_thresholds"] = pt
     merged["net_pin"] = pins

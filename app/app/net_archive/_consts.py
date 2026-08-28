@@ -25,7 +25,6 @@ KIND_NETZ = "netz_aenderung"  # a manual drag; no image
 #: Einstufung eine Optimierung?" — every card carries one, never silence.
 STATE_CHANGED = "changed"
 STATE_CONFIRMED = "confirmed"
-STATE_OUTVOTED = "outvoted"
 STATE_PENDING = "pending"
 STATE_PINNED = "pinned"
 
@@ -34,7 +33,6 @@ STATE_BADGE = {
     STATE_CHANGED: "↕",
     STATE_CONFIRMED: "✓",
     STATE_PENDING: "⏳",
-    STATE_OUTVOTED: "⊘",
     STATE_PINNED: "🔒",
 }
 

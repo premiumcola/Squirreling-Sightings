@@ -18,7 +18,7 @@ import pytest
 
 from app import app_state
 from app import trash as _trash
-from app.detection_feedback import iter_records
+from app.detection_feedback import iter_records, record_verdict
 from app.routes import events as events_routes
 
 flask = pytest.importorskip("flask")
@@ -160,11 +160,16 @@ def test_delete_writes_a_false_alarm_verdict(client, store, tmp_storage_root, mo
     assert records[0]["cam"] == CAM
 
 
-def test_bulk_delete_books_a_false_alarm_per_event(client, tmp_storage_root, monkeypatch):
-    """P1 · this is the gesture that clears a run of false alarms, and
-    `confirmed-false >= 20` is the binding constraint on every stratum.
-    Treating it as mere housekeeping threw away the scarcest evidence in
-    the corpus, a batch at a time."""
+def test_bulk_delete_books_nothing_at_all(client, tmp_storage_root, monkeypatch):
+    """A delete is not a verdict.
+
+    One checkbox range is one gesture over up to 500 events; booking a
+    "Fehlalarm" for each fabricates up to 500 judgements nobody made.
+    This project has been burned by exactly this class twice before — a
+    deleted timelapse booked "false alarm", a 404 double-tap booked one —
+    and a poisoned corpus is worse than an empty one: it biases every
+    threshold the data will later calibrate, silently and permanently.
+    """
     monkeypatch.setattr(
         _trash,
         "move_to_trash",
@@ -172,32 +177,35 @@ def test_bulk_delete_books_a_false_alarm_per_event(client, tmp_storage_root, mon
     )
     resp = client.post(
         f"/api/camera/{CAM}/events/delete-bulk",
-        json={"event_ids": [EID, "evt_other"]},
+        json={"event_ids": [EID, "evt_other", "tl_2026-08-28"]},
     )
     assert resp.status_code == 200
-    records = _verdicts(tmp_storage_root)
-    assert len(records) == 2
-    assert {r["source"] for r in records} == {"web_bulk_delete"}
-    assert all(r["correct"] is False for r in records)
-    assert all(r["cam"] == CAM for r in records)
+    assert resp.get_json()["deleted"] == 3
+    assert _verdicts(tmp_storage_root) == []
 
 
-def test_bulk_delete_never_books_a_timelapse(client, tmp_storage_root, monkeypatch):
-    """The same `tl_` guard the single-delete path carries. A timelapse
-    manifest nobody judged must never enter the corpus as a false alarm
-    — a poisoned corpus is worse than an empty one."""
+def test_bulk_delete_never_overwrites_an_answer_already_given(
+    client, tmp_storage_root, monkeypatch
+):
+    """`LedgerIndex` is last-write-wins per event_id, so a fabricated
+    "falsch" appended after an honest Telegram "richtig" does not sit
+    beside it — it REPLACES it, in the only copy that exists."""
+    record_verdict(
+        tmp_storage_root,
+        event_id=EID,
+        correct=True,
+        ts=1_700_000_000.0,
+        source="telegram_q",
+        cam_id=CAM,
+    )
     monkeypatch.setattr(
         _trash,
         "move_to_trash",
         lambda cam_id, event_id: {"json_deleted": True, "trashed": True},
     )
-    resp = client.post(
-        f"/api/camera/{CAM}/events/delete-bulk",
-        json={"event_ids": ["tl_2026-08-28", EID]},
-    )
-    assert resp.status_code == 200
-    records = _verdicts(tmp_storage_root)
-    assert [r["event_id"] for r in records] == [EID]
+    client.post(f"/api/camera/{CAM}/events/delete-bulk", json={"event_ids": [EID]})
+    survivors = _verdicts(tmp_storage_root)
+    assert [(r["source"], r["correct"]) for r in survivors] == [("telegram_q", True)]
 
 
 def test_ledger_failure_never_breaks_the_request(client, store, monkeypatch):

@@ -28,12 +28,15 @@ and its own budget. Nothing else.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from datetime import datetime
 
 from ... import net_archive
 from ...detection_feedback import corpus_stats, resolve_stratum
-from ...telegram_helpers import LABEL_DE
+from ...detection_feedback._io import ledger_index
+from ...detection_feedback._write import record_alert
+from ...telegram_helpers import LABEL_DE, most_specific_label
 from ...thresholds import resolve_effective
 from ...thresholds._apply import AXIS_ORDER, adapted_layer, rails
 from .._consts import log
@@ -78,6 +81,39 @@ def question_class_markup(eid: str, classes) -> list:
     rows = [[(f"{LABEL_DE.get(c, c)}", f"ev:{eid}:c:{c}")] for c in classes]
     rows.append([("← zurück", f"ev:{eid}:back")])
     return rows
+
+
+def event_subject(meta: dict) -> tuple:
+    """``(label, score)`` — the ONE class this event is about.
+
+    ``most_specific_label`` and not ``labels[0]``, and the whole feature
+    turned on that difference. ``_motion._build_event_meta`` writes
+    ``labels: sorted(set(labels))``, so an event that saw a person while
+    motion was still confirming is filed as ``["motion", "person"]`` and
+    ``labels[0]`` is ``"motion"`` — alphabetically ahead of ``person``
+    and ``squirrel``, the two classes these three cameras exist for.
+
+    ``motion`` then resolves to ``push = 0.0`` (its shipped entry) while
+    no detection carries the label ``motion``, so the score is 0.0 and
+    ``0.0 >= 0.0`` classified EVERY real event as an alarm: no question
+    was ever sent, and the archive filled with fabricated 0-percent
+    alarms. This is the same helper ``_event_alert._event_ctx`` picks the
+    push gate's label with, which is what "the two can never disagree"
+    requires.
+
+    Returns ``("motion", 0.0)`` for an event with no object detection at
+    all — the caller drops it, because there is nothing to ask about.
+    """
+    label = most_specific_label(meta.get("labels") or [])
+    score = max(
+        (
+            float(d.get("score") or 0.0)
+            for d in (meta.get("detections") or [])
+            if d.get("label") == label
+        ),
+        default=0.0,
+    )
+    return label, score
 
 
 def _caption(cam_name: str, label: str, score: float) -> str:
@@ -152,6 +188,50 @@ class QuestionMixin:
             lambda lab: resolve_stratum(stats, cam_id, lab),
         )
 
+    def _corpus_row(self, meta: dict, camera_id: str, *, kind: str) -> None:
+        """The ledger row a later verdict on this event joins to.
+
+        Without it the answer is written and then structurally dropped.
+        ``detection_feedback.judged_alerts`` — the only thing the learner,
+        the axis proposal and the drag preview read — iterates the ALERT
+        records and looks each one's verdict up. A verdict whose event has
+        no alert record is invisible to every stratum: it is kept on disk
+        (``_retention`` protects it) and counted by nothing.
+
+        ``_event_alert`` writes that record inside the push chain, which
+        runs only when ``meta["notify"]`` is true. That excludes exactly
+        the classes the net exists to learn: ``cat``, ``bird``, ``fox``,
+        ``hedgehog`` and everything on ``severity: off`` never notify, so
+        every question asked about them collected its answer into a void.
+        A question about ``person`` in the quiet band is in the same
+        position — it is BELOW the push bar by definition, and the whole
+        point of asking is to learn where the bar belongs.
+
+        Still ONE row per event: the push path runs first and, when it
+        wrote one, this is a no-op. The check is against the same cached
+        index every reader uses, so it costs no extra parse.
+        """
+        eid = meta.get("event_id") or ""
+        root = self._storage_root()
+        if eid and eid in ledger_index(root).alerts:
+            return
+        cam_cfg = self._camera_cfg(camera_id) or {}
+        label, score = event_subject(meta)
+        eff = resolve_effective(
+            cam_cfg, self.push_cfg or {}, label, adapted=adapted_layer(cam_cfg, label)
+        )
+        record_alert(
+            root,
+            cam_id=camera_id,
+            event_id=eid,
+            label=label,
+            score=score,
+            threshold=eff.push,
+            ts=time.time(),
+            detections=meta.get("detections") or [],
+            passed_threshold=(kind == net_archive.KIND_ALARM),
+        )
+
     def archive_event(self, meta: dict, camera_id: str, *, kind: str, asked: bool) -> None:
         """Capture the ask-time state for one event. Never raises.
 
@@ -164,7 +244,7 @@ class QuestionMixin:
         try:
             cam_cfg = self._camera_cfg(camera_id) or {}
             det = meta.get("detections") or []
-            label = (meta.get("labels") or ["motion"])[0]
+            label, _score = event_subject(meta)
             primary = next(
                 (d for d in det if d.get("label") == label),
                 det[0] if det else {"label": label, "score": 0.0},
@@ -224,11 +304,13 @@ class QuestionMixin:
         queue = ss.runtime_get(_QUEUE_KEY) or []
         if not isinstance(queue, list) or not queue:
             return
-        ss.runtime_set(_QUEUE_KEY, [])
+        # Drain LAST. Draining first and then raising on the way to the
+        # send loses the night with no way to get it back.
         text = f"🌙 {len(queue)} Erkennungen aus der Nacht warten auf deine Einschätzung."
         link = self._netz_deep_link()
         buttons = [[("Ansehen", link)]] if link else None
         self.send(text, buttons=buttons, silent=True)
+        ss.runtime_set(_QUEUE_KEY, [])
         log.info("[tg] Nacht-Warteschlange freigegeben: %d Fragen", len(queue))
 
     def _job_netz_learner(self) -> None:
@@ -259,8 +341,16 @@ class QuestionMixin:
             log.warning("[det] rebuild_runtimes nach Netz-Lauf fehlgeschlagen: %s", e)
 
     def _netz_deep_link(self) -> str:
-        base = ((self.global_cfg or {}).get("app") or {}).get("public_base_url") or ""
-        base = str(base).rstrip("/")
+        """Through ``_dashboard_url`` like every other deep link here.
+
+        ``self.global_cfg`` is a CALLABLE in production
+        (``server._reload_telegram_service`` passes
+        ``lambda: settings.export_effective_config(...)``), so reaching
+        for ``.get`` on it raised ``AttributeError`` — after the queue
+        had already been drained two lines above. Every night held that
+        way was announced to nobody and could not be re-announced.
+        """
+        base = (self._dashboard_url() or "").rstrip("/")
         return f"{base}/#netz?tab=verlauf&filter=offen" if base else ""
 
     # ── entry point ───────────────────────────────────────────────────
@@ -274,21 +364,19 @@ class QuestionMixin:
             score >= push          KIND_ALARM
             spawn <= score < push  KIND_FRAGE
             score <  spawn         None
+
+        A motion-only event is None, never an alarm. ``motion`` ships
+        with ``threshold: 0.0`` and carries no detection of its own, so
+        the comparison would be ``0.0 >= 0.0`` — an alarm record with a
+        0-percent score, about nothing, on every clip the cameras record.
+        The net has no motion axis to learn from it either.
         """
         cam_cfg = self._camera_cfg(camera_id) or {}
-        label = (meta.get("labels") or [None])[0]
-        if not label:
+        label, score = event_subject(meta)
+        if label == "motion":
             return None
         eff = resolve_effective(
             cam_cfg, self.push_cfg or {}, label, adapted=adapted_layer(cam_cfg, label)
-        )
-        score = max(
-            (
-                float(d.get("score") or 0.0)
-                for d in (meta.get("detections") or [])
-                if d.get("label") == label
-            ),
-            default=0.0,
         )
         if score >= eff.push:
             return net_archive.KIND_ALARM
@@ -306,12 +394,23 @@ class QuestionMixin:
         log of questions.
         """
         band = self.band_for(meta, camera_id)
-        if band == net_archive.KIND_ALARM:
-            self.archive_event(meta, camera_id, kind=net_archive.KIND_ALARM, asked=True)
-            return "alarm"
-        if band == net_archive.KIND_FRAGE:
+        if band is None:
+            return None
+        try:
+            if band == net_archive.KIND_ALARM:
+                self.archive_event(meta, camera_id, kind=net_archive.KIND_ALARM, asked=True)
+                return "alarm"
             return self.send_question(meta, camera_id) or "frage"
-        return None
+        finally:
+            # Here and not inside `send_question`: a question the mute or
+            # the 10-minute gap swallowed is still a candidate the corpus
+            # has to count, or the answer rate is computed against a
+            # denominator that quietly excludes them. LAST, because
+            # `archive_event` reads the corpus to snapshot the net and
+            # writing first would force a re-parse of the whole ledger on
+            # the thread that has just finished a clip.
+            with contextlib.suppress(Exception):
+                self._corpus_row(meta, camera_id, kind=band)
 
     def send_question(self, meta: dict, camera_id: str) -> str | None:
         """Ask about one uncertain detection. Returns the blocking reason.
@@ -327,7 +426,7 @@ class QuestionMixin:
             return "camera_off"
         if self._mute_reason(camera_id):
             return "muted"
-        label = (meta.get("labels") or [None])[0] or "motion"
+        label, _score = event_subject(meta)
         if not self._question_gap_ok(camera_id, label):
             return "gap"
         if self._question_budget_left() <= 0:
@@ -350,10 +449,10 @@ class QuestionMixin:
 
     def _push_question(self, meta: dict, camera_id: str, cam_cfg: dict, label: str) -> None:
         eid = meta.get("event_id") or datetime.now().strftime("%Y%m%d-%H%M%S")
-        score = max(
-            (float(d.get("score") or 0.0) for d in (meta.get("detections") or [])),
-            default=0.0,
-        )
+        # The subject's score, not the frame's maximum: a caption reading
+        # "Vermutung: Person · 91 %" under a 0.62 person because a 0.91
+        # cat shared the frame is a question the operator cannot answer.
+        _label, score = event_subject(meta)
         photo = self._best_frame_jpeg(meta, camera_id) or meta.get("thumb_bytes")
         if self.settings_store:
             self.settings_store.runtime_alert_index_set(

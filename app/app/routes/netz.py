@@ -55,21 +55,29 @@ def api_netz_axes(cam_id):
     if cam is None:
         return jsonify({"ok": False, "error": "Kamera nicht gefunden"}), 404
     before = {lab: effective_e(cam, lab) for lab in axes}
-    written = H.apply_axes(cam_id, axes, pin=True)
-    _archive_manual(cam_id, cam, before, written)
+    # A8 · the person floor is crossable by hand and by nothing else, so
+    # the confirmation has to travel with the request. Absent = clamped.
+    written = H.apply_axes(
+        cam_id, axes, pin=True, confirmed=bool(payload.get("confirm_person_floor"))
+    )
+    state = H.net_state(cam_id)
+    _archive_manual(cam_id, cam, before, written, state)
     _reload_runtimes()
     log.info("[det] Netz-Achsen gesetzt: cam=%s %s", cam_id, sorted(written))
-    return jsonify({"ok": True, "written": written, "state": H.net_state(cam_id)})
+    return jsonify({"ok": True, "written": written, "state": state})
 
 
-def _archive_manual(cam_id: str, cam: dict, before: dict, written: dict) -> None:
+def _archive_manual(cam_id: str, cam: dict, before: dict, written: dict, state: dict) -> None:
     """One record per dragged axis — same list, same detail sheet.
 
     That is what makes „Netz zu diesem Zeitpunkt wiederherstellen"
     possible for a hand-set value and not only for a learned one.
+
+    Takes the already-computed ``state`` rather than calling
+    ``H.net_state`` a second time: that call is a full pass over the
+    ledger per axis, and one commit was paying for two of them.
     """
-    state = H.net_state(cam_id) or {}
-    net_state = {a["label"]: a for a in state.get("axes") or []}
+    net_state = {a["label"]: a for a in (state or {}).get("axes") or []}
     # Microseconds, matching `_motion._build_event_meta`'s event_id shape.
     # A second-resolution stamp collides when two commits land inside the
     # same second — the later record then OVERWRITES the earlier one and
@@ -203,6 +211,10 @@ def api_netz_archive_restore(eid):
     }
     if not axes:
         return jsonify({"ok": False, "error": "Datensatz trägt keinen Netz-Zustand"}), 400
+    # No `confirmed` here, ever. Restoring is a shape from the past, not
+    # a fresh decision about person on a security camera — the operator
+    # is looking at an archive card, not at the warning dialog. A record
+    # holding a below-floor person axis restores clamped to the floor.
     written = H.apply_axes(cam_id, axes, pin=True)
     _reload_runtimes()
     log.info("[det] Netz wiederhergestellt aus %s: cam=%s", eid, cam_id)

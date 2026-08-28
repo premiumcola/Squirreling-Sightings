@@ -32,7 +32,6 @@ from ._consts import (
     SCOPE_POOLED,
     STATE_CHANGED,
     STATE_CONFIRMED,
-    STATE_OUTVOTED,
     STATE_PENDING,
     STATE_PINNED,
 )
@@ -275,13 +274,6 @@ def sentence_confirmed(*, push: float, scope: str | None = None) -> str:
     ) + _modifiers(scope=scope, floor_held=None)
 
 
-def sentence_outvoted(*, push: float, n_disagreeing: int) -> str:
-    return (
-        f"Notiert, aber ohne Wirkung: {n_disagreeing} andere Rückmeldungen bei ähnlicher "
-        f"Konfidenz sagen das Gegenteil. Der Wert bleibt bei {_pct(push)}."
-    )
-
-
 def sentence_pending(*, label: str, cam_name: str, judged: int, needed: int) -> str:
     return (
         f"Gezählt — {judged} von {needed} Rückmeldungen für <b>{_de(label)} · {cam_name}</b>. "
@@ -301,7 +293,6 @@ def sentence_pinned(*, pinned_on: str | None, proposal: int | None) -> str:
 STATE_SENTENCE = {
     STATE_CHANGED: sentence_changed,
     STATE_CONFIRMED: sentence_confirmed,
-    STATE_OUTVOTED: sentence_outvoted,
     STATE_PENDING: sentence_pending,
     STATE_PINNED: sentence_pinned,
 }

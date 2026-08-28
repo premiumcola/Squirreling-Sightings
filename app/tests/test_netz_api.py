@@ -16,7 +16,7 @@ from app import app_state, net_archive
 from app.routes import netz as netz_routes
 from app.settings_store import SettingsStore
 from app.storage import EventStore
-from app.thresholds._apply import push_for, spawn_for
+from app.thresholds._apply import AUTO_E_FLOOR_PERSON_SECURITY, push_for, spawn_for
 
 CAM = "cam_werkstatt"
 
@@ -217,7 +217,10 @@ def test_the_archive_is_empty_and_says_so(client):
 def test_restore_puts_the_net_back_and_pins_what_it_touched(client):
     client.patch(f"/api/netz/{CAM}/axes", json={"axes": {"person": 62}})
     eid = net_archive.list_records(app_state.storage_root)["items"][0]["event_id"]
-    client.patch(f"/api/netz/{CAM}/axes", json={"axes": {"person": 20}})
+    client.patch(
+        f"/api/netz/{CAM}/axes",
+        json={"axes": {"person": 20}, "confirm_person_floor": True},
+    )
     assert app_state.settings.get_camera(CAM)["net_pin"]["person"]["E"] == 20
 
     res = client.post(f"/api/netz/archive/{eid}/restore")
@@ -233,3 +236,66 @@ def test_restoring_a_missing_record_is_a_404(client):
 
 def test_a_frame_that_was_never_written_is_a_404_not_a_500(client):
     assert client.get("/api/netz/archive/nope/frame.jpg").status_code == 404
+
+
+# ── the person floor (A8) ─────────────────────────────────────────────
+#
+# The floor is what stops the net turning a burglar alarm off. It guarded
+# `clamp_learner_e` alone, so every MANUAL writer walked straight past
+# it: the PATCH called directly, the "Rückgängig" toast (which re-PATCHes
+# the pre-drag snapshot) and "Netz zu diesem Zeitpunkt wiederherstellen".
+# Person at E 0 on a security camera is a 0.75 spawn — an intruder under
+# 75 % confidence produces no track, no clip and no alert.
+
+
+def test_the_api_cannot_blind_person_on_a_security_cam_without_the_confirm(client):
+    res = client.patch(f"/api/netz/{CAM}/axes", json={"axes": {"person": 0}})
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["written"]["person"]["E"] == AUTO_E_FLOOR_PERSON_SECURITY
+    assert body["written"]["person"]["clamped"] is True
+    cam = app_state.settings.get_camera(CAM)
+    assert cam["label_thresholds"]["person"] == spawn_for("person", AUTO_E_FLOOR_PERSON_SECURITY)
+    assert cam["net_pin"]["person"]["E"] == AUTO_E_FLOOR_PERSON_SECURITY
+
+
+def test_the_confirm_is_what_lets_a_deliberate_drag_cross_it(client):
+    res = client.patch(
+        f"/api/netz/{CAM}/axes",
+        json={"axes": {"person": 0}, "confirm_person_floor": True},
+    )
+    assert res.get_json()["written"]["person"]["E"] == 0
+    assert app_state.settings.get_camera(CAM)["label_thresholds"]["person"] == spawn_for(
+        "person", 0
+    )
+
+
+def test_undo_re_patching_a_below_floor_snapshot_is_clamped_too(client):
+    """ "Rückgängig" replays the pre-drag value through the same PATCH and
+    carries no confirmation — it restores what was there, it is not a
+    fresh decision to go blind."""
+    client.patch(
+        f"/api/netz/{CAM}/axes",
+        json={"axes": {"person": 10}, "confirm_person_floor": True},
+    )
+    res = client.patch(f"/api/netz/{CAM}/axes", json={"axes": {"person": 10}})
+    assert res.get_json()["written"]["person"]["E"] == AUTO_E_FLOOR_PERSON_SECURITY
+
+
+def test_restore_cannot_carry_a_below_floor_person_axis_back_in(client):
+    client.patch(
+        f"/api/netz/{CAM}/axes",
+        json={"axes": {"person": 5}, "confirm_person_floor": True},
+    )
+    eid = net_archive.list_records(app_state.storage_root)["items"][0]["event_id"]
+    client.post(f"/api/netz/{CAM}/reset", json={"label": "person"})
+    res = client.post(f"/api/netz/archive/{eid}/restore")
+    assert res.status_code == 200
+    person = next(a for a in res.get_json()["state"]["axes"] if a["label"] == "person")
+    assert person["E"] == AUTO_E_FLOOR_PERSON_SECURITY
+
+
+def test_a_wildlife_camera_has_no_person_floor(client):
+    """The floor is about what an intruder trips, not about the class."""
+    res = client.patch("/api/netz/cam_nutbar/axes", json={"axes": {"person": 0}})
+    assert res.get_json()["written"]["person"]["E"] == 0

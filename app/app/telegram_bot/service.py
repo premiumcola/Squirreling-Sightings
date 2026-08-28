@@ -34,6 +34,7 @@ from ._consts import (  # noqa: F401
 from ._formatting import FormattingMixin
 from ._health import HealthMixin
 from ._inbound import InboundMixin
+from ._inbound_camera import CameraActionMixin
 from ._inbound_event import EventCallbackMixin
 from ._lifecycle import LifecycleMixin
 from ._outbound import OutboundMixin
@@ -44,6 +45,7 @@ class TelegramService(
     HealthMixin,
     OutboundMixin,
     InboundMixin,
+    CameraActionMixin,
     EventCallbackMixin,
     FormattingMixin,
 ):

@@ -123,6 +123,15 @@ function _stage(label, e) {
 // ── the blocking confirm ──────────────────────────────────────────────
 // A8 · only a MANUAL drag may cross the person floor, and only after
 // being told exactly what it costs. The learner never can.
+function _crossesPersonFloor(axes) {
+  const st = netzState.state;
+  return (
+    st?.role === 'security' &&
+    typeof axes.person === 'number' &&
+    axes.person < PERSON_FLOOR_E
+  );
+}
+
 async function _confirmPersonFloor(label, e) {
   const st = netzState.state;
   if (label !== 'person' || st?.role !== 'security' || e >= PERSON_FLOOR_E) return true;
@@ -241,7 +250,15 @@ export async function commitStaged(onRepaint) {
   const axes = { ...netzState.staged };
   if (!Object.keys(axes).length) return;
   const before = { ...netzState.snapshot };
-  const res = await patchAxes(netzState.camId, axes);
+  // The authoritative ask. The stage-time confirm is immediate feedback;
+  // this one is the answer the server acts on, because the server clamps
+  // to the floor unless this request carries it.
+  const crosses = _crossesPersonFloor(axes);
+  if (crosses && !(await _confirmPersonFloor('person', axes.person))) {
+    onRepaint();
+    return;
+  }
+  const res = await patchAxes(netzState.camId, axes, crosses);
   if (!res.ok) {
     showToast('Konnte nicht gespeichert werden.', 'error');
     return;
@@ -275,6 +292,9 @@ export function discardStaged(onRepaint) {
  *  convenient. */
 export async function undoLastCommit(onRepaint) {
   if (!_lastCommit || !Object.keys(_lastCommit).length) return;
+  // No confirm flag: undo restores a value the operator had, it is not a
+  // fresh decision to blind the camera. A pre-drag person axis already
+  // below the floor comes back clamped to it.
   const res = await patchAxes(netzState.camId, _lastCommit);
   _lastCommit = null;
   if (res.ok) {

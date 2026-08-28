@@ -41,8 +41,8 @@ from ._consts import (
     MIN_JUDGED_PER_STRATUM,
     MIN_VETO_WRONG_RATE_LOWER,
 )
-from ._io import iter_records, ledger_health
-from ._retention import index_records, stratum
+from ._io import ledger_health, ledger_index
+from ._retention import stratum
 
 
 def judged_alerts(storage_root, cam_id: str | None = None, label: str | None = None):
@@ -53,7 +53,7 @@ def judged_alerts(storage_root, cam_id: str | None = None, label: str | None = N
     with no verdict are excluded — an unanswered alert says nothing.
     A later verdict supersedes an earlier one for the same event.
     """
-    idx = index_records(iter_records(storage_root))
+    idx = ledger_index(storage_root)
     out = []
     for eid, alert in idx.alerts.items():
         verdict = idx.verdicts.get(eid)
@@ -317,7 +317,7 @@ def resolve_stratum(stats: dict, cam: str, label: str) -> dict:
 
 def corpus_stats(storage_root) -> dict:
     """One pass over the ledger, rolled up per camera and label."""
-    idx = index_records(iter_records(storage_root))
+    idx = ledger_index(storage_root)
     grouped: dict = {}
     for eid, alert in idx.alerts.items():
         grouped.setdefault(stratum(alert), []).append((alert, idx.verdicts.get(eid)))

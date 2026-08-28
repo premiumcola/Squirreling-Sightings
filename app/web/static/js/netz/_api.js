@@ -20,9 +20,16 @@ export function fetchState(camId) {
 }
 
 /** Commit every staged axis in ONE call — the staging bar's
- *  "Übernehmen" is a single write, not one per vertex. */
-export function patchAxes(camId, axes) {
-  return _safe(() => apiPatch(`/api/netz/${encodeURIComponent(camId)}/axes`, { axes }));
+ *  "Übernehmen" is a single write, not one per vertex.
+ *
+ *  `confirmPersonFloor` travels with the request because the server
+ *  clamps `person` on a security camera to E 35 unless it is present.
+ *  Only a caller that actually showed the blocking dialog may pass
+ *  true — "Rückgängig" and the archive restore never do. */
+export function patchAxes(camId, axes, confirmPersonFloor = false) {
+  const body = { axes };
+  if (confirmPersonFloor) body.confirm_person_floor = true;
+  return _safe(() => apiPatch(`/api/netz/${encodeURIComponent(camId)}/axes`, body));
 }
 
 export function fetchPreview(camId, label, e) {

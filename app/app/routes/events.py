@@ -111,16 +111,17 @@ def api_event_delete_bulk(cam_id):
             result = _trash.move_to_trash(cam_id, eid)
             if result.get("json_deleted"):
                 deleted += 1
-                # C4 · book the verdict. This is the gesture an operator
-                # uses to clear a run of false alarms, and
-                # `confirmed-false >= 20` is the binding constraint on
-                # every stratum — a bulk delete that books nothing is a
-                # batch of the scarcest evidence there is, thrown away.
-                # Same `tl_` guard the single-delete path carries: a
-                # timelapse manifest nobody judged must never enter the
-                # corpus as "false alarm".
-                if not eid.startswith("tl_"):
-                    _ledger_verdict(cam_id, eid, correct=False, source="web_bulk_delete")
+                # Deliberately books NOTHING. A bulk delete is tidying,
+                # not judging: one gesture over a checkbox range up to
+                # 500 wide would write 500 "Fehlalarm" verdicts nobody
+                # looked at — and because `LedgerIndex` is last-write-
+                # wins per event_id, every one of them would OVERWRITE
+                # an honest ✅ the operator had already tapped in
+                # Telegram. This project has been burned by exactly this
+                # class twice (a deleted timelapse booked "false alarm",
+                # a 404 double-tap booked one). Judging stays where a
+                # human looked at one picture: the Telegram buttons and
+                # the per-event web verdict.
             else:
                 failed.append(eid)
         except Exception:

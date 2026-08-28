@@ -148,7 +148,6 @@
   color: #e0f2fe;
 }
 
-.netz-badge[data-state='outvoted'],
 .netz-badge[data-state='pinned'] {
   background: rgba(250, 204, 21, 0.22);
   color: #fef9c3;

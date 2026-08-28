@@ -121,6 +121,31 @@ def test_adapted_spawn_never_overwrites_label_thresholds(plain_cam):
     assert eff.source["spawn"] == SOURCE_CAMERA
 
 
+def test_the_camera_wide_tracker_knob_does_not_outrank_the_learner(plain_cam):
+    """One „Vorsichtig" click on the Erkennung tab posts
+    ``track_spawn_min_score: 0.55`` for the WHOLE camera. Ranked above
+    ``adapted`` it silently reverted every axis the net had learned —
+    every label without its own ``label_thresholds`` entry — with no
+    control anywhere showing it and no line in any log.
+
+    A per-class decision still wins. A camera-wide default does not.
+    """
+    plain_cam.pop("label_thresholds", None)
+    plain_cam["track_spawn_min_score"] = 0.55
+    eff = resolve_effective(plain_cam, SHIPPED_PUSH, "squirrel", adapted={"spawn": 0.62})
+    assert eff.spawn == pytest.approx(0.62)
+    assert eff.source["spawn"] == SOURCE_ADAPTED
+    # With nothing learned yet the knob is still the camera's answer.
+    eff = resolve_effective(plain_cam, SHIPPED_PUSH, "squirrel")
+    assert eff.spawn == pytest.approx(0.55)
+    assert eff.source["spawn"] == SOURCE_CAMERA
+    # And a per-class value the operator set still beats both.
+    plain_cam["label_thresholds"] = {"squirrel": 0.70}
+    eff = resolve_effective(plain_cam, SHIPPED_PUSH, "squirrel", adapted={"spawn": 0.62})
+    assert eff.spawn == pytest.approx(0.70)
+    assert eff.source["spawn"] == SOURCE_CAMERA
+
+
 # ── the other three gates ──────────────────────────────────────────────────
 
 

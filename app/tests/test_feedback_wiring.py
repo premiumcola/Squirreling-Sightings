@@ -117,11 +117,26 @@ def test_alert_is_recorded_before_the_push_gate():
     )
 
 
-def test_only_one_ledger_write_per_event():
-    """Two calls would double-count every sent event and skew the
-    score distribution towards the ones that passed."""
-    src = _read_outbound()
-    assert src.count("record_alert(") == 1
+def test_only_one_ledger_write_per_event(tmp_storage_root):
+    """Two rows for one event would double-count it and skew the score
+    distribution towards the ones that passed.
+
+    Asserted by DRIVING an event rather than by counting call sites in
+    the source. There are now two writers on purpose — the push chain
+    for an alert it is about to send, and the question path for
+    everything the push chain never sees (`cat`, `bird`, `severity:
+    off`, and every score in the quiet band, which is the entire set the
+    net has to learn from). The invariant that matters is the one about
+    the FILE, and only a run can check it.
+    """
+    from app.detection_feedback import iter_records
+    from tests.test_netz_question import CAM, _Bot, _meta
+
+    bot = _Bot(tmp_storage_root, dict(CAM))
+    assert bot.on_finalized_event(_meta("dup-alarm", 0.92), "cam_werkstatt") == "alarm"
+    bot.on_finalized_event(_meta("dup-alarm", 0.92), "cam_werkstatt")
+    rows = [r for r in iter_records(tmp_storage_root) if r.get("kind") == "alert"]
+    assert [r["event_id"] for r in rows] == ["dup-alarm"]
 
 
 def test_the_record_says_which_side_of_the_bar_it_fell_on():

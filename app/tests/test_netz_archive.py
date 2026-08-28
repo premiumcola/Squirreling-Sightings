@@ -143,7 +143,9 @@ def test_unjudged_records_are_evicted_before_judged_ones(tmp_storage_root):
     for i in range(net_archive.MAX_RECORDS + 10):
         eid = f"20260828-1412{i:02d}-000000"
         judged = i < 20
-        records.append((eid, {"ts": f"2026-08-28T10:{i % 60:02d}:00", "verdict": {} if judged else None}))
+        records.append(
+            (eid, {"ts": f"2026-08-28T10:{i % 60:02d}:00", "verdict": {} if judged else None})
+        )
     evict = _retention.select_evictable(records)
     assert len(evict) == 10
     judged_ids = {eid for eid, rec in records if rec.get("verdict")}
@@ -175,7 +177,7 @@ def test_enforce_removes_the_record_and_its_frame(tmp_storage_root):
 
 
 def test_the_header_stat_counts_answers_and_movements(tmp_storage_root):
-    """"Von 84 Antworten haben 11 einen Wert bewegt" is the audit
+    """ "Von 84 Antworten haben 11 einen Wert bewegt" is the audit
     sentence the whole feature exists to be able to print."""
     _capture(tmp_storage_root, "a1", verdict=net_archive.VERDICT_RIGHT)
     _capture(tmp_storage_root, "a2", verdict=net_archive.VERDICT_WRONG)
@@ -254,9 +256,7 @@ def test_a_held_person_floor_is_stated_not_hidden(tmp_storage_root):
 
 
 def test_the_pending_sentence_names_the_bar_it_is_counting_towards(tmp_storage_root):
-    text = net_archive.sentence_pending(
-        label="person", cam_name="Werkstatt", judged=24, needed=50
-    )
+    text = net_archive.sentence_pending(label="person", cam_name="Werkstatt", judged=24, needed=50)
     assert "24 von 50" in text
 
 
@@ -266,7 +266,6 @@ def test_the_pending_sentence_names_the_bar_it_is_counting_towards(tmp_storage_r
         net_archive.STATE_CHANGED,
         net_archive.STATE_CONFIRMED,
         net_archive.STATE_PENDING,
-        net_archive.STATE_OUTVOTED,
         net_archive.STATE_PINNED,
     ],
 )

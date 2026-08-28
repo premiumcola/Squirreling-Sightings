@@ -61,6 +61,12 @@ class _Bot(QuestionMixin):
     def _event_deep_link_url(self, _eid):
         return ""
 
+    def _dashboard_url(self):
+        # The real one reads `global_cfg()` — a CALLABLE in production.
+        # `_netz_deep_link` used to reach for `.get` on it directly and
+        # raised AttributeError inside the 07:00 release job.
+        return self.global_cfg["app"]["public_base_url"]
+
     def send(self, text, **kwargs):
         self.sent.append({"text": text, **kwargs})
         return None

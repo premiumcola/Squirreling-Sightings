@@ -185,6 +185,28 @@ def person_floor_applies(cam_cfg: dict | None, label: str) -> bool:
     return label == "person" and camera_role(cam_cfg) == ROLE_SECURITY
 
 
+def clamp_manual_e(cam_cfg: dict | None, label: str, e, *, confirmed: bool) -> int:
+    """The MANUAL path's E, after the one rail it has.
+
+    A drag may cross the person floor — that is the difference between
+    the manual and the automatic path — but only when the caller carries
+    the operator's explicit confirmation. ``confirmed`` is not a default
+    and not an inference: the blocking dialog lives in the UI, and the
+    three writers that never show it (the API called directly, the
+    „Rückgängig" toast, „Netz zu diesem Zeitpunkt wiederherstellen")
+    pass False and are clamped up to the floor instead.
+
+    Without this the floor was decoration: ``AUTO_E_FLOOR_PERSON_SECURITY``
+    guarded ``clamp_learner_e`` alone, so a single PATCH with ``E: 0``
+    put ``person`` on a security camera at a 0.75 spawn — an intruder
+    under 75 % confidence produces no track, no clip and no alert.
+    """
+    ev = clamp_e(e)
+    if confirmed or not person_floor_applies(cam_cfg, label):
+        return ev
+    return max(ev, AUTO_E_FLOOR_PERSON_SECURITY)
+
+
 def clamp_learner_e(cam_cfg: dict | None, label: str, current_e: int, proposed_e: int) -> int:
     """The automatic path's E, after both of its own rails.
 

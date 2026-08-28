@@ -46,7 +46,6 @@ from ._consts import (
     STATE_BADGE,
     STATE_CHANGED,
     STATE_CONFIRMED,
-    STATE_OUTVOTED,
     STATE_PENDING,
     STATE_PINNED,
     VERDICT_OTHER,
@@ -64,7 +63,6 @@ from ._write import (
     record_net_change,
     sentence_changed,
     sentence_confirmed,
-    sentence_outvoted,
     sentence_pending,
     sentence_pinned,
 )
@@ -81,7 +79,6 @@ __all__ = [
     "STATE_BADGE",
     "STATE_CHANGED",
     "STATE_CONFIRMED",
-    "STATE_OUTVOTED",
     "STATE_PENDING",
     "STATE_PINNED",
     "VERDICT_OTHER",
@@ -101,7 +98,6 @@ __all__ = [
     "select_evictable",
     "sentence_changed",
     "sentence_confirmed",
-    "sentence_outvoted",
     "sentence_pending",
     "sentence_pinned",
 ]

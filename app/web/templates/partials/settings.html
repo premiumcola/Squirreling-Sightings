@@ -347,8 +347,16 @@
 
           <div id="tg-panel-was" class="set-tab-content" hidden>
             <div style="padding-top: 8px; display: grid; gap: 10px">
+              {# D8/D9 · der Schwellen-Regler je Label ist weg — das ist die
+              Push-Komponente einer Netz-Achse, und zwei Bedienwege auf einen Wert
+              sind eine Drift-Quelle. Der An/Aus-Schalter BLEIBT: „über Vögel will
+              ich nie eine Meldung" ist eine Richtlinie, keine Zahl, und das Netz
+              kann „nie" nicht ausdrücken. Nach P1 unterbricht der Schalter den
+              Korpus nicht mehr — deshalb sagt der Hilfetext das jetzt. #}
               <div class="field-help" style="margin: 0 0 4px">
-                Pro Label: Push an/aus + Mindestkonfidenz. Schwelle nur einstellen wenn Push an ist.
+                Pro Label: Meldung an/aus. Aus = keine Alarm-Meldung. Gefragt wird trotzdem, damit
+                das Netz lernt. Die Schwelle regelt das
+                <a href="#netz">Erkennungsnetz</a>.
               </div>
               <div id="pushLabelsList" class="push-labels-list"></div>
               <div class="cam-sep"></div>

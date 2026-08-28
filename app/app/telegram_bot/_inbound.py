@@ -32,7 +32,6 @@ from telegram.ext import (
     filters,
 )
 
-from ..detection_feedback import record_verdict
 from ..telegram_helpers import (
     DULL_BIRDS,
     LABEL_DE,
@@ -305,100 +304,6 @@ class InboundMixin:
             await self._handle_menu_cb(q, data)
             return
         await q.answer()
-
-    async def _set_badge(self, q, label: str):
-        """Replace the entire reply markup with a single grey badge button."""
-        try:
-            mk = InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="noop")]])
-            await q.edit_message_reply_markup(reply_markup=mk)
-        except Exception as e:
-            log.debug("[tg] badge edit failed: %s", e)
-
-    async def _handle_event_cb(self, q, data: str):
-        # Telegram only accepts ONE answerCallbackQuery per query, so each
-        # branch answers exactly once at its end.
-        parts = data.split(":")
-        if len(parts) < 3:
-            await q.answer()
-            return
-        eid = parts[1]
-        verb = parts[2]
-        ss = self.settings_store
-
-        if verb in ("ok", "no"):
-            existing = ss.runtime_get_subkey("event_feedback", eid) if ss else None
-            if existing:
-                await q.answer("Bereits bewertet")
-                return
-            verdict = "ok" if verb == "ok" else "no"
-            ss.runtime_set_subkey(
-                "event_feedback",
-                eid,
-                {
-                    "verdict": verdict,
-                    "by": "telegram",
-                    "ts": time.time(),
-                },
-            )
-            # C4 · same judgement into the durable ledger. The settings
-            # entry above carries no camera, no label and no score, so it
-            # can never be joined back to what the detector actually saw
-            # — and it grows settings.json without bound. The ledger
-            # pairs this verdict with the alert record by event_id.
-            with contextlib.suppress(Exception):
-                idx = ss.runtime_get_subkey("alert_index", eid) or {}
-                record_verdict(
-                    self._storage_root(),
-                    event_id=eid,
-                    correct=(verdict == "ok"),
-                    ts=time.time(),
-                    source="telegram",
-                    cam_id=idx.get("cam"),
-                )
-            ts_str = datetime.now().strftime("%H:%M")
-            badge = f"✅ Gültig · {ts_str}" if verdict == "ok" else f"❌ Falsch · {ts_str}"
-            await self._set_badge(q, badge)
-            await q.answer(badge)
-            return
-
-        if verb == "m1h":
-            idx = ss.runtime_get_subkey("alert_index", eid) if ss else None
-            cam = (idx or {}).get("cam")
-            label = (idx or {}).get("label")
-            if not cam or not label:
-                await q.answer("Daten zur Erkennung fehlen.")
-                return
-            until = time.time() + 3600
-            suppress = ss.runtime_get("suppress") or {}
-            if not isinstance(suppress, dict):
-                suppress = {}
-            suppress[f"{cam}|{label}"] = until
-            ss.runtime_set("suppress", suppress)
-            until_dt = (datetime.now() + timedelta(hours=1)).strftime("%H:%M")
-            await self._set_badge(q, f"🔇 Stumm bis {until_dt}")
-            await q.answer(f"🔇 1 h still für {LABEL_DE.get(label, label)}")
-            return
-
-        if verb == "siren":
-            idx = ss.runtime_get_subkey("alert_index", eid) if ss else None
-            cam = (idx or {}).get("cam")
-            rt = self.runtimes.get(cam) if cam else None
-            triggered = False
-            if rt and hasattr(rt, "trigger_siren"):
-                try:
-                    triggered = bool(rt.trigger_siren())
-                except Exception as e:
-                    log.warning("[tg] trigger_siren failed: %s", e)
-            await self._set_badge(q, "🚨 Sirene")
-            if triggered:
-                await q.answer("🚨 Sirene aktiviert")
-            else:
-                # Reolink siren API isn't wired yet — log + acknowledge.
-                log.info("[tg] siren requested for %s — not implemented", cam)
-                await q.answer("🚨 Sirene angefordert (nicht unterstützt)")
-            return
-
-        await q.answer("Unbekannte Aktion")
 
     async def _handle_mute_cb(self, q, data: str):
         """mute:end → clear global mute. mute:ext4h → push end-time to now+4h."""

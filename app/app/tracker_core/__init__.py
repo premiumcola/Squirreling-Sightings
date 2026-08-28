@@ -124,7 +124,9 @@ def compute_miss_grace_samples(seconds: float, fps: float) -> int:
 
 
 # ── Per-camera threshold resolver ───────────────────────────────────────────
-def resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float, float, float]:
+def resolve_track_thresholds(
+    cam_cfg_getter, camera_id, label: str | None = None
+) -> tuple[float, float, float, float]:
     """Pull the camera's spawn / continue / miss-grace / IoU overrides.
 
     Returns ``(spawn_score, floor_score, miss_grace_seconds,
@@ -138,6 +140,16 @@ def resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float, f
     allow tentative samples to spawn tracks, defeating the two-tier
     design. IoU is clamped to [0.0, 0.95] so a typo or extreme value
     can't break the matcher entirely.
+
+    P4 · when ``label`` is given, the floor is clamped against the
+    PER-LABEL spawn from the ladder rather than against the camera-wide
+    ``track_spawn_min_score``. Those two are different numbers, and the
+    difference had teeth: a camera-wide 0.50 with ``bird`` at 0.45 let
+    the floor sit above the label's own spawn, so a bird track could be
+    continued at a score its own spawn would never have started. The
+    import is function-local because ``thresholds._ladder`` reads
+    ``tracker_core._consts`` — a module-level import here would close
+    the cycle.
     """
     spawn = TRACK_SPAWN_SCORE
     floor = TRACK_FLOOR_SCORE
@@ -171,8 +183,14 @@ def resolve_track_thresholds(cam_cfg_getter, camera_id) -> tuple[float, float, f
             iou_t = max(0.0, min(0.95, i))
     except (TypeError, ValueError):
         pass
-    if floor > spawn:
-        floor = spawn
+    clamp_against = spawn
+    if label:
+        from ..thresholds import resolve_effective
+        from ..thresholds._apply import adapted_layer
+
+        clamp_against = resolve_effective(cfg, None, label, adapted=adapted_layer(cfg, label)).spawn
+    if floor > clamp_against:
+        floor = clamp_against
     return spawn, floor, grace_s, iou_t
 
 

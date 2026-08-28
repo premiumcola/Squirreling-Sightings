@@ -1,0 +1,530 @@
+/* ─── 32-netz.css · Erkennungsnetz panel ───────────────────────────────────
+   The radar, its chrome, the drag pill and the staging bar.
+
+   Design rules that shaped this file:
+   · no thin border lines — depth comes from colour contrast and filled
+     bands, which is also why the radar's rings are DISCS, not strokes;
+   · corner radius >= 12 px on the panel, >= 8 px everywhere else;
+   · every touch target >= 44 x 44 px (the invisible vertex disc IS 44);
+   · dvh, never vh; safe-area-inset-bottom on the fixed staging bar.
+
+   Class colours come from 00-class-tokens.css via inline --cc; never
+   re-declared here. */
+
+:root {
+  --netz-prov-manual: #e2e8f0;
+  --netz-prov-auto: rgba(226, 232, 240, 0.55);
+  --netz-prov-werk: #8888aa;
+  --netz-poly: rgba(120, 200, 255, 0.16);
+  --netz-poly-line: rgba(120, 200, 255, 0.85);
+}
+
+#netz .netz-block {
+  padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
+  border-radius: 14px;
+}
+
+.netz-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+/* ── tabs ───────────────────────────────────────────────────────────── */
+
+.netz-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.netz-tab {
+  flex: 1 1 0;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-tab.is-active {
+  background: rgba(34, 197, 94, 0.22);
+  color: #eaf7ee;
+}
+
+/* ── camera / filter pills ──────────────────────────────────────────── */
+
+.netz-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.netz-pill {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-pill.is-active {
+  background: rgba(34, 197, 94, 0.24);
+  color: #eaf7ee;
+}
+
+/* ── the chart ──────────────────────────────────────────────────────── */
+
+.netz-chart {
+  display: flex;
+  justify-content: center;
+  position: relative;
+  margin: 4px 0 10px;
+}
+
+/* touch-action ONLY on the SVG — the page itself must still scroll. */
+.netz-svg {
+  touch-action: none;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.netz-ring-lbl {
+  fill: #e2e8f0;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.netz-axis-lbl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 68px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+}
+
+.netz-axis-ic {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.netz-axis-name {
+  white-space: nowrap;
+}
+
+.netz-hit {
+  cursor: grab;
+}
+
+/* ── bar fallback (< 4 axes) ────────────────────────────────────────── */
+
+.netz-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 auto 10px;
+  width: 100%;
+}
+
+.netz-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.netz-bar-lbl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 116px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-bar-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.netz-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--netz-poly);
+  box-shadow: inset 0 0 0 2px var(--netz-poly-line);
+}
+
+/* The "Werk" reference, as a filled tick rather than a hairline. */
+.netz-bar-werk {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.netz-bar-knob {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: var(--cc);
+  box-shadow: 0 0 0 2px var(--pv);
+  transform: translateY(-50%);
+}
+
+.netz-bar-row.is-empty .netz-bar-knob {
+  background: transparent;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+}
+
+.netz-bar-row.is-ready .netz-bar-knob {
+  box-shadow:
+    0 0 0 2px var(--pv),
+    0 0 0 4px #fff;
+}
+
+/* 44 px tall invisible strip over the whole track — the bar's touch
+   target, same size rule as the radar's vertex disc. */
+.netz-bar-hit {
+  position: absolute;
+  inset: -16px 0;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+/* ── legend ─────────────────────────────────────────────────────────── */
+
+.netz-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.netz-leg-prov {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.netz-leg-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.netz-leg-dot i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.netz-leg-hint {
+  margin-top: 2px;
+  opacity: 0.75;
+}
+
+/* ── progress / automatik / frozen ──────────────────────────────────── */
+
+.netz-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.netz-progress span {
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.netz-auto {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.netz-auto-t {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.netz-auto-t em {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.netz-frozen {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+
+.netz-frozen summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  color: #cbd5e1;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-frozen ul {
+  margin: 6px 0 2px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.netz-frozen li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 3px 0;
+  color: #94a3b8;
+}
+
+.netz-frozen code {
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+/* ── drag pill ──────────────────────────────────────────────────────── */
+
+.netz-drag-pill {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(15, 24, 37, 0.96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.35;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.netz-drag-pill[data-on='1'] {
+  display: flex;
+}
+
+.netz-drag-pill span {
+  color: #94a3b8;
+}
+
+/* ── staging bar ────────────────────────────────────────────────────── */
+
+.netz-stage {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-radius: 12px;
+  background: rgba(15, 24, 37, 0.97);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  z-index: 2;
+}
+
+.netz-stage span {
+  flex: 1 1 auto;
+}
+
+.netz-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #22c55e;
+  color: #06240f;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Never dark-on-dark. */
+.netz-btn--ghost {
+  background: rgba(255, 255, 255, 0.14);
+  color: #e2e8f0;
+}
+
+.toast-action {
+  min-height: 32px;
+  margin-left: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── empty state ────────────────────────────────────────────────────── */
+
+.netz-empty {
+  padding: 24px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  text-align: center;
+}
+
+.netz-empty-title {
+  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.netz-empty-sub {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+@media (hover: hover) {
+  .netz-tab:hover,
+  .netz-pill:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .netz-axis-lbl:hover {
+    color: #fff;
+  }
+}
+
+/* ── D · what is left where the sliders were ────────────────────────── */
+
+.erk-netz-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.erk-netz-link {
+  align-self: flex-start;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  border-radius: 10px;
+  text-decoration: none;
+}
+
+.erk-note {
+  display: block;
+  margin-top: 8px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
+.erk-expert {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.erk-expert summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: #cbd5e1;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.erk-track-warn {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #94a3b8;
+}
+
+/* D11 · the debug read-outs are display-only — no grab cursor, no
+   pointer affordance on something that does not write. */
+.mv-ld-slider.is-readonly .mv-ld-slider-knob,
+.mv-ld-slider.is-readonly .mv-ld-slider-track {
+  cursor: default;
+  pointer-events: none;
+}
+
+.mv-ld-cluster-note {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #94a3b8;
+}

@@ -25,12 +25,13 @@ Precedence — highest wins, and it is the same for every field:
     camera  > adapted > global > default
 
 * ``camera``  — the operator set this by hand on THIS camera.
-* ``adapted`` — a value some later automatic calibration proposes
-  (THR-3). It sits BELOW the manual layer on purpose: an automatic
-  adaptation must never be able to silently overwrite a number the user
-  typed. It is passed in per call — nothing here reads or writes an
-  adapted value on its own, and ``recommend_push`` below deliberately
-  does not either.
+* ``adapted`` — the value the nightly learner last applied. It sits
+  BELOW the manual layer on purpose: an automatic adaptation must never
+  be able to silently overwrite a number the operator set by hand, and
+  that is exactly the precedence the net's "a drag pins the axis" rule
+  needs. It is passed in per call — ``_apply.adapted_layer`` builds it
+  from ``cam["net_adapted"][label]`` — and ``recommend_push``
+  deliberately never writes it.
 * ``global``  — the system-wide setting in ``telegram.push``.
 * ``default`` — the shipped constant.
 
@@ -44,6 +45,8 @@ Layout:
 
     _ladder.py       — the four-gate resolution and its precedence
     _calibration.py  — THR-2 advisory recommendation over the corpus
+    _apply.py        — NETZ · the E ↔ Schwelle mapping and its rails
+    _learner.py      — the nightly run that applies a recommendation
 
 Pure functions, no I/O, no app state. Consumers pass in the camera dict,
 the ``telegram.push`` dict and the ledger rows they already hold.
@@ -67,7 +70,6 @@ from ._calibration import (
     VERDICT_LOWER,
     VERDICT_RAISE,
     PushRecommendation,
-    enforced_push,
     recommend_push,
 )
 from ._ladder import (
@@ -106,7 +108,6 @@ __all__ = [
     "VERDICT_RAISE",
     "EffectiveThresholds",
     "PushRecommendation",
-    "enforced_push",
     "recommend_push",
     "resolve_effective",
 ]

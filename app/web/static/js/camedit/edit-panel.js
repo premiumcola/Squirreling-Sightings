@@ -29,8 +29,6 @@ import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
 import {
   _initCameraFormListeners,
   _initErkSliders,
-  _renderErkPerClassConfidence,
-  _bindErkPerClassToggle,
   _renderErkPerClassConfirm,
   _bindErkConfirmPerClassToggle,
   _bindDetectionRoiControls,
@@ -214,8 +212,6 @@ function _hydrateErkennung(formEl, c) {
   // values survive via the existingCam fallback in the submit handler.
   _initErkSliders(formEl);
   // Both drilldowns stay collapsed unless the user asks for them.
-  _renderErkPerClassConfidence(formEl, c);
-  _bindErkPerClassToggle();
   _renderErkPerClassConfirm(formEl, c);
   _bindErkConfirmPerClassToggle();
   _bindDetectionRoiControls(formEl, c);

@@ -43,8 +43,6 @@ import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
 import {
   _initCameraFormListeners,
   _initErkSliders,
-  _renderErkPerClassConfidence,
-  _bindErkPerClassToggle,
   _renderErkPerClassConfirm,
   _bindErkConfirmPerClassToggle,
   _bindDetectionRoiControls,

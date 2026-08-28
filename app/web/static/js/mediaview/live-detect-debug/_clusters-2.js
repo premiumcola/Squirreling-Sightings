@@ -1,6 +1,6 @@
 import { esc } from '../../core/dom.js';
 import { _scheduleSave } from './_save.js';
-import { _renderSlider, _renderClusterHeader, _wireSlider, _forceSave, _valToPct, _formatValue } from './_clusters-1.js';
+import { _renderClusterHeader } from './_clusters-1.js';
 // Per-class default thresholds — keep aligned with the project's
 // shipped tuning. Used by Cluster 2's "Defaults" button.
 const _CLASS_DEFAULT_THRESH = {
@@ -16,27 +16,17 @@ const _ALL_FILTER_CANDIDATES = ['person', 'cat', 'bird', 'car', 'dog', 'squirrel
 // SIMU-05c · Cluster 2 · Recognition.
 export function _renderCluster2(ctx, cam) {
   const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : [];
-  const thresholds = cam.label_thresholds || {};
-  const globalThresh = Number(cam.detection_min_score) || 0.55;
+  // D10 · the per-class threshold sliders are GONE. They doubled the
+  // Netz and printed the wrong fallback while doing it: `0.55` is the
+  // GLOBAL processing default, while the real spawn is TRACK_SPAWN_SCORE
+  // 0.50 — so the number under the knob was never the number the
+  // pipeline used. Diagnosis reads the effective values from the Netz
+  // panel (/api/netz/state), which resolves them through the ladder.
   const sortedClasses = filterArr
     .slice()
     .sort((a, b) => Object.keys(_CLASS_DEFAULT_THRESH).indexOf(a) - Object.keys(_CLASS_DEFAULT_THRESH).indexOf(b));
-  const classSlidersHtml = sortedClasses
-    .map((lbl) => {
-      const v = Number(thresholds[lbl]);
-      const val = Number.isFinite(v) && v > 0 ? v : globalThresh;
-      return _renderSlider({
-        field: `label_thresholds:${lbl}`,
-        label: lbl,
-        value: val,
-        min: 0.0,
-        max: 0.95,
-        step: 0.01,
-        desc: `Min. Confidence damit "${lbl}" als gültige Detection passt`,
-        hint: '↓ Senken = mehr Detections (aber mehr False Positives)',
-      });
-    })
-    .join('');
+  const classSlidersHtml = `<div class="mv-ld-empty-row">Konfidenz-Schwellen regelt das
+        Erkennungsnetz — <a href="#netz">Netz öffnen</a>.</div>`;
   const filterPillsHtml = _ALL_FILTER_CANDIDATES.map((lbl) => {
     const on = filterArr.includes(lbl);
     return `<button type="button" class="mv-ld-filter-pill" data-filter-pill="${esc(lbl)}" data-on="${on ? '1' : '0'}">${esc(lbl)}${on ? ' ✓' : ''}</button>`;
@@ -62,8 +52,6 @@ export function _renderCluster2(ctx, cam) {
         <div class="mv-ld-filter-pills">${filterPillsHtml}</div>
         ${_renderCluster2Evidence(ctx, cam)}
         <div class="mv-ld-cluster-actions">
-          <button type="button" class="mv-ld-action-btn mv-ld-action-save" data-action="save-cluster2">Speichern (Cam)</button>
-          <button type="button" class="mv-ld-action-btn" data-action="defaults-cluster2">Defaults</button>
           <span class="mv-ld-save-status" data-save-status data-save-state="idle"></span>
         </div>
       </div>
@@ -113,9 +101,6 @@ export function _renderCluster2Evidence(ctx, cam) {
 
 export function _wireCluster2(host, cam, ctx) {
   const camId = (ctx.session || {}).camId || cam.id;
-  host.querySelectorAll('.mv-ld-slider[data-field^="label_thresholds:"]').forEach((root) => {
-    _wireSlider(root, camId);
-  });
   host.querySelectorAll('[data-filter-pill]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const lbl = btn.dataset.filterPill;
@@ -131,22 +116,11 @@ export function _wireCluster2(host, cam, ctx) {
       _scheduleSave(camId, { object_filter: filter }, statusEl);
     });
   });
-  host
-    .querySelector('[data-action="save-cluster2"]')
-    ?.addEventListener('click', () => _forceSave(camId, host));
-  host
-    .querySelector('[data-action="defaults-cluster2"]')
-    ?.addEventListener('click', () => {
-      const filterArr = Array.isArray(cam.object_filter) ? cam.object_filter : [];
-      const lt = {};
-      for (const lbl of filterArr) {
-        lt[lbl] = _CLASS_DEFAULT_THRESH[lbl] || 0.5;
-        const sliderRoot = host.querySelector(`.mv-ld-slider[data-field="label_thresholds:${lbl}"]`);
-        if (sliderRoot) _setSliderValue(sliderRoot, lt[lbl]);
-      }
-      const statusEl = host.querySelector('[data-action="defaults-cluster2"]').closest('.mv-ld-cluster').querySelector('[data-save-status]');
-      _scheduleSave(camId, { label_thresholds: lt }, statusEl);
-    });
+  // The Speichern + Defaults buttons went with the sliders: the object
+  // filter autosaves on every tap, and resetting an axis to Werk is the
+  // Netz's own long-press. Doing that from two places with two different
+  // notions of "default" is what produced the 0.55-vs-0.50 divergence in
+  // the first place.
   host
     .querySelector('[data-action="open-profil-editor"]')
     ?.addEventListener('click', () => {
@@ -155,17 +129,4 @@ export function _wireCluster2(host, cam, ctx) {
     });
 }
 
-export function _setSliderValue(root, val) {
-  const min = Number(root.dataset.min);
-  const max = Number(root.dataset.max);
-  const step = Number(root.dataset.step);
-  const pct = _valToPct(val, min, max);
-  root.dataset.value = String(val);
-  const knob = root.querySelector('[data-slider-knob]');
-  const fill = root.querySelector('[data-slider-fill]');
-  const valEl = root.querySelector('[data-slider-value]');
-  if (knob) knob.style.left = `${pct.toFixed(2)}%`;
-  if (fill) fill.style.width = `${pct.toFixed(2)}%`;
-  if (valEl) valEl.textContent = _formatValue(val, step);
-}
 

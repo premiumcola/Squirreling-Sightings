@@ -9,7 +9,9 @@ from __future__ import annotations
 from copy import deepcopy
 
 from ._consts import (
+    CAMERA_ROLE_DEFAULT,
     CAMERA_THRESHOLD_KEY_DEFAULTS,
+    NET_AUTO_DEFAULT,
     CONFIRMATION_WINDOW_DEFAULTS,
     LABEL_THRESHOLD_DEFAULTS,
     STORAGE_DEFAULTS,
@@ -101,6 +103,16 @@ def default_camera(cam: dict | None = None) -> dict:
             key: (cam.get(key) or deepcopy(default))
             for key, default in CAMERA_THRESHOLD_KEY_DEFAULTS.items()
         },
+        # NETZ · role / net_pin / net_adapted / net_auto. Spelled out
+        # rather than folded into the comprehension above, because that
+        # one uses `or` — and `net_auto: false` is a value the operator
+        # deliberately set, not a missing key.
+        "role": cam.get("role") or CAMERA_ROLE_DEFAULT,
+        "net_pin": deepcopy(cam.get("net_pin") or {}),
+        "net_adapted": deepcopy(cam.get("net_adapted") or {}),
+        "net_auto": (
+            NET_AUTO_DEFAULT if cam.get("net_auto") is None else bool(cam.get("net_auto"))
+        ),
         "timelapse": {
             "enabled": _tl.get("enabled", False),
             "fps": _tl.get("fps", 30),

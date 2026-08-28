@@ -9,8 +9,8 @@ blocked through one choke point (`_event_blocked` → `EventAlertResult
 no message arrive?" is available to the caller and to the per-camera
 decision trace, rather than only to whoever greps the log.
 
-Order matters and is unchanged: the ledger record is written above the
-threshold gate on purpose — see the comment at the call site.
+Order matters: the ledger record is written above EVERY gate on purpose
+— mute and push-flag included — see the comment at the call site.
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from pathlib import Path
 
 from ...detection_feedback import record_alert
 from ...telegram_helpers import LABEL_DE, most_specific_label
+from ...thresholds import resolve_effective
+from ...thresholds._apply import adapted_layer
 from .._consts import _NOTIFY_COOLDOWN_DEFAULTS, log
 
 
@@ -49,10 +51,11 @@ class _EventCtx:
     meta: dict
     camera_id: str
     cam_cfg: dict = field(default_factory=dict)
-    label_cfg: dict = field(default_factory=dict)
     primary: str = "motion"
     top_score: float = 0.0
     threshold: float = 0.0
+    push_enabled: bool = False
+    spawn: float = 0.0
 
 
 def _top_score(detections: list, primary: str) -> float:
@@ -155,18 +158,30 @@ class EventAlertMixin:
 
     def _event_ctx(self, pcfg: dict, meta: dict, camera_id: str) -> _EventCtx:
         """Resolve label, score and the two config blocks the rest of the
-        path reads."""
+        path reads.
+
+        THR-3 · the threshold comes from ``resolve_effective`` — the one
+        place that knows the camera > adapted > global > default order —
+        and no longer from ``push["labels"][label]["threshold"]`` with a
+        0.0 fallback. Two bugs died with that line: a per-camera
+        ``push_thresholds`` entry was settable and inert (the net writes
+        exactly that key, so without this every vertex would have been
+        decoration), and a label absent from ``telegram.push.labels``
+        pushed at 0.0 while every UI claimed 0.85.
+        """
         labels = meta.get("labels") or []
         primary = most_specific_label(labels)
-        label_cfg = (pcfg.get("labels") or {}).get(primary, {})
+        cam_cfg = self._camera_cfg(camera_id) or {}
+        eff = resolve_effective(cam_cfg, pcfg, primary, adapted=adapted_layer(cam_cfg, primary))
         return _EventCtx(
             meta=meta,
             camera_id=camera_id,
-            cam_cfg=self._camera_cfg(camera_id) or {},
-            label_cfg=label_cfg,
+            cam_cfg=cam_cfg,
             primary=primary,
             top_score=_top_score(meta.get("detections") or [], primary),
-            threshold=float(label_cfg.get("threshold", 0.0) or 0.0),
+            threshold=eff.push,
+            push_enabled=eff.push_enabled,
+            spawn=eff.spawn,
         )
 
     def _event_blocked(self, ctx: _EventCtx) -> str | None:
@@ -175,18 +190,18 @@ class EventAlertMixin:
         camera_id, primary = ctx.camera_id, ctx.primary
         top_score, threshold = ctx.top_score, ctx.threshold
         detections = ctx.meta.get("detections") or []
-        muted = self._mute_reason(camera_id)
-        if muted:
-            return muted
-        if not ctx.label_cfg.get("push", False):
-            log.warning("[tg] skip: %s push disabled (cam=%s)", primary, camera_id)
-            return "push_flag"
-        # C4 · record the CANDIDATE here, above every gate. Recording
-        # after them would only ever capture events that cleared the bar
-        # — for `person` nothing under 0.85 — and a calibration built on
-        # that could raise a threshold but never lower one, which is the
-        # direction this system actually needs. The score of a rejected
-        # candidate is only observable at this point.
+        # C4 · record the CANDIDATE here, above EVERY gate — the mute and
+        # push-flag gates included. Recording below the threshold gate
+        # would only ever capture events that cleared the bar (for
+        # `person` nothing under 0.85) and a calibration built on that
+        # could raise a threshold but never lower one, which is the
+        # direction this system actually needs.
+        #
+        # Below the push-flag gate it was worse still: `cat`, `bird`,
+        # `motion`, `fox` and `hedgehog` ship with `push: false`, so five
+        # classes — including the feeder camera's whole subject — wrote
+        # ZERO ledger rows, ever, and were structurally unlearnable. The
+        # score of a rejected candidate is only observable at this point.
         with contextlib.suppress(Exception):
             record_alert(
                 self._storage_root(),
@@ -199,6 +214,12 @@ class EventAlertMixin:
                 detections=detections,
                 passed_threshold=top_score >= threshold,
             )
+        muted = self._mute_reason(camera_id)
+        if muted:
+            return muted
+        if not ctx.push_enabled:
+            log.warning("[tg] skip: %s push disabled (cam=%s)", primary, camera_id)
+            return "push_flag"
         if top_score < threshold:
             log.warning(
                 "[tg] skip: %s score=%.2f < threshold=%.2f (cam=%s)",

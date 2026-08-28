@@ -160,9 +160,11 @@ def test_delete_writes_a_false_alarm_verdict(client, store, tmp_storage_root, mo
     assert records[0]["cam"] == CAM
 
 
-def test_bulk_delete_stays_out_of_the_ledger(client, tmp_storage_root, monkeypatch):
-    """Deliberate: a bulk sweep is housekeeping, not a per-event
-    judgement. Feeding it in would drown the deliberate taps."""
+def test_bulk_delete_books_a_false_alarm_per_event(client, tmp_storage_root, monkeypatch):
+    """P1 · this is the gesture that clears a run of false alarms, and
+    `confirmed-false >= 20` is the binding constraint on every stratum.
+    Treating it as mere housekeeping threw away the scarcest evidence in
+    the corpus, a batch at a time."""
     monkeypatch.setattr(
         _trash,
         "move_to_trash",
@@ -173,7 +175,29 @@ def test_bulk_delete_stays_out_of_the_ledger(client, tmp_storage_root, monkeypat
         json={"event_ids": [EID, "evt_other"]},
     )
     assert resp.status_code == 200
-    assert _verdicts(tmp_storage_root) == []
+    records = _verdicts(tmp_storage_root)
+    assert len(records) == 2
+    assert {r["source"] for r in records} == {"web_bulk_delete"}
+    assert all(r["correct"] is False for r in records)
+    assert all(r["cam"] == CAM for r in records)
+
+
+def test_bulk_delete_never_books_a_timelapse(client, tmp_storage_root, monkeypatch):
+    """The same `tl_` guard the single-delete path carries. A timelapse
+    manifest nobody judged must never enter the corpus as a false alarm
+    — a poisoned corpus is worse than an empty one."""
+    monkeypatch.setattr(
+        _trash,
+        "move_to_trash",
+        lambda cam_id, event_id: {"json_deleted": True, "trashed": True},
+    )
+    resp = client.post(
+        f"/api/camera/{CAM}/events/delete-bulk",
+        json={"event_ids": ["tl_2026-08-28", EID]},
+    )
+    assert resp.status_code == 200
+    records = _verdicts(tmp_storage_root)
+    assert [r["event_id"] for r in records] == [EID]
 
 
 def test_ledger_failure_never_breaks_the_request(client, store, monkeypatch):

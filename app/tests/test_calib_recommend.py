@@ -31,7 +31,6 @@ from app.thresholds import (
     VERDICT_INSUFFICIENT,
     VERDICT_LOWER,
     VERDICT_RAISE,
-    enforced_push,
     recommend_push,
 )
 
@@ -278,29 +277,34 @@ def test_confidence_scales_with_the_sample():
     assert thick.confidence == "high"
 
 
-def test_enforced_push_mirrors_the_live_consumer_not_the_ladder():
-    """`_event_alert._event_ctx` reads the global label threshold and
-    falls back to 0.0 — no per-camera map, no shipped defaults."""
-    # A label absent from the saved config: ladder says 0.85, gate says 0.
-    assert enforced_push({}, "person") == 0.0
-    assert enforced_push({"labels": {"person": {"threshold": 0.7}}}, "person") == 0.7
-    # A per-camera override the live gate does not read.
-    assert enforced_push(PUSH, "person") == 0.85
+def test_the_recommendation_reads_the_layer_the_live_gate_now_uses():
+    """THR-3 · there is no divergence left to report.
 
-
-def test_divergence_between_ladder_and_live_gate_is_surfaced():
+    `_event_alert._event_ctx` resolves through `resolve_effective`, so a
+    per-camera `push_thresholds` entry is the value the push gate
+    applies AND the value the recommendation calls `current`. The old
+    `enforced` / `enforced_matches` pair existed only to surface the gap
+    between those two, and went with it."""
     true_scores = _spread(0.60, 0.95, 30)
     false_scores = _spread(0.10, 0.45, 30)
     cam = {"push_thresholds": {"person": 0.60}}
     rec = recommend_push(
         _stratum(true_scores, false_scores), _pairs(true_scores, false_scores), cam, PUSH
     )
-    # The ladder honours the per-camera override; the shipped push path
-    # does not, and the recommendation must not hide that.
     assert rec.current == 0.60
-    assert rec.enforced == 0.85
-    assert rec.enforced_matches is False
-    assert "live gate" in rec.reason
+    assert rec.current_source == "camera"
+    assert "live gate" not in rec.reason
+    assert not hasattr(rec, "enforced")
+
+
+def test_a_label_missing_from_the_saved_config_uses_the_shipped_default():
+    """The other half of the bug THR-3 killed: `fox` is absent from
+    `telegram.push.labels`, so the old gate pushed it at 0.0 while every
+    UI claimed otherwise. The ladder falls through to the shipped
+    default instead."""
+    from app.thresholds import resolve_effective
+
+    assert resolve_effective({}, {"labels": {}}, "person").push == 0.85
 
 
 def test_as_dict_is_json_safe():

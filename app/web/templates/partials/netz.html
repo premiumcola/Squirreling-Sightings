@@ -1,0 +1,49 @@
+{# Erkennungsnetz — one section, two tabs (Netz / Verlauf), both rendered into #netzBody by
+static/js/netz/. Only one state is in the DOM at a time, so the back button navigates between
+list and detail for free and there is no modal-inside-a-modal on iOS. Same shape as storms.html
+next door. The static markup below is what a browser with JS disabled sees, and also what is on
+screen for the moment between paint and hydration — deliberately the calm empty state, not a
+spinner. #}
+<section id="netz" class="panel section" data-accent="34,197,94">
+  <div class="netz-block" id="netzBlock">
+    <div class="netz-head">
+      <span class="ws-title">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <use href="#icon-netz" /></svg
+        >Erkennungsnetz
+      </span>
+      <span class="ws-subtitle"
+        >Wie empfindlich jede Klasse gemeldet wird — pro Kamera, geformt von deinen Antworten in
+        Telegram.</span
+      >
+    </div>
+    <div class="netz-tabs" id="netzTabs" role="tablist" aria-label="Ansicht">
+      <button
+        type="button"
+        class="netz-tab is-active"
+        data-netz-tab="netz"
+        role="tab"
+        aria-selected="true"
+      >
+        Netz
+      </button>
+      <button
+        type="button"
+        class="netz-tab"
+        data-netz-tab="verlauf"
+        role="tab"
+        aria-selected="false"
+      >
+        Verlauf
+      </button>
+    </div>
+    <div class="netz-body" id="netzBody">
+      <div class="netz-empty">
+        <div class="netz-empty-title">Startwerte</div>
+        <div class="netz-empty-sub">
+          Noch keine Rückmeldungen. Jede Antwort in Telegram formt das Netz.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

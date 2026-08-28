@@ -73,6 +73,7 @@ def register_blueprints(app) -> None:
         detection_cloud,
         events,
         media,
+        netz,
         sichtungen,
         streams,
         telegram,
@@ -99,6 +100,10 @@ def register_blueprints(app) -> None:
     app.register_blueprint(streams.bp)
     app.register_blueprint(media.bp)
     app.register_blueprint(events.bp)
+    # NETZ · Erkennungsnetz + Verlaufs-Archiv. Own module because
+    # neither cameras.py nor events.py has room, and because the net's
+    # two surfaces share one helper module.
+    app.register_blueprint(netz.bp)
     app.register_blueprint(timeline_stats.bp)
     app.register_blueprint(timelapse.bp)
     app.register_blueprint(coral.bp)

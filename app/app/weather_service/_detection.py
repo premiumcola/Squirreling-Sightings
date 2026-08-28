@@ -41,18 +41,59 @@ class DetectionMixin:
     concrete class.
     """
 
+    def _now_index(self, times: list) -> int:
+        """Index of the slot covering NOW, or the last one before it.
+
+        `minutely_15` is a FORECAST: it starts in the past and runs days
+        into the future. The end of that array is the forecast horizon,
+        not the present.
+        """
+        now = datetime.now().replace(tzinfo=None)
+        best = 0
+        for i, raw in enumerate(times):
+            try:
+                # Open-Meteo emits local wall time ("2026-08-28T12:00")
+                # because the request carries `timezone`. Compare naive
+                # against a naive local now; a Z-suffixed value would be
+                # UTC, so normalise that case rather than mis-reading it.
+                txt = str(raw)
+                slot_dt = datetime.fromisoformat(txt.replace("Z", "+00:00"))
+                if slot_dt.tzinfo is not None:
+                    slot_dt = slot_dt.astimezone().replace(tzinfo=None)
+            except (TypeError, ValueError):
+                continue
+            if slot_dt <= now:
+                best = i
+            else:
+                break
+        return best
+
     def _latest_slice(self, payload: dict) -> dict:
-        """Pick the most recent 15-minute time slot whose data is non-null.
-        Open-Meteo returns parallel arrays under `minutely_15`; we walk back
-        from the end until we find a row that actually has values."""
+        """The 15-minute slot covering NOW, with measurements in it.
+
+        `minutely_15` holds a forecast running days ahead, so the last
+        row is the horizon rather than the present. This walked back
+        from the END and took the first row with any non-null value —
+        and at the horizon only `wind_gusts_10m` is still populated,
+        so it reliably returned one gust figure from two days out with
+        every other field null.
+
+        Two consequences, both observed on the live system during an
+        actual storm: `heavy_rain` could never fire, because a null
+        precipitation is not comparable to a threshold; and the status
+        panel showed a fair-weather gust value while it was pouring.
+
+        So: anchor on the slot covering the current time, then walk
+        BACKWARDS from there for the most recent row that carries data —
+        the tail of a forecast is never a measurement of now.
+        """
         m = (payload or {}).get("minutely_15") or {}
         times = m.get("time") or []
         if not times:
             return {}
         keys = [k for k in m if k != "time"]
-        # Walk from newest to oldest until we find a slot with at least one
-        # non-null measurement.
-        for i in range(len(times) - 1, -1, -1):
+        start = self._now_index(times)
+        for i in range(start, -1, -1):
             slot = {"time": times[i]}
             any_val = False
             for k in keys:
@@ -63,7 +104,7 @@ class DetectionMixin:
                     any_val = True
             if any_val:
                 return slot
-        return {"time": times[-1]}
+        return {"time": times[start]}
 
     def _sun_position(self) -> dict:
         """Cached sun altitude/azimuth for the configured location.

@@ -88,18 +88,36 @@ html {
    Section labels and brand are hidden (display:none) — visual
    grouping comes from .nav-divider lines, branding lives in the
    hero. Keeping them in flow forced icon shifts between states. */
+/* .sidebar-slot reserves the flex-layout space. Its width is the ONLY
+   thing .main's flex sizing ever sees — .sidebar itself may grow past
+   it (the collapsed:hover flyout below) without ever pushing .main,
+   because a sticky child overflowing its non-clipping parent just
+   overlaps the next flex sibling in paint order instead of resizing
+   it. This is what actually fixes "menu pushes itself away on
+   scroll": the old rule grew .sidebar's OWN width, which WAS the flex
+   basis .main narrowed against. */
+.sidebar-slot {
+  flex-shrink: 0;
+  width: 260px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sidebar-slot:has(.sidebar.collapsed) {
+  width: 52px;
+}
 .sidebar {
   padding: 8px;
   position: sticky;
   top: 8px;
   height: max-content;
-  flex-shrink: 0;
   width: 260px;
   transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 .sidebar.collapsed {
   width: 52px;
+}
+.sidebar.collapsed:hover {
+  z-index: 30;
 }
 /* nw273 — in collapsed mode the icon's grid column already pins its
    x-position; the label column just animates from 0 width to its

@@ -719,7 +719,9 @@ byId('cameraForm').onsubmit = async (e) => {
     // apply for fresh cameras (existingCam is undefined → "" / 0 / etc.
     // → backend coerces to schema default).
     bottom_crop_px: parseInt(f['bottom_crop_px']?.value ?? existingCam?.bottom_crop_px ?? 0),
-    motion_sensitivity: parseFloat(f['motion_sensitivity']?.value || 0.5),
+    motion_sensitivity: parseFloat(
+      f['motion_sensitivity']?.value ?? existingCam?.motion_sensitivity ?? 0.5,
+    ),
     wildlife_motion_sensitivity: parseFloat(
       f['wildlife_motion_sensitivity']?.value ?? existingCam?.wildlife_motion_sensitivity ?? 0,
     ),
@@ -728,7 +730,9 @@ byId('cameraForm').onsubmit = async (e) => {
       : existingCam?.motion_enabled !== false,
     detection_trigger:
       f['detection_trigger']?.value || existingCam?.detection_trigger || 'motion_and_objects',
-    post_motion_tail_s: parseFloat(f['post_motion_tail_s']?.value || 0),
+    post_motion_tail_s: parseFloat(
+      f['post_motion_tail_s']?.value ?? existingCam?.post_motion_tail_s ?? 0,
+    ),
     // alarm_profile is now a hidden bridge field — its value is the
     // camera's previously-stored value (set by editCamera). Persist
     // unchanged so the class_severity migration on next load still
@@ -780,7 +784,9 @@ byId('cameraForm').onsubmit = async (e) => {
     reolink_http_port: parseInt(f['reolink_http_port']?.value || 0, 10) || 0,
     confirmation_window: _collectConfirmationWindow(e.target, existingCam),
     resolution: f['resolution']?.value || existingCam?.resolution || 'auto',
-    frame_interval_ms: parseInt(f['frame_interval_ms']?.value || 350),
+    frame_interval_ms: parseInt(
+      f['frame_interval_ms']?.value ?? existingCam?.frame_interval_ms ?? 350,
+    ),
     snapshot_interval_s: parseInt(
       f['snapshot_interval_s']?.value ?? existingCam?.snapshot_interval_s ?? 3,
     ),

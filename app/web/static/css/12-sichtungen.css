@@ -2,10 +2,14 @@
 /* Warm bronze tint matching the "Bronze 1–4×" achievement badge. The accent
    (--acc) is fed by data-accent="200,120,64" on the section root and seeded
    by the panel-section accent loop in app.js. No border-top — the tint
-   alone separates this from the surrounding dark UI. */
+   alone separates this from the surrounding dark UI.
+   2026-08-29: bumped 0.08/0.03 → 0.16/0.06 — against --panel (#1a1a1a) on
+   a --bg (#111111) page, the old alpha was too close to both to read as
+   its own surface, so #media's plain panel above and this section's top
+   edge looked like one continuous dark bar instead of two panels. */
 #achievements {
   --acc: 200, 120, 64;
-  background: linear-gradient(160deg, rgba(var(--acc), 0.08) 0%, rgba(var(--acc), 0.03) 100%);
+  background: linear-gradient(160deg, rgba(var(--acc), 0.16) 0%, rgba(var(--acc), 0.06) 100%);
   padding: 12px 16px;
 }
 #achievements .section-head h3,

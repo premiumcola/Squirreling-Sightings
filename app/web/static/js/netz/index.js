@@ -18,6 +18,7 @@ import { renderArchiveDetail } from './_archive_detail.js';
 import { renderArchiveList } from './_archive_list.js';
 import { clearStaged, netzState, shownE, stagedCount } from './_state.js';
 import { labelDe, pct } from './_helpers.js';
+import { initNetzHelp } from './_help.js';
 
 const HOST_ID = 'netzBody';
 
@@ -291,6 +292,7 @@ let _observer = null;
 export function initNetz() {
   const sec = byId('netz');
   if (!sec || _observer) return;
+  initNetzHelp();
   byId('netzTabs')
     ?.querySelectorAll('[data-netz-tab]')
     .forEach((b) => b.addEventListener('click', () => showTab(b.dataset.netzTab)));

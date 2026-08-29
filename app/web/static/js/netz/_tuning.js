@@ -1,15 +1,20 @@
 // ─── netz/_tuning.js ────────────────────────────────────────────────────────
-// Kamera-Feinschliff — the camera-WIDE capture/motion/tracking loop
-// settings that used to live on the Erkennung tab's own form
-// (Analyse-Intervall, Bewegungs-Vortrigger/Nachlauf, Objekt-Tracking,
-// Kleintier-ROI). They can never become per-class radar axes — every one
-// of them runs before the pipeline has classified anything — so they
-// render as a plain collapsed fold below the net instead of a second
-// radar. Saved through the same `PATCH .../detection-tuning` route the
-// Simulieren debug panel already uses; the tracker presets keep their
-// existing "auto-save on click" behaviour.
-import { esc, qs, qsa } from '../core/dom.js';
+// The Fangnetz's PRIMARY radar — camera-wide capture/motion/tracking
+// settings, one spoke each (see _settings_axes.js for why these and not
+// object classes: every one of them runs before the pipeline has
+// classified anything, so a per-class shape is a category error, not a
+// missing feature).
+//
+// Ghost-track filtering (a boolean) and the three tracker presets (each
+// a one-click shortcut across four fields at once) sit BELOW the chart
+// as their own controls rather than forced onto spokes — a toggle has
+// no continuum to drag along, and a preset writes several axes in one
+// motion, which a single vertex can't represent.
+import { qsa } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
+import { renderTuneRadar } from './_radar.js';
+import { bindTuneDrag } from './_tune_drag.js';
+import { TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
 import { patchTuning } from './_api.js';
 import { netzState } from './_state.js';
 
@@ -20,212 +25,131 @@ const _TRACK_PRESETS = {
 };
 const _TRACK_PRESET_LABELS = { careful: 'Vorsichtig', balanced: 'Ausgewogen', robust: 'Robust' };
 
-const _POST_MOTION_OPTIONS = [
-  ['0', 'Standard (Global-Wert)'],
-  ['3', '3 Sekunden'],
-  ['5', '5 Sekunden'],
-  ['8', '8 Sekunden'],
-  ['10', '10 Sekunden'],
-  ['15', '15 Sekunden'],
-];
-const _ROI_MODES = [
-  ['off', 'Aus'],
-  ['roi', 'Motion-ROI'],
-  ['2x2', '2×2'],
-  ['3x3', '3×3'],
-];
+function _effectiveTuning(st) {
+  // Staged (dragged-but-not-committed) values overlay the server state so
+  // the chart shows what the operator is mid-edit on, matching the
+  // confidence radar's shownE().
+  return { ...(st.tuning || {}), ...netzState.tuneStaged };
+}
 
-export function tuningHtml(st) {
-  const t = st.tuning || {};
-  const tail = String(t.post_motion_tail_s || 0);
-  const roiMode = t.roi_mode || 'off';
+function _stagingHtml() {
+  const n = Object.keys(netzState.tuneStaged).length;
+  if (!n) return '';
   return (
-    `<details class="netz-tune"><summary>Kamera-Feinschliff</summary>` +
-    `<div class="netz-tune-body">` +
-    `<span class="lbl">Kamera-weite Aufnahme- und Tracking-Werte — nicht pro Klasse, ` +
-    `laufen vor der Erkennung.</span>` +
-    _scanCard(t) +
-    _motionCard(t) +
-    _tailCard(tail) +
-    _trackingCard(t) +
-    _roiCard(t, roiMode) +
-    `<div class="netz-tune-save">` +
-    `<button type="button" class="netz-btn" data-netz-tune-save disabled>Übernehmen</button>` +
-    `</div>` +
-    `</div></details>`
+    `<div class="netz-stage" role="group" aria-label="Ungespeicherte Änderungen">` +
+    `<span>${n} ${n === 1 ? 'Wert' : 'Werte'} geändert</span>` +
+    `<button type="button" class="netz-btn netz-btn--ghost" data-tune-discard>Verwerfen</button>` +
+    `<button type="button" class="netz-btn" data-tune-apply>Übernehmen</button></div>`
   );
 }
 
-function _scanCard(t) {
-  const v = Number(t.frame_interval_ms) || 350;
-  const fps = Math.max(1, Math.round(1000 / v));
+function _ghostToggleHtml(tuning) {
+  const checked = tuning.track_filter_ghosts !== false;
   return (
-    `<div class="erk-card">` +
-    `<div class="row"><input type="range" data-tune="frame_interval_ms" min="100" max="2000" ` +
-    `step="50" value="${v}"><span class="val" data-tune-val="frame_interval_ms">${v} ms</span></div>` +
-    `<span class="lbl" data-tune-hint="frame_interval_ms">≈ ${fps} fps · niedriger = mehr ` +
-    `Coral-Last</span></div>`
-  );
-}
-
-function _motionCard(t) {
-  const v = Number(t.motion_sensitivity ?? 0.5);
-  return (
-    `<div class="erk-card">` +
-    `<div class="row"><input type="range" data-tune="motion_sensitivity" min="0.1" max="1.0" ` +
-    `step="0.1" value="${v}"><span class="val" data-tune-val="motion_sensitivity">` +
-    `${Math.round(v * 100)}%</span></div>` +
-    `<span class="lbl">Bewegungs-Vortrigger · niedrig = nur große Bewegung</span></div>`
-  );
-}
-
-function _tailCard(tail) {
-  const opts = _POST_MOTION_OPTIONS
-    .map(
-      ([v, label]) => `<option value="${v}"${v === tail ? ' selected' : ''}>${esc(label)}</option>`,
-    )
-    .join('');
-  return (
-    `<div class="erk-card"><div class="row"><select data-tune="post_motion_tail_s">${opts}` +
-    `</select></div><span class="lbl">Nachlauf-Aufnahme nach letzter Bewegung</span></div>`
-  );
-}
-
-function _trackingCard(t) {
-  const grace = Number(t.track_miss_grace_seconds) || 0;
-  const iou = Number(t.track_iou_match_threshold) || 0;
-  const ghostChecked = t.track_filter_ghosts !== false;
-  const presets = Object.keys(_TRACK_PRESETS)
-    .map(
-      (k) =>
-        `<button type="button" class="erk-track-preset" data-tune-preset="${k}">${_TRACK_PRESET_LABELS[k]}</button>`,
-    )
-    .join('');
-  return (
-    `<div class="erk-card">` +
-    `<span class="field-help" style="margin-bottom:6px">Objekt-Tracking · hält erkannte ` +
-    `Objekte über kurze Konfidenz-Einbrüche hinweg auf demselben Track.</span>` +
-    `<div class="erk-track-presets" role="group" aria-label="Tracking-Vorlagen">` +
-    `<span class="erk-track-presets-lbl">Vorlage anwenden:</span>${presets}</div>` +
     `<label class="erk-track-toggle"><span class="erk-track-toggle-text">` +
     `<span class="erk-track-toggle-name">Ghost-Spuren in Aufnahmen ausblenden</span>` +
     `<span class="erk-track-toggle-sub">Spuren, deren beste Konfidenz nie über der ` +
     `Spawn-Schwelle lag, werden nach der Aufnahme aus dem Track-Sidecar entfernt.</span>` +
-    `</span><input type="checkbox" data-tune="track_filter_ghosts" class="switch-input"` +
-    `${ghostChecked ? ' checked' : ''}><span class="switch"></span></label>` +
-    `<details class="erk-expert"><summary>Experte · Track-Kontinuität</summary>` +
-    `<span class="erk-track-warn">Betrifft nicht die Konfidenz, sondern ob ein Objekt über ` +
-    `Frames hinweg dasselbe bleibt. Nur anfassen, wenn eine Kamera Spuren zerreißt.</span>` +
-    `<div class="erk-track-grid">` +
-    `<label class="erk-track-cell"><span class="erk-track-lbl">Gnadenfrist (Sek.)</span>` +
-    `<input type="number" data-tune="track_miss_grace_seconds" min="0" max="30" step="0.5" ` +
-    `value="${grace}" inputmode="decimal" placeholder="8,0">` +
-    `<span class="erk-track-sub">Wie lange darf ein Track ohne Treffer überleben</span></label>` +
-    `<label class="erk-track-cell"><span class="erk-track-lbl">IoU-Schwelle</span>` +
-    `<input type="number" data-tune="track_iou_match_threshold" min="0" max="0.95" step="0.05" ` +
-    `value="${iou}" inputmode="decimal" placeholder="0,20">` +
-    `<span class="erk-track-sub">Wie ähnlich die Box-Lage frame-übergreifend sein muss. ` +
-    `Niedriger = großzügiger.</span></label></div></details></div>`
+    `</span><input type="checkbox" data-tune-ghost class="switch-input"` +
+    `${checked ? ' checked' : ''}><span class="switch"></span></label>`
   );
 }
 
-function _roiCard(t, roiMode) {
-  const wl = Number(t.wildlife_motion_sensitivity) || 0;
-  const net = Number(t.roi_min_net_disp_frac) || 0;
-  const seg = _ROI_MODES
+function _presetsHtml() {
+  const buttons = Object.keys(_TRACK_PRESETS)
     .map(
-      ([mode, label]) =>
-        `<button type="button" class="erk-seg-btn${mode === roiMode ? ' is-active' : ''}" ` +
-        `data-tune-roi="${mode}" aria-pressed="${mode === roiMode}">${esc(label)}</button>`,
+      (k) =>
+        `<button type="button" class="erk-track-preset" data-tune-preset="${k}">` +
+        `${_TRACK_PRESET_LABELS[k]}</button>`,
     )
     .join('');
   return (
-    `<div class="erk-section"><div class="cam-field-label">Kleintier-Erkennung (ROI / ` +
-    `Tiling)</div><div class="erk-seg" role="group" aria-label="Erkennungsmodus">${seg}</div>` +
-    `<div class="erk-roi-hint">Läuft nur, wenn die Vollbild-Erkennung nichts findet und eine ` +
-    `zusammenhängende Bewegung erkannt wurde.</div>` +
-    `<div class="erk-card"><div class="row"><input type="range" data-tune="wildlife_motion_sensitivity" ` +
-    `min="0" max="3" step="0.1" value="${wl}"><span class="val" ` +
-    `data-tune-val="wildlife_motion_sensitivity">${wl <= 0 ? 'auto' : wl.toFixed(1) + '×'}</span>` +
-    `</div><span class="lbl">Wildtier-Empfindlichkeit · niedrigere Bewegungsschwelle für kleine ` +
-    `Tiere (0 = auto)</span></div>` +
-    `<div class="erk-card"><div class="row"><input type="range" data-tune="roi_min_net_disp_frac" ` +
-    `min="0" max="0.2" step="0.01" value="${net}"><span class="val" ` +
-    `data-tune-val="roi_min_net_disp_frac">${net <= 0 ? 'auto (4 %)' : Math.round(net * 100) + ' %'}` +
-    `</span></div><span class="lbl">Min. Bewegungs-Strecke zum Auslösen · trennt laufendes Tier ` +
-    `von Wind-Flackern (0 = Standard 4 %)</span></div></div>`
+    `<div class="erk-track-presets" role="group" aria-label="Tracking-Vorlagen">` +
+    `<span class="erk-track-presets-lbl">Vorlage anwenden (Spawn/Fortsetzung/Gnadenfrist/IoU):</span>` +
+    `${buttons}</div>`
   );
 }
 
-function _fieldValue(inp) {
-  if (inp.type === 'checkbox') return inp.checked;
-  if (inp.type === 'number' || inp.type === 'range') return parseFloat(inp.value || '0');
-  return inp.value;
+export function tuningHtml(st) {
+  const tuning = _effectiveTuning(st);
+  const axes = buildTuneAxes(tuning);
+  const side =
+    Math.min(window.innerWidth || 375, 420) > 420
+      ? 340
+      : Math.max(240, Math.min((window.innerWidth || 375) - 32, 340));
+  return (
+    `<div class="netz-tune-chart">${renderTuneRadar({ axes, side, interactive: true })}</div>` +
+    `<div class="netz-tune-controls">` +
+    _presetsHtml() +
+    _ghostToggleHtml(tuning) +
+    `</div>` +
+    _stagingHtml()
+  );
 }
 
-function _markDirty(host) {
-  host.querySelector('[data-netz-tune-save]')?.removeAttribute('disabled');
+function _repaintVertex(host, key, e) {
+  const wrap = host.querySelector('.netz-tune-chart');
+  if (!wrap) return false;
+  const st = netzState.state;
+  const tuning = _effectiveTuning(st);
+  const axes = buildTuneAxes(tuning);
+  const i = axes.findIndex((a) => a.key === key);
+  if (i < 0) return false;
+  axes[i] = { ...axes[i], E: e };
+  const side = wrap.querySelector('.netz-svg')?.getAttribute('width') || 340;
+  wrap.innerHTML = renderTuneRadar({ axes, side: Number(side), interactive: true });
+  return true;
 }
 
-export function bindTuning(host, onSaved) {
-  const root = host.querySelector('.netz-tune');
-  if (!root) return;
-
-  qsa('[data-tune]', root).forEach((inp) => {
-    inp.addEventListener('input', () => {
-      if (inp.dataset.tune === 'frame_interval_ms') {
-        const v = parseFloat(inp.value);
-        root.querySelector('[data-tune-val="frame_interval_ms"]').textContent = `${v} ms`;
-        const fps = Math.max(1, Math.round(1000 / v));
-        root.querySelector('[data-tune-hint="frame_interval_ms"]').textContent =
-          `≈ ${fps} fps · niedriger = mehr Coral-Last`;
-      } else if (inp.dataset.tune === 'motion_sensitivity') {
-        const v = parseFloat(inp.value);
-        root.querySelector('[data-tune-val="motion_sensitivity"]').textContent =
-          `${Math.round(v * 100)}%`;
-      } else if (inp.dataset.tune === 'wildlife_motion_sensitivity') {
-        const v = parseFloat(inp.value);
-        root.querySelector('[data-tune-val="wildlife_motion_sensitivity"]').textContent =
-          v <= 0 ? 'auto' : v.toFixed(1) + '×';
-      } else if (inp.dataset.tune === 'roi_min_net_disp_frac') {
-        const v = parseFloat(inp.value);
-        root.querySelector('[data-tune-val="roi_min_net_disp_frac"]').textContent =
-          v <= 0 ? 'auto (4 %)' : Math.round(v * 100) + ' %';
-      }
-      _markDirty(host);
-    });
+export function bindTuning(host, onRepaint) {
+  const onStage = (key, raw, alreadySaved) => {
+    if (alreadySaved) {
+      // Long-press reset already PATCHed the server; drop any stale
+      // staged value for this key so a later Übernehmen doesn't
+      // resend a value that no longer reflects the reset.
+      delete netzState.tuneStaged[key];
+      if (netzState.state?.tuning) netzState.state.tuning[key] = raw;
+      return;
+    }
+    netzState.tuneStaged[key] = raw;
+  };
+  bindTuneDrag(host, onRepaint, onStage);
+  // A vertex mid-drag repaints itself (same reasoning as the confidence
+  // radar's netz:vertexmove): the pointer capture set in _tune_drag.js's
+  // _onDown keeps targeting the original node regardless of this innerHTML
+  // rebuild, but any FUTURE drag needs fresh listeners on the fresh nodes.
+  host.addEventListener('netz:tunevertexmove', (ev) => {
+    if (_repaintVertex(host, ev.detail.key, ev.detail.e)) bindTuneDrag(host, onRepaint, onStage);
   });
 
-  qsa('[data-tune-roi]', root).forEach((btn) =>
-    btn.addEventListener('click', () => {
-      qsa('[data-tune-roi]', root).forEach((b) => {
-        const on = b === btn;
-        b.classList.toggle('is-active', on);
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
-      _markDirty(host);
-    }),
-  );
-
-  root.querySelector('[data-netz-tune-save]')?.addEventListener('click', async (e) => {
-    const btn = e.target;
-    const fields = {};
-    qsa('[data-tune]', root).forEach((inp) => {
-      fields[inp.dataset.tune] = _fieldValue(inp);
-    });
-    const roiBtn = root.querySelector('[data-tune-roi].is-active');
-    if (roiBtn) fields.roi_mode = roiBtn.dataset.tuneRoi;
+  host.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
+    const fields = { ...netzState.tuneStaged };
     const res = await patchTuning(netzState.camId, fields);
     if (res.ok) {
-      btn.setAttribute('disabled', '');
-      showToast('Kamera-Feinschliff gespeichert.', 'success');
-      onSaved?.(res.effective);
+      if (netzState.state) netzState.state.tuning = { ...netzState.state.tuning, ...fields };
+      netzState.tuneStaged = {};
+      showToast('Fangnetz übernommen.', 'success');
     } else {
       showToast('Konnte nicht gespeichert werden: ' + (res.error || '—'), 'error');
     }
+    onRepaint();
+  });
+  host.querySelector('[data-tune-discard]')?.addEventListener('click', () => {
+    netzState.tuneStaged = {};
+    onRepaint();
   });
 
-  qsa('[data-tune-preset]', root).forEach((btn) =>
+  host.querySelector('[data-tune-ghost]')?.addEventListener('change', async (e) => {
+    const res = await patchTuning(netzState.camId, { track_filter_ghosts: e.target.checked });
+    if (res.ok && netzState.state) {
+      netzState.state.tuning = { ...netzState.state.tuning, track_filter_ghosts: e.target.checked };
+    } else if (!res.ok) {
+      showToast('Konnte nicht gespeichert werden: ' + (res.error || '—'), 'error');
+      e.target.checked = !e.target.checked;
+    }
+  });
+
+  qsa('[data-tune-preset]', host).forEach((btn) =>
     btn.addEventListener('click', async () => {
       const preset = _TRACK_PRESETS[btn.dataset.tunePreset];
       if (!preset) return;
@@ -235,20 +159,26 @@ export function bindTuning(host, onSaved) {
         track_miss_grace_seconds: preset.grace,
         track_iou_match_threshold: preset.iou,
       };
-      const grace = qs('[data-tune="track_miss_grace_seconds"]', root);
-      const iou = qs('[data-tune="track_iou_match_threshold"]', root);
-      if (grace) grace.value = preset.grace;
-      if (iou) iou.value = preset.iou;
       const res = await patchTuning(netzState.camId, fields);
       if (res.ok) {
+        if (netzState.state) netzState.state.tuning = { ...netzState.state.tuning, ...fields };
+        delete netzState.tuneStaged.track_miss_grace_seconds;
+        delete netzState.tuneStaged.track_iou_match_threshold;
         showToast(
           `Vorlage gespeichert · ${_TRACK_PRESET_LABELS[btn.dataset.tunePreset]}`,
           'success',
         );
-        onSaved?.(res.effective);
       } else {
         showToast('Vorlage konnte nicht gespeichert werden: ' + (res.error || '—'), 'error');
       }
+      onRepaint();
+    }),
+  );
+
+  qsa('[data-tune-axis-label]', host).forEach((b) =>
+    b.addEventListener('click', () => {
+      const spec = TUNE_SPECS[b.dataset.tuneAxisLabel];
+      if (spec) showToast(`${spec.label}\n${spec.hint}`, 'info', { lifetime: 7000 });
     }),
   );
 }

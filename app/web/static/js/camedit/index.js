@@ -42,11 +42,8 @@ import { _refreshCamIdPreview, _bindCamIdPreviewListeners } from './camera_id.js
 import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
 import {
   _initCameraFormListeners,
-  _renderErkPerClassConfirm,
-  _bindErkConfirmPerClassToggle,
   _renderCamObjectPills,
   _renderGlobalStatusRows,
-  _renderCamConfirmGrid,
 } from './detection.js';
 import { _renderShapeList, _updateShapeDrawingBar } from '../shape-editor/index.js';
 import { _bindCamProbeDeviceInfo } from './discovery.js';

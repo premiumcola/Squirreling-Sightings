@@ -89,8 +89,11 @@ function _schedulePreview(host, label, e) {
   }, PREVIEW_DEBOUNCE_MS);
 }
 
+// Scoped to .netz-chart: the page now ALSO hosts the Fangnetz's settings
+// radar (netz-tune-chart, own .netz-svg) in the same #netzBody — an
+// unscoped lookup would grab whichever chart happens to render first.
 function _geometry(host) {
-  const svg = host.querySelector('.netz-svg');
+  const svg = host.querySelector('.netz-chart .netz-svg');
   if (!svg) return null;
   const box = svg.getBoundingClientRect();
   const side = box.width;
@@ -125,11 +128,7 @@ function _stage(label, e) {
 // being told exactly what it costs. The learner never can.
 function _crossesPersonFloor(axes) {
   const st = netzState.state;
-  return (
-    st?.role === 'security' &&
-    typeof axes.person === 'number' &&
-    axes.person < PERSON_FLOOR_E
-  );
+  return st?.role === 'security' && typeof axes.person === 'number' && axes.person < PERSON_FLOOR_E;
 }
 
 async function _confirmPersonFloor(label, e) {
@@ -209,9 +208,7 @@ function _previewVertex(host, drag, e) {
     if (knob) knob.style.left = `${e}%`;
     return;
   }
-  host.dispatchEvent(
-    new CustomEvent('netz:vertexmove', { detail: { label: drag.label, e } }),
-  );
+  host.dispatchEvent(new CustomEvent('netz:vertexmove', { detail: { label: drag.label, e } }));
 }
 
 async function _onUp(ev, host, onRepaint) {

@@ -10,12 +10,7 @@ import { state } from '../core/state.js';
 // Re-exports — preserve the existing API used by camedit/index.js so
 // the consumer sees no rename. See each sub-module for the actual
 // implementation.
-export {
-  _renderErkPerClassConfirm,
-  _bindErkConfirmPerClassToggle,
-  _collectConfirmationWindow,
-  _renderCamConfirmGrid,
-} from './detection-perclass.js';
+export { _collectConfirmationWindow } from './detection-perclass.js';
 export {
   getCamObjectFilterState,
   setCamObjectFilterState,

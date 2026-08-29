@@ -111,29 +111,39 @@ function _chartHtml(st) {
   return `<div class="netz-chart">${chart}</div>${legendHtml(axes)}`;
 }
 
+// Secondary view — per-class confidence, Telegram-learned. Demoted from
+// the primary chart (it used to BE the net) because the outer ring of a
+// "Fangnetz" reads as classes ("Person"? "Katze"?) when it should read
+// as the settings that decide what gets caught in the first place. The
+// mechanism underneath — evidence, provenance, the person-safety floor —
+// is unchanged; only its position in the page moved.
+function _confidenceHtml(st) {
+  return (
+    `<details class="netz-confidence"><summary>Pro-Klasse-Konfidenz</summary>` +
+    `<div class="netz-confidence-body">` +
+    _camChipsHtml(st) +
+    _chartHtml(st) +
+    _progressHtml(st) +
+    _autoHtml(st) +
+    _stagingHtml() +
+    `</div></details>`
+  );
+}
+
 function renderNet(host) {
   const st = netzState.state;
   if (!st) {
     host.innerHTML = `<div class="netz-empty"><div class="netz-empty-sub">Netz wird geladen …</div></div>`;
     return;
   }
-  host.innerHTML =
-    _camChipsHtml(st) +
-    _chartHtml(st) +
-    _progressHtml(st) +
-    _autoHtml(st) +
-    _frozenHtml(st) +
-    tuningHtml(st) +
-    _stagingHtml();
+  // A full re-render (every commit, every drag-repaint's parent redraw)
+  // would otherwise silently re-collapse the secondary fold each time.
+  const confidenceOpen = host.querySelector('.netz-confidence')?.open;
+  host.innerHTML = tuningHtml(st) + _confidenceHtml(st) + _frozenHtml(st);
+  if (confidenceOpen) host.querySelector('.netz-confidence').open = true;
   bindDrag(host, () => renderNet(host));
   _bindNet(host);
-  bindTuning(host, (effective) => {
-    const t = netzState.state?.tuning;
-    if (!t || !effective) return;
-    for (const key of Object.keys(t)) {
-      if (key in effective) t[key] = effective[key];
-    }
-  });
+  bindTuning(host, () => renderNet(host));
 }
 
 function _bindNet(host) {

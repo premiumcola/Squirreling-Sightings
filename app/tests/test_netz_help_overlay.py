@@ -1,4 +1,4 @@
-"""The Erkennungsnetz's "i" help overlay.
+"""The Fangnetz's "i" help overlay.
 
 Static-content check: the modal markup and its wiring exist and agree
 with each other (button controls the right modal id, close button
@@ -9,6 +9,7 @@ chart's arithmetic next door, which needed real execution to trust.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 _NETZ_HTML = (
@@ -48,7 +49,10 @@ def test_every_mechanic_the_operator_can_see_is_explained():
 
 def test_the_modal_starts_hidden():
     # A help overlay open by default would cover the radar on first paint.
-    assert 'id="netzHelpModal" class="modal hidden"' in _NETZ_HTML
+    # Attribute order/line-wrapping is prettier's call, not a contract —
+    # match id and class independent of exact whitespace between them.
+    m = re.search(r'<div\s+id="netzHelpModal"[^>]*class="modal hidden"', _NETZ_HTML, re.DOTALL)
+    assert m, "netzHelpModal is not both present and hidden by default"
 
 
 def test_help_module_is_wired_into_init():

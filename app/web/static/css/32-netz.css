@@ -348,16 +348,42 @@
   font-size: 11px;
 }
 
-/* ── Kamera-Feinschliff — camera-wide loop settings, not per-class ────── */
+/* ── the Fangnetz's PRIMARY chart — camera-wide settings, not per-class ─ */
 
-.netz-tune {
-  margin-top: 10px;
+.netz-tune-chart {
+  display: flex;
+  justify-content: center;
+  position: relative;
+  margin: 4px 0 10px;
+}
+
+/* No icon glyph (there is no icon for "Analyse-Intervall") and longer
+   German labels than a class name, so — unlike the base .netz-axis-lbl —
+   this wraps instead of clipping to one line. */
+.netz-axis-lbl--tune {
+  width: 76px;
+  height: 36px;
+  white-space: normal;
+  font-size: 10px;
+}
+
+.netz-tune-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* ── Pro-Klasse-Konfidenz — demoted secondary fold ─────────────────────── */
+
+.netz-confidence {
+  margin-top: 4px;
   padding: 8px 12px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
 }
 
-.netz-tune summary {
+.netz-confidence summary {
   min-height: 32px;
   display: flex;
   align-items: center;
@@ -367,21 +393,8 @@
   cursor: pointer;
 }
 
-.netz-tune-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.netz-confidence-body {
   margin-top: 8px;
-}
-
-.netz-tune-body > .lbl {
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.netz-tune-save {
-  display: flex;
-  justify-content: flex-end;
 }
 
 /* ── drag pill ──────────────────────────────────────────────────────── */

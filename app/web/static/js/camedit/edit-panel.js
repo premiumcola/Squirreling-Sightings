@@ -26,13 +26,10 @@ import { _refreshCamIdPreview, _bindCamIdPreviewListeners } from './camera_id.js
 import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
 import {
   _initCameraFormListeners,
-  _renderErkPerClassConfirm,
-  _bindErkConfirmPerClassToggle,
   _renderCamObjectPills,
   getCamObjectFilterState,
   setCamObjectFilterState,
   _renderGlobalStatusRows,
-  _renderCamConfirmGrid,
 } from './detection.js';
 import {
   drawShapes,
@@ -188,7 +185,7 @@ function _hydrateAlerting(formEl, c) {
   hydrateAlertingFields(formEl, c);
 }
 
-// ── Erkennung · object filter, sliders, per-class drilldowns ──────────────
+// ── Erkennung · class filter only (D9 — everything else is the Fangnetz) ──
 
 function _hydrateErkennung(formEl, c) {
   const f = formEl.elements;
@@ -199,14 +196,9 @@ function _hydrateErkennung(formEl, c) {
   f['object_filter'].value = getCamObjectFilterState().join(',');
   _renderCamObjectPills();
   hydrateErkennungFields(formEl, c, state);
-  // Null-safe: returns early while #camConfirmGrid is [hidden].
-  _renderCamConfirmGrid(c);
   // motion_enabled, resolution, snapshot_interval_s, bottom_crop_px and
   // wildlife_motion_sensitivity have no UI in this layout; their stored
   // values survive via the existingCam fallback in the submit handler.
-  // Both drilldowns stay collapsed unless the user asks for them.
-  _renderErkPerClassConfirm(formEl, c);
-  _bindErkConfirmPerClassToggle();
   setWhitelistState(c.whitelist_names || []);
   _updateWhitelistHidden();
 }

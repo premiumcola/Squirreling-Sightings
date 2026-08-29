@@ -13,7 +13,12 @@
   </div>
 
   <div class="erk-flow">
-    <!-- STEP 1 — Klassenfilter -->
+    <!-- D9 · Klassenfilter is the only control left on this tab. Confidence
+         (D1-D4) and every camera-wide loop setting (D8 — scan interval,
+         motion pre-trigger, tracking, ROI) both moved into the Fangnetz —
+         see netz/index.js + netz/_tuning.js. This tab decides WHAT gets
+         looked for; the Fangnetz decides how sensitively and how the loop
+         runs. Two tabs asking the same question was the actual complaint. -->
     <div class="erk-step">
       <div class="erk-step-num">1</div>
       <div class="erk-step-head">
@@ -36,100 +41,12 @@
       <div class="erk-card">
         <div id="camObjectFilter" class="cam-objfilter-bar"></div>
       </div>
-    </div>
-
-    <!-- STEPS 2 + 3 · Konfidenz-Schwellen sind jetzt das Netz.
-         D1 detection_min_score war seit dem Zwei-Stufen-Tracker tot im
-         Live-Pfad und zeigte den globalen 0,55-Wert als wäre er eine
-         Kamera-Einstellung. D2 der Person-Regler hatte einen hartkodierten
-         0,72-Fallback, der dem ausgelieferten 0,45 widersprach. D3 die
-         Pro-Klasse-Falte hob Vogel und Eichhörnchen beim blossen
-         Öffnen-und-Speichern von 0,45 auf 0,50 (min="0.50"). D4 der
-         globale Bestätigungs-Regler schrieb einen Schlüssel, den kein
-         Gate liest. Alle vier ersetzt durch eine Achse im Netz. -->
-    <div class="erk-step">
-      <div class="erk-step-num">2</div>
-      <div class="erk-step-head">
-        <svg
-          class="erk-step-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="4.5" opacity=".6" />
-          <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-        </svg>
-        <span class="erk-step-title">Wie sicher?</span>
-        <span class="erk-step-hint">Erkennungsnetz</span>
-      </div>
       <div class="erk-card erk-netz-card">
         <span class="lbl"
-          >Konfidenz-Schwellen regelt jetzt das Netz — eine Achse je Klasse, geformt von deinen
-          Antworten in Telegram.</span
+          >Empfindlichkeit, Scan-Tempo, Tracking und Kleintier-ROI sitzen im Fangnetz — kamera-weit,
+          nicht hier.</span
         >
-        <a class="btn btn-action erk-netz-link" href="#netz">Netz öffnen</a>
-      </div>
-      <!-- D5 · BEHALTEN, vorerst. Grund für den Operator, unten sichtbar:
-           die Live-Schleife liest ihre Klassen-Standardwerte noch nicht
-           (P5, camera_runtime/_main_loop.py:599-610), also fiele ein halb
-           gefülltes Feld hier still auf 3/5 s zurück. Sobald das gefixt
-           ist: in einem Folge-Commit entfernen und bei
-           CONFIRMATION_WINDOW_DEFAULTS einfrieren. -->
-      <button type="button" class="erk-more" id="erkConfirmPerClassToggle" aria-expanded="false">
-        <svg
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M3 4.5l3 3 3-3" />
-        </svg>
-        <span id="erkConfirmPerClassToggleLbl">Bestätigung pro Klasse anpassen</span>
-      </button>
-      <div id="erkConfirmPerClass" hidden></div>
-      <span class="lbl erk-note"
-        >Diese Werte bleiben einstellbar, bis die Live-Schleife ihre Klassen-Standardwerte liest.
-        Bis dahin würde ein halb gefülltes Feld hier still auf 3 Treffer in 5 s zurückfallen.</span
-      >
-    </div>
-
-    <!-- D8 · Analyse-Intervall, Bewegungs-Vortrigger/Nachlauf,
-         Objekt-Tracking (Vorlagen, Ghost-Spuren, Gnadenfrist/IoU) and
-         Kleintier-ROI/Tiling moved into the Netz page's "Kamera-
-         Feinschliff" fold — same camera-wide settings, same backend
-         route (PATCH .../detection-tuning), just no longer duplicated
-         across two tabs. See netz/_tuning.js. -->
-    <div class="erk-step">
-      <div class="erk-step-head">
-        <svg
-          class="erk-step-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-        </svg>
-        <span class="erk-step-title">Scan-Tempo, Tracking, Kleintier-ROI?</span>
-        <span class="erk-step-hint">Kamera-Feinschliff</span>
-      </div>
-      <div class="erk-card erk-netz-card">
-        <span class="lbl"
-          >Analyse-Intervall, Bewegungs-Vortrigger, Objekt-Tracking und Kleintier-ROI sitzen jetzt
-          im Netz — kamera-weite Werte, die vor jeder Klassifikation greifen.</span
-        >
-        <a class="btn btn-action erk-netz-link" href="#netz">Netz öffnen</a>
+        <a class="btn btn-action erk-netz-link" href="#netz">Fangnetz öffnen</a>
       </div>
     </div>
   </div>

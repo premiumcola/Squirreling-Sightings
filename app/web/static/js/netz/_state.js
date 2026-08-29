@@ -17,6 +17,12 @@ export const netzState = {
   // visited on its way out.
   previews: {},
 
+  // Fangnetz PRIMARY axes (camera-wide settings) — see _settings_axes.js.
+  // Rebuilt from state.tuning on every render; tuneStaged holds raw
+  // values a drag has moved but not yet committed via patchTuning.
+  tuneAxes: [],
+  tuneStaged: {},
+
   // ── Verlauf-Tab ──
   tab: 'netz',
   archive: null,

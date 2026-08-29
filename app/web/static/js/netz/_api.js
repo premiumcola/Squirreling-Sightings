@@ -32,6 +32,16 @@ export function patchAxes(camId, axes, confirmPersonFloor = false) {
   return _safe(() => apiPatch(`/api/netz/${encodeURIComponent(camId)}/axes`, body));
 }
 
+/** Kamera-Feinschliff — the camera-wide capture/motion/tracking loop
+ *  fields, saved through the same partial-update route the Simulieren
+ *  debug panel already uses. Returns the server's "effective" echo so
+ *  the panel can confirm what actually landed after validation/clamps. */
+export function patchTuning(camId, fields) {
+  return _safe(() =>
+    apiPatch(`/api/cameras/${encodeURIComponent(camId)}/detection-tuning`, fields),
+  );
+}
+
 export function fetchPreview(camId, label, e) {
   const q = `?label=${encodeURIComponent(label)}&e=${encodeURIComponent(e)}`;
   return _safe(() => apiGet(`/api/netz/${encodeURIComponent(camId)}/preview${q}`));

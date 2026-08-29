@@ -1,8 +1,6 @@
 // ─── camedit/edit-panel.js ─────────────────────────────────────────────────
 // The cam-edit panel: open it, hydrate every tab from the camera record,
-// slide it into the clicked row. Plus the three tracker presets, which
-// are the one control in the panel that saves on click rather than on
-// submit.
+// slide it into the clicked row.
 //
 // Extracted from camedit/index.js, which was 919 lines against a
 // 400-line ceiling and carried a single 326-line `editCamera` against a
@@ -28,10 +26,8 @@ import { _refreshCamIdPreview, _bindCamIdPreviewListeners } from './camera_id.js
 import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
 import {
   _initCameraFormListeners,
-  _initErkSliders,
   _renderErkPerClassConfirm,
   _bindErkConfirmPerClassToggle,
-  _bindDetectionRoiControls,
   _renderCamObjectPills,
   getCamObjectFilterState,
   setCamObjectFilterState,
@@ -58,7 +54,6 @@ import {
 import { hydrateErkennungFields } from './hydration/erkennung.js';
 import { hydrateAlertingFields } from './hydration/alerting.js';
 import { initCameraEditTabs } from './tabs.js';
-import { _wireTrackingPresets } from './tracking-presets.js';
 
 // ── Identity · id, name, vendor, colour, avatar ────────────────────────────
 
@@ -204,17 +199,14 @@ function _hydrateErkennung(formEl, c) {
   f['object_filter'].value = getCamObjectFilterState().join(',');
   _renderCamObjectPills();
   hydrateErkennungFields(formEl, c, state);
-  _wireTrackingPresets(formEl);
   // Null-safe: returns early while #camConfirmGrid is [hidden].
   _renderCamConfirmGrid(c);
   // motion_enabled, resolution, snapshot_interval_s, bottom_crop_px and
   // wildlife_motion_sensitivity have no UI in this layout; their stored
   // values survive via the existingCam fallback in the submit handler.
-  _initErkSliders(formEl);
   // Both drilldowns stay collapsed unless the user asks for them.
   _renderErkPerClassConfirm(formEl, c);
   _bindErkConfirmPerClassToggle();
-  _bindDetectionRoiControls(formEl, c);
   setWhitelistState(c.whitelist_names || []);
   _updateWhitelistHidden();
 }

@@ -348,6 +348,42 @@
   font-size: 11px;
 }
 
+/* ── Kamera-Feinschliff — camera-wide loop settings, not per-class ────── */
+
+.netz-tune {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.netz-tune summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-tune-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.netz-tune-body > .lbl {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.netz-tune-save {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ── drag pill ──────────────────────────────────────────────────────── */
 
 .netz-drag-pill {
@@ -417,6 +453,12 @@
 .netz-btn--ghost {
   background: rgba(255, 255, 255, 0.14);
   color: #e2e8f0;
+}
+
+.netz-btn:disabled {
+  background: rgba(255, 255, 255, 0.14);
+  color: #94a3b8;
+  cursor: default;
 }
 
 .toast-action {

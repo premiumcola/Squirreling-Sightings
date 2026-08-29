@@ -42,10 +42,8 @@ import { _refreshCamIdPreview, _bindCamIdPreviewListeners } from './camera_id.js
 import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
 import {
   _initCameraFormListeners,
-  _initErkSliders,
   _renderErkPerClassConfirm,
   _bindErkConfirmPerClassToggle,
-  _bindDetectionRoiControls,
   _renderCamObjectPills,
   _renderGlobalStatusRows,
   _renderCamConfirmGrid,

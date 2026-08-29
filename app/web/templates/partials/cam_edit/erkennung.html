@@ -101,9 +101,13 @@
       >
     </div>
 
-    <!-- STEP 4 — Analyse-Intervall -->
+    <!-- D8 · Analyse-Intervall, Bewegungs-Vortrigger/Nachlauf,
+         Objekt-Tracking (Vorlagen, Ghost-Spuren, Gnadenfrist/IoU) and
+         Kleintier-ROI/Tiling moved into the Netz page's "Kamera-
+         Feinschliff" fold — same camera-wide settings, same backend
+         route (PATCH .../detection-tuning), just no longer duplicated
+         across two tabs. See netz/_tuning.js. -->
     <div class="erk-step">
-      <div class="erk-step-num">4</div>
       <div class="erk-step-head">
         <svg
           class="erk-step-icon"
@@ -117,240 +121,16 @@
         >
           <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
-        <span class="erk-step-title">Wie schnell scannen?</span>
-        <span class="erk-step-hint">Analyse-Intervall</span>
+        <span class="erk-step-title">Scan-Tempo, Tracking, Kleintier-ROI?</span>
+        <span class="erk-step-hint">Kamera-Feinschliff</span>
       </div>
-      <div class="erk-card">
-        <div class="row">
-          <input type="range" name="frame_interval_ms" min="100" max="2000" step="50" value="350" />
-          <span class="val" id="erkFrameIntervalVal">350 ms</span>
-        </div>
-        <span class="lbl" id="erkFrameIntervalLbl">≈ 3 fps · niedriger = mehr Coral-Last</span>
-      </div>
-    </div>
-
-    <!-- STEP 5 — Bewegungs-Vortrigger -->
-    <div class="erk-step">
-      <div class="erk-step-num">5</div>
-      <div class="erk-step-head">
-        <svg
-          class="erk-step-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
+      <div class="erk-card erk-netz-card">
+        <span class="lbl"
+          >Analyse-Intervall, Bewegungs-Vortrigger, Objekt-Tracking und Kleintier-ROI sitzen jetzt
+          im Netz — kamera-weite Werte, die vor jeder Klassifikation greifen.</span
         >
-          <path d="M3 12h3l3-9 6 18 3-9h3" />
-        </svg>
-        <span class="erk-step-title">Bewegungs-Vortrigger</span>
-        <span class="erk-step-hint">vor der KI</span>
-      </div>
-      <div class="erk-card">
-        <div class="row">
-          <input
-            type="range"
-            name="motion_sensitivity"
-            min="0.1"
-            max="1.0"
-            step="0.1"
-            value="0.5"
-          />
-          <span class="val" id="erkMotionVal">50%</span>
-        </div>
-        <span class="lbl">Empfindlichkeit · niedrig = nur große Bewegung</span>
-      </div>
-      <div class="erk-card">
-        <div class="row">
-          <select name="post_motion_tail_s">
-            <option value="0">Standard (Global-Wert)</option>
-            <option value="3">3 Sekunden</option>
-            <option value="5">5 Sekunden</option>
-            <option value="8">8 Sekunden</option>
-            <option value="10">10 Sekunden</option>
-            <option value="15">15 Sekunden</option>
-          </select>
-        </div>
-        <span class="lbl">Nachlauf-Aufnahme nach letzter Bewegung</span>
-      </div>
-    </div>
-
-    <!-- STEP 6 — Objekt-Tracking
-                     The same two-tier algorithm runs in BOTH the live
-                     pipeline and the post-clip worker. Spawn is the
-                     score needed to START a track; continue is the
-                     low-floor a track may extend down to (between
-                     them = "tentative" — only continues, never spawns);
-                     grace is how long a track may go un-matched
-                     before it ages out. 0.00 means "use the system
-                     default" (spawn 0.50 / continue 0.20 / grace 4.0s). -->
-    <div class="erk-step" data-step="6">
-      <div class="erk-step-head">
-        <span class="erk-step-num">6</span>
-        <svg
-          class="erk-step-icon"
-          viewBox="0 0 24 24"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="3" />
-          <path d="M3 12h2" />
-          <path d="M19 12h2" />
-          <path d="M12 3v2" />
-          <path d="M12 19v2" />
-          <path d="M5.6 5.6l1.4 1.4" />
-          <path d="M17 17l1.4 1.4" />
-          <path d="M5.6 18.4l1.4-1.4" />
-          <path d="M17 7l1.4-1.4" />
-        </svg>
-        <span class="erk-step-title">Objekt-Tracking</span>
-        <span class="erk-step-hint">Verfolgung über Frames hinweg</span>
-      </div>
-      <div class="erk-card">
-        <span class="field-help" style="margin-bottom: 6px"
-          >Hält erkannte Objekte über kurze Konfidenz-Einbrüche hinweg auf demselben Track. 0,00 =
-          System-Default verwenden.</span
-        >
-        <div class="erk-track-presets" role="group" aria-label="Tracking-Vorlagen">
-          <span class="erk-track-presets-lbl">Vorlage anwenden:</span>
-          <button type="button" class="erk-track-preset" data-preset="careful">Vorsichtig</button>
-          <button type="button" class="erk-track-preset" data-preset="balanced">Ausgewogen</button>
-          <button type="button" class="erk-track-preset" data-preset="robust">Robust</button>
-        </div>
-        <!-- L07 · Ghost-track filter toggle. Default ON;
-                         persisted via track_filter_ghosts. Hides
-                         "ghost" tracks (best_score never crossed the
-                         per-label spawn threshold) from new event
-                         sidecars so the lightbox doesn't paint a
-                         labelled bbox on a stone or shadow. -->
-        <label class="erk-track-toggle">
-          <span class="erk-track-toggle-text">
-            <span class="erk-track-toggle-name">Ghost-Spuren in Aufnahmen ausblenden</span>
-            <span class="erk-track-toggle-sub"
-              >Spuren, deren beste Konfidenz nie über der Spawn-Schwelle lag, werden nach der
-              Aufnahme aus dem Track-Sidecar entfernt. Aktiviert lassen, sofern du keinen
-              Debug-Bedarf hast.</span
-            >
-          </span>
-          <input type="checkbox" name="track_filter_ghosts" class="switch-input" checked />
-          <span class="switch"></span>
-        </label>
-        <!-- D6 · Spawn + Fortsetzung ENTFERNT — genau die zwei Zahlen,
-             die das Netz schreibt. Zwei Bedienwege auf einen Wert sind
-             eine Drift-Quelle, und das Netz kennt sie pro Klasse statt
-             nur kameraweit.
-             D7 · Gnadenfrist + IoU BLEIBEN, hinter dieser Falte:
-             Track-Kontinuität sitzt VOR allen vier Gates, das Netz kann
-             sie nicht ausdrücken, und track_iou_match_threshold ist die
-             einzige Zahl, mit der sich eine schlecht trackende Kamera
-             retten lässt. Ohne sie gibt es keinen Rettungsweg. -->
-        <details class="erk-expert">
-          <summary>Experte · Track-Kontinuität</summary>
-          <span class="erk-track-warn"
-            >Diese zwei Werte betreffen nicht die Konfidenz, sondern ob ein Objekt über Frames
-            hinweg dasselbe bleibt. Nur anfassen, wenn eine Kamera Spuren zerreißt.</span
-          >
-          <div class="erk-track-grid">
-            <label class="erk-track-cell">
-              <span class="erk-track-lbl">Gnadenfrist (Sek.)</span>
-              <input
-                type="number"
-                name="track_miss_grace_seconds"
-                min="0"
-                max="30"
-                step="0.5"
-                value="0"
-                inputmode="decimal"
-                placeholder="8,0"
-              />
-              <span class="erk-track-sub">Wie lange darf ein Track ohne Treffer überleben</span>
-            </label>
-            <label class="erk-track-cell">
-              <span class="erk-track-lbl">IoU-Schwelle</span>
-              <input
-                type="number"
-                name="track_iou_match_threshold"
-                min="0"
-                max="0.95"
-                step="0.05"
-                value="0"
-                inputmode="decimal"
-                placeholder="0,20"
-              />
-              <span class="erk-track-sub"
-                >Wie ähnlich die Box-Lage frame-übergreifend sein muss, damit ein Track fortgesetzt
-                wird statt neu zu spawnen. Niedriger = großzügiger.</span
-              >
-            </label>
-          </div>
-        </details>
-        </div>
+        <a class="btn btn-action erk-netz-link" href="#netz">Netz öffnen</a>
       </div>
     </div>
   </div>
-
-  <!-- D3 · Kleintier-Erkennung (ROI / Tiling). Re-detects small/distant
-       animals the full-frame pass misses, gated by coherent motion (D1/D2).
-       roi_mode is backed by the hidden input below; the segmented buttons
-       write it (distinct from the runtime status field detection_mode). -->
-  <div class="erk-section" id="erkRoiSection">
-    <div class="cam-field-label">Kleintier-Erkennung (ROI / Tiling)</div>
-    <input type="hidden" name="roi_mode" id="erkDetModeInput" value="off" />
-    <div class="erk-seg" role="group" aria-label="Erkennungsmodus" id="erkDetModeSeg">
-      <button type="button" class="erk-seg-btn" data-mode="off">Aus</button>
-      <button type="button" class="erk-seg-btn" data-mode="roi">Motion-ROI</button>
-      <button type="button" class="erk-seg-btn" data-mode="2x2">2×2</button>
-      <button type="button" class="erk-seg-btn" data-mode="3x3">3×3</button>
-    </div>
-    <div class="erk-roi-hint">
-      Läuft nur, wenn die Vollbild-Erkennung nichts findet und eine zusammenhängende
-      Bewegung erkannt wurde — fängt kleine/entfernte Tiere (Hund zuverlässig, Katze
-      als „Tier erkannt"). Kostet nur in diesem Fall extra Rechenzeit.
-    </div>
-    <div class="erk-card">
-      <div class="row">
-        <input
-          type="range"
-          name="wildlife_motion_sensitivity"
-          id="erkWlSens"
-          min="0"
-          max="3"
-          step="0.1"
-          value="0"
-        />
-        <span class="val" id="erkWlSensVal">auto</span>
-      </div>
-      <span class="lbl"
-        >Wildtier-Empfindlichkeit · niedrigere Bewegungsschwelle für kleine Tiere
-        (0 = auto)</span
-      >
-    </div>
-    <div class="erk-card">
-      <div class="row">
-        <input
-          type="range"
-          name="roi_min_net_disp_frac"
-          id="erkRoiNet"
-          min="0"
-          max="0.2"
-          step="0.01"
-          value="0"
-        />
-        <span class="val" id="erkRoiNetVal">auto (4 %)</span>
-      </div>
-      <span class="lbl"
-        >Min. Bewegungs-Strecke zum Auslösen · trennt laufendes Tier von Wind-Flackern
-        (0 = Standard 4 %)</span
-      >
-    </div>
-  </div>
-
 </div>

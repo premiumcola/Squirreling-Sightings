@@ -19,6 +19,7 @@ import { renderArchiveList } from './_archive_list.js';
 import { clearStaged, netzState, shownE, stagedCount } from './_state.js';
 import { labelDe, pct } from './_helpers.js';
 import { initNetzHelp } from './_help.js';
+import { bindTuning, tuningHtml } from './_tuning.js';
 
 const HOST_ID = 'netzBody';
 
@@ -122,9 +123,17 @@ function renderNet(host) {
     _progressHtml(st) +
     _autoHtml(st) +
     _frozenHtml(st) +
+    tuningHtml(st) +
     _stagingHtml();
   bindDrag(host, () => renderNet(host));
   _bindNet(host);
+  bindTuning(host, (effective) => {
+    const t = netzState.state?.tuning;
+    if (!t || !effective) return;
+    for (const key of Object.keys(t)) {
+      if (key in effective) t[key] = effective[key];
+    }
+  });
 }
 
 function _bindNet(host) {
@@ -147,9 +156,9 @@ function _bindNet(host) {
     if (res.ok) netzState.state = res.state || netzState.state;
     renderNet(host);
   });
-  host.querySelectorAll('[data-axis-label]').forEach((b) =>
-    b.addEventListener('click', () => _openAxisSheet(host, b.dataset.axisLabel)),
-  );
+  host
+    .querySelectorAll('[data-axis-label]')
+    .forEach((b) => b.addEventListener('click', () => _openAxisSheet(host, b.dataset.axisLabel)));
   // A vertex mid-drag repaints itself rather than re-rendering the SVG
   // under the finger, which would drop the pointer capture.
   host.addEventListener('netz:vertexmove', (ev) => _moveVertex(host, ev.detail));

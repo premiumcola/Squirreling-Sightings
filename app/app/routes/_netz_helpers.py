@@ -141,6 +141,22 @@ def net_state(cam_id: str) -> dict | None:
         # Named, not merely "frozen" — the difference between frozen and
         # forgotten is whether the operator can read the list.
         "frozen": FROZEN_KEYS,
+        # Kamera-Feinschliff — the camera-WIDE capture/motion/tracking loop
+        # settings that used to live on the Erkennung tab. They can never
+        # become radar axes (they run before the pipeline knows a class),
+        # so they render as a plain fold below the net instead. Same
+        # defaults as hydrateErkennungFields/discovery.js's collector.
+        "tuning": {
+            "frame_interval_ms": cam.get("frame_interval_ms", 350),
+            "motion_sensitivity": cam.get("motion_sensitivity", 0.5),
+            "post_motion_tail_s": cam.get("post_motion_tail_s") or 0,
+            "track_miss_grace_seconds": cam.get("track_miss_grace_seconds") or 0,
+            "track_iou_match_threshold": cam.get("track_iou_match_threshold") or 0,
+            "track_filter_ghosts": cam.get("track_filter_ghosts") is not False,
+            "roi_mode": cam.get("roi_mode") or "off",
+            "wildlife_motion_sensitivity": cam.get("wildlife_motion_sensitivity") or 0,
+            "roi_min_net_disp_frac": cam.get("roi_min_net_disp_frac") or 0,
+        },
     }
 
 

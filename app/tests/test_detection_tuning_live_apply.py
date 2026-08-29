@@ -130,3 +130,59 @@ def test_the_tracker_is_still_reconfigured(wired):
         f"/api/cameras/{CAM}/detection-tuning", json={"track_iou_match_threshold": 0.35}
     )
     assert wired.runtime._tracker.last["iou_threshold"] == pytest.approx(0.35)
+
+
+def test_miss_grace_zero_is_the_sentinel_not_out_of_range(wired):
+    """0.0 means "use the system default" everywhere else that reads
+    this field (hydrateErkennungFields, discovery.js's collector, the
+    Netz tuning panel) — this route used to reject it as below its
+    old 1.0 floor."""
+    r = wired.client.patch(
+        f"/api/cameras/{CAM}/detection-tuning", json={"track_miss_grace_seconds": 0.0}
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["effective"]["track_miss_grace_seconds"] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("motion_sensitivity", 0.7),
+        ("wildlife_motion_sensitivity", 1.5),
+        ("roi_min_net_disp_frac", 0.08),
+        ("post_motion_tail_s", 8.0),
+    ],
+)
+def test_the_moved_camera_loop_fields_save_and_report(wired, field, value):
+    """The Netz-hosted Kamera-Feinschliff fields — same route, same
+    validate-then-store-then-echo shape as the pre-existing four."""
+    r = wired.client.patch(f"/api/cameras/{CAM}/detection-tuning", json={field: value})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["effective"][field] == pytest.approx(value)
+
+
+def test_frame_interval_ms_is_stored_as_an_int(wired):
+    r = wired.client.patch(f"/api/cameras/{CAM}/detection-tuning", json={"frame_interval_ms": 500})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    stored = r.get_json()["effective"]["frame_interval_ms"]
+    assert stored == 500
+    assert isinstance(stored, int)
+
+
+def test_roi_mode_accepts_a_known_value(wired):
+    r = wired.client.patch(f"/api/cameras/{CAM}/detection-tuning", json={"roi_mode": "2x2"})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["effective"]["roi_mode"] == "2x2"
+
+
+def test_roi_mode_rejects_an_unknown_value(wired):
+    r = wired.client.patch(f"/api/cameras/{CAM}/detection-tuning", json={"roi_mode": "4x4"})
+    assert r.status_code == 400, r.get_data(as_text=True)
+
+
+def test_track_filter_ghosts_saves_as_a_bool(wired):
+    r = wired.client.patch(
+        f"/api/cameras/{CAM}/detection-tuning", json={"track_filter_ghosts": False}
+    )
+    assert r.status_code == 200, r.get_data(as_text=True)
+    assert r.get_json()["effective"]["track_filter_ghosts"] is False

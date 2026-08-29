@@ -278,17 +278,33 @@ def api_camera_arm(cam_id):
     return jsonify({"ok": True, "camera": redact_camera(cam)})
 
 
-# SIMU-05g · partial-update endpoint for the Debug-tab clusters.
-# Accepts ONLY the detection-tuning subset of camera fields and
-# pushes them straight into the live LiveTracker (no restart) plus
-# persists via upsert_camera. Returns the EFFECTIVE threshold set
-# after the merge so the frontend can confirm what's now active.
+# SIMU-05g · partial-update endpoint for the Debug-tab clusters, and
+# (since the Netz-Kamera-Feinschliff move) the same camera-wide loop
+# settings that used to live on the Erkennung tab's own form. Accepts
+# ONLY this subset of camera fields and pushes them straight into the
+# live LiveTracker (no restart) plus persists via upsert_camera.
+# Returns the EFFECTIVE threshold set after the merge so the frontend
+# can confirm what's now active.
+#
+# track_miss_grace_seconds' floor is 0.0, not 1.0 — 0 is the "use the
+# system default" sentinel every caller (hydrateErkennungFields,
+# discovery.js's collector, the Netz tuning panel) already treats as
+# valid and common; a camera that never customised it saves 0.
 _TUNING_FLOAT_FIELDS = {
     "track_iou_match_threshold": (0.0, 0.95),
-    "track_miss_grace_seconds": (1.0, 30.0),
+    "track_miss_grace_seconds": (0.0, 30.0),
     "track_continue_min_score": (0.0, 0.95),
     "track_spawn_min_score": (0.0, 0.95),
+    "motion_sensitivity": (0.1, 1.0),
+    "wildlife_motion_sensitivity": (0.0, 3.0),
+    "roi_min_net_disp_frac": (0.0, 0.2),
+    "post_motion_tail_s": (0.0, 15.0),
+    "frame_interval_ms": (100.0, 2000.0),
 }
+_TUNING_ENUM_FIELDS = {
+    "roi_mode": ("off", "roi", "2x2", "3x3"),
+}
+_TUNING_BOOL_FIELDS = ("track_filter_ghosts",)
 
 
 @bp.patch('/api/cameras/<cam_id>/detection-tuning')
@@ -317,6 +333,25 @@ def api_camera_detection_tuning(cam_id):
                 400,
             )
         cam[field] = round(val, 4)
+    # frame_interval_ms is a millisecond count, not a fractional threshold —
+    # the loop above already range-validated and stored it as a rounded
+    # float; re-cast to int so the schema type stays consistent with
+    # every other reader of this key.
+    if "frame_interval_ms" in payload:
+        cam["frame_interval_ms"] = int(round(cam["frame_interval_ms"]))
+    for field, allowed in _TUNING_ENUM_FIELDS.items():
+        if field not in payload:
+            continue
+        val = str(payload[field] or "").lower()
+        if val not in allowed:
+            return (
+                jsonify({"ok": False, "error": f"{field}: must be one of {allowed}"}),
+                400,
+            )
+        cam[field] = val
+    for field in _TUNING_BOOL_FIELDS:
+        if field in payload:
+            cam[field] = bool(payload[field])
     # Enforce the floor ≤ spawn invariant the tracker assumes.
     spawn_v = float(cam.get("track_spawn_min_score") or 0.0)
     floor_v = float(cam.get("track_continue_min_score") or 0.0)
@@ -410,6 +445,13 @@ def api_camera_detection_tuning(cam_id):
                 "label_thresholds": cam.get("label_thresholds") or {},
                 "object_filter": cam.get("object_filter") or [],
                 "excluded_classes": cam.get("excluded_classes") or [],
+                "frame_interval_ms": cam.get("frame_interval_ms"),
+                "motion_sensitivity": cam.get("motion_sensitivity"),
+                "post_motion_tail_s": cam.get("post_motion_tail_s"),
+                "track_filter_ghosts": cam.get("track_filter_ghosts") is not False,
+                "roi_mode": cam.get("roi_mode") or "off",
+                "wildlife_motion_sensitivity": cam.get("wildlife_motion_sensitivity"),
+                "roi_min_net_disp_frac": cam.get("roi_min_net_disp_frac"),
             },
         }
     )

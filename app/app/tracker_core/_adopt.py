@@ -32,6 +32,7 @@ from ._consts import (
     SPAWN_NEAR_H_RATIO,
     TRACK_REID_DIST_FACTOR,
     TRACK_REID_MAX_SECONDS,
+    TRACK_REID_SCAN_DEPTH,
     TRACK_REID_SIZE_RATIO,
 )
 from ._motion import recent_observed_samples
@@ -192,7 +193,7 @@ def try_reidentify(state, det, t_s: float):
     # closed-order ≠ last_sample.t order — a track that closed late
     # after a long active span can have an older tail than one that
     # closed earlier with a fresher final sample.
-    for tr in reversed(closed[-32:]):
+    for tr in reversed(closed[-TRACK_REID_SCAN_DEPTH:]):
         if tr.label != det.label:
             continue
         if not tr.samples:

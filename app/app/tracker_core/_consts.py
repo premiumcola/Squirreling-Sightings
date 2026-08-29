@@ -60,6 +60,19 @@ TRACK_REID_MAX_SECONDS = 12.0
 # large prior track. Same-label is enforced by the caller.
 TRACK_REID_DIST_FACTOR = 1.6
 TRACK_REID_SIZE_RATIO = 1.7
+# try_reidentify only ever scans this many of the most-recently-closed
+# tracks (reversed(closed[-TRACK_REID_SCAN_DEPTH:])). LIVE_CLOSED_CAP
+# below is how many closed tracks the live runtime KEEPS — it has to
+# stay >= this, or a track try_reidentify would still want to scan gets
+# evicted first. 2x headroom over what is actually read.
+TRACK_REID_SCAN_DEPTH = 32
+# Bounds TrackerState.closed for the LIVE runtime, which lives the whole
+# camera session (potentially days) — an unbounded list here was the
+# project's one confirmed memory leak, ~1 GB/month/camera at ~630 B per
+# closed track. The post-clip worker's own TrackerState leaves
+# closed_cap unset (None): it genuinely needs every track from the one
+# clip it is processing, not a bounded tail of it.
+LIVE_CLOSED_CAP = 2 * TRACK_REID_SCAN_DEPTH
 # Sub-pixel jitter cutoff for `source="track"` samples (the post-clip
 # worker only — the live path emits no synthetic track samples today).
 SAMPLE_BBOX_DELTA_PX = 2

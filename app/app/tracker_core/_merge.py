@@ -130,7 +130,7 @@ def merge_active_duplicates(state) -> None:
     survivors = []
     for idx, tr in enumerate(active):
         if idx in absorbed:
-            state.closed.append(tr)
+            state.close_track(tr)
         else:
             survivors.append(tr)
     state.active = survivors

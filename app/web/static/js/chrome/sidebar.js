@@ -102,6 +102,7 @@ function _initSidebarNav() {
   const sectionIds = [
     'dashboard',
     'statistik',
+    'netz',
     'media',
     'achievements',
     'weather',

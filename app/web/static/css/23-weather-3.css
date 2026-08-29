@@ -175,8 +175,14 @@
   color: #cfe1ee;
   font-weight: 800;
 }
-.ws-stats-chip.is-disabled {
+/* Toggled off by the operator, or auto-hidden because the field was flat
+   (e.g. Schneefall constant 0.00 all window) — still clickable to bring
+   back, just visually receded rather than gone. */
+.ws-stats-chip.is-hidden {
   opacity: 0.35;
+}
+.ws-stats-chip.is-hidden .ws-stats-chip-dot {
+  background: #4b5563 !important;
 }
 .ws-stats-chip-dot {
   width: 8px;

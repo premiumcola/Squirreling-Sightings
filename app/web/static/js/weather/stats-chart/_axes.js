@@ -54,14 +54,15 @@ export function buildXTicks({ samples, pad, cw, ch, vbH, hours }) {
 //               values in the line's own colour, nice-rounded so they
 //               read 0 / 5 / 10 / 15 rather than 0.13 / 4.97 / 9.81.
 //   all-lines — every line is normalised against its OWN min/max, so
-//               there is no shared value scale. Previously this branch
-//               emitted four unlabelled gridlines and left the reserved
-//               left lane blank, which read as "the axis is broken" and
-//               hid the fact that "near the top" means a different
-//               number for every line. Label the percentage instead:
-//               it is what the axis actually measures, and saying so is
-//               better than labelling nothing or — worse — printing one
-//               line's units next to seven lines' curves.
+//               there is no shared value scale. A "0–100 %" label was
+//               tried here so the reserved left lane wasn't blank — but
+//               it named a number nobody was asking about ("kp was das
+//               soll"): each line's 100 % is a different real value, so
+//               the label was technically accurate and practically
+//               noise. Four plain gridlines stay as a visual anchor;
+//               the real numbers live in the legend below the chart and
+//               in the per-line hover tooltip, which is where "how much"
+//               actually belongs when several units share one plot.
 // One labelled value axis + its gridlines, drawn against an explicit
 // {lo, hi} in the value's own unit. Extracted from buildYAxis's
 // isolated branch so the storm compare chart — whose Y axis is shared
@@ -99,9 +100,7 @@ export function buildYAxis({ isolated, lineMetas, data, pad, cw, ch }) {
   }
   let svg = '';
   for (let g = 0; g <= 4; g++) {
-    const y = pad.t + (g / 4) * ch;
-    svg += gridLine(pad, cw, y);
-    svg += `<text x="${pad.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="${AXIS_TEXT}">${100 - g * 25} %</text>`;
+    svg += gridLine(pad, cw, pad.t + (g / 4) * ch);
   }
   return svg;
 }

@@ -19,53 +19,13 @@ reason a Python-only checkout cannot run its tests.
 
 from __future__ import annotations
 
-import json
-import shutil
-import subprocess
-from pathlib import Path
-
 import pytest
 
-_JS = (Path(__file__).resolve().parents[2] / "app" / "web" / "static" / "js").as_uri()
+from ._node_js import JS_URI as _JS
+from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
+from ._node_js import run_js as _js
 
-pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-
-# Enough of a DOM for the import graph: several modules publish a
-# `window.*` bridge at module scope and a couple touch `document` on
-# import. The element proxy answers any method with another proxy, and
-# remembers assigned properties so `host.innerHTML` can be read back.
-_STUB = """
-const el = () =>
-  new Proxy(
-    { style: {}, dataset: {},
-      classList: { add() {}, remove() {}, toggle() {}, contains: () => false } },
-    { get(t, k) { if (k in t) return t[k];
-                  if (k === 'children' || k === 'childNodes') return [];
-                  return typeof k === 'string' ? () => el() : undefined; },
-      set(t, k, v) { t[k] = v; return true; } },
-  );
-globalThis.window = { addEventListener() {},
-  matchMedia: () => ({ matches: false, addEventListener() {} }) };
-globalThis.document = { addEventListener() {}, querySelector: () => el(),
-  querySelectorAll: () => [], getElementById: () => el(), createElement: () => el(),
-  createElementNS: () => el(), body: el(), documentElement: el() };
-globalThis.IntersectionObserver = class { observe() {} disconnect() {} };
-globalThis.history = { replaceState() {} };
-globalThis.fetch = () => Promise.reject(new Error('no network in tests'));
-"""
-
-
-def _js(body: str):
-    """Run `body` with the storms modules importable. Returns its JSON."""
-    script = "{}\nconst JS = '{}';\n{}\n".format(_STUB, _JS, body)
-    proc = subprocess.run(
-        ["node", "--input-type=module", "-e", script],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    assert proc.returncode == 0, "node failed:\n{}".format(proc.stderr)
-    return json.loads(proc.stdout.strip().splitlines()[-1])
+pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 
 
 # ── A1 · the peak dot marks the metric's own WORST reading ─────────────

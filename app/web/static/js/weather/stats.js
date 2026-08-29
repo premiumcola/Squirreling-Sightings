@@ -47,10 +47,69 @@ let _wsStatsTimer_chart = null;
 let _wsStatsObserver = null;
 export const _wsStatsState = {
   hours: 24,
-  isolated: null, // field key in isolated-mode, null = all lines
+  // `hidden` is the source of truth for which curves are drawn — a
+  // legend chip click toggles membership, independent of any other
+  // chip ("mehrere an- und abwählen"). `isolated` is DERIVED, not set
+  // directly: when hiding leaves exactly one field visible, the chart
+  // switches to that field's real-value axis and the explainer card
+  // follows it, same as the old single-isolate mode. Both are recomputed
+  // in renderWeatherStats() before every render.
+  hidden: new Set(),
+  isolated: null,
+  // Once the operator touches any chip, auto-hide stops recomputing —
+  // otherwise re-enabling a flat field would just vanish again on the
+  // next 60 s refresh.
+  userAdjusted: false,
   data: null, // last fetched payload
   inFlight: false,
 };
+
+// A field with no non-null sample in the current window, or one that
+// never moved (e.g. Schneefall pinned at 0.00 all day), earns nothing by
+// being drawn — it just eats screen space and dilutes the curves that
+// actually say something about this window. "Zeige nur relevante Werte,
+// blende andere aus."
+function _wsIsFlat(samples, key) {
+  let lo = Infinity,
+    hi = -Infinity,
+    any = false;
+  for (const s of samples) {
+    const v = (s.values || {})[key];
+    if (typeof v !== 'number' || !isFinite(v)) continue;
+    any = true;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return !any || hi - lo < 1e-9;
+}
+
+// How much a field's OWN window-relative swing earns it visual weight,
+// as {width, opacity} for the SVG stroke. "Macht die Kurven kräftiger,
+// die gerade interessant sind" — a field near its reference span (the
+// same physical scales the storm archive scores intensity against, see
+// weather_episodes/_consts.py INTENSITY_REFERENCE) renders bold; a flat
+// stretch of the same field renders thin and dim instead of competing
+// for attention with the line that is actually moving.
+//
+// cloud_cover / sun_altitude are excluded on purpose: both swing hugely
+// on ANY ordinary day (sun altitude alone covers ~90°) without that
+// swing meaning anything is "happening" — they render as fixed context
+// lines instead of competing in the relevance ranking.
+const _WS_EMPHASIS_REF_SPAN = {
+  precipitation: 5, // mm/h
+  snowfall: 1, // cm/h
+  lightning_potential: 1, // J/kg — the corrected LPI trigger scale
+  wind_gusts_10m: 30, // km/h
+  visibility: 5000, // m
+};
+const _WS_CONTEXT_LINE = { width: 1.4, opacity: 0.55 };
+
+export function wsLineEmphasis(key, lo, hi) {
+  const ref = _WS_EMPHASIS_REF_SPAN[key];
+  if (!ref) return _WS_CONTEXT_LINE;
+  const t = Math.max(0, Math.min(1, Math.abs(hi - lo) / ref));
+  return { width: 1.4 + t * 1.8, opacity: 0.55 + t * 0.45 };
+}
 
 export async function loadWeatherStats() {
   if (_wsStatsState.inFlight) return;
@@ -88,7 +147,24 @@ export function _wsFmtVal(key, v) {
   return u ? s + ' ' + u : s;
 }
 
+// Fields currently drawn — every field in canonical order minus whatever
+// is in `hidden`. Never empty: a chart with nothing on it is worse than
+// one showing a field nobody asked for, so the legend refuses to hide
+// the last remaining field (see renderWeatherStatsLegend).
+export function wsVisibleFields() {
+  return _WS_FIELD_ORDER.filter((k) => !_wsStatsState.hidden.has(k));
+}
+
 export function renderWeatherStats() {
+  if (!_wsStatsState.userAdjusted) {
+    const samples = _wsStatsState.data?.samples || [];
+    const flat = new Set(_WS_FIELD_ORDER.filter((k) => _wsIsFlat(samples, k)));
+    // Never auto-hide EVERY field (a brand-new install with an all-zero
+    // window would otherwise blank the chart entirely).
+    if (flat.size < _WS_FIELD_ORDER.length) _wsStatsState.hidden = flat;
+  }
+  const visible = wsVisibleFields();
+  _wsStatsState.isolated = visible.length === 1 ? visible[0] : null;
   renderWeatherStatsChart();
   renderWeatherStatsLegend();
   renderWeatherStatsExplainer();

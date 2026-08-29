@@ -7,7 +7,13 @@
 // base chart is laid out.
 
 import { byId } from '../../core/dom.js';
-import { WEATHER_STATS_PALETTE, _WS_FIELD_ORDER, _wsStatsState } from '../stats.js';
+import {
+  WEATHER_STATS_PALETTE,
+  _WS_FIELD_ORDER,
+  _wsStatsState,
+  wsVisibleFields,
+  wsLineEmphasis,
+} from '../stats.js';
 import { _buildThresholdSvg } from '../stats-thresholds.js';
 import { buildLinePath } from './_paths.js';
 import { buildXTicks, buildYAxis } from './_axes.js';
@@ -95,13 +101,21 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
   // each tick against the same {lo, hi} the line was drawn against.
   let linesSvg = '';
   const lineMetas = {};
+  // Hidden fields never reach `fields` at all (wsVisibleFields already
+  // filtered them) — nothing here dims a curve by omission any more.
+  // What remains competes for attention by how much it actually moved
+  // in this window, via wsLineEmphasis — UNLESS exactly one field is on
+  // screen, where there is nothing to compete with and it always reads
+  // clearly.
   for (const key of fields) {
     const meta = buildLinePath(samples, key, PAD.l, PAD.t, cw, ch);
     if (!meta) continue;
     lineMetas[key] = meta;
     const colour = WEATHER_STATS_PALETTE[key] || '#94a3b8';
-    const opacity = isolated && isolated !== key ? 0.15 : 1;
-    linesSvg += `<path d="${meta.path}" fill="none" stroke="${colour}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+    const { width, opacity } = isolated
+      ? { width: 2.2, opacity: 1 }
+      : wsLineEmphasis(key, meta.lo, meta.hi);
+    linesSvg += `<path d="${meta.path}" fill="none" stroke="${colour}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
   }
   const yAxisSvg = buildYAxis({ isolated, lineMetas, data, pad: PAD, cw, ch });
   // Threshold overlay — delegated to stats-thresholds.js so this file
@@ -159,7 +173,10 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
   };
   if (geo.cw <= 0 || geo.ch <= 0) return;
   const isolated = opts.isolated || null;
-  const fields = isolated ? [isolated] : _WS_FIELD_ORDER;
+  // `opts.fields` lets a caller (the Wetter panel) draw a hand-picked
+  // subset; storms/_detail.js never passes it, so it keeps its original
+  // "isolated one field, else every field" behaviour unchanged.
+  const fields = opts.fields || (isolated ? [isolated] : _WS_FIELD_ORDER);
   wrap.innerHTML = _buildChartSvg({
     samples,
     data,
@@ -178,6 +195,7 @@ export function renderWeatherStatsChart() {
   _observe(wrap);
   renderStatsChartInto(wrap, _wsStatsState.data, {
     isolated: _wsStatsState.isolated,
+    fields: wsVisibleFields(),
     hours: _wsStatsState.hours || 24,
   });
 }

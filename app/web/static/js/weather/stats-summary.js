@@ -148,15 +148,15 @@ export function renderWeatherStatsLegend() {
       const colour = WEATHER_STATS_PALETTE[key] || '#94a3b8';
       const label = labels[key] || key;
       const val = _wsFmtVal(key, _wsCurrentValue(key));
-      // When one series is isolated, the others render with .is-disabled
-      // (opacity .35) so the active chip stands out without needing a
-      // background pill to mark it. With no isolation, all chips render
-      // at full opacity.
+      const hidden = _wsStatsState.hidden.has(key);
+      // is-hidden: toggled off (manually or auto, e.g. a flat Schneefall
+      // line) — dimmed, still clickable to bring back. is-isolated: the
+      // one field left once every other is hidden — bolded, since it now
+      // carries the chart's only Y-axis.
       let cls = 'ws-stats-chip';
-      if (isolated) {
-        cls += isolated === key ? ' is-isolated' : ' is-disabled';
-      }
-      return `<button type="button" class="${cls}" data-field="${key}" aria-pressed="${isolated === key ? 'true' : 'false'}">
+      if (hidden) cls += ' is-hidden';
+      else if (isolated === key) cls += ' is-isolated';
+      return `<button type="button" class="${cls}" data-field="${key}" aria-pressed="${hidden ? 'false' : 'true'}">
       <span class="ws-stats-chip-dot" style="--cb:${colour};background:${colour}"></span>
       <span class="ws-stats-chip-meta">
         <span class="ws-stats-chip-label">${label}</span>
@@ -167,10 +167,20 @@ export function renderWeatherStatsLegend() {
     .join('');
   wrap.innerHTML = html;
   // Wire chip clicks once per render (innerHTML wipes prior listeners).
+  // Each chip toggles independently — "mehrere an- und abwählen" — with
+  // one guard: hiding the last visible field would blank the chart, so
+  // that click is a no-op rather than a confusing empty plot.
   wrap.querySelectorAll('.ws-stats-chip').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.field;
-      _wsStatsState.isolated = _wsStatsState.isolated === key ? null : key;
+      const h = _wsStatsState.hidden;
+      if (h.has(key)) {
+        h.delete(key);
+      } else {
+        if (_WS_FIELD_ORDER.length - h.size <= 1) return; // last one standing
+        h.add(key);
+      }
+      _wsStatsState.userAdjusted = true;
       renderWeatherStats();
     });
   });

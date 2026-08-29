@@ -26,6 +26,7 @@ import { state } from '../core/state.js';
     'dashboard',
     'cameras',
     'statistik',
+    'netz',
     'media',
     'achievements',
     'weather',

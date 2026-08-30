@@ -113,8 +113,18 @@ function _withFrontendState(doc, ctx) {
 // browser-owned fields from this body, so a stray client can never write
 // arbitrary content into the log. Never awaited: the clipboard is the
 // primary path and this must not be able to delay or break it.
-function _archiveRun(camId, payload) {
+//
+// A failure DOES reach the screen, because the point of the archive is
+// that the operator can stop pasting into a chat — silently not storing
+// the run would leave them believing it is on the box when it is not.
+// It replaces the "kopiert" toast, which is the right precedence: the
+// copy already succeeded, the surprise is the part that did not.
+function _archiveRun(camId, payload, toast) {
   if (!camId) return;
+  const failed = (why) => {
+    console.warn('[simu-log] Lauf nicht gesichert:', why);
+    _showToast(toast, 'Kopiert · Lauf NICHT gesichert', 'error', 2600);
+  };
   fetch(`/api/cameras/${encodeURIComponent(camId)}/simu-log`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -123,14 +133,18 @@ function _archiveRun(camId, payload) {
       next_ms: payload.tick?.next_ms ?? null,
       hold_ms: payload.tick?.hold_ms ?? null,
     }),
-  }).catch((err) => {
-    console.warn('[simu-log] Lauf nicht gespeichert:', err && (err.message || err));
-  });
+  })
+    .then((r) => r.json())
+    .then((j) => {
+      if (!j || j.ok !== true) failed((j && j.error) || 'unbekannt');
+    })
+    .catch((err) => failed((err && (err.message || err)) || 'Netzwerkfehler'));
 }
 
-// SIMU-06c · wire the copy button. Reads the cached snapshot, splices
+// SIMU-06c · wire the copy button. Reads the cached document, splices
 // in the live frontend-only values, writes to the iOS clipboard
-// SYNCHRONOUSLY (inside the gesture), shows confirmation toast.
+// SYNCHRONOUSLY (inside the gesture), shows the confirmation toast, then
+// hands the same payload to the SIMU log.
 export function _wireCopyBar(host, ctx) {
   const btn = host.querySelector('[data-action="copy-snapshot"]');
   if (!btn) return;
@@ -165,7 +179,7 @@ export function _wireCopyBar(host, ctx) {
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(text).then(
           () => {
-            _showToast(toast, 'Debug-JSON kopiert · Lauf gespeichert', 'ok', 2000);
+            _showToast(toast, 'Debug-JSON kopiert · Lauf gesichert', 'ok', 2000);
           },
           () => {
             _execCopyFallback(text, toast);
@@ -181,7 +195,7 @@ export function _wireCopyBar(host, ctx) {
     if (!ok) {
       _showToast(toast, 'Kopieren fehlgeschlagen — versuche es erneut', 'error', 3000);
     }
-    _archiveRun((_liveCtx.session || {}).camId, payload);
+    _archiveRun((_liveCtx.session || {}).camId, payload, toast);
     btn.dataset.busy = '0';
     btn.classList.remove('mv-ld-debug-copy-busy');
   });
@@ -206,7 +220,7 @@ export function _execCopyFallback(text, toast) {
   }
   document.body.removeChild(ta);
   if (ok && toast) {
-    _showToast(toast, 'Debug-JSON kopiert · Lauf gespeichert', 'ok', 2000);
+    _showToast(toast, 'Debug-JSON kopiert · Lauf gesichert', 'ok', 2000);
   }
   return ok;
 }

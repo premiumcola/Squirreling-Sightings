@@ -240,6 +240,17 @@ def test_the_clipboard_gets_the_document_not_the_prose():
     assert "data.markdown" not in src, "the German report is no longer the copy payload"
 
 
+def test_a_failed_archive_is_not_swallowed():
+    """The archive exists so the operator can STOP pasting runs into a
+    chat. Failing silently would leave them believing a run is on the box
+    when it is not — the one outcome worse than not having the feature."""
+    src = _COPY.read_text(encoding="utf-8")
+    body = src[src.index("function _archiveRun") : src.index("export function _wireCopyBar")]
+    assert "NICHT gesichert" in body, "a failed archive has to reach the screen"
+    assert "j.ok !== true" in body, "a 200 carrying ok:false is still a failure"
+    assert ".catch(" in body, "…and so is a dead network"
+
+
 def test_the_copy_is_still_written_inside_the_gesture():
     """iOS Safari revokes clipboard access across an await boundary — the
     JSON switch must not have introduced one, and the archive POST must

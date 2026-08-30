@@ -98,12 +98,14 @@ function _buildTabs(panels, panelRenderers, item) {
 // Unified player layout, top → bottom (matches the live sim-player):
 //   titlebar
 //   stage    — frame + media + overlay layers, tiling grid, overlay-
-//              toggle pills pinned top-left, read-only readout pinned
-//              top-right, Stream+mode cluster (with a reserved
-//              Stream-selector slot) pinned top-right for read-only modes.
+//              toggle pills pinned top-left, and ONE thing pinned
+//              top-right: the read-only readout for interactive modes
+//              (which relocate their Stream+mode cluster below the
+//              stage), or that cluster itself for read-only ones. Never
+//              both — see the width-budget note in 30g.
 //   controls — below the stage; empty (and collapsed) unless a mode moves
 //              chrome down here. See _relocateControls. Interactive modes
-//              also host the legend's "?" chip here (see legendHost).
+//              also host the legend's "?" chip here — see `legendBand`.
 //   legendband — inline status legend + re-trigger pill, directly below
 //                the stage (collapses via :empty).
 //   playbar  — recorded/timelapse scrubber + per-class swimlane, or the

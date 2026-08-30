@@ -28,6 +28,7 @@ import { openWeatherLightbox, openWeatherRecapLightbox } from './_lightbox.js';
 import { weatherPageSize, renderWeatherPagination } from './_pagination.js';
 import { loadWeatherManualEvents, openManualEventView } from './_manual-events.js';
 import { withinZoom } from './_zoom.js';
+import { bindPinToggle } from './pin-toggle.js';
 
 // Matches MAX_SIGHTINGS_PAGE_SIZE in routes/weather.py. The gallery
 // filters client-side over multi-select chips, so it needs the whole
@@ -208,6 +209,7 @@ function _renderWeatherGrid() {
   const _activeCamIds = new Set((state.cameras || []).map((c) => c.id));
   grid.innerHTML = visible.map((entry) => _weatherFeedCardHTML(entry, _activeCamIds)).join('');
   _bindWeatherGridCards(grid);
+  bindPinToggle(grid);
   renderWeatherPagination(feed.length, pageSize, _renderWeatherGrid);
 }
 

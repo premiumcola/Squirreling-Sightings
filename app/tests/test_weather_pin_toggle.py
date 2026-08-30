@@ -1,14 +1,23 @@
 """weather/pin-toggle.js — the standalone "keep forever" card button.
 
-Built as an isolated module (not wired into _feed.js/sightings.js —
-another change was in flight on both) so it needs its own tests rather
-than piggybacking on test_weather_feed.py's harness. Same real-JS-under-
-node approach: pinToggleHTML is a pure string builder, bindPinToggle
-wires real DOM events, and the network call is stubbed via a fake
-apiPost so no fetch ever leaves the process.
+Built as an isolated module (a sibling change was in flight on
+_feed.js/sightings.js at the time) so most of its own behaviour is
+tested here directly rather than piggybacking on test_weather_feed.py's
+harness. Same real-JS-under-node approach: pinToggleHTML is a pure
+string builder, bindPinToggle wires real DOM events, and the network
+call is stubbed via a fake fetch so no request ever leaves the process.
+
+The module is now wired in (sightingCardHTML embeds pinToggleHTML;
+_renderWeatherGrid calls bindPinToggle right after grid.innerHTML lands)
+— the two tests at the bottom of this file pin that the wiring actually
+happened, since a card that silently drops its own pin button, or a
+grid that never binds the click, would look identical to "not built yet"
+from the outside.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +25,8 @@ from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
 from ._node_js import run_js as _js
 
 pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+
+_JS_ROOT = Path(__file__).resolve().parents[1] / "web" / "static" / "js"
 
 
 def test_unpinned_item_renders_the_base_button_with_no_is_pinned_class():
@@ -125,3 +136,43 @@ def test_bind_pin_toggle_tolerates_a_container_with_no_pin_buttons():
         """
     )
     assert out["threw"] is False
+
+
+# ── wiring: the pin button actually reaches a real sighting card ────────
+
+
+def test_sighting_card_html_embeds_the_pin_toggle():
+    out = _js(
+        """
+        const feed = await import(JS + '/weather/_feed.js');
+        const html = feed.sightingCardHTML(
+          { id: 's7', event_type: 'fog', started_at: '2026-08-29T08:00:00', pinned: true },
+          0,
+          true,
+        );
+        console.log(JSON.stringify({
+          hasPinBtn: html.includes('mmc-pin'),
+          hasIsPinned: html.includes('is-pinned'),
+          hasDeleteBtn: html.includes('mmc-delete'),
+        }));
+        """
+    )
+    assert out == {"hasPinBtn": True, "hasIsPinned": True, "hasDeleteBtn": True}
+
+
+def test_sightings_js_binds_the_pin_toggle_after_the_grid_renders():
+    """A static source check, not an executed one — _renderWeatherGrid
+    pulls in the whole weather module graph (apiGet, state, the storms
+    package…), too much to stand up here just to prove one call site
+    exists. Mirrors test_netz_tuning_frontend_wiring.py's approach to
+    the same kind of "did the wiring survive" question."""
+    src = (_JS_ROOT / "weather" / "sightings.js").read_text(encoding="utf-8")
+    assert "bindPinToggle } from './pin-toggle.js'" in src
+    body = src[src.index("function _renderWeatherGrid") :]
+    body = body[: body.index("\n}\n")]
+    assert "grid.innerHTML = " in body
+    assert "bindPinToggle(grid)" in body
+    assert body.index("grid.innerHTML = ") < body.index("bindPinToggle(grid)"), (
+        "bindPinToggle must run AFTER the card HTML (incl. the pin button) "
+        "has actually landed in the DOM"
+    )

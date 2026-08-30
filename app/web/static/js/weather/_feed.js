@@ -14,6 +14,7 @@ import { esc, byId } from '../core/dom.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
 import { precipitationLabel } from '../core/weather-precip.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
+import { pinToggleHTML } from './pin-toggle.js';
 import {
   episodeTitle,
   fmtDayMonth,
@@ -121,6 +122,7 @@ export function sightingCardHTML(s, idx, isActive) {
           </div>
           ${rightStack}
           <div class="mmc-actions">
+            ${pinToggleHTML(s)}
             <button type="button" class="mmc-btn mmc-delete" title="Löschen" aria-label="Löschen">${_LB_TRASH_ICON_ONLY}</button>
           </div>
         </div>

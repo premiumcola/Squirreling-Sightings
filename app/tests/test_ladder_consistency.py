@@ -58,9 +58,9 @@ def test_a_camera_whose_scores_never_reach_its_push_bar_is_a_calibration_issue()
     assert max(observed_person_scores) < shipped.push
 
     tuned = resolve_effective({"push_thresholds": {"person": 0.50}}, PUSH, "person")
-    assert max(observed_person_scores) >= tuned.push, (
-        "a per-camera push threshold is the lever that makes this camera report"
-    )
+    assert (
+        max(observed_person_scores) >= tuned.push
+    ), "a per-camera push threshold is the lever that makes this camera report"
 
 
 # ── 2 · the camera's own matrix decides ───────────────────────────────────

@@ -36,11 +36,16 @@ function _ensureBboxSvg(wrap) {
   // rewrites left/top/right/bottom on every draw; a stray `inset` in this
   // seed would silently reset them back to `auto` (the exact "no bboxes"
   // bug live-detect-bbox-fit.js's header comment documents).
-  // Trails (canvas, z-index 3 via modals.html) paint first — boxes sit
-  // above them at z-index 4, matching the old canvas draw order.
+  // Same z-index as the trails canvas (#lightboxDetections, z-index 3 via
+  // modals.html) — z-index 4 is already taken by the zone/mask overlay
+  // (zone-overlay-mount.js) + #lightboxLabels, and the pre-existing
+  // stacking has detections BELOW zones/masks. Appending this SVG after
+  // the (already-in-DOM) trails canvas is what puts boxes visually on
+  // top of trails within that same z-index tier, without disturbing the
+  // zones-above-detections relationship.
   svg.style.cssText =
     'position:absolute;left:0;top:0;right:auto;bottom:auto;' +
-    'width:100%;height:100%;pointer-events:none;z-index:4';
+    'width:100%;height:100%;pointer-events:none;z-index:3';
   wrap.appendChild(svg);
   return svg;
 }

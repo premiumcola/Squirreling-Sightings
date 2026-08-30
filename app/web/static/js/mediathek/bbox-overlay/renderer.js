@@ -156,8 +156,9 @@ function _prepCanvasTransform(cv, wrap, media, natW) {
 // returns null outside the track's [first.t, last.t] window — the track
 // simply doesn't paint until its first sample is reached.
 //
-// Trails (canvas) paint first, boxes (SVG, higher z-index) on top —
-// visually anchors the leading dot to the box.
+// Trails (canvas) paint first, boxes (SVG, same z-index but appended
+// after in the DOM — see svg-boxes.js) on top — visually anchors the
+// leading dot to the box.
 function _drawTracksBranch(tracks, ctx, frame) {
   const { media, wrap, videoEl, usingVideo, geom, natW, natH, threshold, isVisible } = frame;
   const { offX, offY, scale } = geom;

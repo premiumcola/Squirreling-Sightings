@@ -136,6 +136,17 @@ def test_svg_boxes_reuses_the_shared_fit_helper_not_a_second_copy():
     assert "core/video-fit.js" in _RENDERER
 
 
+def test_svg_box_layer_does_not_collide_with_the_zone_overlay_z_index():
+    """z-index 4 inside #lightboxMediaWrap is already claimed by the
+    zone/mask overlay (mediaview/canvas/zone-overlay-mount.js) and
+    #lightboxLabels — both of which must stay ABOVE detections, matching
+    the pre-existing stacking. The box layer belongs at the same tier as
+    the trails canvas (z-index 3); it visually sits above trails purely
+    by DOM order (appended after the canvas), not a z-index bump."""
+    assert "z-index:4" not in _SVG_BOXES
+    assert "z-index:3" in _SVG_BOXES
+
+
 def test_svg_box_group_has_a_rect_and_a_label_plate():
     """One track, one <g> with a stroked <rect> (the box) plus a filled
     <rect> + <text> (the pill) — mirrors live-detect-bbox-shapes.js's

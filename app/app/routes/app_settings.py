@@ -106,7 +106,15 @@ def api_settings_app_save():
             # update_section deep-merges (Phase 2 telegram fix), so partial
             # writes like {"events": {"thunder": {"threshold": 800}}} don't
             # wipe sibling keys.
-            settings.update_section("weather", payload.get("weather") or {})
+            weather_payload = payload.get("weather") or {}
+            settings.update_section("weather", weather_payload)
+            # A retention slider save is the only "attended" moment weather
+            # has (no separate "Jetzt bereinigen" button) — confirm any
+            # per-category day-count it carries against the nightly
+            # widening guard, mirroring api_media_cleanup's override path.
+            from ..weather_service._retention import acknowledge_weather_retention_from_payload
+
+            acknowledge_weather_retention_from_payload(weather_payload)
             needs_rebuild = True
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 422

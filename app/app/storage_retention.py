@@ -129,18 +129,24 @@ def _settings():
     return getattr(app_state, "settings", None)
 
 
-def enforced_days(fallback: int) -> int:
+def enforced_days(fallback: int, key: str = ENFORCED_KEY) -> int:
     """The window the sweep last enforced, or ``fallback`` when nothing
     was ever recorded — which is the state of every install upgrading
     into this code, and why the caller passes the ``config.yaml``
-    number: that is what the sweep actually enforced before."""
+    number: that is what the sweep actually enforced before.
+
+    ``key`` defaults to the main event-store's runtime key
+    (:data:`ENFORCED_KEY`); a caller guarding its own independent window
+    (e.g. one weather-media retention category) passes its own key so
+    the two trackers never collide in ``runtime.*``.
+    """
     settings = _settings()
     if settings is None:
         return fallback
     try:
-        value = settings.runtime_get(ENFORCED_KEY)
+        value = settings.runtime_get(key)
     except Exception:
-        log.debug("[storage] runtime_get(%s) failed", ENFORCED_KEY, exc_info=True)
+        log.debug("[storage] runtime_get(%s) failed", key, exc_info=True)
         return fallback
     try:
         return int(value)
@@ -148,18 +154,18 @@ def enforced_days(fallback: int) -> int:
         return fallback
 
 
-def record_enforced_days(days: int) -> None:
+def record_enforced_days(days: int, key: str = ENFORCED_KEY) -> None:
     """Remember the window as enforced. Additive ``runtime_set``."""
     settings = _settings()
     if settings is None:
         return
     try:
-        settings.runtime_set(ENFORCED_KEY, int(days))
+        settings.runtime_set(key, int(days))
     except Exception:
-        log.debug("[storage] runtime_set(%s) failed", ENFORCED_KEY, exc_info=True)
+        log.debug("[storage] runtime_set(%s) failed", key, exc_info=True)
 
 
-def acknowledge_window(days: int) -> None:
+def acknowledge_window(days: int, key: str = ENFORCED_KEY) -> None:
     """Record ``days`` as confirmed by the operator.
 
     The manual "Jetzt bereinigen" button posts an explicit
@@ -180,10 +186,10 @@ def acknowledge_window(days: int) -> None:
         )
         return
     log.info("[storage] Aufbewahrung %d Tage vom Bediener bestätigt", days)
-    record_enforced_days(days)
+    record_enforced_days(days, key)
 
 
-def nightly_window(resolved: int, baseline: int) -> int:
+def nightly_window(resolved: int, baseline: int, key: str = ENFORCED_KEY) -> int:
     """The window the *unattended* sweep may act on.
 
     ``resolved`` is what the config layers now say; ``baseline`` is the
@@ -193,11 +199,13 @@ def nightly_window(resolved: int, baseline: int) -> int:
     the previous, wider window until the operator confirms the new one
     with "Jetzt bereinigen". The warning repeats every night until then,
     which is the point: a pending narrowing must stay visible.
+
+    ``key`` — see :func:`enforced_days`.
     """
-    previous = enforced_days(baseline)
+    previous = enforced_days(baseline, key)
     if resolved >= previous:
         if resolved >= MIN_RETENTION_DAYS:
-            record_enforced_days(resolved)
+            record_enforced_days(resolved, key)
         return resolved
     log.warning(
         "[storage] Aufbewahrung von %d auf %d Tage verkürzt — die nächtliche "

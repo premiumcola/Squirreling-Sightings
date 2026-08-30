@@ -99,6 +99,9 @@ class LifecycleMixin:
         # year so the scheduler always knows the upcoming firings even when
         # the service was started after this year's Q1 has already happened.
         self._register_recap_jobs()
+        # Nightly per-category retention sweep for storage/weather/ — see
+        # _retention.py for the widening guard + pin exemption it applies.
+        self._register_retention_job()
         # Sun-Timelapse: register today's sunrise/sunset jobs and a daily
         # cron at 00:05 that re-registers for the new day.
         self._register_sun_jobs()
@@ -125,8 +128,7 @@ class LifecycleMixin:
             log.info("[scheduler] weather: %d job(s) scheduled", len(jobs))
             if log.isEnabledFor(logging.DEBUG):
                 for j in jobs:
-                    log.debug("[scheduler]   %s · %s · next=%s",
-                              j.id, j.trigger, j.next_run_time)
+                    log.debug("[scheduler]   %s · %s · next=%s", j.id, j.trigger, j.next_run_time)
         except Exception as e:
             log.warning("[scheduler] weather inventory log failed: %s", e)
         # ── Self-heal index drift after a filename refactor ────────────

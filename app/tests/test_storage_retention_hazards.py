@@ -191,6 +191,28 @@ def test_a_refused_window_is_never_recorded_as_confirmed(layers):
     assert storage_retention.nightly_window(0, 30) == 30
 
 
+def test_an_independent_key_tracks_its_own_window_without_colliding(layers):
+    """weather_service/_retention.py guards four independent categories
+    with this same mechanism — a caller-supplied `key` must get its own
+    slot in runtime.* rather than sharing (and corrupting) the main
+    event store's ENFORCED_KEY."""
+    runtime = layers({"retention_days": 60}, {"retention_days": 30})
+    other_key = "weather_retention_enforced_sun_timelapses_days"
+    # The main store's window widens and IS recorded under ENFORCED_KEY.
+    assert storage_retention.nightly_window(60, 30) == 60
+    assert runtime[storage_retention.ENFORCED_KEY] == 60
+    # A second, independent window under its own key starts fresh — the
+    # main store's recorded 60 must not leak into it.
+    assert storage_retention.nightly_window(21, 21, key=other_key) == 21
+    assert runtime[other_key] == 21
+    assert runtime[storage_retention.ENFORCED_KEY] == 60, "the two keys must not collide"
+    storage_retention.acknowledge_window(5, key=other_key)
+    assert runtime[other_key] == 5
+    assert (
+        runtime[storage_retention.ENFORCED_KEY] == 60
+    ), "acknowledging one key must not touch the other"
+
+
 # ── A2 · the single record of a timelapse is immortal ──────────────────────
 def test_the_sweep_never_removes_a_timelapse_record(tmp_storage_root, store):
     """`migrations.py` calls this entry "the single record of a

@@ -17,9 +17,10 @@ import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
 import { renderTuneRadar, tuneGroupLegendHtml } from './_tune_radar.js';
-import { bindClassRows, classRowsHtml } from './_class_rows.js';
+import { buildClassAxes, classAxisHint, classAxisSpec } from './_class_rows.js';
 import {
   applySaved,
+  axisFor,
   camState,
   clearStagedFor,
   effectiveTuning,
@@ -45,10 +46,6 @@ const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garte
 const CHIPS_ID = 'netzCamChips';
 
 // ── render ────────────────────────────────────────────────────────────
-
-// Per-class Meldeschwelle — text-shaped, as chosen when the second radar
-// was dropped, but each row is editable again. See _class_rows.js for why
-// the read-only version was a regression rather than a simplification.
 
 function _stagingHtml(camId) {
   const n = stagedCountFor(camId);
@@ -104,7 +101,11 @@ function _cardHtml(cam) {
     );
   }
   const tuning = effectiveTuning(cam.id);
-  const axes = buildTuneAxes(tuning);
+  // ONE net per camera. The camera-wide settings first, so each colour
+  // group keeps a contiguous arc, then this camera's per-class
+  // Meldeschwellen — which classes those are comes from the camera's own
+  // Klassen-Filter, so the spoke count differs from card to card.
+  const axes = [...buildTuneAxes(tuning), ...buildClassAxes(st)];
   netzState.tuneAxes[cam.id] = axes;
   const role = _ROLE_DE[st.role] || st.role || '';
   const focused = netzState.focusCam === cam.id ? ' is-focus' : '';
@@ -114,7 +115,6 @@ function _cardHtml(cam) {
     (role ? `<span class="netz-card-role">${esc(role)}</span>` : '') +
     `</header>` +
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
-    classRowsHtml(st) +
     `<div class="netz-card-controls">${_presetsHtml()}${_ghostHtml(tuning)}</div>` +
     _stagingHtml(cam.id) +
     `</article>`
@@ -205,12 +205,6 @@ async function _save(camId, fields, okMsg, onRepaint) {
 function _bindCard(card, onRepaint) {
   const camId = card.dataset.cam;
 
-  // Per-class Meldeschwelle rows. These save through a DIFFERENT route
-  // than the radar above (PATCH /api/netz/<cam>/axes, which also writes
-  // the net-archive record), so they commit on release instead of
-  // joining the radar's staging bar — one write, one archive entry.
-  bindClassRows(card, () => onRepaint());
-
   card.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
     const fields = { ...stagedFor(camId) };
     if (!Object.keys(fields).length) return;
@@ -253,8 +247,13 @@ function _bindCard(card, onRepaint) {
 
   qsa('[data-tune-axis-label]', card).forEach((b) =>
     b.addEventListener('click', () => {
-      const spec = TUNE_SPECS[b.dataset.tuneAxisLabel];
-      if (spec) showToast(`${spec.label}\n${spec.hint}`, 'info', { lifetime: 7000 });
+      const key = b.dataset.tuneAxisLabel;
+      const spec = TUNE_SPECS[key] || classAxisSpec(key);
+      if (!spec) return;
+      // A class axis whose Meldung is off says WHY it is greyed out —
+      // that is the whole job of a disabled control's hint.
+      const hint = TUNE_SPECS[key] ? spec.hint : classAxisHint(axisFor(camId, key));
+      showToast(`${spec.label}\n${hint}`, 'info', { lifetime: 7000 });
     }),
   );
 }

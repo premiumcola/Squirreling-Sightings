@@ -61,6 +61,19 @@ export const TUNE_GROUPS = {
     color: '#fbbf24',
     what: 'Ob ein Objekt über Frames hinweg dasselbe Objekt bleibt.',
   },
+  // The per-class Meldeschwellen (netz/_class_rows.js). A genuinely
+  // different concept from the four above — camera-wide capture settings
+  // versus one alert threshold per class, with its own save route and its
+  // own evidence loop — so it gets its own colour rather than being
+  // dressed up as a fifth tuning group. Which of these spokes a card
+  // actually shows is per camera: it comes from that camera's
+  // Klassen-Filter, not from this list.
+  meldung: {
+    key: 'meldung',
+    label: 'Meldung',
+    color: '#f472b6',
+    what: 'Ab welcher Sicherheit eine Klasse eine Meldung auslöst — je Klasse, je Kamera.',
+  },
 };
 
 // What the groups do TOGETHER — the part a per-axis hint cannot say,

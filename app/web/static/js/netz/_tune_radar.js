@@ -3,10 +3,11 @@
 // lines) rather than grown inside it, and it needs its own geometry
 // anyway — three differences from the confidence radar next door:
 //
-//   * ELLIPSE, not circle. The eight German setting names
+//   * ELLIPSE, not circle. The German setting names
 //     ("Wildtier-Empfindlichkeit", "Bewegungs-Vortrigger") do not fit the
 //     68/76 px label boxes a circular layout leaves room for, which is
-//     the whole reason the labels were unreadable.
+//     the whole reason the labels were unreadable. Where those labels GO
+//     is _tune_labels.js's problem, not this file's.
 //   * GROUP COLOUR on vertices, spokes and labels (see TUNE_GROUPS). The
 //     polygon itself stays neutral — _radar.js's comment is right that a
 //     rainbow polygon is unreadable.
@@ -27,18 +28,16 @@
 
 import { esc } from '../core/dom.js';
 import { TUNE_GROUPS } from './_settings_axes.js';
+import { LABEL_OFF_X, LABEL_W, labelsSvg } from './_tune_labels.js';
 
-// viewBox geometry. Wider than tall so the left/right label boxes have
-// horizontal room; PAD is what is reserved OUTSIDE the ring for labels.
+// viewBox geometry. Wider than tall so the left/right label rails have
+// horizontal room; PAD_X is exactly what one rail needs, derived from the
+// label metrics rather than guessed, so the boxes cannot hang off the
+// viewBox when either number is tuned.
 export const TUNE_W = 440;
 export const TUNE_H = 340;
-const PAD_X = 108;
+const PAD_X = LABEL_W + LABEL_OFF_X + 4;
 const PAD_Y = 40;
-const LABEL_W = 104;
-const LABEL_H = 34;
-// How far outside the ring the label box sits, per axis.
-const LABEL_OFF_X = 16;
-const LABEL_OFF_Y = 14;
 // Snap window around an axis's own default, so "back to Werk" is
 // recoverable by feel — the equivalent of _mapping.js's factory snap.
 const SNAP = 2;
@@ -49,12 +48,9 @@ export function tuneGeometry(w = TUNE_W, h = TUNE_H) {
 
 /** Point on the ellipse for (axis index, radial fraction 0-1). Index 0
  *  points straight up, the rest run clockwise. */
-export function tunePolar(i, n, frac, geo, padX = 0, padY = 0) {
+export function tunePolar(i, n, frac, geo) {
   const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
-  return {
-    x: geo.cx + Math.cos(a) * (geo.rx * frac + padX),
-    y: geo.cy + Math.sin(a) * (geo.ry * frac + padY),
-  };
+  return { x: geo.cx + Math.cos(a) * geo.rx * frac, y: geo.cy + Math.sin(a) * geo.ry * frac };
 }
 
 /** Pointer offset from the centre → E (0-100), normalised PER AXIS so the
@@ -92,15 +88,20 @@ function _ringsSvg(geo) {
     .join('');
 }
 
-function _spokesSvg(axes, geo) {
-  return axes
-    .map((axis, i) => {
-      const p = tunePolar(i, axes.length, 1, geo);
-      return (
+/** The outer end of every spoke, once — the spokes, the leader lines and
+ *  the label rail all need it and it is pure trigonometry. */
+function _spokeEnds(axes, geo) {
+  return axes.map((axis, i) => ({ axis, ...tunePolar(i, axes.length, 1, geo) }));
+}
+
+function _spokesSvg(ends, geo) {
+  return ends
+    .map(
+      (p) =>
         `<line x1="${geo.cx}" y1="${geo.cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}" ` +
-        `stroke="${esc(axis.color)}" stroke-width="1" opacity=".22"/>`
-      );
-    })
+        `stroke="${esc(p.axis.color)}" stroke-width="1" ` +
+        `opacity="${p.axis.locked ? '.12' : '.22'}"/>`,
+    )
     .join('');
 }
 
@@ -129,23 +130,32 @@ function _polygonSvg(points) {
 
 function _vertexSvg(axis, i, n, geo, interactive) {
   const p = tunePolar(i, n, Math.max(0, Math.min(100, axis.E)) / 100, geo);
-  const manuell = axis.provenance === 'manuell';
-  const fill = manuell ? axis.color : 'none';
-  const stroke = manuell ? axis.color : 'rgba(255,255,255,.34)';
+  // Hollow means "still on the shipped value". Anything that moved it —
+  // the operator OR the nightly learner — fills the dot.
+  const moved = !!axis.provenance && axis.provenance !== 'werk';
+  const fill = moved ? axis.color : 'none';
+  const stroke = moved ? axis.color : 'rgba(255,255,255,.34)';
+  // A locked axis is drawn, never grabbable: no halo, no hit disc. See
+  // _class_rows.js — a class whose Meldung is switched off has a stored
+  // threshold that nothing consults, and a draggable vertex there would
+  // promise an effect the alarm path never delivers. Hiding the spoke
+  // instead would hide the far more useful fact that the class is mute.
+  const live = interactive && !axis.locked;
   // The halo is what answers "which node am I about to grab?". Opacity,
   // not radius: SVG geometry properties are only animatable via CSS in
   // newer engines, while opacity works everywhere and cannot reflow.
-  const halo = interactive
+  const halo = live
     ? `<circle class="netz-tune-halo" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" ` +
       `r="13" fill="${esc(axis.color)}" opacity="0"/>`
     : '';
   // The invisible 44 px disc IS the touch target (iOS minimum).
-  const hit = interactive
+  const hit = live
     ? `<circle class="netz-tune-hit" data-tune-axis="${esc(axis.key)}" ` +
       `cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="22" fill="transparent"/>`
     : '';
   return (
-    `<g class="netz-vertex" data-tune-axis="${esc(axis.key)}">${halo}` +
+    `<g class="netz-vertex${axis.locked ? ' is-off' : ''}" ` +
+    `data-tune-axis="${esc(axis.key)}">${halo}` +
     `<circle class="netz-tune-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5.5" ` +
     `fill="${fill}" stroke="${stroke}" stroke-width="1.8"/>${hit}</g>`
   );
@@ -188,44 +198,29 @@ export function moveTuneVertex(svg, axes, key) {
   if (val) val.textContent = axis.display;
 }
 
-// Label + its CURRENT VALUE. Showing the value on the chart is what makes
-// the net readable without tapping every spoke — the whole complaint the
-// redesign started from.
-function _labelsSvg(axes, geo, interactive) {
-  return axes
-    .map((axis, i) => {
-      const p = tunePolar(i, axes.length, 1, geo, LABEL_OFF_X, LABEL_OFF_Y);
-      const tag = interactive ? 'button' : 'span';
-      const attrs = interactive ? ` type="button" data-tune-axis-label="${esc(axis.key)}"` : '';
-      return (
-        `<foreignObject x="${(p.x - LABEL_W / 2).toFixed(1)}" ` +
-        `y="${(p.y - LABEL_H / 2).toFixed(1)}" width="${LABEL_W}" height="${LABEL_H}">` +
-        `<${tag} xmlns="http://www.w3.org/1999/xhtml" class="netz-tlbl"${attrs}>` +
-        `<span class="netz-tlbl-n" style="color:${esc(axis.color)}">${esc(axis.label)}</span>` +
-        `<span class="netz-tlbl-v">${esc(axis.display)}</span>` +
-        `</${tag}></foreignObject>`
-      );
-    })
-    .join('');
-}
-
 /**
  * @param {object}  opts
- * @param {Array}   opts.axes         rows from buildTuneAxes()
+ * @param {Array}   opts.axes         buildTuneAxes() rows plus, appended,
+ *                                    buildClassAxes() rows — ONE net per
+ *                                    camera carries both concerns.
  * @param {boolean} opts.interactive  false = a static, non-draggable copy
  */
 export function renderTuneRadar({ axes, interactive = true }) {
   const geo = tuneGeometry();
   const values = axes.map((a) => a.E);
+  const ends = _spokeEnds(axes, geo);
   return (
     `<svg class="netz-svg netz-tune-svg" viewBox="0 0 ${TUNE_W} ${TUNE_H}" ` +
     `width="${TUNE_W}" height="${TUNE_H}" role="img" aria-label="Erkennungsprofil">` +
     _ringsSvg(geo) +
-    _spokesSvg(axes, geo) +
+    _spokesSvg(ends, geo) +
     _defaultSvg(axes, geo) +
     _polygonSvg(_pointsFor(axes, values, geo)) +
     axes.map((a, i) => _vertexSvg(a, i, axes.length, geo, interactive)).join('') +
-    _labelsSvg(axes, geo, interactive) +
+    // Label + its CURRENT VALUE, on the rail. Showing the value on the
+    // chart is what makes the net readable without tapping every spoke —
+    // the complaint the redesign started from.
+    labelsSvg(ends, geo, TUNE_H, interactive) +
     `</svg>`
   );
 }

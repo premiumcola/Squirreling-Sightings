@@ -19,6 +19,7 @@
 
 import { showConfirm, showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
+import { classAxisSpec, isClassAxisKey, resetClassAxis, saveClassAxis } from './_class_rows.js';
 import { TUNE_SPECS, tuneDisplay, tuneRawFromE } from './_settings_axes.js';
 import { eFromEllipse, moveTuneVertex, tuneGeometry, TUNE_H, TUNE_W } from './_tune_radar.js';
 import { applySaved, axisFor, netzState, stageValue, unstage } from './_state.js';
@@ -41,7 +42,12 @@ function _pillEl(card) {
 
 function _paintPill(card, spec, raw) {
   const el = _pillEl(card);
-  el.innerHTML = `<b>${spec.label}</b><span>${tuneDisplay(spec, raw)}</span>`;
+  // `note` is only set on class axes — the two save paths on this one net
+  // behave differently on release (stage vs. commit), so the pill says
+  // which one the finger is on rather than leaving it to be discovered.
+  el.innerHTML =
+    `<b>${spec.label}</b><span>${tuneDisplay(spec, raw)}</span>` +
+    (spec.note ? `<em>${spec.note}</em>` : '');
   el.dataset.on = '1';
 }
 
@@ -79,7 +85,10 @@ function _onDown(ev, node, onRepaint) {
   if (!card) return;
   const camId = card.dataset.cam;
   const key = node.dataset.tuneAxis;
-  const spec = TUNE_SPECS[key];
+  // One pointer layer for both concerns on the net. A class axis carries
+  // a TUNE_SPECS-shaped spec (see _class_rows.js) precisely so this stays
+  // a lookup rather than a second drag implementation.
+  const spec = TUNE_SPECS[key] || classAxisSpec(key);
   const axis = axisFor(camId, key);
   if (!spec || !axis) return;
   const geo = _geometry(card);
@@ -171,8 +180,17 @@ function _onUp(ev, onRepaint) {
   card
     .querySelector(`.netz-vertex[data-tune-axis="${CSS.escape(key)}"]`)
     ?.classList.remove('is-dragging');
-  // Pointerup STAGES. Nothing is saved until "Übernehmen" — the same
-  // two-stage commit the confidence radar used.
+  // TWO SAVE PATHS, one net. A camera-wide axis STAGES — nothing is
+  // written until "Übernehmen", the two-stage commit the confidence radar
+  // used. A per-class Meldeschwelle COMMITS on release through
+  // PATCH /api/netz/<cam>/axes, which also writes the net-archive record:
+  // one drag, one write, one history entry. Repainting here would snap
+  // the vertex back to the stored value for the length of the request, so
+  // the save owns the repaint.
+  if (moved && isClassAxisKey(key)) {
+    saveClassAxis(camId, key, raw, onRepaint);
+    return;
+  }
   if (moved) stageValue(camId, key, raw);
   onRepaint();
 }
@@ -181,6 +199,14 @@ async function _onLongPress(card, camId, key, spec, onRepaint) {
   _drag = null;
   _hidePill(card);
   if (!(await showConfirm(`${spec.label} auf Werk zurücksetzen?`))) return;
+  // A class axis resets through POST /api/netz/<cam>/reset, which also
+  // UNPINS it. `patchAxes(…, 50)` would land on the same number and leave
+  // the learner locked out of the axis for good.
+  if (isClassAxisKey(key)) {
+    await resetClassAxis(camId, key);
+    onRepaint();
+    return;
+  }
   const res = await patchTuning(camId, { [key]: spec.default });
   if (res.ok) {
     // The reset already hit the server, so drop any staged value for this

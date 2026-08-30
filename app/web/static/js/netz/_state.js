@@ -69,6 +69,19 @@ export function axisFor(camId, key) {
   return (netzState.tuneAxes[camId] || []).find((a) => a.key === key) || null;
 }
 
+/** Replace one camera's whole net payload with a fresh server response.
+ *
+ *  `PATCH /api/netz/<cam>/axes` and `POST /api/netz/<cam>/reset` both
+ *  return `H.net_state(cam_id)` — the ladder re-resolved after the write.
+ *  Taking it wholesale is the only way the card can show what actually
+ *  landed: a per-class write moves `push`, `spawn`, `source` and
+ *  `provenance` together, and patching one of them by hand is how a
+ *  display drifts from the pipeline. Staged tuning drags are unaffected —
+ *  `effectiveTuning` layers them on top of whatever is stored. */
+export function applyNetState(camId, state) {
+  if (camId && state) netzState.states[camId] = state;
+}
+
 /** Fold a saved response back into the stored state so the next render
  *  shows what the server actually accepted (it clamps and range-checks),
  *  not what was optimistically dragged. */

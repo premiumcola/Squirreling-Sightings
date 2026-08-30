@@ -207,25 +207,44 @@ class ManifestsMixin:
         # explicitly rather than glob'd so we never delete unrelated
         # files that happen to share the stem in the same directory.
         sidecar_exts = (".json", ".mp4", ".jpg", ".jpeg", ".webp", ".tracks.json")
-        any_removed = False
+        # Weather deletes used to be HARD while motion deletes went to the
+        # Papierkorb — a split that only worked while the two archives were
+        # two screens. They are becoming one library with one Papierkorb
+        # button, and a button that restores half the grid and silently
+        # destroys the other half is worse than no button. So: same trash,
+        # same grace period, same restore path.
+        present = []
         for ext in sidecar_exts:
             p = (
                 stem.with_suffix(ext)
                 if ext.startswith(".") and ext.count(".") == 1
                 else stem.with_name(stem.name + ext)
             )
+            if p.exists():
+                present.append(p)
+        any_removed = False
+        if present:
             try:
-                if p.exists():
-                    p.unlink()
-                    any_removed = True
-            except FileNotFoundError:
-                # Race with a concurrent delete — treat as success.
-                pass
+                from ..trash import retire_to_trash
+
+                cam_id = str(sighting_id).split("__", 1)[0] or "weather"
+                moved = retire_to_trash(self._sightings_dir().parent, cam_id, stem.name, present)
+                any_removed = moved > 0
             except Exception as e:
-                # Don't abort the sweep just because one sibling failed
-                # (permissions, FS quirks). Log and move on so the
-                # remaining files still get cleaned.
-                log.warning("[weather] delete %s: %s", p.name, e)
+                log.warning("[weather] delete %s: Papierkorb nicht erreichbar: %s", sighting_id, e)
+            # Anything the trash could not file away is still removed —
+            # `retire_to_trash` leaves such a file in place on purpose, and
+            # a delete that silently leaves the clip in the grid would read
+            # as broken.
+            for p in present:
+                try:
+                    if p.exists():
+                        p.unlink()
+                        any_removed = True
+                except FileNotFoundError:
+                    pass
+                except Exception as e:
+                    log.warning("[weather] delete %s: %s", p.name, e)
         # Also scrub any leftover scratch frame dir from a crashed
         # capture — `.scratch_<stem>/` next to the manifest. Best-
         # effort only; never blocks the delete result.

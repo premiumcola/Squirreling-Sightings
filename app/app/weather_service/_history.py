@@ -18,6 +18,7 @@ from pathlib import Path
 import requests
 
 from ..io_utils import atomic_write_json
+from . import _history_store as _hstore
 from ._consts import (
     EVENT_ICON_HEX,
     EVENT_LABEL_DE,
@@ -32,6 +33,12 @@ from ._consts import (
     _safe_subset,
     log,
 )
+
+
+# The buffer's own span in hours, at the default 5-minute poll. Derived
+# so the API clamp and the buffer can never disagree again.
+_DEFAULT_POLL_S = 300
+_MAX_HISTORY_HOURS = max(1, HISTORY_MAXLEN * _DEFAULT_POLL_S // 3600)
 
 
 class HistoryMixin:
@@ -50,59 +57,50 @@ class HistoryMixin:
             root = "/app/storage"
         return Path(root) / "weather_history.json"
 
-    def _load_history(self):
-        path = self._history_path()
-        if not path.exists():
-            return
+    def _storage_root(self) -> Path:
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:
-            log.warning("[weather] history file unparseable, starting fresh: %s", e)
-            return
-        items = payload.get("samples") if isinstance(payload, dict) else payload
-        if not isinstance(items, list):
-            log.warning("[weather] history file has unexpected shape, starting fresh")
-            return
-        kept = 0
+            return Path(
+                self.settings_store.base_config.get("storage", {}).get("root", "/app/storage")
+            )
+        except Exception:
+            return Path("/app/storage")
+
+    def _load_history(self):
+        """Fill the buffer from the append-only ledger (or the legacy
+        document on first boot after the format change)."""
+        rows = _hstore.load(self._storage_root(), HISTORY_MAXLEN)
         with self._history_lock:
             self._history.clear()
-            for row in items[-HISTORY_MAXLEN:]:
-                if not isinstance(row, dict):
-                    continue
-                ts = row.get("ts")
-                values = row.get("values")
-                if not isinstance(ts, str) or not isinstance(values, dict):
-                    continue
-                # Migration: drop fields no longer in HISTORY_FIELDS, fill
-                # missing ones with None — never crash on old/extra keys.
-                clean = {k: values.get(k) for k in HISTORY_FIELDS}
-                self._history.append({"ts": ts, "values": clean})
-                kept += 1
-        log.info("[weather] history loaded: %d samples from %s", kept, path)
+            for row in rows:
+                self._history.append(row)
+        log.info("[weather] history loaded: %d samples", len(rows))
+        # A legacy install has no ledger yet; write one so the next poll
+        # appends instead of falling back again.
+        root = self._storage_root()
+        if rows and not _hstore.history_path(root).exists():
+            _hstore.write_all(root, rows)
+
+    def _append_history(self, sample: dict):
+        """Persist ONE sample. O(1) in the window length.
+
+        The old path serialised and fsynced the entire buffer on every
+        poll, which is what made a long window unaffordable. See
+        _history_store.py's docstring for the reasoning.
+        """
+        root = self._storage_root()
+        if not _hstore.append(root, sample):
+            return
+        if _hstore.needs_compaction(root, HISTORY_MAXLEN):
+            with self._history_lock:
+                rows = list(self._history)
+            _hstore.compact(root, rows)
 
     def _save_history(self):
-        """Atomic write to .tmp + os.replace so a kill -9 mid-write cannot
-        leave a half-written history.json on disk."""
-        path = self._history_path()
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            log.warning("[weather] history dir mkdir failed: %s", e)
-            return
+        """Full rewrite. Only for shutdown and explicit callers — the
+        poll path uses :meth:`_append_history`."""
         with self._history_lock:
-            samples = list(self._history)
-        payload = {
-            "version": 1,
-            "saved_at": datetime.now().isoformat(timespec="seconds"),
-            "samples": samples,
-        }
-        # fsync=True — history is the source of truth for the weather
-        # chart; an OS-level crash mid-write would lose the rolling
-        # window without the explicit flush + fsync.
-        try:
-            atomic_write_json(path, payload, fsync=True)
-        except Exception as e:
-            log.warning("[weather] history write failed: %s", e)
+            rows = list(self._history)
+        _hstore.write_all(self._storage_root(), rows)
 
     def _record_sample(self, latest: dict, sun: dict):
         """Append the latest poll's numeric values to the ring buffer.
@@ -117,13 +115,14 @@ class HistoryMixin:
                 v = latest.get(key) if isinstance(latest, dict) else None
                 values[key] = float(v) if isinstance(v, (int, float)) else None
         ts_iso = datetime.now().isoformat(timespec="seconds")
+        sample = {"ts": ts_iso, "values": values}
         with self._history_lock:
-            self._history.append({"ts": ts_iso, "values": values})
+            self._history.append(sample)
         # Update the live status snapshot so /api/weather/status carries the
         # last polled slice without a separate fetch.
         with self._lock:
             self._status["current_values"] = dict(values)
-        self._save_history()
+        self._append_history(sample)
         self._sweep_episodes()
 
     def _sweep_episodes(self):
@@ -231,7 +230,11 @@ class HistoryMixin:
         the panel itself is set to 24 h). Every existing caller that
         only passes ``hours`` is unaffected.
         """
-        hours = max(1, min(720, int(hours or 24)))
+        # Clamp to the buffer's own span rather than a literal: the two
+        # drifted apart the moment HISTORY_MAXLEN grew, and a caller
+        # asking for more than the buffer holds should get the buffer,
+        # not a silently shorter window.
+        hours = max(1, min(_MAX_HISTORY_HOURS, int(hours or 24)))
         since_dt = _safe_dt(since_iso) if since_iso else None
         until_dt = _safe_dt(until_iso) if until_iso else None
         cutoff = since_dt or (datetime.now() - timedelta(hours=hours))
@@ -253,6 +256,11 @@ class HistoryMixin:
             if until_dt and ts_dt > until_dt:
                 continue
             out.append(row)
+        # A long window must not become a download. Thinning preserves
+        # spikes per field rather than striding — see _history_store's
+        # `downsample` for why a stride would erase exactly the lightning
+        # and gust peaks this chart is read for.
+        out, bucket = _hstore.downsample(out)
         # Thresholds from configured event settings. Always emit the
         # configured threshold value regardless of the enabled toggle —
         # the chart needs to draw the boundary even for events that are
@@ -279,6 +287,7 @@ class HistoryMixin:
         return {
             "hours": hours,
             "samples": out,
+            "bucket_size": bucket,
             "thresholds": thresholds,
             "events_enabled": events_enabled,
             "units": dict(HISTORY_UNITS),

@@ -54,6 +54,14 @@ WEATHER_RETENTION_CATEGORIES: tuple[str, ...] = (
     "sun_timelapses",
 )
 
+#: Manual events are FLAT JSON files under `weather/manual_events/`, not
+#: per-camera event directories, so `_sweep_sighting_category`'s
+#: `cam_dir/evt_dir` walk skipped every one of them and they grew without
+#: bound. They also carry no media — only a saved chart range — so they
+#: get their own sweep and their own key rather than being forced into a
+#: loop written for clip folders.
+MANUAL_EVENTS_DIRNAME = "manual_events"
+
 #: Recaps fire quarterly/yearly — a flat day-count alone would delete
 #: last quarter's recap the moment its own window expires, which is
 #: the opposite of what a "recap" is for. This is the period-aware
@@ -70,6 +78,11 @@ WEATHER_RECAP_MIN_KEEP = 2
 #: so the shipped default stands in for it — mirrors what
 #: `config_retention_days()` is for the main event store.
 _DEFAULT_CATEGORY_DAYS: dict[str, int] = {
+    # A manual event is a deliberate act of authorship — the operator sat
+    # down and described a storm. It costs a few hundred bytes and is not
+    # reproducible once the 90-day curve buffer has rolled past it, so it
+    # outlives every automatic capture by default.
+    "manual_events": 400,
     "sightings": 90,
     "event_timelapses": 120,
     "sun_timelapses": 21,
@@ -111,7 +124,7 @@ def acknowledge_weather_retention_from_payload(weather_payload: dict) -> None:
 
     if not isinstance(weather_payload, dict):
         return
-    for category in (*WEATHER_RETENTION_CATEGORIES, "recaps"):
+    for category in (*WEATHER_RETENTION_CATEGORIES, "recaps", "manual_events"):
         key = f"retention_{category}_days"
         if key not in weather_payload:
             continue
@@ -219,6 +232,21 @@ class WeatherRetentionMixin:
                 r, p = self._sweep_sighting_category(category, window)
                 removed += r
                 pinned += p
+            manual_window = nightly_window(
+                self._resolve_category_days("manual_events"),
+                self._category_baseline_days("manual_events"),
+                key=weather_retention_runtime_key("manual_events"),
+            )
+            manual_removed = 0
+            if manual_window >= MIN_RETENTION_DAYS:
+                manual_removed = self._sweep_manual_events(manual_window)
+            else:
+                log.error(
+                    "[weather] autoclean manual_events abgebrochen: retention=%d Tage — "
+                    "mindestens %d Tage erforderlich",
+                    manual_window,
+                    MIN_RETENTION_DAYS,
+                )
             recap_window = nightly_window(
                 self._resolve_category_days("recaps"),
                 self._category_baseline_days("recaps"),
@@ -235,10 +263,11 @@ class WeatherRetentionMixin:
                     MIN_RETENTION_DAYS,
                 )
             log.info(
-                "[weather] autoclean: %d Sichtungen + %d Recaps entfernt, "
-                "%d angepinnte Sichtungen übersprungen",
+                "[weather] autoclean: %d Sichtungen + %d Recaps + %d manuelle "
+                "Ereignisse entfernt, %d angepinnte Sichtungen übersprungen",
                 removed,
                 recap_removed,
+                manual_removed,
                 pinned,
             )
         except Exception as e:
@@ -254,7 +283,7 @@ class WeatherRetentionMixin:
         removed = 0
         pinned = 0
         for cam_dir in root.iterdir():
-            if not cam_dir.is_dir() or cam_dir.name == "recaps":
+            if not cam_dir.is_dir() or cam_dir.name in ("recaps", MANUAL_EVENTS_DIRNAME):
                 continue
             for evt_dir in cam_dir.iterdir():
                 if not evt_dir.is_dir() or evt_dir.name.startswith(".scratch_"):
@@ -280,6 +309,50 @@ class WeatherRetentionMixin:
                     if sighting_id and self.delete_sighting(sighting_id):
                         removed += 1
         return removed, pinned
+
+    def _sweep_manual_events(self, retention_days: int) -> int:
+        """Delete manual events whose saved range ended before the cutoff.
+
+        Age is measured from ``range_end`` — what the record is ABOUT —
+        not ``created_at``. Writing up last winter's storm today should
+        not buy it a fresh 400 days, and the card prints the range, so
+        ages by anything else would contradict what the operator sees.
+
+        A pinned record is skipped, matching the sighting sweep.
+        """
+        root = self._manual_events_dir()
+        if not root.exists():
+            return 0
+        cutoff = datetime.now() - timedelta(days=retention_days)
+        removed = 0
+        for jf in list(root.glob("*.json")):
+            try:
+                m = json.loads(jf.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if m.get("pinned"):
+                continue
+            when = (
+                _safe_dt(m.get("range_end", ""))
+                or _safe_dt(m.get("range_start", ""))
+                or _safe_dt(m.get("created_at", ""))
+            )
+            if when is None or when >= cutoff:
+                continue
+            try:
+                jf.unlink()
+            except FileNotFoundError:
+                continue
+            except Exception as e:
+                log.warning("[weather] manual-event sweep: %s: %s", jf.name, e)
+                continue
+            removed += 1
+            log.info(
+                "[weather] Manuelles Ereignis entfernt (Aufbewahrung %dd): %s",
+                retention_days,
+                m.get("id") or jf.stem,
+            )
+        return removed
 
     def _sweep_recaps(self, retention_days: int) -> int:
         """Delete every un-pinned recap older than ``retention_days``,

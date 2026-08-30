@@ -50,7 +50,7 @@ EVENT_ICON_HEX: dict[str, str] = {
 # Numeric Open-Meteo parameters we persist + the cached sun altitude. Kept in
 # a single deque of {ts, values} rows so callers can ship the buffer as JSON
 # and the frontend can filter by time range without juggling 7 parallel
-# arrays. Capacity = 288 samples ≈ 24 h at the default 5-min poll.
+# arrays. Capacity is HISTORY_MAXLEN below.
 HISTORY_FIELDS: tuple[str, ...] = (
     "precipitation",
     "snowfall",
@@ -99,7 +99,17 @@ HISTORY_FIELD_TO_EVENT: dict[str, str] = {
     "wind_gusts_10m": "storm",
 }
 
-HISTORY_MAXLEN = 8640  # 30 d @ 5 min — deque truncates oldest, ~1.5 MB on disk
+# 3 years @ 5 min. The window is NOT bounded by the file size any more:
+# _history_store.py appends one ~168 B line per poll and compacts only
+# when the ledger drifts past the window, so the per-poll write cost is
+# constant no matter how far back this reaches. The old full-document
+# rewrite made a long window untenable — 3 years is ~53 MB, and that was
+# re-serialised and fsynced every five minutes.
+# What still scales with the window: the boot read (one pass over the
+# ledger) and the chart's own point count, which is why the API clamps a
+# request to the buffer's span rather than handing 315k points to a
+# phone.
+HISTORY_MAXLEN = 315_360
 
 # Per-event-type score DOMAIN (min, max) a trigger's severity can occupy.
 # Every detector in _detection.py clamps its severity to the full [0, 1]

@@ -75,4 +75,5 @@ def test_defaults_dict_carries_exactly_the_documented_keys():
         "retention_event_timelapses_days",
         "retention_sun_timelapses_days",
         "retention_recaps_days",
+        "retention_manual_events_days",
     }

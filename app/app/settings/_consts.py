@@ -205,6 +205,10 @@ WEATHER_RETENTION_DEFAULTS: dict = {
     "retention_event_timelapses_days": 120,
     "retention_sun_timelapses_days": 21,
     "retention_recaps_days": 400,
+    # Manual events are authored by hand and cost a few hundred bytes;
+    # they were swept by nothing at all until now (the sweep walked
+    # camera DIRECTORIES and manual_events/ holds flat files).
+    "retention_manual_events_days": 400,
 }
 
 

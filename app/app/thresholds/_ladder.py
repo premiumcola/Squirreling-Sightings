@@ -203,10 +203,26 @@ def _resolve_push(cam_cfg: dict, push_cfg: dict, label: str, adapted: dict) -> t
     )
 
 
-def _resolve_push_enabled(push_cfg: dict, label: str) -> tuple[bool, str]:
-    """Whether the label pushes at all. No per-camera layer exists — the
-    camera-level switch is ``telegram_enabled`` and gates the whole
-    camera, not one label; the per-label matrix stays global."""
+def _resolve_push_enabled(cam_cfg: dict, push_cfg: dict, label: str) -> tuple[bool, str]:
+    """Whether the label pushes at all.
+
+    ``class_severity`` is the per-camera, per-label matrix and — per its
+    own definition in the cam-edit panel — the source of truth that
+    replaced ``alarm_profile``. It therefore OUTRANKS the global switch.
+
+    The contradiction this fixes: the shipped global config has
+    ``cat: {push: False}``, so a camera whose matrix said ``cat = info``
+    detected cats, recorded cats, listed cats as active — and never once
+    reported one. Two settings, opposite meanings, no warning. The
+    operator had answered the question ("info") and was overruled by a
+    default they never saw.
+
+    ``off`` in the matrix still means off: a camera that mutes a class
+    mutes it, whatever the global says.
+    """
+    severity = _sub(cam_cfg, "class_severity").get(label)
+    if isinstance(severity, str) and severity:
+        return severity != "off", SOURCE_CAMERA
     cfg_label = _sub(_sub(push_cfg, "labels"), label)
     if "push" in cfg_label:
         return bool(cfg_label.get("push")), SOURCE_GLOBAL
@@ -235,7 +251,7 @@ def resolve_effective(
     spawn, spawn_src = _resolve_spawn(cam_cfg, label, adapted)
     confirm_n, confirm_seconds, confirm_src = _resolve_confirm(cam_cfg, label)
     push, push_src = _resolve_push(cam_cfg, push_cfg, label, adapted)
-    push_enabled, push_enabled_src = _resolve_push_enabled(push_cfg, label)
+    push_enabled, push_enabled_src = _resolve_push_enabled(cam_cfg, push_cfg, label)
     # The detector floor can never sit above the spawn gate — a spawn
     # the detector never reports is unreachable. Same clamp
     # tracker_core.resolve_track_thresholds applies; when it bites, the

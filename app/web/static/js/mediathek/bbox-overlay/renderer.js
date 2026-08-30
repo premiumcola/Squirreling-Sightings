@@ -3,6 +3,12 @@
 // NEVER modified; this paints a separate canvas on top of the media
 // element. Track colours come from the deterministic tracks.json
 // palette so multiple subjects in one clip get distinguishable strokes.
+//
+// This file is the ORCHESTRATOR — per-render setup + branch selection.
+// The actual painting primitives live in ./_canvas-shapes.js (canvas box
+// drawing), the label-visibility gate in ./_classfilter.js, and shared
+// style/text resolution in ./_box-style.js — split out so this file and
+// its functions stay under CLAUDE.md's size ceilings.
 import { byId } from '../../core/dom.js';
 import { state } from '../../core/state.js';
 import { colors } from '../../core/icons.js';
@@ -10,36 +16,12 @@ import { _lbClearDetections } from '../../lightbox.js';
 import { lbState } from '../state.js';
 import { _TRACK_SPAWN_SCORE } from './_state.js';
 import { _isReindexBannerActive } from './reindex.js';
-import { _getHiddenClassesForCam } from './hidden-classes.js';
 import { renderTrailLayer } from '../../mediaview/canvas/trail-layer.js';
 import { _pointInPoly, _polyPoints } from '../../shape-editor/geometry.js';
 import { normalizePolygon } from '../../core/polygon-source.js';
-
-// Neutral gray for the ⊘ Maskiert modifier. Replaces the track's
-// per-identity color (the per-track hue still drives the timeline
-// row and the legend's "Farbe = Person" hint, but a masked-out
-// subject is rendered in neutral so it's visually clear it has
-// been filtered out of alerting).
-const _MASKED_STROKE = '#94a3b8';
-
-/**
- * Darken a hex color toward black for label-text use. Keeps the
- * hue family so the pill text reads as "the same color, but dark"
- * — never plain black. factor 0..1, smaller = darker.
- */
-function _darkenHex(hex, factor) {
-  const fb = '#0a0a0a';
-  if (!hex || typeof hex !== 'string' || hex[0] !== '#') return fb;
-  let h = hex.slice(1);
-  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  if (h.length !== 6) return fb;
-  const n = parseInt(h, 16);
-  if (!Number.isFinite(n)) return fb;
-  const r = Math.floor(((n >> 16) & 0xff) * factor);
-  const g = Math.floor(((n >> 8) & 0xff) * factor);
-  const b = Math.floor((n & 0xff) * factor);
-  return `rgb(${r},${g},${b})`;
-}
+import { _makeLabelVisibleFn } from './_classfilter.js';
+import { drawTrackBoxCanvas } from './_canvas-shapes.js';
+import { resolveBoxStyle } from './_box-style.js';
 
 // Bbox + trail visibility — flipped by the overlay-toggles pill bar
 // (bboxes/trails). Module-scoped so the RAF redraw loop and the
@@ -123,55 +105,30 @@ function _firstSampleOfTrack(track) {
   };
 }
 
-// Resolve the camera-config object_filter set, or null when unfiltered.
-// tracks.json schema≥2 stores filter_applied at write time so this
-// matches what the worker actually used; older sidecars + the legacy
-// path fall back to the camera's live config.
-export function _resolveAllowedLabels() {
-  const tracks = lbState.item?._tracks;
-  if (tracks && Array.isArray(tracks.filter_applied)) {
-    return new Set(tracks.filter_applied);
-  }
-  const camId = lbState.item?.camera_id;
-  if (camId) {
-    const cam = (state.cameras || []).find((c) => (c.id || '') === camId);
-    const of = cam?.object_filter;
-    if (Array.isArray(of) && of.length > 0) {
-      return new Set(of);
-    }
-  }
-  return null;
-}
-
-// Combined visibility check — closure read once per render, called
-// per track / per detection.
-function _makeLabelVisibleFn() {
-  const allowed = _resolveAllowedLabels();
-  const camId = lbState.item?.camera_id;
-  const hidden = _getHiddenClassesForCam(camId);
-  return (label) => {
-    if (hidden.has(label)) return false;
-    return allowed === null || allowed.has(label);
-  };
-}
-
-export function _lbDrawDetections() {
-  const cv = byId('lightboxDetections');
-  if (!cv || !lbState.item) return;
-  const ctx = cv.getContext('2d');
+// Resolve which media element (video or still image) currently carries
+// pixels, plus its natural (source) resolution. Returns null when
+// neither is showing anything yet.
+function _resolveActiveMedia() {
   const videoEl = byId('lightboxVideo');
   const imgEl = byId('lightboxImg');
   const usingVideo = videoEl && videoEl.style.display !== 'none' && videoEl.videoWidth > 0;
   const usingImage = imgEl && imgEl.style.display !== 'none' && imgEl.naturalWidth > 0;
   const media = usingVideo ? videoEl : usingImage ? imgEl : null;
-  if (!media) {
-    _lbClearDetections();
-    return;
-  }
-  const natW = usingVideo ? videoEl.videoWidth : imgEl.naturalWidth;
-  const natH = usingVideo ? videoEl.videoHeight : imgEl.naturalHeight;
-  const wrap = byId('lightboxMediaWrap');
-  if (!wrap) return;
+  if (!media) return null;
+  return {
+    media,
+    videoEl,
+    usingVideo,
+    natW: usingVideo ? videoEl.videoWidth : imgEl.naturalWidth,
+    natH: usingVideo ? videoEl.videoHeight : imgEl.naturalHeight,
+  };
+}
+
+// Size the canvas to the wrap's CSS box (accounting for devicePixelRatio)
+// and compute the letterbox offset/scale that maps SOURCE pixel coords
+// (tracks.json bbox space) onto the canvas.
+function _prepCanvasTransform(cv, wrap, media, natW, natH) {
+  const ctx = cv.getContext('2d');
   const wrapRect = wrap.getBoundingClientRect();
   const mediaRect = media.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -181,12 +138,78 @@ export function _lbDrawDetections() {
   cv.height = Math.round(wrapRect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, wrapRect.width, wrapRect.height);
-
   const scale = Math.min(mediaRect.width / natW, mediaRect.height / natH);
   const renderedW = natW * scale,
     renderedH = natH * scale;
   const offX = (mediaRect.width - renderedW) / 2 + (mediaRect.left - wrapRect.left);
   const offY = (mediaRect.height - renderedH) / 2 + (mediaRect.top - wrapRect.top);
+  return { ctx, offX, offY, scale };
+}
+
+// Interpolate every track's bbox to the current playback time. The RAF
+// loop calls _lbDrawDetections every frame during play so the box moves
+// smoothly; the seeked/pause/ended listeners call it on every scrub tick
+// so the box snaps to the new position on pause + drag. _interpolateTrackAt
+// returns null outside the track's [first.t, last.t] window — the track
+// simply doesn't paint until its first sample is reached.
+//
+// Trails paint first so the bbox stroke sits on top — visually anchors
+// the leading dot to the box.
+function _drawTracksBranch(tracks, ctx, videoEl, usingVideo, geom, natW, natH, threshold, isVisible) {
+  const { offX, offY, scale } = geom;
+  const t = usingVideo ? videoEl.currentTime || 0 : null;
+  if (_overlayVisibility.showTrails && t != null) {
+    for (const tr of tracks.tracks) {
+      if (!isVisible(tr.label)) continue;
+      renderTrailLayer(ctx, tr, t, tr.color, offX, offY, scale);
+    }
+  }
+  const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
+  if (_overlayVisibility.showBboxes) {
+    for (const tr of tracks.tracks) {
+      if (!isVisible(tr.label)) continue;
+      const sample = t == null ? _firstSampleOfTrack(tr) : _interpolateTrackAt(tr, t);
+      if (!sample) continue;
+      const status = _classifyTrackStatus(tr, sample, threshold);
+      const masked = _isSampleMasked(sample, natW, natH, camMasks);
+      const style = resolveBoxStyle(sample, tr.color, status, masked, tr._num);
+      drawTrackBoxCanvas(ctx, sample, offX, offY, scale, style, masked);
+    }
+  }
+}
+
+// Legacy single-bbox fallback for clips with no sidecar yet (404 /
+// pending fetch). Caller (_lbDrawDetections) already gates this on the
+// reindex banner + playback state — see its comments for why.
+function _drawLegacyFallback(ctx, geom, natW, natH, threshold, isVisible) {
+  const { offX, offY, scale } = geom;
+  const dets = (lbState.item.detections || [])
+    .filter((d) => d && d.bbox && typeof d.bbox.x1 === 'number')
+    .filter((d) => isVisible(d.label));
+  if (!dets.length) return;
+  const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
+  for (const d of dets) {
+    const c = colors[d.label] || colors.unknown;
+    const sample = { bbox: d.bbox, score: d.score, label: d.label };
+    const status = _classifyTrackStatus(null, sample, threshold);
+    const masked = _isSampleMasked(sample, natW, natH, camMasks);
+    const style = resolveBoxStyle(sample, c, status, masked, null);
+    drawTrackBoxCanvas(ctx, sample, offX, offY, scale, style, masked);
+  }
+}
+
+export function _lbDrawDetections() {
+  const cv = byId('lightboxDetections');
+  const wrap = byId('lightboxMediaWrap');
+  if (!cv || !wrap || !lbState.item) return;
+  const active = _resolveActiveMedia();
+  if (!active) {
+    _lbClearDetections();
+    return;
+  }
+  const { media, videoEl, usingVideo, natW, natH } = active;
+  const geom = _prepCanvasTransform(cv, wrap, media, natW, natH);
+  const { ctx } = geom;
 
   const tracks = lbState.item._tracks;
   const haveTracks = tracks && Array.isArray(tracks.tracks) && tracks.tracks.length > 0;
@@ -202,80 +225,32 @@ export function _lbDrawDetections() {
       : _TRACK_SPAWN_SCORE;
   const isVisible = _makeLabelVisibleFn();
 
-  ctx.font = '600 12px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
-  ctx.textBaseline = 'top';
-
   if (haveTracks) {
-    // Interpolate every track's bbox to the current playback time.
-    // The RAF loop calls us every frame during play so the box
-    // moves smoothly; the seeked/pause/ended listeners call us on
-    // every scrub tick so the box snaps to the new position on
-    // pause + drag. _interpolateTrackAt returns null outside the
-    // track's [first.t, last.t] window — the track simply doesn't
-    // paint until its first sample is reached, which keeps the
-    // overlay honest about the subject's actual appearance time.
-    const t = usingVideo ? videoEl.currentTime || 0 : null;
-
-    // Trails first so the bbox stroke sits on top — visually anchors
-    // the leading dot to the box. Skipped when the trails pill is
-    // off OR we're rendering a still photo (no time axis = no trail).
-    if (_overlayVisibility.showTrails && t != null) {
-      for (const tr of tracks.tracks) {
-        if (!isVisible(tr.label)) continue;
-        renderTrailLayer(ctx, tr, t, tr.color, offX, offY, scale);
-      }
-    }
-
-    const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
-    if (_overlayVisibility.showBboxes) {
-      for (const tr of tracks.tracks) {
-        if (!isVisible(tr.label)) continue;
-        const sample = t == null ? _firstSampleOfTrack(tr) : _interpolateTrackAt(tr, t);
-        if (!sample) continue;
-        const status = _classifyTrackStatus(tr, sample, spawnThreshold);
-        const masked = _isSampleMasked(sample, natW, natH, camMasks);
-        _drawTrackBox(ctx, sample, tr.color, offX, offY, scale, status, masked, tr._num);
-      }
-    }
+    _drawTracksBranch(tracks, ctx, videoEl, usingVideo, geom, natW, natH, spawnThreshold, isVisible);
     return;
   }
 
-  // Indexer ran and produced an empty sidecar → keep the canvas
-  // clean. Showing the trigger-frame detection here would be a
-  // stationary, mis-positioned box that pops in only on scrub, with
-  // no relationship to where the subject actually was during the
-  // recorded clip. The timeline panel surfaces the WHY (gate values
-  // + filter) so the operator understands the empty state without
-  // a misleading box.
+  // Indexer ran and produced an empty sidecar → keep the canvas clean.
+  // Showing the trigger-frame detection here would be a stationary,
+  // mis-positioned box that pops in only on scrub, with no relationship
+  // to where the subject actually was during the recorded clip. The
+  // timeline panel surfaces the WHY (gate values + filter) so the
+  // operator understands the empty state without a misleading box.
   if (sidecarFetched && sidecarEmpty) return;
 
-  // Legacy single-bbox fallback for clips with no sidecar yet (404 /
-  // pending fetch). Suppressed entirely while the reindex banner is
-  // active (avoids staring at the same trigger-frame box for ~17 s)
-  // and during active playback (the trigger bbox is one moment in
-  // time; painting it during motion would lie about subject
-  // location). Pause / ended / still-image branches paint the box
-  // back at the trigger position so the user has SOMETHING to see
-  // before the indexer finishes.
+  // Suppressed entirely while the reindex banner is active (avoids
+  // staring at the same trigger-frame box for ~17 s) and during active
+  // playback (the trigger bbox is one moment in time; painting it during
+  // motion would lie about subject location). Pause / ended / still-
+  // image branches paint the box back at the trigger position so the
+  // user has SOMETHING to see before the indexer finishes.
   if (_isReindexBannerActive()) return;
-
   const isPlaying =
     usingVideo && !videoEl.paused && !videoEl.ended && (videoEl.currentTime || 0) > 0.05;
   if (isPlaying) return;
   if (!_overlayVisibility.showBboxes) return;
 
-  const dets = (lbState.item.detections || [])
-    .filter((d) => d && d.bbox && typeof d.bbox.x1 === 'number')
-    .filter((d) => isVisible(d.label));
-  if (!dets.length) return;
-  const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
-  for (const d of dets) {
-    const c = colors[d.label] || colors.unknown;
-    const sample = { bbox: d.bbox, score: d.score, label: d.label };
-    const status = _classifyTrackStatus(null, sample, spawnThreshold);
-    const masked = _isSampleMasked(sample, natW, natH, camMasks);
-    _drawTrackBox(ctx, sample, c, offX, offY, scale, status, masked, null);
-  }
+  _drawLegacyFallback(ctx, geom, natW, natH, spawnThreshold, isVisible);
 }
 
 // Ground point = bottom-center of bbox. A subject is considered
@@ -351,100 +326,4 @@ export function _classifyTrackStatus(track, sample, threshold) {
   // No track context — collapse to the two-tier legacy view.
   if (cur != null && cur < t) return 'weak';
   return 'confirmed';
-}
-
-// Style table for the three tracking-status categories. The bbox
-// renderer AND the legend component read these (the legend swatch is
-// just a 24×16 stroke painted with the same lineDash + alpha), so
-// changing a number here propagates to every status surface.
-export const _STATUS_STYLE = {
-  confirmed: { dash: [], alpha: 1.0, marker: '' },
-  weak: { dash: [6, 4], alpha: 1.0, marker: '↓ ' },
-  ghost: { dash: [2, 4], alpha: 0.55, marker: '≈ ' },
-};
-
-function _drawTrackBox(ctx, sample, color, offX, offY, scale, status, masked, trackNum) {
-  const b = sample.bbox;
-  const x1 = offX + b.x1 * scale,
-    y1 = offY + b.y1 * scale;
-  const x2 = offX + b.x2 * scale,
-    y2 = offY + b.y2 * scale;
-  const w = x2 - x1,
-    h = y2 - y1;
-  if (w <= 0 || h <= 0) return;
-  const cat = status && _STATUS_STYLE[status] ? status : 'confirmed';
-  const style = _STATUS_STYLE[cat];
-  // H2 · stroke COLOR is the per-track identity color (each track in
-  // the clip gets its own hue from tracks.json — confirmed AND weak
-  // AND ghost all use that same hue). Status is encoded purely by the
-  // LINE STYLE (solid / dashed / fine-dotted) + the marker prefix in
-  // the label pill. The only color exception is ⊘ Maskiert, which
-  // flips the stroke to neutral gray to read as "filtered out of
-  // alerting" while still preserving its underlying dash pattern.
-  const trackColor = color || '#22c55e';
-  const stroke = masked ? _MASKED_STROKE : trackColor;
-  ctx.save();
-  ctx.globalAlpha = style.alpha;
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = 2;
-  ctx.setLineDash(style.dash);
-  ctx.strokeRect(x1, y1, w, h);
-  ctx.setLineDash([]);
-  ctx.globalAlpha = 1;
-  // Pill label — "↓ #N · X %" (status marker + person number + score).
-  // Background uses the per-track color; text uses a DARKENED shade
-  // of that hue (never plain black) so the pill reads as "the
-  // person's color, intense fill, deep text" — matches the same
-  // family across the bbox + the characteristic card + the timeline.
-  const hasNum = typeof trackNum === 'number';
-  const pct = sample.score != null ? Math.round(sample.score * 100) : null;
-  const prefix = `${masked ? '⊘ ' : ''}${style.marker}`;
-  const numText = hasNum ? `#${trackNum}` : '';
-  let text;
-  if (numText && pct != null) text = `${prefix}${numText} · ${pct}%`;
-  else if (numText) text = `${prefix}${numText}`.trim();
-  else if (pct != null) text = `${prefix}${pct}%`;
-  else text = '';
-  if (text) {
-    const padX = 6,
-      pillH = 18;
-    const tw = ctx.measureText(text).width;
-    const pillY = Math.max(0, y1 - pillH - 2);
-    const pillBg = masked ? 'rgba(148,163,184,0.92)' : trackColor;
-    const pillTextColor = _darkenHex(masked ? _MASKED_STROKE : trackColor, 0.18);
-    ctx.globalAlpha = style.alpha;
-    ctx.fillStyle = pillBg;
-    ctx.fillRect(x1, pillY, tw + padX * 2, pillH);
-    ctx.fillStyle = pillTextColor;
-    ctx.fillText(text, x1 + padX, pillY + 3);
-  }
-  // ⊘ corner badge — top-right of the box. Sits on its own small
-  // backdrop so it's readable against any video content. Drawn at
-  // full alpha (status alpha doesn't apply to the badge — it's a
-  // category indicator).
-  if (masked) {
-    const badge = 14;
-    const bx = x2 - badge - 2;
-    const by = y1 + 2;
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.beginPath();
-    ctx.arc(bx + badge / 2, by + badge / 2, badge / 2 + 1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = _MASKED_STROKE;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(bx + badge / 2, by + badge / 2, badge / 2 - 1, 0, Math.PI * 2);
-    ctx.stroke();
-    // Diagonal slash.
-    const r = badge / 2 - 2;
-    const cxBadge = bx + badge / 2;
-    const cyBadge = by + badge / 2;
-    const off = r / Math.SQRT2;
-    ctx.beginPath();
-    ctx.moveTo(cxBadge - off, cyBadge - off);
-    ctx.lineTo(cxBadge + off, cyBadge + off);
-    ctx.stroke();
-  }
-  ctx.restore();
 }

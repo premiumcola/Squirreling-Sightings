@@ -11,12 +11,8 @@ import { trackColor } from '../../core/track-color.js';
 import { lbState } from '../state.js';
 import { _state } from './_state.js';
 import { _getHiddenClassesForCam, _setHiddenClassesForCam } from './hidden-classes.js';
-import {
-  _isPointInAnyMask,
-  _lbDrawDetections,
-  _resolveAllowedLabels,
-  _resolveMaskPolygonsForCam,
-} from './renderer.js';
+import { _isPointInAnyMask, _lbDrawDetections, _resolveMaskPolygonsForCam } from './renderer.js';
+import { _resolveAllowedLabels } from './_classfilter.js';
 import { lbInvalidateTracks, lbLoadTracksForItem } from './fetcher.js';
 import {
   _updatePlayPct,

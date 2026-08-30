@@ -52,12 +52,19 @@ VIEWPORTS = [
 ]
 
 # Fixed chrome envelope, px. Lower bound: title bar 40 (.mv-titlebar
-# min-height) + control row 54 (chip row + the telemetry cost line) +
-# legend band 48 (the 44 px "?" chip plus its padding) + playbar ~78 (one
-# swimlane lane) + 5 × 4 px column gaps. Upper bound: the same with a
-# three-lane playbar. The layout has to hold across the whole range —
-# that is the property the hard-coded 230 px did not have.
-CHROME_MIN = 240
+# min-height) + control row 48 (the 44 px chip row plus its padding —
+# the legend's "?" chip now rides at its right end) + legend band 0 (it
+# is :empty in live and collapses) + playbar ~78 (one swimlane lane) +
+# 4 × 4 px row gaps. Upper bound: the same with a three-lane playbar and
+# room to spare. The layout has to hold across the whole range — that is
+# the property the hard-coded 230 px did not have.
+#
+# M2 moved two rows out of this sum: the telemetry cost line onto the
+# picture (it is a readout, not a control) and the "?" chip into the
+# control row, which emptied the band it had to itself. ~70 px of a
+# 667 px phone, handed back to the stage by the measured budget without
+# any number here having to be re-derived.
+CHROME_MIN = 180
 CHROME_MAX = 340
 
 # What each region needs to still be the thing it is called.

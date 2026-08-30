@@ -4,9 +4,12 @@
 // agnostic — H/I lift the recorded/live-specific action buttons
 // (confirm-haken, download, delete) on top of this base.
 //
-// Nav buttons render disabled when the matching action handler is
-// absent (e.g. live mode has no prev/next), so the same markup serves
-// every mode without per-mode branching in the shell.
+// Nav buttons render disabled at the ends of a list the mode CAN page
+// through, and are omitted entirely by a mode that pages through
+// nothing (live-detect supplies neither handler). A permanently
+// disabled chevron is not an affordance — over a 375 px phone it was
+// 2 × 36 px of dead width shouldering the camera name off centre, which
+// is the whole reason the name now sits in the middle of the bar.
 
 import { byId, esc } from '../core/dom.js';
 
@@ -47,16 +50,23 @@ export function renderTitleBar(host, config = {}) {
     typeof actions.onDelete === 'function'
       ? `<button type="button" class="mv-tb-act mv-tb-act--danger" data-act="delete" aria-label="Löschen" title="Löschen">${_TRASH}</button>`
       : '';
+  // A mode that offers neither neighbour does not page at all — render
+  // no chevrons rather than two permanently dead ones.
+  const pages = hasPrev || hasNext;
+  const nav = (dir, label, glyph, on) =>
+    pages
+      ? `<button type="button" class="mv-tb-nav" data-nav="${dir}"${on ? '' : ' disabled'} aria-label="${label}">${glyph}</button>`
+      : '';
   const { cam, time } = _titleFrom(config);
   el.className = 'mv-titlebar';
   el.innerHTML =
-    `<button type="button" class="mv-tb-nav" data-nav="prev"${hasPrev ? '' : ' disabled'} aria-label="Vorheriges">${_CHEVRON_L}</button>` +
+    `<div class="mv-tb-lead">${nav('prev', 'Vorheriges', _CHEVRON_L, hasPrev)}</div>` +
     `<div class="mv-tb-titles"><span class="mv-tb-cam">${esc(cam)}</span>` +
     `<span class="mv-tb-time">${esc(time)}</span></div>` +
     `<div class="mv-tb-actions">` +
     dl +
     del +
-    `<button type="button" class="mv-tb-nav" data-nav="next"${hasNext ? '' : ' disabled'} aria-label="Nächstes">${_CHEVRON_R}</button>` +
+    nav('next', 'Nächstes', _CHEVRON_R, hasNext) +
     `<button type="button" class="mv-tb-close" data-act="close" aria-label="Schließen">${_CLOSE}</button>` +
     `</div>`;
   const wire = (sel, fn) => {

@@ -98,12 +98,14 @@ function _buildTabs(panels, panelRenderers, item) {
 // Unified player layout, top → bottom (matches the live sim-player):
 //   titlebar
 //   stage    — frame + media + overlay layers, tiling grid, overlay-
-//              toggle pills pinned top-left, Stream+mode cluster (with a
-//              reserved Stream-selector slot) pinned top-right.
+//              toggle pills pinned top-left, read-only readout pinned
+//              top-right, Stream+mode cluster (with a reserved
+//              Stream-selector slot) pinned top-right for read-only modes.
 //   controls — below the stage; empty (and collapsed) unless a mode moves
-//              chrome down here. See _relocateControls.
-//   legendband — inline status legend + class legend + re-trigger pill,
-//                directly below the stage (collapses via :empty).
+//              chrome down here. See _relocateControls. Interactive modes
+//              also host the legend's "?" chip here (see legendHost).
+//   legendband — inline status legend + re-trigger pill, directly below
+//                the stage (collapses via :empty).
 //   playbar  — recorded/timelapse scrubber + per-class swimlane, or the
 //              live swimlane (collapses via :empty for weather).
 //   panels   — colour-coded tabs + fine-analysis fold.
@@ -113,6 +115,7 @@ const _SHELL_HTML =
   `<div class="mv-shell-frame" data-slot="frame"></div>` +
   `<svg class="mv-shell-grid" data-slot="grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" hidden></svg>` +
   `<div class="mv-shell-toggles" data-slot="toggles"></div>` +
+  `<div class="mv-shell-readout" data-slot="readout"></div>` +
   `<div class="mv-shell-topright" data-slot="topright">` +
   `<div class="mv-shell-streamslot" data-slot="stream"></div>` +
   `<div class="mv-shell-modeind" data-slot="modeind"></div></div></div>` +
@@ -258,11 +261,19 @@ export function mountMediaView(config = {}) {
     }
   }
 
-  // Inline status-legend band directly below the stage (float:false —
-  // no longer a floating frame overlay). The class-colour legend and the
-  // "Neu erkennen" pill share the same band (retrigger pinned right via
-  // 30g); the band collapses via :empty when a mode mounts none of them.
-  const legendBand = slot('legendband');
+  // Inline status legend (float:false — no longer a floating frame
+  // overlay). Read-only modes get their own band directly below the
+  // stage; the "Neu erkennen" pill shares it (pinned right via 30g) and
+  // the band collapses via :empty when a mode mounts neither.
+  //
+  // M2 · interactive (live) modes put the legend in the CONTROL row
+  // instead. On a phone the legend is a single 44 px "?" chip, so its own
+  // band was a full-width row carrying one round button and nothing else
+  // — about 48 px of a 667 px screen spent on whitespace. The control row
+  // below the stage is already ≥ 44 px tall (the mode segments set that
+  // floor), so the chip rides at its right end for free. Still below the
+  // picture, which is the property test_sim_chrome_layout guards.
+  const legendBand = flags.interactiveMode ? slot('controls') : slot('legendband');
   if (overlays.bboxes) {
     // I4 · status legend = the LINE-TYPE legend (Bestätigt / Schwach / Ghost /
     // Maskiert · "Farbe = Person-Nr."). Colour now encodes the track number,
@@ -283,7 +294,10 @@ export function mountMediaView(config = {}) {
     }
   }
   if (flags.retrigger || typeof actions.onRetrigger === 'function') {
-    const rt = renderRetriggerButton(legendBand, { onClick: actions.onRetrigger });
+    // Always the band, never the control row: "Neu erkennen" is a wide
+    // labelled pill, and the control row it would join is the one row
+    // that already has to fit Stream + four mode segments at 375 px.
+    const rt = renderRetriggerButton(slot('legendband'), { onClick: actions.onRetrigger });
     if (rt) {
       components.retrigger = rt;
       teardowns.push(rt.teardown);

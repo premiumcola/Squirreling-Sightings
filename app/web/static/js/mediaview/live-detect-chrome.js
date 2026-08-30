@@ -150,13 +150,17 @@ export function _setupLiveChrome(camId, cameraName) {
   // Stream Sub/Main toggle → the shell's reserved Stream slot (D3).
   _mountStreamToggle(shell);
 
-  // The cost of the selected mode, one line, directly under the switch —
-  // the question "kann ich 3×3 fahren?" is asked at the moment the chip is
-  // tapped, so the answer belongs there and not two taps away in a tab.
+  // M2 · the cost of the selected mode — "ROI · 18 % TPU · 4 Kacheln/
+  // Rettung · +186 ms" — moves ONTO the picture, top-right. It is a
+  // readout and nothing else: there is no gesture that does anything to
+  // it, so a full-width row of its own under the control cluster was
+  // ~20 px of a 667 px phone spent on a value that reads perfectly well
+  // as a corner pill. The pinned host is `pointer-events: none` (30g), so
+  // a tap aimed at a bbox underneath still reaches the bbox.
   // It shows ONE row of the Cluster-6 table, never the table.
-  const controls = shell.root.querySelector('[data-slot="controls"]');
-  if (controls) {
-    S.session.modeCost = mountModeCost(controls, () => S.session?.detMode || 'off');
+  const readout = shell.root.querySelector('[data-slot="readout"]');
+  if (readout) {
+    S.session.modeCost = mountModeCost(readout, () => S.session?.detMode || 'off');
   }
 
   // Paint an empty swimlane before the first tick lands.

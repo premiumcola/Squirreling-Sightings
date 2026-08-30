@@ -36,9 +36,18 @@
   display: none;
 }
 
-/* ── Title bar ───────────────────────────────────────────────────── */
+/* ── Title bar ───────────────────────────────────────────────────────
+   Three tracks, not a flex row: lead (prev chevron) · title · actions.
+   The two 1fr tracks resolve to the same width whenever there is free
+   space, so the camera name is centred in the BAR rather than centred
+   in whatever the two clusters left over — which on a phone was a
+   left-aligned name with a ragged right edge. `minmax(0, auto)` lets
+   the title track shrink under a long camera name so `.mv-tb-cam`'s
+   ellipsis still fires instead of the name pushing the close button
+   off the edge. */
 .mv-titlebar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr minmax(0, auto) 1fr;
   align-items: center;
   gap: 10px;
   padding: max(4px, env(safe-area-inset-top, 0)) 8px 4px 8px;
@@ -46,12 +55,19 @@
   background: #000;
   border-radius: 8px 8px 0 0;
 }
+.mv-tb-lead {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+}
 .mv-tb-titles {
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
+  justify-self: center;
+  text-align: center;
   min-width: 0;
-  flex: 1 1 auto;
 }
 .mv-tb-cam {
   font-size: 17px;
@@ -66,9 +82,15 @@
   font-size: 12px;
   color: rgba(226, 232, 240, 0.55);
 }
+/* Live has no timestamp — an empty span still claims a line box and
+   pushed the whole bar (and the picture under it) 15 px down. */
+.mv-tb-time:empty {
+  display: none;
+}
 .mv-tb-actions {
   display: flex;
   align-items: center;
+  justify-self: end;
   gap: 6px;
 }
 .mv-tb-nav,
@@ -196,6 +218,40 @@
 .mv-shell-toggles:empty {
   display: none;
 }
+/* M2 · READ-ONLY readouts over the picture — the third kind of stage
+   chrome, and the only one that is never pressed. The operator's rule:
+   "die nur angezeigt werden und gar nicht andrückbar sind, können ja
+   schön klein sein, aber kontrastreich im Video, möglichst nah am Rand."
+   So: pinned to the top-right corner, small, and inert — a tap passes
+   straight through to the bbox overlay under it. Every other mode mounts
+   nothing here and the box collapses via :empty.
+
+   Pinned TOP, not bottom: a camera burns its OSD timestamp into the
+   frame wherever it likes and this app cannot see where (the lesson the
+   floating legend cost — see the legend-band note below). The top strip
+   is where this app's own chrome already lives, so it is the corner
+   whose contents we control. */
+.mv-shell-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  pointer-events: none;
+}
+.mv-shell-stage > .mv-shell-readout {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 17;
+  /* Half the stage, and the toggles opposite get the other half (see the
+     live-detect override further down). Two pinned boxes each sized to
+     their own content is the collision this file's M note is about; two
+     boxes that can never exceed 50 % cannot reach each other. */
+  max-width: calc(50% - 12px);
+}
+.mv-shell-readout:empty {
+  display: none;
+}
 .mv-shell-topright {
   display: flex;
   align-items: center;
@@ -225,10 +281,10 @@
 .mv-shell-controls {
   display: flex;
   align-items: center;
-  /* Wrap so the telemetry cost line (width:100%) drops onto its own row
-     instead of competing with the Stream + mode cluster for one 375 px
-     strip — the same collision that put the mode cluster below the stage
-     in the first place. */
+  /* Wrap so a wide passenger (the desktop status legend's four labelled
+     rows) drops onto its own line instead of competing with the Stream +
+     mode cluster for one 375 px strip — the same collision that put the
+     mode cluster below the stage in the first place. */
   flex-wrap: wrap;
   padding: 2px 8px;
 }
@@ -1017,7 +1073,6 @@
   color: #94a3b8;
 }
 
-
 /* ── Live-detect · desktop two-column layout ──────────────────────────
    A wide window has MORE room, just on the horizontal axis — which a
    single stacked column cannot spend. Above 1000 px the shell becomes a
@@ -1098,18 +1153,27 @@
   }
 }
 
-/* ── Legend band · live ──────────────────────────────────────────────
-   Live now mounts the status legend inline here like every other mode
-   (see shell.js). It is no longer floated over the frame, because the
-   only thing it could be positioned against — the camera's burnt-in OSD
-   timestamp — is invisible to this app: the flags assumed a top band, the
-   operator's camera burns it at the bottom, and the two collided.
-   On a phone the legend collapses to its 44 px "?" chip, so this band
-   costs one touch-target row rather than four labelled rows. */
-#lightboxModal.lb-live-detect .mv-shell-legendband {
-  min-height: 0;
-  padding: 2px 8px;
-}
-#lightboxModal.lb-live-detect .mv-shell-legendband .mv-legend {
+/* ── Legend + readout · live ─────────────────────────────────────────
+   Live mounts the status legend BELOW the picture like every other mode
+   (see shell.js) — never floated over the frame, because the only thing
+   it could be positioned against, the camera's burnt-in OSD timestamp,
+   is invisible to this app: the flags assumed a top band, the operator's
+   camera burns it at the bottom, and the two collided.
+
+   M2 · it rides in the control row rather than in a band of its own. On
+   a phone the legend IS a single 44 px "?" chip, so its own row carried
+   one round button across the full width and nothing else. The control
+   row is already at least that tall, so the chip is free there and the
+   legend band collapses (:empty) — one whole row of the phone's height
+   budget handed back to the picture. */
+#lightboxModal.lb-live-detect .mv-shell-controls .mv-legend {
   margin-left: auto;
+  flex-shrink: 0;
+}
+/* The other half of the readout's width budget. The pinned readout is
+   capped at 50 % of the stage (see .mv-shell-stage > .mv-shell-readout);
+   capping the opposite corner to the same share is what makes the two
+   structurally unable to overlap, rather than merely unlikely to. */
+#lightboxModal.lb-live-detect .mv-shell-stage > .mv-shell-toggles {
+  max-width: calc(50% - 12px);
 }

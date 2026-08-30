@@ -26,6 +26,33 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* M2 · the same line, mounted OVER the picture (shell slot "readout").
+   Small, right-aligned, hard against the corner — and readable over both
+   a bright workshop frame and a black night one, which is what the dark
+   translucent pill + blur + text-shadow buy. Same visual language as the
+   card badges (.mmc-tl-badge) so the app has one "chip over an image"
+   look, minus its border: depth here comes from contrast, not a hairline.
+   Wraps to a second line inside its 50 %-of-stage cap rather than being
+   clipped — the projection is the reason the line exists. */
+.mv-shell-readout .mv-tele-cost {
+  width: auto;
+  padding: 0;
+}
+.mv-shell-readout .mv-tele-cost-line {
+  display: block;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: right;
+  color: #eef4fa;
+  background: rgba(0, 0, 0, 0.62);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+/* After the readout block so the tone still wins over its base colour —
+   equal specificity, source order decides. */
 .mv-tele-cost-line[data-tone='tight'] {
   color: #ffd9a8;
 }

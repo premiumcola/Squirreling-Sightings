@@ -25,6 +25,7 @@ import { renderFineAnalysisFold } from './fine-analysis-fold.js';
 import { lbRenderTrackTimeline, lbClearTrackTimeline } from '../mediathek/bbox-overlay/index.js';
 import { renderLiveSwimlane } from './live-swimlane.js';
 import { observeLiveChromeBudget } from './live-chrome-budget.js';
+import { mountPlayerChrome } from './player/index.js';
 
 // Per-mode shell behaviour. interactiveMode → live segmented control vs
 // read-only badge; contextKey → overlay-toggle persistence
@@ -328,6 +329,19 @@ export function mountMediaView(config = {}) {
       teardowns.push(() => {
         playbar.innerHTML = '';
       });
+    }
+  }
+
+  // On-picture player chrome for the two modes that play a recorded file
+  // (mediaview/player/): centre transport, elapsed / −remaining, the
+  // switch to the system player, and the auto-hide that makes the whole
+  // stage read like the native player. Live has its own chrome and
+  // weather has no <video> at all, so both skip it.
+  if (mode === 'recorded' || mode === 'timelapse') {
+    const pc = mountPlayerChrome(slot('stage'), { videoId: config.videoId });
+    if (pc) {
+      components.playerChrome = pc;
+      teardowns.push(pc.teardown);
     }
   }
 

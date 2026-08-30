@@ -93,6 +93,11 @@ LOAD_ORDER = [
     # F · MediaView shared shell chrome (title bar, stage, mode
     # indicator, unified + class legends, re-trigger, panel-tab accents).
     "30g-mediaview-shell.css",
+    # Recorded player chrome in the native player's visual language
+    # (centre transport, elapsed / −remaining, auto-hide). After 30g so
+    # it can fold the stage-corner clusters that file pins into the same
+    # auto-hide group.
+    "30h-mediaview-player.css",
     # Telemetrie-Panel (Cluster 6 + Kostenzeile unter dem Modus-Schalter).
     "31-mediaview-telemetry.css",
     # NETZ · Erkennungsnetz (Radar + Drag) und sein Verlaufs-Archiv.

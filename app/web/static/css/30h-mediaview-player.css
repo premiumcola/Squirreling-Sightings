@@ -1,0 +1,224 @@
+/* ── MediaView recorded player · native-look chrome ───────────────────────
+   The operator watches clips on an iPhone and knows exactly one video
+   player: the one iOS ships. Our in-page player is the only place the
+   detection overlay can exist (a fullscreen <video> on iOS is a native
+   view outside the page), so it borrows that player's visual language
+   instead of asking the operator to learn a second one:
+
+     · black ground, picture letterboxed and centred
+     · every control a translucent dark disc over the picture
+     · a generous centre transport — −10 s · play/pause · +10 s
+     · a bottom strip with elapsed on the left and −remaining on the
+       right, plus the switch to the system player
+     · all of it fades out during playback and returns on a tap
+
+   Loads AFTER 30g so the stage-corner clusters 30g pins (overlay
+   toggles, mode badge) can be folded into the same auto-hide group and
+   restyled to match — scoped to `#lightboxModal.lb-recorded` so the live
+   simulator's identical pills are untouched.
+
+   No `position: fixed` and no `vh` anywhere in here: the chrome is
+   absolutely positioned inside the stage, which the shell already sizes.
+   That is what keeps it immune to the iOS address-bar collapse. */
+
+/* ── The chrome layer over the picture ───────────────────────────────── */
+.mv-player {
+  position: absolute;
+  inset: 0;
+  z-index: 17;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* The layer itself must never eat taps meant for the picture (the
+     auto-hide tap-to-toggle listens on the stage) — only the controls do. */
+  pointer-events: none;
+}
+.mv-player > * {
+  pointer-events: none;
+}
+.mv-player button {
+  pointer-events: auto;
+}
+
+/* ── Centre transport ────────────────────────────────────────────────── */
+.mv-player-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 9vw, 46px);
+}
+.mv-player-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(8, 10, 16, 0.55);
+  color: #f8fafc;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.mv-player-play {
+  width: 64px;
+  height: 64px;
+  background: rgba(8, 10, 16, 0.62);
+}
+.mv-player-btn:active {
+  background: rgba(30, 41, 59, 0.8);
+}
+@media (hover: hover) {
+  .mv-player-btn:hover {
+    background: rgba(30, 41, 59, 0.78);
+    color: #fff;
+  }
+}
+
+/* ── Bottom strip · elapsed / −remaining / system player ─────────────── */
+.mv-player-timebar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Landscape on a notched iPhone puts the stage under the sensor
+     housing — the horizontal insets are the ones that bite here. The
+     stage is not at the bottom of the viewport (the swimlane and the
+     panels follow), so no home-indicator inset is wanted. */
+  padding: 8px max(12px, env(safe-area-inset-right, 0px)) 10px
+    max(12px, env(safe-area-inset-left, 0px));
+  background: linear-gradient(to top, rgba(3, 5, 10, 0.72), rgba(3, 5, 10, 0));
+}
+.mv-player-spacer {
+  flex: 1 1 auto;
+}
+.mv-player-t {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(248, 250, 252, 0.92);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.mv-player-native {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 10, 16, 0.62);
+  color: #e2e8f0;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+@media (hover: hover) {
+  .mv-player-native:hover {
+    background: rgba(30, 41, 59, 0.82);
+    color: #fff;
+  }
+}
+/* 375 px: the label is the first thing to go, the 44 px disc stays. */
+@media (max-width: 380px) {
+  .mv-player-native span {
+    display: none;
+  }
+  .mv-player-native {
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* ── Auto-hide ───────────────────────────────────────────────────────────
+   One attribute on the stage drives the whole group: the transport, the
+   time strip, and the two corner clusters 30g pins over the picture. The
+   toggles and the mode badge are part of the player's chrome, so they
+   come and go with it. */
+.mv-shell-stage[data-chrome] > .mv-player,
+.mv-shell-stage[data-chrome] > .mv-shell-toggles,
+.mv-shell-stage[data-chrome] > .mv-shell-topright {
+  transition: opacity 0.24s ease;
+}
+.mv-shell-stage[data-chrome='0'] > .mv-player,
+.mv-shell-stage[data-chrome='0'] > .mv-shell-toggles,
+.mv-shell-stage[data-chrome='0'] > .mv-shell-topright {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mv-shell-stage[data-chrome] > .mv-player,
+  .mv-shell-stage[data-chrome] > .mv-shell-toggles,
+  .mv-shell-stage[data-chrome] > .mv-shell-topright {
+    transition: none;
+  }
+}
+
+/* ── Folding our own controls into the player's language ─────────────────
+   The overlay-toggle pills are what the system player cannot offer, so
+   they stay — but as translucent discs on the picture rather than a
+   control strip beside it. Scoped to the recorded modal: the live
+   simulator mounts the same component and keeps its own look. */
+#lightboxModal.lb-recorded .mv-shell-stage .mv-live-toggle {
+  min-height: 44px;
+  border-radius: 999px;
+  background: rgba(8, 10, 16, 0.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#lightboxModal.lb-recorded .mv-shell-stage .mv-live-toggle[data-on='1'] {
+  background: rgba(56, 189, 248, 0.34);
+  color: #f0f9ff;
+}
+
+/* The swimlane keeps its scrub bar (it is the time axis for the per-class
+   strips) but not its play button — the centre disc is the one
+   play/pause now, and CLAUDE.md's "every piece of info shown once" rules
+   out two. `visibility` rather than `display`: the sidebar column and the
+   time column are parallel flex stacks, so removing the box would slide
+   every class badge out of line with its strip. */
+#lightboxModal.lb-recorded #lbScrubPlay {
+  visibility: hidden;
+}
+
+/* ── While the system player has the clip ────────────────────────────────
+   Set by mediaview/player/_native.js on #lightboxMediaWrap. The layers
+   cannot be seen inside a native fullscreen video anyway; hiding them
+   makes the state explicit and means nothing is half-painted on the way
+   back. The RAF loop is stopped in JS at the same moment. */
+#lightboxMediaWrap[data-native-fs='1'] #lightboxDetections,
+#lightboxMediaWrap[data-native-fs='1'] #lightboxBboxSvg,
+#lightboxMediaWrap[data-native-fs='1'] #lightboxZoneOverlay {
+  display: none;
+}
+
+/* ── Phone sizing ────────────────────────────────────────────────────────
+   Smoke sizes: 375 px (iPhone SE) and 393 px (iPhone 14). The stage is
+   16:9, so at 375 px it is 211 px tall — a 64 px disc plus two 44 px
+   discs still clears the time strip, but the gap has to give first. */
+@media (max-width: 430px) {
+  .mv-player-center {
+    gap: 22px;
+  }
+  .mv-player-play {
+    width: 58px;
+    height: 58px;
+  }
+  .mv-player-timebar {
+    padding-top: 6px;
+    padding-bottom: 8px;
+  }
+}

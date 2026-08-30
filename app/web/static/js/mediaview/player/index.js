@@ -1,0 +1,93 @@
+// ─── mediaview/player/index.js ─────────────────────────────────────────────
+// Public face of the recorded-clip player chrome — the piece that makes
+// our in-page player feel like the one iOS ships, so the operator has a
+// reason to stay in it and keep the detection overlay.
+//
+// Composition (all three ride the shell's existing stage; nothing new is
+// added to modals.html):
+//
+//   _transport.js  centre −10 / play-pause / +10 discs + the elapsed /
+//                  −remaining strip + the system-player switch.
+//   _autohide.js   chrome fades during playback, returns on tap or mouse
+//                  move, never hides while paused.
+//   _native.js     the handoff itself and — the part that actually needs
+//                  care — the trip back: overlay layers and the RAF loop
+//                  restored, whichever way the operator left fullscreen.
+//
+// The overlay-toggle pills and the mode badge the shell already pins to
+// the stage corners join the auto-hide group via CSS (30h), so the whole
+// set reads as one player's chrome rather than a control strip that
+// happens to sit near a video.
+
+import { byId } from '../../core/dom.js';
+import { installChromeAutoHide } from './_autohide.js';
+import { renderTransport } from './_transport.js';
+import {
+  canNativeFullscreen,
+  handoffToNativePlayer,
+  resumeOverlayAfterNative,
+  suspendOverlayForNative,
+  watchNativeFullscreen,
+} from './_native.js';
+
+/**
+ * Mount the player chrome onto a MediaView stage.
+ *
+ * @param {HTMLElement} stage        the shell's [data-slot="stage"] node
+ * @param {Object} [opts]
+ * @param {string} [opts.videoId]    element id of the <video> to drive
+ * @returns {{ sync(): void, teardown(): void }|null}
+ */
+export function mountPlayerChrome(stage, opts = {}) {
+  if (!stage) return null;
+  const videoId = opts.videoId || 'lightboxVideo';
+  const getVideo = () => byId(videoId);
+  const video = getVideo();
+
+  const host = document.createElement('div');
+  host.className = 'mv-player';
+  stage.appendChild(host);
+
+  const autoHide = installChromeAutoHide(stage, getVideo);
+  const transport = renderTransport(host, {
+    getVideo,
+    nativeAvailable: canNativeFullscreen(video),
+    onInteract: () => autoHide?.reveal(),
+    onNative: () => handoffToNativePlayer(getVideo()),
+  });
+
+  // Fullscreen can also be entered/left without our button — the native
+  // controls' own affordance, Esc, the iOS swipe-down. One watcher covers
+  // every route so the overlay state can never disagree with what the
+  // operator is looking at.
+  const unwatch = watchNativeFullscreen(video, {
+    onEnter: (v) => suspendOverlayForNative(v),
+    onExit: (v) => {
+      resumeOverlayAfterNative(v);
+      transport?.sync();
+      autoHide?.reveal();
+    },
+  });
+
+  return {
+    sync: () => transport?.sync(),
+    teardown: () => {
+      try {
+        unwatch();
+      } catch {
+        /* ignore */
+      }
+      // Leaving the modal while the wrap still carries the native-fs flag
+      // would hide the overlay layers for the NEXT clip too — the flag
+      // lives on the reused #lightboxMediaWrap, which outlives this shell.
+      try {
+        resumeOverlayAfterNative(getVideo());
+      } catch {
+        /* ignore */
+      }
+      transport?.teardown();
+      autoHide?.teardown();
+      host.remove();
+    },
+  };
+}

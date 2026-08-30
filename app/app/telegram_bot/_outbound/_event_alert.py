@@ -242,29 +242,19 @@ class EventAlertMixin:
         return None
 
     def _mute_reason(self, camera_id: str) -> str | None:
-        """Global + per-camera mute. Both honour the same "_until" epoch
-        contract: 0 / past = no mute, future = active. Daily reports,
+        """Global + per-camera mute, with production's log line.
+
+        The state itself is resolved by ``GatesMixin.mute_state`` — one
+        owner, shared with the Simulieren panel's decision trace so the
+        two can never disagree about what "muted" means. Daily reports,
         highlights and the watchdog go through their own jobs and stay
         silent-by-design — they bypass this gate entirely."""
-        if not self.settings_store:
-            return None
-        try:
-            global_mute = float(self.settings_store.runtime_get("global_mute_until") or 0)
-        except Exception:
-            global_mute = 0
-        if global_mute and time.time() < global_mute:
-            log.info("[tg] skip: global mute active until epoch=%d", int(global_mute))
-            return "global_mute"
-        try:
-            cam_mute = float(
-                self.settings_store.runtime_get_subkey("cam_mute_until", camera_id, 0) or 0
-            )
-        except Exception:
-            cam_mute = 0
-        if cam_mute and time.time() < cam_mute:
-            log.info("[tg] skip: cam %s muted until epoch=%d", camera_id, int(cam_mute))
-            return "cam_mute"
-        return None
+        reason, until = self.mute_state(camera_id)
+        if reason == "global_mute":
+            log.info("[tg] skip: global mute active until epoch=%d", int(until))
+        elif reason == "cam_mute":
+            log.info("[tg] skip: cam %s muted until epoch=%d", camera_id, int(until))
+        return reason
 
     def _cooldown_blocked(self, ctx: _EventCtx) -> bool:
         """Per-class cooldown — minimum elapsed seconds between two

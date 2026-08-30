@@ -11,6 +11,7 @@ never sent, and nothing in the UI used to say so.
 from __future__ import annotations
 
 from ...thresholds import resolve_effective
+from ...thresholds._apply import adapted_layer
 from ._helpers import _fenced, _schedule_blocks
 
 
@@ -21,10 +22,16 @@ def ladder_rows(cam: dict, push_cfg: dict, labels) -> list:
     place that knows the camera > adapted > global > default order — so
     the snapshot reports the same numbers the pipeline uses instead of
     re-implementing the lookup.
+
+    ``adapted=`` is not optional here even though the signature allows
+    it: without it the ``adapted`` layer is empty and the table shows the
+    factory bar for every axis the nightly learner has moved. Production
+    passes it (``_event_alert._event_ctx``), so a snapshot that omits it
+    reports a threshold nothing runs on.
     """
     rows = []
     for label in labels:
-        eff = resolve_effective(cam, push_cfg, label)
+        eff = resolve_effective(cam, push_cfg, label, adapted=adapted_layer(cam, label))
         rows.append(eff)
     return rows
 

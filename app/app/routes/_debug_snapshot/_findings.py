@@ -151,7 +151,22 @@ def build_findings(cam: dict, last: dict, cluster_ev: dict, ladder) -> list:
             }
         )
     if not out:
-        out.append({"tone": "ok", "text": "Keine Auffälligkeit — alle Tore offen."})
+        # "Alle Tore offen" was a claim about EVERY gate, made by a check
+        # that opens six of them. Bewegungs-Gate, Bestätigungsfenster,
+        # Wildtier-Kaskade, Vogelarten, Identität, Ereignis-Cooldown,
+        # Aufnahme-Zeitplan und Frame-Validator werden hier nie
+        # ausgewertet — die Entwarnung nennt jetzt ihren eigenen Umfang,
+        # statt für Tore zu bürgen, die niemand angesehen hat.
+        out.append(
+            {
+                "tone": "ok",
+                "text": (
+                    "Geprüfte Tore offen: scharf, Telegram, Aufnahme, Zeitpläne, "
+                    "Schwellen-Leiter. Bewegung, Bestätigung und Wildtier-Kaskade "
+                    "bleiben ungeprüft."
+                ),
+            }
+        )
     # Most-blocking first. Only the first two or three lines survive on a
     # phone screen, so a red gate must never be pushed below an FYI by
     # the incidental order the checks run in. Stable → ties keep it.

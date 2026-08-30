@@ -346,6 +346,25 @@ def test_the_verdict_still_hedges_on_the_gates_it_cannot_run():
     assert "nicht prüft" in _final(lines)
 
 
+# ── S5 · the Debug tab does not vouch for gates it never checked ────────
+
+
+def test_the_all_clear_names_what_it_actually_checked():
+    """ "Keine Auffälligkeit — alle Tore offen." is a claim about ALL
+    gates from a check that opens six of them. Nine are never evaluated
+    here, and an all-clear that covers them is the same false confidence
+    the decision trace just lost."""
+    from app.routes._debug_snapshot._findings import build_findings
+
+    findings = build_findings({}, {"ts": 1}, {}, [])
+    ok = [f for f in findings if f["tone"] == "ok"]
+
+    assert ok, "an all-clear line must still exist"
+    text = ok[0]["text"]
+    assert "alle Tore offen" not in text, "it cannot vouch for gates it never opened"
+    assert "ungeprüft" in text or "nicht geprüft" in text, text
+
+
 # ── budgets ─────────────────────────────────────────────────────────────
 
 

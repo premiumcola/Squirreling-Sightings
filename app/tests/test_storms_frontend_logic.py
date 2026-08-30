@@ -234,25 +234,34 @@ def test_episodes_with_different_thresholds_get_a_line_each():
     assert out["agreed"] == [{"value": 1000, "label": "Schwelle"}]
 
 
-def test_day_one_empty_state_names_only_real_thresholds():
-    """The threshold line is the whole point of that empty state: it
-    proves the detector is armed. "Schnee 0,00 cm/h" disproves it."""
+def test_an_empty_archive_renders_nothing_and_hides_its_section():
+    """The day-one empty state is gone.
+
+    It existed to prove the detector was armed by naming its thresholds.
+    That reasoning still holds, but the surface changed: storm episodes
+    now render as ordinary cards inside the Wetter-Ereignisse feed, so
+    #storms is a detail view rather than the archive's only entrance,
+    and an empty panel at the foot of the weather section said only
+    "there is nothing here". The operator struck it out and asked for it
+    gone; the section now hides itself instead.
+    """
     out = _js(
         """
         const { renderList } = await import(JS + '/storms/_list.js');
         const { stormsState } = await import(JS + '/storms/_state.js');
-        const { _wsStatsState } = await import(JS + '/weather/stats.js');
         stormsState.episodes = [];
-        _wsStatsState.data = { thresholds: { precipitation: 5, snowfall: null } };
-        const host = { innerHTML: '', classList: { toggle() {} } };
+        const attrs = [];
+        globalThis.document.getElementById = () => ({
+          setAttribute: (k, v) => attrs.push(['set', k, v]),
+          removeAttribute: (k) => attrs.push(['remove', k]),
+        });
+        const host = { innerHTML: 'stale', classList: { toggle() {} } };
         renderList(host, () => {});
-        console.log(JSON.stringify({ html: host.innerHTML }));
+        console.log(JSON.stringify({ html: host.innerHTML, attrs }));
         """
     )
-    html = out["html"]
-    assert "Aktuelle Schwellen" in html
-    assert "Regen" in html
-    assert "Schnee" not in html, "a null threshold must not be printed as 0"
+    assert out["html"] == "", "an empty archive still paints something"
+    assert ["set", "hidden", ""] in [list(a) for a in out["attrs"]], "#storms was not hidden"
 
 
 # ── B1 · the inverted metric ───────────────────────────────────────────

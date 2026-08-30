@@ -292,14 +292,23 @@ def test_controls_appear_only_once_they_do_something():
     assert "years.length > 1" in src, "the year selector needs 2 years"
 
 
-def test_day_one_empty_state_names_the_thresholds_it_waits_for():
+def test_an_empty_archive_hides_its_whole_section():
+    """There is no day-one empty state any more.
+
+    Storm episodes render as ordinary cards inside the Wetter-Ereignisse
+    feed (weather/_feed.js), so #storms is a DETAIL surface rather than
+    the archive's only entrance. An empty panel at the foot of the
+    weather section was therefore a large box whose only message was
+    "there is nothing here" — the operator struck it out on a screenshot
+    and asked for it gone. The section hides itself instead, and
+    un-hides as soon as an episode exists.
+    """
     src = _read(_STORMS / "_list.js")
-    assert "Noch kein Gewitter aufgezeichnet." in src
-    assert "Aktuelle Schwellen" in src, (
-        "the empty state must show what the detector is armed on — "
-        "without it the archive reads as broken rather than ready"
-    )
-    assert "thresholds" in src
+    assert "Noch kein Gewitter aufgezeichnet." not in src, "the day-one box is back"
+    body = src[src.index("export function renderList") :]
+    body = body[: body.index("\nfunction _bind")]
+    assert "setAttribute('hidden', '')" in body, "an empty archive no longer hides its section"
+    assert "removeAttribute('hidden')" in body, "the section can never come back"
 
 
 def test_single_episode_teaches_compare_without_offering_a_broken_control():

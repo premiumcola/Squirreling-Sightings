@@ -9,9 +9,8 @@
 // years. Below those counts the controls are ABSENT, not disabled — no
 // dead chrome.
 
-import { esc } from '../core/dom.js';
+import { byId, esc } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
-import { _wsStatsState } from '../weather/stats.js';
 import {
   stormsState,
   STORM_CLASS_ORDER,
@@ -33,7 +32,6 @@ import {
   fmtNumberDe,
   fmtTime,
   leadPeak,
-  thresholdFor,
 } from './_helpers.js';
 
 const FILM_ICON =
@@ -216,35 +214,6 @@ function _pickHtml(ep) {
 
 // ── empty states ──────────────────────────────────────────────────────
 
-// Day one. The threshold line is the whole trick: it proves the system
-// is armed and watching. An empty state that shows what it is waiting
-// for reads as ready; one that says only "keine Daten" reads as broken.
-function _emptyHtml() {
-  const thr = _wsStatsState.data?.thresholds || {};
-  // `thresholdFor`, not `Number.isFinite`: the payload carries `null`
-  // for a field with no configured event, and `Number(null)` is a
-  // finite 0. Printing "Schnee 0,00 cm/h" would disprove the exact
-  // thing this line exists to prove.
-  const bits = [
-    ['lightning_potential', 'Blitz'],
-    ['precipitation', 'Regen'],
-    ['snowfall', 'Schnee'],
-  ]
-    .map(([k, lbl]) => {
-      const t = thresholdFor(thr, k);
-      return Number.isFinite(t) ? `${lbl} ${fmtMetric(k, t)}` : '';
-    })
-    .filter(Boolean);
-  const line = bits.length
-    ? `<div class="st-empty-thr">Aktuelle Schwellen: ${esc(bits.join(' · '))}</div>`
-    : '';
-  return `<div class="ws-empty st-empty">
-      <div class="st-empty-title">Noch kein Gewitter aufgezeichnet.</div>
-      <div class="st-empty-sub">Das Archiv füllt sich automatisch, sobald Blitz-Potential, Niederschlag oder Böen die Schwelle überschreiten.</div>
-      ${line}
-    </div>`;
-}
-
 function _selectBarHtml() {
   if (!stormsState.selecting) return '';
   const n = selectedCount();
@@ -266,9 +235,19 @@ export function renderList(host, onNavigate) {
   // so the last rows can still be scrolled clear of it.
   host.classList.toggle('is-selecting', !!stormsState.selecting);
   if (!all.length) {
-    host.innerHTML = _emptyHtml();
+    // Nothing recorded yet: hide the whole section rather than printing
+    // a day-one explainer. Storm episodes now render as ordinary cards
+    // inside the Wetter-Ereignisse feed (weather/_feed.js), so this
+    // page is a DETAIL surface, not the archive's only entrance — an
+    // empty panel at the foot of the weather section was a large box
+    // that said only "there is nothing here", which the operator struck
+    // out on a screenshot. `#storms` is un-hidden again by the branch
+    // below as soon as an episode exists.
+    host.innerHTML = '';
+    byId('storms')?.setAttribute('hidden', '');
     return;
   }
+  byId('storms')?.removeAttribute('hidden');
   const ranks = _rankMap(all);
   const rows = _sorted(_filtered(all));
   const body = rows.length

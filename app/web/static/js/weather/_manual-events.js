@@ -15,8 +15,8 @@ import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import { apiGet, apiPost, apiDelete } from '../core/api.js';
-import { WEATHER_TYPES } from '../core/weather-types.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
+import { manualEventCategories, manualCategoryMeta } from './_manual-event-cats.js';
 import { renderStatsChartInto } from './stats-chart/index.js';
 
 export async function fetchManualEvents() {
@@ -44,13 +44,22 @@ function _closeManualEventModal() {
   byId('wsManualEventModal')?.remove();
 }
 
-function _manualEventHeaderHTML(m, meta) {
+// The modal is where the categories get spelled out in words — the grid
+// card only has room for their icons.
+function _manualEventHeaderHTML(m, metas) {
+  const primary = metas[0];
+  const badges = metas
+    .map(
+      (meta) =>
+        `<span class="ws-manual-modal-badge" style="color:${meta.color}" aria-hidden="true">${meta.icon}</span>`,
+    )
+    .join('');
   return `
     <div class="ws-manual-modal-head">
-      <span class="ws-manual-modal-badge" style="color:${meta.color}" aria-hidden="true">${meta.icon}</span>
+      ${badges}
       <div class="ws-manual-modal-title">
-        <div class="ws-manual-modal-name">${esc(m.name || meta.de)}</div>
-        <div class="ws-manual-modal-cat">${esc(meta.de)}</div>
+        <div class="ws-manual-modal-name">${esc(m.name || primary.de)}</div>
+        <div class="ws-manual-modal-cat">${esc(metas.map((meta) => meta.de).join(' · '))}</div>
       </div>
       <button type="button" class="ws-manual-modal-close" aria-label="Schließen">✕</button>
     </div>`;
@@ -80,12 +89,12 @@ function _deleteFromModal(id) {
   });
 }
 
-function _mountManualEventModal(m, meta) {
+function _mountManualEventModal(m, metas) {
   byId('wsManualEventModal')?.remove();
   const modal = document.createElement('div');
   modal.className = 'ws-manual-modal';
   modal.id = 'wsManualEventModal';
-  modal.innerHTML = `<div class="ws-manual-modal-card">${_manualEventHeaderHTML(m, meta)}${_manualEventBodyHTML(m)}</div>`;
+  modal.innerHTML = `<div class="ws-manual-modal-card">${_manualEventHeaderHTML(m, metas)}${_manualEventBodyHTML(m)}</div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click', (e) => {
     if (e.target === modal) _closeManualEventModal();
@@ -111,12 +120,9 @@ function _mountManualEventModal(m, meta) {
 export async function openManualEventView(id) {
   const m = (state.weather.manualEvents || []).find((it) => it.id === id);
   if (!m) return;
-  const meta = WEATHER_TYPES[m.category] || {
-    de: m.category || 'Ereignis',
-    color: '#94a3b8',
-    icon: '',
-  };
-  const modal = _mountManualEventModal(m, meta);
+  const cats = manualEventCategories(m);
+  const metas = (cats.length ? cats : ['']).map(manualCategoryMeta);
+  const modal = _mountManualEventModal(m, metas);
   const wrap = modal.querySelector('#wsManualEventChart');
   try {
     const q = `since=${encodeURIComponent(m.range_start)}&until=${encodeURIComponent(m.range_end)}`;

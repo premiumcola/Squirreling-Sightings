@@ -98,9 +98,32 @@
   display: inline-flex;
   color: var(--cb, #94a3b8);
 }
+/* Multi-select: the lit state must be obvious without relying on colour
+   alone (the chips are colour-coded per type anyway), so a selected chip
+   also carries an inset ring and aria-pressed="true". */
 .ws-zsave-cat.is-active {
   background: color-mix(in srgb, var(--cb, #7faec9) 28%, transparent);
   color: #fff;
+  box-shadow: inset 0 0 0 2px var(--cb, #7faec9);
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .ws-zsave-cat:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .ws-zsave-cat.is-active:hover {
+    background: color-mix(in srgb, var(--cb, #7faec9) 38%, transparent);
+  }
+}
+/* "mehrere möglich" — the only hint that the chips are not radio
+   buttons. Inline with the row label, deliberately quiet. */
+.ws-zsave-hint {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(127, 174, 201, 0.75);
 }
 
 /* Curve checkboxes — one per Wetterdaten-chart line, dot colour matches
@@ -146,6 +169,48 @@
   min-height: 44px;
 }
 
+/* ── Manual-event grid card ───────────────────────────────────────────────
+   Same .ws-recap-card chrome as recaps and Gewitter-episodes; the only
+   difference is the right-hand slot, which holds one badge per category
+   instead of a single play circle. The badges stack VERTICALLY: the card
+   is ~140 px wide on an iPhone SE, so a horizontal row would push the
+   name off; a column costs no width and three 24 px badges (80 px) still
+   fit inside the card's 84 px min-height. A one-category card is
+   byte-for-byte the 34 px circle it always was. */
+.ws-manual-card {
+  padding-right: 52px; /* 34 px slot + 10 px offset + 8 px breathing room */
+}
+.ws-manual-cats {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.ws-manual-cat {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--cb, #7faec9) 55%, transparent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ws-manual-cats[data-n='2'] .ws-manual-cat,
+.ws-manual-cats[data-n='3'] .ws-manual-cat {
+  width: 24px;
+  height: 24px;
+}
+.ws-manual-cats[data-n='2'] .ws-manual-cat svg,
+.ws-manual-cats[data-n='3'] .ws-manual-cat svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* ── Manual-event view modal ──────────────────────────────────────────────
    Clicking a saved manual-event card re-draws the Wetterdaten-chart for
    exactly that range in a small overlay — no clip, no video player. */
@@ -181,6 +246,11 @@
   display: inline-flex;
   flex-shrink: 0;
   font-size: 22px;
+}
+/* Up to three badges share the head row — pull the extras closer so the
+   title keeps its width on a 375 px screen. */
+.ws-manual-modal-badge + .ws-manual-modal-badge {
+  margin-left: -4px;
 }
 .ws-manual-modal-title {
   flex: 1;

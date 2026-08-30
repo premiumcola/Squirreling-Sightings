@@ -28,6 +28,7 @@ import {
 } from './stats.js';
 import { buildLinePath } from './stats-chart/_paths.js';
 import { createManualEvent, loadWeatherManualEvents } from './_manual-events.js';
+import { MANUAL_CATEGORIES_MAX } from './_manual-event-cats.js';
 
 // Only fields with an unambiguous 1:1 detector-category mapping earn a
 // default guess (see routes/weather.py's HISTORY_FIELD_TO_EVENT for the
@@ -60,12 +61,16 @@ export function _deriveDefaultCategory(samples) {
   return best;
 }
 
-function _categoryChipsHTML(activeCategory) {
+// Multi-select: an event is genuinely more than one thing (the
+// operator's own example is a thunderstorm that ALSO brings heavy rain),
+// so several chips can be lit at once — up to MANUAL_CATEGORIES_MAX.
+// `aria-pressed` carries the selected state, not colour alone.
+export function _categoryChipsHTML(activeCategories) {
   return Object.keys(WEATHER_TYPES)
     .map((key) => {
       const meta = WEATHER_TYPES[key];
-      const active = key === activeCategory ? ' is-active' : '';
-      return `<button type="button" class="ws-zsave-cat${active}" data-category="${esc(key)}" style="--cb:${meta.color}"><span class="ws-zsave-cat-ic" aria-hidden="true">${meta.icon}</span>${esc(meta.de)}</button>`;
+      const on = activeCategories.has(key);
+      return `<button type="button" class="ws-zsave-cat${on ? ' is-active' : ''}" aria-pressed="${on}" data-category="${esc(key)}" style="--cb:${meta.color}"><span class="ws-zsave-cat-ic" aria-hidden="true">${meta.icon}</span>${esc(meta.de)}</button>`;
     })
     .join('');
 }
@@ -84,15 +89,15 @@ function _curveCheckboxesHTML(checkedFields) {
     .join('');
 }
 
-function _formHTML(range, defaultCategory, checkedFields) {
+function _formHTML(activeCategories, checkedFields) {
   return `
     <div class="ws-zsave-row">
       <label class="ws-zsave-label" for="wsZsaveName">Name</label>
       <input type="text" class="ws-zsave-input" id="wsZsaveName" maxlength="120" placeholder="z. B. Gewitter mit Blitzen">
     </div>
     <div class="ws-zsave-row">
-      <span class="ws-zsave-label">Kategorie</span>
-      <div class="ws-zsave-cats" id="wsZsaveCats">${_categoryChipsHTML(defaultCategory)}</div>
+      <span class="ws-zsave-label">Kategorie <span class="ws-zsave-hint">mehrere möglich</span></span>
+      <div class="ws-zsave-cats" id="wsZsaveCats">${_categoryChipsHTML(activeCategories)}</div>
     </div>
     <div class="ws-zsave-row">
       <span class="ws-zsave-label">Relevante Kurven</span>
@@ -109,26 +114,29 @@ function _formHTML(range, defaultCategory, checkedFields) {
     </div>`;
 }
 
-function _selectedCategory(panel) {
-  return panel.querySelector('.ws-zsave-cat.is-active')?.dataset.category || null;
+// DOM-walk, not a cached JS Set — the panel's markup is the single
+// source of truth for what is currently ticked (CLAUDE.md's collector
+// rule), so a chip toggled by any path is picked up.
+function _selectedCategories(panel) {
+  return [...panel.querySelectorAll('.ws-zsave-cat.is-active')].map((el) => el.dataset.category);
 }
 
 function _selectedCurves(panel) {
   return [...panel.querySelectorAll('.ws-zsave-curves input:checked')].map((el) => el.value);
 }
 
-function _collectPayload(panel, range) {
+export function _collectPayload(panel, range) {
   const name = panel.querySelector('#wsZsaveName').value.trim();
-  const category = _selectedCategory(panel);
+  const categories = _selectedCategories(panel);
   const curves = _selectedCurves(panel);
   const characteristic = panel.querySelector('#wsZsaveNote').value.trim();
   if (!name) return { error: 'Bitte einen Namen eingeben.' };
-  if (!category) return { error: 'Bitte eine Kategorie auswählen.' };
+  if (!categories.length) return { error: 'Bitte mindestens eine Kategorie auswählen.' };
   if (!curves.length) return { error: 'Bitte mindestens eine Kurve auswählen.' };
   return {
     payload: {
       name,
-      category,
+      categories,
       characteristic,
       range_start: range.start,
       range_end: range.end,
@@ -137,14 +145,25 @@ function _collectPayload(panel, range) {
   };
 }
 
-function _wireForm(panel, range) {
+// Toggle, not radio-select. The cap is enforced here AND server-side;
+// hitting it is an error the operator must see, not a silently ignored
+// tap.
+function _wireCategoryChips(panel) {
   panel.querySelectorAll('.ws-zsave-cat').forEach((btn) => {
     btn.addEventListener('click', () => {
-      panel
-        .querySelectorAll('.ws-zsave-cat')
-        .forEach((b) => b.classList.toggle('is-active', b === btn));
+      const on = btn.classList.contains('is-active');
+      if (!on && _selectedCategories(panel).length >= MANUAL_CATEGORIES_MAX) {
+        showToast(`Höchstens ${MANUAL_CATEGORIES_MAX} Kategorien.`, 'error');
+        return;
+      }
+      btn.classList.toggle('is-active', !on);
+      btn.setAttribute('aria-pressed', String(!on));
     });
   });
+}
+
+function _wireForm(panel, range) {
+  _wireCategoryChips(panel);
   panel.querySelector('#wsZsaveCancel')?.addEventListener('click', () => {
     panel.hidden = true;
   });
@@ -178,8 +197,9 @@ function _toggleSaveForm() {
   if (!range) return; // the button only shows while zoomed; defensive no-op otherwise
   const samples = zoomedSamples(_wsStatsState.data?.samples || []);
   const defaultCategory = _deriveDefaultCategory(samples);
+  const activeCategories = new Set(defaultCategory ? [defaultCategory] : []);
   const checkedFields = new Set(wsVisibleFields());
-  panel.innerHTML = _formHTML(range, defaultCategory, checkedFields);
+  panel.innerHTML = _formHTML(activeCategories, checkedFields);
   panel.hidden = false;
   _wireForm(panel, range);
 }

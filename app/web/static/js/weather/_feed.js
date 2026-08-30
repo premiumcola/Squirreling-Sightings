@@ -15,6 +15,7 @@ import { WEATHER_TYPES } from '../core/weather-types.js';
 import { precipitationLabel } from '../core/weather-precip.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import { pinToggleHTML } from './pin-toggle.js';
+import { manualEventCategories, manualCategoryMeta } from './_manual-event-cats.js';
 import {
   episodeTitle,
   fmtDayMonth,
@@ -167,17 +168,24 @@ export function episodeCardHTML(ep) {
 }
 
 // A user-saved chart range (the Wetterdaten-chart's drag-zoom "als
-// Ereignis speichern" action) — category drives the badge icon/colour
-// via the SAME WEATHER_TYPES map every other event card uses, so a
-// manual event reads as an ordinary weather event, not a bolted-on
-// fourth visual identity. Clicking it re-draws the chart for exactly
-// this saved range/curves (weather/_manual-events.js::openManualEventView).
+// Ereignis speichern" action) — its categories drive the badge
+// icons/colours via the SAME WEATHER_TYPES map every other event card
+// uses, so a manual event reads as an ordinary weather event, not a
+// bolted-on fourth visual identity. Clicking it re-draws the chart for
+// exactly this saved range/curves
+// (weather/_manual-events.js::openManualEventView).
+//
+// One event can carry up to three categories (a thunderstorm that also
+// brings heavy rain). They stack VERTICALLY in the same right-hand slot
+// the single badge always occupied: the card is only ~140 px wide on an
+// iPhone SE, so a horizontal row would eat the name — a column costs no
+// width at all and stays inside the card's 84 px min-height. A
+// one-category card therefore looks exactly as it always did. The full
+// German labels ride along as the slot's accessible name and the card's
+// tooltip; the detail modal spells them out in text.
 export function manualEventCardHTML(m) {
-  const meta = WEATHER_TYPES[m.category] || {
-    de: m.category || 'Ereignis',
-    color: '#94a3b8',
-    icon: '',
-  };
+  const metas = manualEventCategories(m).map(manualCategoryMeta);
+  const primary = metas[0] || manualCategoryMeta('');
   const metaLine = [
     fmtDayMonth(m.range_start),
     `${fmtTime(m.range_start)}–${fmtTime(m.range_end)}`,
@@ -185,11 +193,15 @@ export function manualEventCardHTML(m) {
   ]
     .filter(Boolean)
     .join(' · ');
+  const catLabel = metas.map((meta) => meta.de).join(' · ');
+  const badges = metas
+    .map((meta) => `<span class="ws-manual-cat" style="--cb:${meta.color}">${meta.icon}</span>`)
+    .join('');
   return `
-      <div class="ws-recap-card" data-manual-id="${esc(m.id)}">
-        <div class="ws-recap-card-period">${esc(m.name || meta.de)}</div>
+      <div class="ws-recap-card ws-manual-card" data-manual-id="${esc(m.id)}" title="${esc(catLabel)}">
+        <div class="ws-recap-card-period">${esc(m.name || primary.de)}</div>
         <div class="ws-recap-card-meta">${esc(metaLine)}</div>
-        <span class="ws-recap-card-play" aria-hidden="true" style="color:${meta.color}">${meta.icon}</span>
+        <span class="ws-manual-cats" data-n="${metas.length}" role="img" aria-label="${esc(catLabel)}">${badges}</span>
       </div>`;
 }
 

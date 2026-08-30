@@ -20,6 +20,7 @@ from .. import app_state
 from ..weather_service._consts import HISTORY_FIELDS
 from ..weather_service._manual_events import (
     MANUAL_EVENT_CATEGORIES,
+    MANUAL_EVENT_CATEGORIES_MAX,
     MANUAL_EVENT_CHARACTERISTIC_MAX,
     MANUAL_EVENT_NAME_MAX,
 )
@@ -44,8 +45,36 @@ def _parse_iso(raw) -> str | None:
     return raw
 
 
+def _validate_categories(body: dict):
+    """Return ``(categories, error)`` for either request shape.
+
+    The save form sends a ``categories`` list (an event is genuinely more
+    than one thing — a thunderstorm that also brings heavy rain); a
+    caller that still sends the original single ``category`` string is
+    accepted unchanged and read as a one-element list. ``categories``
+    wins when a body carries both.
+    """
+    raw = body.get("categories")
+    if raw is None:
+        single = body.get("category")
+        if single is None:
+            return None, f"category must be one of {list(MANUAL_EVENT_CATEGORIES)}"
+        raw = [single]
+    if not isinstance(raw, list) or not raw:
+        return None, "categories must be a non-empty list"
+    if len(raw) > MANUAL_EVENT_CATEGORIES_MAX:
+        return None, f"categories must not exceed {MANUAL_EVENT_CATEGORIES_MAX} entries"
+    clean: list[str] = []
+    for c in raw:
+        if not isinstance(c, str) or c not in MANUAL_EVENT_CATEGORIES:
+            return None, f"category must be one of {list(MANUAL_EVENT_CATEGORIES)}"
+        if c not in clean:
+            clean.append(c)
+    return clean, None
+
+
 def _validate_body(body: dict):
-    """Return ``(fields, error)``. ``fields`` carries name/category/
+    """Return ``(fields, error)``. ``fields`` carries name/categories/
     characteristic/range_start/range_end/curves once every check passes."""
     name = body.get("name")
     if not isinstance(name, str) or not name.strip():
@@ -53,9 +82,9 @@ def _validate_body(body: dict):
     name = name.strip()
     if len(name) > MANUAL_EVENT_NAME_MAX:
         return None, f"name exceeds {MANUAL_EVENT_NAME_MAX} characters"
-    category = body.get("category")
-    if not isinstance(category, str) or category not in MANUAL_EVENT_CATEGORIES:
-        return None, f"category must be one of {list(MANUAL_EVENT_CATEGORIES)}"
+    categories, err = _validate_categories(body)
+    if err:
+        return None, err
     characteristic = body.get("characteristic")
     if characteristic is None:
         characteristic = ""
@@ -81,7 +110,7 @@ def _validate_body(body: dict):
             clean_curves.append(c)
     return {
         "name": name,
-        "category": category,
+        "categories": categories,
         "characteristic": characteristic,
         "range_start": range_start,
         "range_end": range_end,

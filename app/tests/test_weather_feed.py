@@ -199,6 +199,87 @@ def test_manual_event_card_falls_back_to_the_category_label_without_a_name():
     assert out["hasSchnee"] is True
 
 
+def test_manual_event_card_shows_one_badge_per_category():
+    """An event is genuinely more than one thing (a thunderstorm that
+    also brings heavy rain) — the card must show every category, not
+    just the first, and label the slot for screen readers."""
+    out = _js(
+        """
+        const feed = await import(JS + '/weather/_feed.js');
+        const html = feed.manualEventCardHTML({
+          id: 'manual_3', name: 'Gewitter mit Starkregen',
+          categories: ['thunder', 'heavy_rain'],
+          range_start: '2026-08-29T14:00:00', range_end: '2026-08-29T18:00:00',
+          curves: ['precipitation', 'lightning_potential'],
+        });
+        console.log(JSON.stringify({
+          badges: (html.match(/class="ws-manual-cat"/g) || []).length,
+          n: html.includes('data-n="2"'),
+          label: html.includes('aria-label="Gewitter · Starkregen"'),
+          thunderColour: html.includes('--cb:#7faec9'),
+          rainColour: html.includes('--cb:#5a8aa8'),
+        }));
+        """
+    )
+    assert out["badges"] == 2
+    assert out["n"] is True
+    assert out["label"] is True
+    assert out["thunderColour"] is True
+    assert out["rainColour"] is True
+
+
+def test_manual_event_card_still_renders_an_old_single_category_record():
+    """Records saved before multi-select carry only `category`. They must
+    keep rendering — one badge, its own colour — with no migration."""
+    out = _js(
+        """
+        const feed = await import(JS + '/weather/_feed.js');
+        const html = feed.manualEventCardHTML({
+          id: 'manual_old', name: 'Altes Gewitter', category: 'thunder',
+          range_start: '2026-08-29T14:00:00', range_end: '2026-08-29T18:00:00',
+          curves: ['lightning_potential'],
+        });
+        console.log(JSON.stringify({
+          badges: (html.match(/class="ws-manual-cat"/g) || []).length,
+          n: html.includes('data-n="1"'),
+          label: html.includes('aria-label="Gewitter"'),
+          hasName: html.includes('Altes Gewitter'),
+          hasManualId: html.includes('data-manual-id="manual_old"'),
+        }));
+        """
+    )
+    assert out["badges"] == 1
+    assert out["n"] is True
+    assert out["label"] is True
+    assert out["hasName"] is True
+    assert out["hasManualId"] is True
+
+
+def test_manual_event_categories_normalises_both_record_shapes():
+    """The JS twin of weather_service/_manual_events.py::
+    manual_event_categories — one helper, both shapes, no branching on a
+    record's age scattered across the card builder and the modal."""
+    out = _js(
+        """
+        const cats = await import(JS + '/weather/_manual-event-cats.js');
+        console.log(JSON.stringify({
+          old: cats.manualEventCategories({ category: 'fog' }),
+          neu: cats.manualEventCategories({ categories: ['fog', 'snow'] }),
+          both: cats.manualEventCategories({ categories: ['snow', 'fog'], category: 'snow' }),
+          dedup: cats.manualEventCategories({ categories: ['fog', 'fog', 7, ''] }),
+          none: cats.manualEventCategories({}),
+          max: cats.MANUAL_CATEGORIES_MAX,
+        }));
+        """
+    )
+    assert out["old"] == ["fog"]
+    assert out["neu"] == ["fog", "snow"]
+    assert out["both"] == ["snow", "fog"]
+    assert out["dedup"] == ["fog"]
+    assert out["none"] == []
+    assert out["max"] == 3
+
+
 def test_sighting_card_html_moved_here_still_builds_a_card():
     """sightingCardHTML moved from sightings.js into this module when
     sightings.js crossed the JS line ceiling — pin that the export

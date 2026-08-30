@@ -1,12 +1,15 @@
-"""weather/_manual-event-save.js's default-category guess.
+"""weather/_manual-event-save.js — the drag-zoom save form.
 
-The operator explicitly asked for their OWN input here, not automatic
-pattern recognition (see the German refinement this feature was built
-from) — this heuristic only picks a starting point among the four
-fields with an unambiguous 1:1 category mapping (precipitation,
-snowfall, lightning_potential, visibility); the operator can always
-override it. Runs the real module under node because a wrong pick here
-silently mis-categorises a save the operator never reviewed.
+Two concerns, both run against the real module under node because
+getting either wrong mis-files a save the operator never reviewed:
+
+* the default-category guess. The operator explicitly asked for their
+  OWN input here, not automatic pattern recognition (see the German
+  refinement this feature was built from) — the heuristic only picks a
+  starting point among the four fields with an unambiguous 1:1 category
+  mapping (precipitation, snowfall, lightning_potential, visibility).
+* the multi-select chips + the payload they collect. The chips used to
+  be mutually exclusive; an event is genuinely more than one thing.
 """
 
 from __future__ import annotations
@@ -104,3 +107,87 @@ def test_an_empty_range_yields_no_default():
         """
     )
     assert out["category"] is None
+
+
+# ── multi-select category chips ─────────────────────────────────────────
+# The operator asked to tick more than one ("Vielleicht zwei oder so") —
+# a thunderstorm that also brings heavy rain is genuinely both. The chips
+# stopped being mutually exclusive; the selected state must be carried by
+# aria-pressed, not colour alone (CLAUDE.md's iOS/a11y checklist).
+
+
+def test_chips_carry_aria_pressed_for_every_selection():
+    out = _js(
+        """
+        const mod = await import(JS + '/weather/_manual-event-save.js');
+        const html = mod._categoryChipsHTML(new Set(['thunder', 'heavy_rain']));
+        console.log(JSON.stringify({
+          pressed: (html.match(/aria-pressed="true"/g) || []).length,
+          unpressed: (html.match(/aria-pressed="false"/g) || []).length,
+          active: (html.match(/ws-zsave-cat is-active/g) || []).length,
+        }));
+        """
+    )
+    assert out["pressed"] == 2
+    assert out["active"] == 2
+    # Every remaining chip is explicitly unpressed — no chip without state.
+    assert out["unpressed"] == 7
+
+
+def test_no_selection_leaves_every_chip_unpressed():
+    out = _js(
+        """
+        const mod = await import(JS + '/weather/_manual-event-save.js');
+        const html = mod._categoryChipsHTML(new Set());
+        console.log(JSON.stringify({
+          pressed: (html.match(/aria-pressed="true"/g) || []).length,
+          active: (html.match(/is-active/g) || []).length,
+        }));
+        """
+    )
+    assert out["pressed"] == 0
+    assert out["active"] == 0
+
+
+# _collectPayload walks the panel DOM (CLAUDE.md's collector rule), so a
+# hand-rolled stub answering the two selectors it uses is enough — no
+# jsdom, same trick as the rest of this harness.
+_PANEL_STUB = """
+function panel(cats, curves) {
+  return {
+    querySelector: (s) =>
+      s === '#wsZsaveName' ? { value: 'Gewitter' } : { value: 'Blitze und Regen' },
+    querySelectorAll: (s) =>
+      s === '.ws-zsave-cat.is-active'
+        ? cats.map((c) => ({ dataset: { category: c } }))
+        : (curves || ['precipitation']).map((v) => ({ value: v })),
+  };
+}
+const RANGE = { start: '2026-08-29T14:00:00', end: '2026-08-29T18:00:00' };
+const mod = await import(JS + '/weather/_manual-event-save.js');
+"""
+
+
+def _collect(cats_js: str):
+    return _js(
+        _PANEL_STUB
+        + "console.log(JSON.stringify(mod._collectPayload(panel({}), RANGE)));".format(cats_js)
+    )
+
+
+def test_the_payload_carries_every_ticked_category():
+    out = _collect("['thunder', 'heavy_rain']")
+    assert out["payload"]["categories"] == ["thunder", "heavy_rain"]
+    assert "category" not in out["payload"]
+    assert out["payload"]["curves"] == ["precipitation"]
+
+
+def test_a_single_ticked_category_still_produces_a_one_element_list():
+    out = _collect("['snow']")
+    assert out["payload"]["categories"] == ["snow"]
+
+
+def test_saving_without_a_category_is_still_refused():
+    out = _collect("[]")
+    assert "Kategorie" in out["error"]
+    assert "payload" not in out

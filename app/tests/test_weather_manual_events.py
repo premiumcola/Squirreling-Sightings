@@ -9,13 +9,19 @@ against a lightweight stand-in service.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 flask = pytest.importorskip("flask")
 
 from app import app_state  # noqa: E402
 from app.routes import weather_manual_events as routes  # noqa: E402
-from app.weather_service._manual_events import ManualEventsMixin  # noqa: E402
+from app.weather_service._manual_events import (  # noqa: E402
+    MANUAL_EVENT_CATEGORIES_MAX,
+    ManualEventsMixin,
+    manual_event_categories,
+)
 
 RANGE_A = ("2026-08-29T14:00:00", "2026-08-29T18:00:00")
 
@@ -101,6 +107,71 @@ def test_two_events_saved_in_the_same_second_do_not_collide(tmp_path):
     )
     assert a["id"] != b["id"]
     assert len(ws.list_manual_events()) == 2
+
+
+# ── multi-category (one event is genuinely more than one thing) ──────────
+
+
+def test_create_stores_every_picked_category_and_mirrors_the_first(tmp_path):
+    ws = _FakeWS(tmp_path)
+    created = ws.create_manual_event(
+        "Gewitter mit Starkregen",
+        *RANGE_A,
+        ["precipitation", "lightning_potential"],
+        categories=["thunder", "heavy_rain"],
+    )
+    assert created["categories"] == ["thunder", "heavy_rain"]
+    # `category` stays populated so a reader that only knows the old
+    # single field keeps working.
+    assert created["category"] == "thunder"
+    assert ws.list_manual_events()[0]["categories"] == ["thunder", "heavy_rain"]
+
+
+def test_the_single_category_argument_still_works(tmp_path):
+    """Any caller still passing `category=` gets a one-element list."""
+    ws = _FakeWS(tmp_path)
+    created = ws.create_manual_event("A", *RANGE_A, ["snowfall"], category="snow")
+    assert created["categories"] == ["snow"]
+    assert created["category"] == "snow"
+
+
+def test_an_old_single_category_record_still_lists_and_gains_a_list(tmp_path):
+    """Records the operator saved BEFORE multi-select carry only a
+    `category` string. They must keep listing — and come back with a
+    `categories` list — without any on-disk migration."""
+    legacy = {
+        "id": "manual_20260801T120000_abc123",
+        "name": "Altes Gewitter",
+        "category": "thunder",
+        "characteristic": "",
+        "range_start": RANGE_A[0],
+        "range_end": RANGE_A[1],
+        "curves": ["lightning_potential"],
+        "created_at": "2026-08-01T12:00:00",
+    }
+    root = tmp_path / "manual_events"
+    root.mkdir(parents=True)
+    (root / f"{legacy['id']}.json").write_text(json.dumps(legacy), encoding="utf-8")
+    ws = _FakeWS(tmp_path)
+    items = ws.list_manual_events()
+    assert len(items) == 1
+    assert items[0]["categories"] == ["thunder"]
+    assert items[0]["category"] == "thunder"
+    assert ws.get_manual_event(legacy["id"])["categories"] == ["thunder"]
+
+
+def test_manual_event_categories_normalises_both_shapes():
+    assert manual_event_categories({"category": "fog"}) == ["fog"]
+    assert manual_event_categories({"categories": ["fog", "snow"]}) == ["fog", "snow"]
+    # A new-shape record's list wins over its own first-entry mirror.
+    assert manual_event_categories({"categories": ["snow", "fog"], "category": "snow"}) == [
+        "snow",
+        "fog",
+    ]
+    # Duplicates and junk entries drop out; a record with neither field
+    # yields an empty list rather than raising.
+    assert manual_event_categories({"categories": ["fog", "fog", 7, ""]}) == ["fog"]
+    assert manual_event_categories({}) == []
 
 
 # ── route: validation + wiring ───────────────────────────────────────────
@@ -219,3 +290,52 @@ def test_create_without_characteristic_defaults_to_empty_string_over_http(client
     r = client.post("/api/weather/manual-events", json=_body())
     assert r.status_code == 201
     assert r.get_json()["item"]["characteristic"] == ""
+
+
+def test_create_over_http_accepts_several_categories(client):
+    body = _body(categories=["thunder", "heavy_rain"])
+    del body["category"]
+    r = client.post("/api/weather/manual-events", json=body)
+    assert r.status_code == 201
+    item = r.get_json()["item"]
+    assert item["categories"] == ["thunder", "heavy_rain"]
+    assert item["category"] == "thunder"
+
+
+def test_create_over_http_still_accepts_the_original_single_category(client):
+    """The pre-multi-select request shape must not start 400-ing."""
+    r = client.post("/api/weather/manual-events", json=_body())
+    assert r.status_code == 201
+    assert r.get_json()["item"]["categories"] == ["thunder"]
+
+
+def test_create_rejects_an_unknown_category_inside_the_list(client):
+    body = _body(categories=["thunder", "not_a_real_category"])
+    del body["category"]
+    r = client.post("/api/weather/manual-events", json=body)
+    assert r.status_code == 400
+    assert "category" in r.get_json()["error"]
+
+
+def test_create_rejects_an_empty_category_list(client):
+    body = _body(categories=[])
+    del body["category"]
+    r = client.post("/api/weather/manual-events", json=body)
+    assert r.status_code == 400
+    assert "categories" in r.get_json()["error"]
+
+
+def test_create_rejects_more_categories_than_the_card_can_show(client):
+    body = _body(categories=list(routes.MANUAL_EVENT_CATEGORIES[: MANUAL_EVENT_CATEGORIES_MAX + 1]))
+    del body["category"]
+    r = client.post("/api/weather/manual-events", json=body)
+    assert r.status_code == 400
+    assert "categories" in r.get_json()["error"]
+
+
+def test_create_dedupes_repeated_categories(client):
+    body = _body(categories=["thunder", "thunder", "fog"])
+    del body["category"]
+    r = client.post("/api/weather/manual-events", json=body)
+    assert r.status_code == 201
+    assert r.get_json()["item"]["categories"] == ["thunder", "fog"]

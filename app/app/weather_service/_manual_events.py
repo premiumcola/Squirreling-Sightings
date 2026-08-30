@@ -64,6 +64,52 @@ MANUAL_EVENT_CATEGORIES: tuple[str, ...] = (
     "storm_front",
 )
 
+#: A real event is genuinely more than one thing — a thunderstorm that
+#: also brings heavy rain — so the operator may tick several categories.
+#: Three is the ceiling because that is what the grid card can show
+#: without turning into noise on a 375 px screen (weather/_feed.js::
+#: manualEventCardHTML stacks one badge per category in a fixed-height
+#: slot). Keep in sync with MANUAL_CATEGORIES_MAX in
+#: app/web/static/js/weather/_manual-event-cats.js.
+MANUAL_EVENT_CATEGORIES_MAX = 3
+
+
+def manual_event_categories(record: dict) -> list[str]:
+    """The category list of a manual-event record, old shape or new.
+
+    Records written before multi-select carry a single ``category``
+    string; records written since carry a ``categories`` list *and* keep
+    ``category`` as its first entry. This is the one place that knows
+    both shapes — every reader (``list_manual_events``, the card
+    builder's JS twin) goes through it rather than branching on the
+    record's age. Order is preserved, duplicates dropped.
+    """
+    out: list[str] = []
+    raw = record.get("categories")
+    if isinstance(raw, list):
+        for c in raw:
+            if isinstance(c, str) and c and c not in out:
+                out.append(c)
+    if not out:
+        single = record.get("category")
+        if isinstance(single, str) and single:
+            out.append(single)
+    return out
+
+
+def normalize_manual_event(record: dict) -> dict:
+    """Fill in both category fields so callers never see only one.
+
+    An old single-``category`` record gains the ``categories`` list; a
+    new one keeps ``category`` pointing at its first entry. Applied on
+    read, so nothing on disk has to be migrated to stay readable.
+    """
+    cats = manual_event_categories(record)
+    if cats:
+        record["categories"] = cats
+        record["category"] = cats[0]
+    return record
+
 
 class ManualEventsMixin:
     """User-saved chart ranges — a named time window, assigned to one of
@@ -94,7 +140,7 @@ class ManualEventsMixin:
         items: list[dict] = []
         for jf in root.glob("*.json"):
             try:
-                items.append(json.loads(jf.read_text(encoding="utf-8")))
+                items.append(normalize_manual_event(json.loads(jf.read_text(encoding="utf-8"))))
             except Exception:
                 continue
         # Newest range first — matches the unified feed's own newest-first
@@ -107,7 +153,7 @@ class ManualEventsMixin:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            return normalize_manual_event(json.loads(path.read_text(encoding="utf-8")))
         except Exception:
             return None
 
@@ -117,21 +163,29 @@ class ManualEventsMixin:
         range_start: str,
         range_end: str,
         curves: list[str],
-        category: str,
+        category: str | None = None,
         characteristic: str = "",
+        categories: list[str] | None = None,
     ) -> dict:
         """Write a new manual-event manifest and return it.
 
-        The route validates name/range/curves/category before calling
+        The route validates name/range/curves/categories before calling
         this — this method only mints the id and persists, mirroring how
         ``_build_recap`` is handed already-picked, already-valid inputs.
+
+        Takes either shape: ``categories=[…]`` (what the form sends now)
+        or the original single ``category=…``. Both land on disk as a
+        ``categories`` list plus a ``category`` first-entry mirror, so a
+        reader that only knows the old field keeps working.
         """
+        cats = manual_event_categories({"categories": categories, "category": category})
         now = datetime.now()
         event_id = f"manual_{now.strftime('%Y%m%dT%H%M%S')}_{uuid.uuid4().hex[:6]}"
         manifest = {
             "id": event_id,
             "name": name,
-            "category": category,
+            "category": cats[0] if cats else "",
+            "categories": cats,
             "characteristic": characteristic or "",
             "range_start": range_start,
             "range_end": range_end,
@@ -139,7 +193,7 @@ class ManualEventsMixin:
             "created_at": now.isoformat(timespec="seconds"),
         }
         _atomic_write_json(self._manual_events_dir() / f"{event_id}.json", manifest)
-        log.info("[weather] manual event saved: %s (%s / %s)", event_id, name, category)
+        log.info("[weather] manual event saved: %s (%s / %s)", event_id, name, ", ".join(cats))
         return manifest
 
     def delete_manual_event(self, event_id: str) -> bool:

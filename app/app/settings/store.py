@@ -30,6 +30,7 @@ from .migrations import (
     migrate_class_severity,
     migrate_label_thresholds,
     migrate_rtsp_password_encoding,
+    migrate_zone_source_space,
     migrate_runtime_defaults,
     migrate_schedules,
     migrate_server_location_defaults,
@@ -133,6 +134,7 @@ class SettingsStore:
         migrate_label_thresholds(self.data)
         migrate_runtime_defaults(self.data)
         migrate_rtsp_password_encoding(self.data)
+        migrate_zone_source_space(self.data)
         self._repair_snapshot_urls()
         # One-shot cleanup of any pre-existing duplicate camera rows.
         # Historically, a stale state.cameras array round-tripping through

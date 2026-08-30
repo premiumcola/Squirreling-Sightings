@@ -21,7 +21,7 @@ import math
 import cv2
 import numpy as np
 
-from .bbox_utils import iou
+from .bbox_utils import containment, iou
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,32 @@ TILE_OVERLAP = 0.15
 # 1.5 is deliberately modest: it rejects the "crop is basically the frame"
 # case without splitting crops that already help.
 DEFAULT_MIN_MAGNIFICATION = 1.5
+
+# ── nms_merge duplicate gates ─────────────────────────────────────────
+# Two questions, because no single metric answers both shapes of "the
+# same subject, twice".
+#
+# MERGE_IOU — "are these two boxes the same box?". Right whenever both
+# passes saw the WHOLE subject.
+MERGE_IOU = 0.45
+# MERGE_CONTAIN — "is one box essentially inside the other?", measured as
+# intersection-over-SMALLER-box (bbox_utils.containment). This is the
+# tile-seam case this module exists for, and IoU is blind to it — the
+# same mistake already corrected in tracker_core (SPAWN_BLOCK_CONTAIN)
+# and camera_runtime/_rescue.py (_blob_containment).
+#
+# Measured on the reporting camera (3840x2160, roi_mode 2x2). tile_regions
+# puts the four tiles at (0,0,2208,1242) / (1632,0,3840,1242) /
+# (0,918,2208,2160) / (1632,918,3840,2160), so a standing person crosses
+# the horizontal seam band y in [918, 1242]: the top tile reports
+# head+torso, the full-frame pass reports the whole body. From the field
+# frame — partial 876x645, full 1148x1200, overlap 324k px^2:
+#     IoU         = 0.20   -> under 0.45, BOTH boxes were kept
+#     containment = 0.57   -> plainly one subject
+# 0.50 sits ~13 % under that measurement. The headroom is not decoration:
+# the pair recurred on every frame at 91/77, 87/84, 90/77 %, so the
+# geometry wobbles frame to frame and a gate pinned at 0.55 would flicker.
+MERGE_CONTAIN = 0.50
 
 
 def normalise_mode(mode) -> str:
@@ -143,12 +169,62 @@ def detect_region(detector, frame, region, threshold):
     return out
 
 
-def nms_merge(dets, iou_thresh: float = 0.45):
+def _box_area(b) -> int:
+    x1, y1, x2, y2 = b
+    return max(0, x2 - x1) * max(0, y2 - y1)
+
+
+def _is_duplicate(a, b, iou_thresh: float, contain_thresh: float) -> bool:
+    """True when two same-label boxes are two views of ONE subject.
+
+    Mirrors the dual gate of ``tracker_core._adopt.spawn_blocking_track``:
+    IoU for two boxes of comparable size, containment for one box sitting
+    inside another.
+
+    The containment gate is guarded on size, and the guard is DERIVED from
+    ``iou_thresh`` instead of being a second tunable. For any pair,
+    ``iou = c * r / (r + 1 - c * r)`` where ``c`` is containment and ``r``
+    the smaller box's share of the larger's area; at perfect containment
+    (``c = 1``) that collapses to ``iou = r``. So IoU is *structurally*
+    unable to reach its own bar only while ``r < iou_thresh`` — above it,
+    IoU could have fired and deliberately did not, and containment has no
+    business overruling it.
+
+    That guard is what protects two squirrels at one feeder. Equal-sized
+    boxes have ``r = 1`` and are never touched by the containment gate, so
+    the same-label bar for comparable subjects stays exactly
+    ``iou_thresh``; an unguarded 0.50 containment would have quietly
+    dropped it to 0.33 (``c / (2 - c)`` at ``r = 1``).
+
+    The residual band — ``r`` just above ``iou_thresh`` with near-perfect
+    containment — is a deliberate MISS, i.e. it errs towards reporting two
+    boxes rather than eating a real second subject.
+    """
+    if iou(a, b) >= iou_thresh:
+        return True
+    if contain_thresh <= 0:
+        return False
+    areas = (_box_area(a), _box_area(b))
+    if max(areas) <= 0 or min(areas) / max(areas) >= iou_thresh:
+        return False
+    return containment(a, b) >= contain_thresh
+
+
+def nms_merge(dets, iou_thresh: float = MERGE_IOU, contain_thresh: float = MERGE_CONTAIN):
     """Greedy per-label NMS — keeps the highest-scoring box of each cluster
-    so a subject straddling a tile seam isn't double-counted."""
+    so a subject straddling a tile seam isn't double-counted.
+
+    Suppresses on IoU OR containment; :func:`_is_duplicate` carries why one
+    metric could not do it and what stops the second one over-reaching.
+    Deliberately per-label — the wildlife stage decides cat-vs-squirrel
+    later, so a cat box inside a person box is still two subjects here.
+    """
     kept = []
     for d in sorted(dets, key=lambda x: x.score, reverse=True):
-        if any(d.label == k.label and iou(d.bbox, k.bbox) >= iou_thresh for k in kept):
+        if any(
+            d.label == k.label and _is_duplicate(d.bbox, k.bbox, iou_thresh, contain_thresh)
+            for k in kept
+        ):
             continue
         kept.append(d)
     return kept

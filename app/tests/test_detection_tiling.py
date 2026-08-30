@@ -12,7 +12,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from app.bbox_utils import containment, iou
 from app.detection_tiling import (
+    MERGE_CONTAIN,
+    MERGE_IOU,
     detect_region,
     nms_merge,
     tile_regions,
@@ -135,6 +138,97 @@ def test_different_labels_on_the_same_patch_are_kept():
 
 def test_merge_of_nothing_is_nothing():
     assert nms_merge([]) == []
+
+
+# ── nms_merge · the containment gate ──────────────────────────────────
+#
+# The field case, on "Squirrel Town 'Nut Bar'" (3840x2160, roi_mode 2x2):
+# ONE person reported as two stacked `person` boxes, every frame. The
+# 2x2 tiles are (0,0,2208,1242) / (1632,0,3840,1242) / (0,918,2208,2160)
+# / (1632,918,3840,2160) — a standing person crosses the horizontal seam
+# band y in [918, 1242], so the top tile reports head+torso while the
+# full-frame pass reports the whole body.
+
+
+def test_real_seam_split_person_collapses_to_one():
+    """The reported bug: a 2x2 tile seam cuts a standing person in half.
+
+    Geometry from the operator's frame — partial 876x645, full 1148x1200,
+    overlap 324k px^2. The two passes disagree on where the subject starts
+    (the tile pass runs at ~1.74x the full pass's effective resolution and
+    draws the raised arm the letterboxed full-frame pass smeared away), so
+    the partial is NOT a clean subset of the full box.
+
+    IoU = 0.20, which is why the old IoU-only gate kept both. Containment
+    = 0.57 — plainly one subject.
+    """
+    partial = (1144, 205, 2020, 850)  # 876 x 645, head+torso, top tile
+    full = (1300, 400, 2448, 1600)  # 1148 x 1200, whole body, full frame
+
+    assert iou(partial, full) < MERGE_IOU, "must not be an IoU catch — that is the bug"
+    assert containment(partial, full) >= MERGE_CONTAIN
+
+    kept = nms_merge([_Det("person", 0.77, partial), _Det("person", 0.91, full)])
+
+    assert len(kept) == 1, "one person must not be reported as two boxes"
+    assert kept[0].score == 0.91, "the higher-scoring box must survive"
+
+
+def test_two_people_one_behind_the_other_both_survive():
+    """Two adults at the feeder, one standing a step behind and to the
+    right of the other so their shoulders overlap in image space.
+
+    Safe on BOTH axes by construction: containment 0.29 is far under the
+    0.50 gate, and the boxes are comparable in size (area ratio 0.81), so
+    the size guard keeps the containment gate off entirely.
+    """
+    front = (1000, 500, 1560, 1900)  # 560 x 1400
+    behind = (1420, 540, 1900, 1860)  # 480 x 1320
+
+    assert containment(front, behind) < MERGE_CONTAIN
+
+    kept = nms_merge([_Det("person", 0.88, front), _Det("person", 0.71, behind)])
+    assert len(kept) == 2
+
+
+def test_comparable_size_boxes_are_never_merged_by_containment():
+    """Two squirrels at one feeder — the case the size guard exists for.
+
+    Equal-sized boxes overlapping at containment 0.55 (over the 0.50 gate)
+    but IoU 0.38 (under the 0.45 gate). Without the guard the containment
+    gate would have quietly lowered the same-label bar for comparable
+    subjects from IoU 0.45 to 0.33, swallowing one of the two animals.
+    """
+    a = (1200, 900, 1600, 1300)
+    b = (1380, 900, 1780, 1300)
+
+    assert containment(a, b) > MERGE_CONTAIN, "containment alone would merge these"
+    assert iou(a, b) < MERGE_IOU, "IoU alone would not"
+
+    kept = nms_merge([_Det("squirrel", 0.83, a), _Det("squirrel", 0.79, b)])
+    assert len(kept) == 2, "the size guard must protect two comparable subjects"
+
+
+def test_containment_gate_brackets_its_threshold():
+    """Pin MERGE_CONTAIN: 0.60 inside merges, 0.40 inside does not.
+
+    Both pairs are small-inside-large at area ratio 0.225 — under the size
+    guard, so the containment gate is live for both — and both sit well
+    under the IoU gate, so only MERGE_CONTAIN decides. A future change to
+    the constant moves one of these.
+    """
+    assert MERGE_CONTAIN == 0.50
+
+    big = (1000, 400, 1800, 1600)  # 800 x 1200
+    inside_60 = (1200, 1240, 1560, 1840)  # 360 x 600, containment 0.60
+    inside_40 = (1200, 1360, 1560, 1960)  # 360 x 600, containment 0.40
+
+    assert containment(inside_60, big) == pytest.approx(0.60)
+    assert containment(inside_40, big) == pytest.approx(0.40)
+    assert iou(inside_60, big) < MERGE_IOU and iou(inside_40, big) < MERGE_IOU
+
+    assert len(nms_merge([_Det("person", 0.9, big), _Det("person", 0.6, inside_60)])) == 1
+    assert len(nms_merge([_Det("person", 0.9, big), _Det("person", 0.6, inside_40)])) == 2
 
 
 # ── tiled_detect ──────────────────────────────────────────────────────

@@ -35,7 +35,13 @@ const el = () =>
                   return typeof k === 'string' ? () => el() : undefined; },
       set(t, k, v) { t[k] = v; return true; } },
   );
+// `location` is part of the stub because several modules read
+// `window.location.hash` at IMPORT time (statistics.js's hash redirect,
+// the weather + netz hash routers). Without it the import throws and
+// the failure looks like the module under test is broken. Tests that
+// care about navigation still set `globalThis.location` themselves.
 globalThis.window = { addEventListener() {},
+  location: { hash: '', href: '', search: '' },
   matchMedia: () => ({ matches: false, addEventListener() {} }) };
 globalThis.document = { addEventListener() {}, querySelector: () => el(),
   querySelectorAll: () => [], getElementById: () => el(), createElement: () => el(),

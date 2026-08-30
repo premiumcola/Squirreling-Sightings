@@ -73,6 +73,31 @@ window._statOpenMedia = function (camId, label) {
   }, 400);
 };
 
+// Configured cameras first (they carry name + colour), then any id that
+// appears in the timeline response but is not configured — a camera
+// removed after its events were recorded still owns those events, and
+// dropping it would silently under-count the month.
+export function _camerasFromData(...payloads) {
+  const out = [];
+  const seen = new Set();
+  for (const c of state.cameras || []) {
+    if (c && c.id && !seen.has(c.id)) {
+      seen.add(c.id);
+      out.push(c);
+    }
+  }
+  for (const data of payloads) {
+    for (const t of (data && data.tracks) || []) {
+      const id = t && t.camera_id;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        out.push({ id, name: id });
+      }
+    }
+  }
+  return out;
+}
+
 function _renderStatistik(monthData, dayData) {
   const content = byId('statContent');
   if (!content) return;
@@ -89,7 +114,16 @@ function _renderStatistik(monthData, dayData) {
   (monthData.tracks || []).forEach((t) => {
     camCounts[t.camera_id] = (t.points || []).length;
   });
-  const cameras = state.cameras || [];
+  // The camera list for both charts is the UNION of the configured
+  // cameras and whatever ids the API actually returned. `state.cameras`
+  // is populated by loadAll(); this panel hydrates on its own
+  // IntersectionObserver, so scrolling to Statistik before that lands
+  // used to render "Keine Ereignisse" over a response full of events —
+  // the charts iterated `state.cameras`, not the data. Same load-order
+  // trap that left the Erkennungsprofil reading "Keine Kamera
+  // konfiguriert". Ids from the data get a placeholder record so the
+  // row still has a name and a colour.
+  const cameras = _camerasFromData(monthData, dayData);
 
   const labelCounts = {};
   allMonth.forEach((e) =>

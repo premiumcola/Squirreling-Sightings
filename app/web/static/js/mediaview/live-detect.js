@@ -32,6 +32,20 @@ import { _startHoldRefresh, _hideStallBanner } from './live-detect-stall.js';
 import { _renderDiagStrip } from './live-detect-diag.js';
 import { unmountLdSkeleton } from './live-detect-skeleton.js';
 import { stopSnapshotPrefetch } from './live-detect-debug/index.js';
+import { state } from '../core/state.js';
+
+// The four modes routes/cameras.py's _TUNING_ENUM_FIELDS accepts. A
+// value outside this set means the stored config drifted from the
+// backend's own enum — fall back to 'off' rather than sending the
+// server something it will reject.
+const _ROI_MODES = ['off', 'roi', '2x2', '3x3'];
+
+/** The camera's configured roi_mode, or 'off' when unknown. */
+function _configuredRoiMode(camId) {
+  const cam = (state.cameras || []).find((c) => c.id === camId);
+  const mode = cam && cam.roi_mode;
+  return _ROI_MODES.includes(mode) ? mode : 'off';
+}
 
 // C73 · cadence floors. The original 1 Hz floor was set against the
 // main-stream cost budget (2560×1440 frame copy + JPEG encode +
@@ -157,10 +171,16 @@ export function openLiveDetect({ camId, cameraName }) {
     lastNonEmptyTickMs: 0,
     holdHandle: null,
     // C2/C3 · ephemeral sim controls (per-open, not persisted). Default
-    // MAIN stream so the sim mirrors the production alarm pipeline; tiling
-    // off until the operator engages a mode.
+    // MAIN stream so the sim mirrors the production alarm pipeline.
     stream: 'main',
-    detMode: 'off',
+    // …and seed MODUS from what the camera actually runs, for the same
+    // reason. This was hardcoded 'off', so opening the simulator on a
+    // camera configured for 2x2 quietly diagnosed a pipeline the camera
+    // does not use — one more way the panel disagreed with production.
+    // Note the sim tiles EVERY tick while production tiles only as a
+    // rescue; matching the MODE is the part that belongs here, and the
+    // trace already states that cadence difference itself.
+    detMode: _configuredRoiMode(camId),
   };
   S.traceLines = [];
   S.traceTicks = [];

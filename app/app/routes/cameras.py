@@ -102,6 +102,13 @@ def api_cameras():
         # L07 · expose to the cam-edit form. Default True so legacy
         # cameras without the field read as enabled on first hydrate.
         s["track_filter_ghosts"] = cam.get("track_filter_ghosts") is not False
+        # The Simulieren panel's MODUS control seeds itself from this. It
+        # used to hardcode "off", so opening the simulator on a camera that
+        # actually runs 2x2 showed — and then ran — a DIFFERENT pipeline
+        # than production, silently. The operator caught it: "wenn ich in
+        # den Simulator geh, dann ist das 2x2 nicht an, obwohl die ja so
+        # läuft".
+        s["roi_mode"] = cam.get("roi_mode") or "off"
         s["zones"] = cam.get("zones", [])
         s["masks"] = cam.get("masks", [])
         s["resolution"] = cam.get("resolution", "auto")

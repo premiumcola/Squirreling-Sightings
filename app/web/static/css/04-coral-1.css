@@ -523,6 +523,16 @@
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
+/* Toggled by JS through the `hidden` attribute. Without this opt-out the
+   `display` above silently wins: the UA stylesheet's
+   `[hidden] { display: none }` loses to ANY author rule that sets
+   `display`, regardless of specificity, because author origin outranks
+   user-agent origin. See test_weather_zoom_panel_css.py — the sweep
+   there found this whole family at once. */
+.media-pagination[hidden] {
+  display: none;
+}
+
 /* POLISH-01a · the button is the 44 px touch target (transparent);
    the inner .page-pill-chip is the smaller visible pill. */
 .page-pill {

@@ -10,6 +10,16 @@
   border: 1px dashed rgba(255, 255, 255, 0.15);
   flex-wrap: wrap;
 }
+/* Toggled by JS through the `hidden` attribute. Without this opt-out the
+   `display` above silently wins: the UA stylesheet's
+   `[hidden] { display: none }` loses to ANY author rule that sets
+   `display`, regardless of specificity, because author origin outranks
+   user-agent origin. See test_weather_zoom_panel_css.py — the sweep
+   there found this whole family at once. */
+.shape-drawing-bar[hidden] {
+  display: none;
+}
+
 .shape-drawing-count {
   font-size: 12px;
   font-weight: 600;
@@ -334,6 +344,16 @@
   display: flex;
   justify-content: flex-end;
 }
+/* Toggled by JS through the `hidden` attribute. Without this opt-out the
+   `display` above silently wins: the UA stylesheet's
+   `[hidden] { display: none }` loses to ANY author rule that sets
+   `display`, regardless of specificity, because author origin outranks
+   user-agent origin. See test_weather_zoom_panel_css.py — the sweep
+   there found this whole family at once. */
+.shape-clear-row[hidden] {
+  display: none;
+}
+
 /* C5 — touch-action:none disables every default touch behaviour
    (pinch-zoom, double-tap zoom, scroll-pan) on the canvas. The zone
    editor consumes single touch for drag + double-tap for straighten

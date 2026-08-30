@@ -90,3 +90,70 @@ def test_no_other_rule_in_this_partial_sets_display_without_a_hidden_opt_out():
         if not _sets_own_display(css, selector):
             continue
         assert f"{selector}[hidden]" in css, f"{selector} needs a [hidden] opt-out"
+
+
+# ── the same bug, swept across the whole codebase ─────────────────────
+
+
+def test_no_hidden_toggled_element_has_its_display_forced():
+    """The repo-wide version of the bug above.
+
+    Sweeping for it turned up a third instance the original report did
+    not mention: `.shape-clear-row` in the zone/mask editor. `shape-
+    editor/ui.js` hides that row when there is no polygon to clear, and
+    `display: flex` defeated it, so "Alle löschen" sat on an empty
+    editor offering to delete nothing.
+
+    The sweep is deliberately narrow — only ids that JS actually
+    assigns `.hidden` on, resolved to their classes via the templates —
+    because a looser "any class that sets display" scan returns ~500
+    rules, almost none of which are ever toggled.
+    """
+    js_root = Path(__file__).resolve().parents[1] / "web" / "static" / "js"
+    tpl_root = Path(__file__).resolve().parents[1] / "web" / "templates"
+
+    # Two shapes, because both occur: the direct
+    # `byId('x').hidden = …`, and the far more common
+    # `const el = byId('x'); … el.hidden = …` where the two halves sit
+    # lines apart. Matching only the direct form is why the first draft
+    # of this sweep missed `.shape-clear-row` — the very bug that
+    # prompted widening it.
+    toggled = set()
+    for path in js_root.rglob("*.js"):
+        src = path.read_text(encoding="utf-8", errors="ignore")
+        toggled.update(re.findall(r"byId\(['\"]([A-Za-z0-9_-]+)['\"]\)\s*\??\.hidden\s*=", src))
+        for var, eid in re.findall(
+            r"(?:const|let|var)\s+(\w+)\s*=\s*byId\(['\"]([A-Za-z0-9_-]+)['\"]\)", src
+        ):
+            if re.search(rf"\b{re.escape(var)}\s*\??\.hidden\s*=", src):
+                toggled.add(eid)
+
+    id_classes: dict[str, set[str]] = {}
+    for path in tpl_root.rglob("*.html"):
+        for tag in re.finditer(
+            r'<[^>]*\bid="([A-Za-z0-9_-]+)"[^>]*>',
+            path.read_text(encoding="utf-8", errors="ignore"),
+        ):
+            cls = re.search(r'\bclass="([^"]+)"', tag.group(0))
+            if cls:
+                id_classes.setdefault(tag.group(1), set()).update(cls.group(1).split())
+
+    forces_display: dict[str, str] = {}
+    guarded: set[str] = set()
+    for path in _CSS.glob("*.css"):
+        src = path.read_text(encoding="utf-8")
+        for rule in re.finditer(r"^\.([a-z0-9_-]+)\s*\{([^}]*)\}", src, re.M):
+            if re.search(r"\bdisplay\s*:", rule.group(2)):
+                forces_display.setdefault(rule.group(1), path.name)
+        guarded.update(re.findall(r"\.([a-z0-9_-]+)\[hidden\]", src))
+
+    broken = [
+        f"#{eid} (.{cls} in {forces_display[cls]})"
+        for eid in sorted(toggled)
+        for cls in sorted(id_classes.get(eid, ()))
+        if cls in forces_display and cls not in guarded
+    ]
+    assert not broken, (
+        "these elements are toggled via the `hidden` attribute but their class "
+        "forces `display`, so hiding them does nothing: " + ", ".join(broken)
+    )

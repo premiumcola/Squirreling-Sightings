@@ -127,6 +127,16 @@
   border-radius: 9px;
   overflow: hidden;
 }
+/* Toggled by JS through the `hidden` attribute. Without this opt-out the
+   `display` above silently wins: the UA stylesheet's
+   `[hidden] { display: none }` loses to ANY author rule that sets
+   `display`, regardless of specificity, because author origin outranks
+   user-agent origin. See test_weather_zoom_panel_css.py — the sweep
+   there found this whole family at once. */
+.sev-matrix[hidden] {
+  display: none;
+}
+
 .sev-cell {
   padding: 7px 10px;
   font-size: 11px;

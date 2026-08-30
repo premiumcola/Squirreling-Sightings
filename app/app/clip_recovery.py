@@ -11,10 +11,20 @@ the library renders "hängt · 5 h 51 min": honest about the symptom, but
 codebase ever wrote the terminal state and there was no way out of it
 except deleting the event by hand.
 
-:func:`sweep_orphaned_clips` writes that missing transition, at boot,
-which is the one moment it can be stated without guessing: anything
-still in flight from *before this process started* is orphaned by
-definition, because no thread in this process owns it.
+This module writes that missing transition, from the only two places
+that can know the producer is gone:
+
+* :func:`stamp_interrupted_clips` — on SIGTERM. Bounded to the last two
+  day folders and to a handful of manifest rewrites, because Docker
+  sends SIGKILL about ten seconds later and a running encode will not
+  beat that clock. See the note in ``lifecycle.py``: this stamps, it
+  does not drain.
+* :func:`sweep_orphaned_clips` — at boot. Anything still in flight from
+  *before this process started* is orphaned by definition: no thread in
+  this process owns it.
+
+Both halves share one vocabulary — :func:`needs_adoption`,
+:data:`INTERRUPTED_AT`, :data:`INTERRUPTED_REASON_DE`.
 
 Nothing is deleted. A stub carries detections, labels and often a
 snapshot, so destroying records on every boot is not something to do
@@ -30,7 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -45,11 +55,52 @@ from .storage import _atomic_write_text, event_date_subdir
 
 log = logging.getLogger(__name__)
 
+#: "A process died on this clip and the next boot still has to decide
+#: what became of it." Written by the shutdown stamp, cleared by the
+#: boot sweep — which is what makes the sweep idempotent: after one
+#: pass there are no candidates left for a second one.
+INTERRUPTED_AT = "interrupted_at"
+
 #: Operator-facing German, naming the real cause. ``_processing.js``
 #: renders ``encode_error`` as the note on a failed tile.
 INTERRUPTED_REASON_DE = (
     "Ein Neustart hat die Verarbeitung unterbrochen — das Video wurde nicht fertiggestellt."
 )
+
+#: How many day folders back the shutdown stamp looks. A clip in flight
+#: is minutes old; two days covers a clip that spans midnight and keeps
+#: the walk bounded to something that finishes inside Docker's stop
+#: grace on an archive of any size.
+_STAMP_DAYS = 2
+
+
+def needs_adoption(event: dict) -> bool:
+    """True when nothing is producing this clip any more.
+
+    The one predicate both halves share. ``is_pending`` is the live
+    case; ``interrupted_at`` is what the shutdown stamp left behind and
+    it deliberately outlives that stamp's own ``failed``, so the next
+    boot still gets to look for a finished mp4 next to the manifest
+    before it believes the failure.
+    """
+    return bool(is_pending(event) or event.get(INTERRUPTED_AT))
+
+
+def mark_interrupted(event: dict, now: datetime) -> bool:
+    """Stamp one manifest "the process that owned this is gone".
+
+    Terminal and honest immediately: the tile stops claiming work is
+    happening. Returns True when the manifest actually changed, so a
+    second signal costs no writes.
+    """
+    if event.get(INTERRUPTED_AT):
+        return False
+    event["stage"] = STAGE_FAILED
+    event["status"] = STAGE_STATUS[STAGE_FAILED]
+    event["stage_since"] = now.isoformat(timespec="seconds")
+    event[INTERRUPTED_AT] = now.isoformat(timespec="seconds")
+    event["encode_error"] = INTERRUPTED_REASON_DE
+    return True
 
 
 def _owned_by_this_process(event: dict, started_at: datetime) -> bool:
@@ -64,6 +115,8 @@ def _owned_by_this_process(event: dict, started_at: datetime) -> bool:
     exists. A manifest with no parsable timestamp at all (``None``) is
     the permanently broken case and gets adopted.
     """
+    if event.get(INTERRUPTED_AT):
+        return False  # already known dead, whatever its clock says
     return stage_age_s(event, started_at) == 0
 
 
@@ -151,12 +204,13 @@ def _clip_dir(manifest: Path, event_id: str) -> Path:
 def adopt_event(event: dict, manifest: Path, root: Path, public_base: str, now: datetime) -> str:
     """Give one orphaned clip its terminal state in place.
 
-    Returns ``"recovered"`` or ``"failed"``. Either way the clip stops
-    being pending, which is what retires it from the candidate set and
-    makes a second sweep a no-op.
+    Returns ``"recovered"`` or ``"failed"``. Clearing
+    :data:`INTERRUPTED_AT` is what retires the event from the candidate
+    set, so a second sweep finds nothing to do.
     """
     event_id = event.get("event_id") or manifest.stem
     video = _playable_clip(_clip_dir(manifest, event_id), event_id)
+    event.pop(INTERRUPTED_AT, None)
     event["stage_since"] = now.isoformat(timespec="seconds")
     if video is None:
         event["stage"] = STAGE_FAILED
@@ -210,10 +264,25 @@ def _all_manifests(storage_root: Path) -> Iterator[Path]:
                 yield path
 
 
+def _recent_manifests(storage_root: Path, now: datetime, days: int) -> Iterator[Path]:
+    """Manifests from the last ``days`` day folders, plus whatever is
+    still loose in a camera root. Bounded on purpose — the shutdown path
+    has a SIGKILL behind it, so it may not rglob a full archive."""
+    wanted = [(now - timedelta(days=d)).strftime("%Y-%m-%d") for d in range(max(1, days))]
+    for cam_dir in _camera_dirs(storage_root):
+        for name in wanted:
+            day_dir = cam_dir / name
+            if day_dir.is_dir():
+                yield from sorted(day_dir.glob("*.json"))
+        for path in sorted(cam_dir.glob("*.json")):
+            if not path.name.endswith(".tracks.json"):
+                yield path
+
+
 def sweep_orphaned_clips(
     storage_root, *, started_at: datetime, public_base: str = "", now: datetime = None
 ) -> dict:
-    """Adopt every clip left in flight by a dead process.
+    """Boot half: adopt every clip left in flight by a dead process.
 
     Returns ``{"recovered": n, "failed": n}``. Idempotent — the second
     run over the same tree finds no candidates and writes nothing.
@@ -223,10 +292,27 @@ def sweep_orphaned_clips(
     result = {"recovered": 0, "failed": 0}
     for path in _all_manifests(root):
         event = _load(path)
-        if event is None or not is_pending(event):
+        if event is None or not needs_adoption(event):
             continue
         if _owned_by_this_process(event, started_at):
             continue
         result[adopt_event(event, path, root, public_base, now)] += 1
         _write(path, event)
     return result
+
+
+def stamp_interrupted_clips(storage_root, *, days: int = _STAMP_DAYS, now: datetime = None) -> int:
+    """Shutdown half: stamp every in-flight clip interrupted. Returns how
+    many manifests changed."""
+    root = Path(storage_root)
+    now = now or datetime.now()
+    stamped = 0
+    for path in _recent_manifests(root, now, days):
+        event = _load(path)
+        if event is None or not needs_adoption(event):
+            continue
+        if not mark_interrupted(event, now):
+            continue
+        _write(path, event)
+        stamped += 1
+    return stamped

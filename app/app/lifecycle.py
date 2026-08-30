@@ -425,6 +425,31 @@ def _emit_shutdown_bilanz(reason: str = "signal"):
     log.info("[boot] ── stopped cleanly ──")
 
 
+def _stamp_interrupted_clips():
+    """Mark every in-flight clip interrupted on the way out.
+
+    Deliberately a stamp, not a drain. ``docker stop`` sends SIGTERM and
+    SIGKILLs about ten seconds later; a motion clip may still be
+    recording (bounded by ``clip_max_duration_s``, 120 s by default) and
+    its re-encode runs ffmpeg with a 300 s timeout, so "only stop when
+    processing is done" cannot be honoured in that window and waiting
+    for it would just get us killed mid-write with nothing gained. What
+    does fit is a few manifest rewrites over the last two day folders,
+    so the next boot — and the operator — sees an honest state instead
+    of a phantom "wird umgewandelt". The boot sweep in
+    :mod:`app.app.clip_recovery` then checks whether the file made it to
+    disk anyway and un-fails the ones that did.
+    """
+    try:
+        from .clip_recovery import stamp_interrupted_clips
+
+        stamped = stamp_interrupted_clips(app_state.storage_root)
+        if stamped:
+            log.info("[boot] %d laufende(r) Clip(s) als unterbrochen markiert", stamped)
+    except Exception as e:
+        log.warning("[boot] Clip-Markierung beim Herunterfahren fehlgeschlagen: %s", e)
+
+
 def _install_shutdown_hooks():
     """SIGTERM (docker stop), SIGINT (Ctrl-C), and atexit all funnel into
     _emit_shutdown_bilanz. Idempotent — multiple signals only log once."""
@@ -434,6 +459,7 @@ def _install_shutdown_hooks():
         if fired[0]:
             return
         fired[0] = True
+        _stamp_interrupted_clips()
         try:
             _emit_shutdown_bilanz(reason)
         except Exception as e:

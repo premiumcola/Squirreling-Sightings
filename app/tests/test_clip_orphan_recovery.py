@@ -7,13 +7,16 @@ else in the codebase ever wrote a terminal state, so the card read
 "hängt · 5 h 51 min" for the rest of the archive's life and the only
 exit was deleting the event by hand.
 
-The boot sweep closes it: at boot every in-flight clip from before the
-process started is orphaned by definition, so the file on disk is the
-only truth left about it.
+Two halves close it, sharing one vocabulary
+(:func:`app.clip_recovery.needs_adoption`, ``interrupted_at``):
 
-The pin that matters most is the recovery. ffmpeg often finishes
+* the boot sweep, which knows every in-flight clip from before the
+  process started is orphaned, and
+* the SIGTERM stamp, which says so on the way out.
+
+The pin that matters most is the recovery: ffmpeg often finishes
 writing the mp4 before the process dies, and that finished clip used
-to be presented as "hängt" forever — it is the one case where the fix
+to be presented as "hängt" forever. It is the one case where the fix
 gives the operator something back rather than just stopping a lie.
 """
 
@@ -27,14 +30,15 @@ from types import SimpleNamespace
 import pytest
 from flask import Flask
 
-from app import app_state
-from app.camera_runtime._recording._stages import (
-    STAGE_ENCODING,
-    STAGE_READY,
-    STAGE_RECORDING,
-    is_pending,
+from app import app_state, clip_recovery
+from app.camera_runtime._recording._stages import STAGE_ENCODING, STAGE_READY, STAGE_RECORDING
+from app.clip_recovery import (
+    INTERRUPTED_AT,
+    INTERRUPTED_REASON_DE,
+    needs_adoption,
+    stamp_interrupted_clips,
+    sweep_orphaned_clips,
 )
-from app.clip_recovery import INTERRUPTED_REASON_DE, sweep_orphaned_clips
 from app.routes import media as media_routes
 from app.storage import EventStore
 
@@ -115,7 +119,7 @@ def test_an_orphan_whose_encode_finished_is_recovered_to_ready(tmp_storage_root)
     assert ev["video_url"].endswith(ev["video_relpath"])
     assert ev["file_size_bytes"] == len(REAL_MP4)
     assert "encode_error" not in ev
-    assert not is_pending(ev)
+    assert not needs_adoption(ev)
 
 
 def test_the_stream_copy_is_accepted_when_the_reencode_never_finished(tmp_storage_root):
@@ -164,7 +168,7 @@ def test_an_orphan_with_nothing_on_disk_is_marked_failed(tmp_storage_root):
     assert ev["status"] == "error", "the coarse field the older consumers read must follow"
     assert ev["encode_error"] == INTERRUPTED_REASON_DE
     assert "Neustart" in ev["encode_error"], "the reason must name the real cause, in German"
-    assert not is_pending(ev)
+    assert not needs_adoption(ev)
 
 
 def test_nothing_is_deleted_and_the_evidence_survives(tmp_storage_root):
@@ -219,8 +223,8 @@ def test_a_finished_clip_is_never_touched(tmp_storage_root):
 
 # ── D · idempotence + robustness ───────────────────────────────────────────
 def test_a_second_sweep_finds_nothing_left_to_do(tmp_storage_root):
-    """Boot happens a lot. A terminal stage is what retires an event from
-    the candidate set."""
+    """Boot happens a lot. Clearing `interrupted_at` is what retires an
+    event from the candidate set."""
     _stub(
         tmp_storage_root,
         "20260827-080000-000000",
@@ -267,7 +271,68 @@ def test_a_missing_storage_tree_is_not_an_error(tmp_path):
     }
 
 
-# ── E · what the library shows afterwards ──────────────────────────────────
+# ── E · the shutdown stamp ─────────────────────────────────────────────────
+def test_sigterm_stamps_every_in_flight_clip_interrupted(tmp_storage_root):
+    path = _stub(tmp_storage_root, "20260827-115900-000000", stage=STAGE_ENCODING, since=BOOT)
+
+    assert stamp_interrupted_clips(tmp_storage_root, now=BOOT) == 1
+    ev = _read(path)
+    assert ev["stage"] == "failed"
+    assert ev["status"] == "error"
+    assert ev[INTERRUPTED_AT] == BOOT.isoformat(timespec="seconds")
+    assert ev["encode_error"] == INTERRUPTED_REASON_DE
+
+
+def test_the_stamp_is_idempotent_across_repeated_signals(tmp_storage_root):
+    """SIGTERM then SIGKILL then a second `docker stop` — the stamp may
+    not keep rewriting manifests it already owns."""
+    _stub(tmp_storage_root, "20260827-115901-000000", stage=STAGE_ENCODING, since=BOOT)
+    assert stamp_interrupted_clips(tmp_storage_root, now=BOOT) == 1
+    assert stamp_interrupted_clips(tmp_storage_root, now=BOOT) == 0
+
+
+def test_the_stamp_leaves_finished_clips_alone(tmp_storage_root):
+    day = _day(tmp_storage_root)
+    path = day / "20260827-100000-000000.json"
+    path.write_text(json.dumps({"event_id": "x", "status": "ready"}), encoding="utf-8")
+    assert stamp_interrupted_clips(tmp_storage_root, now=BOOT) == 0
+
+
+def test_the_stamped_clip_is_still_offered_to_the_next_boot(tmp_storage_root):
+    """The stamp is terminal for the UI but not for the sweep: the mp4
+    may have landed in the seconds between the signal and SIGKILL, and
+    `interrupted_at` is what keeps that clip a candidate."""
+    path = _stub(tmp_storage_root, "20260827-115902-000000", stage=STAGE_ENCODING, since=BOOT)
+    stamp_interrupted_clips(tmp_storage_root, now=BOOT)
+    (_day(tmp_storage_root) / "20260827-115902-000000.mp4").write_bytes(REAL_MP4)
+
+    # Next boot: the stamp predates it, so the age guard would call this
+    # clip "ours" — `interrupted_at` overrides that.
+    assert sweep_orphaned_clips(
+        tmp_storage_root, started_at=BOOT - timedelta(minutes=1), now=BOOT
+    ) == {"recovered": 1, "failed": 0}
+    assert _read(path)["stage"] == STAGE_READY
+    assert INTERRUPTED_AT not in _read(path)
+
+
+def test_the_stamp_walk_stays_inside_the_docker_stop_window(tmp_storage_root):
+    """Bounded to the recent day folders on purpose — SIGKILL is ten
+    seconds behind SIGTERM, so this path may not rglob a whole archive."""
+    old = tmp_storage_root / "motion_detection" / CAM / "2019-01-01"
+    old.mkdir(parents=True, exist_ok=True)
+    stale = old / "20190101-120000-000000.json"
+    stale.write_text(
+        json.dumps({"event_id": "20190101-120000-000000", "stage": STAGE_ENCODING}),
+        encoding="utf-8",
+    )
+
+    assert stamp_interrupted_clips(tmp_storage_root, now=BOOT) == 0
+    assert "stage" in _read(stale) and INTERRUPTED_AT not in _read(stale)
+    # The unbounded boot sweep is the one that gets to it.
+    assert sweep_orphaned_clips(tmp_storage_root, started_at=BOOT, now=BOOT)["failed"] == 1
+
+
+# ── F · what the library shows afterwards ──────────────────────────────────
 @pytest.fixture
 def client(monkeypatch, tmp_storage_root: Path):
     """The real media route over the tmp tree — the surface that renders
@@ -323,3 +388,14 @@ def test_the_haengt_card_stops_lying_when_there_is_nothing_to_recover(client, tm
 
     _sweep(tmp_storage_root)
     assert _items(client) == []
+
+
+# ── G · one vocabulary, not two ────────────────────────────────────────────
+def test_both_halves_share_the_orphan_predicate():
+    """A second definition of "this clip was abandoned" is how the two
+    halves would start disagreeing about which events exist."""
+    src = Path(clip_recovery.__file__).read_text(encoding="utf-8")
+    assert src.count("def needs_adoption") == 1
+    assert (
+        src.count("needs_adoption(event)") == 2
+    ), "the boot sweep and the shutdown stamp must both ask the same helper"

@@ -101,6 +101,34 @@ HISTORY_FIELD_TO_EVENT: dict[str, str] = {
 
 HISTORY_MAXLEN = 8640  # 30 d @ 5 min — deque truncates oldest, ~1.5 MB on disk
 
+# Per-event-type score DOMAIN (min, max) a trigger's severity can occupy.
+# Every detector in _detection.py clamps its severity to the full [0, 1]
+# range, but _sun_tl's "sky quality" score is 0.5 + 0.5*(1 - cloud/100) —
+# bounded to [0.5, 1.0], since even a fully-overcast capture keeps a
+# "floor of dignity" (the Sichtungen card explicitly reads "50% = stark
+# bewölkt", never lower) instead of reading 0%. A quality gate authored
+# for the [0, 1] convention (push.weather.min_score in _clip.py, the
+# recap candidate floor in _recaps.py) is therefore a structural no-op
+# against sun-timelapse: every capture, however overcast, clears a
+# literal 0.4 once its domain never goes below 0.5. Rescaling the
+# configured floor onto each type's own domain keeps "turn the dial up =
+# stricter, proportionally" true for every event type, not only the ones
+# that happen to touch 0.
+SCORE_DOMAIN_DEFAULT = (0.0, 1.0)
+SCORE_DOMAIN_BY_PREFIX = {"sun_timelapse": (0.5, 1.0)}
+
+
+def score_floor_for_type(min_score: float, event_type: str) -> float:
+    """Rescale a [0, 1]-authored floor onto `event_type`'s own score
+    domain — see SCORE_DOMAIN_BY_PREFIX's comment for why this exists."""
+    et = str(event_type or "")
+    lo, hi = SCORE_DOMAIN_DEFAULT
+    for prefix, domain in SCORE_DOMAIN_BY_PREFIX.items():
+        if et.startswith(prefix):
+            lo, hi = domain
+            break
+    return lo + float(min_score) * (hi - lo)
+
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -29,6 +29,7 @@ from ._consts import (
     _is_quiet_now,
     _safe_dt,
     _safe_subset,
+    score_floor_for_type,
     log,
 )
 
@@ -211,7 +212,9 @@ class RecapsMixin:
                         continue
                     if started.date() < start_d or started.date() > end_d:
                         continue
-                    if float(m.get("score") or 0.0) < 0.4:
+                    if float(m.get("score") or 0.0) < score_floor_for_type(
+                        0.4, m.get("event_type", "")
+                    ):
                         continue
                     out.append(m)
         return out

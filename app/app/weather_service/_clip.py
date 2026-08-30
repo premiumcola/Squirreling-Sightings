@@ -31,6 +31,7 @@ from ._consts import (
     _is_quiet_now,
     _safe_dt,
     _safe_subset,
+    score_floor_for_type,
     log,
 )
 
@@ -221,8 +222,9 @@ class ClipMixin:
                 return
             min_score = float(wcfg.get("min_score", 0.4) or 0.0)
             score = float(manifest.get("score") or manifest.get("severity") or 0.0)
-            if score < min_score:
-                log.info("[weather] tg push skip: %s score=%.2f < min=%.2f", evt, score, min_score)
+            floor = score_floor_for_type(min_score, evt)
+            if score < floor:
+                log.info("[weather] tg push skip: %s score=%.2f < min=%.2f", evt, score, floor)
                 return
             cam_name = manifest.get("cam_name") or manifest.get("cam_id", "?")
             cap = (

@@ -10,96 +10,56 @@ import { showToast, showConfirm } from './core/toast.js';
 import { colors, OBJ_LABEL } from './core/icons.js';
 import { WEATHER_TYPES } from './core/weather-types.js';
 import { apiPost } from './core/api.js';
+import { mergeDeep, pushCfg, pushDefaults } from './push-config.js';
 
 // Order in the "Was senden" list — matches the spec's reading order
 // (Person first, animals + person before motion).
 const _PUSH_LABEL_ORDER = ['person', 'squirrel', 'dog', 'car', 'cat', 'bird', 'motion'];
 
-// Schema-default block — used by the "Standard"-Preset and as a
-// fallback when the backend hasn't shipped the keys yet. Mirror of
-// _TELEGRAM_PUSH_DEFAULTS in settings_store.py — keep the two in sync.
-function _pushDefaults() {
-  return {
-    enabled: true,
-    rate_limit_seconds: 30,
-    quiet_hours: { start: '22:00', end: '07:00' },
-    night_alert: {
-      enabled: true,
-      armed_only: true,
-      use_sun: true,
-      lat: null,
-      lon: null,
-      start: '22:00',
-      end: '07:00',
-    },
-    labels: {
-      person: { push: true, threshold: 0.85 },
-      cat: { push: false, threshold: 0.8 },
-      dog: { push: true, threshold: 0.8 },
-      bird: { push: false, threshold: 0.9 },
-      car: { push: true, threshold: 0.85 },
-      squirrel: { push: true, threshold: 0.8 },
-      motion: { push: false, threshold: 0.0 },
-    },
-    daily_report: { enabled: true, time: '22:00' },
-    highlight: { enabled: true, time: '19:00' },
-    system: { enabled: true },
-    timelapse: { enabled: true },
-  };
-}
-
-// Pull current push config from loaded state with safe fallbacks.
-function _pushCfg() {
-  const tg = state.config?.telegram || {};
-  // Deep merge defaults under user values so the UI never gets undefined.
-  const def = _pushDefaults();
-  const cur = tg.push || {};
-  const merge = (d, c) => {
-    const out = { ...d };
-    for (const k of Object.keys(c || {})) {
-      if (
-        c[k] &&
-        typeof c[k] === 'object' &&
-        !Array.isArray(c[k]) &&
-        d[k] &&
-        typeof d[k] === 'object'
-      ) {
-        out[k] = merge(d[k], c[k]);
-      } else {
-        out[k] = c[k];
-      }
-    }
-    return out;
-  };
-  return merge(def, cur);
-}
+// THE endpoint for every push write. There is no /api/settings/telegram/push
+// route and there never was one: the ES-module refactor invented that URL,
+// and because savePushCfg merged optimistically and swallowed nothing (it
+// had no catch at all), every control in this panel 404'd while showing the
+// change as applied. `/api/settings/app` deep-merges the section via
+// SettingsStore.update_section, so a partial like
+// {labels:{person:{push:false}}} lands without wiping its siblings.
+const _PUSH_SAVE_URL = '/api/settings/app';
 
 let _pushSaveTimer = null;
-async function savePushCfg(partial) {
-  // Optimistic local merge so the UI reflects the change instantly;
-  // the next /api/bootstrap refresh will overwrite if anything diverged.
+
+/** Persist a partial push config. Returns true on success, false on failure.
+ *
+ * The local merge stays optimistic so the UI reacts instantly, but a save
+ * that fails must not look like a save that worked: the pre-save subtree is
+ * snapshotted, restored on error, and the panel re-rendered from it.
+ *
+ * Exported so the URL, the payload shape and the rollback can be driven
+ * directly by a test — this is the function that silently 404'd.
+ */
+export async function savePushCfg(partial) {
+  // JSON round-trip rather than structuredClone: the push subtree is pure
+  // JSON (bool / number / string / null), and this way the snapshot needs
+  // no browser-version caveat.
+  const before = state.config?.telegram?.push
+    ? JSON.parse(JSON.stringify(state.config.telegram.push))
+    : null;
   if (state.config) {
     state.config.telegram = state.config.telegram || {};
-    state.config.telegram.push = _mergeDeep(state.config.telegram.push || {}, partial);
+    state.config.telegram.push = mergeDeep(state.config.telegram.push || {}, partial);
   }
-  await apiPost('/api/settings/telegram/push', partial);
-}
-
-function _mergeDeep(t, s) {
-  for (const k of Object.keys(s || {})) {
-    if (
-      s[k] &&
-      typeof s[k] === 'object' &&
-      !Array.isArray(s[k]) &&
-      t[k] &&
-      typeof t[k] === 'object'
-    ) {
-      _mergeDeep(t[k], s[k]);
-    } else {
-      t[k] = s[k];
+  try {
+    await apiPost(_PUSH_SAVE_URL, { telegram: { push: partial } });
+  } catch (err) {
+    if (state.config?.telegram) {
+      if (before === null) delete state.config.telegram.push;
+      else state.config.telegram.push = before;
     }
+    hydratePushUI();
+    showToast('Speichern fehlgeschlagen — Einstellung zurückgesetzt.', 'error');
+    console.error('[push] save failed', err);
+    return false;
   }
-  return t;
+  return true;
 }
 
 function _debouncedPushSave(partial, ms = 600) {
@@ -111,7 +71,7 @@ function _debouncedPushSave(partial, ms = 600) {
 let _pushDepsTimer = null;
 
 export function hydratePushUI() {
-  const cfg = _pushCfg();
+  const cfg = pushCfg();
   // ── "Wann senden" ────────────────────────────────────────────────────────
   const set = (id, prop, val) => {
     const el = byId(id);
@@ -180,7 +140,7 @@ function _updatePushNightModeUI() {
   if (timeRow) timeRow.style.display = useSun ? 'none' : 'grid';
   if (!sunInfo) return;
   if (useSun) {
-    const cfg = _pushCfg();
+    const cfg = pushCfg();
     const lat = cfg.night_alert?.lat,
       lon = cfg.night_alert?.lon;
     if (lat == null || lon == null) {
@@ -194,7 +154,16 @@ function _updatePushNightModeUI() {
   }
 }
 
+// Bind-once guards. hydratePushUI() re-renders and is now also called from
+// the save-failure rollback and after a preset — addEventListener would
+// stack a second, third, … handler on the same control each time, and each
+// duplicate would fire its own POST.
+let _pushHandlersBound = false;
+let _pushWeatherHandlersBound = false;
+
 function _bindPushHandlers() {
+  if (_pushHandlersBound) return;
+  _pushHandlersBound = true;
   // Top-level master switch.
   byId('push_enabled')?.addEventListener('change', (e) =>
     savePushCfg({ enabled: e.target.checked }),
@@ -277,7 +246,9 @@ function _bindPushHandlers() {
       if (!(await showConfirm('Aktuelle Push-Einstellungen überschreiben?'))) return;
       const preset = btn.dataset.preset;
       const block = _buildPushPreset(preset);
-      await savePushCfg(block);
+      // savePushCfg already rolls back and reports on failure — claiming
+      // "Preset angewendet" on top of that would be the second lie.
+      if (!(await savePushCfg(block))) return;
       hydratePushUI();
       showToast('Preset angewendet.', 'success');
     });
@@ -290,7 +261,7 @@ function _bindPushHandlers() {
 // Netz had learned or the operator had dragged — the same drift the
 // slider caused, just in one click instead of many.
 function _buildPushPreset(name) {
-  const def = _pushDefaults();
+  const def = pushDefaults();
   if (name === 'quiet') {
     return {
       enabled: true,
@@ -394,6 +365,8 @@ function _hydratePushWeather() {
 }
 
 function _bindPushWeatherHandlers() {
+  if (_pushWeatherHandlersBound) return;
+  _pushWeatherHandlersBound = true;
   byId('push_weather_enabled')?.addEventListener('change', (e) =>
     savePushCfg({ weather: { enabled: e.target.checked } }),
   );

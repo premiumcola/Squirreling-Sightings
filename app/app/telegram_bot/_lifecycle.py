@@ -451,18 +451,23 @@ class LifecycleMixin:
             self.schedule_daily(hh, mm, "tg_highlight", self._job_highlight)
         if pcfg.get("system", {}).get("enabled", True):
             self.schedule_interval(60, "tg_watchdog", self._job_watchdog)
-        # NETZ · the two jobs the Erkennungsnetz needs. Both are
-        # unconditional: the release is a no-op on an empty queue, and
-        # the learner's own rails (24 h per axis, 5 E points per run)
-        # are what bound it — not a config flag that could be off while
-        # the corpus fills.
+        # NETZ · the question release. Only ONE of the Erkennungsnetz's
+        # two jobs belongs on this scheduler, because sending a message
+        # is the whole of it; a no-op on an empty queue.
         #
-        # 07:00 first, matching the default end of quiet_hours: the
-        # questions held overnight are released as ONE message with one
-        # button, never as a digest of thumbnails.
+        # Everything above this line — including this job — is behind two
+        # early returns (`start()` on `not self.enabled`, and this method
+        # on `not push.enabled`). The nightly threshold learner used to
+        # sit here too and inherited both, so switching pushes off also
+        # switched off detection tuning for four months. It now runs on
+        # its own clock — thresholds/_nightly.py, registered from
+        # server.rebuild_services().
+        #
+        # 07:00, matching the default end of quiet_hours: the questions
+        # held overnight are released as ONE message with one button,
+        # never as a digest of thumbnails.
         hh, mm = _parse_hhmm((pcfg.get("quiet_hours") or {}).get("end", "07:00"))
         self.schedule_daily(hh, mm, "netz_question_release", self._job_question_release)
-        self.schedule_daily(3, 30, "netz_learner", self._job_netz_learner)
         try:
             jobs = [j.id for j in self._scheduler.get_jobs()]
             log.info("[tg] Registered jobs: %s", jobs)

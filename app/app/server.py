@@ -42,6 +42,7 @@ from .mqtt_service import MQTTService
 from .settings_store import SettingsStore
 from .storage import EventStore
 from .telegram_bot import TelegramService
+from .thresholds._nightly import register_nightly_jobs
 from .timelapse import TimelapseBuilder
 from .tracking_worker import build_worker as build_tracking_worker
 from .weather_service import WeatherService
@@ -381,6 +382,14 @@ def rebuild_services():
         weather_service.start()
     else:
         weather_service.reload(cfg.get("weather", {}), server_cfg=cfg.get("server", {}))
+    # NETZ · the nightly threshold learner, on a clock of its own. Not on
+    # Telegram's scheduler (gated on the bot being enabled AND pushes
+    # being on) and not on the weather service's (gated on weather being
+    # enabled and a location being set): adapting detection thresholds
+    # from the stored verdict corpus depends on neither service. Keyed by
+    # job id with replace_existing, so this call on every reload
+    # re-registers rather than adding a second 03:30 firing.
+    register_nightly_jobs()
     # Existing camera runtimes hold their own references to the previous
     # telegram_service / mqtt_service (assigned in __init__). After a pure
     # services reload (e.g. Telegram or MQTT credential change without a

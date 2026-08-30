@@ -313,33 +313,6 @@ class QuestionMixin:
         ss.runtime_set(_QUEUE_KEY, [])
         log.info("[tg] Nacht-Warteschlange freigegeben: %d Fragen", len(queue))
 
-    def _job_netz_learner(self) -> None:
-        """03:30 · the nightly run. Registered in ``register_default_jobs``.
-
-        Rebuilds the runtimes ONCE at the end rather than per class — a
-        rebuild per axis would restart every camera a dozen times in a
-        row for what is at most a handful of threshold changes.
-        """
-        if not self.settings_store:
-            return
-        try:
-            from ...thresholds._learner import run_pass
-
-            summary = run_pass(self._storage_root(), self.settings_store, self.push_cfg or {})
-        except Exception as e:
-            log.warning("[det] Netz-Nachtlauf fehlgeschlagen: %s", e)
-            return
-        if not summary.get("changed"):
-            return
-        try:
-            from ... import app_state
-
-            rebuild = getattr(app_state, "rebuild_runtimes", None)
-            if callable(rebuild):
-                rebuild()
-        except Exception as e:
-            log.warning("[det] rebuild_runtimes nach Netz-Lauf fehlgeschlagen: %s", e)
-
     def _netz_deep_link(self) -> str:
         """Through ``_dashboard_url`` like every other deep link here.
 

@@ -29,7 +29,7 @@ def build_cluster_evidence(entry: dict, cam: dict, obj_filter, ema_ms: float) ->
     return {
         "cluster1": _continuity(events),
         "cluster2": _per_class(class_log, obj_filter),
-        "cluster3": _off_filter(class_log),
+        "cluster3": _off_filter(class_log, cam.get("excluded_classes") or ()),
         "cluster4": _performance(entry, cam, ema_ms),
         "cluster5": {"events_60s": _event_rows(events, now)},
     }
@@ -74,11 +74,19 @@ def _per_class(class_log, obj_filter) -> dict:
     return {"per_class_60s_counts": per_class, "missing_classes_60s": missing}
 
 
-def _off_filter(class_log) -> dict:
-    """Cluster 3 · what the class filter dropped, per label."""
+def _off_filter(class_log, excluded=()) -> dict:
+    """Cluster 3 · what the class filter dropped, per label.
+
+    Labels already on ``excluded_classes`` are left out: these counts feed
+    the one-tap false-positive pills, and a pill offering to exclude a class
+    that IS excluded would invite the operator to tap the same button
+    forever. The pill has to disappear and stay gone — that is the whole
+    promise of "ein Tap entfernt sie aus der Detection-Pipeline".
+    """
+    denied = set(excluded)
     off_filter: dict = {}
     for _ts, lbl, verdict in class_log or []:
-        if verdict == "filtered":
+        if verdict == "filtered" and lbl not in denied:
             off_filter[lbl] = off_filter.get(lbl, 0) + 1
     return {"off_filter_60s_counts": off_filter}
 

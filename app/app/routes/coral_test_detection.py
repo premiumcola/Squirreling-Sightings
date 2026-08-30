@@ -372,6 +372,7 @@ def _build_diag(
             "per_class": dict(setup.label_thresholds),
         },
         "object_filter": sorted(setup.object_filter),
+        "excluded_classes": sorted(setup.excluded_classes),
         "validator_profile": (pick.profile.name if pick.profile else None),
         "validator_reason": pick.validator_reason or None,
         "source_frame_size": {"w": int(sim.frame_w), "h": int(sim.frame_h)},

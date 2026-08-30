@@ -66,6 +66,11 @@ class DetectionSetup:
     det_mode: str
     bottom_crop_px: int
     object_filter: frozenset
+    # The DENY half of the class gate, written by the Simulieren panel's
+    # false-positive pills. It had no reader at all: the pill vanished, the
+    # save round-tripped it back under "effective", and the class kept
+    # firing. See apply_object_filter for the precedence.
+    excluded_classes: frozenset
     label_thresholds: dict
     spawn_default: float
     floor: float
@@ -123,6 +128,7 @@ def build_detection_setup(
         det_mode=mode,
         bottom_crop_px=max(0, crop_px),
         object_filter=frozenset(cfg.get("object_filter") or ()),
+        excluded_classes=frozenset(cfg.get("excluded_classes") or ()),
         label_thresholds=dict(cfg.get("label_thresholds") or {}),
         spawn_default=tracks.spawn,
         floor=tracks.floor,
@@ -168,17 +174,38 @@ def apply_bottom_crop(frame, bottom_crop_px: int):
 # guard stays where it was: unreachable, and reported as such.
 
 
-def apply_object_filter(dets: list, allowed) -> tuple[list, list]:
-    """Class allow-list. Empty set means "every class passes"."""
-    if not allowed:
+def apply_object_filter(dets: list, allowed, excluded=frozenset()) -> tuple[list, list]:
+    """The class gate: an allow-list AND a deny-list, in that order.
+
+    ``allowed`` (``object_filter``) is the camera's "these are the classes
+    this camera is about". Empty means "every class passes".
+
+    ``excluded`` (``excluded_classes``) is the deny half, written one tap at
+    a time from the Simulieren panel's false-positive pills.
+
+    PRECEDENCE: an exclusion beats an inclusion, and it is applied whether
+    or not an allow-list exists. Two reasons. First, the two are not
+    symmetric statements: ``object_filter`` is usually a stale default
+    (``["person","cat","bird"]`` is seeded at camera creation and rarely
+    revisited), while an exclusion is an explicit act the operator performs
+    *after* watching the class fire — the more recent and the more specific
+    intent wins. Second, "no allow-list" means "allow everything", and if
+    that also silenced the deny-list then the operator's only tool against
+    a class drowning the pipeline (``book`` 379x, ``bench`` 71x) would stop
+    working on exactly the cameras that filter nothing. A class in both
+    lists is therefore dropped.
+    """
+    if not allowed and not excluded:
         return list(dets), []
     kept: list = []
     dropped: list = []
     for d in dets:
-        if d.label in allowed:
-            kept.append(d)
-        else:
+        if d.label in excluded:
+            dropped.append((d, f"Klasse '{d.label}' ist ausgeschlossen"))
+        elif allowed and d.label not in allowed:
             dropped.append((d, f"Klasse '{d.label}' nicht im Objektfilter"))
+        else:
+            kept.append(d)
     return kept, dropped
 
 

@@ -142,7 +142,7 @@ def test_the_cooldown_bounds_the_inference_rate(cam):
 
 def test_the_rescue_still_pays_one_inference_per_attempt(cam, frame):
     """Baseline for the cost claim: an attempt is not free."""
-    cam._roi_rescue(frame, [], _Blob(), "roi", allowed=set())
+    cam._roi_rescue(frame, [], _Blob(), "roi", allowed=set(), excluded=frozenset())
 
     assert cam.detector.calls == 1
     assert cam._roi_rescue_attempts == 1
@@ -152,7 +152,7 @@ def test_attempts_counts_inferences_not_frames(cam, frame):
     """`roi_rescue_attempts` must stay the number of re-detects actually
     paid for, so that a cooldown-skipped frame does not inflate it."""
     for _ in range(3):
-        cam._roi_rescue(frame, [], _Blob(), "roi", allowed=set())
+        cam._roi_rescue(frame, [], _Blob(), "roi", allowed=set(), excluded=frozenset())
 
     assert cam._roi_rescue_attempts == cam.detector.calls == 3
     assert cam._roi_rescue_hits == 0

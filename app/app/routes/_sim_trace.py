@@ -97,6 +97,15 @@ def config_lines(*, setup: DetectionSetup, sim: SimPass, mode_override: bool) ->
         f"[coral] roh {sim.raw_count} Detektion(en) · {sim.invokes} Inferenz(en) · "
         f"{sim.inference_ms} ms",
     ]
+    # Only when something IS excluded: the deny-list is the rare case, and
+    # a "(keiner)" line on every tick would be noise. When it is set it must
+    # be visible, because a silently-dropped class is exactly the symptom
+    # the panel exists to explain.
+    if setup.excluded_classes:
+        lines.append(
+            f"[coral] excluded_classes: {sorted(setup.excluded_classes)} — "
+            f"werden verworfen, auch wenn sie im object_filter stehen"
+        )
     sahi = sahi_trace_line(sim.sahi_diag or {"mode": "off"})
     if sahi:
         lines.append(sahi)
@@ -122,7 +131,8 @@ def gate_lines(*, cam: dict, setup: DetectionSetup, sim: SimPass, active_tracks:
     n_masks = len(cam.get("masks") or [])
     n_zones = len(cam.get("zones") or [])
     return [
-        f"[filter] {sim.count(VERDICT_FILTERED)} Box(en) durch object_filter verworfen",
+        f"[filter] {sim.count(VERDICT_FILTERED)} Box(en) durch den Klassenfilter "
+        f"(object_filter / excluded_classes) verworfen",
         f"[mask] {n_masks} Maske(n) konfiguriert · "
         f"{sim.count(VERDICT_MASKED)} Box(en) verworfen",
         f"[zone] {n_zones} Zone(n) konfiguriert · "

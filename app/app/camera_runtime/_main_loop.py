@@ -267,7 +267,8 @@ class MainLoopMixin:
                 self._inference_times_ms.append((time.time() - _t0) * 1000.0)
                 _fh_px, _fw_px = proc_frame.shape[:2]
                 allowed = setup.object_filter
-                detections, _ = apply_object_filter(list(raw_detections), allowed)
+                excluded = setup.excluded_classes
+                detections, _ = apply_object_filter(list(raw_detections), allowed, excluded)
                 # Exclusion mask first: drop detections inside masked
                 # regions before zone filtering or the tracker runs. A
                 # tracked subject must NOT survive into a masked region.
@@ -311,7 +312,7 @@ class MainLoopMixin:
                     # whether or not the rescue finds anything.
                     self._roi_rescue_last_ts = time.time()
                     detections = self._roi_rescue(
-                        proc_frame, raw_detections, _coherent_blob, det_mode, allowed
+                        proc_frame, raw_detections, _coherent_blob, det_mode, allowed, excluded
                     )
                 # Effective fps for grace-window math. Falls back to a
                 # conservative 3 Hz when the rolling measurement hasn't

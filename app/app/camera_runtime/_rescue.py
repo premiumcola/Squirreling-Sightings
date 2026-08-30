@@ -150,7 +150,7 @@ class RescueMixin:
         """
         return (now - getattr(self, "_roi_rescue_last_ts", 0.0)) >= _RESCUE_MIN_INTERVAL_S
 
-    def _roi_rescue(self, proc_frame, raw_detections, blob, det_mode, allowed):
+    def _roi_rescue(self, proc_frame, raw_detections, blob, det_mode, allowed, excluded):
         """D2 · magnified re-detect around a coherent motion blob.
 
         Returns the detection list the rest of the frame should work with.
@@ -174,8 +174,10 @@ class RescueMixin:
             full_dets=raw_detections,
         )
         # Same gate order as the full-frame path: class filter, then mask,
-        # then zones.
-        roi_dets, _ = apply_object_filter(roi_dets, allowed)
+        # then zones. Both halves of the class gate travel together — a
+        # magnified re-detect that resurrected an excluded class would be
+        # the exclusion's only leak.
+        roi_dets, _ = apply_object_filter(roi_dets, allowed, excluded)
         roi_dets = self._filter_masked_detections(proc_frame, roi_dets)
         roi_dets = self._filter_zoned_detections(proc_frame, roi_dets)
         # Only boxes that came out of a magnified region are "via roi" — the

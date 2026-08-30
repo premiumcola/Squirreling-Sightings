@@ -151,7 +151,7 @@ def test_the_rescue_reuses_the_full_frame_pass_it_was_handed(frame):
     det = _FakeDetector()
     cam = _Cam(det)
 
-    cam._roi_rescue(frame, already, _Blob(), "roi", allowed=set())
+    cam._roi_rescue(frame, already, _Blob(), "roi", allowed=set(), excluded=frozenset())
 
     assert len(det.calls) == 1, "the crop only"
     assert cam._roi_rescue_attempts == 1
@@ -165,7 +165,7 @@ def test_a_rescue_that_finds_nothing_new_is_not_counted_as_a_hit(frame):
     already = [_Det("cat", 0.30, (100, 100, 260, 240))]
     cam = _Cam(_FakeDetector())
 
-    out = cam._roi_rescue(frame, already, _Blob(), "roi", allowed=set())
+    out = cam._roi_rescue(frame, already, _Blob(), "roi", allowed=set(), excluded=frozenset())
 
     assert cam._roi_rescue_attempts == 1
     assert cam._roi_rescue_hits == 0
@@ -178,7 +178,7 @@ def test_a_real_rescue_counts_and_is_marked_via_roi(frame):
     det = _FakeDetector(per_call=[[_Det("squirrel", 0.76, (20, 20, 120, 110))]])
     cam = _Cam(det)
 
-    out = cam._roi_rescue(frame, already, _Blob(), "roi", allowed=set())
+    out = cam._roi_rescue(frame, already, _Blob(), "roi", allowed=set(), excluded=frozenset())
 
     gained = [d for d in out if getattr(d, "via_roi", False)]
     assert cam._roi_rescue_hits == 1
@@ -190,7 +190,7 @@ def test_the_object_filter_still_applies_to_rescued_boxes(frame):
     det = _FakeDetector(per_call=[[_Det("squirrel", 0.76, (20, 20, 120, 110))]])
     cam = _Cam(det)
 
-    out = cam._roi_rescue(frame, [], _Blob(), "roi", allowed={"bird"})
+    out = cam._roi_rescue(frame, [], _Blob(), "roi", allowed={"bird"}, excluded=frozenset())
 
     assert out == []
     assert cam._roi_rescue_hits == 0

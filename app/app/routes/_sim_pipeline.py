@@ -287,7 +287,7 @@ def run_gates(cam_cfg: dict, proc_frame, raw: list, setup: DetectionSetup):
     cache = sim_mask_zones(setup.camera_id)
     cfg = cam_cfg or {}
 
-    kept, filter_drops = apply_object_filter(list(raw), setup.object_filter)
+    kept, filter_drops = apply_object_filter(list(raw), setup.object_filter, setup.excluded_classes)
     for d, reason in filter_drops:
         drops.append((d, VERDICT_FILTERED, reason))
 

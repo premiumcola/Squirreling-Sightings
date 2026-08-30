@@ -47,6 +47,7 @@ import { _exitMediaSelectMode, _updateMediaSelectToggle } from './bulk-delete.js
 import { loadMedia } from './media-loader.js';
 import { renderMediaFilterPills, _seedTopMediaLabel, _pruneEmptyMediaFilters } from './filters.js';
 import { openLightbox } from '../lightbox.js';
+import { primaryLabel } from '../core/primary-label.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import {
   isActivelyPending,
@@ -208,8 +209,11 @@ export function mediaCardHTML(item) {
   const playBg = hexToRgba(accent, 0.18);
   const playBorder = hexToRgba(accent, 0.5);
   const subBadge = `${subBadgeBase};color:${accent}`;
-  // Pick most-specific label (first non-motion) for the top-left badge; fall back to motion
-  const _badgeLabel = (item.labels || []).find((l) => l && l !== 'motion') || 'motion';
+  // Top-left badge names the event's ONE triggering label — same helper
+  // the recorded bbox overlay's class filter now uses (core/primary-label.js,
+  // mirrors app/app/labels.py::primary_label()) so the badge and the boxes
+  // that draw over the video always name the same subject.
+  const _badgeLabel = primaryLabel(item.labels);
   const _badgeColor = colors[_badgeLabel] || colors.motion || '#93c5fd';
   // When the bird classifier has identified a species, show it instead of the
   // generic "Vogel" — keeps bird colour + icon but tells the user what kind.

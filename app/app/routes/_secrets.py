@@ -35,6 +35,8 @@ ever making the round trip.
 
 from __future__ import annotations
 
+from urllib.parse import quote, unquote
+
 # Secrets that must never appear in a camera dict leaving the process.
 CAMERA_SECRET_KEYS = ("password",)
 # Camera fields that may carry an embedded ``user:password@`` userinfo.
@@ -63,8 +65,24 @@ def _split_url(url: str) -> tuple[str, str, str, str] | None:
 
 
 def _join_url(scheme: str, user: str, password: str, host: str) -> str:
+    """Re-assemble, percent-encoding the password.
+
+    THE BUG THIS FIXES: an RTSP password routinely contains ``@``, ``:``
+    or ``/``. Written raw into the userinfo those characters ARE the URL
+    syntax — ffmpeg parses ``rtsp://admin:p@ss@host/x`` as host ``ss`` and
+    fails with "Port missing in uri", so the camera simply never opens.
+    Before the redaction refactor the browser sent an already-encoded URL
+    (``_rtspEnc`` in camedit/discovery.js); once the server started
+    re-inserting the stored password itself, nothing encoded it.
+
+    ``safe=""`` because every reserved character is unsafe HERE — this is
+    userinfo, not a path. The mask string is passed through untouched: it
+    is display-only and must stay readable as dots.
+    """
     if not user:
         return f"{scheme}://{host}"
+    if password and password != _MASK:
+        password = quote(password, safe="")
     creds = f"{user}:{password}" if password else user
     return f"{scheme}://{creds}@{host}"
 
@@ -110,6 +128,38 @@ def set_url_password(url: str, password: str) -> str:
     if not user or existing:
         return url
     return _join_url(scheme, user, password, host)
+
+
+def reencode_url_password(url: str, password: str) -> str:
+    """Percent-encode an embedded password that was written raw.
+
+    Only touches the URL when its embedded secret IS ``password`` — the
+    same credential, merely unencoded. A URL deliberately pointing at a
+    DIFFERENT account (a read-only snapshot viewer, say) keeps its own
+    credentials: that is a documented, tested behaviour and not something
+    a repair pass may quietly overwrite.
+    """
+    parts = _split_url(url)
+    if parts is None:
+        return url
+    _scheme, user, existing, _host = parts
+    if not user or not existing or not password:
+        return url
+    if unquote(existing) != password:
+        return url
+    return set_url_password(strip_url_password(url), password)
+
+
+def url_password(url: str) -> str:
+    """The DECODED password embedded in ``url``, or ``""``.
+
+    The inverse of what ``_join_url`` writes, so a round trip through a
+    stored URL returns the password the operator actually typed.
+    """
+    parts = _split_url(url)
+    if parts is None:
+        return ""
+    return unquote(parts[2] or "")
 
 
 def redact_secrets(section: dict | None, keys: tuple[str, ...]) -> dict:
@@ -173,5 +223,11 @@ def merge_camera_secrets(payload: dict, stored: dict | None) -> dict:
     payload["password"] = password
     for key in CAMERA_URL_KEYS:
         if key in payload:
-            payload[key] = set_url_password(payload.get(key) or "", password)
+            url = payload.get(key) or ""
+            # Two distinct jobs: put the secret back into the
+            # credential-free URL the browser was given, and repair a
+            # stored URL whose password was written raw before this was
+            # encoded. Neither may disturb a URL carrying a DIFFERENT
+            # account's credentials.
+            payload[key] = reencode_url_password(set_url_password(url, password), password)
     return payload

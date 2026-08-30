@@ -515,3 +515,41 @@ def migrate_runtime_defaults(data: dict) -> None:
     rt.setdefault("alert_index", {})
     rt.setdefault("last_storage_warn_ts", 0)
     rt.setdefault("last_coral_state", "")
+
+
+def migrate_rtsp_password_encoding(data: dict) -> None:
+    """Percent-encode passwords sitting raw inside stored camera URLs.
+
+    An RTSP password routinely contains ``@``, ``:`` or ``/``. Written raw
+    into a URL's userinfo those characters ARE the syntax: ffmpeg reads
+    ``rtsp://admin:p@ss@host/x`` as host ``ss`` and refuses the stream
+    with "Port missing in uri", so the camera never opens and the live
+    tile shows KEIN SIGNAL. The browser used to send an already-encoded
+    URL; when the credential-redaction refactor moved URL assembly to the
+    server, nothing encoded it any more and every camera whose password
+    held a reserved character stopped connecting.
+
+    Rewrites only the userinfo, only when re-encoding actually changes the
+    string, and only when the camera has a stored password to put back —
+    so a correctly-encoded URL, a credential-free one and a camera with no
+    password are all left exactly as they are.
+    """
+    from ..routes._secrets import CAMERA_URL_KEYS, reencode_url_password
+
+    fixed = 0
+    for cam in data.get("cameras") or []:
+        if not isinstance(cam, dict):
+            continue
+        password = cam.get("password") or ""
+        if not password:
+            continue
+        for key in CAMERA_URL_KEYS:
+            url = cam.get(key) or ""
+            if not url:
+                continue
+            repaired = reencode_url_password(url, password)
+            if repaired != url:
+                cam[key] = repaired
+                fixed += 1
+    if fixed:
+        log.info("[migration] %d Kamera-URL(s) mit kodiertem Passwort neu geschrieben", fixed)

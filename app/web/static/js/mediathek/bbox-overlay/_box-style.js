@@ -1,11 +1,12 @@
 // ─── mediathek/bbox-overlay/_box-style.js ──────────────────────────────────
 // Pure per-box style + label-text resolution — the ONE place that turns
 // (sample, trackColor, status, masked, trackNum) into paintable parameters.
-// Both the canvas box painter (_canvas-shapes.js) and the SVG box painter
-// (svg-boxes.js) read from here so the two surfaces can never drift —
-// mirrors canvas/trail-layer.js's buildTrailPoints -> {drawTrailPolyline,
-// buildTrailSvg} split: one shared geometry/style helper, thin per-surface
-// paint code.
+// The SVG box painter (svg-boxes.js) reads from here; it briefly shared
+// this module with a canvas box painter (_canvas-shapes.js, retired once
+// boxes moved fully to SVG — see git log) so a future second surface can
+// reuse it the same way — mirrors canvas/trail-layer.js's buildTrailPoints
+// -> {drawTrailPolyline, buildTrailSvg} split: one shared geometry/style
+// helper, thin per-surface paint code.
 //
 // Status dash/alpha/marker come from mediaview/status-legend.js's
 // MV_STATUS_STYLE, resolved via its mvStatusCategory() — the fold that

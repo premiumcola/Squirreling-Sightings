@@ -39,13 +39,12 @@ from ._node_js import run_js as _js
 pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 
 _JS_DIR = Path(__file__).resolve().parents[1] / "web" / "static" / "js"
-_BOX_STYLE = (_JS_DIR / "mediathek" / "bbox-overlay" / "_box-style.js").read_text(
-    encoding="utf-8"
-)
+_BOX_STYLE = (_JS_DIR / "mediathek" / "bbox-overlay" / "_box-style.js").read_text(encoding="utf-8")
 _RENDERER = (_JS_DIR / "mediathek" / "bbox-overlay" / "renderer.js").read_text(encoding="utf-8")
 _CLASSFILTER = (_JS_DIR / "mediathek" / "bbox-overlay" / "_classfilter.js").read_text(
     encoding="utf-8"
 )
+_SVG_BOXES = (_JS_DIR / "mediathek" / "bbox-overlay" / "svg-boxes.js").read_text(encoding="utf-8")
 
 
 # ── 1 · the status-legend fold ──────────────────────────────────────────
@@ -121,6 +120,92 @@ def test_classfilter_does_not_narrow_a_motion_only_event():
 def test_classfilter_uses_the_shared_primary_label_helper():
     assert "primaryLabel" in _CLASSFILTER
     assert "core/primary-label.js" in _CLASSFILTER
+
+
+# ── 3 · the SVG box painter ──────────────────────────────────────────────
+
+
+def test_svg_boxes_reuses_the_shared_fit_helper_not_a_second_copy():
+    """The audit flagged renderer.js's inline letterbox math as a
+    duplicate of core/video-fit.js's fittedRect(). Both the canvas prep
+    (renderer.js) and the SVG painter must import fittedRect rather than
+    re-deriving the scale/offset formula."""
+    assert "fittedRect" in _SVG_BOXES
+    assert "core/video-fit.js" in _SVG_BOXES
+    assert "fittedRect" in _RENDERER
+    assert "core/video-fit.js" in _RENDERER
+
+
+def test_svg_box_group_has_a_rect_and_a_label_plate():
+    """One track, one <g> with a stroked <rect> (the box) plus a filled
+    <rect> + <text> (the pill) — mirrors live-detect-bbox-shapes.js's
+    _buildBboxGroup output shape, just with recorded's own pill text
+    convention (marker + #num + pct, no class name)."""
+    out = _js(
+        """
+        const mod = await import(JS + '/mediathek/bbox-overlay/svg-boxes.js');
+
+        function fakeEl() {
+          const el = { style: {}, dataset: {}, parentNode: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }),
+            setAttribute() {}, appendChild() {} };
+          return el;
+        }
+        const wrap = fakeEl();
+        const media = Object.assign(fakeEl(), { videoWidth: 800, videoHeight: 600 });
+        let created = null;
+        document.createElementNS = () => { created = fakeEl(); created.innerHTML = ''; return created; };
+        document.getElementById = (id) => (id === 'lightboxBboxSvg' ? created : null);
+
+        const sample = { bbox: { x1: 100, y1: 100, x2: 300, y2: 400 }, score: 0.82 };
+        mod.drawTrackBoxesSvg(media, wrap, 800, 600, [
+          { sample, trackColor: '#22c55e', status: 'weak', masked: false, trackNum: 3 },
+        ]);
+        console.log(JSON.stringify({
+          rectCount: (created.innerHTML.match(/<rect/g) || []).length,
+          hasTextEl: created.innerHTML.includes('<text'),
+          hasDash: created.innerHTML.includes('stroke-dasharray="6 4"'),
+          hasNonScaling: created.innerHTML.includes('vector-effect="non-scaling-stroke"'),
+          labelText: /<text[^>]*>([^<]+)<\\/text>/.exec(created.innerHTML)[1],
+        }));
+        """
+    )
+    assert out["rectCount"] == 2, "expected the box rect + the pill background rect"
+    assert out["hasTextEl"] is True
+    assert out["hasDash"] is True, "weak status must paint a dashed stroke"
+    assert out["hasNonScaling"] is True, "stroke must not thicken when the viewBox scales"
+    assert out["labelText"] == "↓ #3 · 82%"
+
+
+def test_svg_positioned_via_the_letterboxed_media_rect():
+    """A 800x600 source letterboxed into a 400x300 host at (10,20) must
+    position/size the SVG to the fitted rect, not the raw host box."""
+    out = _js(
+        """
+        const mod = await import(JS + '/mediathek/bbox-overlay/svg-boxes.js');
+
+        function fakeEl(rect) {
+          return { style: {}, dataset: {}, parentNode: null,
+            getBoundingClientRect: () => rect,
+            setAttribute() {}, appendChild() {} };
+        }
+        const wrap = fakeEl({ left: 10, top: 20, width: 400, height: 300 });
+        const media = Object.assign(fakeEl({ left: 10, top: 20, width: 400, height: 300 }),
+          { videoWidth: 800, videoHeight: 600 });
+        let created = null;
+        document.createElementNS = () => { created = fakeEl({}); created.innerHTML = ''; return created; };
+        document.getElementById = (id) => (id === 'lightboxBboxSvg' ? created : null);
+
+        mod.drawTrackBoxesSvg(media, wrap, 800, 600, []);
+        console.log(JSON.stringify({
+          left: created.style.left, top: created.style.top,
+          width: created.style.width, height: created.style.height,
+        }));
+        """
+    )
+    # 800x600 into 400x300 host → scale 0.5, fits exactly (same 4:3 aspect),
+    # so no letterbox gutter and the rect covers the whole host.
+    assert out == {"left": "0px", "top": "0px", "width": "400px", "height": "300px"}
 
 
 def test_primary_label_mirrors_the_python_vocabulary():

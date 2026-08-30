@@ -45,16 +45,21 @@ export function _updateLbConfirmBtn(confirmed) {
   }
 }
 
-// Clear the bbox-overlay canvas without redrawing. Used when the
-// lightbox switches between media or closes; the resize/load hooks in
-// legacy.js call _lbDrawDetections again next paint if we're still
-// open.
+// Clear the bbox-overlay layers without redrawing — the canvas (trails)
+// AND its SVG sibling (boxes, mediathek/bbox-overlay/svg-boxes.js). Used
+// when the lightbox switches between media or closes; the resize/load
+// hooks in legacy.js call _lbDrawDetections again next paint if we're
+// still open. Clears the SVG by plain byId lookup rather than importing
+// svg-boxes.js — this file stays a dependency-free pure-DOM helper.
 export function _lbClearDetections() {
   const cv = byId('lightboxDetections');
-  if (!cv) return;
-  const ctx = cv.getContext('2d');
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (cv) {
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+  }
+  const svg = byId('lightboxBboxSvg');
+  if (svg) svg.innerHTML = '';
 }
 
 // Reset the lightbox to photo mode — pause + drop any video src,

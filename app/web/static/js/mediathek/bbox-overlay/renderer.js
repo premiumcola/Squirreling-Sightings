@@ -1,27 +1,28 @@
 // ─── mediathek/bbox-overlay/renderer.js ────────────────────────────────────
-// Canvas-overlay renderer + per-track interpolation helpers. The MP4 is
-// NEVER modified; this paints a separate canvas on top of the media
-// element. Track colours come from the deterministic tracks.json
-// palette so multiple subjects in one clip get distinguishable strokes.
+// Overlay renderer + per-track interpolation helpers. The MP4 is NEVER
+// modified; this paints a separate canvas (trails) + SVG (boxes) on top
+// of the media element. Track colours come from the deterministic
+// tracks.json palette so multiple subjects in one clip get distinguishable
+// strokes.
 //
 // This file is the ORCHESTRATOR — per-render setup + branch selection.
-// The actual painting primitives live in ./_canvas-shapes.js (canvas box
-// drawing), the label-visibility gate in ./_classfilter.js, and shared
-// style/text resolution in ./_box-style.js — split out so this file and
-// its functions stay under CLAUDE.md's size ceilings.
+// The label-visibility gate lives in ./_classfilter.js; the SVG box
+// painter in ./svg-boxes.js; shared box style/text resolution in
+// ./_box-style.js — split out so this file and its functions stay under
+// CLAUDE.md's size ceilings.
 import { byId } from '../../core/dom.js';
 import { state } from '../../core/state.js';
 import { colors } from '../../core/icons.js';
 import { _lbClearDetections } from '../../lightbox.js';
 import { lbState } from '../state.js';
+import { fittedRect } from '../../core/video-fit.js';
 import { _TRACK_SPAWN_SCORE } from './_state.js';
 import { _isReindexBannerActive } from './reindex.js';
 import { renderTrailLayer } from '../../mediaview/canvas/trail-layer.js';
 import { _pointInPoly, _polyPoints } from '../../shape-editor/geometry.js';
 import { normalizePolygon } from '../../core/polygon-source.js';
 import { _makeLabelVisibleFn } from './_classfilter.js';
-import { drawTrackBoxCanvas } from './_canvas-shapes.js';
-import { resolveBoxStyle } from './_box-style.js';
+import { clearBboxSvg, drawTrackBoxesSvg } from './svg-boxes.js';
 
 // Bbox + trail visibility — flipped by the overlay-toggles pill bar
 // (bboxes/trails). Module-scoped so the RAF redraw loop and the
@@ -126,8 +127,11 @@ function _resolveActiveMedia() {
 
 // Size the canvas to the wrap's CSS box (accounting for devicePixelRatio)
 // and compute the letterbox offset/scale that maps SOURCE pixel coords
-// (tracks.json bbox space) onto the canvas.
-function _prepCanvasTransform(cv, wrap, media, natW, natH) {
+// (tracks.json bbox space) onto the canvas. Reuses core/video-fit.js's
+// fittedRect() for the letterbox math — the SVG box layer (svg-boxes.js)
+// needs the SAME rect, so resolving it via the shared helper instead of
+// a second inline computation keeps the two surfaces from drifting.
+function _prepCanvasTransform(cv, wrap, media, natW) {
   const ctx = cv.getContext('2d');
   const wrapRect = wrap.getBoundingClientRect();
   const mediaRect = media.getBoundingClientRect();
@@ -138,11 +142,10 @@ function _prepCanvasTransform(cv, wrap, media, natW, natH) {
   cv.height = Math.round(wrapRect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, wrapRect.width, wrapRect.height);
-  const scale = Math.min(mediaRect.width / natW, mediaRect.height / natH);
-  const renderedW = natW * scale,
-    renderedH = natH * scale;
-  const offX = (mediaRect.width - renderedW) / 2 + (mediaRect.left - wrapRect.left);
-  const offY = (mediaRect.height - renderedH) / 2 + (mediaRect.top - wrapRect.top);
+  const fit = fittedRect(media);
+  const scale = natW > 0 ? fit.w / natW : 1;
+  const offX = fit.x + (mediaRect.left - wrapRect.left);
+  const offY = fit.y + (mediaRect.top - wrapRect.top);
   return { ctx, offX, offY, scale };
 }
 
@@ -153,9 +156,10 @@ function _prepCanvasTransform(cv, wrap, media, natW, natH) {
 // returns null outside the track's [first.t, last.t] window — the track
 // simply doesn't paint until its first sample is reached.
 //
-// Trails paint first so the bbox stroke sits on top — visually anchors
-// the leading dot to the box.
-function _drawTracksBranch(tracks, ctx, videoEl, usingVideo, geom, natW, natH, threshold, isVisible) {
+// Trails (canvas) paint first, boxes (SVG, higher z-index) on top —
+// visually anchors the leading dot to the box.
+function _drawTracksBranch(tracks, ctx, frame) {
+  const { media, wrap, videoEl, usingVideo, geom, natW, natH, threshold, isVisible } = frame;
   const { offX, offY, scale } = geom;
   const t = usingVideo ? videoEl.currentTime || 0 : null;
   if (_overlayVisibility.showTrails && t != null) {
@@ -165,6 +169,7 @@ function _drawTracksBranch(tracks, ctx, videoEl, usingVideo, geom, natW, natH, t
     }
   }
   const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
+  const boxes = [];
   if (_overlayVisibility.showBboxes) {
     for (const tr of tracks.tracks) {
       if (!isVisible(tr.label)) continue;
@@ -172,30 +177,36 @@ function _drawTracksBranch(tracks, ctx, videoEl, usingVideo, geom, natW, natH, t
       if (!sample) continue;
       const status = _classifyTrackStatus(tr, sample, threshold);
       const masked = _isSampleMasked(sample, natW, natH, camMasks);
-      const style = resolveBoxStyle(sample, tr.color, status, masked, tr._num);
-      drawTrackBoxCanvas(ctx, sample, offX, offY, scale, style, masked);
+      boxes.push({ sample, trackColor: tr.color, status, masked, trackNum: tr._num });
     }
   }
+  drawTrackBoxesSvg(media, wrap, natW, natH, boxes);
 }
 
 // Legacy single-bbox fallback for clips with no sidecar yet (404 /
 // pending fetch). Caller (_lbDrawDetections) already gates this on the
 // reindex banner + playback state — see its comments for why.
-function _drawLegacyFallback(ctx, geom, natW, natH, threshold, isVisible) {
-  const { offX, offY, scale } = geom;
+function _drawLegacyFallback(frame) {
+  const { media, wrap, natW, natH, threshold, isVisible } = frame;
   const dets = (lbState.item.detections || [])
     .filter((d) => d && d.bbox && typeof d.bbox.x1 === 'number')
     .filter((d) => isVisible(d.label));
-  if (!dets.length) return;
-  const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
-  for (const d of dets) {
-    const c = colors[d.label] || colors.unknown;
-    const sample = { bbox: d.bbox, score: d.score, label: d.label };
-    const status = _classifyTrackStatus(null, sample, threshold);
-    const masked = _isSampleMasked(sample, natW, natH, camMasks);
-    const style = resolveBoxStyle(sample, c, status, masked, null);
-    drawTrackBoxCanvas(ctx, sample, offX, offY, scale, style, masked);
+  if (!dets.length) {
+    drawTrackBoxesSvg(media, wrap, natW, natH, []);
+    return;
   }
+  const camMasks = _resolveMaskPolygonsForCam(lbState.item?.camera_id);
+  const boxes = dets.map((d) => {
+    const sample = { bbox: d.bbox, score: d.score, label: d.label };
+    return {
+      sample,
+      trackColor: colors[d.label] || colors.unknown,
+      status: _classifyTrackStatus(null, sample, threshold),
+      masked: _isSampleMasked(sample, natW, natH, camMasks),
+      trackNum: null,
+    };
+  });
+  drawTrackBoxesSvg(media, wrap, natW, natH, boxes);
 }
 
 export function _lbDrawDetections() {
@@ -208,7 +219,7 @@ export function _lbDrawDetections() {
     return;
   }
   const { media, videoEl, usingVideo, natW, natH } = active;
-  const geom = _prepCanvasTransform(cv, wrap, media, natW, natH);
+  const geom = _prepCanvasTransform(cv, wrap, media, natW);
   const { ctx } = geom;
 
   const tracks = lbState.item._tracks;
@@ -224,33 +235,62 @@ export function _lbDrawDetections() {
       ? tracks.gates.min_confidence
       : _TRACK_SPAWN_SCORE;
   const isVisible = _makeLabelVisibleFn();
+  const frame = {
+    media,
+    wrap,
+    videoEl,
+    usingVideo,
+    geom,
+    natW,
+    natH,
+    threshold: spawnThreshold,
+    isVisible,
+  };
 
   if (haveTracks) {
-    _drawTracksBranch(tracks, ctx, videoEl, usingVideo, geom, natW, natH, spawnThreshold, isVisible);
+    _drawTracksBranch(tracks, ctx, frame);
     return;
   }
+  _drawNoTracksBranch(frame, sidecarFetched, sidecarEmpty);
+}
 
-  // Indexer ran and produced an empty sidecar → keep the canvas clean.
+// No real tracks.json tracks for this clip — either the sidecar was
+// fetched and came back empty, or it hasn't landed yet (legacy fallback
+// territory). Each early-out clears the SVG box layer so a stale box
+// from the previously-open item can't linger.
+function _drawNoTracksBranch(frame, sidecarFetched, sidecarEmpty) {
+  const { videoEl, usingVideo } = frame;
+  // Indexer ran and produced an empty sidecar → keep the overlay clean.
   // Showing the trigger-frame detection here would be a stationary,
   // mis-positioned box that pops in only on scrub, with no relationship
   // to where the subject actually was during the recorded clip. The
   // timeline panel surfaces the WHY (gate values + filter) so the
   // operator understands the empty state without a misleading box.
-  if (sidecarFetched && sidecarEmpty) return;
-
+  if (sidecarFetched && sidecarEmpty) {
+    clearBboxSvg();
+    return;
+  }
   // Suppressed entirely while the reindex banner is active (avoids
   // staring at the same trigger-frame box for ~17 s) and during active
   // playback (the trigger bbox is one moment in time; painting it during
   // motion would lie about subject location). Pause / ended / still-
   // image branches paint the box back at the trigger position so the
   // user has SOMETHING to see before the indexer finishes.
-  if (_isReindexBannerActive()) return;
+  if (_isReindexBannerActive()) {
+    clearBboxSvg();
+    return;
+  }
   const isPlaying =
     usingVideo && !videoEl.paused && !videoEl.ended && (videoEl.currentTime || 0) > 0.05;
-  if (isPlaying) return;
-  if (!_overlayVisibility.showBboxes) return;
-
-  _drawLegacyFallback(ctx, geom, natW, natH, spawnThreshold, isVisible);
+  if (isPlaying) {
+    clearBboxSvg();
+    return;
+  }
+  if (!_overlayVisibility.showBboxes) {
+    clearBboxSvg();
+    return;
+  }
+  _drawLegacyFallback(frame);
 }
 
 // Ground point = bottom-center of bbox. A subject is considered

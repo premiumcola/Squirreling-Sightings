@@ -38,13 +38,11 @@ class RecordingStepMixin:
 
         Returns True when the caller must ``continue``.
         """
-        # Measure main-stream FPS over a rolling 5 s window.
-        self._main_fps_frames += 1
-        _fps_el = time.time() - self._main_fps_window_start
-        if _fps_el >= 5.0:
-            self._main_fps = round(self._main_fps_frames / _fps_el, 1)
-            self._main_fps_frames = 0
-            self._main_fps_window_start = time.time()
+        # No FPS accounting here. This method runs on a strictly smaller
+        # set of iterations than the loop it is called from (snapshot
+        # cameras never reach it, and the recording-block gate skips it on
+        # motion frames), so a rate counted here understates the loop the
+        # tracker ticks in — see _cadence.py.
         # Clip boundary knobs (configurable); ffmpeg stream-copy ignores
         # the pre-buffer, so it is only filled on the OpenCV fallback path.
         _proc = self.global_cfg.get("processing") or {}

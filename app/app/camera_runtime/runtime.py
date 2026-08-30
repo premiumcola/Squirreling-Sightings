@@ -25,6 +25,7 @@ from ..detectors import (
     WildlifeClassifier,
 )
 from ..tracker_core import LiveTracker, resolve_track_thresholds
+from ._cadence import LoopCadenceMixin
 from ._capture import CaptureMixin
 from ._consts import log  # noqa: F401  (kept for parity with original module log binding)
 from ._lifecycle import LifecycleMixin
@@ -123,6 +124,7 @@ class CameraRuntime(
     MotionMixin,
     RecordingMixin,
     RecordingStepMixin,
+    LoopCadenceMixin,
     RescueMixin,
     LoopStagesMixin,
     TimelapseMixin,
@@ -208,10 +210,15 @@ class CameraRuntime(
         self._ffmpeg_start_time: datetime | None = None
         self._rec_event_id: str | None = None  # event_id of the currently-recording clip
         self._prev_good_frame = None  # last accepted frame (MAD reference)
-        # Main-stream FPS measurement (rolling 5s window)
+        # Main-loop tick rate (rolling 5 s window, monotonic) — measured by
+        # LoopCadenceMixin on the loop's own tick, next to the tracker step
+        # whose seconds→ticks grace conversion consumes it.
         self._main_fps: float = 0.0
         self._main_fps_frames: int = 0
-        self._main_fps_window_start: float = time.time()
+        # Both None until the loop's first tick — the gap between
+        # construction and the first frame is startup, not cadence.
+        self._main_fps_window_start: float | None = None
+        self._main_fps_last_tick: float | None = None
         proc = self.global_cfg.get("processing", {})
         self.detector = CoralObjectDetector(proc.get("detection", {}))
         # N-of-M confirmation gate — per-runtime instance so its state

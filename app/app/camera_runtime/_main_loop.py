@@ -314,10 +314,14 @@ class MainLoopMixin:
                     detections = self._roi_rescue(
                         proc_frame, raw_detections, _coherent_blob, det_mode, allowed, excluded
                     )
-                # Effective fps for grace-window math. Falls back to a
-                # conservative 3 Hz when the rolling measurement hasn't
-                # warmed up yet (first ~5 s of a camera's session).
-                _eff_fps = max(1.0, float(getattr(self, "_main_fps", 0.0) or 3.0))
+                # Effective fps for grace-window math, counted on THIS
+                # tick so it describes the loop the tracker runs in — see
+                # _cadence.py for why the recording step was the wrong
+                # place to count it. No 1.0 floor: a genuinely sub-1 Hz
+                # snapshot camera must be allowed to say so, and
+                # compute_miss_grace_samples already floors the resulting
+                # sample count at 1.
+                _eff_fps = self._tick_loop_cadence(interval)
                 detections = self._tracker.step(
                     detections,
                     t_s=time.monotonic(),

@@ -61,6 +61,7 @@ import './weather/stats.js'; // stage 24 A
 import './weather/sightings.js'; // stage 24 B
 import './weather/settings.js'; // stage 24 C
 import './weather/maintenance.js'; // rescan + thumb regen
+import './weather/_manual-event-save.js'; // drag-zoom "als Ereignis speichern" form
 import './storms/index.js'; // Gewitter-Archiv (storm episodes)
 import './netz/index.js'; // Erkennungsnetz + Verlaufs-Archiv
 import './camedit/coral-test.js'; // stage 25 A

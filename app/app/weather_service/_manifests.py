@@ -242,6 +242,28 @@ class ManifestsMixin:
             log.info("[weather] delete %s: nothing on disk — treated as already-gone", sighting_id)
         return True
 
+    def set_sighting_pinned(self, sighting_id: str, pinned: bool) -> bool:
+        """Toggle the "keep forever" flag on one sighting's manifest.
+
+        ``pinned: true`` means the nightly weather retention sweep
+        (weather_service/_retention.py) skips this sighting regardless
+        of age — the pin icon on the card. Read-modify-write on the
+        single manifest JSON; sidecar files (mp4/jpg) are untouched.
+        Returns False when the manifest can't be found or parsed.
+        """
+        path = self._manifest_path_for(sighting_id)
+        if not path or not path.exists():
+            return False
+        try:
+            m = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            log.warning("[weather] pin toggle: unreadable manifest %s: %s", sighting_id, e)
+            return False
+        m["pinned"] = bool(pinned)
+        _atomic_write_json(path, m)
+        log.info("[weather] %s: %s", sighting_id, "angepinnt" if pinned else "Pin entfernt")
+        return True
+
     def _manifest_path_for(self, sighting_id: str) -> Path | None:
         # ID shape: <cam_id>__<event>__<ts_label>
         try:

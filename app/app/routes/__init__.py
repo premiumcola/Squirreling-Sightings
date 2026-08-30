@@ -85,6 +85,7 @@ def register_blueprints(app) -> None:
         weather,
         weather_episodes,
         weather_manual_events,
+        weather_pin,
     )
 
     app.register_blueprint(tracking.bp)
@@ -116,6 +117,8 @@ def register_blueprints(app) -> None:
     app.register_blueprint(weather_episodes.bp)
     # Manual weather events (user-saved chart ranges) — same reasoning.
     app.register_blueprint(weather_manual_events.bp)
+    # Sighting pin/unpin toggle — same reason, own module.
+    app.register_blueprint(weather_pin.bp)
     app.register_blueprint(telegram.bp)
     # Device-scoped inference telemetry — deliberately not folded into
     # /api/status (per-camera) nor into the two oversized coral modules.

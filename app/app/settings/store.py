@@ -497,8 +497,10 @@ class SettingsStore:
             "weather",
             # export_text ships `storage`; without it here a settings
             # backup restored the retention window and the media page
-            # size to whatever the fresh install defaulted to.
+            # size to whatever the fresh install defaulted to. Same for
+            # `trash` and its soft-delete grace period.
             "storage",
+            "trash",
         }
         for key, value in loaded.items():
             if key in allowed:

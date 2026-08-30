@@ -77,7 +77,13 @@ def api_settings_app_save():
     payload = request.get_json(force=True) or {}
     needs_rebuild = False
     try:
-        for sec in ("app", "server", "ui", "storage"):
+        # `trash` joins the plain schema-validated sections: `trash.grace_days`
+        # is read live by `trash._grace_days` and enforced by the daily
+        # `cleanup_expired` sweep, but this tuple was the only save path
+        # and it omitted the section — so SECTION_SCHEMAS["trash"] was
+        # validating a call nobody could make. No UI control ships with
+        # this; reachable-by-API is the point.
+        for sec in ("app", "server", "ui", "storage", "trash"):
             if sec in payload:
                 settings.update_section(sec, payload.get(sec) or {})
         if "telegram" in payload:

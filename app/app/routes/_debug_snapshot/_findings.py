@@ -78,6 +78,37 @@ def build_findings(cam: dict, last: dict, cluster_ev: dict, ladder) -> list:
                 "text": "Noch kein abgeschlossener Tick — Live-Werte fehlen. Simulation läuft?",
             }
         )
+    out += _gate_findings(cam)
+    out += _ladder_findings(ladder)
+    out += _cluster_findings(cluster_ev)
+    if not out:
+        # "Alle Tore offen" was a claim about EVERY gate, made by a check
+        # that opens six of them. Bewegungs-Gate, Bestätigungsfenster,
+        # Wildtier-Kaskade, Vogelarten, Identität, Ereignis-Cooldown,
+        # Aufnahme-Zeitplan und Frame-Validator werden hier nie
+        # ausgewertet — die Entwarnung nennt jetzt ihren eigenen Umfang,
+        # statt für Tore zu bürgen, die niemand angesehen hat.
+        out.append(
+            {
+                "tone": "ok",
+                "text": (
+                    "Geprüfte Tore offen: scharf, Telegram, Aufnahme, Zeitpläne, "
+                    "Schwellen-Leiter. Bewegung, Bestätigung und Wildtier-Kaskade "
+                    "bleiben ungeprüft."
+                ),
+            }
+        )
+    # Most-blocking first. Only the first two or three lines survive on a
+    # phone screen, so a red gate must never be pushed below an FYI by
+    # the incidental order the checks run in. Stable → ties keep it.
+    out.sort(key=lambda f: _TONE_ORDER.get(f["tone"], 9))
+    return out
+
+
+def _gate_findings(cam: dict) -> list:
+    """The camera's own switches and windows — the six gates the
+    all-clear above is allowed to speak for."""
+    out = []
     if cam.get("armed", True) is False:
         out.append({"tone": "red", "text": "Kamera ist NICHT scharf (armed=false) — kein Alarm."})
     if cam.get("telegram_enabled", True) is False:
@@ -98,6 +129,12 @@ def build_findings(cam: dict, last: dict, cluster_ev: dict, ladder) -> list:
                 "text": "schedule_record-Fenster ist gerade ZU — es wird jetzt nicht aufgezeichnet.",
             }
         )
+    return out
+
+
+def _ladder_findings(ladder) -> list:
+    """The two ways the threshold ladder silences a class for good."""
+    out = []
     for eff in ladder or []:
         if not eff.push_enabled:
             out.append(
@@ -116,6 +153,12 @@ def build_findings(cam: dict, last: dict, cluster_ev: dict, ladder) -> list:
                     ),
                 }
             )
+    return out
+
+
+def _cluster_findings(cluster_ev: dict) -> list:
+    """The 60-s aggregates — FYIs, never blockers."""
+    out = []
     c1 = (cluster_ev or {}).get("cluster1") or {}
     if int(c1.get("deaths_60s", 0)) > 0:
         out.append(
@@ -150,25 +193,4 @@ def build_findings(cam: dict, last: dict, cluster_ev: dict, ladder) -> list:
                 "text": f"Langsamer Zyklus ({c4['tick_cycle_ema_ms']} ms) — Sub-Stream erwägen.",
             }
         )
-    if not out:
-        # "Alle Tore offen" was a claim about EVERY gate, made by a check
-        # that opens six of them. Bewegungs-Gate, Bestätigungsfenster,
-        # Wildtier-Kaskade, Vogelarten, Identität, Ereignis-Cooldown,
-        # Aufnahme-Zeitplan und Frame-Validator werden hier nie
-        # ausgewertet — die Entwarnung nennt jetzt ihren eigenen Umfang,
-        # statt für Tore zu bürgen, die niemand angesehen hat.
-        out.append(
-            {
-                "tone": "ok",
-                "text": (
-                    "Geprüfte Tore offen: scharf, Telegram, Aufnahme, Zeitpläne, "
-                    "Schwellen-Leiter. Bewegung, Bestätigung und Wildtier-Kaskade "
-                    "bleiben ungeprüft."
-                ),
-            }
-        )
-    # Most-blocking first. Only the first two or three lines survive on a
-    # phone screen, so a red gate must never be pushed below an FYI by
-    # the incidental order the checks run in. Stable → ties keep it.
-    out.sort(key=lambda f: _TONE_ORDER.get(f["tone"], 9))
     return out

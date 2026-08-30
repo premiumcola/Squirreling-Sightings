@@ -268,13 +268,18 @@ function _bindCard(card, onRepaint, onHistory) {
     }),
   );
 
+  _bindAxisHints(card, camId);
+}
+
+/** Tap a spoke's label → what that axis does. One lookup covers both
+ *  concerns on the net; a class axis whose Meldung is off says WHY it is
+ *  greyed out, which is the whole job of a disabled control's hint. */
+function _bindAxisHints(card, camId) {
   qsa('[data-tune-axis-label]', card).forEach((b) =>
     b.addEventListener('click', () => {
       const key = b.dataset.tuneAxisLabel;
       const spec = TUNE_SPECS[key] || classAxisSpec(key);
       if (!spec) return;
-      // A class axis whose Meldung is off says WHY it is greyed out —
-      // that is the whole job of a disabled control's hint.
       const hint = TUNE_SPECS[key] ? spec.hint : classAxisHint(axisFor(camId, key));
       showToast(`${spec.label}\n${hint}`, 'info', { lifetime: 7000 });
     }),

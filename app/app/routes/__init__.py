@@ -75,6 +75,7 @@ def register_blueprints(app) -> None:
         media,
         netz,
         sichtungen,
+        simu_log,
         streams,
         telegram,
         telemetry,
@@ -111,6 +112,9 @@ def register_blueprints(app) -> None:
     app.register_blueprint(coral.bp)
     # N14 · per-cam test-detection lives in its own module now.
     app.register_blueprint(coral_test_detection.bp)
+    # SIMU run log — store / list / fetch one "Debug kopieren" run. Own
+    # module because coral_test_detection.py is already past the ceiling.
+    app.register_blueprint(simu_log.bp)
     app.register_blueprint(weather.bp)
     # Storm-episode archive — its own module because routes/weather.py
     # is already past the file ceiling.

@@ -33,8 +33,8 @@ gruppiert, nicht alphabetisch.
 - **`routes/`** — Paket (17 Blueprint-Module + zwei `_*_helpers`).
   `bootstrap`, `cameras`, `streams`, `media`, `events`,
   `timeline_stats`, `timelapse`, `tracking`, `sichtungen`, `coral`,
-  `coral_test_detection`, `weather`, `weather_episodes`, `telegram`,
-  `detection_cloud`, `trash`, `admin`. Jedes Blueprint resolved Shared
+  `coral_test_detection`, `simu_log`, `weather`, `weather_episodes`,
+  `telegram`, `detection_cloud`, `trash`, `admin`. Jedes Blueprint resolved Shared
   State über `app_state` — niemals zurück nach `server.py` (außer den
   Lazy-Imports von `rebuild_runtimes` / `restart_single_camera` als
   einseitige Boot-Helpers).
@@ -158,6 +158,15 @@ gruppiert, nicht alphabetisch.
   Fenster < 1 Tag wird abgelehnt, und eine Verkürzung wird angekündigt
   statt unbeaufsichtigt ausgeführt (`nightly_window`) — bestätigt wird
   sie mit „Jetzt bereinigen“.
+- **`simu_log/`** — Paket (5 Dateien). Der SIMU-Lauf-Log: jedes „Debug
+  kopieren“ landet zusätzlich als JSON unter
+  `storage/logs/simu/<cam_id>/<ts>.json`, damit ein Lauf die
+  Zwischenablage des iPhones überlebt. `_scrub.py` maskiert
+  positionsbasiert (jeder String, jeder Secret-Key) statt Feld für Feld
+  — die Datei wird über ein authentifizierungsfreies LAN abgeholt und
+  weitergepastet. `_retention.py` erzwingt 20 Läufe / 30 Tage pro
+  Kamera **auf dem Schreibpfad**, nicht per Timer. Fail-soft: ein
+  fehlgeschlagener Schreibvorgang darf die Zwischenablage nie kosten.
 - **`storage_scan.py`** — „Neu scannen“: registriert Medien ohne
   Manifest. Überspringt `.raw.mp4` / `.best.jpg` (gehören zu einem
   bestehenden Ereignis) und zu kleine MP4s.

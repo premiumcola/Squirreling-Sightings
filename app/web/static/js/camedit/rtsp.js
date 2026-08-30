@@ -8,6 +8,7 @@
 //   • parseRtspUrl      — regex-free URL parser used by recovery + diagnostics
 //   • _defaultRtspPathForManufacturer — vendor → main-stream path mapping
 import { byId } from '../core/dom.js';
+import { apiPost } from '../core/api.js';
 import { _setEyeState } from '../chrome/password-toggle.js';
 
 export const RTSP_PATH_OPTS = [
@@ -59,13 +60,51 @@ export function _revealUrl(input) {
   if (input.name !== 'rtsp_url') input.removeAttribute('readonly');
 }
 
+/** Put the stored password back into a credential-free URL, for display
+ *  only. Mirrors the server's `set_url_password`: a URL with no username
+ *  has nothing to authenticate, and one that already carries a password
+ *  (hand-typed) is left alone. */
+export function _withPassword(url, password) {
+  const u = url || '';
+  if (!password || !u.includes('://') || !u.includes('@')) return u;
+  const [scheme, rest] = [u.slice(0, u.indexOf('://')), u.slice(u.indexOf('://') + 3)];
+  const at = rest.lastIndexOf('@');
+  const creds = rest.slice(0, at);
+  const host = rest.slice(at + 1);
+  if (!creds || creds.includes(':')) return u;
+  return `${scheme}://${creds}:${password}@${host}`;
+}
+
+/** Fetch the password for THIS camera, once, on an explicit reveal.
+ *  The bulk /api/cameras poll stays redacted — see the endpoint's own
+ *  docstring for why this is a separate request rather than a field. */
+async function _fetchSecret(camId) {
+  if (!camId) return '';
+  try {
+    const res = await apiPost(`/api/cameras/${encodeURIComponent(camId)}/reveal-secret`, {});
+    return res?.password || '';
+  } catch {
+    return '';
+  }
+}
+
 // Inline onclick="_toggleUrlMask(this)" in the cam-edit form.
-window._toggleUrlMask = function (btn) {
+window._toggleUrlMask = async function (btn) {
   const wrap = btn.closest('.url-wrap');
   const input = wrap?.querySelector('input[data-mask-url="1"]');
   if (!input) return;
   const nowRevealed = input.dataset.masked === '1';
   if (nowRevealed) {
+    // The server hands the browser a credential-FREE URL, so there is
+    // nothing to unmask until the password is fetched. Without this the
+    // eye appeared to work and revealed "rtsp://admin@host" — the same
+    // string it was already showing.
+    const real = input.dataset.real != null ? input.dataset.real : input.value;
+    if (real.includes('@') && !_maskUrlPassword(real).includes('••')) {
+      const camId = byId('cameraForm')?.elements?.['id']?.value;
+      const pw = await _fetchSecret(camId);
+      if (pw) input.dataset.real = _withPassword(real, pw);
+    }
     _revealUrl(input);
     _setEyeState(btn, true);
   } else {

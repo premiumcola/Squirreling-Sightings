@@ -150,3 +150,33 @@ def api_camera_reolink_image_mode(cam_id: str):
             "detail": result.get("detail", ""),
         }
     ), status_code
+
+
+@bp.post('/api/cameras/<cam_id>/reveal-secret')
+def api_camera_reveal_secret(cam_id: str):
+    """The stored RTSP password, for the cam-edit "eye" button.
+
+    Why this is a dedicated endpoint and not simply the password back in
+    ``/api/cameras``: that collection is polled every few seconds by every
+    open dashboard, so putting the secret there is what previously placed
+    it in every response body, every browser cache and — beside a username
+    field — in Chrome's password manager. See ``routes/_secrets.py`` for
+    the full reasoning; ``redact_camera`` stays exactly as strict.
+
+    This costs one deliberate request per reveal, carries the value in
+    nothing that is cached, and never logs it. The residual exposure is
+    real and worth naming: the box serves plain HTTP on the LAN with no
+    authentication, so anyone who can already reach it can call this. That
+    was equally true of the old behaviour — the difference is that the
+    secret is no longer handed out unasked, hundreds of times an hour.
+    """
+    cam = app_state.settings.get_camera(cam_id) if app_state.settings else None
+    if not cam:
+        return jsonify({"ok": False, "error": "camera not found"}), 404
+    password = cam.get("password") or ""
+    log.info("[http] reveal-secret angefordert: cam=%s vorhanden=%s", cam_id, bool(password))
+    resp = jsonify({"ok": True, "password": password, "password_set": bool(password)})
+    # Never let a proxy, the browser cache or the back-button hold this.
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    resp.headers["Pragma"] = "no-cache"
+    return resp

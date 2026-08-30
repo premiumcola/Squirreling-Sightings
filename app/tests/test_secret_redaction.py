@@ -319,3 +319,48 @@ def test_the_config_endpoint_redacts_its_camera_list():
     src = (Path(_pkg_root) / "app" / "routes" / "bootstrap.py").read_text(encoding="utf-8")
     assert '"cameras": [redact_camera(cam) for cam in c.get("cameras", [])]' in src
     assert '"cameras": c.get("cameras", [])' not in src
+
+
+# ── the cam-edit "eye": JS reassembly must mirror set_url_password ────────
+#
+# The browser is handed a credential-free URL and rebuilds the displayed
+# one itself after fetching the password via /reveal-secret. If the two
+# sides disagree, the operator is shown a URL that is not the one the
+# server would build — the exact class of confusion the masking refactor
+# was meant to end. Same bit-for-bit-mirror rule as camera_id/buildCameraId.
+
+_MIRROR_CASES = [
+    ("rtsp://admin@cam.lan:554/h265Preview_01_main", "pw123"),
+    ("http://admin@cam.lan/cgi-bin/snapshot.cgi", "pw123"),
+    # Already carries a password — hand-edited, must be left alone.
+    ("rtsp://admin:other@cam.lan/x", "pw123"),
+    # No username — nothing to authenticate.
+    ("rtsp://cam.lan/x", "pw123"),
+    # No password stored — nothing to add.
+    ("rtsp://admin@cam.lan/x", ""),
+]
+
+
+def test_js_with_password_mirrors_set_url_password():
+    import json as _json
+
+    import pytest as _pytest
+
+    from app.routes._secrets import set_url_password
+
+    from ._node_js import NODE_AVAILABLE
+    from ._node_js import run_js as _js
+
+    if not NODE_AVAILABLE:
+        _pytest.skip("node not installed")
+
+    cases = _json.dumps(_MIRROR_CASES)
+    got = _js(
+        f"""
+        const mod = await import(JS + '/camedit/rtsp.js');
+        const cases = {cases};
+        console.log(JSON.stringify(cases.map(([u, p]) => mod._withPassword(u, p))));
+        """
+    )
+    expected = [set_url_password(u, p) for u, p in _MIRROR_CASES]
+    assert got == expected

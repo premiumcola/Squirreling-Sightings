@@ -17,6 +17,7 @@ import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
 import { renderTuneRadar, tuneGroupLegendHtml } from './_tune_radar.js';
+import { bindClassRows, classRowsHtml } from './_class_rows.js';
 import {
   applySaved,
   camState,
@@ -38,20 +39,9 @@ const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garte
 
 // ── render ────────────────────────────────────────────────────────────
 
-function _confidenceLine(st) {
-  // Per-class confidence as plain TEXT, not a second radar. The values are
-  // still learned from the Telegram verdicts and still enforced; this page
-  // just stopped drawing a chart for them.
-  const axes = st.axes || [];
-  if (!axes.length) return '';
-  const parts = axes
-    .map((a) => {
-      const pct = Number.isFinite(Number(a.push)) ? `${Math.round(Number(a.push) * 100)} %` : '—';
-      return `${esc(a.label)} ${pct}`;
-    })
-    .join(' · ');
-  return `<div class="netz-card-conf"><b>Meldeschwelle je Klasse</b><span>${parts}</span></div>`;
-}
+// Per-class Meldeschwelle — text-shaped, as chosen when the second radar
+// was dropped, but each row is editable again. See _class_rows.js for why
+// the read-only version was a regression rather than a simplification.
 
 function _stagingHtml(camId) {
   const n = stagedCountFor(camId);
@@ -109,7 +99,7 @@ function _cardHtml(cam) {
     (role ? `<span class="netz-card-role">${esc(role)}</span>` : '') +
     `</header>` +
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
-    _confidenceLine(st) +
+    classRowsHtml(st) +
     `<div class="netz-card-controls">${_presetsHtml()}${_ghostHtml(tuning)}</div>` +
     _stagingHtml(cam.id) +
     `</article>`
@@ -192,6 +182,12 @@ async function _save(camId, fields, okMsg, onRepaint) {
 
 function _bindCard(card, onRepaint) {
   const camId = card.dataset.cam;
+
+  // Per-class Meldeschwelle rows. These save through a DIFFERENT route
+  // than the radar above (PATCH /api/netz/<cam>/axes, which also writes
+  // the net-archive record), so they commit on release instead of
+  // joining the radar's staging bar — one write, one archive entry.
+  bindClassRows(card, () => onRepaint());
 
   card.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
     const fields = { ...stagedFor(camId) };

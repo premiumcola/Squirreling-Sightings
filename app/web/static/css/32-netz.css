@@ -699,6 +699,48 @@
   color: #cbd5e1;
 }
 
+/* Per-class Meldeschwelle rows (netz/_class_rows.js). Name and value on
+   one line, the slider full-width underneath — at 430 px a three-column
+   row squeezes the slider to a stub, and this is the control the operator
+   actually needs to reach. */
+.netz-cls-hint {
+  display: block;
+  margin-bottom: 6px;
+  opacity: 0.75;
+}
+.netz-cls-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 2px 0;
+}
+.netz-cls-name {
+  color: #cbd5e1;
+}
+.netz-cls-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.netz-cls-row.is-off .netz-cls-val {
+  color: #94a3b8;
+  font-weight: 500;
+}
+.netz-cls-slider {
+  grid-column: 1 / -1;
+  width: 100%;
+  /* 44 px tap target per the iOS checklist — the visual track stays thin,
+     the hit area does not. */
+  min-height: 44px;
+  accent-color: #60a5fa;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.netz-cls-slider:disabled {
+  opacity: 0.5;
+}
+
 .netz-card-controls {
   display: flex;
   flex-direction: column;

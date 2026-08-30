@@ -12,6 +12,7 @@ on-screen view stays short (see ``live-detect-debug/_verdict.js``).
 
 from __future__ import annotations
 
+from ...labels import COUNTED_LABELS
 from ._blocks import assemble
 from ._findings import build_findings, ladder_rows
 from ._helpers import collect_log_lines
@@ -20,12 +21,29 @@ __all__ = ["build_snapshot", "build_findings", "collect_log_lines", "ladder_rows
 
 
 def _relevant_labels(cam: dict, last: dict) -> list:
-    """Classes worth showing a ladder for: the filter plus whatever the
-    last tick actually saw. Sorted so two snapshots diff cleanly."""
-    labels = set(cam.get("object_filter") or [])
+    """Classes worth showing a ladder for: the camera's filter, plus what
+    the last tick saw — but only labels this project actually has a
+    concept for. Sorted so two snapshots diff cleanly.
+
+    The COUNTED_LABELS gate is the fix for a real readability failure: the
+    detector's COCO label space contains ~80 classes, so a workshop camera
+    pointed at a bench reports book / chair / suitcase / backpack / laptop
+    every tick. Each one has no entry in TELEGRAM_PUSH_DEFAULTS, so
+    `resolve_effective` returns push_enabled=False and _findings emitted a
+    warn-tone "wird erkannt, aber nie gemeldet" line for every one of them.
+    Those are not findings — nobody ever asked to be told about a book —
+    and because warn sorts above info they pushed the REAL diagnostics off
+    a phone screen that shows three lines.
+
+    A label the camera explicitly filters for is always kept, even if it
+    somehow left the vocabulary: that one the operator did ask about.
+    """
+    wanted = set(cam.get("object_filter") or [])
+    labels = set(wanted)
     for det in last.get("detections") or []:
-        if det.get("label"):
-            labels.add(det["label"])
+        label = det.get("label")
+        if label and (label in COUNTED_LABELS or label in wanted):
+            labels.add(label)
     return sorted(labels)
 
 

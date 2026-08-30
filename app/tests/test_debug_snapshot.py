@@ -312,3 +312,59 @@ def test_a_missing_tick_does_not_break_the_document():
     md = _md(tt={})
     assert "noch kein Tick" in md
     assert "## Befund" in md
+
+
+# ── SIMU · foreign COCO classes must not become findings ──────────────────
+#
+# A workshop camera pointed at a bench makes the detector report book,
+# chair, suitcase, backpack and laptop every tick. None of them has an
+# entry in TELEGRAM_PUSH_DEFAULTS, so `resolve_effective` returns
+# push_enabled=False for each and the findings builder emitted a warn-tone
+# "<class>: push=false — wird erkannt, aber nie gemeldet." per class.
+# Warn sorts above info, so five non-findings pushed the REAL diagnostics
+# off a phone screen that shows three lines.
+
+
+def test_foreign_coco_classes_do_not_become_ladder_rows():
+    from app.routes._debug_snapshot import _relevant_labels
+
+    cam = {"object_filter": ["person", "cat", "dog"]}
+    last = {
+        "detections": [
+            {"label": "person"},
+            {"label": "book"},
+            {"label": "chair"},
+            {"label": "suitcase"},
+            {"label": "laptop"},
+        ]
+    }
+    assert _relevant_labels(cam, last) == ["cat", "dog", "person"]
+
+
+def test_a_project_label_the_camera_does_not_filter_for_is_still_shown():
+    """The vocabulary in labels.py — not the camera's filter — decides what
+    counts as a real class. Seeing a squirrel on a camera that does not
+    filter for squirrels is a genuine finding worth a ladder row."""
+    from app.routes._debug_snapshot import _relevant_labels
+
+    cam = {"object_filter": ["person"]}
+    last = {"detections": [{"label": "squirrel"}, {"label": "book"}]}
+    assert _relevant_labels(cam, last) == ["person", "squirrel"]
+
+
+def test_a_filtered_for_class_survives_even_if_it_left_the_vocabulary():
+    """An explicit object_filter entry is something the operator asked
+    about by name; it must never be silently dropped."""
+    from app.routes._debug_snapshot import _relevant_labels
+
+    cam = {"object_filter": ["person", "weird_custom_class"]}
+    last = {"detections": [{"label": "weird_custom_class"}, {"label": "book"}]}
+    assert _relevant_labels(cam, last) == ["person", "weird_custom_class"]
+
+
+def test_an_empty_filter_still_reports_real_classes():
+    from app.routes._debug_snapshot import _relevant_labels
+
+    cam = {"object_filter": []}
+    last = {"detections": [{"label": "person"}, {"label": "book"}]}
+    assert _relevant_labels(cam, last) == ["person"]

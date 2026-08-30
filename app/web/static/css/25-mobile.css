@@ -580,13 +580,21 @@ body.sidebar-locked {
      clears the floating dock from the dock's own promoted metrics, so a
      future dock resize propagates automatically. Anchored to `bottom`,
      never sized in vh — address-bar collapse moves it with the viewport
-     bottom, which is the correct behaviour, not a jump. */
+     bottom, which is the correct behaviour, not a jump.
+
+     z-index 91 puts it above the dock's bottom scrim (89), which now
+     reaches from the viewport bottom up past this bar's row and would
+     otherwise fog an interactive control. Above the dock plate (90) too,
+     but the two never overlap geometrically — the bar is anchored 8 px
+     clear of the plate's top edge — so painting order between them is
+     moot, and if a future dock grows into this row the action bar is the
+     one that must stay legible. */
   .st-selbar {
     position: fixed;
     left: 12px;
     right: 12px;
     bottom: calc(var(--m-dock-bottom-gap, 8px) + var(--m-dock-h, 70px) + 8px);
-    z-index: 40;
+    z-index: 91;
   }
   /* …and because it is fixed, it occludes the end of the list. The list
      reserves its own height (8 + 44 + 8 padding + 12 breathing room)

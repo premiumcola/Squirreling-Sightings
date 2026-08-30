@@ -1,26 +1,40 @@
-/* ── Mobile bottom dock ─────────────────────────────────────────
-   Floating pill-style bar detached from every edge. Bottom margin
-   uses max(env(safe-area-inset-bottom), 8px) so home-indicator
-   iPhones float just above the indicator (closer than the older
-   12 px floor felt) while notch-less devices still get a clear
-   8 px gap. Corner radius echoes the iPhone 15 Pro / Pro Max
-   device curvature (~30 px).
+/* ── Mobile chrome · bottom dock + fog scrims ───────────────────────
+   Rewritten as one block, not patched. CLAUDE.md: "If a component has
+   been patched more than twice for the same iOS symptom: read ALL
+   existing rules first, then rewrite from scratch." This component was
+   patched across 24bf294 → 6379fca → b92bf33 → 3506350 → 028296f →
+   c61ebdb → 3c6f3a7 → a5f7fc8 → 296f2b6 → 3fbd046 → 7c880de, and the
+   pile had grown two competing `box-shadow` declarations inside the
+   same `.m-dock` rule plus three consumers hardcoding a bottom-gap
+   formula the dock no longer used.
 
-   Visual separation from the page underneath comes from three
-   compound shadows:
-     - inset 0 1px 0 rgba(255,255,255,.08) — a 1 px inner top
-       highlight that defines the silhouette against busy content
-       (e.g. Wetter snapshots, Library thumbnails). This is the
-       only acceptable thin line — it adds depth, not a border.
-     - 0 -4px 16px rgba(0,0,0,.40) — a soft halo rising upward to
-       separate the bar from page content scrolling above it.
-     - 0 10px 32px rgba(0,0,0,.55) — a stronger drop shadow below
-       that anchors the bar visually to its hovering position.
+   Two rules that keep this from happening a fourth time:
 
-   Surface stays neutral grayscale (#1f1f23, slightly lighter than
-   the panel #1a1a1a) — no blue cast, no backdrop-filter saturate.
-   The half-step toward brighter gives the bar more contrast
-   against the #111 page without re-introducing any hue. */
+   1. EVERY number lives once, in the :root block below. The scrim,
+      the body scroll clearance and the Gewitter-Archiv compare bar
+      (25-mobile.css) all derive from those tokens. Nothing that has
+      to line up with the dock may restate a literal.
+   2. `.m-dock` declares exactly ONE box-shadow. A second declaration
+      in the same rule silently wins over the first, which is how the
+      "single diffuse drop shadow" written in 3fbd046 never reached a
+      single device.
+
+   Depth model — the dock is a floating plate, and three separate
+   things have to stop the page reading through it:
+     · the plate itself     — translucent neutral fill + backdrop blur
+     · around and below it  — the bottom scrim (body::after), which
+                              covers the side margins and the strip
+                              between the dock and the screen edge
+     · above it             — the same scrim's upward fade, so content
+                              scrolling into the dock dissolves rather
+                              than sliding under a hard edge
+   The scrim is deliberately NOT a shadow hanging above the bar: the
+   old `0 -10px 28px` upward halo read as a smear floating over the
+   dock instead of depth behind it.
+
+   Surface stays neutral grayscale (#1f1f23, a half-step lighter than
+   the panel #1a1a1a) — no blue cast. saturate(1.05) is a near-no-op
+   so the blur cannot amplify hues into the old Blaustich. */
 .m-dock {
   display: none;
 }
@@ -74,48 +88,55 @@
 }
 
 @media (max-width: 768px) {
-  /* Dock metrics promoted to :root so any other fixed element can clear
-     the floating dock without hardcoding its height. --m-dock-h is
-     8 px inner-pad + 54 px button min-height + 8 px inner-pad; the
-     bottom gap already folds in env(safe-area-inset-bottom). The
-     Gewitter-Archiv's compare action bar derives its `bottom` from
-     these two, so a future dock resize propagates automatically. */
+  /* ── The dock's geometry, declared exactly once ──────────────────
+     --m-dock-margin        left/right inset from the screen edge.
+     --m-dock-inner-pad     chrome between the plate edge and the
+                            button cluster.
+     --m-dock-btn-h         button min-height. 54 px, comfortably over
+                            the 44 px iOS touch-target floor.
+     --m-dock-h             plate height, DERIVED — 2 · inner-pad +
+                            button height. Previously restated as the
+                            literal 70 px in three places.
+     --m-dock-bottom-gap    distance from the plate's bottom edge to
+                            the bottom of the layout viewport. The
+                            home-indicator band is cleared via
+                            env(safe-area-inset-bottom) (the page ships
+                            viewport-fit=cover, so the inset is real);
+                            the +2 px additive is the calibration the
+                            operator signed off on in a5f7fc8 as
+                            "visibly closer to the bottom edge". 3fbd046
+                            later raised it to +6 px while recovering
+                            from the flush-bottom experiment, and that
+                            is the drift being undone here — the bar had
+                            crept back up. max(8px, …) keeps a floor on
+                            devices that report no inset (Android,
+                            older iPads, desktop-narrow) so the bottom
+                            gap never falls below the side margin.
+     --m-dock-screen-radius the device's own display corner radius.
+                            iPhone 15 Pro / Pro Max ≈ 55 px. The plate
+                            radius is DERIVED from it minus the margin,
+                            which is what makes the curve concentric
+                            with the screen instead of merely round —
+                            "an die Radien vom Display anlehnen".
+     --m-dock-radius        plate radius → 47 px.
+     --m-dock-pill-radius   active-tab pill radius, derived one step
+                            further in so its curve nests inside the
+                            plate's → 39 px.
+     --m-dock-fog-fade      how far the bottom scrim keeps fading ABOVE
+                            the plate's top edge before it is fully
+                            transparent. */
   :root {
-    --m-dock-h: 70px;
-    --m-dock-bottom-gap: max(8px, calc(env(safe-area-inset-bottom, 0px) + 6px));
+    --m-dock-margin: 8px;
+    --m-dock-inner-pad: 8px;
+    --m-dock-btn-h: 54px;
+    --m-dock-h: calc(2 * var(--m-dock-inner-pad) + var(--m-dock-btn-h));
+    --m-dock-bottom-gap: max(8px, calc(env(safe-area-inset-bottom, 0px) + 2px));
+    --m-dock-screen-radius: 55px;
+    --m-dock-radius: calc(var(--m-dock-screen-radius) - var(--m-dock-margin));
+    --m-dock-pill-radius: calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
+    --m-dock-fog-fade: 96px;
   }
   .m-dock {
-    /* Concentric corner geometry — three nested radii.
-       --m-dock-margin     : equal on left, right, and floor of bottom.
-                             Bottom additionally clears the home-indicator
-                             via env(safe-area-inset-bottom).
-       --m-dock-radius     : bar's outer radius. iPhone 15 Pro / Pro Max
-                             outer screen radius ≈ 55 px; bar margin 8 px
-                             → bar radius 47 px nestles concentrically
-                             into the device curve. Smaller iPhones have
-                             a smaller screen radius; the same value
-                             still reads cleanly because the bar always
-                             appears as a visually self-similar curve.
-       --m-dock-inner-pad  : inner chrome between bar edge and the
-                             button cluster. Pill radius is derived as
-                             (bar_radius − inner_pad) so the active
-                             pill curve nests inside the bar curve. */
-    --m-dock-margin: 8px;
-    --m-dock-radius: 47px;
-    --m-dock-inner-pad: 8px;
-    --m-dock-pill-radius: calc(var(--m-dock-radius) - var(--m-dock-inner-pad));
-    /* Floating-strip layout: the dock sits with a small visible
-       gap above the home-indicator zone, all corners curved, with
-       a single soft drop shadow surrounding it. The previous
-       flush-bottom pass (radius:top-only + upward double-shadow)
-       killed the floating identity and added a hard top edge that
-       read as a partition line. 6 px additive over safe-area is
-       the right calibration: the gap is noticeable as a strip
-       without re-introducing the 36 px chasm of the very first
-       version.
-       --m-dock-bottom-gap is NOT redeclared here: it is promoted to
-       :root above, in this same breakpoint, and a second identical
-       declaration is one more place to forget when it is tuned. */
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 2px;
@@ -123,26 +144,30 @@
     left: var(--m-dock-margin);
     right: var(--m-dock-margin);
     bottom: var(--m-dock-bottom-gap);
-    padding: var(--m-dock-inner-pad) var(--m-dock-inner-pad);
+    padding: var(--m-dock-inner-pad);
     border-radius: var(--m-dock-radius);
-    /* Single diffuse drop shadow — small downward y to anchor the
-       strip visually above the home-indicator band, 24 px blur for
-       softness, no second sharp layer (the previous 0 -2px 6px
-       layer painted as a hard line on iPhone). */
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
     /* Translucent neutral fill + heavy backdrop blur. The blur is
-       what makes page content scrolling underneath unreadable
-       through the dock — without it the dock was a solid plate
-       that hid content, but couldn't fog it the way iOS native
-       chrome does. The 0.72 alpha keeps the dock visually neutral
-       grayscale instead of letting page colours bleed through too
-       strongly; saturate(1.05) is a near-no-op so the blur doesn't
-       amplify hues and re-introduce the old Blaustich risk. The
-       -webkit prefix comes first because Safari iOS (even 17+)
-       still consults the prefixed form. */
+       what fogs page content scrolling underneath the plate the way
+       iOS native chrome does; the 0.72 alpha keeps the plate neutral
+       grayscale instead of letting page colours bleed through. The
+       -webkit prefix comes first because Safari iOS (even 17+) still
+       consults the prefixed form. */
     background: rgba(31, 31, 35, 0.72);
     -webkit-backdrop-filter: blur(22px) saturate(1.05);
     backdrop-filter: blur(22px) saturate(1.05);
+    /* THE one and only box-shadow on this rule. Downward-anchored, so
+       the plate reads as hovering above the home-indicator band; the
+       6 px spread pushes the darkening out past the plate's own
+       silhouette into the side margins, which is the "Schatten
+       außenrum" the page content used to run straight through. No
+       upward layer — that is the scrim's job, and an upward halo on
+       the plate itself is what read as "hängt oben drüber".
+       No inset highlight either: a 1 px white top line is a thin
+       border by any other name (design principles), and the scrim
+       now supplies the silhouette against busy content. */
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.45),
+      0 10px 30px 6px rgba(0, 0, 0, 0.6);
     /* iOS Safari compositing dance — without these three the dock
        rendered as a flat translucent plate with no visible blur on
        iPhone, even though the rule pair above is correct. Root cause:
@@ -163,44 +188,47 @@
     isolation: isolate;
     will-change: backdrop-filter, transform;
     transform: translateZ(0);
-    /* Stronger upward shadow than the previous −4 / 16 / .40 — that
-       value was almost invisible against the dark page bg. The new
-       layered shadow stack creates a soft fog gradient above the
-       dock visible against any non-pure-black content (media cards,
-       weather panel, snapshot grid). Pairs with the body::after
-       overlay below so depth is guaranteed even when iOS Safari
-       refuses to composite the dock's backdrop-filter sample. */
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 -2px 8px rgba(0, 0, 0, 0.55),
-      0 -10px 28px rgba(0, 0, 0, 0.45),
-      0 12px 40px rgba(0, 0, 0, 0.65);
     z-index: 90;
     outline: 0;
   }
-  /* Fog band above the dock — independent fixed overlay that does
-     NOT depend on backdrop-filter rendering, so the visual depth
-     reaches the user even on iOS Safari builds that silently drop
-     the dock's compositing layer. The gradient bottom matches the
-     page background (#111) at 0.85 alpha, fading to transparent
-     ~80 px above the dock top — that's the "shadow behind" the user
-     sees when content scrolls into the dock area. Sits at z-index
-     89 so the dock at z-index 90 still paints over it cleanly.
-     pointer-events:none keeps taps reaching content underneath. */
+  /* ── Bottom scrim ────────────────────────────────────────────────
+     One fixed overlay covering the WHOLE dock band, anchored to the
+     viewport bottom rather than to the plate's top edge. It has to
+     start at bottom:0, because the two places the page was visibly
+     "running around" the dock are exactly the places the plate does
+     not cover: the --m-dock-margin slots left and right of it, and
+     the --m-dock-bottom-gap strip between it and the screen edge.
+     The previous version started at the plate's TOP edge and left
+     both of those raw — and it derived that edge from a stale
+     `env(...) + 2px + 70px` literal, so it was out of register with
+     the plate by 4 px anyway.
+
+     Alpha profile, read bottom-up:
+       0 → plate top       0.82, a solid fog behind the margins and
+                           under the plate. Not opaque: the plate's
+                           own backdrop-filter still has something to
+                           sample, so the frosted look survives.
+       → +28 px            0.50
+       → +fog-fade         0, a long soft dissolve so content
+                           scrolling into the dock fades instead of
+                           meeting an edge.
+     Independent of backdrop-filter, so the depth reaches the user
+     even on iOS builds that silently drop the plate's compositing
+     layer. z-index 89 keeps it under the plate (90); the elevation
+     token file sanctions raw sub-100 values inside one layer.
+     pointer-events:none keeps taps reaching the content underneath. */
   body::after {
     content: '';
     position: fixed;
     left: 0;
     right: 0;
-    /* dock occupies (bottom-gap → bottom-gap + dock-height); the
-       overlay sits flush against the page-bg-side of that band.
-       Dock-height = 2*inner-pad + button min-height = 16 + 54 = 70. */
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 2px + 70px);
-    height: 80px;
+    bottom: 0;
+    height: calc(var(--m-dock-bottom-gap) + var(--m-dock-h) + var(--m-dock-fog-fade));
     background: linear-gradient(
       to top,
-      rgba(17, 17, 17, 0.85) 0%,
-      rgba(17, 17, 17, 0.55) 30%,
+      rgba(17, 17, 17, 0.82) 0,
+      rgba(17, 17, 17, 0.82) calc(var(--m-dock-bottom-gap) + var(--m-dock-h)),
+      rgba(17, 17, 17, 0.5) calc(var(--m-dock-bottom-gap) + var(--m-dock-h) + 28px),
       rgba(17, 17, 17, 0) 100%
     );
     pointer-events: none;
@@ -211,9 +239,8 @@
     outline: 0;
     background: transparent;
     -webkit-tap-highlight-color: transparent;
-    /* Pill radius derived from bar radius − inner padding so the
-       active pill's curve sits concentrically inside the bar's curve.
-       At default values this resolves to 39 px (47 − 8). */
+    /* Pill radius derived from plate radius − inner padding so the
+       active pill's curve sits concentrically inside it → 39 px. */
     border-radius: var(--m-dock-pill-radius);
     display: flex;
     flex-direction: column;
@@ -221,7 +248,7 @@
     justify-content: center;
     gap: 3px;
     padding: 8px 4px 6px;
-    min-height: 54px;
+    min-height: var(--m-dock-btn-h);
     /* Slightly darker neutral than the old slate-blue (155,168,196)
        so iOS OLED stops rendering the inactive dock labels as
        visibly blue. Opacity bumped .7 → .78 to compensate for the
@@ -284,14 +311,13 @@
       box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
     }
   }
-  /* Reserve scroll-space at the bottom so the floating dock never
-     overlaps the last bit of page content. Tracks the bottom-gap
-     formula above (`safe-area + 2 px`) so the two move together if
-     the design margin changes. The +8 trailing gives a final
-     breathing buffer between the last page element and the dock's
-     top edge. */
+  /* Reserve scroll-space so the floating dock never sits on top of the
+     last bit of page content. Derived from the same two tokens as the
+     plate itself — the literal that used to live here (`70px + env(…)
+     + 2px + 8px`) went stale the moment the bottom gap was re-tuned,
+     and short clearance is how the last row ends up under the bar. */
   body {
-    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px) + 2px + 8px) !important;
+    padding-bottom: calc(var(--m-dock-bottom-gap) + var(--m-dock-h) + 8px) !important;
   }
   /* Narrow iPhones: nudge label down a hair so "Sichtungen" doesn't
      wrap. Only triggers under 380 px. */

@@ -728,6 +728,16 @@
     gap: 0;
     display: block;
   }
+  /* .sidebar-slot exists only to reserve flex width on desktop (see
+     01-base.css). Here the shell is display:block and the sidebar is
+     lifted out of flow as an off-canvas overlay, so the slot is a
+     leftover 260 px box. It measures 0 high today, but a desktop-only
+     layout primitive left unguarded inside the phone breakpoint is
+     exactly the kind of thing that later grows a margin and shoves the
+     page. Collapse it here rather than trusting that it stays inert. */
+  .sidebar-slot {
+    width: 0;
+  }
   .sidebar {
     position: fixed;
     top: 0;

@@ -368,3 +368,57 @@ def test_an_empty_filter_still_reports_real_classes():
     cam = {"object_filter": []}
     last = {"detections": [{"label": "person"}, {"label": "book"}]}
     assert _relevant_labels(cam, last) == ["person"]
+
+
+# ── the wildlife threshold the panel could not name ───────────────────
+#
+# `processing.wildlife.min_score` IS live — `WildlifeClassifier.__init__`
+# reads it with a hardcoded fallback, so the classifier really runs at
+# that fallback on the deployed box, whose config.yaml predates the
+# `processing.wildlife` block. The snapshot printed the config lookup
+# raw, so a missing key rendered as:
+#
+#     wildlife_min_score: 0.00 (0 → global processing.wildlife.min_score = n/v)
+#
+# "n/v" reads as "no threshold is in effect", which is the opposite of
+# the truth and sends the operator looking for a disabled classifier.
+# The detector's behaviour is deliberately unchanged here — only the
+# panel learns to name the value that is actually running, and where it
+# came from.
+
+
+def test_a_missing_global_wildlife_score_names_the_classifier_default():
+    from app.detectors.wildlife import WILDLIFE_MIN_SCORE_DEFAULT
+    from app.routes._debug_snapshot._blocks import _motion_block
+
+    out = _motion_block(_cam(), {"processing": {}})
+    assert "n/v" not in out
+    assert f"{WILDLIFE_MIN_SCORE_DEFAULT:.2f}" in out
+    assert "Klassifizierer-Default" in out
+
+
+def test_a_configured_global_wildlife_score_is_shown_as_configured():
+    from app.routes._debug_snapshot._blocks import _motion_block
+
+    out = _motion_block(_cam(), {"processing": {"wildlife": {"min_score": 0.5}}})
+    assert "0.50" in out
+    assert "Klassifizierer-Default" not in out
+
+
+def test_a_per_camera_override_still_wins_the_line():
+    from app.routes._debug_snapshot._blocks import _motion_block
+
+    out = _motion_block(_cam(wildlife_min_score=0.6), {"processing": {}})
+    assert "wildlife_min_score: 0.60" in out
+    assert "Klassifizierer-Default" not in out
+
+
+def test_the_panel_default_is_the_one_the_detector_actually_uses():
+    """The number on screen and the number in the classifier come from
+    one constant — a second literal is how they drift apart."""
+    import inspect
+
+    from app.detectors import wildlife
+
+    src = inspect.getsource(wildlife.WildlifeClassifier.__init__)
+    assert 'self.cfg.get("min_score", WILDLIFE_MIN_SCORE_DEFAULT)' in src

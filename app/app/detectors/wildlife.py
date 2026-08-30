@@ -29,6 +29,15 @@ from .discovery import discover_wildlife_paths
 log = logging.getLogger(__name__)
 
 
+# Threshold the classifier runs at when `processing.wildlife.min_score`
+# is absent from the effective config — which is the live case on any
+# install whose config.yaml predates the `processing.wildlife` block.
+# Named rather than inlined so the debug panel can report the value that
+# is genuinely in effect instead of "not configured": the setting IS
+# read, it just resolves to this.
+WILDLIFE_MIN_SCORE_DEFAULT = 0.35
+
+
 class _InatTiming(InferenceTimingMixin):
     """Timing holder for the iNat second-opinion interpreter.
 
@@ -86,7 +95,7 @@ class WildlifeClassifier(InferenceTimingMixin):
                     v,
                 )
         self.labels = load_label_map(self.cfg.get("labels_path"))
-        self.min_score = float(self.cfg.get("min_score", 0.35))
+        self.min_score = float(self.cfg.get("min_score", WILDLIFE_MIN_SCORE_DEFAULT))
         self.interpreter = None
         # ── Optional iNaturalist second-stage backend ──────────────────────
         # When inat_cfg is supplied (typically the bird_species block, since

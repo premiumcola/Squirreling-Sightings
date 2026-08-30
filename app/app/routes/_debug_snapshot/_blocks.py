@@ -69,6 +69,17 @@ def _gates_block(cam: dict) -> str:
 
 
 def _motion_block(cam: dict, eff_cfg: dict) -> str:
+    # Local import: detectors.wildlife pulls in cv2 + numpy at module
+    # scope, and this package is imported on every route registration.
+    # Same lazy pattern routes/app_settings.py uses for the detectors.
+    from ...detectors.wildlife import WILDLIFE_MIN_SCORE_DEFAULT
+
+    # `processing.wildlife.min_score` is absent from the effective config
+    # on any install whose config.yaml predates the block — which is the
+    # live case here. Printing the raw lookup rendered that as "n/v",
+    # i.e. "no threshold in effect", when the classifier is in fact
+    # running at its own fallback. Report the number that is actually
+    # applied and say where it came from; the detector is unchanged.
     wl_global = (
         ((eff_cfg.get("processing") or {}).get("wildlife") or {}).get("min_score")
         if eff_cfg
@@ -77,7 +88,13 @@ def _motion_block(cam: dict, eff_cfg: dict) -> str:
     wl_cam = float(cam.get("wildlife_min_score") or 0.0)
     wl_line = _fmt_float(wl_cam)
     if wl_cam <= 0.0:
-        wl_line += f" (0 → global processing.wildlife.min_score = {_fmt_float(wl_global)})"
+        if wl_global is None:
+            wl_line += (
+                " (0 → global processing.wildlife.min_score nicht gesetzt → "
+                f"Klassifizierer-Default {_fmt_float(WILDLIFE_MIN_SCORE_DEFAULT)})"
+            )
+        else:
+            wl_line += f" (0 → global processing.wildlife.min_score = {_fmt_float(wl_global)})"
     wl_motion = float(cam.get("wildlife_motion_sensitivity") or 0.0)
     wl_motion_line = _fmt_float(wl_motion)
     if wl_motion <= 0.0:

@@ -6,7 +6,6 @@
 // The letterbox positioner lives in live-detect-bbox-fit.js (trails reuse
 // it); the per-detection shapes live in live-detect-bbox-shapes.js. Reads
 // state via S.
-import { state } from '../core/state.js';
 import { S } from './live-detect-state.js';
 import {
   _debugDiagOn,
@@ -19,6 +18,7 @@ import { _renderDetailPill } from './live-detect-panels.js';
 import { _positionSvgOverImage } from './live-detect-bbox-fit.js';
 import { _overlayScale, _buildBboxGroup } from './live-detect-bbox-shapes.js';
 import { _HOLD_MS_CEILING } from './live-detect.js';
+import { paintableLabels } from './live-detect-classfilter.js';
 
 // gp384 / C84 — hold-time merge. Prefer the live tick's detections (full
 // opacity). If the tick is empty, fall back to the most recent detection
@@ -28,25 +28,10 @@ import { _HOLD_MS_CEILING } from './live-detect.js';
 // label are dominated by the most-recent one's opacity anyway. holdMs
 // falls back to the legacy 1500 ms ceiling until the first cycle EMA
 // observation lands, so the first tick still gets a sensible hold.
-// The detector's label space is COCO's ~80 classes, but this project only
-// has a concept for the ten in labels.py plus whatever the camera filters
-// for. A workshop bench reports book / chair / suitcase / backpack /
-// laptop on every tick, and painting each one put a plate over the actual
-// subject. The Detections panel and the swimlane already gate on
-// `object_filter` (live-detect-panels.js:55-56, :216-217) — this renderer
-// was the one that never got the same gate.
-//
-// Deliberately NOT a new hardcoded list: the camera's own object_filter is
-// the source of truth, exactly as in the panels.
-function _paintableLabels() {
-  const cam = (state.cameras || []).find((c) => c.id === S.session?.camId) || {};
-  const arr = Array.isArray(cam.object_filter) ? cam.object_filter : null;
-  return arr && arr.length > 0 ? new Set(arr) : null;
-}
-
 function _heldDetections() {
   const holdMs = Number.isFinite(S.holdMsActive) ? S.holdMsActive : _HOLD_MS_CEILING;
-  const want = _paintableLabels();
+  // Foreign COCO classes are not painted — see live-detect-classfilter.js.
+  const want = paintableLabels();
   const keep = (label) => !want || want.has(label);
   const live = (S.session.lastDetections || []).filter((d) => keep(d.label));
   if (live.length) return live.map((d) => ({ ...d, _holdMul: 1 }));

@@ -7,6 +7,7 @@ import { liveTrackColor } from '../core/track-color.js';
 import { buildTrailSvg } from './canvas/trail-layer.js';
 import { zoneEl } from './live-detect-skeleton.js';
 import { S } from './live-detect-state.js';
+import { paintableLabels } from './live-detect-classfilter.js';
 import { _debugDiagOn, _updateDiagStrip, _refreshMediaRow } from './live-detect-diag.js';
 import { _renderBboxOverlay, _LIVE_TRAIL_MAX_POINTS } from './live-detect-bbox.js';
 import { _positionSvgOverImage } from './live-detect-bbox-fit.js';
@@ -129,10 +130,24 @@ export function _renderTrailsOverlay() {
   // label and render neutral grey via liveTrackColor's fallback. Pre-sort by
   // ms inside each group; detBuffer is push-order but a polling-cadence change
   // could technically interleave entries.
+  //
+  // The class gate matters MORE here than on the bboxes: a trackless
+  // detection groups by LABEL, so two unrelated "bench" hits at opposite
+  // edges of the frame become one polyline drawn straight across the
+  // picture. Filtering the buffer removes those lines at the source.
+  const want = paintableLabels();
   const byTrack = new Map();
   for (const e of S.detBuffer) {
-    const key =
-      Number.isFinite(e.track_num) && e.track_num > 0 ? `t${e.track_num}` : `m:${e.label}`;
+    // A trail claims "this ONE object went here, then here". A detection
+    // with no track number has no such history — the old fallback grouped
+    // trackless boxes by LABEL and drew a path that never happened: on a
+    // 2x2-tiled workshop camera the detector reports several independent
+    // person/cat boxes per tick at opposite corners, and joining them by
+    // label produced dozens of white lines across the picture. Untracked
+    // detections keep their bbox; they just lose the invented history.
+    if (!Number.isFinite(e.track_num) || e.track_num <= 0) continue;
+    if (want && !want.has(e.label)) continue;
+    const key = `t${e.track_num}`;
     if (!byTrack.has(key)) byTrack.set(key, []);
     byTrack.get(key).push(e);
   }

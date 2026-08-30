@@ -32,17 +32,25 @@ function _weatherSightingLabel(s, meta) {
   return meta.de;
 }
 import { openMediaView } from '../mediaview/index.js';
+
+// Matches MAX_SIGHTINGS_PAGE_SIZE in routes/weather.py. The gallery
+// filters client-side over multi-select chips, so it needs the whole
+// list; the cap keeps "whole" bounded on a large library.
+const _FETCH_PAGE_SIZE = 500;
 import { closeWeatherMode } from '../mediaview/weather-mode.js';
 
 async function loadWeatherSightings(filter) {
   // Filter migrates from single-string to Set semantics: state.weather.filter
   // is a Set of event_type strings. Empty Set = "no filter, show everything"
-  // (matches the Mediathek pill UX). Server fetch always pulls the full list
+  // (matches the Mediathek pill UX). The fetch asks for the full list
   // — filtering happens client-side in _renderWeatherGrid so toggling pills
   // doesn't trigger a network round-trip. The legacy single-string call site
   // is still tolerated: a string argument seeds a single-member Set.
   try {
-    const data = await apiGet('/api/weather/sightings');
+    // Ask for the whole list explicitly. Without page_size the server
+    // returns 50 while still counting every event, which is what made a
+    // chip read "Starkregen 3" over an empty grid.
+    const data = await apiGet(`/api/weather/sightings?page_size=${_FETCH_PAGE_SIZE}`);
     state.weather.items = data.items || [];
     state.weather.counts = data.counts || {};
     state.weather.total = data.total || 0;

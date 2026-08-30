@@ -19,6 +19,11 @@ from flask import Blueprint, Response, jsonify, request, send_from_directory
 
 from .. import app_state
 
+#: Upper bound for ?page_size on the sightings list. The gallery asks
+#: for everything so its multi-select chips can filter client-side;
+#: this keeps "everything" from meaning an unbounded response.
+MAX_SIGHTINGS_PAGE_SIZE = 500
+
 bp = Blueprint("weather", __name__)
 
 log = logging.getLogger(__name__)
@@ -385,12 +390,21 @@ def api_weather_sightings():
     # Flask's type=int parser swallows non-int values into None;
     # the explicit `or 0` matches the prior try/except default.
     page = request.args.get('page', type=int, default=0) or 0
+    # The gallery filters client-side over a multi-select chip row, so it
+    # needs the WHOLE list, not one page. It never sent a page_size and the
+    # server defaulted to 50 while reporting `counts` over everything — so
+    # the chips said "Starkregen 3" and the grid showed nothing, because
+    # all three sat below the 50 newest of 86. Bounded, not unbounded: a
+    # very large library must not become one enormous response.
+    page_size = request.args.get('page_size', type=int, default=0) or 0
+    page_size = min(max(page_size, 1), MAX_SIGHTINGS_PAGE_SIZE) if page_size else 50
     result = ws.list_sightings(
         cam_id=request.args.get('cam_id') or None,
         event_type=request.args.get('event_type') or None,
         since_iso=request.args.get('from') or None,
         until_iso=request.args.get('to') or None,
         page=page,
+        page_size=page_size,
     )
     # Additive: stat each clip so the gallery card can render a size badge
     # (mirrors the Mediathek media-card's file_size_bytes). Never writes.

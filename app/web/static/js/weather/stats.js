@@ -17,6 +17,18 @@ import { byId } from '../core/dom.js';
 import { renderWeatherStatsChart } from './stats-chart/index.js';
 import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-summary.js';
 import { apiGet } from '../core/api.js';
+import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
+
+// The unified Wetter-Ereignisse grid (weather/sightings.js) narrows by
+// the same zoom range on every drag/reset. Reached via the window
+// bridge sightings.js publishes for cross-module callers rather than an
+// ES import — sightings.js imports openManualEventView (etc.) which
+// pulls in stats-chart/index.js, which already imports FROM this
+// module; an import back would close that into a multi-file cycle for
+// no reason a plain re-render function call doesn't already solve.
+function _refreshWeatherGrid() {
+  if (typeof window.renderWeatherSightings === 'function') window.renderWeatherSightings();
+}
 
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
@@ -168,22 +180,89 @@ export function renderWeatherStats() {
   renderWeatherStatsChart();
   renderWeatherStatsLegend();
   renderWeatherStatsExplainer();
+  _renderWeatherStatsPillState();
+}
+
+// Preset pills read "active" off _wsStatsState.hours ONLY while no
+// custom drag-zoom is in effect — a custom range matches none of the
+// five fixed windows, so every pill must go dark and the reset chip
+// (the discoverable way back to a preset) must show instead.
+function _renderWeatherStatsPillState() {
+  const bar = byId('weatherStatsPills');
+  if (!bar) return;
+  const zoomed = isZoomActive();
+  bar.querySelectorAll('.ws-stats-pill[data-hours]').forEach((b) => {
+    b.classList.toggle(
+      'is-active',
+      !zoomed && parseInt(b.dataset.hours, 10) === _wsStatsState.hours,
+    );
+  });
+  const resetBtn = byId('weatherStatsZoomReset');
+  if (resetBtn) resetBtn.hidden = !zoomed;
+  const zoomActions = byId('weatherZoomActions');
+  if (zoomActions) zoomActions.hidden = !zoomed;
+}
+
+// A fresh drag or an explicit reset invalidates whatever the save form
+// (weather/_manual-event-save.js) was showing — it rebuilds itself from
+// scratch on every "Als Ereignis speichern" click, so forcing it closed
+// here is simpler than reaching across modules to refresh its contents
+// in place. Plain DOM toggle, no import: the two modules never need to
+// know about each other beyond this shared element id.
+function _closeZoomSavePanel() {
+  const panel = byId('weatherZoomSavePanel');
+  if (panel) panel.hidden = true;
+}
+
+// Fired by the chart's drag-to-zoom (stats-chart/_hover.js's
+// opts.onRangeSelect, wired in stats-chart/index.js). Overrides whatever
+// preset is selected — none of the five pills matches a custom range —
+// and narrows the unified grid below by the same window.
+export function onWeatherChartRangeSelect(startTs, endTs) {
+  setZoomRange(startTs, endTs);
+  renderWeatherStats();
+  _refreshWeatherGrid();
+  _closeZoomSavePanel();
+}
+
+// The reset chip, and clicking ANY preset (even the one already
+// active) — both documented, discoverable ways back to a preset per
+// the brief. Exported so weather.html's inline wiring (none currently)
+// or a future affordance could call it directly; today only the reset
+// button and _bindWeatherStatsPills below use it.
+export function resetWeatherChartZoom() {
+  clearZoomRange();
+  renderWeatherStats();
+  _refreshWeatherGrid();
+  _closeZoomSavePanel();
 }
 
 function _bindWeatherStatsPills() {
   const bar = byId('weatherStatsPills');
   if (!bar || bar.dataset.wired) return;
-  bar.querySelectorAll('.ws-stats-pill').forEach((btn) => {
+  bar.querySelectorAll('.ws-stats-pill[data-hours]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const h = parseInt(btn.dataset.hours, 10) || 24;
-      if (h === _wsStatsState.hours) return;
+      const hadZoom = isZoomActive();
+      // A preset click always clears a custom range, even when it picks
+      // the same hours value the panel was already showing — that's the
+      // "clicking a preset again resets zoom" affordance from the brief.
+      clearZoomRange();
+      if (hadZoom) _closeZoomSavePanel();
+      if (h === _wsStatsState.hours) {
+        if (hadZoom) {
+          renderWeatherStats();
+          _refreshWeatherGrid();
+        }
+        return;
+      }
       _wsStatsState.hours = h;
-      bar
-        .querySelectorAll('.ws-stats-pill')
-        .forEach((b) => b.classList.toggle('is-active', b === btn));
       loadWeatherStats();
+      if (hadZoom) _refreshWeatherGrid(); // un-filter the grid now, don't wait on the fetch
     });
   });
+  const resetBtn = byId('weatherStatsZoomReset');
+  if (resetBtn) resetBtn.addEventListener('click', resetWeatherChartZoom);
   bar.dataset.wired = '1';
 }
 
@@ -235,6 +314,7 @@ export const WEATHER_FIELD_LABEL_DE = {
   visibility: 'Sicht',
   wind_gusts_10m: 'Wind-Böen',
   cloud_cover: 'Bewölkung',
+  sun_altitude: 'Sonnenhöhe',
   weather_code: 'WMO-Code',
 };
 export const WEATHER_FIELD_UNIT_DE = {
@@ -244,6 +324,7 @@ export const WEATHER_FIELD_UNIT_DE = {
   visibility: 'm',
   wind_gusts_10m: 'km/h',
   cloud_cover: '%',
+  sun_altitude: '°',
   weather_code: '',
 };
 

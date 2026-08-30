@@ -1,45 +1,38 @@
 // ─── weather/sightings.js ──────────────────────────────────────────────────
 // Stage 24 of the legacy.js → ES modules refactor — Wetter-Sichtungen
-// grid + lightbox + recaps/episodes + hash-anchor handler. Pure code
-// move from legacy.js; the two _orig* monkey-patches that lived at the
-// bottom of legacy.js have been folded directly into the function
-// bodies (loadWeatherSightings -> loadWeatherRecaps; renderWeatherSightings
-// -> _renderWeatherGrid) so callers see one definition, no double-
-// override risk. Recap/episode card templates live in ./_feed.js.
+// grid + hash-anchor handler. Pure code move from legacy.js; the two
+// _orig* monkey-patches that lived at the bottom of legacy.js have been
+// folded directly into the function bodies (loadWeatherSightings ->
+// loadWeatherRecaps; renderWeatherSightings -> _renderWeatherGrid) so
+// callers see one definition, no double-override risk. Card templates
+// live in ./_feed.js, pagination in ./_pagination.js, the MediaView
+// lightbox openers in ./_lightbox.js, manual-event data+view in
+// ./_manual-events.js — this file crossed the JS line ceiling and split
+// into those four siblings, keeping only "load the sources, build the
+// grid, wire the chip filter" here.
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { showToast, showConfirm } from '../core/toast.js';
 import { apiGet, apiDelete } from '../core/api.js';
+import { showToast } from '../core/toast.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
-import { precipitationLabel } from '../core/weather-precip.js';
 import { fetchEpisodes } from '../storms/_api.js';
-import { recapCardHTML, episodeCardHTML, openStormEpisode, unifiedFeedItems } from './_feed.js';
-// Reuse the Library card's trash glyph so the weather cards' hover-reveal
-// delete reads identically to the Mediathek media-card.
-import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
-
-// Pick the right human-readable label for a sighting badge. For
-// `heavy_rain` we band the actual current precipitation reading
-// (api_snapshot.precipitation) — the static "Starkregen" from
-// WEATHER_TYPES is the *event-type* name and would mislabel a card
-// captured at e.g. 0.1 mm/h. For all other event types we fall back
-// to the static WEATHER_TYPES label.
-function _weatherSightingLabel(s, meta) {
-  if (s && s.event_type === 'heavy_rain') {
-    const snap = s.api_snapshot || {};
-    if (snap.precipitation !== null && snap.precipitation !== undefined) {
-      return precipitationLabel(snap.precipitation);
-    }
-  }
-  return meta.de;
-}
-import { openMediaView } from '../mediaview/index.js';
+import {
+  sightingCardHTML,
+  recapCardHTML,
+  episodeCardHTML,
+  manualEventCardHTML,
+  openStormEpisode,
+  unifiedFeedItems,
+} from './_feed.js';
+import { openWeatherLightbox, openWeatherRecapLightbox } from './_lightbox.js';
+import { weatherPageSize, renderWeatherPagination } from './_pagination.js';
+import { loadWeatherManualEvents, openManualEventView } from './_manual-events.js';
+import { withinZoom } from './_zoom.js';
 
 // Matches MAX_SIGHTINGS_PAGE_SIZE in routes/weather.py. The gallery
 // filters client-side over multi-select chips, so it needs the whole
 // list; the cap keeps "whole" bounded on a large library.
 const _FETCH_PAGE_SIZE = 500;
-import { closeWeatherMode } from '../mediaview/weather-mode.js';
 
 async function loadWeatherSightings(filter) {
   // Filter migrates from single-string to Set semantics: state.weather.filter
@@ -70,11 +63,14 @@ async function loadWeatherSightings(filter) {
   } catch (_err) {
     // silently degrade — section stays empty
   }
-  // Recaps and Gewitter-episodes are event records like any other and
-  // render inline in the same grid (see _renderWeatherGrid) — loading
-  // them here keeps every source synced without a separate boot hook.
+  // Recaps, Gewitter-episodes and manual events are event records like
+  // any other and render inline in the same grid (see _renderWeatherGrid)
+  // — loading them here keeps every source synced without a separate
+  // boot hook.
   await loadWeatherRecaps();
   await loadStormEpisodes();
+  await loadWeatherManualEvents();
+  _renderWeatherGrid();
 }
 
 function renderWeatherSightings() {
@@ -140,105 +136,6 @@ function _renderWeatherFilterPills() {
   });
 }
 
-// Viewport-aware page size: tight on phones (4 = 2×2 mosaic that
-// matches the .ws-grid 2-col mobile layout), comfortable on tablets,
-// 3×3 on desktop so the pagination control stays in view on a
-// 1080 p screen without scrolling. Recomputed on every render so a
-// window resize adjusts the page count without a reload.
-function _weatherPageSize() {
-  const w = window.innerWidth || 1200;
-  if (w <= 768) return 4;
-  if (w <= 1180) return 8;
-  return 9;
-}
-
-// ── Mediathek-style card chrome ───────────────────────────────────────────
-// The two inline-style strings below are copied verbatim from mediaCardHTML()
-// in mediathek/orchestration.js so the badge font / blur / radius match the
-// Library cards 1:1 without re-exporting private constants. _WS_SUB_BADGE_BASE
-// gets the event's own colour appended per card at build time.
-const _WS_BADGE_STYLE =
-  'font-size:10px;font-weight:700;color:#e2e8f0;background:rgba(0,0,0,.68);backdrop-filter:blur(3px);padding:2px 6px;border-radius:4px;line-height:1.45;white-space:nowrap';
-const _WS_SUB_BADGE_BASE =
-  'font-size:10px;background:none;backdrop-filter:blur(3px);padding:0 6px;border-radius:4px;line-height:1.45;white-space:nowrap;margin-top:1px;opacity:0.85';
-
-// Duration m:ss + byte→KB/MB formatters — mirror Mediathek's fmtDur / fmtByt
-// so the bottom-right stack reads identically to the Library cards.
-function _wsFmtDur(s) {
-  if (!s || s <= 0) return '';
-  const m = Math.floor(s / 60);
-  const sec = Math.round(s % 60);
-  return `${m}:${String(sec).padStart(2, '0')}`;
-}
-function _wsFmtBytes(b) {
-  if (!b || b <= 0) return '';
-  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
-  return Math.round(b / 1024) + ' KB';
-}
-
-// Build one weather-sighting card, mirroring the Mediathek media-card:
-// type badge + score top-left, hover-reveal delete top-right, date/time
-// bottom-left, duration/size bottom-right. `idx` is the absolute index into
-// the filtered list (data-idx → lightbox prev/next); `isActive` is false
-// when the camera was removed — that dims the card and swaps the thumb for
-// the striped orphan placeholder.
-function _weatherSightingCardHTML(s, idx, isActive) {
-  const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type, color: '#94a3b8', icon: '' };
-  // Sun-timelapse cards prefer the real sunrise/sunset time over the
-  // window-end timestamp; older records without sun_event_at fall back.
-  const t = new Date(s.sun_event_at || s.started_at);
-  const dateLabel = t.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  });
-  const timeLabel = t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  const sevPct = Math.round((s.score || s.severity || 0) * 100);
-  // The percentage means different things per type; the same text feeds the
-  // tap-to-explain toast since title= doesn't surface on touch.
-  const isSunTl = typeof s.event_type === 'string' && s.event_type.startsWith('sun_timelapse');
-  const scoreTip = isSunTl
-    ? 'Himmelsqualität · 100% = klarer Himmel, 50% = stark bewölkt'
-    : 'Stärke des Wetterereignisses';
-  const color = meta.color || '#94a3b8';
-  const subBadge = `${_WS_SUB_BADGE_BASE};color:${color}`;
-  const displayLabel = _weatherSightingLabel(s, meta);
-  const durLabel = _wsFmtDur(s.duration_s);
-  const sizeLabel = _wsFmtBytes(s.file_size_bytes);
-  const thumbHtml = isActive
-    ? `<img class="ws-card-thumb" loading="lazy" src="/api/weather/sightings/${encodeURIComponent(s.id)}/thumb" alt="${esc(displayLabel)}" onerror="this.style.opacity=0.2"/>`
-    : `<div class="ws-card-thumb ws-card-thumb--orphan" aria-hidden="true"></div>`;
-  const scoreChip =
-    sevPct > 0
-      ? `<span class="ws-score-chip" role="button" tabindex="0" style="pointer-events:auto" title="${esc(scoreTip)}" aria-label="${sevPct} Prozent, ${esc(scoreTip)}" data-score-tip="${esc(scoreTip)}">${sevPct}%<span class="ws-score-info" aria-hidden="true">ⓘ</span></span>`
-      : '';
-  const rightStack =
-    durLabel || sizeLabel
-      ? `<div class="ws-card-stack ws-card-stack--r">${durLabel ? `<div style="${_WS_BADGE_STYLE}">${durLabel}</div>` : ''}${sizeLabel ? `<div style="${subBadge}">${sizeLabel}</div>` : ''}</div>`
-      : '';
-  return `
-      <div class="ws-card${isActive ? '' : ' ws-card--orphan'}" data-idx="${idx}" data-id="${esc(s.id)}">
-        <div class="ws-card-thumb-wrap">
-          ${thumbHtml}
-          <span class="ws-card-play">
-            <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-          </span>
-          <div class="ws-card-cluster">
-            <span class="mmc-tl-badge ws-type-badge" style="border-color:${color}b3;color:${color}"><span class="ws-card-badge-icon">${meta.icon}</span>${esc(displayLabel)}</span>
-            ${scoreChip}
-          </div>
-          <div class="ws-card-stack ws-card-stack--l">
-            <div style="${_WS_BADGE_STYLE}">${dateLabel}</div>
-            <div style="${subBadge}">${timeLabel}</div>
-          </div>
-          ${rightStack}
-          <div class="mmc-actions">
-            <button type="button" class="mmc-btn mmc-delete" title="Löschen" aria-label="Löschen">${_LB_TRASH_ICON_ONLY}</button>
-          </div>
-        </div>
-      </div>`;
-}
-
 // Delete a sighting straight from its card (Mediathek-style hover trash —
 // no confirm modal; the heavier confirm lives in the lightbox). Fades the
 // card, hits the same DELETE endpoint the lightbox uses, then re-fetches so
@@ -275,15 +172,24 @@ function _renderWeatherGrid() {
   // absolute idx the sighting cards carry, regardless of where the
   // unified feed's sort places them on screen.
   state.weather.itemsFiltered = items;
-  const feed = unifiedFeedItems(items, state.weather.recaps, state.weather.episodes);
+  const merged = unifiedFeedItems(
+    items,
+    state.weather.recaps,
+    state.weather.episodes,
+    state.weather.manualEvents,
+  );
+  // A custom drag-zoom on the Wetterdaten chart narrows the SAME feed by
+  // timestamp, on top of (not instead of) the chip filter above — both
+  // apply simultaneously, and reset independently of one another.
+  const feed = merged.filter((entry) => withinZoom(entry.ts));
   if (!feed.length) {
     grid.innerHTML = '';
     if (empty) empty.hidden = false;
-    _renderWeatherPagination(0, 0);
+    renderWeatherPagination(0, 0, _renderWeatherGrid);
     return;
   }
   if (empty) empty.hidden = true;
-  const pageSize = _weatherPageSize();
+  const pageSize = weatherPageSize();
   const pageCount = Math.max(1, Math.ceil(feed.length / pageSize));
   let page = Number.isInteger(state.weather.page) ? state.weather.page : 0;
   if (page >= pageCount) page = pageCount - 1;
@@ -300,21 +206,25 @@ function _renderWeatherGrid() {
   // clean — the card still renders with a placeholder so the user can
   // see the orphan exists and decide whether to delete it.
   const _activeCamIds = new Set((state.cameras || []).map((c) => c.id));
-  grid.innerHTML = visible
-    .map((entry) => {
-      if (entry.kind === 'sighting') {
-        return _weatherSightingCardHTML(entry.data, entry.idx, _activeCamIds.has(entry.data.cam_id));
-      }
-      if (entry.kind === 'recap') return recapCardHTML(entry.data, entry.idx);
-      return episodeCardHTML(entry.data);
-    })
-    .join('');
+  grid.innerHTML = visible.map((entry) => _weatherFeedCardHTML(entry, _activeCamIds)).join('');
   _bindWeatherGridCards(grid);
-  _renderWeatherPagination(feed.length, pageSize);
+  renderWeatherPagination(feed.length, pageSize, _renderWeatherGrid);
+}
+
+// One switch, one place — picking the right card template per feed
+// entry kind. Split out of _renderWeatherGrid to keep that function
+// under the JS ceiling.
+function _weatherFeedCardHTML(entry, activeCamIds) {
+  if (entry.kind === 'sighting') {
+    return sightingCardHTML(entry.data, entry.idx, activeCamIds.has(entry.data.cam_id));
+  }
+  if (entry.kind === 'recap') return recapCardHTML(entry.data, entry.idx);
+  if (entry.kind === 'manual') return manualEventCardHTML(entry.data);
+  return episodeCardHTML(entry.data);
 }
 
 // Click + delete + score-tip wiring for whatever mix of sighting/recap/
-// episode cards the current page rendered. Split out of
+// episode/manual cards the current page rendered. Split out of
 // _renderWeatherGrid to keep that function under the JS ceiling.
 function _bindWeatherGridCards(grid) {
   grid.querySelectorAll('.ws-card').forEach((card) => {
@@ -327,6 +237,9 @@ function _bindWeatherGridCards(grid) {
   });
   grid.querySelectorAll('.ws-recap-card[data-ep-id]').forEach((card) => {
     card.addEventListener('click', () => openStormEpisode(card.dataset.epId));
+  });
+  grid.querySelectorAll('.ws-recap-card[data-manual-id]').forEach((card) => {
+    card.addEventListener('click', () => openManualEventView(card.dataset.manualId));
   });
   // Hover-reveal delete (top-right) mirrors the Mediathek media-card:
   // stopPropagation so the trash tap removes the event instead of opening
@@ -358,46 +271,6 @@ function _bindWeatherGridCards(grid) {
   });
 }
 
-// Pagination strip underneath the grid. Copied 1:1 from the Mediathek
-// renderMediaPagination() recipe (mediathek/orchestration.js): a prev
-// chip, a "Seite X von Y" label, and a next chip — no numbered pill row
-// (it got ugly with many pages). The container
-// (#weatherSightingsPagination) already carries `media-pagination` so
-// the `.page-pill` / `.page-pill-chip` / `.page-label` styling is shared
-// with the Library. Wiring is unchanged: prev/next move
-// state.weather.page, re-render the grid, and scroll it back into view;
-// the strip stays hidden for single-page lists.
-function _renderWeatherPagination(totalItems, pageSize) {
-  const pag = byId('weatherSightingsPagination');
-  if (!pag) return;
-  if (!totalItems || totalItems <= pageSize) {
-    pag.hidden = true;
-    pag.innerHTML = '';
-    return;
-  }
-  pag.hidden = false;
-  const pageCount = Math.max(1, Math.ceil(totalItems / pageSize));
-  const cur = Number.isInteger(state.weather.page) ? state.weather.page : 0;
-  pag.innerHTML =
-    `<button type="button" class="page-pill" data-act="prev" ${cur === 0 ? 'disabled' : ''} aria-label="Vorherige Seite"><span class="page-pill-chip">‹</span></button>` +
-    `<span class="page-label">Seite ${cur + 1} von ${pageCount}</span>` +
-    `<button type="button" class="page-pill" data-act="next" ${cur >= pageCount - 1 ? 'disabled' : ''} aria-label="Nächste Seite"><span class="page-pill-chip">›</span></button>`;
-  pag.querySelectorAll('button').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      if (btn.disabled) return;
-      let next = state.weather.page || 0;
-      if (btn.dataset.act === 'prev') next = Math.max(0, next - 1);
-      else if (btn.dataset.act === 'next') next = Math.min(pageCount - 1, next + 1);
-      if (next === state.weather.page) return;
-      state.weather.page = next;
-      _renderWeatherGrid();
-      // Scroll the grid back into view so the user sees the new page,
-      // not whatever scroll position the strip was at.
-      byId('weatherSightingsGrid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
-}
-
 // Window resize switches the page-size band (4 → 8 → 12). Re-render
 // the grid so the user sees the right column count immediately and
 // the page index gets clamped to the new page count.
@@ -412,70 +285,6 @@ window.addEventListener(
   },
   { passive: true },
 );
-
-let _wsLbIdx = -1;
-
-// Reshape a weather sighting into the MediaView shell item: the title
-// bar reads camera_name + time_label; the Wetter tab reads
-// api_snapshot + sun_snapshot. event_type seeds a short type word in
-// the time label so the header still reads "Sonnenuntergang · 30.05.".
-function _sightingItem(s) {
-  const meta = WEATHER_TYPES[s.event_type] || { de: s.event_type || '' };
-  const t = new Date(s.started_at);
-  const when = Number.isNaN(t.getTime())
-    ? ''
-    : t.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
-  const label = _weatherSightingLabel(s, meta);
-  return {
-    camera_name: s.cam_name || s.cam_id || '',
-    time_label: [label, when].filter(Boolean).join(' · '),
-    api_snapshot: s.api_snapshot,
-    sun_snapshot: s.sun_snapshot,
-    event_type: s.event_type,
-  };
-}
-
-// Confirm + delete a sighting from inside the player, then close the
-// modal and refresh the grid so counts / filter pills stay consistent.
-function _confirmDeleteSighting(s) {
-  showConfirm('Wetter-Ereignis wirklich löschen?').then((ok) => {
-    if (!ok) return;
-    apiDelete(`/api/weather/sightings/${encodeURIComponent(s.id)}`)
-      .then(() => {
-        closeWeatherMode();
-        loadWeatherSightings(state.weather.filter);
-      })
-      .catch((err) => showToast('Löschen fehlgeschlagen: ' + (err?.message || err), 'error'));
-  });
-}
-
-// Open a weather sighting in the unified MediaView shell (blue tabs,
-// Wetter panel, Fein-Analyse fold, prev/next across the filtered list,
-// download + delete). Replaces the legacy ws-lb modal entirely. idx is
-// the absolute index into state.weather.itemsFiltered so prev/next
-// walk the whole filtered set, not just the current page.
-function openWeatherLightbox(idx) {
-  const items = state.weather.itemsFiltered || state.weather.items || [];
-  if (idx < 0 || idx >= items.length) return;
-  _wsLbIdx = idx;
-  const s = items[idx];
-  openMediaView({
-    mode: 'weather',
-    item: _sightingItem(s),
-    source: {
-      type: 'video',
-      url: `/api/weather/sightings/${encodeURIComponent(s.id)}/clip`,
-      loop: true,
-    },
-    actions: {
-      onPrev: idx > 0 ? () => openWeatherLightbox(idx - 1) : null,
-      onNext: idx < items.length - 1 ? () => openWeatherLightbox(idx + 1) : null,
-      onDownload: () =>
-        window.open(`/api/weather/sightings/${encodeURIComponent(s.id)}/clip`, '_blank'),
-      onDelete: () => _confirmDeleteSighting(s),
-    },
-  });
-}
 
 // ── Settings: Wetter-Ereignisse ──────────────────────────────────────────────
 
@@ -495,41 +304,6 @@ async function loadStormEpisodes() {
   const { items } = await fetchEpisodes();
   state.weather.episodes = items;
   _renderWeatherGrid();
-}
-
-// Open a weather recap (a multi-clip compilation) in the MediaView
-// shell. Recaps carry no per-event snapshot — no Wetter tab, no
-// Fein-Analyse fold, just the clip + title. No prev/next: recaps don't
-// form an ordered series. Tolerant signature — the Telegram router
-// calls openWeatherRecap(item, idx); a bare idx also works.
-function openWeatherRecapLightbox(itemOrIdx, idx) {
-  const items = state.weather.recaps || [];
-  let m;
-  if (itemOrIdx && typeof itemOrIdx === 'object') {
-    m = itemOrIdx;
-  } else {
-    const i = typeof itemOrIdx === 'number' ? itemOrIdx : idx;
-    if (i == null || i < 0 || i >= items.length) return;
-    m = items[i];
-  }
-  if (!m) return;
-  openMediaView({
-    mode: 'weather',
-    item: {
-      camera_name: m.period_label || m.id || 'Recap',
-      time_label: [m.built_at || '', m.n_clips != null ? `${m.n_clips} Sichtungen` : '']
-        .filter(Boolean)
-        .join(' · '),
-    },
-    source: {
-      type: 'video',
-      url: `/api/weather/recaps/${encodeURIComponent(m.id)}/clip`,
-      loop: true,
-    },
-    showWeatherTab: false,
-    showFineFold: false,
-    actions: {},
-  });
 }
 
 // ── Hash anchor handler — open lightbox for #weather/<id> on page load ──────
@@ -582,3 +356,9 @@ window.loadWeatherSightings = loadWeatherSightings;
 window.loadWeatherRecaps = loadWeatherRecaps;
 window.openWeatherLightbox = openWeatherLightbox;
 window.openWeatherRecap = openWeatherRecapLightbox;
+// The Wetterdaten-chart's drag-zoom (weather/stats.js) narrows this same
+// grid by timestamp on every drag/reset — a plain re-render off already-
+// loaded state, not a re-fetch, so it reaches for this bridge instead of
+// the heavier window.loadWeatherSightings above (which would also be
+// correct, just a needless network round-trip per drag).
+window.renderWeatherSightings = renderWeatherSightings;

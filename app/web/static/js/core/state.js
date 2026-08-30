@@ -32,7 +32,7 @@ export const state = {
   _tlInitialized: false,
   mediaSelectMode: false,
   mediaSelected: new Set(),
-  weather: { items: [], counts: {}, total: 0, filter: null, recaps: [] },
+  weather: { items: [], counts: {}, total: 0, filter: null, recaps: [], manualEvents: [] },
 };
 
 // Zone/Mask drawing state for the cam-edit shape editor. Lives at the

@@ -1,0 +1,253 @@
+/* ── Wetterdaten-chart drag-zoom ──────────────────────────────────────────
+   Additive companion to 23-weather-3.css: the reset chip that appears
+   next to the five preset pills, the "als Ereignis speichern" row +
+   form, and the manual-event view modal. Depth throughout comes from
+   background-tint contrast, never a border (project rule). */
+
+/* Reset chip — same pill family as .ws-stats-pill but visually distinct
+   (a plain "✕", muted until hovered) so it doesn't read as a sixth time
+   window. */
+.ws-stats-pill--reset {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 800;
+}
+@media (hover: hover) {
+  .ws-stats-pill--reset:hover {
+    color: #fca5b5;
+    background: rgba(244, 63, 94, 0.16);
+  }
+}
+
+/* "Zeitraum ausgewählt · Als Ereignis speichern" row — sits between the
+   chart and the legend, visible only while a custom zoom is active. */
+.ws-zoom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.ws-zoom-hint {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(127, 174, 201, 0.85);
+}
+
+/* Save form panel. */
+.ws-zoom-save {
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(127, 174, 201, 0.08);
+  box-shadow: inset 4px 0 0 #7faec9;
+  display: grid;
+  gap: 12px;
+}
+.ws-zsave-row {
+  display: grid;
+  gap: 6px;
+}
+.ws-zsave-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ws-zsave-input,
+.ws-zsave-note {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 16px; /* iOS: below 16px the input auto-zooms on focus */
+  font-family: inherit;
+}
+.ws-zsave-note {
+  min-height: 72px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+/* Category chips — reuse the WEATHER_TYPES palette via the --cb custom
+   property, same convention as the sighting filter chips. */
+.ws-zsave-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ws-zsave-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ws-zsave-cat-ic {
+  display: inline-flex;
+  color: var(--cb, #94a3b8);
+}
+.ws-zsave-cat.is-active {
+  background: color-mix(in srgb, var(--cb, #7faec9) 28%, transparent);
+  color: #fff;
+}
+
+/* Curve checkboxes — one per Wetterdaten-chart line, dot colour matches
+   WEATHER_STATS_PALETTE so the form reads as "which lines" at a glance. */
+.ws-zsave-curves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+}
+@media (min-width: 640px) {
+  .ws-zsave-curves {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.ws-zsave-curve {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.ws-zsave-curve input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.ws-zsave-curve-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ws-zsave-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.ws-zsave-actions .btn,
+.ws-zsave-actions .btn-action {
+  min-height: 44px;
+}
+
+/* ── Manual-event view modal ──────────────────────────────────────────────
+   Clicking a saved manual-event card re-draws the Wetterdaten-chart for
+   exactly that range in a small overlay — no clip, no video player. */
+.ws-manual-modal {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background: rgba(6, 10, 16, 0.72);
+  z-index: var(--z-modal, 1200);
+}
+.ws-manual-modal-card {
+  width: min(560px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  border-radius: 16px;
+  padding: 18px;
+  background: #10161f;
+  display: grid;
+  gap: 12px;
+}
+.ws-manual-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ws-manual-modal-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 22px;
+}
+.ws-manual-modal-title {
+  flex: 1;
+  min-width: 0;
+}
+.ws-manual-modal-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.ws-manual-modal-cat {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ws-manual-modal-close {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+.ws-manual-modal-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(226, 232, 240, 0.85);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ws-manual-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.ws-manual-modal-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(244, 63, 94, 0.16);
+  color: #fca5b5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ws-manual-modal-delete:hover {
+    background: rgba(244, 63, 94, 0.26);
+  }
+}
+
+@media (max-width: 480px) {
+  .ws-zsave-curves {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ws-zsave-actions {
+    flex-direction: column-reverse;
+  }
+  .ws-zsave-actions .btn,
+  .ws-zsave-actions .btn-action {
+    width: 100%;
+  }
+}

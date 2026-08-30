@@ -16,9 +16,9 @@
       <span class="ws-subtitle" id="weatherSightingsSubtitle"></span>
     </div>
     {# Order is deliberate: chips decide WHAT, the timeline decides WHEN, and the gallery below
-    shows what is left. The chart used to sit under the gallery, so narrowing the time window
-    meant scrolling past the very clips it was filtering. Recaps are no longer their own strip —
-    they are event records like any other and now live in the same list. #}
+    shows what is left. The chart used to sit under the gallery, so narrowing the time window meant
+    scrolling past the very clips it was filtering. Recaps are no longer their own strip — they are
+    event records like any other and now live in the same list. #}
     <div class="ws-filter-bar" id="weatherFilterBar"></div>
     <!-- Wetterdaten & Prognose: persisted history of all numeric
                Open-Meteo parameters + sun altitude, rendered as a single
@@ -42,10 +42,37 @@
           <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
           <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
           <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
+          <!-- A custom drag-zoom on the chart below matches none of the five
+                     presets above — every ws-stats-pill.is-active class then comes
+                     off (weather/stats.js::_renderWeatherStatsPillState) and this
+                     chip is the discoverable way back. Clicking any preset again
+                     resets the zoom just as well; this is the explicit affordance. -->
+          <button
+            type="button"
+            class="ws-stats-pill ws-stats-pill--reset"
+            id="weatherStatsZoomReset"
+            hidden
+            aria-label="Zoom zurücksetzen"
+            title="Zoom zurücksetzen"
+          >
+            ✕
+          </button>
         </div>
       </div>
       <div class="ws-stats-chart-wrap" id="weatherStatsChartWrap">
         <!-- populated by renderWeatherStatsChart() -->
+      </div>
+      <!-- Shown only while a custom drag-zoom is active (weather/stats.js).
+                 "Als Ereignis speichern" opens weatherZoomSavePanel, populated by
+                 weather/_manual-event-save.js. -->
+      <div class="ws-zoom-actions" id="weatherZoomActions" hidden>
+        <span class="ws-zoom-hint">Zeitraum ausgewählt</span>
+        <button type="button" class="btn btn-action action-green" id="weatherZoomSaveBtn">
+          Als Ereignis speichern
+        </button>
+      </div>
+      <div class="ws-zoom-save" id="weatherZoomSavePanel" hidden>
+        <!-- populated by weather/_manual-event-save.js -->
       </div>
       <div class="ws-stats-legend" id="weatherStatsLegend">
         <!-- populated by renderWeatherStatsLegend() -->

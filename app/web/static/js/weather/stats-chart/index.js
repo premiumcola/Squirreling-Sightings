@@ -13,7 +13,9 @@ import {
   _wsStatsState,
   wsVisibleFields,
   wsLineEmphasis,
+  onWeatherChartRangeSelect,
 } from '../stats.js';
+import { isZoomActive, zoomedSamples } from '../_zoom.js';
 import { _buildThresholdSvg } from '../stats-thresholds.js';
 import { buildLinePath } from './_paths.js';
 import { buildXTicks, buildYAxis } from './_axes.js';
@@ -136,6 +138,7 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
       ${thresholdSvg}
       ${markers && markers.length ? _markersSvg(markers, samples, PAD, cw, ch) : ''}
       <line class="ws-chart-guide" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
+      <rect class="ws-chart-brush" x="0" y="${PAD.t}" width="0" height="${ch}" fill="rgba(127,174,201,.22)" style="display:none;pointer-events:none"/>
       <rect class="ws-chart-hover-area" x="${PAD.l}" y="${PAD.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
     </svg>`;
   return svg + noThresholdHint + '<div class="ws-chart-tooltip" hidden></div>';
@@ -189,13 +192,23 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
   bindChartHover(wrap, samples, fields, PAD, geo.cw, geo.VB_W, data, opts.hover || {});
 }
 
+// A custom drag-zoom (weather/_zoom.js) is a client-side slice of the
+// SAME fetched payload, never a second fetch: the history buffer has no
+// downsampling (see routes/weather.py::api_weather_history's docstring
+// and the service's own history() — every sample from the ring buffer
+// at its native poll cadence, regardless of `hours`), so a wide preset's
+// own data already carries full resolution for any narrower range
+// inside it.
 export function renderWeatherStatsChart() {
   const wrap = byId('weatherStatsChartWrap');
   if (!wrap) return;
   _observe(wrap);
-  renderStatsChartInto(wrap, _wsStatsState.data, {
+  const data = _wsStatsState.data;
+  const viewData = isZoomActive() ? { ...data, samples: zoomedSamples(data?.samples) } : data;
+  renderStatsChartInto(wrap, viewData, {
     isolated: _wsStatsState.isolated,
     fields: wsVisibleFields(),
     hours: _wsStatsState.hours || 24,
+    hover: { onRangeSelect: onWeatherChartRangeSelect },
   });
 }

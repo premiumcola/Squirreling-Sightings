@@ -67,6 +67,11 @@ LOAD_ORDER = [
     "21-weather-2.css",
     "22-cam-edit-3.css",
     "23-weather-3.css",
+    # Wetterdaten-chart drag-zoom: reset chip, "als Ereignis speichern"
+    # form, and the manual-event view modal. Letter suffix matches the
+    # existing 06a-06f / 24b family — an additive companion to
+    # 23-weather-3.css, not a rewrite of it.
+    "23b-weather-zoom.css",
     "24-cam-edit-4.css",
     # Gewitter-Archiv — sits before 25-mobile.css so every mobile
     # override there still wins the cascade. Letter suffix matches the

@@ -33,12 +33,10 @@ function showWizardStep(step) {
 
 async function finishWizard() {
   const camId = byId('wiz_cam_id').value.trim();
+  // No `app` block. The wizard used to collect name / tagline / logo
+  // and write them to settings.json; no template renders any of the
+  // three, so the operator typed a rename that never happened.
   const payload = {
-    app: {
-      name: byId('wiz_app_name').value || 'Squirreling · Sightings',
-      tagline: byId('wiz_tagline').value || '',
-      logo: byId('wiz_logo').value || '🐈‍⬛',
-    },
     server: { default_discovery_subnet: byId('wiz_subnet').value || '192.168.1.0/24' },
     telegram: {
       enabled: byId('wiz_tg_enabled').checked,

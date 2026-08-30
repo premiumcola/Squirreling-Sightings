@@ -19,7 +19,6 @@ import {
 import { renderTimeline } from './timeline.js';
 import { _renderGlobalStatusRows } from './camedit/detection.js';
 import {
-  renderShell,
   renderCameraSettings,
   renderProfiles,
   renderAudit,
@@ -161,7 +160,6 @@ export async function loadAll() {
     `/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`,
   );
   await loadMediaStorageStats();
-  renderShell();
   renderDashboard();
   renderTimeline();
   renderCameraSettings();

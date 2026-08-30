@@ -15,8 +15,7 @@
 // Public surface bridged on window for inline onclicks + loadAll() in
 // live-update.js: editCamera, toggleArm, toggleCameraEnabled,
 // _reconnectCam, _quickDeleteCamera, _flashDetection,
-// renderShell, renderCameraSettings, renderProfiles, renderAudit,
-// hydrateSettings.
+// renderCameraSettings, renderProfiles, renderAudit, hydrateSettings.
 import { state } from '../core/state.js';
 import { byId, esc } from '../core/dom.js';
 import { j, apiPost } from '../core/api.js';
@@ -72,24 +71,12 @@ import {
 // Tiny helper used by the export-config buttons in the App-Section.
 const download = (url) => window.open(url, '_blank');
 
-export function renderShell() {
-  // Hero title is now a static "Squirreling · Sightings" lockup with the squirrel-on-
-  // hyphen ornament — no longer driven by config.app.{name,tagline,
-  // subtitle}. Side-nav app-name still hydrates if present so users
-  // who renamed the app via Settings keep their custom label there.
-  const _sideAppName = byId('sideAppName');
-  if (_sideAppName) _sideAppName.textContent = state.config.app.name || 'Squirreling · Sightings';
-  // Null-guard the legacy hero IDs so a config still containing
-  // tagline/subtitle doesn't crash renderShell — they just no-op.
-  const nameEl = byId('appName');
-  if (nameEl) nameEl.textContent = state.config.app.name || 'Squirreling · Sightings';
-  const tagEl = byId('appTagline');
-  if (tagEl) tagEl.textContent = state.config.app.tagline || 'Motion · Objekte · Timelapse';
-  const subEl = byId('appSubtitle');
-  if (subEl)
-    subEl.textContent =
-      state.config.app.subtitle || 'RTSP-Streams · KI-Erkennung · Vogelarten · Telegram-Alerts';
-}
+// renderShell is gone. It hydrated #sideAppName / #appName /
+// #appTagline / #appSubtitle from config.app — four ids that exist in
+// no template. The hero is a static lockup (SVG squirrel glyph on the
+// hyphen plus a fixed wordmark, see partials/hero.html) and the sidenav
+// carries no brand element, so every branch was a null-guarded no-op.
+// The wizard inputs that fed those keys went with it.
 
 // _camGridCols / SURVEIL_ACC / SURVEIL_LABEL / _isInScheduleWindow /
 // _surveilMode / _surveilEyeSvg now live in dashboard.js (Stage 3a).

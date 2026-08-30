@@ -9,6 +9,18 @@ pipeline. Severity matrix, per-label push thresholds, quiet hours and
 the notify schedule are frequently the very things being diagnosed when
 someone walks in front of a camera — routing the diagnostic through them
 would silence it exactly when it is needed.
+
+WHY THIS FILE CHANGED: the fixture used to build its config as
+``{"telegram": {"recording_ticker": …}}``, mirroring the reader. But the
+default is written one level down, at ``telegram.push.recording_ticker``
+(``settings/_consts.TELEGRAM_PUSH_DEFAULTS``), and nothing ever wrote the
+top-level key. So the setting was unreachable: the ticker could not be
+switched off, and it is documented as a walk-in-test aid meant to be off
+in normal operation — two extra Telegram messages per event, forever.
+The suite passed the whole time, because it asserted against the reader's
+own wrong path instead of against where the value is stored. The fixture
+now writes where the writer writes; ``test_the_legacy_top_level_path_is_
+still_honoured`` covers a hand-edited install carrying the old key.
 """
 
 from __future__ import annotations
@@ -31,7 +43,7 @@ class _Cam(PublishMixin):
         self.camera_id = "cam-test"
         self.notifier = _Notifier()
         self.cfg = {"name": "Werkstatt", "armed": True, "telegram_enabled": True, **cfg}
-        self.global_cfg = {"telegram": {"recording_ticker": tg_default}}
+        self.global_cfg = {"telegram": {"push": {"recording_ticker": tg_default}}}
 
     def _send_ticker(self, text):  # run inline instead of in a thread
         import time as _t
@@ -119,6 +131,67 @@ def test_motion_only_event_still_reads_sensibly():
     cam = _Cam()
     cam.notify_recording_started([])
     assert "Bewegung" in cam.notifier.sent[0]
+
+
+def test_the_switch_is_read_where_the_default_is_written():
+    """The drift itself. TELEGRAM_PUSH_DEFAULTS is the single source of the
+    key's location; a reader that looks anywhere else cannot be switched."""
+    from app.settings._consts import TELEGRAM_PUSH_DEFAULTS
+
+    assert "recording_ticker" in TELEGRAM_PUSH_DEFAULTS
+
+    cam = _Cam()
+    cam.global_cfg = {"telegram": {"push": dict(TELEGRAM_PUSH_DEFAULTS, recording_ticker=False)}}
+    cam.notify_recording_started(["person"])
+    assert cam.notifier.sent == []
+
+
+def test_the_legacy_top_level_path_is_still_honoured():
+    """A hand-edited install can carry the value where the old reader looked.
+    It keeps working until migrate_telegram_push_defaults lifts it across."""
+    cam = _Cam()
+    cam.global_cfg = {"telegram": {"recording_ticker": False}}
+    cam.notify_recording_started(["person"])
+    assert cam.notifier.sent == []
+
+
+def test_push_wins_over_the_legacy_path():
+    cam = _Cam()
+    cam.global_cfg = {"telegram": {"recording_ticker": True, "push": {"recording_ticker": False}}}
+    cam.notify_recording_started(["person"])
+    assert cam.notifier.sent == []
+
+
+def test_the_migration_lifts_a_legacy_value_into_push():
+    """Additive: the hand-edited False must survive the True default."""
+    from app.settings.migrations import migrate_telegram_push_defaults
+
+    data = {"telegram": {"token": "<BOT_TOKEN>", "recording_ticker": False}}
+    migrate_telegram_push_defaults(data)
+
+    assert data["telegram"]["push"]["recording_ticker"] is False
+    # The dead key goes, so nothing can read the drifted path again.
+    assert "recording_ticker" not in data["telegram"]
+    assert data["telegram"]["token"] == "<BOT_TOKEN>"
+
+
+def test_the_migration_leaves_an_already_migrated_value_alone():
+    from app.settings.migrations import migrate_telegram_push_defaults
+
+    data = {"telegram": {"recording_ticker": True, "push": {"recording_ticker": False}}}
+    migrate_telegram_push_defaults(data)
+
+    assert data["telegram"]["push"]["recording_ticker"] is False
+
+
+def test_the_migration_is_idempotent():
+    from app.settings.migrations import migrate_telegram_push_defaults
+
+    data = {"telegram": {"recording_ticker": False}}
+    migrate_telegram_push_defaults(data)
+    migrate_telegram_push_defaults(data)
+
+    assert data["telegram"]["push"]["recording_ticker"] is False
 
 
 def test_the_ticker_does_not_run_through_the_push_pipeline():

@@ -61,6 +61,19 @@ class PublishMixin:
         cam_pref = self.cfg.get("recording_ticker")
         if cam_pref is not None:
             return bool(cam_pref)
+        # `telegram.push.recording_ticker` — where TELEGRAM_PUSH_DEFAULTS
+        # puts the key and where the whole push block lives. This read used
+        # to be `tg.get("recording_ticker")`, one level up, which nothing
+        # ever wrote: the switch was unreachable and the ticker was
+        # permanently on, two extra Telegram messages per event forever.
+        # The docstring calls it a walk-in-test aid meant to be turned OFF
+        # in normal operation, and the drift is exactly what defeated that.
+        push = tg.get("push") or {}
+        if "recording_ticker" in push:
+            return bool(push["recording_ticker"])
+        # Back-compat: an install still carrying the value at the old
+        # top-level path, read before migrate_telegram_push_defaults has
+        # lifted it across.
         return bool(tg.get("recording_ticker", True))
 
     def _send_ticker(self, text: str) -> None:

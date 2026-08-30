@@ -308,6 +308,18 @@ def migrate_telegram_push_defaults(data: dict) -> None:
     if not isinstance(push, dict):
         push = {}
         tg["push"] = push
+    # Lift a hand-edited `telegram.recording_ticker` into the documented
+    # `telegram.push.recording_ticker` BEFORE the defaults land. The reader
+    # in camera_runtime/_recording/_publish looked one level up from where
+    # TELEGRAM_PUSH_DEFAULTS puts the key, so the only way an install could
+    # carry a value at the old path was by editing settings.json directly —
+    # and that value must survive, not be overwritten by the True default.
+    # setdefault keeps it additive; the pop removes the now-dead key so the
+    # drift cannot be re-read by anything later.
+    legacy_ticker = tg.pop("recording_ticker", None)
+    if legacy_ticker is not None:
+        push.setdefault("recording_ticker", bool(legacy_ticker))
+        log.info("[migration] recording_ticker: telegram → telegram.push verschoben")
     _deep_merge_defaults(push, TELEGRAM_PUSH_DEFAULTS)
     # Backfill night-alert lat/lon from server.location when present —
     # avoids forcing the user to re-enter coordinates already known to

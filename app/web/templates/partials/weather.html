@@ -14,52 +14,51 @@
         Wetter-Ereignisse
       </span>
       <span class="ws-subtitle" id="weatherSightingsSubtitle"></span>
-      {# Discovery hook — the mobile dock's five slots are full, so on a phone this chip is what
-      makes the Gewitter-Archiv findable without scrolling blind. One line of HTML, 44 px tall. #}
-      <a class="ws-jump-chip" href="#storms">Gewitter-Archiv →</a>
     </div>
-    <div class="ws-recaps-row" id="weatherRecapsRow" hidden>
-      <div class="ws-recaps-title">Recaps</div>
-      <div class="ws-recaps-strip" id="weatherRecapsStrip"></div>
-    </div>
+    {# Order is deliberate: chips decide WHAT, the timeline decides WHEN, and the gallery below
+    shows what is left. The chart used to sit under the gallery, so narrowing the time window
+    meant scrolling past the very clips it was filtering. Recaps are no longer their own strip —
+    they are event records like any other and now live in the same list. #}
     <div class="ws-filter-bar" id="weatherFilterBar"></div>
+    <!-- Wetterdaten & Prognose: persisted history of all numeric
+               Open-Meteo parameters + sun altitude, rendered as a single
+               multi-line SVG chart with per-line normalisation. Fetches
+               /api/weather/history on visibility (IntersectionObserver)
+               and refreshes every 60 s while the section is in view.
+               Sits between the filter chips and the gallery so narrowing
+               the time window never requires scrolling past the clips
+               it is about to filter. -->
+    <div class="ws-stats-block" id="weatherStatsBlock">
+      <div class="ws-stats-head">
+        <span class="ws-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <use href="#icon-trend" />
+          </svg>
+          Wetterdaten &amp; Prognose
+        </span>
+        <div class="ws-stats-pills" id="weatherStatsPills" role="tablist" aria-label="Zeitfenster">
+          <button type="button" class="ws-stats-pill" data-hours="1">1 h</button>
+          <button type="button" class="ws-stats-pill" data-hours="6">6 h</button>
+          <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
+          <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
+          <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
+        </div>
+      </div>
+      <div class="ws-stats-chart-wrap" id="weatherStatsChartWrap">
+        <!-- populated by renderWeatherStatsChart() -->
+      </div>
+      <div class="ws-stats-legend" id="weatherStatsLegend">
+        <!-- populated by renderWeatherStatsLegend() -->
+      </div>
+      <div class="ws-stats-explainer" id="weatherStatsExplainer" hidden>
+        <!-- populated by renderWeatherStatsExplainer() when a chip is isolated -->
+      </div>
+    </div>
     <div class="ws-grid" id="weatherSightingsGrid"></div>
     <div class="ws-pagination media-pagination" id="weatherSightingsPagination" hidden></div>
     <div class="ws-empty" id="weatherSightingsEmpty" hidden>
       Noch keine Wetter-Ereignisse. Sobald eine Wetter-Kamera ein Ereignis erkennt (Gewitter,
       Starkregen, Nebel, Sonnenuntergang …), erscheint hier ein 10-Sekunden-Clip.
-    </div>
-  </div>
-
-  <!-- Wetterdaten & Prognose: persisted history of all numeric
-             Open-Meteo parameters + sun altitude, rendered as a single
-             multi-line SVG chart with per-line normalisation. Fetches
-             /api/weather/history on visibility (IntersectionObserver)
-             and refreshes every 60 s while the section is in view. -->
-  <div class="ws-stats-block" id="weatherStatsBlock">
-    <div class="ws-stats-head">
-      <span class="ws-title">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <use href="#icon-trend" />
-        </svg>
-        Wetterdaten &amp; Prognose
-      </span>
-      <div class="ws-stats-pills" id="weatherStatsPills" role="tablist" aria-label="Zeitfenster">
-        <button type="button" class="ws-stats-pill" data-hours="1">1 h</button>
-        <button type="button" class="ws-stats-pill" data-hours="6">6 h</button>
-        <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
-        <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
-        <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
-      </div>
-    </div>
-    <div class="ws-stats-chart-wrap" id="weatherStatsChartWrap">
-      <!-- populated by renderWeatherStatsChart() -->
-    </div>
-    <div class="ws-stats-legend" id="weatherStatsLegend">
-      <!-- populated by renderWeatherStatsLegend() -->
-    </div>
-    <div class="ws-stats-explainer" id="weatherStatsExplainer" hidden>
-      <!-- populated by renderWeatherStatsExplainer() when a chip is isolated -->
     </div>
   </div>
 

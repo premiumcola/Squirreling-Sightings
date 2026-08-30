@@ -470,10 +470,16 @@ def test_sidenav_entry_uses_the_new_sprite_glyph():
 
 def test_mobile_dock_is_untouched():
     """Five slots are full; a sixth breaks repeat(5, 1fr) and the 44 px
-    budget at 375 px. Discovery comes from the Wetter section instead."""
+    budget at 375 px. Discovery used to be a standalone "Gewitter-Archiv →"
+    jump-chip in the Wetter head; episodes now render as ordinary cards
+    inline in the unified Wetter-Ereignisse grid instead (weather/_feed.js),
+    so a phone user reaches the archive by scrolling the feed they are
+    already on rather than needing a dedicated chip or dock slot."""
     dock = _read(_TPL / "partials" / "mobile_dock.html")
     assert "#storms" not in dock
-    assert "Gewitter-Archiv →" in _read(_TPL / "partials" / "weather.html")
+    assert "Gewitter-Archiv →" not in _read(_TPL / "partials" / "weather.html")
+    feed = _read(_JS / "weather" / "_feed.js")
+    assert "#/gewitter/" in feed, "no in-feed link back into the archive's own detail view"
 
 
 def test_stylesheet_is_registered_before_the_mobile_partial():

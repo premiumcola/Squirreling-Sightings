@@ -1,17 +1,19 @@
 // ─── weather/sightings.js ──────────────────────────────────────────────────
 // Stage 24 of the legacy.js → ES modules refactor — Wetter-Sichtungen
-// grid + lightbox + recaps + hash-anchor handler. Pure code move from
-// legacy.js; the two _orig* monkey-patches that lived at the bottom
-// of legacy.js have been folded directly into the function bodies
-// (loadWeatherSightings -> loadWeatherRecaps; renderWeatherSightings
-// -> _renderWeatherRecaps) so callers see one definition, no double-
-// override risk.
+// grid + lightbox + recaps/episodes + hash-anchor handler. Pure code
+// move from legacy.js; the two _orig* monkey-patches that lived at the
+// bottom of legacy.js have been folded directly into the function
+// bodies (loadWeatherSightings -> loadWeatherRecaps; renderWeatherSightings
+// -> _renderWeatherGrid) so callers see one definition, no double-
+// override risk. Recap/episode card templates live in ./_feed.js.
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import { apiGet, apiDelete } from '../core/api.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
 import { precipitationLabel } from '../core/weather-precip.js';
+import { fetchEpisodes } from '../storms/_api.js';
+import { recapCardHTML, episodeCardHTML, openStormEpisode, unifiedFeedItems } from './_feed.js';
 // Reuse the Library card's trash glyph so the weather cards' hover-reveal
 // delete reads identically to the Mediathek media-card.
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
@@ -68,11 +70,11 @@ async function loadWeatherSightings(filter) {
   } catch (_err) {
     // silently degrade — section stays empty
   }
-  // Phase 3 — Recaps live next to sightings; loading them here keeps the
-  // two views synced without a separate boot hook. (Folded in from the
-  // _origLoadWeatherSightings monkey-patch that lived at the bottom of
-  // legacy.js pre-stage-24.)
+  // Recaps and Gewitter-episodes are event records like any other and
+  // render inline in the same grid (see _renderWeatherGrid) — loading
+  // them here keeps every source synced without a separate boot hook.
   await loadWeatherRecaps();
+  await loadStormEpisodes();
 }
 
 function renderWeatherSightings() {
@@ -85,9 +87,6 @@ function renderWeatherSightings() {
   }
   _renderWeatherFilterPills();
   _renderWeatherGrid();
-  // Phase 3 — Recap strip re-renders alongside sightings. (Folded in
-  // from the _origRenderWeatherSightings monkey-patch.)
-  _renderWeatherRecaps();
 }
 
 function _renderWeatherFilterPills() {
@@ -272,29 +271,26 @@ function _renderWeatherGrid() {
   // Mediathek mental model).
   const sel = state.weather.filter instanceof Set ? state.weather.filter : new Set();
   const items = sel.size === 0 ? allItems : allItems.filter((s) => sel.has(s.event_type));
-  if (!items.length) {
+  // The lightbox indexes prev/next into this same filtered list via the
+  // absolute idx the sighting cards carry, regardless of where the
+  // unified feed's sort places them on screen.
+  state.weather.itemsFiltered = items;
+  const feed = unifiedFeedItems(items, state.weather.recaps, state.weather.episodes);
+  if (!feed.length) {
     grid.innerHTML = '';
     if (empty) empty.hidden = false;
     _renderWeatherPagination(0, 0);
     return;
   }
   if (empty) empty.hidden = true;
-  // Slice the filtered list for the current page. The renderer below
-  // walks `items` so we replace it in-place; the original full list
-  // stays in state.weather.items for the next filter toggle.
   const pageSize = _weatherPageSize();
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const pageCount = Math.max(1, Math.ceil(feed.length / pageSize));
   let page = Number.isInteger(state.weather.page) ? state.weather.page : 0;
   if (page >= pageCount) page = pageCount - 1;
   if (page < 0) page = 0;
   state.weather.page = page;
   const sliceStart = page * pageSize;
-  const visibleItems = items.slice(sliceStart, sliceStart + pageSize);
-  // The renderer expects the full `items` for click-into-lightbox idx
-  // semantics. Surface the visible slice here but preserve the full
-  // filtered list as state.weather.itemsFiltered for the lightbox to
-  // index into via the absolute idx attribute.
-  state.weather.itemsFiltered = items;
+  const visible = feed.slice(sliceStart, sliceStart + pageSize);
   // Pre-compute the active-camera id set so each sighting card can
   // decide whether to actually request its thumb. Sightings recorded
   // before a manuf/model edit carry the OLD canonical cam_id in their
@@ -304,16 +300,33 @@ function _renderWeatherGrid() {
   // clean — the card still renders with a placeholder so the user can
   // see the orphan exists and decide whether to delete it.
   const _activeCamIds = new Set((state.cameras || []).map((c) => c.id));
-  // Render only the visible slice for the current page; data-idx
-  // carries the absolute index in `items` (filtered list) so the
-  // lightbox can navigate prev/next across the whole filtered set.
-  grid.innerHTML = visibleItems
-    .map((s, localIdx) =>
-      _weatherSightingCardHTML(s, sliceStart + localIdx, _activeCamIds.has(s.cam_id)),
-    )
+  grid.innerHTML = visible
+    .map((entry) => {
+      if (entry.kind === 'sighting') {
+        return _weatherSightingCardHTML(entry.data, entry.idx, _activeCamIds.has(entry.data.cam_id));
+      }
+      if (entry.kind === 'recap') return recapCardHTML(entry.data, entry.idx);
+      return episodeCardHTML(entry.data);
+    })
     .join('');
+  _bindWeatherGridCards(grid);
+  _renderWeatherPagination(feed.length, pageSize);
+}
+
+// Click + delete + score-tip wiring for whatever mix of sighting/recap/
+// episode cards the current page rendered. Split out of
+// _renderWeatherGrid to keep that function under the JS ceiling.
+function _bindWeatherGridCards(grid) {
   grid.querySelectorAll('.ws-card').forEach((card) => {
     card.addEventListener('click', () => openWeatherLightbox(parseInt(card.dataset.idx, 10)));
+  });
+  grid.querySelectorAll('.ws-recap-card[data-recap-idx]').forEach((card) => {
+    card.addEventListener('click', () =>
+      openWeatherRecapLightbox(parseInt(card.dataset.recapIdx, 10)),
+    );
+  });
+  grid.querySelectorAll('.ws-recap-card[data-ep-id]').forEach((card) => {
+    card.addEventListener('click', () => openStormEpisode(card.dataset.epId));
   });
   // Hover-reveal delete (top-right) mirrors the Mediathek media-card:
   // stopPropagation so the trash tap removes the event instead of opening
@@ -343,7 +356,6 @@ function _renderWeatherGrid() {
       }
     });
   });
-  _renderWeatherPagination(items.length, pageSize);
 }
 
 // Pagination strip underneath the grid. Copied 1:1 from the Mediathek
@@ -471,42 +483,18 @@ async function loadWeatherRecaps() {
   try {
     const d = await apiGet('/api/weather/recaps');
     state.weather.recaps = d.items || [];
-    _renderWeatherRecaps();
   } catch (_err) {
     /* silent */
   }
+  _renderWeatherGrid();
 }
 
-function _renderWeatherRecaps() {
-  const row = byId('weatherRecapsRow');
-  const strip = byId('weatherRecapsStrip');
-  if (!row || !strip) return;
-  const items = state.weather.recaps || [];
-  if (!items.length) {
-    row.hidden = true;
-    strip.innerHTML = '';
-    return;
-  }
-  row.hidden = false;
-  strip.innerHTML = items
-    .map((m, idx) => {
-      const dur = parseInt(m.duration_s || 0, 10);
-      const mm = Math.floor(dur / 60),
-        ss = dur % 60;
-      const durLbl = `${mm}:${ss.toString().padStart(2, '0')} min`;
-      return `
-      <div class="ws-recap-card" data-idx="${idx}" data-id="${esc(m.id)}">
-        <div class="ws-recap-card-period">${esc(m.period_label || m.id)}</div>
-        <div class="ws-recap-card-meta">${m.n_clips || 0} Clips · ${esc(durLbl)}</div>
-        <span class="ws-recap-card-play">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-        </span>
-      </div>`;
-    })
-    .join('');
-  strip.querySelectorAll('.ws-recap-card').forEach((card) => {
-    card.addEventListener('click', () => openWeatherRecapLightbox(parseInt(card.dataset.idx, 10)));
-  });
+// fetchEpisodes() never throws (see storms/_api.js) — a missing or
+// unreachable endpoint resolves to an empty list, same as day one.
+async function loadStormEpisodes() {
+  const { items } = await fetchEpisodes();
+  state.weather.episodes = items;
+  _renderWeatherGrid();
 }
 
 // Open a weather recap (a multi-clip compilation) in the MediaView

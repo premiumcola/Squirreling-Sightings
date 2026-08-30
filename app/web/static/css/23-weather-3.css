@@ -1,5 +1,6 @@
 /* ── Wetterdaten & Prognose chart block (Phase 4) ─────────────────────── */
-/* Lives at the top of the #weather section, above the sightings grid.
+/* Sits between the filter chips and the gallery: chips decide WHAT,
+   this chart decides WHEN, the gallery below shows what is left.
    The chart itself is hand-rolled inline SVG — no external dep, matches
    the rest of the app's vanilla approach. Background/depth comes from a
    subtle storm-blue tint (the section's data-accent) instead of borders. */

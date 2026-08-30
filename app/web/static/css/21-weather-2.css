@@ -148,35 +148,13 @@
   }
 }
 
-/* ── Wetter-Recaps strip (Phase 3) ───────────────────────────────────────── */
-.ws-recaps-row {
-  margin-bottom: 14px;
-}
-.ws-recaps-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 6px;
-}
-.ws-recaps-strip {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 2px 2px 6px;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
-}
-.ws-recaps-strip::-webkit-scrollbar {
-  height: 6px;
-}
-.ws-recaps-strip::-webkit-scrollbar-thumb {
-  background: rgba(127, 174, 201, 0.35);
-  border-radius: 3px;
-}
+/* ── Recap & Gewitter-Episode cards (Phase 3+5) ──────────────────────────── */
+/* Recaps and storm episodes are no longer their own strip — they are
+   event records like any other and render as ordinary cells in .ws-grid,
+   interleaved with sighting cards by recency. `align-self: start` keeps
+   their natural (shorter, text-only) height instead of being stretched
+   to match a 16:9 thumbnail card in the same grid row. */
 .ws-recap-card {
-  flex: 0 0 160px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -185,7 +163,7 @@
   background: rgba(127, 174, 201, 0.08);
   cursor: pointer;
   position: relative;
-  scroll-snap-align: start;
+  align-self: start;
   transition:
     background 0.15s,
     transform 0.15s;
@@ -222,7 +200,6 @@
 }
 @media (max-width: 640px) {
   .ws-recap-card {
-    flex-basis: 140px;
     padding: 10px 12px;
   }
   .ws-recap-card-period {

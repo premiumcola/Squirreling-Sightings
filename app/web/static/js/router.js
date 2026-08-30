@@ -96,9 +96,10 @@ async function _openRecapById(recapId) {
     window.openWeatherRecap(items[idx], idx);
     return true;
   }
-  // Fallback — best effort: scroll to the recaps strip.
+  // Fallback — best effort: recaps render inline in the unified grid now,
+  // not a separate strip.
   document
-    .querySelector('#weatherRecapsStrip')
+    .querySelector('#weatherSightingsGrid')
     ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   return false;
 }

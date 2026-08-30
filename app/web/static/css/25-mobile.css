@@ -627,17 +627,6 @@ body.sidebar-locked {
     flex-shrink: 0;
   }
 
-  /* Recap strip — let cards bleed to the screen edges so the next card
-     visibly hints at the scroll affordance. Card width 140 px on mobile. */
-  .ws-recaps-strip {
-    padding: 2px 12px 6px;
-    margin: 0 -12px;
-  }
-  .ws-recap-card {
-    flex-basis: 140px;
-    min-width: 140px;
-  }
-
   /* Time-range pills above the chart — 44 px tap-targets per iOS HIG, and
      allow horizontal scroll-snap so the 5-pill row (1h/6h/24h/7d/30d)
      never wraps awkwardly on a 375 px viewport. */
@@ -667,9 +656,8 @@ body.sidebar-locked {
   .weather-sightings-head {
     margin-bottom: 6px;
   }
-  /* The empty-state box and the Wetterdaten-block underneath it
-     used to read as merged. Add a small clean gap so they're
-     visually separated without floating apart. */
+  /* Small clean gap under the filter chips so the chart doesn't read
+     as merged with them on a narrow phone screen. */
   .ws-stats-block {
     margin-top: 14px;
   }

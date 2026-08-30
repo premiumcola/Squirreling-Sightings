@@ -404,18 +404,20 @@ def api_camera_detection_tuning(cam_id):
     # carries its own threshold cache; resolve_track_thresholds reads
     # from cfg on every call, so the per-tick threshold reads pick up
     # the new label_thresholds immediately. Configure() pushes the
-    # tracker-level thresholds (spawn/floor/grace/iou) in one shot.
+    # tracker-level thresholds (spawn/floor/grace/iou/containment) in one
+    # shot.
     runtime = runtimes.get(cam_id)
     if runtime is not None and hasattr(runtime, "_tracker"):
         try:
             from ..tracker_core import resolve_track_thresholds
 
-            spawn, floor, grace, iou = resolve_track_thresholds(lambda _cid: cam, cam_id)
+            tracks = resolve_track_thresholds(lambda _cid: cam, cam_id)
             runtime._tracker.configure(
-                spawn_default=spawn,
-                floor=floor,
-                grace_seconds=grace,
-                iou_threshold=iou,
+                spawn_default=tracks.spawn,
+                floor=tracks.floor,
+                grace_seconds=tracks.grace_seconds,
+                iou_threshold=tracks.iou,
+                block_contain=tracks.block_contain,
             )
             # DetectionSetup is resolved ONCE at runtime construction, on
             # the premise that every camera-config change restarts the

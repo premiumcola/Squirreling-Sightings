@@ -131,6 +131,7 @@ def get_test_tracker(cam_id: str, setup: DetectionSetup) -> dict:
             floor=setup.floor,
             grace_seconds=setup.grace_seconds,
             iou_threshold=setup.iou_threshold,
+            block_contain=setup.block_contain,
         )
         return entry
     entry = {
@@ -140,6 +141,7 @@ def get_test_tracker(cam_id: str, setup: DetectionSetup) -> dict:
             floor=setup.floor,
             grace_seconds=setup.grace_seconds,
             iou_threshold=setup.iou_threshold,
+            block_contain=setup.block_contain,
         ),
         "display_nums": {},
         "track_labels": {},

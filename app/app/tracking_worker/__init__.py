@@ -273,10 +273,10 @@ class TrackingWorker(threading.Thread):
         try:
             detector = self._ensure_detector()
             allowed = resolve_object_filter(self._cam_cfg_getter, job.camera_id)
-            spawn_score, floor_score, grace_s, iou_thresh = resolve_track_thresholds(
-                self._cam_cfg_getter,
-                job.camera_id,
-            )
+            thr = resolve_track_thresholds(self._cam_cfg_getter, job.camera_id)
+            spawn_score = thr.spawn
+            floor_score = thr.floor
+            grace_s = thr.grace_seconds
             # The live runtime needs spawn=0.5 to suppress false-trigger
             # notifications. The post-clip worker only writes a
             # visualization sidecar — every detection above the raw
@@ -295,7 +295,8 @@ class TrackingWorker(threading.Thread):
                 allowed,
                 floor_score=floor_score,
                 spawn_score=floor_score,
-                iou_threshold=iou_thresh,
+                iou_threshold=thr.iou,
+                block_contain=thr.block_contain,
             )
             cam_cfg = self._cam_cfg(job.camera_id)
             self._clean_tracks(state, job, cam_cfg, spawn_score)

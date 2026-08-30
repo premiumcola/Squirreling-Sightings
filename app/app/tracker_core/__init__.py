@@ -62,6 +62,10 @@ from ._motion import (  # noqa: F401 — public API re-export
     recent_observed_samples,
     velocity_estimate,
 )
+from ._resolve import (  # noqa: F401 — public API re-export
+    TrackThresholds,
+    resolve_track_thresholds,
+)
 
 log = logging.getLogger(__name__)
 
@@ -123,77 +127,6 @@ def compute_miss_grace_samples(seconds: float, fps: float) -> int:
     if secs <= 0 or rate <= 0:
         return TRACK_MISS_WINDOWS
     return max(1, int(round(secs * rate)))
-
-
-# ── Per-camera threshold resolver ───────────────────────────────────────────
-def resolve_track_thresholds(
-    cam_cfg_getter, camera_id, label: str | None = None
-) -> tuple[float, float, float, float]:
-    """Pull the camera's spawn / continue / miss-grace / IoU overrides.
-
-    Returns ``(spawn_score, floor_score, miss_grace_seconds,
-    iou_threshold)``. A camera that hasn't customised these fields
-    (or has them set to 0.0, the schema's "use module default"
-    sentinel) falls back to the module-level defaults so an
-    unconfigured install behaves identically to before the per-camera
-    fields existed.
-
-    Floor is clamped up to spawn — letting `floor > spawn` would
-    allow tentative samples to spawn tracks, defeating the two-tier
-    design. IoU is clamped to [0.0, 0.95] so a typo or extreme value
-    can't break the matcher entirely.
-
-    P4 · when ``label`` is given, the floor is clamped against the
-    PER-LABEL spawn from the ladder rather than against the camera-wide
-    ``track_spawn_min_score``. Those two are different numbers, and the
-    difference had teeth: a camera-wide 0.50 with ``bird`` at 0.45 let
-    the floor sit above the label's own spawn, so a bird track could be
-    continued at a score its own spawn would never have started. The
-    import is function-local because ``thresholds._ladder`` reads
-    ``tracker_core._consts`` — a module-level import here would close
-    the cycle.
-    """
-    spawn = TRACK_SPAWN_SCORE
-    floor = TRACK_FLOOR_SCORE
-    grace_s = MISS_GRACE_DEFAULT_SECONDS
-    iou_t = IOU_MATCH_THRESHOLD
-    try:
-        cfg = cam_cfg_getter(camera_id) or {}
-    except Exception:
-        cfg = {}
-    try:
-        s = float(cfg.get("track_spawn_min_score") or 0.0)
-        if s > 0.0:
-            spawn = s
-    except (TypeError, ValueError):
-        pass
-    try:
-        f = float(cfg.get("track_continue_min_score") or 0.0)
-        if f > 0.0:
-            floor = f
-    except (TypeError, ValueError):
-        pass
-    try:
-        g = float(cfg.get("track_miss_grace_seconds") or 0.0)
-        if g > 0.0:
-            grace_s = g
-    except (TypeError, ValueError):
-        pass
-    try:
-        i = float(cfg.get("track_iou_match_threshold") or 0.0)
-        if i > 0.0:
-            iou_t = max(0.0, min(0.95, i))
-    except (TypeError, ValueError):
-        pass
-    clamp_against = spawn
-    if label:
-        from ..thresholds import resolve_effective
-        from ..thresholds._apply import adapted_layer
-
-        clamp_against = resolve_effective(cfg, None, label, adapted=adapted_layer(cfg, label)).spawn
-    if floor > clamp_against:
-        floor = clamp_against
-    return spawn, floor, grace_s, iou_t
 
 
 # ── Track + state ───────────────────────────────────────────────────────────
@@ -824,6 +757,7 @@ class LiveTracker:
         "floor",
         "grace_seconds",
         "iou_threshold",
+        "block_contain",
     )
 
     def __init__(
@@ -834,6 +768,7 @@ class LiveTracker:
         floor: float = TRACK_FLOOR_SCORE,
         grace_seconds: float = MISS_GRACE_DEFAULT_SECONDS,
         iou_threshold: float = IOU_MATCH_THRESHOLD,
+        block_contain: float = SPAWN_BLOCK_CONTAIN,
     ):
         self.camera_id = camera_id
         # Bounded — this instance lives the whole camera session. The
@@ -845,6 +780,7 @@ class LiveTracker:
         self.floor = float(floor)
         self.grace_seconds = float(grace_seconds)
         self.iou_threshold = float(iou_threshold)
+        self.block_contain = float(block_contain)
 
     def configure(
         self,
@@ -856,10 +792,11 @@ class LiveTracker:
         block_contain: float | None = None,
     ) -> None:
         """Replace the per-camera thresholds. Called on settings reload
-        so a tweaked spawn / continue / grace / iou value takes effect
-        without rebuilding the runtime. ``iou_threshold`` defaults to
-        the module constant when omitted so older callers that pass
-        only the three legacy fields keep working."""
+        so a tweaked spawn / continue / grace / iou / containment value
+        takes effect without rebuilding the runtime. ``iou_threshold``
+        and ``block_contain`` keep whatever the instance already holds
+        when omitted, so older callers that pass only the three legacy
+        fields keep working."""
         self.spawn_default = float(spawn_default)
         self.floor = float(floor)
         self.grace_seconds = float(grace_seconds)
@@ -903,7 +840,7 @@ class LiveTracker:
             spawn_for=spawn_for,
             miss_grace_samples=grace,
             iou_threshold=self.iou_threshold,
-            block_contain=getattr(self, "block_contain", SPAWN_BLOCK_CONTAIN),
+            block_contain=self.block_contain,
             frame_w=frame_w,
             frame_h=frame_h,
         )

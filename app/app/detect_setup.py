@@ -71,6 +71,12 @@ class DetectionSetup:
     floor: float
     grace_seconds: float
     iou_threshold: float
+    # Intersection-over-smaller-box gate for the spawn block — the
+    # "Doppel-Sperre" axis. Carried here for the same reason the other
+    # four are: both paths build their LiveTracker from this setup, so a
+    # value that stopped here would be a knob the operator can move and
+    # the tracker never sees.
+    block_contain: float
     trigger_mode: str
     confirmation_window: dict
     # The GLOBAL confidence floor. Kept here so the panel can report it,
@@ -102,7 +108,7 @@ def build_detection_setup(
     unset, the mode is normalised here.
     """
     cfg = cam_cfg or {}
-    spawn, floor, grace, iou = resolve_track_thresholds(lambda _cid: cfg, camera_id)
+    tracks = resolve_track_thresholds(lambda _cid: cfg, camera_id)
     mode = normalise_mode(cfg.get("roi_mode")) if roi_mode is None else roi_mode
     min_score = float(cfg.get("detection_min_score") or 0.0)
     if min_score <= 0:
@@ -118,10 +124,11 @@ def build_detection_setup(
         bottom_crop_px=max(0, crop_px),
         object_filter=frozenset(cfg.get("object_filter") or ()),
         label_thresholds=dict(cfg.get("label_thresholds") or {}),
-        spawn_default=float(spawn),
-        floor=float(floor),
-        grace_seconds=float(grace),
-        iou_threshold=float(iou),
+        spawn_default=tracks.spawn,
+        floor=tracks.floor,
+        grace_seconds=tracks.grace_seconds,
+        iou_threshold=tracks.iou,
+        block_contain=tracks.block_contain,
         trigger_mode=str(cfg.get("detection_trigger") or "motion_and_objects"),
         confirmation_window=dict(cfg.get("confirmation_window") or {}),
         min_score=min_score,

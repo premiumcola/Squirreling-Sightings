@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..tracker_core import TrackerState, associate_detections
+from ..tracker_core import SPAWN_BLOCK_CONTAIN, TrackerState, associate_detections
 from ._detect import detect_and_filter
 
 
@@ -76,7 +76,17 @@ def precision_for(cam_cfg_getter, camera_id: str) -> str:
     return "standard"
 
 
-def sample_clip(cap, meta: dict, detector, allowed, *, floor_score, spawn_score, iou_threshold):
+def sample_clip(
+    cap,
+    meta: dict,
+    detector,
+    allowed,
+    *,
+    floor_score,
+    spawn_score,
+    iou_threshold,
+    block_contain=SPAWN_BLOCK_CONTAIN,
+):
     """Walk the clip at ``meta["sample_interval"]`` and return the
     populated :class:`TrackerState`.
 
@@ -113,6 +123,7 @@ def sample_clip(cap, meta: dict, detector, allowed, *, floor_score, spawn_score,
             frame_h=frame_h,
             spawn_score=spawn_score,
             iou_threshold=iou_threshold,
+            block_contain=block_contain,
         )
         frame_idx += sample_interval
 

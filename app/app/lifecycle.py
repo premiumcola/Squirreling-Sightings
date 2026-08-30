@@ -472,6 +472,20 @@ def _install_shutdown_hooks():
     def _sig_handler(signum, frame):
         name = {15: "SIGTERM", 2: "SIGINT"}.get(signum, f"signal {signum}")
         _once(name)
+        # …and then actually die. This used to log and return, leaving
+        # the WSGI server serving: `docker stop` therefore sat out its
+        # full ten-second grace on EVERY restart and then SIGKILLed us —
+        # ten seconds added to each deploy, and the hard kill landing at
+        # an arbitrary point rather than right after the shutdown work.
+        # Restoring the default disposition and re-raising the signal is
+        # the canonical "clean up, then terminate normally" pattern: the
+        # exit status stays the one the caller expects for that signal,
+        # which `os._exit(0)` would misreport.
+        try:
+            _signal.signal(signum, _signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+        except Exception:  # noqa: BLE001 — never block shutdown
+            os._exit(0)
 
     try:
         _signal.signal(_signal.SIGTERM, _sig_handler)

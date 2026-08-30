@@ -185,7 +185,7 @@ function _hydrateAlerting(formEl, c) {
   hydrateAlertingFields(formEl, c);
 }
 
-// ── Erkennung · class filter only (D9 — everything else is the Fangnetz) ──
+// ── Erkennung · class filter only (D9 — the rest is the Erkennungsprofil) ──
 
 function _hydrateErkennung(formEl, c) {
   const f = formEl.elements;

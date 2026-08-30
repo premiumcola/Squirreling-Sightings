@@ -1,4 +1,4 @@
-"""`netz/_settings_axes.js` — E-normalization for the Fangnetz's PRIMARY
+"""`netz/_settings_axes.js` — E-normalization for the Erkennungsprofil's PRIMARY
 axes (camera-wide settings, not per-class confidence).
 
 Unlike the confidence axes (_mapping.js, mirrored against the Python

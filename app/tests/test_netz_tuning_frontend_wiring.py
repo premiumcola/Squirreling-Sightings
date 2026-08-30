@@ -1,8 +1,8 @@
-"""The Fangnetz's PRIMARY radar (camera-wide settings) and its backend
+"""The Erkennungsprofil's PRIMARY radar (camera-wide settings) and its backend
 route agree on field names.
 
 This is exactly the drift class the D1-D9 comments in erkennung.html and
-_tuning.js warn about repeatedly: a control renamed on one side of the
+_cards.js warn about repeatedly: a control renamed on one side of the
 wire while the other side keeps the old name silently stops saving (the
 axis still renders, still LOOKS wired, and nothing throws — the payload
 key the backend never reads is the only symptom). A source-text
@@ -25,15 +25,18 @@ _CAMERAS_PY = (
 _SETTINGS_AXES_JS = (
     Path(__file__).resolve().parents[1] / "web" / "static" / "js" / "netz" / "_settings_axes.js"
 ).read_text(encoding="utf-8")
-_TUNING_JS = (
-    Path(__file__).resolve().parents[1] / "web" / "static" / "js" / "netz" / "_tuning.js"
+_CARDS_JS = (
+    Path(__file__).resolve().parents[1] / "web" / "static" / "js" / "netz" / "_cards.js"
+).read_text(encoding="utf-8")
+_TUNE_RADAR_JS = (
+    Path(__file__).resolve().parents[1] / "web" / "static" / "js" / "netz" / "_tune_radar.js"
 ).read_text(encoding="utf-8")
 _NETZ_HELPERS_PY = (
     Path(__file__).resolve().parents[1] / "app" / "routes" / "_netz_helpers.py"
 ).read_text(encoding="utf-8")
 
 # The 8 spokes, plus track_filter_ghosts (a boolean toggle beside the
-# chart, not a spoke — see _tuning.js's header comment for why) and the
+# chart, not a spoke — see _cards.js's header comment for why) and the
 # two preset-only fields (never a standalone control, only ever written
 # together by the three tracker-preset buttons).
 _NON_SPOKE_TUNING_FIELDS = {
@@ -86,5 +89,23 @@ def test_the_chart_is_built_generically_not_one_field_at_a_time():
     — a hand-written field list here is exactly the kind of listing that
     drifts from _settings_axes.js the moment one of the two is edited
     without the other."""
-    assert "buildTuneAxes(" in _TUNING_JS
-    assert "renderTuneRadar(" in _TUNING_JS
+    assert "buildTuneAxes(" in _CARDS_JS
+    assert "renderTuneRadar(" in _CARDS_JS
+
+
+def test_every_write_path_takes_its_camera_from_the_dom():
+    """With every camera's net on screen at once, a module-level "current
+    camera" is how a drag on one camera PATCHes another. The card's own
+    dataset is the only correct source."""
+    assert "card.dataset.cam" in _CARDS_JS
+    assert "netzState.camId" not in _CARDS_JS
+
+
+def test_the_settings_radar_keeps_a_uniform_viewbox_mapping():
+    """_radar.js:13-20 documents the past bug: a viewBox whose aspect
+    ratio differs from the element's scales x and y by different factors
+    and visibly distorts the glyphs. An ellipse is fine; a stretched
+    square is not — so the width/height attributes must carry the same
+    numbers as the viewBox."""
+    assert 'viewBox="0 0 ${TUNE_W} ${TUNE_H}" ` +\n    `width="${TUNE_W}" height="${TUNE_H}"' in _TUNE_RADAR_JS
+    assert "preserveAspectRatio" not in _TUNE_RADAR_JS

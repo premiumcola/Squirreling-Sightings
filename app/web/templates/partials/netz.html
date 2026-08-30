@@ -1,150 +1,59 @@
-{# Fangnetz — one section, two tabs (Netz / Verlauf), both rendered into #netzBody by
-static/js/netz/. Only one state is in the DOM at a time, so the back button navigates between list
-and detail for free and there is no modal-inside-a-modal on iOS. Same shape as storms.html next
-door. The static markup below is what a browser with JS disabled sees, and also what is on screen
-for the moment between paint and hydration — deliberately the calm empty state, not a spinner.
-Internal ids/classes stay `netz*` throughout static/js/netz/ and 32-netz.css — only the user-visible
-text changed to "Fangnetz". Renaming every internal identifier too would be a large, purely-cosmetic
-diff across a dozen files for zero behavioural gain. #}
+{# Erkennungsprofil — one section, two views (Netze / Verlauf) rendered into #netzBody by
+static/js/netz/. Only one is in the DOM at a time, so the back button navigates between them for
+free and there is no modal-inside-a-modal on iOS.
+
+The Netz/Verlauf TAB BAR is gone: with only two views a full-width segmented control was more
+chrome than choice. #netzViewBtn top-right toggles both directions — it must stay a toggle, not a
+one-way link, because the archive list has no back control of its own.
+
+Internal ids/classes stay `netz*` throughout static/js/netz/ and 32-netz.css — only the
+user-visible text says "Erkennungsprofil". Renaming every internal identifier too would be a
+large, purely-cosmetic diff across a dozen files for zero behavioural gain.
+
+The static markup below is what a browser with JS disabled sees, and what is on screen for the
+moment between paint and hydration — deliberately the calm empty state, not a spinner. #}
 <section id="netz" class="panel section" data-accent="34,197,94" data-dock-section="dashboard">
   <div class="netz-block" id="netzBlock">
     <div class="netz-head">
       <div class="netz-head-row">
         <span class="ws-title">
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <use href="#icon-netz" /></svg
-          >Fangnetz
+          >Erkennungsprofil
         </span>
         <button
           type="button"
-          id="netzHelpBtn"
-          class="netz-help-btn"
-          aria-haspopup="dialog"
-          aria-controls="netzHelpModal"
-          aria-label="Erklärung zum Fangnetz"
-          title="Was bedeuten Radius, Ring und Füllung?"
+          id="netzViewBtn"
+          class="netz-view-btn"
+          data-view="netz"
+          aria-label="Verlauf öffnen"
+          title="Verlauf"
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <circle cx="12" cy="12" r="9.25" />
-            <line x1="12" y1="11" x2="12" y2="16.5" />
-            <circle cx="12" cy="7.75" r="0.25" fill="currentColor" stroke="none" />
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 12a9 9 0 1 0 3-6.7" />
+            <polyline points="3 4 3 9 8 9" />
+            <polyline points="12 7.5 12 12.5 15.5 14" />
           </svg>
         </button>
       </div>
       <span class="ws-subtitle"
-        >Kamera-weite Erkennungswerte auf einen Blick — pro Kamera, per Hand oder Vorlage
-        gesetzt.</span
+        >Die Erkennungswerte jeder Kamera — Ecke ziehen zum Ändern, lange halten für Werk.</span
       >
-    </div>
-    <div class="netz-tabs" id="netzTabs" role="tablist" aria-label="Ansicht">
-      <button
-        type="button"
-        class="netz-tab is-active"
-        data-netz-tab="netz"
-        role="tab"
-        aria-selected="true"
-      >
-        Netz
-      </button>
-      <button
-        type="button"
-        class="netz-tab"
-        data-netz-tab="verlauf"
-        role="tab"
-        aria-selected="false"
-      >
-        Verlauf
-      </button>
     </div>
     <div class="netz-body" id="netzBody">
       <div class="netz-empty">
-        <div class="netz-empty-title">Startwerte</div>
-        <div class="netz-empty-sub">
-          Noch keine Rückmeldungen. Jede Antwort in Telegram formt das Netz.
-        </div>
+        <div class="netz-empty-sub">Profile werden geladen …</div>
       </div>
     </div>
   </div>
 </section>
-
-{# Static content — no server data, so it lives in the template rather than being assembled in JS.
-netz/_help.js only opens/closes it. #}
-<div
-  id="netzHelpModal"
-  class="modal hidden"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="netzHelpTitle"
->
-  <div class="modal-card panel netz-help-card">
-    <div class="modal-inner-head">
-      <h3 id="netzHelpTitle">Wie das Netz zu lesen ist</h3>
-      <button type="button" id="netzHelpCloseBtn" class="close-btn" aria-label="Schließen">
-        ✕
-      </button>
-    </div>
-    <div class="netz-help-body">
-      <section class="netz-help-sec">
-        <h4>Die Achsen</h4>
-        <p>
-          Acht Speichen, eine je kamera-weiter Erkennungseinstellung — Analyse-Intervall,
-          Bewegungs-Vortrigger, Nachlauf, Gnadenfrist, IoU-Schwelle, ROI-Modus,
-          Wildtier-Empfindlichkeit, Min.-Strecke. Das läuft alles VOR jeder Klassifikation, also
-          kamera-weit statt pro Klasse — deswegen ist das hier kein Radar aus Person/Katze/Vogel.
-        </p>
-      </section>
-      <section class="netz-help-sec">
-        <h4>Was der Radius bedeutet</h4>
-        <p>
-          Innen ist immer der sparsamere/vorsichtigere Wert dieser einen Einstellung, außen der
-          aktivere/empfindlichere — die genaue Bedeutung ist pro Achse verschieden (kurzes
-          Analyse-Intervall ist z. B. „außen", während eine hohe IoU-Schwelle „innen" ist). Auf den
-          Achsennamen tippen zeigt die Kurz-Erklärung dieser einen Speiche.
-        </p>
-      </section>
-      <section class="netz-help-sec">
-        <h4>Ziehen</h4>
-        <p>
-          Eine Ecke lässt sich direkt verschieben, fein abgestuft statt in Stufen (bei ROI-Modus und
-          Nachlauf rastet sie auf den vorhandenen Stufen ein). Beim Loslassen wird der Wert
-          vorgemerkt; erst „Übernehmen" schreibt ihn, „Verwerfen" nimmt alles seit dem letzten
-          Speichern zurück. Langes Halten setzt eine einzelne Achse auf Werk zurück.
-        </p>
-      </section>
-      <section class="netz-help-sec">
-        <h4>Der Farbring — Werk oder von Hand</h4>
-        <div class="netz-leg-prov">
-          <span class="netz-leg-dot"
-            ><i style="background: #8888aa"></i>Werk — Startwert, noch nie berührt</span
-          >
-          <span class="netz-leg-dot"
-            ><i style="background: #38bdf8"></i>manuell — von dir gezogen</span
-          >
-        </div>
-        <p>
-          Diese acht Werte lernen nicht automatisch aus Telegram-Antworten — dafür gibt es keine
-          Rückmeldung, die sagt „das Analyse-Intervall war falsch". Sie bleiben, wie du sie setzt.
-        </p>
-      </section>
-      <section class="netz-help-sec">
-        <h4>Pro-Klasse-Konfidenz — jetzt eine eigene Nebenansicht</h4>
-        <p>
-          Wie sicher sich das System bei Person, Katze, Vogel &amp; Co. sein muss, bevor es dich
-          erreicht, lebt jetzt in der Falte „Pro-Klasse-Konfidenz" darunter — unverändert im
-          Mechanismus: ein Radius je Klasse, geformt von deinen <em>Richtig</em>/<em>Falsch</em>/
-          <em>Etwas anderes</em>-Antworten in Telegram, mit Farbring (Werk/manuell/automatisch) und
-          Füllung/Größe als Beleg-Anzeige. Jede Antwort landet weiterhin im Verlauf-Tab.
-        </p>
-      </section>
-      <section class="netz-help-sec">
-        <h4>Die eine feste Grenze</h4>
-        <p>
-          Auf einer Sicherheitskamera darf die Automatik die Konfidenz-Achse „Person" nie über eine
-          feste Grenze hinaus lockern — eine verpasste Person wäre der teuerste Fehler, den dieses
-          System machen kann. Ein manueller Zug über diese Grenze bleibt möglich, aber nur mit
-          ausdrücklicher Bestätigung.
-        </p>
-      </section>
-    </div>
-  </div>
-</div>

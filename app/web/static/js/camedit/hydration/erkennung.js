@@ -1,7 +1,7 @@
 // ─── camedit/hydration/erkennung.js ────────────────────────────────────────
 // N17 · Pure-DOM hydrator for the Erkennung tab's form fields. D9 cut the
 // tab down to the class filter alone — every field this hydrated moved
-// either to the Fangnetz (netz/_tuning.js, its own GET /api/netz/state)
+// either to the Erkennungsprofil (netz/_cards.js, its own GET /api/netz/state)
 // or, for confirmation_window, lost its UI entirely (detection-perclass.js's
 // _collectConfirmationWindow now just echoes the stored value back).
 // `_state` is unused now that detection_min_score's fallback (the last

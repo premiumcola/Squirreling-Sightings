@@ -1,5 +1,5 @@
 // ─── netz/_settings_axes.js ────────────────────────────────────────────────
-// The Fangnetz's PRIMARY axes: camera-wide capture/motion/tracking
+// The Erkennungsprofil's PRIMARY axes: camera-wide capture/motion/tracking
 // settings, not per-class confidence. Confidence has its own evidence-
 // driven E (see _mapping.js) fed by Telegram verdicts; these 8 have no
 // such feedback loop — a setting is either at its shipped default
@@ -15,15 +15,67 @@
 // position in a fixed list, so E only ever lands on a real value —
 // there is no "continue and IoU" reading between "roi" and "2x2".
 
+// Ordered so each GROUP occupies a contiguous arc of the radar — a group
+// scattered around the circle cannot be read as a group. Keep this a flat
+// list of 8 quoted keys: test_netz_tuning_frontend_wiring.py parses it
+// with a regex over the raw literal and asserts the length.
 export const TUNE_AXIS_ORDER = [
   'frame_interval_ms',
-  'motion_sensitivity',
   'post_motion_tail_s',
-  'track_miss_grace_seconds',
-  'track_iou_match_threshold',
-  'roi_mode',
+  'motion_sensitivity',
   'wildlife_motion_sensitivity',
   'roi_min_net_disp_frac',
+  'roi_mode',
+  'track_miss_grace_seconds',
+  'track_iou_match_threshold',
+];
+
+// Four groups, four colours. The POLYGON stays neutral on purpose
+// (_radar.js's own comment: "a rainbow polygon is unreadable") — the
+// colour lands on the vertices, the spokes and the axis labels, which is
+// enough to read the arcs as groups without turning the shape to mush.
+export const TUNE_GROUPS = {
+  tempo: {
+    key: 'tempo',
+    label: 'Tempo',
+    color: '#60a5fa',
+    what: 'Wie oft und wie lange überhaupt hingeschaut wird.',
+  },
+  bewegung: {
+    key: 'bewegung',
+    label: 'Bewegung',
+    color: '#4ade80',
+    what: 'Was als Bewegung durchgeht und die Erkennung überhaupt auslöst.',
+  },
+  kleintier: {
+    key: 'kleintier',
+    label: 'Kleintier',
+    color: '#c084fc',
+    what: 'Der Nachscan für kleine/entfernte Tiere, wenn die Vollbild-Erkennung leer ausgeht.',
+  },
+  verfolgung: {
+    key: 'verfolgung',
+    label: 'Verfolgung',
+    color: '#fbbf24',
+    what: 'Ob ein Objekt über Frames hinweg dasselbe Objekt bleibt.',
+  },
+};
+
+// What the groups do TOGETHER — the part a per-axis hint cannot say,
+// because the interaction is the whole point of a net.
+export const TUNE_COMBOS = [
+  {
+    groups: ['bewegung', 'kleintier'],
+    text: 'Beide weit außen: Eichhörnchen und Vögel fallen zuverlässig auf — kostet aber spürbar Coral-Rechenzeit und bringt mehr Fehlalarme bei Wind.',
+  },
+  {
+    groups: ['tempo', 'verfolgung'],
+    text: 'Kurzes Intervall + großzügige Verfolgung: ein laufendes Tier bleibt EINE Spur statt in mehrere zu zerfallen. Langes Intervall mit strenger IoU ist die häufigste Ursache für zerrissene Spuren.',
+  },
+  {
+    groups: ['bewegung', 'tempo'],
+    text: 'Empfindliche Bewegung bei langem Intervall meldet viel, sieht aber wenig davon — der Vortrigger löst aus, bevor der nächste Analyse-Frame da ist.',
+  },
 ];
 
 export const TUNE_LABELS_DE = {
@@ -44,6 +96,7 @@ const _TAIL_STEPS = [0, 3, 5, 8, 10, 15];
 export const TUNE_SPECS = {
   frame_interval_ms: {
     key: 'frame_interval_ms',
+    group: 'tempo',
     label: TUNE_LABELS_DE.frame_interval_ms,
     min: 100,
     max: 2000,
@@ -54,6 +107,7 @@ export const TUNE_SPECS = {
   },
   motion_sensitivity: {
     key: 'motion_sensitivity',
+    group: 'bewegung',
     label: TUNE_LABELS_DE.motion_sensitivity,
     min: 0.1,
     max: 1.0,
@@ -64,6 +118,7 @@ export const TUNE_SPECS = {
   },
   post_motion_tail_s: {
     key: 'post_motion_tail_s',
+    group: 'tempo',
     label: TUNE_LABELS_DE.post_motion_tail_s,
     steps: _TAIL_STEPS,
     default: 0,
@@ -72,6 +127,7 @@ export const TUNE_SPECS = {
   },
   track_miss_grace_seconds: {
     key: 'track_miss_grace_seconds',
+    group: 'verfolgung',
     label: TUNE_LABELS_DE.track_miss_grace_seconds,
     min: 0,
     max: 30,
@@ -82,6 +138,7 @@ export const TUNE_SPECS = {
   },
   track_iou_match_threshold: {
     key: 'track_iou_match_threshold',
+    group: 'verfolgung',
     label: TUNE_LABELS_DE.track_iou_match_threshold,
     min: 0,
     max: 0.95,
@@ -92,6 +149,7 @@ export const TUNE_SPECS = {
   },
   roi_mode: {
     key: 'roi_mode',
+    group: 'kleintier',
     label: TUNE_LABELS_DE.roi_mode,
     steps: _ROI_STEPS,
     default: 'off',
@@ -100,6 +158,7 @@ export const TUNE_SPECS = {
   },
   wildlife_motion_sensitivity: {
     key: 'wildlife_motion_sensitivity',
+    group: 'bewegung',
     label: TUNE_LABELS_DE.wildlife_motion_sensitivity,
     min: 0,
     max: 3,
@@ -110,6 +169,7 @@ export const TUNE_SPECS = {
   },
   roi_min_net_disp_frac: {
     key: 'roi_min_net_disp_frac',
+    group: 'bewegung',
     label: TUNE_LABELS_DE.roi_min_net_disp_frac,
     min: 0,
     max: 0.2,
@@ -161,17 +221,29 @@ export function tuneIsDefault(spec, raw) {
   return Number(raw) === Number(spec.default);
 }
 
-/** Build the axis row array `_radar.js` and the drag layer both expect:
- *  {key, label, E, provenance, raw}, in the fixed TUNE_AXIS_ORDER. */
+/** Build the axis row array the radar and the drag layer both expect:
+ *  {key, label, E, provenance, raw, group, color, defaultE}, in the fixed
+ *  TUNE_AXIS_ORDER.
+ *
+ *  `defaultE` is what lets the radar draw an honest "Werk" reference
+ *  shape. The shared ring labels call the 50 % ring "Werk", which is true
+ *  for a confidence axis but NOT for these: `frame_interval_ms`'s default
+ *  of 350 ms sits at E 87, not 50. Carrying the real per-axis default
+ *  means the reference outline is the actual shipped configuration
+ *  instead of a circle that merely looks authoritative. */
 export function buildTuneAxes(tuning) {
   return TUNE_AXIS_ORDER.map((key) => {
     const spec = TUNE_SPECS[key];
     const raw = tuning?.[key] ?? spec.default;
+    const group = TUNE_GROUPS[spec.group];
     return {
       key,
       label: TUNE_LABELS_DE[key] || key,
       raw,
       E: tuneE(spec, raw),
+      defaultE: tuneE(spec, spec.default),
+      group: spec.group,
+      color: group ? group.color : '#7ac8ff',
       provenance: tuneIsDefault(spec, raw) ? 'werk' : 'manuell',
       display: tuneDisplay(spec, raw),
     };

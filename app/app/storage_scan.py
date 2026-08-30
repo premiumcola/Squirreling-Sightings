@@ -29,13 +29,20 @@ _MEDIA_SUFFIXES = (".jpg", ".jpeg", ".mp4")
 _COMPANION_SUFFIXES = (".raw.mp4", ".best.jpg")
 
 
-def _media_url(base: str, relpath: str) -> str:
+def media_url(base: str, relpath: str) -> str:
+    """The ``/media/...`` URL for a storage-relative path. Public because
+    :mod:`app.app.clip_recovery` republishes recovered clips and has to
+    spell the URL exactly the way the recorder does."""
     return f"{base}/media/{relpath}" if base else f"/media/{relpath}"
 
 
-def _extract_thumb(video: Path, thumb: Path) -> bool:
+def extract_thumb(video: Path, thumb: Path) -> bool:
     """Grab a middle frame so the freshly registered card has a preview.
-    Returns True when ``thumb`` exists afterwards."""
+    Returns True when ``thumb`` exists afterwards.
+
+    Shared with :mod:`app.app.clip_recovery`, which needs a thumbnail
+    for exactly the same reason: a clip that just gained a manifest
+    entry and has no preview yet."""
     if thumb.exists():
         return True
     try:
@@ -79,18 +86,18 @@ def _build_event(store_root: Path, cam_id: str, media_file: Path, base: str) -> 
     }
     if media_file.suffix.lower() != ".mp4":
         event["snapshot_relpath"] = rel
-        event["snapshot_url"] = _media_url(base, rel)
+        event["snapshot_url"] = media_url(base, rel)
         event["video_url"] = None
         return event
     event["video_relpath"] = rel
-    event["video_url"] = _media_url(base, rel)
+    event["video_url"] = media_url(base, rel)
     event["snapshot_relpath"] = None
     event["snapshot_url"] = None
     thumb = media_file.with_suffix(".jpg")
-    if _extract_thumb(media_file, thumb):
+    if extract_thumb(media_file, thumb):
         thumb_rel = thumb.relative_to(store_root).as_posix()
         event["snapshot_relpath"] = thumb_rel
-        event["snapshot_url"] = _media_url(base, thumb_rel)
+        event["snapshot_url"] = media_url(base, thumb_rel)
     return event
 
 

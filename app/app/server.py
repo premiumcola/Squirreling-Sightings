@@ -562,6 +562,16 @@ _migrations.cleanup_stale_timelapse_frames(storage_root=storage_root, settings=s
 # rglob, so this is purely cosmetic for the on-disk layout.
 _migrations.relocate_root_event_jsons(storage_root=storage_root)
 _migrations.generate_missing_thumbnails(storage_root=storage_root)
+# Clips whose producer died mid-chain (restart, ffmpeg hang, power cut).
+# Everything still in flight from before _BOOT_TS is orphaned by
+# definition — recover it if its mp4 is on disk, otherwise mark it
+# failed so the card stops claiming it is still working.
+_migrations.adopt_orphaned_clips(
+    storage_root=storage_root,
+    settings=settings,
+    base_cfg=base_cfg,
+    started_at=datetime.fromtimestamp(_BOOT_TS),
+)
 _migrations.migrate_timelapse_to_eventstore(
     storage_root=storage_root,
     settings=settings,

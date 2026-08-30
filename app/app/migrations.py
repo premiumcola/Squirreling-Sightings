@@ -14,10 +14,12 @@ import logging
 import shutil as _shutil
 import threading
 import time as _time
+from datetime import datetime
 from pathlib import Path
 
 import cv2 as _cv2
 
+from . import clip_recovery
 from .media_index import register_timelapse_events
 from .storage import event_date_subdir
 
@@ -253,6 +255,45 @@ def relocate_root_event_jsons(*, storage_root: Path) -> None:
                 )
         except Exception as e:
             log.warning("[migration] event-JSON relocation failed: %s", e)
+
+    threading.Thread(target=_do, daemon=True).start()
+
+
+def adopt_orphaned_clips(
+    *, storage_root: Path, settings, base_cfg: dict, started_at: datetime
+) -> None:
+    """Give every clip left in flight by a dead process its terminal state.
+
+    A clip only ever moved forward through its stages, and only by the
+    thread doing the work, so a container restart mid-encode froze the
+    manifest at ``encoding`` for good — the card read "hängt · 5 h 51
+    min" with no recovery path but manual deletion. At boot the owning
+    process is gone by definition, so the file on disk is the only
+    truth left: a playable mp4 next to the manifest becomes ``ready``,
+    everything else becomes an honest ``failed``. See
+    :mod:`app.app.clip_recovery`; nothing is deleted.
+
+    ``started_at`` is the process start. Cameras are already live when
+    this thread runs, so it is what keeps the sweep off a recording
+    that began seconds ago.
+    """
+
+    def _do():
+        try:
+            cfg = settings.export_effective_config(base_cfg)
+            public_base = (cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
+            result = clip_recovery.sweep_orphaned_clips(
+                storage_root, started_at=started_at, public_base=public_base
+            )
+            if result["recovered"] or result["failed"]:
+                log.info(
+                    "[migration] %d abgebrochene(r) Clip(s) wiederhergestellt, "
+                    "%d als fehlgeschlagen markiert",
+                    result["recovered"],
+                    result["failed"],
+                )
+        except Exception as e:
+            log.warning("[migration] Clip-Adoption fehlgeschlagen: %s", e)
 
     threading.Thread(target=_do, daemon=True).start()
 

@@ -338,7 +338,7 @@ export function mountMediaView(config = {}) {
   // stage read like the native player. Live has its own chrome and
   // weather has no <video> at all, so both skip it.
   if (mode === 'recorded' || mode === 'timelapse') {
-    const pc = mountPlayerChrome(slot('stage'), { videoId: config.videoId });
+    const pc = mountPlayerChrome(slot('stage'));
     if (pc) {
       components.playerChrome = pc;
       teardowns.push(pc.teardown);

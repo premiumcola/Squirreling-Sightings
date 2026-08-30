@@ -33,15 +33,18 @@ import {
 /**
  * Mount the player chrome onto a MediaView stage.
  *
- * @param {HTMLElement} stage        the shell's [data-slot="stage"] node
- * @param {Object} [opts]
- * @param {string} [opts.videoId]    element id of the <video> to drive
+ * The media element is #lightboxVideo, not a parameter: recorded-mode.js
+ * REPARENTS the legacy #lightboxMediaWrap into the stage rather than
+ * building a fresh player (its header comment says why — the painter,
+ * the zone overlay and the scrubber are all bound to those ids at module
+ * load). Resolved per call so the lookup survives the reparenting.
+ *
+ * @param {HTMLElement} stage  the shell's [data-slot="stage"] node
  * @returns {{ sync(): void, teardown(): void }|null}
  */
-export function mountPlayerChrome(stage, opts = {}) {
+export function mountPlayerChrome(stage) {
   if (!stage) return null;
-  const videoId = opts.videoId || 'lightboxVideo';
-  const getVideo = () => byId(videoId);
+  const getVideo = () => byId('lightboxVideo');
   const video = getVideo();
 
   const host = document.createElement('div');

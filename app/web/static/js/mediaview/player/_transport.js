@@ -28,13 +28,18 @@ const _PAUSE_SVG =
 // Ring-with-a-10 skip glyphs. Stroke-only ring + a filled numeral, which
 // is the project's thin-line chrome idiom (overlay-toggles.js) rather
 // than Apple's solid glyph.
-const _skipSvg = (back) =>
-  '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" ' +
-  'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  (back ? '<path d="M12 5a7 7 0 1 0 7 7"/><polyline points="12 2 8.4 5 12 8"/>' : '') +
-  (back ? '' : '<path d="M12 5a7 7 0 1 1-7 7"/><polyline points="12 2 15.6 5 12 8"/>') +
-  '<text x="12" y="16.4" text-anchor="middle" font-size="8.5" font-weight="700" ' +
-  'fill="currentColor" stroke="none" font-family="system-ui, sans-serif">10</text></svg>';
+const _skipSvg = (back) => {
+  const ring = back
+    ? '<path d="M12 5a7 7 0 1 0 7 7"/><polyline points="12 2 8.4 5 12 8"/>'
+    : '<path d="M12 5a7 7 0 1 1-7 7"/><polyline points="12 2 15.6 5 12 8"/>';
+  return (
+    '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    ring +
+    '<text x="12" y="16.4" text-anchor="middle" font-size="8.5" font-weight="700" ' +
+    'fill="currentColor" stroke="none" font-family="system-ui, sans-serif">10</text></svg>'
+  );
+};
 
 const _EXPAND_SVG =
   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
@@ -118,13 +123,22 @@ export function renderTransport(host, opts = {}) {
   const elapsedEl = host.querySelector('.mv-player-elapsed');
   const remainEl = host.querySelector('.mv-player-remain');
 
+  // `timeupdate` fires ~4× a second, so every write here is guarded by a
+  // comparison: re-assigning innerHTML would rebuild the play glyph's SVG
+  // four times a second for a picture that did not change.
+  let shownPlaying = null;
+  const setText = (el, text) => {
+    if (el && el.textContent !== text) el.textContent = text;
+  };
   const sync = () => {
     const v = getVideo();
     const playing = !!v && !v.paused && !v.ended;
-    if (playBtn) playBtn.innerHTML = playing ? _PAUSE_SVG : _PLAY_SVG;
-    host.dataset.playing = playing ? '1' : '0';
-    if (elapsedEl) elapsedEl.textContent = clockLabel(v ? v.currentTime : 0);
-    if (remainEl) remainEl.textContent = remainingLabel(v ? v.currentTime : 0, v ? v.duration : 0);
+    if (playBtn && playing !== shownPlaying) {
+      playBtn.innerHTML = playing ? _PAUSE_SVG : _PLAY_SVG;
+      shownPlaying = playing;
+    }
+    setText(elapsedEl, clockLabel(v ? v.currentTime : 0));
+    setText(remainEl, remainingLabel(v ? v.currentTime : 0, v ? v.duration : 0));
   };
 
   const onClick = (ev) => {

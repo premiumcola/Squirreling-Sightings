@@ -65,6 +65,14 @@ _SUN_TL_DRIFT_LIMIT_MIN = 90
 # spec the user-facing slider was removed — fewer knobs to mis-set.
 _SUN_TL_LOCKED_WINDOW_MIN = 75
 
+# Locked output frame rate — same story as the window above. Every
+# timelapse path in the system encodes at 15 fps; the per-phase `fps`
+# in settings.json is not consulted by the capture path at all (see
+# `target_fps` in _run_sun_capture). Named here so the encoder and the
+# preview endpoint quote one value instead of two literals that can
+# drift apart.
+_SUN_TL_LOCKED_FPS = 15
+
 
 @dataclass
 class _SunTLTestSession:
@@ -652,7 +660,7 @@ class SunTimelapseMixin:
         # legacy value slips through (user-edited settings.json, etc.)
         # we land at 15 anyway — a per-build deviation here would just
         # re-introduce the "stretched fps → choppy mp4" failure mode.
-        target_fps = 15
+        target_fps = _SUN_TL_LOCKED_FPS
         cam_name = self._cam_name(cam_id)
         # Per-phase subdir so on-disk layout makes the kind obvious. The
         # legacy single "sun_timelapse/" directory is still walked at
@@ -1703,7 +1711,7 @@ class SunTimelapseMixin:
         # schedule enforces. Mirror here so the test panel runs against
         # exactly the values the real schedule will use.
         interval_s = max(8, int(pcfg_user.get("interval_s", 8) or 8))
-        target_fps = 15
+        target_fps = _SUN_TL_LOCKED_FPS
         # Carry the daynight_override block forward so the test
         # exercises the same Color/Auto flip the real schedule does.
         pcfg = {
@@ -1985,7 +1993,18 @@ class SunTimelapseMixin:
                 if not p.get("enabled"):
                     p["window_start"] = p["window_end"] = None
                     continue
-                window = int(p.get("window_min", 30) or 30)
+                # The preview must quote the window that RECORDS, not the
+                # one settings.json happens to carry: both _register_sun_jobs
+                # and _run_sun_capture size the capture from
+                # _SUN_TL_LOCKED_WINDOW_MIN and never read the stored value.
+                # Deriving the row from `window_min` meant the operator saw a
+                # 30-min window next to a "75 min · fest" chip, and the same
+                # wrong pair went out on the Telegram card. Echo the honoured
+                # window + fps back so anything reading the phase block sees
+                # what the recorder will do.
+                window = _SUN_TL_LOCKED_WINDOW_MIN
+                p["window_min"] = _SUN_TL_LOCKED_WINDOW_MIN
+                p["fps"] = _SUN_TL_LOCKED_FPS
                 # Resolve "next" event: today if its capture window
                 # hasn't started yet, else tomorrow. The capture-start
                 # boundary is what determines whether the recording is

@@ -312,8 +312,13 @@ STORAGE_DEFAULTS: dict = {
 
 
 # Per-camera sun-timelapse defaults — both phases off until the user
-# opts in. window_min is overridden at runtime by _SUN_TL_LOCKED_WINDOW_MIN
-# (75 min) and persisted here as 30 only for legacy round-trips.
+# opts in.
+# `window_min` is deliberately absent. It used to be seeded here as 30
+# while the capture path sized every window from
+# _SUN_TL_LOCKED_WINDOW_MIN (75) and never read the stored value — so
+# the only thing the key ever did was make the preview row and the
+# Telegram card quote a window 45 minutes shorter than the recording.
+# Legacy settings.json files keep whatever they carry; nothing reads it.
 # E1 · interval_s 3 → 8 (defeats the Reolink snapshot-API cache that
 # bursts up to 14 identical frames on a 3 s pull), fps 25 → 15
 # (matches the cross-system fixed output rate so the encoder doesn't
@@ -321,8 +326,8 @@ STORAGE_DEFAULTS: dict = {
 # settings/migrations.py · _migrate_timelapse_intervals for the
 # matching clamp on legacy settings.json files.
 SUN_TL_DEFAULTS: dict = {
-    "sunrise": {"enabled": False, "window_min": 30, "interval_s": 8, "fps": 15},
-    "sunset": {"enabled": False, "window_min": 30, "interval_s": 8, "fps": 15},
+    "sunrise": {"enabled": False, "interval_s": 8, "fps": 15},
+    "sunset": {"enabled": False, "interval_s": 8, "fps": 15},
 }
 
 

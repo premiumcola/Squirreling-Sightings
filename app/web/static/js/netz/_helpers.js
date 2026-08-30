@@ -101,7 +101,18 @@ export const VERDICT_DE = {
   anders: 'Etwas anderes',
 };
 
+// The two record kinds that describe a CHANGE the operator made rather
+// than a moment a camera saw. Mirror of net_archive._consts.CHANGE_KINDS.
+export const CHANGE_KINDS = ['netz_aenderung', 'kamera_aenderung'];
+
+export function isChangeRecord(kind) {
+  return CHANGE_KINDS.includes(kind);
+}
+
 export function verdictWord(row) {
+  // A change record has nothing to judge — "noch nicht beurteilt" on a
+  // row that says "Du hast Gnadenfrist … geändert" reads as a bug.
+  if (isChangeRecord(row.kind)) return 'Einstellung geändert';
   if (!row.verdict) return 'noch nicht beurteilt';
   if (row.verdict === 'anders' && row.corrected_label) {
     return `Etwas anderes · ${labelDe(row.corrected_label)}`;
@@ -116,6 +127,13 @@ export function classChip(label) {
     `<span class="netz-chip" style="--cc:${esc(c)}">` +
     `<span class="netz-chip-ic">${axisIcon(label, 13)}</span>${esc(labelDe(label))}</span>`
   );
+}
+
+/** A camera-wide setting has no class and no icon — its German name goes
+ *  where the class chip would be, in the Meldung group's colour so the
+ *  row is recognisable as "an Einstellung, kein Tier". */
+export function settingChip(name) {
+  return name ? `<span class="netz-chip" style="--cc:#f472b6">${esc(name)}</span>` : '';
 }
 
 /** The one-line direction legend. Getting this backwards is the classic

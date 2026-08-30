@@ -45,6 +45,24 @@ const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garte
 // them onto their own strip below the title on a phone).
 const CHIPS_ID = 'netzCamChips';
 
+// Same glyph as #netzViewBtn — one icon means one thing. The header
+// button opens the whole Verlauf; this one opens it filtered to the card
+// it sits on, which is the question the operator actually asks ("wie
+// wurden DIESE Einstellungen der Reihe nach geändert").
+const _HIST_ICON =
+  `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ` +
+  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+  `<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>` +
+  `<polyline points="12 7.5 12 12.5 15.5 14"/></svg>`;
+
+function _histBtnHtml(cam) {
+  return (
+    `<button type="button" class="netz-card-hist" data-netz-hist ` +
+    `aria-label="Verlauf von ${esc(cam.name)}" title="Verlauf dieser Kamera">` +
+    `${_HIST_ICON}</button>`
+  );
+}
+
 // ── render ────────────────────────────────────────────────────────────
 
 function _stagingHtml(camId) {
@@ -113,6 +131,7 @@ function _cardHtml(cam) {
     `<article class="netz-card${focused}" data-cam="${esc(cam.id)}">` +
     `<header class="netz-card-hd"><h4>${esc(cam.name)}</h4>` +
     (role ? `<span class="netz-card-role">${esc(role)}</span>` : '') +
+    _histBtnHtml(cam) +
     `</header>` +
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
     `<div class="netz-card-controls">${_presetsHtml()}${_ghostHtml(tuning)}</div>` +
@@ -202,8 +221,12 @@ async function _save(camId, fields, okMsg, onRepaint) {
   onRepaint();
 }
 
-function _bindCard(card, onRepaint) {
+function _bindCard(card, onRepaint, onHistory) {
   const camId = card.dataset.cam;
+
+  card.querySelector('[data-netz-hist]')?.addEventListener('click', () => {
+    if (typeof onHistory === 'function') onHistory(camId);
+  });
 
   card.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
     const fields = { ...stagedFor(camId) };
@@ -258,7 +281,7 @@ function _bindCard(card, onRepaint) {
   );
 }
 
-export function bindCards(host, onRepaint) {
+export function bindCards(host, onRepaint, onHistory) {
   qsa('[data-netz-cam]', byId(CHIPS_ID) || host).forEach((b) =>
     b.addEventListener('click', () => {
       netzState.focusCam = netzState.focusCam === b.dataset.netzCam ? null : b.dataset.netzCam;
@@ -268,5 +291,5 @@ export function bindCards(host, onRepaint) {
         ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }),
   );
-  qsa('.netz-card', host).forEach((card) => _bindCard(card, onRepaint));
+  qsa('.netz-card', host).forEach((card) => _bindCard(card, onRepaint, onHistory));
 }

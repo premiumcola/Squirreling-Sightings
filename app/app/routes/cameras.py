@@ -22,6 +22,7 @@ from ._camera_helpers import (
     _CONN_FIELDS,
     _auto_detect_device_info,
 )
+from ._tuning_archive import archive_tuning_change
 from ._secrets import (
     merge_camera_secrets,
     redact_camera,
@@ -313,6 +314,13 @@ _TUNING_ENUM_FIELDS = {
     "roi_mode": ("off", "roi", "2x2", "3x3"),
 }
 _TUNING_BOOL_FIELDS = ("track_filter_ghosts",)
+#: Everything this route can move. The Verlauf snapshot is taken over
+#: exactly these keys, and only for the ones the request actually carries.
+_ARCHIVED_TUNING_FIELDS = (
+    *_TUNING_FLOAT_FIELDS,
+    *_TUNING_ENUM_FIELDS,
+    *_TUNING_BOOL_FIELDS,
+)
 
 
 @bp.patch('/api/cameras/<cam_id>/detection-tuning')
@@ -325,6 +333,11 @@ def api_camera_detection_tuning(cam_id):
     payload = request.get_json(force=True, silent=True) or {}
     if not isinstance(payload, dict):
         return jsonify({"ok": False, "error": "payload must be an object"}), 400
+    # Snapshot BEFORE the validators start writing into `cam` — get_camera
+    # hands back the stored dict, and every branch below mutates it in
+    # place. Only the keys the request carries: a field nobody touched can
+    # then never turn up as a "change".
+    _before = {f: cam.get(f) for f in _ARCHIVED_TUNING_FIELDS if f in payload}
     # Validate the float-range fields. Reject out-of-range with 400
     # so the frontend's slider never ships a value the backend would
     # silently clamp.
@@ -407,6 +420,7 @@ def api_camera_detection_tuning(cam_id):
         settings.upsert_camera(cam)
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 422
+    archive_tuning_change(cam_id, cam, _before)
     # Live-apply to the running tracker — no restart needed. LiveTracker
     # carries its own threshold cache; resolve_track_thresholds reads
     # from cfg on every call, so the per-tick threshold reads pick up

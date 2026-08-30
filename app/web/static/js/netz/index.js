@@ -34,8 +34,17 @@ function _host() {
 
 function renderNet(host) {
   renderCards(host);
-  bindCards(host, () => renderNet(host));
+  bindCards(host, () => renderNet(host), openCameraHistory);
   bindTuneDrag(host, () => renderNet(host));
+}
+
+/** The card's own Verlauf button: the same archive, pre-filtered to that
+ *  camera. Not a separate view — a second history surface would be a
+ *  second place for the record shape to drift, and the archive's camera
+ *  chips make the filter visible and reversible. */
+function openCameraHistory(camId) {
+  netzState.archiveFilter = { cam: camId || null, label: null, open: false };
+  showTab('verlauf');
 }
 
 export async function loadNet() {

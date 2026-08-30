@@ -28,16 +28,26 @@ Layout:
     _consts.py     — paths, quotas, the state/badge vocabulary
     _io.py         — atomic JSON round-trip + the frame re-encode
     _write.py      — the three writes, and the five German sentences
+    _tuning.py     — camera-WIDE setting changes, one record per field
     _read.py       — the browse page and the durable event-context lookup
     _retention.py  — 400 records / 24 months, unjudged evicted first
+
+The archive covers BOTH kinds of change the operator can make. A
+per-class drag lands through ``record_net_change``; a camera-wide
+setting (Analyse-Intervall, ROI-Modus, Ghost-Spuren …) through
+``record_tuning_changes``. Until the latter existed, half of what
+the Erkennungsprofil can change had no history and the archive looked
+complete anyway.
 """
 
 from __future__ import annotations
 
 from ._consts import (
+    CHANGE_KINDS,
     KIND_ALARM,
     KIND_FRAGE,
     KIND_NETZ,
+    KIND_TUNING,
     MAX_AGE_DAYS,
     MAX_RECORDS,
     PAGE_SIZE,
@@ -55,6 +65,7 @@ from ._consts import (
 from ._io import frame_path, load_record
 from ._read import find_event_context, get_record, list_records
 from ._retention import enforce, select_evictable
+from ._tuning import TUNING_LABELS_DE, format_tuning_value, record_tuning_changes, tuning_changes
 from ._write import (
     append_consequence,
     append_verdict,
@@ -68,9 +79,11 @@ from ._write import (
 )
 
 __all__ = [
+    "CHANGE_KINDS",
     "KIND_ALARM",
     "KIND_FRAGE",
     "KIND_NETZ",
+    "KIND_TUNING",
     "MAX_AGE_DAYS",
     "MAX_RECORDS",
     "PAGE_SIZE",
@@ -81,6 +94,7 @@ __all__ = [
     "STATE_CONFIRMED",
     "STATE_PENDING",
     "STATE_PINNED",
+    "TUNING_LABELS_DE",
     "VERDICT_OTHER",
     "VERDICT_RIGHT",
     "VERDICT_WRONG",
@@ -90,14 +104,17 @@ __all__ = [
     "capture",
     "enforce",
     "find_event_context",
+    "format_tuning_value",
     "frame_path",
     "get_record",
     "list_records",
     "load_record",
     "record_net_change",
+    "record_tuning_changes",
     "select_evictable",
     "sentence_changed",
     "sentence_confirmed",
     "sentence_pending",
     "sentence_pinned",
+    "tuning_changes",
 ]

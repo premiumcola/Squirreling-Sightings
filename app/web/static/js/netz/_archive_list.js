@@ -16,7 +16,7 @@
 import { esc } from '../core/dom.js';
 import { archiveFrameUrl } from './_api.js';
 import { netzState } from './_state.js';
-import { classChip, fmtDateTime, labelDe, verdictWord } from './_helpers.js';
+import { classChip, fmtDateTime, labelDe, settingChip, verdictWord } from './_helpers.js';
 
 const MIN_CAMS_FOR_CHIPS = 2;
 const MIN_RECORDS_FOR_CLASS_CHIPS = 4;
@@ -95,7 +95,9 @@ function _rowHtml(row) {
     `<button type="button" class="netz-arc-row" data-arc-id="${esc(row.event_id)}">` +
     _thumb(row) +
     `<span class="netz-arc-body">` +
-    `<span class="netz-arc-l1">${classChip(row.label)}` +
+    // A camera-wide change carries no class — its field name takes the
+    // chip's place so the row still says WHAT moved at a glance.
+    `<span class="netz-arc-l1">${classChip(row.label) || settingChip(row.field_de)}` +
     `<span class="netz-arc-cam">${esc(row.cam_name || '')}</span>` +
     `<span class="netz-arc-time">${esc(fmtDateTime(row.ts))}${esc(score)}</span></span>` +
     `<span class="netz-arc-l2"><span class="netz-badge" data-state="${esc(row.state)}">` +

@@ -6,7 +6,7 @@ common case (the first page) touches only the current month.
 
 from __future__ import annotations
 
-from ._consts import PAGE_SIZE, STATE_CHANGED, STATE_BADGE, STATE_PENDING
+from ._consts import CHANGE_KINDS, PAGE_SIZE, STATE_CHANGED, STATE_BADGE, STATE_PENDING
 from ._io import iter_record_paths, load_record, read_record
 
 
@@ -30,8 +30,24 @@ def _row(rec: dict) -> dict:
         "state": state,
         "badge": STATE_BADGE.get(state, "⏳"),
         "reason_de": cons.get("reason_de") or "",
-        "has_frame": bool(rec.get("kind") != "netz_aenderung"),
+        # A camera-wide change has no class; the field name is what the
+        # row shows in the chip's place.
+        "field_de": cons.get("field_de"),
+        "has_frame": rec.get("kind") not in CHANGE_KINDS,
     }
+
+
+def _sort_key(row: dict):
+    """Newest first, by the record's OWN timestamp.
+
+    Not by file order: ``iter_record_paths`` walks month folders, and
+    every manual change written before this landed in ``unknown`` (its
+    event_id starts with ``netz-``, so ``_month_of`` cannot date it).
+    Reverse-sorted, ``unknown`` comes before every real month — which put
+    the whole change history above the whole question history regardless
+    of when anything happened. The operator asked for "der Reihe nach".
+    """
+    return str(row.get("ts") or "")
 
 
 def _matches(rec: dict, cam: str | None, label: str | None, only_open: bool) -> bool:
@@ -85,6 +101,7 @@ def list_records(
         else:
             unjudged += 1
         rows.append(_row(rec))
+    rows.sort(key=_sort_key, reverse=True)
     page = rows[offset : offset + limit]
     return {
         "items": page,

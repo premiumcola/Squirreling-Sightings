@@ -17,7 +17,16 @@ import { showConfirm, showToast } from '../core/toast.js';
 import { archiveFrameUrl, restoreNet } from './_api.js';
 import { MIN_RADAR_AXES, renderBars, renderRadar } from './_radar.js';
 import { AXIS_ORDER } from './_mapping.js';
-import { classChip, fmtDateTime, labelDe, pct, PROVENANCE_DE, verdictWord } from './_helpers.js';
+import {
+  classChip,
+  fmtDateTime,
+  isChangeRecord,
+  labelDe,
+  pct,
+  PROVENANCE_DE,
+  settingChip,
+  verdictWord,
+} from './_helpers.js';
 
 const MINI_SIDE = 240;
 
@@ -59,10 +68,32 @@ function _ladderRows(netState) {
 }
 
 function _frameHtml(rec) {
-  if (rec.kind === 'netz_aenderung') return '';
+  if (isChangeRecord(rec.kind)) return '';
   return (
     `<img class="netz-det-frame" alt="" src="${esc(archiveFrameUrl(rec.event_id))}" ` +
     `onerror="this.closest('.netz-det-figure')?.remove()">`
+  );
+}
+
+/** The net block — heading, mini-radar, ladder table, restore button.
+ *
+ *  A camera-wide change carries NO net_state: Analyse-Intervall and
+ *  ROI-Modus run before the pipeline knows a class, so there are no per-
+ *  class thresholds to show and nothing for „wiederherstellen" to write.
+ *  An empty radar with an empty table under a „Netz zu diesem Zeitpunkt"
+ *  heading, plus a button that can only answer 400, is worse than
+ *  leaving the section out. */
+function _netHtml(rec) {
+  if (!Object.keys(rec.net_state || {}).length) return '';
+  return (
+    `<div class="netz-det-sub">Netz zu diesem Zeitpunkt</div>` +
+    _miniRadar(rec.net_state) +
+    `<div class="netz-table-wrap"><table class="netz-table">` +
+    `<thead><tr><th>Klasse</th><th>E</th><th>Spawn</th><th>Meldung</th>` +
+    `<th>Ebene</th><th>Quelle</th></tr></thead>` +
+    `<tbody>${_ladderRows(rec.net_state)}</tbody></table></div>` +
+    `<button type="button" class="netz-btn netz-btn--ghost" data-arc-restore>` +
+    `Netz zu diesem Zeitpunkt wiederherstellen</button>`
   );
 }
 
@@ -76,26 +107,25 @@ export function renderArchiveDetail(host, rec, handlers) {
   host.innerHTML =
     `<div class="netz-det">` +
     `<button type="button" class="netz-back" data-arc-back>← Verlauf</button>` +
-    `<div class="netz-det-head">${classChip(det.label)}` +
+    `<div class="netz-det-head">${classChip(det.label) || settingChip(cons.field_de)}` +
     `<span class="netz-arc-cam">${esc(rec.cam_name || '')}</span>` +
     `<span class="netz-arc-time">${esc(fmtDateTime(rec.ts))}${esc(score)}</span></div>` +
-    (rec.kind === 'netz_aenderung'
+    (isChangeRecord(rec.kind)
       ? ''
       : `<figure class="netz-det-figure">${_frameHtml(rec)}</figure>`) +
     `<div class="netz-det-verdict"><span class="netz-badge" data-state="${esc(
       cons.state || 'pending',
     )}">${esc(rec.badge || '')}</span>` +
-    `${esc(verdictWord({ verdict: verdict.value, corrected_label: verdict.corrected_label }))}` +
+    `${esc(
+      verdictWord({
+        kind: rec.kind,
+        verdict: verdict.value,
+        corrected_label: verdict.corrected_label,
+      }),
+    )}` +
     `</div>` +
     `<p class="netz-det-reason">${cons.reason_de || ''}</p>` +
-    `<div class="netz-det-sub">Netz zu diesem Zeitpunkt</div>` +
-    _miniRadar(rec.net_state) +
-    `<div class="netz-table-wrap"><table class="netz-table">` +
-    `<thead><tr><th>Klasse</th><th>E</th><th>Spawn</th><th>Meldung</th>` +
-    `<th>Ebene</th><th>Quelle</th></tr></thead>` +
-    `<tbody>${_ladderRows(rec.net_state)}</tbody></table></div>` +
-    `<button type="button" class="netz-btn netz-btn--ghost" data-arc-restore>` +
-    `Netz zu diesem Zeitpunkt wiederherstellen</button>` +
+    _netHtml(rec) +
     `</div>`;
   host.querySelector('[data-arc-back]')?.addEventListener('click', handlers.back);
   host

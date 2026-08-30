@@ -20,6 +20,14 @@ ARCHIVE_DIRNAME = "net_archive"
 KIND_FRAGE = "frage"  # spawn <= score < push — the quiet question
 KIND_ALARM = "alarm"  # score >= push — the existing event alert
 KIND_NETZ = "netz_aenderung"  # a manual drag; no image
+KIND_TUNING = "kamera_aenderung"  # a camera-WIDE setting; no image, no net
+
+#: The kinds that describe a CHANGE the operator made rather than a
+#: moment a camera saw. No frame, and — for the camera-wide one — no net
+#: state either. Grouped here so a reader cannot pick up one and miss the
+#: other: that is exactly how `has_frame` ended up hard-coding a single
+#: kind string.
+CHANGE_KINDS = (KIND_NETZ, KIND_TUNING)
 
 #: Consequence states. The `state` field IS the answer to "war meine
 #: Einstufung eine Optimierung?" — every card carries one, never silence.

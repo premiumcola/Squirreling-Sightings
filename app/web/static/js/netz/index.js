@@ -139,6 +139,25 @@ function _routeFromHash() {
   showTab(q?.get('tab') || 'netz');
 }
 
+/** First-visibility hydration.
+ *
+ * A deep link (#netz?tab=…) picks the view; ANY other way of arriving —
+ * the operator simply scrolling the section into frame, which is the
+ * normal case — still has to load something. `_routeFromHash` alone
+ * returns early on a non-#netz hash, so the panel stayed on its own
+ * "Keine Kamera konfiguriert." empty state until the Verlauf button was
+ * pressed (that calls `showTab` directly) and the operator came back.
+ * storms/index.js, which this observer was modelled on, does not have
+ * the hole: its `_route()` ends in an unconditional `_showList(host)`.
+ */
+function _hydrate() {
+  if ((location.hash || '').startsWith('#netz')) {
+    _routeFromHash();
+    return;
+  }
+  showTab(netzState.view || 'netz');
+}
+
 let _observer = null;
 
 /** Hydrate on first visibility, matching storms/. The panel is a section
@@ -151,11 +170,13 @@ export function initNetz() {
   });
   _observer = new IntersectionObserver(
     (entries) => {
-      if (entries.some((e) => e.isIntersecting)) _routeFromHash();
+      if (entries.some((e) => e.isIntersecting)) _hydrate();
     },
     { threshold: 0.02 },
   );
   _observer.observe(sec);
+  // A deep link must render even if the section never crosses the
+  // observer threshold on its own (mirrors storms/index.js).
   if ((location.hash || '').startsWith('#netz')) _routeFromHash();
 }
 

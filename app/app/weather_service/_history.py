@@ -215,10 +215,26 @@ class HistoryMixin:
         with self._history_lock:
             return self._episode_pending
 
-    def history(self, hours: int = 24) -> dict:
-        """Backing call for /api/weather/history."""
+    def history(
+        self,
+        hours: int = 24,
+        since_iso: str | None = None,
+        until_iso: str | None = None,
+    ) -> dict:
+        """Backing call for /api/weather/history.
+
+        ``since_iso``/``until_iso`` are additive: when given, they
+        replace the ``hours``-based cutoff with an explicit absolute
+        window, so a saved manual-event range can be replayed exactly
+        even when it no longer falls inside "the last N hours from
+        now" (e.g. the operator opens a save from three days ago while
+        the panel itself is set to 24 h). Every existing caller that
+        only passes ``hours`` is unaffected.
+        """
         hours = max(1, min(720, int(hours or 24)))
-        cutoff = datetime.now() - timedelta(hours=hours)
+        since_dt = _safe_dt(since_iso) if since_iso else None
+        until_dt = _safe_dt(until_iso) if until_iso else None
+        cutoff = since_dt or (datetime.now() - timedelta(hours=hours))
         with self._history_lock:
             samples = list(self._history)
         # Filter to time window. Tolerate parse failures by falling back to
@@ -228,10 +244,15 @@ class HistoryMixin:
         for row in samples:
             ts_str = row.get("ts") or ""
             try:
-                if datetime.fromisoformat(ts_str) >= cutoff:
-                    out.append(row)
+                ts_dt = datetime.fromisoformat(ts_str)
             except Exception:
                 out.append(row)
+                continue
+            if ts_dt < cutoff:
+                continue
+            if until_dt and ts_dt > until_dt:
+                continue
+            out.append(row)
         # Thresholds from configured event settings. Always emit the
         # configured threshold value regardless of the enabled toggle —
         # the chart needs to draw the boundary even for events that are

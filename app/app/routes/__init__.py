@@ -84,6 +84,7 @@ def register_blueprints(app) -> None:
         trash,
         weather,
         weather_episodes,
+        weather_manual_events,
     )
 
     app.register_blueprint(tracking.bp)
@@ -113,6 +114,8 @@ def register_blueprints(app) -> None:
     # Storm-episode archive — its own module because routes/weather.py
     # is already past the file ceiling.
     app.register_blueprint(weather_episodes.bp)
+    # Manual weather events (user-saved chart ranges) — same reasoning.
+    app.register_blueprint(weather_manual_events.bp)
     app.register_blueprint(telegram.bp)
     # Device-scoped inference telemetry — deliberately not folded into
     # /api/status (per-camera) nor into the two oversized coral modules.

@@ -720,7 +720,13 @@ def api_weather_history():
     """Backing endpoint for the Wetterstatistik chart. `hours` clamped
     to 1..720 by the service (30 d at default 5-min poll). Returns a
     sample list, per-field thresholds drawn from the configured event
-    triggers, units, German labels, and the configured poll interval."""
+    triggers, units, German labels, and the configured poll interval.
+
+    `since`/`until` (ISO timestamps) are additive optional params: when
+    given they replace the `hours` cutoff with an explicit absolute
+    window — used to replay a saved manual event's exact range, which
+    may no longer fall inside "the last N hours from now". Every
+    existing caller that only sends `hours` is unaffected."""
     ws = app_state.weather_service
     if ws is None:
         return jsonify(
@@ -735,4 +741,6 @@ def api_weather_history():
             }
         )
     hours = request.args.get("hours", type=int, default=24) or 24
-    return jsonify(ws.history(hours))
+    since_iso = request.args.get("since") or None
+    until_iso = request.args.get("until") or None
+    return jsonify(ws.history(hours, since_iso=since_iso, until_iso=until_iso))

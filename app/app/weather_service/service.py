@@ -35,6 +35,7 @@ from ._event_tl import EventTimelapseMixin
 from ._history import HistoryMixin
 from ._lifecycle import LifecycleMixin
 from ._manifests import ManifestsMixin
+from ._manual_events import ManualEventsMixin
 from ._recaps import RecapsMixin
 from ._sun_tl import SunTimelapseMixin
 
@@ -45,6 +46,7 @@ class WeatherService(
     ClipMixin,
     ManifestsMixin,
     RecapsMixin,
+    ManualEventsMixin,
     HistoryMixin,
     SunTimelapseMixin,
     EventTimelapseMixin,

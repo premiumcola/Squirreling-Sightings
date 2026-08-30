@@ -493,9 +493,15 @@
     background 0.15s,
     color 0.15s;
 }
-.erk-track-preset:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+/* Behind the hover guard: on iOS an unguarded :hover sticks after a tap
+   and the button stays lit until something else is touched. These buttons
+   are also rendered on the Erkennungsprofil cards, which is a phone
+   surface first. */
+@media (hover: hover) {
+  .erk-track-preset:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
 }
 .erk-track-preset[data-flash='1'] {
   background: rgba(75, 163, 255, 0.3);

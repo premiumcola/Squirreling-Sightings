@@ -12,7 +12,7 @@
 // to the host: `host.querySelector('[data-tune-apply]')` finds the FIRST
 // card's button regardless of which one was clicked.
 
-import { esc, qsa } from '../core/dom.js';
+import { byId, esc, qsa } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
@@ -24,9 +24,9 @@ import {
   clearStagedFor,
   effectiveTuning,
   netzState,
+  stageValue,
   stagedCountFor,
   stagedFor,
-  unstage,
 } from './_state.js';
 
 const _TRACK_PRESETS = {
@@ -36,6 +36,13 @@ const _TRACK_PRESETS = {
 };
 const _TRACK_PRESET_LABELS = { careful: 'Vorsichtig', balanced: 'Ausgewogen', robust: 'Robust' };
 const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garten' };
+
+// The camera chips render into the section HEADER, not into the body
+// host: #netzBody is swapped wholesale between the Netz and the Verlauf
+// view, and the chips belong to the Netz. The slot sits beside the
+// Verlauf button, which puts them top-right on desktop (32-netz.css moves
+// them onto their own strip below the title on a phone).
+const CHIPS_ID = 'netzCamChips';
 
 // ── render ────────────────────────────────────────────────────────────
 
@@ -69,12 +76,20 @@ function _presetsHtml() {
   );
 }
 
+// One switch does not need a row of its own — it used to own a full
+// 44 px line under the presets for a single boolean. As a chip it sits at
+// the end of the preset row, keeps the 44 px target, and reports its
+// state through aria-pressed instead of a second label.
 function _ghostHtml(tuning) {
+  const on = tuning.track_filter_ghosts !== false;
   return (
-    `<label class="netz-card-ghost"><span>Ghost-Spuren ausblenden</span>` +
-    `<input type="checkbox" data-tune-ghost class="switch-input"` +
-    `${tuning.track_filter_ghosts !== false ? ' checked' : ''}>` +
-    `<span class="switch"></span></label>`
+    `<button type="button" class="netz-chip-toggle" data-tune-ghost ` +
+    `aria-pressed="${on ? 'true' : 'false'}" aria-label="Ghost-Spuren ausblenden" ` +
+    `title="Ghost-Spuren ausblenden">` +
+    `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" ` +
+    `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="M12 3a7 7 0 0 0-7 7v11l2.5-2 2.5 2 2-2 2 2 2.5-2 2.5 2V10a7 7 0 0 0-7-7Z"/>` +
+    `<path d="M9.5 10.5h.01M14.5 10.5h.01"/></svg>Ghost</button>`
   );
 }
 
@@ -123,6 +138,13 @@ function _chipsHtml() {
   );
 }
 
+/** Paint the header's camera slot. Cleared in the Verlauf view, which
+ *  has camera chips of its own inside the list. */
+export function renderCamChips() {
+  const el = byId(CHIPS_ID);
+  if (el) el.innerHTML = netzState.view === 'netz' ? _chipsHtml() : '';
+}
+
 function _combosHtml() {
   return (
     `<div class="netz-combos"><b>Was zusammen wirkt</b>` +
@@ -154,13 +176,13 @@ function _frozenHtml() {
 }
 
 export function renderCards(host) {
+  renderCamChips();
   const cams = netzState.cameras || [];
   if (!cams.length) {
     host.innerHTML = `<div class="netz-empty"><div class="netz-empty-sub">Keine Kamera konfiguriert.</div></div>`;
     return;
   }
   host.innerHTML =
-    _chipsHtml() +
     tuneGroupLegendHtml() +
     `<div class="netz-cards">${cams.map((c) => _cardHtml(c)).join('')}</div>` +
     _combosHtml() +
@@ -201,34 +223,31 @@ function _bindCard(card, onRepaint) {
     onRepaint();
   });
 
-  card.querySelector('[data-tune-ghost]')?.addEventListener('change', async (ev) => {
-    await _save(
-      camId,
-      { track_filter_ghosts: ev.target.checked },
-      'Erkennungsprofil übernommen.',
-      onRepaint,
-    );
+  card.querySelector('[data-tune-ghost]')?.addEventListener('click', async (ev) => {
+    const wasOn = ev.currentTarget.getAttribute('aria-pressed') === 'true';
+    await _save(camId, { track_filter_ghosts: !wasOn }, 'Erkennungsprofil übernommen.', onRepaint);
   });
 
   qsa('[data-tune-preset]', card).forEach((btn) =>
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const p = _TRACK_PRESETS[btn.dataset.tunePreset];
       if (!p) return;
-      // A preset writes four fields at once; drop any staged value for the
-      // two it overlaps so a later "Übernehmen" cannot resurrect them.
-      unstage(camId, 'track_miss_grace_seconds');
-      unstage(camId, 'track_iou_match_threshold');
-      await _save(
-        camId,
-        {
-          track_spawn_min_score: p.spawn,
-          track_continue_min_score: p.cont,
-          track_miss_grace_seconds: p.grace,
-          track_iou_match_threshold: p.iou,
-        },
-        `Vorlage gespeichert · ${_TRACK_PRESET_LABELS[btn.dataset.tunePreset]}`,
-        onRepaint,
+      // A preset STAGES its four fields, it does not commit them. Clicking
+      // one used to overwrite four axes on the spot with nothing to
+      // return to — „dann verdreht's ja alles, dann komm ich nicht
+      // zurück". Staged, the bar's „Verwerfen" IS the way back, and it
+      // costs no extra control on an already busy card.
+      stageValue(camId, 'track_spawn_min_score', p.spawn);
+      stageValue(camId, 'track_continue_min_score', p.cont);
+      stageValue(camId, 'track_miss_grace_seconds', p.grace);
+      stageValue(camId, 'track_iou_match_threshold', p.iou);
+      showToast(
+        `Vorlage ${_TRACK_PRESET_LABELS[btn.dataset.tunePreset]} vorgemerkt — ` +
+          `„Übernehmen" speichert, „Verwerfen" nimmt sie zurück.`,
+        'info',
+        { lifetime: 6000 },
       );
+      onRepaint();
     }),
   );
 
@@ -241,7 +260,7 @@ function _bindCard(card, onRepaint) {
 }
 
 export function bindCards(host, onRepaint) {
-  qsa('[data-netz-cam]', host).forEach((b) =>
+  qsa('[data-netz-cam]', byId(CHIPS_ID) || host).forEach((b) =>
     b.addEventListener('click', () => {
       netzState.focusCam = netzState.focusCam === b.dataset.netzCam ? null : b.dataset.netzCam;
       onRepaint();

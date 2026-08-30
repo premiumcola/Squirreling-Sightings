@@ -511,11 +511,58 @@
 
 /* ── Erklärung-Overlay ("i" button + modal) ──────────────────────────── */
 
+/* Three slots, one grid — NOT `margin-left: auto` on an inline-flex child,
+   which is the documented root cause of the Live-Pill layout bugs on iOS.
+   Phone: title left, Verlauf button right, camera chips on their own
+   full-width strip underneath (three names plus a 44 px button cannot
+   share a 375 px line). Desktop: chips move up onto the title row and sit
+   right, beside the button — what the operator asked for, "auf jeden Fall
+   aufm PC". */
 .netz-head-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'title btn' 'cams cams';
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+
+.netz-head-row > .ws-title {
+  grid-area: title;
+  min-width: 0;
+}
+
+.netz-head-row > .netz-view-btn {
+  grid-area: btn;
+}
+
+.netz-head-row > .netz-cams {
+  grid-area: cams;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+/* Before hydration — and in the Verlauf view — the slot holds nothing.
+   An empty grid area would still claim its 8 px gap. */
+.netz-cams:empty {
+  display: none;
+}
+
+/* The chips are the one control here the operator taps on a phone. */
+.netz-cams .netz-pill {
+  min-height: 44px;
+}
+
+@media (min-width: 760px) {
+  .netz-head-row {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'title cams btn';
+  }
+
+  .netz-head-row > .netz-cams {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
 }
 
 /* ── Erkennungsprofil · one card per camera, side by side ─────────────── */
@@ -741,24 +788,52 @@
   opacity: 0.5;
 }
 
+/* Presets and the Ghost switch share ONE row. The switch used to own a
+   full 44 px line for a single boolean — disproportionate on a card that
+   already carries a radar and a staging bar. */
 .netz-card-controls {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
   margin-top: 8px;
 }
 
-.netz-card-ghost {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  font-size: 12px;
-  color: #cbd5e1;
+/* The preset buttons come from 06c-cam-edit-erkennung.css. Inside the
+   card they join the same row, so the block margin goes and the target
+   grows to the 44 px the iOS checklist asks for. */
+.netz-card-controls .erk-track-presets {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.netz-card-ghost span:first-child {
-  flex: 1 1 auto;
+.netz-card-controls .erk-track-preset {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* A compact on/off chip: pressed = the setting is active. Same visual
+   language as .netz-pill, so the card has one chip shape, not two. */
+.netz-chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.netz-chip-toggle[aria-pressed='true'] {
+  background: rgba(34, 197, 94, 0.24);
+  color: #eaf7ee;
 }
 
 /* A plain box, not a <details>: reference material the operator should be

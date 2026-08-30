@@ -1,17 +1,13 @@
 {# Erkennungsprofil — one section, two views (Netze / Verlauf) rendered into #netzBody by
 static/js/netz/. Only one is in the DOM at a time, so the back button navigates between them for
-free and there is no modal-inside-a-modal on iOS.
-
-The Netz/Verlauf TAB BAR is gone: with only two views a full-width segmented control was more
-chrome than choice. #netzViewBtn top-right toggles both directions — it must stay a toggle, not a
-one-way link, because the archive list has no back control of its own.
-
-Internal ids/classes stay `netz*` throughout static/js/netz/ and 32-netz.css — only the
-user-visible text says "Erkennungsprofil". Renaming every internal identifier too would be a
-large, purely-cosmetic diff across a dozen files for zero behavioural gain.
-
-The static markup below is what a browser with JS disabled sees, and what is on screen for the
-moment between paint and hydration — deliberately the calm empty state, not a spinner. #}
+free and there is no modal-inside-a-modal on iOS. The Netz/Verlauf TAB BAR is gone: with only two
+views a full-width segmented control was more chrome than choice. #netzViewBtn top-right toggles
+both directions — it must stay a toggle, not a one-way link, because the archive list has no back
+control of its own. Internal ids/classes stay `netz*` throughout static/js/netz/ and 32-netz.css —
+only the user-visible text says "Erkennungsprofil". Renaming every internal identifier too would be
+a large, purely-cosmetic diff across a dozen files for zero behavioural gain. The static markup
+below is what a browser with JS disabled sees, and what is on screen for the moment between paint
+and hydration — deliberately the calm empty state, not a spinner. #}
 <section id="netz" class="panel section" data-accent="34,197,94" data-dock-section="dashboard">
   <div class="netz-block" id="netzBlock">
     <div class="netz-head">
@@ -21,6 +17,11 @@ moment between paint and hydration — deliberately the calm empty state, not a 
             <use href="#icon-netz" /></svg
           >Erkennungsprofil
         </span>
+        {# Kamera-Chips. Filled by netz/_cards.js::renderCamChips, deliberately NOT by the body
+        renderer: #netzBody is swapped wholesale between the Netz and the Verlauf view, and the
+        chips belong to the Netz. Empty until hydration — `.netz-cams:empty` collapses the slot, so
+        a JS-less browser sees the same calm header it saw before. #}
+        <div class="netz-pills netz-cams" id="netzCamChips"></div>
         <button
           type="button"
           id="netzViewBtn"

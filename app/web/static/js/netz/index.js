@@ -18,7 +18,7 @@
 import { byId } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { fetchArchive, fetchArchiveRecord, fetchState } from './_api.js';
-import { bindCards, renderCards } from './_cards.js';
+import { bindCards, renderCamChips, renderCards } from './_cards.js';
 import { bindTuneDrag, isTuneDragging } from './_tune_drag.js';
 import { renderArchiveDetail } from './_archive_detail.js';
 import { renderArchiveList } from './_archive_list.js';
@@ -63,6 +63,9 @@ export async function loadNet() {
 async function loadArchive() {
   const host = _host();
   if (!host) return;
+  // The header's camera slot belongs to the Netz view; the archive brings
+  // its own camera chips inside the list.
+  renderCamChips();
   const res = await fetchArchive({ ...netzState.archiveFilter });
   netzState.archive = res.ok ? res : { items: [] };
   renderArchiveList(host, netzState.archive, {

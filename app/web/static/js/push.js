@@ -329,7 +329,12 @@ function hydratePushDeps() {
 
 // ── Push Weather settings (extends the "Was senden" tab) ─────────────────
 
-const _PUSH_WEATHER_ORDER = ['thunder', 'heavy_rain', 'snow', 'fog', 'sunset'];
+// Every entry must exist in WEATHER_TYPES — the fallback below would
+// otherwise render the raw English key as the chip label. 'sunset' was
+// exactly that: the score-based sunset event was retired into the
+// sun-timelapse pipeline, WEATHER_TYPES dropped it, and the row stayed
+// behind as an untranslated toggle for a push that can never be sent.
+const _PUSH_WEATHER_ORDER = ['thunder', 'heavy_rain', 'snow', 'fog'];
 
 function _renderPushWeatherEvents(weatherCfg) {
   const wrap = byId('pushWeatherEventsList');

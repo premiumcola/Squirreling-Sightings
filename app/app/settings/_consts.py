@@ -58,7 +58,9 @@ TELEGRAM_PUSH_DEFAULTS: dict = {
             "heavy_rain": True,
             "snow": True,
             "fog": False,  # default off — pretty rare to be interesting
-            "sunset": True,
+            # No `sunset` toggle: `_maybe_push_telegram` looks the event up
+            # by the manifest's event_type, and no clip can carry
+            # "sunset" any more (see WEATHER_DEFAULTS above).
         },
         "recap_push": True,  # ein Push pro fertigem Quartals-/Jahres-Recap
     },
@@ -115,14 +117,15 @@ WEATHER_DEFAULTS: dict = {
         # charted but had no threshold behind them.
         "storm": {"enabled": True, "threshold": 60.0, "cooldown_min": 60},
         "fog": {"enabled": True, "vis_max_m": 1000, "contrast_max": 0.25, "cooldown_min": 90},
-        # Sunset: triggers once per day in the dusk window.
-        "sunset": {
-            "enabled": True,
-            "alt_min": -2,
-            "alt_max": 5,
-            "min_duration_min": 12,
-            "cooldown_min": 720,
-        },
+        # `sunset` removed. The score-based sunset EVENT was retired when
+        # sunrise/sunset content moved to the sun-timelapse pipeline —
+        # `_detection._detect` stopped dispatching it and EVENT_LABEL_DE
+        # dropped the key, so the poll loop cannot reach it. The five
+        # tunables kept being seeded here regardless: alt_min, alt_max,
+        # min_duration_min, cooldown_min and an `enabled` flag that
+        # enabled nothing. `_detect_sunset` itself is still parked in
+        # _detection.py for a possible re-enable; only the settings
+        # surface is gone.
     },
     "clip": {
         "pre_roll_s": 5,

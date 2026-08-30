@@ -166,8 +166,7 @@ function _frozenHtml() {
 export function renderCards(host) {
   const cams = netzState.cameras || [];
   if (!cams.length) {
-    host.innerHTML =
-      `<div class="netz-empty"><div class="netz-empty-sub">Keine Kamera konfiguriert.</div></div>`;
+    host.innerHTML = `<div class="netz-empty"><div class="netz-empty-sub">Keine Kamera konfiguriert.</div></div>`;
     return;
   }
   host.innerHTML =

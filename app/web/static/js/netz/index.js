@@ -20,11 +20,9 @@ import { showToast } from '../core/toast.js';
 import { fetchArchive, fetchArchiveRecord, fetchState } from './_api.js';
 import { bindCards, renderCards } from './_cards.js';
 import { bindTuneDrag, isTuneDragging } from './_tune_drag.js';
-import { renderTuneRadar } from './_tune_radar.js';
-import { buildTuneAxes } from './_settings_axes.js';
 import { renderArchiveDetail } from './_archive_detail.js';
 import { renderArchiveList } from './_archive_list.js';
-import { effectiveTuning, netzState } from './_state.js';
+import { netzState } from './_state.js';
 
 const HOST_ID = 'netzBody';
 
@@ -37,23 +35,6 @@ function _host() {
 function renderNet(host) {
   renderCards(host);
   bindCards(host, () => renderNet(host));
-  bindTuneDrag(host, () => renderNet(host));
-}
-
-// A vertex mid-drag repaints only its own card's SVG. A full re-render
-// would rebuild the node under the finger and drop the pointer capture.
-function _onVertexMove(host, { camId, key, e }) {
-  const card = host.querySelector(`.netz-card[data-cam="${CSS.escape(camId)}"]`);
-  const wrap = card?.querySelector('.netz-card-chart');
-  if (!wrap) return;
-  const axes = buildTuneAxes(effectiveTuning(camId));
-  const i = axes.findIndex((a) => a.key === key);
-  if (i < 0) return;
-  axes[i] = { ...axes[i], E: e };
-  netzState.tuneAxes[camId] = axes;
-  wrap.innerHTML = renderTuneRadar({ axes, interactive: true });
-  // Fresh nodes need fresh listeners for the NEXT drag; the current one
-  // keeps running on its captured node regardless.
   bindTuneDrag(host, () => renderNet(host));
 }
 
@@ -164,8 +145,6 @@ export function initNetz() {
   );
   _observer.observe(sec);
   if ((location.hash || '').startsWith('#netz')) _routeFromHash();
-  const host = _host();
-  host?.addEventListener('netz:tunevertexmove', (ev) => _onVertexMove(host, ev.detail));
 }
 
 window.addEventListener('hashchange', () => {

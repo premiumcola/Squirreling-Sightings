@@ -39,15 +39,13 @@ function _camChips(data) {
   const all =
     `<button type="button" class="netz-pill${sel ? '' : ' is-active'}" ` +
     `data-arc-cam="">Alle</button>`;
-  return (
-    `<div class="netz-pills">${all}${cams
-      .map(
-        (c) =>
-          `<button type="button" class="netz-pill${sel === c.id ? ' is-active' : ''}" ` +
-          `data-arc-cam="${esc(c.id)}">${esc(c.name)}</button>`,
-      )
-      .join('')}</div>`
-  );
+  return `<div class="netz-pills">${all}${cams
+    .map(
+      (c) =>
+        `<button type="button" class="netz-pill${sel === c.id ? ' is-active' : ''}" ` +
+        `data-arc-cam="${esc(c.id)}">${esc(c.name)}</button>`,
+    )
+    .join('')}</div>`;
 }
 
 function _classChips(data) {
@@ -158,7 +156,7 @@ function _bind(host, handlers) {
     netzState.archiveFilter.open = !netzState.archiveFilter.open;
     handlers.reload();
   });
-  host.querySelectorAll('[data-arc-id]').forEach((b) =>
-    b.addEventListener('click', () => handlers.openDetail(b.dataset.arcId)),
-  );
+  host
+    .querySelectorAll('[data-arc-id]')
+    .forEach((b) => b.addEventListener('click', () => handlers.openDetail(b.dataset.arcId)));
 }

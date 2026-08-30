@@ -763,3 +763,34 @@
     color: #fff;
   }
 }
+
+/* Which node am I about to grab? The halo answers that before the click,
+   and stays on while dragging so the grabbed node is unambiguous once the
+   cursor has moved away from it. Opacity only — a radius change would
+   reflow the SVG on every hover. */
+.netz-tune-halo {
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.netz-vertex.is-dragging .netz-tune-halo {
+  opacity: 0.45;
+}
+
+.netz-tune-hit {
+  cursor: grab;
+}
+
+.netz-vertex.is-dragging .netz-tune-hit {
+  cursor: grabbing;
+}
+
+@media (hover: hover) {
+  .netz-vertex:hover .netz-tune-halo {
+    opacity: 0.3;
+  }
+
+  .netz-vertex:hover .netz-tune-dot {
+    stroke: #fff;
+  }
+}

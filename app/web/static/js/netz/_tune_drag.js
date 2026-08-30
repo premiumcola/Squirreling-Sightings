@@ -20,13 +20,14 @@
 import { showConfirm, showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { TUNE_SPECS, tuneDisplay, tuneRawFromE } from './_settings_axes.js';
-import { eFromEllipse, tuneGeometry, TUNE_H, TUNE_W } from './_tune_radar.js';
-import { applySaved, axisFor, stageValue, unstage } from './_state.js';
+import { eFromEllipse, moveTuneVertex, tuneGeometry, TUNE_H, TUNE_W } from './_tune_radar.js';
+import { applySaved, axisFor, netzState, stageValue, unstage } from './_state.js';
 
 const LONG_PRESS_MS = 500;
 const MOVE_THRESHOLD_PX = 4;
 
 let _drag = null;
+let _rafId = 0;
 
 function _pillEl(card) {
   let el = card.querySelector('.netz-drag-pill');
@@ -110,6 +111,31 @@ function _onDown(ev, node, onRepaint) {
   node.addEventListener('pointercancel', up);
 }
 
+// Pointer events fire faster than the screen refreshes, so the paint is
+// coalesced into one animation frame. Without this a fast drag does the
+// same DOM work three or four times for a single visible update.
+function _schedulePaint() {
+  if (_rafId) return;
+  _rafId = requestAnimationFrame(() => {
+    _rafId = 0;
+    if (!_drag) return;
+    const axes = netzState.tuneAxes[_drag.camId];
+    if (!axes) return;
+    const i = axes.findIndex((a) => a.key === _drag.key);
+    if (i < 0) return;
+    // Mutate the row in place so the next frame — and the pointerup that
+    // stages the value — both read the value actually on screen.
+    axes[i] = {
+      ...axes[i],
+      E: _drag.e,
+      raw: _drag.raw,
+      display: tuneDisplay(_drag.spec, _drag.raw),
+    };
+    moveTuneVertex(_drag.card.querySelector('.netz-tune-svg'), axes, _drag.key);
+    _paintPill(_drag.card, _drag.spec, _drag.raw);
+  });
+}
+
 function _onMove(ev) {
   if (!_drag) return;
   const dist = Math.hypot(ev.clientX - _drag.start.x, ev.clientY - _drag.start.y);
@@ -117,6 +143,9 @@ function _onMove(ev) {
   if (!_drag.moved) {
     _drag.moved = true;
     clearTimeout(_drag.longPress);
+    _drag.card
+      .querySelector(`.netz-vertex[data-tune-axis="${CSS.escape(_drag.key)}"]`)
+      ?.classList.add('is-dragging');
   }
   const e = eFromEllipse(
     ev.clientX - _drag.geo.cx,
@@ -124,23 +153,24 @@ function _onMove(ev) {
     _drag.geo,
     _drag.axis.defaultE,
   );
-  const raw = tuneRawFromE(_drag.spec, e);
-  _drag.raw = raw;
-  _paintPill(_drag.card, _drag.spec, raw);
-  _drag.card.dispatchEvent(
-    new CustomEvent('netz:tunevertexmove', {
-      bubbles: true,
-      detail: { camId: _drag.camId, key: _drag.key, e },
-    }),
-  );
+  _drag.e = e;
+  _drag.raw = tuneRawFromE(_drag.spec, e);
+  _schedulePaint();
 }
 
 function _onUp(ev, onRepaint) {
   if (!_drag) return;
   const { camId, key, moved, raw, card } = _drag;
   clearTimeout(_drag.longPress);
+  if (_rafId) {
+    cancelAnimationFrame(_rafId);
+    _rafId = 0;
+  }
   _drag = null;
   _hidePill(card);
+  card
+    .querySelector(`.netz-vertex[data-tune-axis="${CSS.escape(key)}"]`)
+    ?.classList.remove('is-dragging');
   // Pointerup STAGES. Nothing is saved until "Übernehmen" — the same
   // two-stage commit the confidence radar used.
   if (moved) stageValue(camId, key, raw);

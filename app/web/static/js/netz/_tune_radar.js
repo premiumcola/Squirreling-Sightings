@@ -122,7 +122,7 @@ function _defaultSvg(axes, geo) {
 
 function _polygonSvg(points) {
   return (
-    `<polygon points="${points}" fill="rgba(120,200,255,.14)" ` +
+    `<polygon class="netz-tune-poly" points="${points}" fill="rgba(120,200,255,.14)" ` +
     `stroke="rgba(120,200,255,.75)" stroke-width="2.5" stroke-linejoin="round"/>`
   );
 }
@@ -132,16 +132,60 @@ function _vertexSvg(axis, i, n, geo, interactive) {
   const manuell = axis.provenance === 'manuell';
   const fill = manuell ? axis.color : 'none';
   const stroke = manuell ? axis.color : 'rgba(255,255,255,.34)';
+  // The halo is what answers "which node am I about to grab?". Opacity,
+  // not radius: SVG geometry properties are only animatable via CSS in
+  // newer engines, while opacity works everywhere and cannot reflow.
+  const halo = interactive
+    ? `<circle class="netz-tune-halo" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" ` +
+      `r="13" fill="${esc(axis.color)}" opacity="0"/>`
+    : '';
   // The invisible 44 px disc IS the touch target (iOS minimum).
   const hit = interactive
     ? `<circle class="netz-tune-hit" data-tune-axis="${esc(axis.key)}" ` +
       `cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="22" fill="transparent"/>`
     : '';
   return (
-    `<g class="netz-vertex" data-tune-axis="${esc(axis.key)}">` +
-    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5.5" fill="${fill}" ` +
-    `stroke="${stroke}" stroke-width="1.8"/>${hit}</g>`
+    `<g class="netz-vertex" data-tune-axis="${esc(axis.key)}">${halo}` +
+    `<circle class="netz-tune-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5.5" ` +
+    `fill="${fill}" stroke="${stroke}" stroke-width="1.8"/>${hit}</g>`
   );
+}
+
+/** Move ONE vertex in an already-rendered SVG, in place.
+ *
+ *  The drag used to re-render the whole chart (rings, spokes, polygon,
+ *  eight vertices, eight foreignObject labels) and re-bind every listener
+ *  on each pointermove. That is what made dragging feel stepped and
+ *  sticky: dozens of nodes rebuilt per frame, with the grabbed node
+ *  itself replaced mid-gesture. Here only three attributes and one text
+ *  node change, so the browser has nothing to re-layout.
+ */
+export function moveTuneVertex(svg, axes, key) {
+  if (!svg) return;
+  const i = axes.findIndex((a) => a.key === key);
+  if (i < 0) return;
+  const geo = tuneGeometry();
+  const axis = axes[i];
+  const p = tunePolar(i, axes.length, Math.max(0, Math.min(100, axis.E)) / 100, geo);
+  const g = svg.querySelector(`.netz-vertex[data-tune-axis="${CSS.escape(key)}"]`);
+  if (g) {
+    g.querySelectorAll('circle').forEach((c) => {
+      c.setAttribute('cx', p.x.toFixed(1));
+      c.setAttribute('cy', p.y.toFixed(1));
+    });
+  }
+  const poly = svg.querySelector('.netz-tune-poly');
+  if (poly)
+    poly.setAttribute(
+      'points',
+      _pointsFor(
+        axes,
+        axes.map((a) => a.E),
+        geo,
+      ),
+    );
+  const val = svg.querySelector(`[data-tune-axis-label="${CSS.escape(key)}"] .netz-tlbl-v`);
+  if (val) val.textContent = axis.display;
 }
 
 // Label + its CURRENT VALUE. Showing the value on the chart is what makes

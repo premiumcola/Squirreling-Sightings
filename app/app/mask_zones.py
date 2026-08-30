@@ -42,6 +42,50 @@ CANVAS_W = 1280
 CANVAS_H = 720
 
 
+def point_xy(p) -> tuple[float, float]:
+    """``(x, y)`` from either point shape the stored polygons use.
+
+    ``{"x": .., "y": ..}`` is what the editor writes today, but the
+    docstring below has always advertised a bare point list as accepted —
+    and a ``[x, y]`` pair reaching ``_fill`` used to raise
+    ``AttributeError: 'list' object has no attribute 'get'`` from inside
+    ``build_zone_image``, i.e. an uncaught crash on the alarm path rather
+    than a skipped polygon.
+    """
+    if isinstance(p, dict):
+        return float(p.get("x", 0) or 0), float(p.get("y", 0) or 0)
+    if isinstance(p, (list, tuple)) and len(p) >= 2:
+        return float(p[0] or 0), float(p[1] or 0)
+    return 0.0, 0.0
+
+
+def normalise_zone(z):
+    """A zone record as a dict, or ``None`` if it carries no usable polygon.
+
+    Zones saved before 2026-04-22 are a BARE LIST of points with no dict
+    wrapper (``shapeState.zones.push([...shapeState.points])``), and no
+    migration ever converted them. Since 1bb2d4e the runtime looks the
+    matched polygon up in a dict-only bucket list so it can forward that
+    zone's trigger flags — but the prebaked raster still counts the bare
+    list as a global zone. The two disagree, and the disagreement is
+    total: ``global_applies`` is True (so the "no zone targets this label"
+    escape is disabled) while the bucket list is empty (so nothing can
+    ever match). Every detection, at every position, is dropped with
+    "outside applicable zones" — an armed camera that reports nothing.
+
+    Wrapping the legacy shape here is monotone: such a zone rejects 100 %
+    of detections today, so nothing that currently works can start
+    failing. It carries no trigger flags, which is correct — the flags
+    post-date the format, and the downstream defaults already cover a
+    dict zone that omits them.
+    """
+    if isinstance(z, dict):
+        return z
+    if isinstance(z, list) and len(z) >= 3:
+        return {"points": z}
+    return None
+
+
 def flatten_poly_points(poly, samples_per_curve: int = 12) -> list:
     """Return the polygon as a flat list of {x,y} points, sampling any
     curved segments via quadratic-bezier interpolation.
@@ -158,8 +202,9 @@ def _fill(canvas, polys, colour: int) -> None:
         src_h = int(poly.get("source_h") or CANVAS_H) if isinstance(poly, dict) else CANVAS_H
         sx = float(CANVAS_W) / max(1, src_w)
         sy = float(CANVAS_H) / max(1, src_h)
+        xy = [point_xy(p) for p in pts_list]
         pts = np.array(
-            [[int(p.get('x', 0) * sx), int(p.get('y', 0) * sy)] for p in pts_list],
+            [[int(x * sx), int(y * sy)] for x, y in xy],
             dtype=np.int32,
         )
         pts[:, 0] = np.clip(pts[:, 0], 0, CANVAS_W - 1)
@@ -194,6 +239,15 @@ def build_zone_image(cam_zones):
         return None
     zone = np.zeros((CANVAS_H, CANVAS_W), dtype=np.uint8)
     _fill(zone, global_zones, 255)
+    # A raster with nothing drawn on it is not "a zone excluding the whole
+    # frame" — it is an unusable zone record (no points, one point, two
+    # points: _fill needs three to fill anything). Returning the empty
+    # canvas made `global_applies` True with no polygon able to match, so
+    # every detection anywhere was dropped as "outside applicable zones"
+    # and the camera silently stopped alerting. None restores the honest
+    # reading: nothing here can gate, so do not gate.
+    if not zone.any():
+        return None
     return zone
 
 
@@ -272,8 +326,9 @@ def _zone_buckets(cam_zones) -> tuple:
     """
     labeled: dict = {}
     global_polys: list = []
-    for z in cam_zones:
-        if not isinstance(z, dict):
+    for raw in cam_zones:
+        z = normalise_zone(raw)
+        if z is None:
             continue
         pts = z.get("points") or []
         if not isinstance(pts, list) or len(pts) < 3:

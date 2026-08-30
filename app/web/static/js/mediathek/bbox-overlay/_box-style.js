@@ -1,15 +1,17 @@
 // ─── mediathek/bbox-overlay/_box-style.js ──────────────────────────────────
 // Pure per-box style + label-text resolution — the ONE place that turns
 // (sample, trackColor, status, masked, trackNum) into paintable parameters.
-// Both the canvas trail layer (renderTrailLayer) and the SVG box layer
+// Both the canvas box painter (_canvas-shapes.js) and the SVG box painter
 // (svg-boxes.js) read from here so the two surfaces can never drift —
 // mirrors canvas/trail-layer.js's buildTrailPoints -> {drawTrailPolyline,
 // buildTrailSvg} split: one shared geometry/style helper, thin per-surface
 // paint code.
 //
-// Status dash/alpha come from mediaview/status-legend.js's MV_STATUS_STYLE
-// (the fold that used to live as a private duplicate here — see git log).
-import { MV_STATUS_STYLE } from '../../mediaview/status-legend.js';
+// Status dash/alpha/marker come from mediaview/status-legend.js's
+// MV_STATUS_STYLE, resolved via its mvStatusCategory() — the fold that
+// used to live as a private `_STATUS_STYLE` duplicate here (renamed/
+// unified so the painted stroke and the legend swatch can never drift).
+import { MV_STATUS_STYLE, mvStatusCategory } from '../../mediaview/status-legend.js';
 
 // Neutral gray for the ⊘ Maskiert modifier. Replaces the track's
 // per-identity color (the per-track hue still drives the timeline
@@ -45,7 +47,11 @@ function _darkenHex(hex, factor) {
 function _pillText(sample, trackNum, masked, marker) {
   const hasNum = typeof trackNum === 'number';
   const pct = sample.score != null ? Math.round(sample.score * 100) : null;
-  const prefix = `${masked ? '⊘ ' : ''}${marker}`;
+  // MV_STATUS_STYLE's marker carries NO trailing space (status-legend.js's
+  // own _rowHtml adds it at use time) — add it here the same way, rather
+  // than assuming the marker string bakes it in like the old private
+  // _STATUS_STYLE duplicate did.
+  const prefix = `${masked ? '⊘ ' : ''}${marker ? `${marker} ` : ''}`;
   const numText = hasNum ? `#${trackNum}` : '';
   if (numText && pct != null) return `${prefix}${numText} · ${pct}%`;
   if (numText) return `${prefix}${numText}`.trim();
@@ -60,7 +66,7 @@ function _pillText(sample, trackNum, masked, marker) {
  * and only differ in how they turn `bbox` + these params into pixels.
  */
 export function resolveBoxStyle(sample, trackColor, status, masked, trackNum) {
-  const cat = status && MV_STATUS_STYLE[status] ? status : 'confirmed';
+  const cat = mvStatusCategory(status);
   const style = MV_STATUS_STYLE[cat];
   const baseColor = trackColor || '#22c55e';
   const stroke = masked ? MASKED_STROKE : baseColor;

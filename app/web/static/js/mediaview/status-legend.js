@@ -18,9 +18,12 @@
 // attribute is a no-op.
 //
 // This is the single owner of the status → {dash, alpha, marker} map
-// (MV_STATUS_STYLE). K folds mediathek/bbox-overlay/renderer.js's
-// private _STATUS_STYLE into this so the painted strokes and the
-// legend swatches keep matching from one table.
+// (MV_STATUS_STYLE). K folded mediathek/bbox-overlay/renderer.js's
+// former private _STATUS_STYLE duplicate into this table — the
+// recorded canvas painter now resolves its stroke via
+// mediathek/bbox-overlay/_box-style.js's resolveBoxStyle(), which
+// calls mvStatusCategory() + reads MV_STATUS_STYLE directly, so the
+// painted strokes and the legend swatches keep matching from one table.
 
 import { byId, esc } from '../core/dom.js';
 
@@ -28,10 +31,11 @@ import { byId, esc } from '../core/dom.js';
 // solid); alpha = stroke opacity; marker = the glyph the bbox score
 // pill prints so a "↓ 24 %" pill links visually to the "↓ Schwach"
 // legend row.
-// dash + alpha mirror mediathek/bbox-overlay/renderer.js _STATUS_STYLE
-// so the legend swatch and the painted bbox stroke read identically.
-// ``masked`` has no entry there (it swaps to a neutral grey solid via
-// _MASKED_COLOR) — it's spelled out here so the legend can show it.
+// dash + alpha are read directly by mediathek/bbox-overlay/_box-style.js's
+// resolveBoxStyle() so the legend swatch and the painted bbox stroke read
+// identically. ``masked`` has no entry there (it swaps to a neutral grey
+// solid via _MASKED_COLOR / _MASKED_STROKE) — it's spelled out here so the
+// legend can show it.
 export const MV_STATUS_STYLE = {
   confirmed: { dash: [], alpha: 1, marker: '' },
   weak: { dash: [6, 4], alpha: 1, marker: '↓' },

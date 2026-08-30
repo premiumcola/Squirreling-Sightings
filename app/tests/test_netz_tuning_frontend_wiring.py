@@ -54,7 +54,7 @@ def _tune_axis_order():
 
 def test_every_spoke_has_a_spec():
     order = _tune_axis_order()
-    assert len(order) == 8, order
+    assert len(order) == 10, order
     for key in order:
         assert f"{key}: {{" in _SETTINGS_AXES_JS, f"{key}: no TUNE_SPECS entry"
 

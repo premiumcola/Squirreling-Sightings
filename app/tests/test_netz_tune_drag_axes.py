@@ -61,8 +61,8 @@ def test_rendering_the_cards_populates_the_drag_lookup_per_camera():
         }}));
         """
     )
-    assert out["a"] == 8, "cam_a's axes never populated — its vertex drags bail out"
-    assert out["b"] == 8, "cam_b's axes never populated — its vertex drags bail out"
+    assert out["a"] == 10, "cam_a's axes never populated — its vertex drags bail out"
+    assert out["b"] == 10, "cam_b's axes never populated — its vertex drags bail out"
     assert "frame_interval_ms" in out["keys"]
 
 

@@ -43,6 +43,7 @@ from ._consts import (  # noqa: F401 — public API re-export
     PRED_VELOCITY_WINDOW,
     REID_OCCUPIED_IOU,
     SAMPLE_BBOX_DELTA_PX,
+    SPAWN_BLOCK_CONTAIN,
     SPAWN_BLOCK_IOU,
     STATIONARY_SPEED_FRAC,
     TRACK_FLOOR_SCORE,
@@ -479,6 +480,7 @@ def associate_detections(
     spawn_for: Callable[[str], float] | None = None,
     miss_grace_samples: int = TRACK_MISS_WINDOWS,
     iou_threshold: float = IOU_MATCH_THRESHOLD,
+    block_contain: float = SPAWN_BLOCK_CONTAIN,
 ) -> list[tuple[object, Track]]:
     """Two-tier greedy IoU pairing + spawn + age-out for one frame.
 
@@ -672,7 +674,7 @@ def associate_detections(
             "x2": int(d.bbox[2]),
             "y2": int(d.bbox[3]),
         }
-        blocker = spawn_blocking_track(state.active, predicted, d)
+        blocker = spawn_blocking_track(state.active, predicted, d, block_contain)
         if blocker is None:
             # J6 · only tracks that existed at frame entry are
             # candidates, so `predicted` stays index-aligned and a
@@ -851,6 +853,7 @@ class LiveTracker:
         floor: float,
         grace_seconds: float,
         iou_threshold: float | None = None,
+        block_contain: float | None = None,
     ) -> None:
         """Replace the per-camera thresholds. Called on settings reload
         so a tweaked spawn / continue / grace / iou value takes effect
@@ -862,6 +865,8 @@ class LiveTracker:
         self.grace_seconds = float(grace_seconds)
         if iou_threshold is not None:
             self.iou_threshold = float(iou_threshold)
+        if block_contain is not None:
+            self.block_contain = float(block_contain)
 
     def step_matches(
         self,
@@ -898,6 +903,7 @@ class LiveTracker:
             spawn_for=spawn_for,
             miss_grace_samples=grace,
             iou_threshold=self.iou_threshold,
+            block_contain=getattr(self, "block_contain", SPAWN_BLOCK_CONTAIN),
             frame_w=frame_w,
             frame_h=frame_h,
         )

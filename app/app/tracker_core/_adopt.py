@@ -24,9 +24,10 @@ are pure predicates over tracker state and hold no state of their own.
 
 from __future__ import annotations
 
-from ..bbox_utils import iou
+from ..bbox_utils import containment, iou
 from ._consts import (
     REID_OCCUPIED_IOU,
+    SPAWN_BLOCK_CONTAIN,
     SPAWN_BLOCK_IOU,
     SPAWN_NEAR_DIST_FACTOR,
     SPAWN_NEAR_H_RATIO,
@@ -122,30 +123,54 @@ def nearby_track(active, predicted, det, taken):
     return best_track
 
 
-def spawn_blocking_track(active, predicted, det):
-    """Return the ACTIVE track that overlaps ``det.bbox`` above
-    ``SPAWN_BLOCK_IOU``, or None.
+def spawn_blocking_track(active, predicted, det, contain_threshold=None):
+    """Return the ACTIVE track that already covers ``det.bbox``, or None.
+
+    Two independent gates, because they catch different shapes of the
+    same mistake:
+
+    * IoU above ``SPAWN_BLOCK_IOU`` — two boxes of comparable size on
+      the same subject (a duplicate the NMS gate let through, or a
+      cross-label misclassification).
+    * CONTAINMENT above ``SPAWN_BLOCK_CONTAIN`` — one box essentially
+      inside the other. IoU is blind to this: the SSD routinely reports
+      a person's head or torso as its own "person" box alongside the
+      full body, and a 120x120 face inside a 400x900 body scores IoU
+      ~0.04 while being 100 % contained. That box used to spawn a second
+      track on a subject that already had one, which is what turns one
+      human walking around into ids #3 #4 #5 #6.
 
     Considers ALL labels — a cross-label hit indicates a
     misclassification of an already-tracked subject. Tests the
     detection against both the track's predicted bbox (already computed
     by the caller at frame entry, so index-aligned with ``active``) and
-    its last OBSERVED bbox, and picks the highest IoU when several
+    its last OBSERVED bbox, and picks the strongest match when several
     qualify.
     """
+    contain_gate = SPAWN_BLOCK_CONTAIN if contain_threshold is None else float(contain_threshold)
     best_track = None
-    best_iou = SPAWN_BLOCK_IOU
+    best_score = 0.0
     for ti, tr in enumerate(active):
         if not tr.samples:
             continue
         pred = predicted[ti] if ti < len(predicted) else None
         last_tuple = last_observed_bbox(tr) or _bbox_tuple(tr.samples[-1]["bbox"])
-        iou_pred = iou(det.bbox, pred) if pred is not None else 0.0
-        iou_last = iou(det.bbox, last_tuple)
-        best_for_track = max(iou_pred, iou_last)
-        if best_for_track > best_iou:
-            best_iou = best_for_track
-            best_track = tr
+        refs = [last_tuple] + ([pred] if pred is not None else [])
+        for ref in refs:
+            by_iou = iou(det.bbox, ref)
+            by_contain = containment(det.bbox, ref)
+            # Normalise both gates onto "how far past its own threshold"
+            # so one track cannot win on a weak IoU over another's strong
+            # containment.
+            score = max(
+                by_iou / SPAWN_BLOCK_IOU if by_iou > SPAWN_BLOCK_IOU else 0.0,
+                by_contain / contain_gate
+                if contain_gate > 0 and by_contain > contain_gate
+                else 0.0,
+            )
+            if score > best_score:
+                best_score = score
+                best_track = tr
     return best_track
 
 

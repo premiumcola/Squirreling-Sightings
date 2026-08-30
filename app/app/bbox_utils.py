@@ -42,3 +42,26 @@ def bbox_centroid_dist(a: dict, b: dict) -> float:
     bcx = (b["x1"] + b["x2"]) / 2.0
     bcy = (b["y1"] + b["y2"]) / 2.0
     return ((acx - bcx) ** 2 + (acy - bcy) ** 2) ** 0.5
+
+
+def containment(inner: tuple[int, int, int, int], outer: tuple[int, int, int, int]) -> float:
+    """Overlap as a fraction of the SMALLER box ("intersection over min").
+
+    IoU asks "how equal are these two boxes?"; this asks "is one of them
+    essentially inside the other?". The difference decides whether a
+    detector's face box and its body box are one subject or two: a
+    120x120 face inside a 400x900 person overlaps by 100 % of the face,
+    but their IoU is only ~0.04 — far below any sane duplicate gate.
+    """
+    ax1, ay1, ax2, ay2 = inner
+    bx1, by1, bx2, by2 = outer
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+    a_area = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+    b_area = max(0, bx2 - bx1) * max(0, by2 - by1)
+    smaller = min(a_area, b_area)
+    return inter / smaller if smaller > 0 else 0.0

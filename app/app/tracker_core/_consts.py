@@ -102,6 +102,21 @@ EDGE_GRACE_SAMPLES = 2
 # without blocking a fresh subject who happens to brush past an
 # unrelated existing track.
 SPAWN_BLOCK_IOU = 0.45
+# J2b · containment gate, measured as intersection-over-SMALLER-box.
+#
+# IoU cannot see a box that sits INSIDE another one. The SSD regularly
+# reports a person's head/torso as its own "person" box while also
+# reporting the whole body: a 120x120 face inside a 400x900 body overlaps
+# by 100 % of the face but scores IoU ~0.04, so the 0.45 spawn block waved
+# it through and one human became two tracks — reported from the field as
+# "it detected a person just in my face and me completely, in parallel,
+# and got confused when I turned".
+#
+# 0.70 means "at least seventy percent of the smaller box lies inside the
+# larger one". Two people standing shoulder to shoulder overlap far less
+# than that (their boxes meet at an edge), so this cannot merge two
+# genuine subjects; a part-of-a-person box practically always exceeds it.
+SPAWN_BLOCK_CONTAIN = 0.70
 # J6 · proximity adoption for a LIVE same-label track. The J2 gate
 # above is blind to the case that actually fragments a walking person.
 #

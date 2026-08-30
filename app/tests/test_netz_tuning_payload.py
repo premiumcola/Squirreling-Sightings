@@ -49,6 +49,8 @@ def test_a_never_touched_camera_reports_the_schema_defaults(tmp_path, monkeypatc
         "post_motion_tail_s": 0,
         "track_miss_grace_seconds": 0,
         "track_iou_match_threshold": 0,
+        "track_spawn_min_score": 0,
+        "track_block_contain": 0,
         "track_filter_ghosts": True,
         "roi_mode": "off",
         "wildlife_motion_sensitivity": 0,

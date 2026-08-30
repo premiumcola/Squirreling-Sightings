@@ -28,6 +28,8 @@ export const TUNE_AXIS_ORDER = [
   'roi_mode',
   'track_miss_grace_seconds',
   'track_iou_match_threshold',
+  'track_spawn_min_score',
+  'track_block_contain',
 ];
 
 // Four groups, four colours. The POLYGON stays neutral on purpose
@@ -87,6 +89,8 @@ export const TUNE_LABELS_DE = {
   roi_mode: 'ROI-Modus',
   wildlife_motion_sensitivity: 'Wildtier-Empfindlichkeit',
   roi_min_net_disp_frac: 'Min.-Strecke',
+  track_spawn_min_score: 'Spur-Start',
+  track_block_contain: 'Doppel-Sperre',
 };
 
 const _ROI_STEPS = ['off', 'roi', '2x2', '3x3'];
@@ -166,6 +170,30 @@ export const TUNE_SPECS = {
     invert: false,
     fmt: (v) => (Number(v) <= 0 ? 'auto' : `${Number(v).toFixed(1)}×`),
     hint: 'Bewegungsschwelle für kleine Tiere · innen = auto, außen = empfindlicher',
+  },
+  track_spawn_min_score: {
+    key: 'track_spawn_min_score',
+    group: 'verfolgung',
+    label: TUNE_LABELS_DE.track_spawn_min_score,
+    min: 0,
+    max: 0.95,
+    default: 0,
+    // A HIGHER bar means fewer, stronger tracks — the sparing end, so
+    // it maps inward like the other "be strict" axes.
+    invert: true,
+    fmt: (v) => (Number(v) <= 0 ? 'Standard' : Number(v).toFixed(2)),
+    hint: 'Wie sicher ein Treffer sein muss, um eine NEUE Spur zu starten · innen = nur klare Treffer starten eine Spur (weniger Doppel-Spuren), außen = auch schwache',
+  },
+  track_block_contain: {
+    key: 'track_block_contain',
+    group: 'verfolgung',
+    label: TUNE_LABELS_DE.track_block_contain,
+    min: 0,
+    max: 1.0,
+    default: 0,
+    invert: true,
+    fmt: (v) => (Number(v) <= 0 ? 'Standard (70 %)' : `${Math.round(v * 100)} %`),
+    hint: 'Wie viel einer kleineren Box in einer bestehenden Spur liegen muss, um als DASSELBE Objekt zu gelten · innen = streng zusammenfassen (Gesicht + Körper = eine Person), außen = eher zwei Spuren',
   },
   roi_min_net_disp_frac: {
     key: 'roi_min_net_disp_frac',

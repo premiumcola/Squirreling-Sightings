@@ -115,7 +115,7 @@ def test_default_values_report_werk_provenance():
         console.log(JSON.stringify(axes.map(a => a.provenance)));
         """
     )
-    assert out == ["werk"] * 8
+    assert out == ["werk"] * 10
 
 
 def test_a_changed_value_reports_manuell_provenance_only_for_itself():
@@ -136,4 +136,4 @@ def test_ghost_filter_is_not_one_of_the_eight_axes():
     chart, not a spoke — a bool has no continuum to drag along."""
     out = _js(f"{_IMPORT}\nconsole.log(JSON.stringify(mod.TUNE_AXIS_ORDER));")
     assert "track_filter_ghosts" not in out
-    assert len(out) == 8
+    assert len(out) == 10

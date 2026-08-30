@@ -152,6 +152,8 @@ def net_state(cam_id: str) -> dict | None:
             "post_motion_tail_s": cam.get("post_motion_tail_s") or 0,
             "track_miss_grace_seconds": cam.get("track_miss_grace_seconds") or 0,
             "track_iou_match_threshold": cam.get("track_iou_match_threshold") or 0,
+            "track_spawn_min_score": cam.get("track_spawn_min_score") or 0,
+            "track_block_contain": cam.get("track_block_contain") or 0,
             "track_filter_ghosts": cam.get("track_filter_ghosts") is not False,
             "roi_mode": cam.get("roi_mode") or "off",
             "wildlife_motion_sensitivity": cam.get("wildlife_motion_sensitivity") or 0,

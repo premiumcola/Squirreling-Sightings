@@ -271,6 +271,10 @@ CAMERA_SCHEMA: dict = {
     "track_miss_grace_seconds": (float, 0.0),
     "track_postclip_precision": (str, "standard"),
     "track_iou_match_threshold": (float, 0.0),
+    # J2b · how much of a smaller box must lie inside a tracked box
+    # before it is treated as the SAME subject instead of a new one.
+    # 0.0 = use the module default (SPAWN_BLOCK_CONTAIN).
+    "track_block_contain": (float, 0.0),
     #   track_filter_ghosts        — L07. When True (default) the
     #                                post-clip tracking worker drops any
     #                                track whose best_score never reached

@@ -91,13 +91,24 @@
 
   {# Wetter-Wartung — recovery actions + retention controls, placed LAST in the section so the user
   lands on the events grid first and only sees maintenance controls when they intentionally scroll
-  to the bottom. Mirrors the Mediathek-Wartung position at the foot of partials/mediathek.html. #}
+  to the bottom. Mirrors the Mediathek-Wartung position at the foot of partials/mediathek.html.
+  One slider per media category instead of one blanket slider — a quarterly recap and a daily
+  sunrise clip have nothing in common retention-wise. See settings/_consts.py::
+  WEATHER_RETENTION_DEFAULTS for the default day-counts and the reasoning behind each. #}
   {% from 'partials/_maintenance_panel.html' import maintenance_panel %} {% call maintenance_panel(
   panel_id='set-weather-maint', accent='127,174,201', title='Wetter-Wartung', hint='Nur bei
-  Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'weatherMaintForm', 'val_id':
-  'ws_retention_days_val', 'input_id': 'ws_retention_days', 'toggle_id': 'ws_auto_cleanup',
-  'days_name': 'retention_days', 'enabled_name': 'auto_cleanup_enabled', 'current': 90, 'min': 7,
-  'max': 365, } ) %}
+  Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'weatherMaintForm',
+  'toggle_id': 'ws_auto_cleanup', 'enabled_name': 'auto_cleanup_enabled', 'rows': [ { 'label':
+  'Sichtungen (Gewitter/Regen/Schnee/Nebel)', 'val_id': 'ws_retention_sightings_val', 'input_id':
+  'ws_retention_sightings', 'days_name': 'retention_sightings_days', 'current': 90, 'min': 7, 'max':
+  365, }, { 'label': 'Ereignis-Timelapses (Gewitter/Front/Sturm)', 'val_id':
+  'ws_retention_event_tl_val', 'input_id': 'ws_retention_event_tl', 'days_name':
+  'retention_event_timelapses_days', 'current': 120, 'min': 7, 'max': 365, }, { 'label':
+  'Sonnen-Timelapses (Auf-/Untergang)', 'val_id': 'ws_retention_sun_tl_val', 'input_id':
+  'ws_retention_sun_tl', 'days_name': 'retention_sun_timelapses_days', 'current': 21, 'min': 7,
+  'max': 365, }, { 'label': 'Recaps (Quartal/Jahr)', 'val_id': 'ws_retention_recaps_val',
+  'input_id': 'ws_retention_recaps', 'days_name': 'retention_recaps_days', 'current': 400, 'min':
+  30, 'max': 1000, }, ], } ) %}
   <button type="button" id="weatherRescanBtn" class="btn btn-action action-green">
     <svg
       viewBox="0 0 16 16"

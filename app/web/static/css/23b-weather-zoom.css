@@ -18,6 +18,16 @@
   }
 }
 
+/* Both panels below are toggled by JS through the `hidden` attribute,
+   and both set their own `display` — which silently defeats it. The UA
+   stylesheet's `[hidden] { display: none }` loses to ANY author rule
+   that sets `display`, regardless of specificity, because author origin
+   outranks user-agent origin. Without these two opt-outs the save form
+   stayed on screen after "Speichern" / "Abbrechen" and the action row
+   showed its dead save button with no range selected. Same fix the rest
+   of the codebase already uses (`.mv-shell-grid[hidden]`,
+   `.set-tab-content[hidden]`, …). */
+
 /* "Zeitraum ausgewählt · Als Ereignis speichern" row — sits between the
    chart and the legend, visible only while a custom zoom is active. */
 .ws-zoom-actions {
@@ -27,6 +37,9 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 8px;
+}
+.ws-zoom-actions[hidden] {
+  display: none;
 }
 .ws-zoom-hint {
   font-size: 12.5px;
@@ -43,6 +56,9 @@
   box-shadow: inset 4px 0 0 #7faec9;
   display: grid;
   gap: 12px;
+}
+.ws-zoom-save[hidden] {
+  display: none;
 }
 .ws-zsave-row {
   display: grid;

@@ -73,6 +73,11 @@ function _presetsHtml() {
 export function tuningHtml(st) {
   const tuning = _effectiveTuning(st);
   const axes = buildTuneAxes(tuning);
+  // _tune_drag.js resolves the dragged vertex through netzState.tuneAxes.
+  // Without this assignment its lookup returns null and _onDown bails on
+  // EVERY pointerdown — the vertex silently never moves, which reads as
+  // "didn't drag far enough" rather than as a bug.
+  netzState.tuneAxes = axes;
   const side =
     Math.min(window.innerWidth || 375, 420) > 420
       ? 340
@@ -96,6 +101,7 @@ function _repaintVertex(host, key, e) {
   const i = axes.findIndex((a) => a.key === key);
   if (i < 0) return false;
   axes[i] = { ...axes[i], E: e };
+  netzState.tuneAxes = axes;
   const side = wrap.querySelector('.netz-svg')?.getAttribute('width') || 340;
   wrap.innerHTML = renderTuneRadar({ axes, side: Number(side), interactive: true });
   return true;

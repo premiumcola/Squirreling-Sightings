@@ -273,6 +273,13 @@ export function _renderFrame(data) {
   S.session.lastBboxSpace = _diag.bbox_space || null;
   S.session.lastSourceFrameSize = _diag.source_frame_size || null;
   S.session.lastSnapshotFrameSize = _diag.snapshot_frame_size || null;
+  // S3 · diag.parity declares which gates this endpoint does NOT run.
+  // The backend has been assembling that list since the parity change
+  // landed and NOTHING read it — a "writes a value nobody reads" bug
+  // sitting inside the alarm diagnostics themselves. The Trace tab
+  // renders it above the verdict so the operator can tell which half of
+  // the answer is measured and which half is simply unchecked.
+  S.session.lastParity = _diag.parity || null;
   // C73 · remember which stream the backend served this frame from
   // so _scheduleNext can pick the right floor on the NEXT cycle.
   // Falls back to undefined when an older backend didn't send the

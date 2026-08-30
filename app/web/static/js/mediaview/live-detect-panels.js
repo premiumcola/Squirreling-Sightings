@@ -386,7 +386,10 @@ export function _appendTrace(lines) {
 export function _renderTraceTab() {
   if (typeof getActiveTab === 'function' && getActiveTab() !== 'trace') return;
   const host = panelEl('trace');
-  if (host) renderLiveTrace(host, S.traceTicks);
+  // S3 · the parity block rides along so the "nicht geprüft" chips sit
+  // above the stream. Without it the panel renders a verdict with no
+  // statement of what the verdict covers.
+  if (host) renderLiveTrace(host, S.traceTicks, S.session?.lastParity);
 }
 
 export function _classifyTrace(line) {

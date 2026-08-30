@@ -2068,6 +2068,56 @@
   color: var(--mv-ld-muted, #5a7a68);
 }
 
+/* S3 · a gate the panel EVALUATED. Its own tint so "measured" reads as
+   one category against the amber "not looked at" below — the two used to
+   render identically in the muted info colour. */
+.mv-ld-trace-line[data-prefix='gate'] {
+  color: #a9c8b6;
+}
+
+/* S3 · a gate the panel deliberately does NOT run. Amber and italic on a
+   tinted band: the line qualifies the [final] verdict, so it must not be
+   quieter than it. Colour + fill only — no hairline borders. */
+.mv-ld-trace-line[data-prefix='unchecked'] {
+  color: #e0a93f;
+  font-style: italic;
+  background: rgba(224, 169, 63, 0.09);
+  border-radius: 8px;
+  padding: 2px 8px;
+  margin: 1px 0;
+}
+
+/* S3 · diag.parity.not_simulated, rendered above the tick stream. One
+   compact chip row — the declaration has to be readable at 430 px
+   without becoming a wall of warnings. */
+.mv-ld-trace-parity {
+  padding: 8px 10px 6px;
+}
+
+.mv-ld-trace-parity-head {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: #e0a93f;
+  margin-bottom: 5px;
+}
+
+.mv-ld-trace-parity-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mv-ld-trace-parity-chip {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+  color: #e0a93f;
+  background: rgba(224, 169, 63, 0.13);
+  border-radius: 8px;
+  padding: 3px 8px;
+}
+
 /* ── Q2-5 · stall / reconnect banner ─────────────────────────────────── */
 /* Overlays the video preview when the snapshot poll has gone silent
    longer than the adaptive threshold. Sits above every overlay layer

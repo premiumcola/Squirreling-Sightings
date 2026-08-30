@@ -34,6 +34,20 @@ export function _isSnapshotIdDead(camId) {
   return camId ? (_failedSnapshotIds.get(camId) || 0) >= 2 : false;
 }
 
+/** A frame that decoded is proof the endpoint is alive again.
+ *
+ *  THE RECOVERY EDGE THAT WAS MISSING: the dead-id mark was only ever
+ *  set, and only `loadAll()` (a full bootstrap) cleared it. Two failed
+ *  snapshots during a container restart are guaranteed at 5 fps, so
+ *  every camera was marked dead within half a second of a deploy. The
+ *  status poll then redrew the tiles, each `<img>` loaded exactly ONE
+ *  frame — and the refresh loop skipped them forever after, because the
+ *  mark still stood. Result: three tiles frozen at the second of the
+ *  restart, still captioned "Live · 15 fps". Only F5 fixed it. */
+export function _markSnapshotAlive(camId) {
+  if (camId) _failedSnapshotIds.delete(camId);
+}
+
 export function _camIdFromImg(img) {
   return img?.closest?.('[data-camid]')?.dataset?.camid || null;
 }
@@ -74,6 +88,11 @@ export function _camImgRetry(img) {
 // frame is always visible — no cropping, no squashing.
 export function _cvImgLoaded(img) {
   img.classList.add('loaded');
+  // Clear both failure counters — the id-level one that gates the
+  // refresh loop, and this element's own backoff step.
+  _markSnapshotAlive(_camIdFromImg(img));
+  delete img.dataset.snapRetry;
+  if (img.style.display === 'none') img.style.display = '';
   const placeholder = img.previousElementSibling;
   if (placeholder) placeholder.style.display = 'none';
   const w = img.naturalWidth,

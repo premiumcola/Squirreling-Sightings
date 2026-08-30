@@ -442,6 +442,17 @@ class SettingsStore:
             **deepcopy(base_cfg.get("server", {})),
             **deepcopy(self.data.get("server", {})),
         }
+        # Same layering as `server`: config.yaml supplies the section
+        # (notably `root`, which settings.json never carries), settings
+        # overrides per key. Without this the section was the base layer
+        # verbatim and `storage.media_limit_default` — whose only reader
+        # is `/api/camera/<id>/media` via get_effective_config — could
+        # not be set at all. The other `storage.*` keys read
+        # `settings.data` directly and were unaffected.
+        cfg["storage"] = {
+            **deepcopy(base_cfg.get("storage", {})),
+            **deepcopy(self.data.get("storage", {})),
+        }
         cfg["telegram"] = deepcopy(self.data.get("telegram", {}))
         cfg["mqtt"] = deepcopy(self.data.get("mqtt", {}))
         cfg["cameras"] = deepcopy(self.data.get("cameras", []))
@@ -484,6 +495,10 @@ class SettingsStore:
             "telegram_actions",
             "timelapse_settings",
             "weather",
+            # export_text ships `storage`; without it here a settings
+            # backup restored the retention window and the media page
+            # size to whatever the fresh install defaulted to.
+            "storage",
         }
         for key, value in loaded.items():
             if key in allowed:

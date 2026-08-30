@@ -1,14 +1,23 @@
 // ─── mediathek/ios-video.js ────────────────────────────────────────────────
-// Stage 22 of the legacy.js → ES modules refactor — iOS native video
-// player handoff. For VIDEO items on iOS we skip the custom lightbox
-// entirely and let Safari render its standalone fullscreen player. The
-// shell would only stack on top of it (the previous "hide shell on
+// Stage 22 of the legacy.js → ES modules refactor — native video player
+// handoff straight from the grid. Skips the custom lightbox entirely and
+// lets the platform render its standalone fullscreen player. The shell
+// would only stack on top of it (the previous "hide shell on
 // webkitbeginfullscreen" attempt was unreliable across iOS versions).
 // After the player closes the user returns to the grid; per-card ✓/✗
 // affordances handle confirm/delete inline so the workflow doesn't lose
 // those actions.
+//
+// This path is no longer chosen by a UA sniff — it is the operator's
+// remembered preference (mediaview/player/_pref.js). Which makes the way
+// BACK mandatory: a preference that can only be set, never cleared, is a
+// trap, because a grid that opens the native player immediately gives
+// the operator no surface to change their mind on. The exit toast is
+// that surface.
 import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
+import { enterVideoFullscreen } from '../core/ios-video.js';
+import { PLAYER_INLINE, prefersNativePlayer, setPlayerPref } from '../mediaview/player/_pref.js';
 import { lbState } from './state.js';
 
 let _iosCurrentVideo = null; // the transient <video> currently playing
@@ -44,10 +53,12 @@ export function _iosNativeVideoOpen(item) {
   document.body.appendChild(v);
   _iosCurrentVideo = v;
   const _onEnd = () => {
-    // Closing the iOS native player returns the user to the grid. The
+    // Closing the native player returns the user to the grid. The
     // inline ✓/✗ on each card handle confirm/delete; the old floating
     // action sheet was a desktop-era leftover.
+    const played = _iosCurrentItem;
     _iosTeardownVideo();
+    _offerBoxPlayer(played);
   };
   v.addEventListener('webkitendfullscreen', _onEnd);
   v.addEventListener('ended', _onEnd);
@@ -64,13 +75,32 @@ export function _iosNativeVideoOpen(item) {
     if (p && p.catch) {
       p.catch(() => {
         try {
-          if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+          // Feature-detected entry, shared with the in-player handoff
+          // (mediaview/player/_native.js) so there is one place that
+          // knows which fullscreen API this browser has.
+          enterVideoFullscreen(v);
           v.play().catch(() => {});
         } catch {}
       });
     }
   };
   _attempt();
+}
+
+// The way back out of the preference. Only offered when the native
+// player was the operator's standing choice — a one-off handoff from
+// inside our own player already has the switch on screen.
+function _offerBoxPlayer(item) {
+  if (!item || !prefersNativePlayer()) return;
+  showToast('Systemplayer — ohne Bboxes und Trails', 'info', {
+    action: {
+      label: 'Box-Player',
+      onClick: () => {
+        setPlayerPref(PLAYER_INLINE);
+        window.openLightbox?.(item);
+      },
+    },
+  });
 }
 
 function _iosTeardownVideo() {

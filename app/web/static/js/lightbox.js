@@ -18,7 +18,7 @@
 // bridges still live on the legacy.js side so router.js + inline onclicks
 // + still-resident callers keep resolving until those domains migrate.
 import { byId, esc } from './core/dom.js';
-import { state, IS_IOS } from './core/state.js';
+import { state } from './core/state.js';
 import { j } from './core/api.js';
 import { showToast } from './core/toast.js';
 import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from './core/icons.js';
@@ -27,6 +27,7 @@ import { lbStopTrackingPlayback, lbClearTrackTimeline } from './mediathek/bbox-o
 import { openMediaView } from './mediaview/index.js';
 import { unmountZoneOverlayForLightbox } from './mediaview/canvas/zone-overlay-mount.js';
 import { _iosNativeVideoOpen } from './mediathek/ios-video.js';
+import { prefersNativePlayer } from './mediaview/player/_pref.js';
 import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
 import { refreshTimelineAndStats } from './chrome/storage-stats.js';
@@ -317,13 +318,15 @@ export function openLightbox(item) {
     openTLPlayer(item);
     return;
   }
-  // iOS hand-off — for video items, skip the custom shell entirely and
-  // give Safari its native player. The doubled-chrome problem (lightbox
-  // buttons + iOS controls overlapping) goes away because there's no
-  // shell to render on top of the player. Action sheet fills the gap
-  // for tag/confirm/delete after the player closes.
+  // Native hand-off — skip our shell entirely and give the platform its
+  // own player. This used to fire on a UA sniff, which meant the SVG
+  // detection overlay was unreachable on the exact device it was built
+  // for: no DOM overlay can exist inside a native fullscreen <video>.
+  // It is now the operator's remembered choice (mediaview/player/_pref.js),
+  // default off, flipped from the Systemplayer control inside our player
+  // and back from the toast that follows the native player's exit.
   const _hasVideoSrc = !!(item && (item.video_relpath || item.video_url));
-  if (IS_IOS && _hasVideoSrc) {
+  if (_hasVideoSrc && prefersNativePlayer()) {
     _iosNativeVideoOpen(item);
     return;
   }

@@ -258,6 +258,74 @@ def test_player_teardown_cannot_strand_the_hidden_overlay():
     assert "resumeOverlayAfterNative" in teardown
 
 
+# ── 4 · remembering the choice ───────────────────────────────────────
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_player_preference_round_trips_through_localstorage():
+    out = _js(
+        """
+        const store = {};
+        globalThis.localStorage = {
+          getItem: (k) => (k in store ? store[k] : null),
+          setItem: (k, v) => { store[k] = String(v); },
+        };
+        const m = await import(JS + '/mediaview/player/_pref.js');
+        const first = m.getPlayerPref();
+        m.setPlayerPref(m.PLAYER_NATIVE);
+        const remembered = m.prefersNativePlayer();
+        m.setPlayerPref(m.PLAYER_INLINE);
+        console.log(JSON.stringify({
+          first, remembered, back: m.prefersNativePlayer(),
+          keys: Object.keys(store),
+        }));
+        """
+    )
+    assert out["first"] == "inline", "the box player is the default — that is the whole point"
+    assert out["remembered"] is True
+    assert out["back"] is False
+    assert out["keys"] == ["tamspy.playerPref.v1"]
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_a_private_window_cannot_break_playback():
+    out = _js(
+        """
+        globalThis.localStorage = {
+          getItem() { throw new Error('private mode'); },
+          setItem() { throw new Error('private mode'); },
+        };
+        const m = await import(JS + '/mediaview/player/_pref.js');
+        let threw = false;
+        try { m.setPlayerPref(m.PLAYER_NATIVE); } catch { threw = true; }
+        console.log(JSON.stringify({ pref: m.getPlayerPref(), threw }));
+        """
+    )
+    assert out == {"pref": "inline", "threw": False}
+
+
+def test_lightbox_routes_on_the_preference_not_on_the_user_agent():
+    src = _read(_JS / "lightbox.js")
+    assert "prefersNativePlayer" in src
+    assert "IS_IOS" not in src, (
+        "openLightbox must not hand video items to the native player by UA — "
+        "that is what hid the detection boxes on the one device that needed them"
+    )
+
+
+def test_the_remembered_native_route_offers_a_way_back():
+    """A preference that can only be set is a trap: once the grid opens
+    the native player straight away, there is no surface left to change
+    your mind on. The exit toast is that surface."""
+    src = _read(_JS / "mediathek" / "ios-video.js")
+    assert "PLAYER_INLINE" in src and "setPlayerPref" in src
+    assert "Box-Player" in src, "the way back needs a visible German label"
+    assert "prefersNativePlayer" in src, (
+        "the offer belongs to the remembered route only — a one-off handoff "
+        "from inside our player already has the switch on screen"
+    )
+
+
 # ── 5 · CSS + the iOS checklist ──────────────────────────────────────
 
 

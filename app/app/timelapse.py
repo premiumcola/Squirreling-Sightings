@@ -121,7 +121,12 @@ class TimelapseBuilder:
                 "-i",
                 concat_path,
                 "-vf",
-                f"scale={out_w}:{out_h}",
+                # force_original_aspect_ratio + pad: a frame that is NOT the
+                # majority size is letterboxed into the output box instead of
+                # being stretched to fill it. `scale` alone distorts, which is
+                # how one odd frame used to squash a whole timelapse.
+                f"scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,"
+                f"pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
                 "-c:v",
                 "libx264",
                 "-crf",
@@ -384,6 +389,12 @@ class TimelapseBuilder:
         macroblock_first: str | None = None
         macroblock_last: str | None = None
         ref_size: tuple[int, int] | None = None
+        # Every frame's size, so the output aspect can be the one MOST
+        # frames actually have. Latching the first frame's size made a
+        # single odd frame — a camera that answered one snapshot at a
+        # different resolution after a reconnect — set the aspect for the
+        # whole film, and every other frame was then stretched to match.
+        size_counts: dict[tuple[int, int], int] = {}
         # Audit counter for the magenta-pattern detector — surfaces in
         # the build summary so we can spot corruption-burst trends
         # without drowning in per-frame DEBUG lines.
@@ -419,8 +430,10 @@ class TimelapseBuilder:
             # microseconds; the perceptual-hash leg below handles the
             # near-duplicate case.
             fhash = hashlib.md5(img[::8, ::8].tobytes()).hexdigest()
+            _sz = (img.shape[1], img.shape[0])
+            size_counts[_sz] = size_counts.get(_sz, 0) + 1
             if ref_size is None:
-                ref_size = (img.shape[1], img.shape[0])
+                ref_size = _sz
             if fhash in seen_hashes:
                 dup_count += 1
                 dup_last = img_path.name
@@ -561,6 +574,23 @@ class TimelapseBuilder:
         )
 
         # ── Pass 2: encode ────────────────────────────────────────────────────
+        # The output aspect follows the MAJORITY of the frames, not
+        # whichever one happened to be scanned first.
+        if size_counts:
+            majority = max(size_counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            if majority != ref_size:
+                log.info(
+                    "[timelapse] %s: %dx%d is the majority frame size (%d/%d), "
+                    "not the first frame's %sx%s — encoding to the majority",
+                    out_path.name,
+                    majority[0],
+                    majority[1],
+                    size_counts[majority],
+                    sum(size_counts.values()),
+                    ref_size[0] if ref_size else "?",
+                    ref_size[1] if ref_size else "?",
+                )
+            ref_size = majority
         path = self._write_video_ffmpeg(valid_paths, out_path, fps, ref_size)
         if path is None:
             log.debug(

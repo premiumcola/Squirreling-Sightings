@@ -138,10 +138,16 @@ def test_the_screen_shows_only_a_handful_of_findings():
 
 def test_the_frontend_fills_in_what_the_server_cannot_know():
     """next-tick delay and bbox hold live in the browser scheduler; the
-    server emits tokens instead of a misleading "?"."""
+    server emits null instead of a misleading 0, and the browser splices
+    its own values in immediately before the clipboard write.
+
+    (Before M2 the copied payload was Markdown and these arrived as
+    ``<<tick_next_ms>>`` tokens. The document is JSON now — same
+    contract, typed fields instead of string substitution.)"""
     src = _read(_COPY)
-    for token in ("<<tick_next_ms>>", "<<hold_ms>>", "<<frontend_state_ua>>"):
-        assert token in src, f"{token} must be substituted before the copy"
+    for field in ("next_ms", "hold_ms", "user_agent"):
+        assert field in src, f"{field} must be filled in before the copy"
+    assert "_withFrontendState" in src, "nothing merges the browser-only block"
 
 
 def test_the_clipboard_write_stays_inside_the_gesture():

@@ -16,8 +16,17 @@ from ...labels import COUNTED_LABELS
 from ._blocks import assemble
 from ._findings import build_findings, ladder_rows
 from ._helpers import collect_log_lines
+from ._machine import SCHEMA, SECTION_KEYS, build_document
 
-__all__ = ["build_snapshot", "build_findings", "collect_log_lines", "ladder_rows"]
+__all__ = [
+    "SCHEMA",
+    "SECTION_KEYS",
+    "build_snapshot",
+    "build_document",
+    "build_findings",
+    "collect_log_lines",
+    "ladder_rows",
+]
 
 
 def _relevant_labels(cam: dict, last: dict) -> list:
@@ -48,7 +57,14 @@ def _relevant_labels(cam: dict, last: dict) -> list:
 
 
 def build_snapshot(cam: dict, cam_id: str, tt: dict, runtime, eff_cfg: dict) -> dict:
-    """Return ``{"markdown": str, "findings": [...]}`` for one camera.
+    """Return ``{"markdown": str, "doc": dict, "findings": [...]}``.
+
+    Two renderings of ONE extraction: ``doc`` is what "Debug kopieren"
+    puts on the clipboard and what the SIMU log stores (machine-first,
+    see :mod:`._machine`); ``markdown`` is what a human reads in a
+    terminal. Both are built from the same ``last`` / ``diag`` /
+    ``cluster_ev`` / ``ladder`` / ``findings`` values resolved here, so
+    neither can report a threshold the other does not.
 
     Pure apart from the log ring-buffer read — every other input is
     passed in, so the whole document is unit-testable.
@@ -59,7 +75,7 @@ def build_snapshot(cam: dict, cam_id: str, tt: dict, runtime, eff_cfg: dict) -> 
     push_cfg = ((eff_cfg or {}).get("telegram") or {}).get("push") or {}
     ladder = ladder_rows(cam, push_cfg, _relevant_labels(cam, last))
     findings = build_findings(cam, last, cluster_ev, ladder)
-    markdown = assemble(
+    parts = dict(
         cam=cam,
         cam_id=cam_id,
         last=last,
@@ -71,4 +87,8 @@ def build_snapshot(cam: dict, cam_id: str, tt: dict, runtime, eff_cfg: dict) -> 
         findings=findings,
         log_records=collect_log_lines(cam_id),
     )
-    return {"markdown": markdown, "findings": findings}
+    return {
+        "markdown": assemble(**parts),
+        "doc": build_document(**parts),
+        "findings": findings,
+    }

@@ -472,5 +472,16 @@ def api_debug_snapshot(cam_id: str):
         eff_cfg=app_state.get_effective_config(),
     )
     if want_json:
-        return jsonify({"ok": True, "markdown": snap["markdown"], "findings": snap["findings"]})
+        # ``doc`` is the machine-first payload the copy button writes to
+        # the clipboard and POSTs to the SIMU log; ``findings`` is what
+        # the Debug tab renders on screen. ``markdown`` rides along for
+        # the human rendering of the same run.
+        return jsonify(
+            {
+                "ok": True,
+                "markdown": snap["markdown"],
+                "doc": snap["doc"],
+                "findings": snap["findings"],
+            }
+        )
     return Response(snap["markdown"], mimetype="text/markdown; charset=utf-8")

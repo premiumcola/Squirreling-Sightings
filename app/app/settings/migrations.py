@@ -25,6 +25,7 @@ from ._consts import (
     TELEGRAM_PUSH_DEFAULTS,
     TL_DEFAULT_PROFILES,
     WEATHER_DEFAULTS,
+    WEATHER_RETENTION_DEFAULTS,
 )
 from .defaults import default_camera, window_minutes
 
@@ -336,6 +337,10 @@ def migrate_weather_defaults(data: dict) -> None:
         w = {}
         data["weather"] = w
     _deep_merge_defaults(w, WEATHER_DEFAULTS)
+    # Per-category retention (Wetter-Wartung) — setdefault-only, so a
+    # real install's existing blanket `retention_days` is left exactly
+    # as it is; only the new per-category keys are backfilled.
+    _deep_merge_defaults(w, WEATHER_RETENTION_DEFAULTS)
     # Make sure every camera carries the opt-in flag in the new shape;
     # existing cameras with handcrafted weather dicts are left alone.
     # The sun_timelapse sub-block is added unconditionally — it's the

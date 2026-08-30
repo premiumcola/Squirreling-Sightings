@@ -164,6 +164,47 @@ WEATHER_DEFAULTS: dict = {
 }
 
 
+# Per-category weather-media retention (Wetter-Wartung). Additively
+# backfilled alongside WEATHER_DEFAULTS — see migrate_weather_defaults.
+#
+# The legacy blanket pair (`retention_days` / `auto_cleanup_enabled`)
+# stays: `auto_cleanup_enabled` remains the single master switch for
+# the whole sweep, and `retention_days` is the fallback bucket a
+# category resolves to when its own key is somehow absent (a
+# hand-edited settings.json, or a category added after the install's
+# last migration ran) — see resolve_category_days() in
+# weather_service/_retention.py. It is never removed or reinterpreted.
+#
+# The four categories have genuinely different natural lifetimes:
+#   retention_sightings_days        — raw thunder/heavy_rain/snow/fog
+#     clips (weather_service/_clip.py). Cheap, frequent, short — kept
+#     at the old blanket default.
+#   retention_event_timelapses_days — thunder_rising/front_passing/
+#     storm_front (_event_tl_encode.py). Rarer and heavier than a raw
+#     clip, curated by the recap picker's own higher per-type cap
+#     (RecapsMixin._EVENT_TL_TRIGGERS) — worth a little longer.
+#   retention_sun_timelapses_days   — sunrise/sunset (_sun_tl/). The
+#     most frequent (opt-in cameras produce one a day) and least
+#     individually precious — SHORTER than the blanket default, per
+#     the explicit ask that a daily sunrise/sunset not eat 90 days of
+#     disk by default.
+#   retention_recaps_days           — quarterly/yearly compilations
+#     (_recaps.py). A flat day-count is the wrong unit for something
+#     that fires 4x/year, so this is a generous flat floor ONLY; the
+#     sweep additionally never deletes the WEATHER_RECAP_MIN_KEEP most
+#     recent recaps regardless of age (weather_service/_retention.py)
+#     — a period-aware guarantee layered on top of the flat number
+#     rather than a full period-cadence calculation.
+WEATHER_RETENTION_DEFAULTS: dict = {
+    "retention_days": 90,
+    "auto_cleanup_enabled": True,
+    "retention_sightings_days": 90,
+    "retention_event_timelapses_days": 120,
+    "retention_sun_timelapses_days": 21,
+    "retention_recaps_days": 400,
+}
+
+
 # Keys mirror camera_runtime._consts._PROFILES and the frontend's
 # _TL_PROFILES_DEF — all three lists must carry the same profile names or
 # a profile is configurable somewhere and inert everywhere else.

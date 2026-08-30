@@ -167,6 +167,20 @@ function _setRoiLabel(stage, on) {
   }
 }
 
+// On-picture player chrome for the two modes that play a recorded file
+// (mediaview/player/): centre transport, elapsed / −remaining, the switch
+// to the system player, and the auto-hide that makes the whole stage read
+// like the native player. Live brings its own chrome and weather has no
+// <video> at all, so both skip it. Its own function rather than an inline
+// branch — mountMediaView is long enough already.
+function _mountPlayerFor(mode, stage, components, teardowns) {
+  if (mode !== 'recorded' && mode !== 'timelapse') return;
+  const pc = mountPlayerChrome(stage);
+  if (!pc) return;
+  components.playerChrome = pc;
+  teardowns.push(pc.teardown);
+}
+
 /**
  * Build the MediaView shell from a config and (optionally) mount it.
  *
@@ -332,18 +346,7 @@ export function mountMediaView(config = {}) {
     }
   }
 
-  // On-picture player chrome for the two modes that play a recorded file
-  // (mediaview/player/): centre transport, elapsed / −remaining, the
-  // switch to the system player, and the auto-hide that makes the whole
-  // stage read like the native player. Live has its own chrome and
-  // weather has no <video> at all, so both skip it.
-  if (mode === 'recorded' || mode === 'timelapse') {
-    const pc = mountPlayerChrome(slot('stage'));
-    if (pc) {
-      components.playerChrome = pc;
-      teardowns.push(pc.teardown);
-    }
-  }
+  _mountPlayerFor(mode, slot('stage'), components, teardowns);
 
   const tabs = _buildTabs(panels, config.panelRenderers, config.item);
   if (tabs.length) {

@@ -69,6 +69,13 @@ def api_cameras():
         s["rtsp_url"] = strip_url_password(cam.get("rtsp_url", ""))
         s["username"] = cam.get("username", "")
         s["password_set"] = bool(cam.get("password"))
+        # Identity colour override from cam-edit's Allgemein tab. The
+        # projection is key-by-key, so a field it forgets is a field the
+        # frontend never sees: `getCameraColor` prefers `c.color` and
+        # falls back to the name-derived auto-tone, so omitting it here
+        # made every saved colour invisible everywhere. "" = no
+        # override, which is the fallback the picker's Auto button writes.
+        s["color"] = cam.get("color", "")
         s["object_filter"] = cam.get("object_filter", [])
         s["telegram_enabled"] = cam.get("telegram_enabled", True)
         s["mqtt_enabled"] = cam.get("mqtt_enabled", True)

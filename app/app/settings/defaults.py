@@ -47,6 +47,11 @@ def default_camera(cam: dict | None = None) -> dict:
         "manufacturer": cam.get("manufacturer", ""),
         "model": cam.get("model", ""),
         "location": cam.get("location", ""),
+        # Identity colour override (schema: CAMERA_SCHEMA["color"]).
+        # Missing here meant the default skeleton a NEW camera is seeded
+        # from had no `color` at all, so a colour picked during creation
+        # was dropped on first insert. "" = use the frontend auto-tone.
+        "color": cam.get("color", ""),
         "enabled": cam.get("enabled", True),
         "rtsp_url": cam.get("rtsp_url", ""),
         "snapshot_url": cam.get("snapshot_url", ""),

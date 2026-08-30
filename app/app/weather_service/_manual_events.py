@@ -112,11 +112,11 @@ def normalize_manual_event(record: dict) -> dict:
 
 
 class ManualEventsMixin:
-    """User-saved chart ranges — a named time window, assigned to one of
-    the app's existing weather-event categories, plus the curve keys and
-    a free-text "characteristic" the operator entered to justify that
-    categorisation (the drag-zoom feature's "save this as an event"
-    action, e.g. category=thunder, curves=[precipitation,
+    """User-saved chart ranges — a named time window, assigned to one or
+    more of the app's existing weather-event categories, plus the curve
+    keys and a free-text "characteristic" the operator entered to justify
+    that categorisation (the drag-zoom feature's "save this as an event"
+    action, e.g. categories=[thunder, heavy_rain], curves=[precipitation,
     lightning_potential], characteristic="Regen setzt ein, dann Blitze
     auf hohem Niveau … mittelgroßes Gewitter"). No clip attached.
 

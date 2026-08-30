@@ -14,12 +14,16 @@ getting either wrong mis-files a save the operator never reviewed:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
 from ._node_js import run_js as _js
 
 pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+
+_JS_DIR = Path(__file__).resolve().parents[2] / "app" / "web" / "static" / "js"
 
 _SAMPLE = """
 function sample(vals) {{
@@ -191,3 +195,94 @@ def test_saving_without_a_category_is_still_refused():
     out = _collect("[]")
     assert "Kategorie" in out["error"]
     assert "payload" not in out
+
+
+# ── the save flow: panel closes, the new card lands in the list ─────────
+# "wenn ich speicher, dann sollte es in dem Editscreen weggehen und eben
+# runter in die History direkt kommen. Aktuell bleibt der Editscreen
+# einfach komplett offen und es kommt diese komische Speichermeldung
+# unten." Driven end-to-end with a stubbed fetch: the whole point is that
+# every step after the POST actually happens.
+
+_FLOW_STUB = """
+const posted = [];
+globalThis.fetch = (url, init) => {
+  const method = (init && init.method) || 'GET';
+  posted.push({ url, method, body: init && init.body });
+  const item = { id: 'manual_new', name: 'Gewitter', categories: ['thunder', 'heavy_rain'],
+                 range_start: '2026-08-29T14:00:00', range_end: '2026-08-29T18:00:00',
+                 curves: ['precipitation'] };
+  const json = method === 'POST' ? { ok: true, item } : { items: [item] };
+  return Promise.resolve({
+    ok: OK, status: OK ? 201 : 500, statusText: 'x',
+    headers: { get: () => 'application/json' },
+    text: () => Promise.resolve('kaputt'),
+    json: () => Promise.resolve(json),
+  });
+};
+const card = { dataset: { manualId: 'manual_new' }, added: [], scrolled: false,
+               classList: { add(c) { card.added.push(c); } },
+               scrollIntoView() { card.scrolled = true; } };
+const grid = { querySelectorAll: () => [card] };
+const origById = globalThis.document.getElementById;
+globalThis.document.getElementById = (id) =>
+  id === 'weatherSightingsGrid' ? grid : origById(id);
+let rendered = 0;
+globalThis.window.renderWeatherSightings = () => { rendered += 1; };
+const panel = {
+  hidden: false,
+  querySelector: (s) =>
+    s === '#wsZsaveName' ? { value: 'Gewitter mit Starkregen' } : { value: 'Blitze und Regen' },
+  querySelectorAll: (s) =>
+    s === '.ws-zsave-cat.is-active'
+      ? [{ dataset: { category: 'thunder' } }, { dataset: { category: 'heavy_rain' } }]
+      : [{ value: 'precipitation' }],
+};
+const mod = await import(JS + '/weather/_manual-event-save.js');
+const st = await import(JS + '/core/state.js');
+st.state.weather.page = 4;
+await mod._submitSave(panel, { start: '2026-08-29T14:00:00', end: '2026-08-29T18:00:00' });
+console.log(JSON.stringify({
+  posted, hidden: panel.hidden, rendered, page: st.state.weather.page,
+  added: card.added, scrolled: card.scrolled,
+}));
+"""
+
+
+def _run_flow(ok: str):
+    return _js(_FLOW_STUB.replace("OK", ok))
+
+
+def test_a_successful_save_closes_the_panel_and_reloads_the_list():
+    out = _run_flow("true")
+    assert out["hidden"] is True, "the edit panel must not stay open after a save"
+    # POST, then the manual-event list re-fetch that feeds the grid.
+    assert [p["method"] for p in out["posted"]] == ["POST", "GET"]
+    assert '"categories":["thunder","heavy_rain"]' in out["posted"][0]["body"]
+    assert out["rendered"] == 1
+
+
+def test_the_saved_card_is_highlighted_where_it_landed():
+    out = _run_flow("true")
+    assert out["added"] == ["ws-manual-card--new"]
+    assert out["scrolled"] is True
+    # Deep in the pagination a fresh event would sit on a page the
+    # operator isn't looking at — reset so it is actually reachable.
+    assert out["page"] == 0
+
+
+def test_a_failed_save_leaves_the_panel_open_and_does_not_pretend_it_worked():
+    out = _run_flow("false")
+    assert out["hidden"] is False
+    assert out["rendered"] == 0
+    assert out["added"] == []
+
+
+def test_only_the_error_toast_survives_in_the_save_module():
+    """The operator asked for the success toast ("diese komische
+    Speichermeldung unten") to go; the failure toast must stay, or a save
+    that fails looks exactly like a save that worked."""
+    src = (_JS_DIR / "weather" / "_manual-event-save.js").read_text(encoding="utf-8")
+    assert "'success'" not in src
+    assert "Speichern fehlgeschlagen" in src
+    assert "'error'" in src

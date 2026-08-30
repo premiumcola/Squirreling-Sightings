@@ -227,6 +227,27 @@
   height: 14px;
 }
 
+/* A just-saved event announces WHERE it landed — the card replaces the
+   success toast the operator did not want. One short tint that fades
+   back to the resting card colour; no permanent chrome, the class is
+   gone on the next grid render. */
+@keyframes ws-manual-card-new {
+  from {
+    background: rgba(127, 174, 201, 0.42);
+  }
+  to {
+    background: rgba(127, 174, 201, 0.08);
+  }
+}
+.ws-manual-card--new {
+  animation: ws-manual-card-new 1.8s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-manual-card--new {
+    animation: none;
+  }
+}
+
 /* ── Manual-event view modal ──────────────────────────────────────────────
    Clicking a saved manual-event card re-draws the Wetterdaten-chart for
    exactly that range in a small overlay — no clip, no video player. */

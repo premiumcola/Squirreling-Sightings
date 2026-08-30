@@ -54,6 +54,25 @@ def test_the_zoom_action_row_has_an_explicit_hidden_opt_out():
     assert "none" in _rule(css, ".ws-zoom-actions[hidden]").replace(" ", "")
 
 
+def test_the_new_card_flash_respects_prefers_reduced_motion():
+    """The saved event announces where it landed instead of a success
+    toast — but a motion-sensitive operator must be able to opt out, and
+    the highlight must stay an animation (transient) rather than a
+    permanent background override."""
+    css = _ZOOM_CSS.read_text(encoding="utf-8")
+    rule = _rule(css, ".ws-manual-card--new")
+    assert "animation:" in rule.replace(" ", "")[:20] or "animation" in rule
+    assert "background" not in rule, "the highlight must fade, not repaint the card for good"
+    reduced = re.search(
+        r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}",
+        css,
+        re.DOTALL,
+    )
+    assert reduced, "no prefers-reduced-motion block"
+    assert ".ws-manual-card--new" in reduced.group(1)
+    assert "animation: none" in reduced.group(1)
+
+
 def test_no_other_rule_in_this_partial_sets_display_without_a_hidden_opt_out():
     """A guard for the next panel added here. Any selector this file
     gives a `display` to, whose element the templates mark `hidden`,

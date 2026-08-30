@@ -1,8 +1,10 @@
 // ─── weather/_manual-event-save.js ─────────────────────────────────────
 // The Wetterdaten-chart's drag-zoom "als Ereignis speichern" form —
-// name + category (one of core/weather-types.js's WEATHER_TYPES, so the
-// saved record renders with the same badge/icon/colour machinery every
-// other event uses) + which curves the operator marked as the evidence
+// name + one to three categories (keys of core/weather-types.js's
+// WEATHER_TYPES, so the saved record renders with the same
+// badge/icon/colour machinery every other event uses; several because a
+// storm that also brings heavy rain genuinely is both) + which curves
+// the operator marked as the evidence
 // + a free-text "Charakteristik" describing how those curves moved
 // together (the operator's own example: "Regen setzt ein, dann Blitze
 // auf hohem Niveau, Wind nimmt zu und wieder ab … mittelgroßes
@@ -15,6 +17,7 @@
 // modules import anything back from here, so this file adds no new
 // import cycle.
 import { byId, esc } from '../core/dom.js';
+import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
 import { getZoomRange, zoomedSamples } from './_zoom.js';
@@ -162,27 +165,57 @@ function _wireCategoryChips(panel) {
   });
 }
 
+// The saved record IS the confirmation — the operator asked for it to
+// land visibly in the list below instead of a toast ("es sollte in dem
+// Editscreen weggehen und eben runter in die History direkt kommen").
+// So the fresh card announces itself with a short tint and, if it is
+// off-screen after the panel collapsed, scrolls into view. Nothing
+// permanent: the next grid render rebuilds innerHTML and the class is
+// gone. Motion opts out via prefers-reduced-motion (see
+// css/23b-weather-zoom.css).
+function _revealSavedCard(id) {
+  if (!id) return;
+  const grid = byId('weatherSightingsGrid');
+  if (!grid) return;
+  const cards = Array.from(grid.querySelectorAll('.ws-manual-card') || []);
+  const card = cards.find((el) => el.dataset?.manualId === id);
+  if (!card) return;
+  card.classList.add('ws-manual-card--new');
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// A FAILED save keeps its toast — loudly. Only the success toast went
+// away, and only because the new card replaces it; a save that fails
+// must never look like a save that worked.
+export function _submitSave(panel, range) {
+  const { payload, error } = _collectPayload(panel, range);
+  if (error) {
+    showToast(error, 'error');
+    return Promise.resolve();
+  }
+  return createManualEvent(payload)
+    .then((res) => {
+      panel.hidden = true;
+      return loadWeatherManualEvents().then(() => res?.item?.id || null);
+    })
+    .then((newId) => {
+      // Page 0 holds the freshest slice of the feed — the same reset
+      // sightings.js does when a filter change shrinks the result set,
+      // and without it a save made while paging deeper looks lost.
+      state.weather.page = 0;
+      if (typeof window.renderWeatherSightings === 'function') window.renderWeatherSightings();
+      _revealSavedCard(newId);
+    })
+    .catch((err) => showToast('Speichern fehlgeschlagen: ' + (err?.message || err), 'error'));
+}
+
 function _wireForm(panel, range) {
   _wireCategoryChips(panel);
   panel.querySelector('#wsZsaveCancel')?.addEventListener('click', () => {
     panel.hidden = true;
   });
   panel.querySelector('#wsZsaveSubmit')?.addEventListener('click', () => {
-    const { payload, error } = _collectPayload(panel, range);
-    if (error) {
-      showToast(error, 'error');
-      return;
-    }
-    createManualEvent(payload)
-      .then(() => {
-        panel.hidden = true;
-        showToast('Wetter-Ereignis gespeichert', 'success');
-        return loadWeatherManualEvents();
-      })
-      .then(() => {
-        if (typeof window.renderWeatherSightings === 'function') window.renderWeatherSightings();
-      })
-      .catch((err) => showToast('Speichern fehlgeschlagen: ' + (err?.message || err), 'error'));
+    _submitSave(panel, range);
   });
 }
 

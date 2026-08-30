@@ -37,7 +37,6 @@ from .migrations import (
     migrate_telegram_push_defaults,
     migrate_timelapse_intervals,
     migrate_timelapse_profiles,
-    migrate_timelapse_settings,
     migrate_thunder_lpi_scale,
     migrate_weather_defaults,
 )
@@ -119,7 +118,6 @@ class SettingsStore:
         schedule_migrated = migrate_schedules(self.data)
         migrate_class_severity(self.data)
         migrate_alerting_schedules(self.data)
-        migrate_timelapse_settings(self.data)
         migrate_timelapse_profiles(self.data)
         migrate_telegram_push_defaults(self.data)
         migrate_server_location_defaults(self.data)
@@ -493,7 +491,6 @@ class SettingsStore:
             "ui",
             "review",
             "telegram_actions",
-            "timelapse_settings",
             "weather",
             # export_text ships `storage`; without it here a settings
             # backup restored the retention window and the media page

@@ -237,11 +237,10 @@ def build_defaults(base_config: dict) -> dict:
         "telegram_actions": [],
         "review": {},
         "ui": {"wizard_completed": bool(cams)},
-        "timelapse_settings": {
-            "global_enabled": base_config.get("timelapse_settings", {}).get(
-                "global_enabled", False
-            ),
-        },
+        # No `timelapse_settings` block. It only ever held
+        # `global_enabled`, a master switch no capture path consulted and
+        # no UI could flip; timelapse recording is decided per camera by
+        # `timelapse.profiles.<name>.enabled`.
         # Ephemeral runtime data (callback verdicts, suppress windows,
         # offline state). Persisted so a service reload doesn't lose
         # active mute timers or in-flight system_state.

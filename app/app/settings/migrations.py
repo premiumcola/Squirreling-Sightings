@@ -283,10 +283,6 @@ def migrate_alerting_schedules(data: dict) -> None:
         log.info("[migration] alerting-schedule: %d Kameras migriert", migrated)
 
 
-def migrate_timelapse_settings(data: dict) -> None:
-    data.setdefault("timelapse_settings", {"global_enabled": False})
-
-
 def migrate_timelapse_profiles(data: dict) -> None:
     """Additively add missing timelapse profile keys to existing cameras."""
     for cam in data.get("cameras", []):

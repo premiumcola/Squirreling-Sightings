@@ -110,8 +110,12 @@ def api_timelapse_status():
 
     settings = app_state.settings
     today = datetime.now().strftime("%Y-%m-%d")
-    tl_settings = settings.data.get("timelapse_settings", {})
-    global_enabled = bool(tl_settings.get("global_enabled", False))
+    # No global master switch here. `timelapse_settings.global_enabled`
+    # used to be reported alongside these counters, but nothing read it
+    # on either side: no frontend module fetched it and no capture path
+    # honoured it. Whether a profile records is decided per camera by
+    # `timelapse.profiles.<name>.enabled`, which the supervisor in
+    # camera_runtime/_lifecycle.py polls.
     cameras_out = []
     for cam in settings.data.get("cameras", []):
         cam_id = cam["id"]
@@ -137,23 +141,11 @@ def api_timelapse_status():
     return jsonify(
         {
             "ok": True,
-            "global_enabled": global_enabled,
             "active_count": total_active,
             "cameras": cameras_out,
             "today": today,
         }
     )
-
-
-@bp.post('/api/settings/timelapse')
-def api_settings_timelapse_save():
-    settings = app_state.settings
-    payload = request.get_json(force=True) or {}
-    ts = settings.data.setdefault("timelapse_settings", {})
-    if "global_enabled" in payload:
-        ts["global_enabled"] = bool(payload["global_enabled"])
-    settings.save()
-    return jsonify({"ok": True})
 
 
 @bp.get('/api/camera/<cam_id>/timelapse')

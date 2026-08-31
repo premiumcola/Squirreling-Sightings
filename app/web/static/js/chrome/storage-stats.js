@@ -7,7 +7,6 @@
 import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { j, apiPost } from '../core/api.js';
-import { showToast, showConfirm } from '../core/toast.js';
 import { renderTimeline } from '../timeline.js';
 
 export async function loadMediaStorageStats() {
@@ -56,59 +55,16 @@ export async function refreshTimelineAndStats() {
   }
 }
 
-// One-time wiring for the three buttons in the Mediathek settings
-// section. All three guard against the elements being absent so the
-// module is safe to import on pages without these controls.
-byId('cleanupNowBtn')?.addEventListener('click', async () => {
-  if (
-    // Says Papierkorb, because that is where they go now — the sweep
-    // routes through storage/.trash instead of unlinking, so they stay
-    // restorable for the grace period. Promising a deletion that does
-    // not happen is the same defect as promising a keep that does not.
-    !(await showConfirm(
-      'Jetzt bereinigen? Alle Dateien älter als die Aufbewahrungszeit wandern in den Papierkorb ' +
-        'und bleiben dort wiederherstellbar.',
-    ))
-  )
-    return;
-  const rdEl = byId('ms_retention_days');
-  const payload = rdEl?.value ? { retention_days: Number(rdEl.value) } : {};
-  try {
-    const r = await j('/api/media/cleanup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    // `retention_days` is what the server ACTUALLY enforced, which is
-    // not always what the field said: leaving it empty defers to the
-    // nightly window, and a pending narrowing keeps the wider one.
-    const win = r.retention_days ? ` (${r.retention_days} Tage)` : '';
-    showToast(
-      `Bereinigung abgeschlossen${win}. ${r.removed || 0} Dateien im Papierkorb.`,
-      'success',
-    );
-    await loadMediaStorageStats();
-  } catch (e) {
-    showToast('Fehler: ' + e.message, 'error');
-  }
-});
-
-byId('purgeOrphansBtn')?.addEventListener('click', async () => {
-  if (
-    !(await showConfirm(
-      'Verwaiste Events löschen? Alle Event-Einträge ohne zugehörige Mediendatei werden entfernt.',
-    ))
-  )
-    return;
-  try {
-    const r = await j('/api/media/purge-orphans', { method: 'POST' });
-    showToast(`${r.removed || 0} verwaiste Events entfernt.`, 'success');
-    if (typeof window.loadAll === 'function') await window.loadAll();
-  } catch (e) {
-    showToast('Fehler: ' + e.message, 'error');
-  }
-});
-
+// One-time wiring for the Mediathek settings form. Guards against the
+// element being absent so the module is safe to import on pages without
+// this control.
+//
+// R23 · the #cleanupNowBtn and #purgeOrphansBtn handlers were deleted
+// here. No template has rendered either id since the two legacy danger
+// buttons were dropped from partials/mediathek.html, so both listeners
+// were bound to nothing. The retention-acknowledge path they were the
+// last confirmer for now lives server-side in
+// routes/app_settings.py::_acknowledge_storage_retention.
 byId('mediaSettingsForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target.elements;

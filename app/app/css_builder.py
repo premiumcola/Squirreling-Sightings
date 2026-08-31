@@ -83,7 +83,13 @@ LOAD_ORDER = [
     "29-birds.css",
     # P23 · 30-lightbox-video.css (1964 lines, 52× !important) split
     # into 5 sibling files at the same load position. Each ≤ 600 lines.
-    "30a-lightbox-frame.css",
+    # R23 · 30a-lightbox-frame.css deleted. Every rule in it was scoped
+    # under .lb-fs-video (a class nothing adds any more — four removes,
+    # one contains, zero adds) or under #lightboxTopBar, which the
+    # markup renders `hidden` and JS only ever re-hides. Its own
+    # `#lightboxTopBar[hidden] { display: none }` cancelled the base
+    # `display: flex`, so dropping the file leaves the UA rule in
+    # charge and the bar stays hidden exactly as before.
     "30b-lightbox-time.css",
     "30c-lightbox-meters.css",
     "30d-lightbox-shell.css",

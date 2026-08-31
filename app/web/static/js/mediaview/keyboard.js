@@ -1,18 +1,20 @@
 // ─── mediaview/keyboard.js ─────────────────────────────────────────────────
-// Window keydown listener active while the MediaView modal is mounted.
-// Three shortcuts — Space (play/pause), ArrowLeft (seek -5 s, clamp at
-// 0), ArrowRight (seek +5 s, clamp at duration). All three call
-// preventDefault so they don't trip the page-scroll / radio-button
-// defaults. Ignored when the focused element is INPUT, TEXTAREA,
-// SELECT, or contenteditable — text-entry inside a future panel tab
-// keeps its native key behaviour.
+// Every keyboard and touch shortcut that drives the lightbox / MediaView
+// modal, in one place. R23 moved the two installers below out of
+// lightbox.js, which stood 822 lines against a 400-line ceiling and had
+// them as bare module-scope side effects.
 //
-// `install` returns a teardown function the shell calls on unmount.
-// One install / teardown pair per shell mount keeps the listener from
-// leaking across the modal lifecycle. The listener attaches to
-// `window` instead of `document` so an outer modal layer (e.g. an
-// iOS native player overlay) doesn't intercept the events before we
-// see them.
+// Both installers take their collaborators as callbacks rather than
+// importing lightbox.js. That is deliberate: lightbox.js already sits in
+// three load-bearing import cycles, and reaching back into it from here
+// would add a fourth for nothing — the arguments are the same functions
+// the caller already has in scope.
+//
+// Each installer returns a teardown function. lightbox.js installs once
+// at module scope and never tears down (the modal is a permanent DOM
+// fixture); the return value exists so a future mount/unmount owner does
+// not have to reopen this file.
+import { byId } from '../core/dom.js';
 
 const _FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
@@ -54,4 +56,178 @@ export function installMediaViewKeyboard(getVideoEl) {
   };
   window.addEventListener('keydown', onKey);
   return () => window.removeEventListener('keydown', onKey);
+}
+
+// ── Lightbox keydown ────────────────────────────────────────────────────────
+// Drilldown back-nav: Backspace or Escape returns to overview when no
+// lightbox is open. Skip when the user is typing in an input/textarea so
+// editable fields keep their normal behavior.
+//
+// NOTE this guard is deliberately NOT _isFormFocus: it has never counted
+// SELECT as editable, while the lightbox branch below always has. Kept
+// verbatim — widening it here would change which keystrokes close the
+// drilldown, which is a behaviour change, not a refactor.
+function _drilldownBackNav(e, deps) {
+  if (e.key !== 'Escape' && e.key !== 'Backspace') return;
+  if (byId('mediaDrilldown')?.style.display === 'none') return;
+  const t = e.target;
+  const isEditable =
+    t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  if (isEditable) return;
+  e.preventDefault();
+  deps.closeMediaDrilldown();
+}
+
+// Seek step — was 10 s; tightened to 5 s to match the mediaview task #6
+// spec. Five-second granularity reads more naturally for 10-30 s motion
+// clips, where 10 s would overshoot interesting segments in two presses.
+function _arrowSeekOrNav(e, ctx, deps) {
+  e.preventDefault();
+  if (e.key === 'ArrowLeft') {
+    if (ctx.videoActive) {
+      ctx.video.currentTime = Math.max(0, (ctx.video.currentTime || 0) - 5);
+      deps.showSeekOverlay('−5s');
+    } else {
+      deps.navPrev();
+    }
+    return;
+  }
+  if (ctx.videoActive) {
+    const dur = ctx.video.duration || 0;
+    const next = (ctx.video.currentTime || 0) + 5;
+    ctx.video.currentTime = dur > 0 ? Math.min(dur, next) : next;
+    deps.showSeekOverlay('+5s');
+  } else {
+    deps.navNext();
+  }
+}
+
+function _spaceOrFullscreen(e, ctx) {
+  if (!ctx.videoActive) return;
+  e.preventDefault();
+  if (e.key === ' ') {
+    if (ctx.video.paused) ctx.video.play().catch(() => {});
+    else ctx.video.pause();
+    return;
+  }
+  const fsElem = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsElem) {
+    (document.exitFullscreen || document.webkitExitFullscreen || function () {})
+      .call(document)
+      .catch(() => {});
+    return;
+  }
+  const v = ctx.video;
+  const req = v.requestFullscreen || v.webkitRequestFullscreen || v.webkitEnterFullscreen;
+  if (req) req.call(v).catch(() => {});
+}
+
+function _openLightboxShortcut(e, deps) {
+  const video = byId('lightboxVideo');
+  const modal = byId('lightboxModal');
+  const ctx = {
+    video,
+    videoActive: !!(video && video.style.display !== 'none' && video.src),
+  };
+  // Live-sim suppresses prev/next + confirm/delete keys — there's no
+  // recorded item to navigate to or label. Esc + Space + F still route
+  // through their normal handlers below so the user keeps close-on-Esc
+  // and fullscreen-on-F.
+  // L1 · weather shares this container too; like live it has no recorded
+  // item to seek/label, so it suppresses the same keys (its own title-bar
+  // chevrons handle navigation).
+  const suppressed =
+    modal.classList.contains('lb-live-detect') || modal.classList.contains('lb-weather');
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (suppressed) {
+      e.preventDefault();
+      return;
+    }
+    _arrowSeekOrNav(e, ctx, deps);
+  } else if (e.key === 'ArrowUp') {
+    if (suppressed) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    byId('lightboxConfirm').click();
+  } else if (e.key === 'ArrowDown') {
+    if (suppressed) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    deps.handleDeleteKey();
+  } else if (e.key === ' ' || e.key === 'f' || e.key === 'F') {
+    _spaceOrFullscreen(e, ctx);
+  } else if (e.key === 'Escape') {
+    deps.closeLightbox();
+  }
+}
+
+/**
+ * Document-level shortcuts for the lightbox and the media drilldown.
+ * `deps` supplies every collaborator: closeLiveView, closeMediaDrilldown,
+ * closeLightbox, navPrev, navNext, handleDeleteKey, showSeekOverlay.
+ */
+export function installLightboxKeys(deps) {
+  const onKey = (e) => {
+    // Live view ESC close (takes priority)
+    if (e.key === 'Escape' && !byId('liveViewModal')?.classList.contains('hidden')) {
+      deps.closeLiveView();
+      return;
+    }
+    if (byId('lightboxModal').classList.contains('hidden')) {
+      _drilldownBackNav(e, deps);
+      return;
+    }
+    // Suppress lightbox shortcuts whenever the user is typing in a form
+    // field — Escape and the seek/nav keys must not steal focus from an
+    // active text input embedded in a panel (e.g. the Detections-tab
+    // class filter chip).
+    if (_isFormFocus(e.target)) return;
+    _openLightboxShortcut(e, deps);
+  };
+  document.addEventListener('keydown', onKey);
+  return () => document.removeEventListener('keydown', onKey);
+}
+
+// ── Lightbox swipe ──────────────────────────────────────────────────────────
+// Swipe navigation on the lightbox media area (mobile). Horizontal swipe =
+// prev/next; vertical swipes are ignored (the swipe-down-to-dismiss branch
+// was removed — it was firing accidentally on scroll/zoom and the visible
+// X button covers the close case).
+export function installLightboxSwipe() {
+  const wrap = byId('lightboxMediaWrap');
+  const modal = byId('lightboxModal');
+  if (!wrap || !modal) return () => {};
+  let _tx = 0,
+    _ty = 0,
+    _dragging = false;
+  const onStart = (e) => {
+    if (e.touches.length !== 1) return;
+    _tx = e.touches[0].clientX;
+    _ty = e.touches[0].clientY;
+    _dragging = true;
+  };
+  const onEnd = (e) => {
+    if (!_dragging) return;
+    _dragging = false;
+    const dx = e.changedTouches[0].clientX - _tx;
+    const dy = e.changedTouches[0].clientY - _ty;
+    // Vertical-dominant gestures (scroll, pinch-zoom-finish) must not
+    // trigger prev/next — drop them on the floor.
+    if (Math.abs(dy) > Math.abs(dx)) return;
+    if (Math.abs(dx) < 40) return;
+    // Live-sim has no neighbour item to navigate to.
+    if (modal.classList.contains('lb-live-detect')) return;
+    if (dx < 0) byId('lightboxNext')?.click();
+    else byId('lightboxPrev')?.click();
+  };
+  wrap.addEventListener('touchstart', onStart, { passive: true });
+  wrap.addEventListener('touchend', onEnd, { passive: true });
+  return () => {
+    wrap.removeEventListener('touchstart', onStart);
+    wrap.removeEventListener('touchend', onEnd);
+  };
 }

@@ -7,12 +7,16 @@
 //   * openLightbox / closeLightbox + photo/video player switch
 //   * openTLPlayer / _tlNavItems for timelapse playback (now shell-routed)
 //   * _lbHandleDeleteKey / _lbNavList / _lbShowSeekOverlay / _renderLbLabels
-//   * the document keydown handler (Esc / arrow keys / 'd' / space / 'f')
-//   * lightbox prev/next/close button wiring + the touchstart swipe handler
+//   * lightbox prev/next/close button wiring
 //   * confirm + delete button onclicks (motion + timelapse paths)
 //   * the resize listener that re-paginates the grid on viewport changes
 //   * one-time runtime init lines (_updateLbConfirmBtn, lightboxDelete glyph,
-//     fullscreen-button binding, swipe handler IIFE)
+//     fullscreen-button binding)
+//
+// R23 · the document keydown handler (Esc / arrows / space / 'f') and the
+// touchstart swipe handler moved to mediaview/keyboard.js. This file
+// installs both at module scope and passes their collaborators in, so
+// keyboard.js never imports back into here.
 //
 // All window.openLightbox / window.closeLightbox / window.openTLPlayer
 // bridges still live on the legacy.js side so router.js + inline onclicks
@@ -31,6 +35,7 @@ import { prefersNativePlayer } from './mediaview/player/_pref.js';
 import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
 import { refreshTimelineAndStats } from './chrome/storage-stats.js';
+import { installLightboxKeys, installLightboxSwipe } from './mediaview/keyboard.js';
 import {
   calcItemsPerPage,
   renderMediaGrid,
@@ -39,17 +44,11 @@ import {
 } from './mediathek/orchestration.js';
 
 // ── Stage-4 pure helpers ────────────────────────────────────────────────────
-// N16 · moved to mediaview/panels/lb-helpers.js. Re-exported here so
-// existing imports from '../lightbox.js' keep resolving.
-export {
-  _LB_CHECK_SVG,
-  _LB_CHECK2_SVG,
-  _LB_HINT,
-  _LB_TRASH_HTML,
-  _updateLbConfirmBtn,
-  _lbClearDetections,
-  _lbResetToPhoto,
-} from './mediaview/panels/lb-helpers.js';
+// N16 · moved to mediaview/panels/lb-helpers.js. R23 retired all but one
+// of the back-compat re-exports: every other consumer now imports the
+// helper straight from lb-helpers.js. _lbClearDetections still has one
+// caller reaching for it through this module.
+export { _lbClearDetections } from './mediaview/panels/lb-helpers.js';
 import {
   _LB_TRASH_HTML,
   _updateLbConfirmBtn,
@@ -457,134 +456,33 @@ byId('lightboxModal').onclick = (e) => {
     closeLightbox();
   }
 };
-byId('lightboxPrev').onclick = () => {
+// Step one item along the nav list. The chevron buttons and the
+// ArrowLeft/ArrowRight shortcuts drive the same two functions — they used
+// to carry a verbatim copy of this body each.
+function _lbNavPrev() {
   const nav = _lbNavList();
   const i = nav.findIndex((x) => x.event_id === lbState.item?.event_id);
   if (i > 0) openLightbox(nav[i - 1]);
-};
-byId('lightboxNext').onclick = () => {
+}
+function _lbNavNext() {
   const nav = _lbNavList();
   const i = nav.findIndex((x) => x.event_id === lbState.item?.event_id);
   if (i >= 0 && i < nav.length - 1) openLightbox(nav[i + 1]);
-};
+}
+byId('lightboxPrev').onclick = _lbNavPrev;
+byId('lightboxNext').onclick = _lbNavNext;
 
-document.addEventListener('keydown', (e) => {
-  // Live view ESC close (takes priority)
-  if (e.key === 'Escape' && !byId('liveViewModal')?.classList.contains('hidden')) {
-    closeLiveView();
-    return;
-  }
-  const lbOpen = !byId('lightboxModal').classList.contains('hidden');
-  if (!lbOpen) {
-    // Drilldown back-nav: Backspace or Escape returns to overview when no lightbox is open.
-    // Skip when the user is typing in an input/textarea so editable fields keep their normal behavior.
-    if (
-      (e.key === 'Escape' || e.key === 'Backspace') &&
-      byId('mediaDrilldown')?.style.display !== 'none'
-    ) {
-      const t = e.target;
-      const isEditable =
-        t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
-      if (!isEditable) {
-        e.preventDefault();
-        closeMediaDrilldown();
-        return;
-      }
-    }
-    return;
-  }
-  // Suppress lightbox shortcuts whenever the user is typing in a form
-  // field — Escape and the seek/nav keys must not steal focus from
-  // an active text input embedded in a panel (e.g. the future
-  // Detections-tab class filter chip). Mirrors the input-focus guard
-  // the drilldown branch above already uses.
-  const _tgt = e.target;
-  const _editable =
-    _tgt &&
-    (_tgt.tagName === 'INPUT' ||
-      _tgt.tagName === 'TEXTAREA' ||
-      _tgt.tagName === 'SELECT' ||
-      _tgt.isContentEditable);
-  if (_editable) return;
-  const _v = byId('lightboxVideo');
-  const _videoActive = !!(_v && _v.style.display !== 'none' && _v.src);
-  // Live-sim suppresses prev/next + confirm/delete keys — there's no
-  // recorded item to navigate to or label. Esc + Space + F still
-  // route through their normal handlers below so the user keeps
-  // close-on-Esc and fullscreen-on-F.
-  const _liveDetect = byId('lightboxModal').classList.contains('lb-live-detect');
-  // L1 · weather shares this container too; like live it has no recorded
-  // item to seek/label, so it suppresses the prev/next + confirm/delete
-  // keys (its own title-bar chevrons handle navigation).
-  const _weather = byId('lightboxModal').classList.contains('lb-weather');
-  // Seek step — was 10 s; tightened to 5 s to match the mediaview
-  // task #6 spec. Five-second granularity reads more naturally for
-  // 10-30 s motion clips, where 10 s would overshoot interesting
-  // segments in two presses.
-  if (e.key === 'ArrowLeft') {
-    if (_liveDetect || _weather) {
-      e.preventDefault();
-      return;
-    }
-    e.preventDefault();
-    if (_videoActive) {
-      _v.currentTime = Math.max(0, (_v.currentTime || 0) - 5);
-      _lbShowSeekOverlay('−5s');
-    } else {
-      const nav = _lbNavList();
-      const i = nav.findIndex((x) => x.event_id === lbState.item?.event_id);
-      if (i > 0) openLightbox(nav[i - 1]);
-    }
-  } else if (e.key === 'ArrowRight') {
-    if (_liveDetect || _weather) {
-      e.preventDefault();
-      return;
-    }
-    e.preventDefault();
-    if (_videoActive) {
-      const dur = _v.duration || 0;
-      const next = (_v.currentTime || 0) + 5;
-      _v.currentTime = dur > 0 ? Math.min(dur, next) : next;
-      _lbShowSeekOverlay('+5s');
-    } else {
-      const nav = _lbNavList();
-      const i = nav.findIndex((x) => x.event_id === lbState.item?.event_id);
-      if (i >= 0 && i < nav.length - 1) openLightbox(nav[i + 1]);
-    }
-  } else if (e.key === 'ArrowUp') {
-    if (_liveDetect || _weather) {
-      e.preventDefault();
-      return;
-    }
-    e.preventDefault();
-    byId('lightboxConfirm').click();
-  } else if (e.key === 'ArrowDown') {
-    if (_liveDetect || _weather) {
-      e.preventDefault();
-      return;
-    }
-    e.preventDefault();
-    _lbHandleDeleteKey();
-  } else if (e.key === ' ') {
-    if (_videoActive) {
-      e.preventDefault();
-      if (_v.paused) _v.play().catch(() => {});
-      else _v.pause();
-    }
-  } else if (e.key === 'f' || e.key === 'F') {
-    if (_videoActive) {
-      e.preventDefault();
-      const fsElem = document.fullscreenElement || document.webkitFullscreenElement;
-      if (fsElem) {
-        (document.exitFullscreen || document.webkitExitFullscreen || function () {})
-          .call(document)
-          .catch(() => {});
-      } else {
-        const req = _v.requestFullscreen || _v.webkitRequestFullscreen || _v.webkitEnterFullscreen;
-        if (req) req.call(_v).catch(() => {});
-      }
-    }
-  } else if (e.key === 'Escape') closeLightbox();
+// Document-level lightbox / drilldown shortcuts — Esc, Backspace,
+// arrows, Space, F. Body lives in mediaview/keyboard.js; every
+// collaborator is passed in so that module never imports this one.
+installLightboxKeys({
+  closeLiveView,
+  closeMediaDrilldown,
+  closeLightbox,
+  navPrev: _lbNavPrev,
+  navNext: _lbNavNext,
+  handleDeleteKey: _lbHandleDeleteKey,
+  showSeekOverlay: _lbShowSeekOverlay,
 });
 
 _updateLbConfirmBtn(false);
@@ -595,46 +493,9 @@ byId('lightboxDelete').innerHTML = _LB_TRASH_HTML;
 // modal is unreachable on iOS. No iOS gate needed here.
 _initFsBtn('liveViewFsBtn', byId('liveViewWrap'), () => byId('liveViewWrap'));
 
-// Swipe navigation on the lightbox media area (mobile). Horizontal
-// swipe = prev/next; vertical swipes are ignored (the swipe-down-
-// to-dismiss branch was removed — it was firing accidentally on
-// scroll/zoom and the visible X button covers the close case).
-(function initLightboxSwipe() {
-  const wrap = byId('lightboxMediaWrap');
-  const modal = byId('lightboxModal');
-  if (!wrap || !modal) return;
-  let _tx = 0,
-    _ty = 0,
-    _dragging = false;
-  wrap.addEventListener(
-    'touchstart',
-    (e) => {
-      if (e.touches.length !== 1) return;
-      _tx = e.touches[0].clientX;
-      _ty = e.touches[0].clientY;
-      _dragging = true;
-    },
-    { passive: true },
-  );
-  wrap.addEventListener(
-    'touchend',
-    (e) => {
-      if (!_dragging) return;
-      _dragging = false;
-      const dx = e.changedTouches[0].clientX - _tx;
-      const dy = e.changedTouches[0].clientY - _ty;
-      // Vertical-dominant gestures (scroll, pinch-zoom-finish) must
-      // not trigger prev/next — drop them on the floor.
-      if (Math.abs(dy) > Math.abs(dx)) return;
-      if (Math.abs(dx) < 40) return;
-      // Live-sim has no neighbour item to navigate to.
-      if (modal.classList.contains('lb-live-detect')) return;
-      if (dx < 0) byId('lightboxNext')?.click();
-      else byId('lightboxPrev')?.click();
-    },
-    { passive: true },
-  );
-})();
+// Swipe navigation on the lightbox media area (mobile) — installer in
+// mediaview/keyboard.js.
+installLightboxSwipe();
 
 byId('lightboxConfirm').onclick = async () => {
   if (!lbState.item) return;

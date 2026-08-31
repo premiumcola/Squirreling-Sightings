@@ -27,75 +27,7 @@ import { renderLiveSwimlane } from './live-swimlane.js';
 import { observeLiveChromeBudget } from './live-chrome-budget.js';
 import { mountPlayerChrome } from './player/index.js';
 import { getDeviceTier, TIER_COMPACT, TIER_FULL } from './device-tier.js';
-
-// Per-mode shell behaviour. interactiveMode → live segmented control vs
-// read-only badge; contextKey → overlay-toggle persistence
-// scope; retrigger / fineFold → whether those pieces mount by default.
-const _MODE_FLAGS = {
-  recorded: {
-    interactiveMode: false,
-    contextKey: 'mediathek',
-    retrigger: true,
-    fineFold: true,
-  },
-  timelapse: {
-    interactiveMode: false,
-    contextKey: 'timelapse',
-    retrigger: false,
-    fineFold: false,
-  },
-  weather: {
-    interactiveMode: false,
-    contextKey: 'weather',
-    retrigger: false,
-    fineFold: true,
-  },
-  live: {
-    interactiveMode: true,
-    contextKey: 'live',
-    retrigger: false,
-    fineFold: true,
-  },
-  'live-detect': {
-    interactiveMode: true,
-    contextKey: 'live',
-    retrigger: false,
-    fineFold: true,
-  },
-};
-
-// Panel-flag key → tab descriptor. F mounts placeholder bodies; G/H/I
-// swap in the real panel renderers (weather.js / recording-settings.js
-// / detections.js) without changing the tab wiring here.
-const _TAB_META = {
-  detections: { id: 'detections', label: 'Detections' },
-  tracksList: { id: 'tracks', label: 'Tracks' },
-  settings: { id: 'settings', label: 'Aufnahme-Settings' },
-  recordingSettings: { id: 'erkennung', label: 'Erkennung' },
-  weather: { id: 'weather', label: 'Wetter' },
-};
-
-function _buildTabs(panels, panelRenderers, item) {
-  const out = [];
-  for (const key of Object.keys(_TAB_META)) {
-    if (!panels[key]) continue;
-    const meta = _TAB_META[key];
-    // A real renderer wired by the consumer (G: weather; H/I: recorded
-    // / live panels) takes over; otherwise a placeholder marks the tab
-    // as not-yet-migrated so the strip still composes.
-    const custom = panelRenderers && typeof panelRenderers[key] === 'function';
-    out.push({
-      id: meta.id,
-      label: meta.label,
-      render: custom
-        ? (host) => panelRenderers[key](host, item)
-        : (host) => {
-            host.innerHTML = `<div class="mv-tab-placeholder">${meta.label} · wird migriert</div>`;
-          },
-    });
-  }
-  return out;
-}
+import { _MODE_FLAGS, _buildTabs } from './_shell-layout.js';
 
 // Unified player layout, top → bottom (matches the live sim-player):
 //   titlebar
@@ -113,6 +45,11 @@ function _buildTabs(panels, panelRenderers, item) {
 //   playbar  — recorded/timelapse scrubber + per-class swimlane, or the
 //              live swimlane (collapses via :empty for weather).
 //   panels   — colour-coded tabs + fine-analysis fold.
+//
+// Stays in this file rather than joining _shell-layout.js: several test
+// files pin this exact markup by reading shell.js's own source text at
+// this file path (see _shell-layout.js's header for the full list) —
+// moving it would fail those tests despite changing no real behaviour.
 const _SHELL_HTML =
   `<div class="mv-shell-titlebar" data-slot="titlebar"></div>` +
   `<div class="mv-shell-stage" data-slot="stage">` +

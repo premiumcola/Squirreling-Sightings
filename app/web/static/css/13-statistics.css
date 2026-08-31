@@ -16,6 +16,22 @@
   flex-direction: column;
   gap: 5px;
 }
+/* Three pills at the desktop min-width (120 px) + two 10 px gaps need
+   380 px — more than an iPhone SE's ~323 px content width (375 px
+   viewport − 14 px .shell padding × 2 − 12 px .section padding × 2).
+   flex-wrap would technically save it from overflowing the page, but
+   wrapping the third pill onto its own row looks broken next to two
+   even ones above it — shrinking the floor so all three genuinely fit
+   is the fix, not relying on the wrap escape hatch. */
+@media (max-width: 480px) {
+  .stat-period-row {
+    gap: 8px;
+  }
+  .stat-period-pill {
+    min-width: 0;
+    padding: 14px 12px;
+  }
+}
 .stat-period-num {
   font-size: 34px;
   font-weight: 800;
@@ -248,9 +264,21 @@
 }
 /* Layout: CSS grid with the first column sized at runtime by JS so the
    widest camera name fits without being clipped. The 24 hour cells fill
-   the rest equally (1fr each). --hm-label-w is set inline by JS. */
+   the rest equally (1fr each). --hm-label-w is set inline by JS.
+
+   min-width used to be a flat 360 px INCLUDING the label column, which
+   left as little as ~230 px for all 24 hour columns combined — under
+   10 px each. At 9 px font a 2-digit hour ("21", "12", "15") is wider
+   than its own column, so even the every-3rd-hour labels the mobile
+   thinning rule keeps visible read as clipped/overlapping. calc()
+   guarantees the 24 columns 480 px (20 px each — comfortable for a
+   2-digit label) on top of whatever the label column actually needs,
+   rather than fighting it for a share of a fixed total. The wrapper
+   already scrolls horizontally by design (.stat-heatmap-wrap), so a
+   wider minimum just means more of that intended scroll on a phone,
+   not a new overflow. */
 .stat-hm-grid {
-  min-width: 360px;
+  min-width: calc(var(--hm-label-w) + 480px);
   --hm-label-w: 130px;
 }
 .stat-hm-header,

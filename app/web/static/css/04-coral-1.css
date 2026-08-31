@@ -462,15 +462,34 @@
   min-width: 64px;
   text-align: right;
 }
+/* The track background lives on ::-webkit-slider-runnable-track /
+   ::-moz-range-track, NOT on the element itself — 13-statistics.css's
+   touch media query bumps this element's own `height` to 44 px for a
+   generous hit area (the visual track stays 4 px via the pseudo-
+   element's own height), and a flat `background` on the ELEMENT used
+   to fill that whole 44 px box with solid #2a2a2a on every touch
+   device: a fat opaque gray bar instead of a thin line. Matches
+   01-base.css's global `input[type=range]` pattern (rgba track,
+   transparent element) rather than the flat-hex one this predates. */
 #tlRangeSlider {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
   width: 130px;
-  border-radius: 2px;
-  background: #2a2a2a;
+  background: transparent;
   outline: none;
   cursor: pointer;
+}
+#tlRangeSlider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+#tlRangeSlider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0;
 }
 #tlRangeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;

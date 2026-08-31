@@ -12,12 +12,16 @@
    library/_filter-bar.js — that class already gets the mobile
    horizontal-scroll treatment (25-mobile.css) per row; this only adds
    the vertical gap between the three rows, which a single-row bar never
-   needed. */
+   needed. Kept tight on purpose: each row is already a full 44 px
+   touch-target tall (.media-pill, non-negotiable per the iOS
+   checklist) — three of those stacked is real height no matter what,
+   so the only place left to reclaim space is the gap BETWEEN them, not
+   the rows themselves. */
 #libraryFilterBar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 4px;
+  margin-bottom: 10px;
 }
 /* Stage 7 — visible while the grid is scoped to the Wetterdaten-chart's
    drag-zoom (library/page.js toggles [hidden]). Depth via background

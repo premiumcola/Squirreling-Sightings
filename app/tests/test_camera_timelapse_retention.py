@@ -128,6 +128,38 @@ def test_the_daily_job_skips_the_sweep_while_the_row_is_off(tmp_storage_root, st
 # ── when it IS switched on ─────────────────────────────────────────────
 
 
+def test_the_nightly_job_sweeps_a_configured_window_end_to_end(
+    tmp_storage_root, store, monkeypatch
+):
+    """The whole path the operator actually gets: a number in
+    settings.json, the daily job, the file gone — and its record gone
+    with it, because a record without its mp4 is the ghost tile and an
+    mp4 without its record is an orphan the next rescan resurrects."""
+    files = _timelapse(tmp_storage_root, "2026-04-30")
+    runtime: dict = {}
+    monkeypatch.setattr(
+        app_state,
+        "settings",
+        SimpleNamespace(
+            data={"storage": {"retention_camera_timelapses_days": 14, "retention_days": 14}},
+            runtime_get=lambda key, default=None: runtime.get(key, default),
+            runtime_set=runtime.__setitem__,
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(app_state, "base_cfg", {"storage": {"retention_days": 14}}, raising=False)
+    # The job re-arms itself with a 24 h Timer; a test may not leave one
+    # behind.
+    monkeypatch.setattr(
+        maintenance.threading,
+        "Timer",
+        lambda *a, **k: SimpleNamespace(start=lambda: None, daemon=True),
+    )
+    maintenance._run_daily_cleanup()
+    assert not files["mp4"].exists()
+    assert not files["manifest"].exists()
+
+
 def test_an_expired_timelapse_is_retired_whole(tmp_storage_root, store):
     """Video, thumbnail, sidecar and manifest, together. Deleting the
     manifest alone is what produced the reappearing ghost tile."""

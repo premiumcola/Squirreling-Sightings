@@ -10,6 +10,11 @@ Date: 2026-05-12. Source of truth at this moment: `partials/mediathek.html`
 `static/js/mediathek/rescan.js`, `static/js/chrome/storage-stats.js`,
 and `static/js/weather/maintenance.js`.
 
+> **Superseded on 2026-08-31 for everything retention-related.** The two
+> retention forms became ONE — see [Aufbewahrungsfristen](#aufbewahrungsfristen-2026-08-31)
+> at the foot of this file. The Sonderaktionen audit below still holds:
+> those buttons did not move.
+
 ## Mediathek-Wartung (rename target — currently `Mediathek-Einstellungen`)
 
 Source: `app/web/templates/partials/mediathek.html`. All five buttons sit
@@ -81,3 +86,62 @@ legacy-buttons.
 - Trash / Papierkorb (T4) gets its own collapsible section under
   BOTH panels via the same macro — the audit table above doesn't list
   it because the buttons don't exist yet.
+
+## Aufbewahrungsfristen (2026-08-31)
+
+The panel named in the table above as "Mediathek-Wartung" is now
+**Mediathek-Verwaltung** and is the only place any retention window is
+set. Its rows are data: `app/app/retention_catalog.py`.
+
+| Row | Section · key | Default | Swept by |
+|---|---|---|---|
+| Bewegungs-Clips | `storage.retention_days` | 14 (config.yaml) | `storage_retention.cleanup_old` |
+| Kamera-Timelapses | `storage.retention_camera_timelapses_days` | **0 = nie löschen** | `timelapse_retention.sweep_camera_timelapses` |
+| Wetter-Sichtungen | `weather.retention_sightings_days` | 90 | `weather_service/_retention` |
+| Ereignis-Timelapses | `weather.retention_event_timelapses_days` | 120 | ″ |
+| Sonnen-Timelapses | `weather.retention_sun_timelapses_days` | 21 | ″ |
+| Recaps | `weather.retention_recaps_days` | 400 | ″ (2 newest immortal) |
+| Manuelle Ereignisse | `weather.retention_manual_events_days` | 400 | ″ |
+| Papierkorb-Frist | `trash.grace_days` | 7 | `trash.cleanup_expired` |
+
+Four things that were true before and are not any more:
+
+- **Wetter-Wartung had its own form.** It is gone; that section keeps its
+  two recovery buttons plus an "Aufbewahrungsfristen" button that opens
+  the one panel. Its sliders never hydrated anyway — they read
+  `/api/bootstrap` → `data.app.weather`, and `bootstrap_state()` returns
+  no `app` key, so a saved value never came back.
+- **Two categories had no control at all.** Camera timelapses were exempt
+  from every sweep; `trash.grace_days` was settable only by hand-editing
+  settings.json.
+- **Only two of the eight rows were acknowledged on save.** A window that
+  saves without calling `storage_retention.acknowledge_window` can be
+  raised and never lowered — the guard keeps deferring to the wider
+  previously-enforced value. `retention_catalog.acknowledge_payload` now
+  does it for every row of every section.
+- **Hydration was per panel.** The panel is server-rendered with resolved
+  values (`routes/retention_panel.py`'s context processor); the JS only
+  saves, and it collects by walking `data-section` / `data-field` in the
+  DOM rather than holding a field map.
+
+### The `tl_*` decision
+
+Camera timelapses ship at **0 = nie löschen**. `tl_<stem>.json` is the
+single record of an mp4 that lives outside the swept tree, which is why
+`storage_retention._collect_expired` skips it — deleting the record alone
+produced a tile that vanished, came back at the next boot and vanished
+again. The new sweep therefore retires video + thumbnail + sidecar +
+manifest as ONE trash entry, and it does nothing at all until the
+operator sets a window. A category that has never been deleted on any
+install does not become mortal because someone upgraded; it becomes
+configurable.
+
+### Why `storage.retention_days` is not seeded into settings.json
+
+Resolution order is settings.json first, config.yaml second. Seeding the
+key would freeze whatever config.yaml says today and make every later
+config.yaml edit inert — the same reason `settings/defaults.py` leaves it
+out of the fresh-install seed. The panel does not need it seeded: it
+renders through `retention_catalog.resolve_days`, which walks both
+layers. The widening guard's baseline stays
+`maintenance.config_retention_days()`, i.e. config.yaml only.

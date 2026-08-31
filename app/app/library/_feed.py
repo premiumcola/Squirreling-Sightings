@@ -254,6 +254,20 @@ def _windowed_candidates(
             if "weather_service_unavailable" not in degraded:
                 degraded.append("weather_service_unavailable")
         else:
+            # `weather_candidates` is shared with the episode-footage
+            # index (`weather_episodes._footage.build_footage_index`),
+            # where `kind` intentionally carries the specific weather
+            # type (thunder / heavy_rain / sun_timelapse_rise / ...) so
+            # footage tiles can be grouped by it. This feed's own kind
+            # vocabulary (`KINDS` above) has no such per-type slots —
+            # every weather sighting is ONE library kind, "sighting" —
+            # so it is normalised here, at the merge boundary, instead
+            # of inside the shared reader. The specific type still
+            # survives in `extra.event_type` (`_category_of` above
+            # already reads it from there for the categories filter,
+            # which is silently a no-op without this normalisation).
+            for it in sightings:
+                it["kind"] = "sighting"
             out.extend(
                 it
                 for it in sightings

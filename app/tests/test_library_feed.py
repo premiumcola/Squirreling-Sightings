@@ -61,15 +61,99 @@ def _write_event(root, cam, dt: datetime, event_id: str, **extra):
 
 
 class _FakeWeatherService:
-    def __init__(self, recaps=None, manuals=None):
+    def __init__(self, recaps=None, manuals=None, sightings=None):
         self._recaps = list(recaps or [])
         self._manuals = list(manuals or [])
+        self._sightings = list(sightings or [])
 
     def list_recaps(self):
         return list(self._recaps)
 
     def list_manual_events(self):
         return list(self._manuals)
+
+    def list_sightings(
+        self, cam_id=None, event_type=None, since_iso=None, until_iso=None, page=0, page_size=50
+    ):
+        return {
+            "items": list(self._sightings),
+            "counts": {},
+            "total": len(self._sightings),
+            "page": page,
+            "page_size": page_size,
+        }
+
+
+# ── sighting kind normalisation ──────────────────────────────────────────
+#
+# `weather_candidates` (weather_episodes/_footage_sources.py) is shared
+# with the episode-footage index, where `kind` intentionally carries the
+# specific weather type (thunder / heavy_rain / ...) for grouping. Pinned
+# here: the library feed must NOT leak that raw type into `item["kind"]`
+# — every weather sighting is the ONE library kind "sighting" (per this
+# route's own documented KINDS vocabulary), with the specific type still
+# reachable via `extra.event_type`. Regression for a bug caught while
+# building the Stage-4 frontend card dispatcher: without the
+# normalisation in `_windowed_candidates`, `item["kind"]` was the raw
+# event_type (e.g. "thunder"), which silently broke BOTH the documented
+# `/api/library` response contract AND `_category_of`'s own categories
+# filter for sightings (it only ever checks `kind == "sighting"`).
+
+
+def test_sighting_items_carry_the_library_kind_not_the_raw_event_type():
+    ws = _FakeWeatherService(
+        sightings=[
+            {
+                "id": "sight_1",
+                "event_type": "thunder",
+                "cam_id": "cam1",
+                "cam_name": "Cam 1",
+                "started_at": datetime(2026, 8, 30, 12, 0, 0).isoformat(timespec="seconds"),
+                "duration_s": 30,
+                "clip_path": "weather/cam1/thunder/sight_1.mp4",
+            }
+        ]
+    )
+    result = list_library_items(
+        weather_service=ws,
+        cameras=[{"id": "cam1", "name": "Cam 1"}],
+        kinds=["sighting"],
+        limit=10,
+    )
+    assert [it["kind"] for it in result["items"]] == ["sighting"]
+    assert result["items"][0]["extra"]["event_type"] == "thunder"
+
+
+def test_sighting_categories_filter_matches_the_items_own_event_type():
+    ws = _FakeWeatherService(
+        sightings=[
+            {
+                "id": "sight_thunder",
+                "event_type": "thunder",
+                "cam_id": "cam1",
+                "cam_name": "Cam 1",
+                "started_at": datetime(2026, 8, 30, 12, 0, 0).isoformat(timespec="seconds"),
+                "duration_s": 30,
+                "clip_path": "weather/cam1/thunder/sight_thunder.mp4",
+            }
+        ]
+    )
+    kept = list_library_items(
+        weather_service=ws,
+        cameras=[{"id": "cam1", "name": "Cam 1"}],
+        kinds=["sighting"],
+        categories=["thunder"],
+        limit=10,
+    )
+    dropped = list_library_items(
+        weather_service=ws,
+        cameras=[{"id": "cam1", "name": "Cam 1"}],
+        kinds=["sighting"],
+        categories=["snow"],
+        limit=10,
+    )
+    assert [it["id"] for it in kept["items"]] == ["sighting:sight_thunder"]
+    assert dropped["items"] == []
 
 
 # ── recap / manual-event overlap boundary ───────────────────────────────

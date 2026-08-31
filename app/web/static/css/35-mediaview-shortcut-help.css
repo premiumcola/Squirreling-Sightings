@@ -1,0 +1,140 @@
+/* ── MediaView '?' shortcut-help overlay ──────────────────────────────────
+   PC-only (mediaview/keyboard.js only ever mounts this on the 'full'
+   device tier — see device-tier.js: width >= 769px AND a real mouse/
+   trackpad). No touch device can trigger it, so this file skips the
+   safe-area / dvh / touch-target rules 30h documents for the on-picture
+   player chrome — there is no iOS surface to defend here.
+
+   Sits ABOVE #lightboxModal (.modal, z-index: var(--z-modal) = 1100 in
+   06a-cam-edit-zones-masks.css) since it is mounted straight onto
+   document.body as a second fixed layer, not inside the shell — the
+   shell can be reparented/rebuilt under it (prev/next) without ever
+   touching this panel. */
+
+.mv-shhelp {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-action, 1200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.mv-shhelp-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.6);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.mv-shhelp-panel {
+  position: relative;
+  width: min(420px, 100%);
+  max-height: min(70dvh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: #0b0e16;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.mv-shhelp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex: none;
+}
+
+.mv-shhelp-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.mv-shhelp-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .mv-shhelp-x:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #f8fafc;
+  }
+}
+
+.mv-shhelp-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mv-shhelp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.mv-shhelp-row:last-child {
+  border-bottom: 0;
+}
+
+.mv-shhelp-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.mv-shhelp-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font:
+    12px/1 ui-monospace,
+    'SFMono-Regular',
+    Menlo,
+    Consolas,
+    monospace;
+}
+
+.mv-shhelp-or {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.mv-shhelp-label {
+  color: #94a3b8;
+  font-size: 13px;
+  text-align: right;
+}

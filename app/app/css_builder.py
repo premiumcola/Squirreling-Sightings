@@ -117,6 +117,11 @@ LOAD_ORDER = [
     # After 25-mobile.css like every other late partial, so its own
     # min-width query is the one that decides the row layout.
     "34-retention.css",
+    # '?' shortcut-help overlay (PC-tier only) — mounted straight onto
+    # document.body above #lightboxModal, so it just needs the shared
+    # --z-modal-action token from 00-elevation-tokens.css, already
+    # loaded first.
+    "35-mediaview-shortcut-help.css",
 ]
 
 _BANNER = (

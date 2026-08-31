@@ -16,21 +16,45 @@
 // localStorage[FINE_FOLD_STORAGE_KEY] so the user's last choice
 // survives page reloads.
 
+import { TIER_FULL } from './device-tier.js';
+
 export const FINE_FOLD_STORAGE_KEY = 'tamspy.mediaview.fineFold';
 
 const _TERM_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
 const _CHEVRON_SVG = `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>`;
 
-function _isOpen(defaultOpen) {
+/**
+ * Pure decision — split out from `_isOpen` so the actual RULE is
+ * testable without a localStorage mock, mirroring device-tier.js's
+ * resolveDeviceTier/getDeviceTier split (pure resolver vs. DOM/storage
+ * wrapper).
+ *
+ * Three-state storage read: '1' = explicitly open, '0' = explicitly
+ * closed — either ALWAYS wins, regardless of tier: an operator's past
+ * choice must keep winning on both tiers. Only when the key was never
+ * touched (raw === null) does the fallback run: on the 'full' tier (a
+ * permanently-visible desktop with room to spare) the fold defaults
+ * open, the same way live-detect mode already forces `defaultOpen:true`
+ * for its own reasons (its own call site bypasses this fallback
+ * entirely by always passing true, so it is unaffected either way);
+ * on 'compact' the caller's per-mode default is unchanged from before
+ * tier existed (live-detect open, recorded/weather closed).
+ *
+ * @param {string|null} raw       localStorage.getItem(FINE_FOLD_STORAGE_KEY)
+ * @param {boolean} defaultOpen   caller's per-mode fallback
+ * @param {string} [tier]         'full' | 'compact' | undefined
+ * @returns {boolean}
+ */
+export function resolveFoldOpen(raw, defaultOpen, tier) {
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  if (tier === TIER_FULL) return true;
+  return !!defaultOpen;
+}
+
+function _isOpen(defaultOpen, tier) {
   try {
-    const raw = localStorage.getItem(FINE_FOLD_STORAGE_KEY);
-    // Three-state: '1' = explicitly open, '0' = explicitly closed,
-    // null = never touched → fall through to the caller's default
-    // (live-detect mode wants it open by default so the trace ticks
-    // visibly; recorded mode keeps the historical "closed" default).
-    if (raw === '1') return true;
-    if (raw === '0') return false;
-    return !!defaultOpen;
+    return resolveFoldOpen(localStorage.getItem(FINE_FOLD_STORAGE_KEY), defaultOpen, tier);
   } catch {
     return !!defaultOpen;
   }
@@ -85,7 +109,7 @@ function _renderLines(lines, opts = {}) {
 
 export function renderFineAnalysisFold(host, lines, opts = {}) {
   if (!host) return null;
-  const open0 = _isOpen(opts.defaultOpen);
+  const open0 = _isOpen(opts.defaultOpen, opts.tier);
   // B23 · live-detect mounts pass { live: true } so the empty-state
   // copy reads "Warte auf ersten Tick …" instead of the recorded-
   // clip "Kein Server-Trace gespeichert" string. Capture the flag in

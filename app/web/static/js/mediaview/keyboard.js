@@ -15,6 +15,9 @@
 // fixture); the return value exists so a future mount/unmount owner does
 // not have to reopen this file.
 import { byId } from '../core/dom.js';
+import { getActiveLightboxBindings, isShortcutHelpAvailable } from './lightbox-bindings.js';
+import { mountShortcutHelp } from './shortcut-help.js';
+import { getDeviceTier } from './device-tier.js';
 
 const _FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
@@ -171,13 +174,45 @@ export function _transportV2Shortcut(e, ctx, deps) {
   }
 }
 
-function _openLightboxShortcut(e, deps) {
+// ── '?' shortcut-help overlay ───────────────────────────────────────────────
+// Module-singleton mount handle — installLightboxKeys is only ever
+// installed once (see this file's header note), so one module-level slot
+// is enough and lets installLightboxKeys's onKey check "is the help panel
+// currently up" without threading state through `deps`.
+let _help = null;
+
+function _closeShortcutHelp() {
+  _help?.teardown();
+  _help = null;
+}
+
+// Gated to the 'full' device tier (mediaview/device-tier.js). Reads the
+// LIVE capability via getDeviceTier() rather than the mounted shell's
+// `data-tier` — plain photo items never mount mediaview/shell.js at all
+// (only the video/timelapse/weather/live-detect modes do), and '?' must
+// still work there on a desktop: tier is a property of the operator's
+// screen + pointer, not of which lightbox mode happens to be showing.
+// On 'compact' (touch / narrow) this is a silent no-op: no
+// preventDefault, no overlay — '?' behaves exactly as it did before this
+// feature existed.
+function _toggleShortcutHelp(ctx, e) {
+  if (!isShortcutHelpAvailable(getDeviceTier())) return;
+  e.preventDefault();
+  if (_help) {
+    _closeShortcutHelp();
+    return;
+  }
+  _help = mountShortcutHelp(getActiveLightboxBindings(ctx), _closeShortcutHelp);
+}
+
+// Single ctx builder for the whole lightbox keydown surface — dispatch
+// (below) AND the '?' shortcut-help overlay (lightbox-bindings.js's
+// getActiveLightboxBindings) read the exact same `videoActive` /
+// `suppressed` fields from here, so the help list can never show a
+// binding that this function's own branches wouldn't also honour.
+function _buildLightboxCtx() {
   const video = byId('lightboxVideo');
   const modal = byId('lightboxModal');
-  const ctx = {
-    video,
-    videoActive: !!(video && video.style.display !== 'none' && video.src),
-  };
   // Live-sim suppresses prev/next + confirm/delete keys — there's no
   // recorded item to navigate to or label. Esc + Space + F still route
   // through their normal handlers below so the user keeps close-on-Esc
@@ -185,8 +220,20 @@ function _openLightboxShortcut(e, deps) {
   // L1 · weather shares this container too; like live it has no recorded
   // item to seek/label, so it suppresses the same keys (its own title-bar
   // chevrons handle navigation).
-  const suppressed =
-    modal.classList.contains('lb-live-detect') || modal.classList.contains('lb-weather');
+  const suppressed = !!(
+    modal &&
+    (modal.classList.contains('lb-live-detect') || modal.classList.contains('lb-weather'))
+  );
+  return {
+    video,
+    videoActive: !!(video && video.style.display !== 'none' && video.src),
+    suppressed,
+  };
+}
+
+function _openLightboxShortcut(e, deps) {
+  const ctx = _buildLightboxCtx();
+  const { suppressed } = ctx;
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     if (suppressed) {
       e.preventDefault();
@@ -211,6 +258,8 @@ function _openLightboxShortcut(e, deps) {
     _spaceOrFullscreen(e, ctx);
   } else if (_transportV2Shortcut(e, ctx, deps)) {
     // handled inside — frame-step / speed / loop / detection-nav / snapshot
+  } else if (e.key === '?') {
+    _toggleShortcutHelp(ctx, e);
   } else if (e.key === 'Escape') {
     deps.closeLightbox();
   }
@@ -224,6 +273,18 @@ function _openLightboxShortcut(e, deps) {
  */
 export function installLightboxKeys(deps) {
   const onKey = (e) => {
+    // The help overlay owns the keyboard while it's up: Escape (and '?'
+    // again) close it, everything else is swallowed so an operator
+    // reading the list can't accidentally seek/delete/navigate behind
+    // it. Escape ALWAYS closes it — that's the one guarantee that keeps
+    // this from trapping the operator with an open panel and no exit.
+    if (_help) {
+      if (e.key === 'Escape' || e.key === '?') {
+        e.preventDefault();
+        _closeShortcutHelp();
+      }
+      return;
+    }
     // Live view ESC close (takes priority)
     if (e.key === 'Escape' && !byId('liveViewModal')?.classList.contains('hidden')) {
       deps.closeLiveView();

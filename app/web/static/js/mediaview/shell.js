@@ -389,7 +389,11 @@ export function mountMediaView(config = {}) {
     // renderFineAnalysisFold(host, lines, opts) — live modes pass the
     // ``live`` flag so the fold reads "Warte auf ersten Tick …" and
     // gets the live accent; recorded/weather start with no lines.
-    const ff = renderFineAnalysisFold(slot('fafold'), [], { live: flags.interactiveMode });
+    // `tier` lets the fold default OPEN on 'full' (desktop, room to
+    // spare) even for modes whose per-mode default is closed — see
+    // fine-analysis-fold.js's resolveFoldOpen. An operator's explicit
+    // past open/close choice (localStorage) still wins either way.
+    const ff = renderFineAnalysisFold(slot('fafold'), [], { live: flags.interactiveMode, tier });
     if (ff) components.fineFold = ff;
   }
 

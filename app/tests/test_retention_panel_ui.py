@@ -175,12 +175,41 @@ def test_the_retired_hydration_paths_are_gone():
     assert "RETENTION_FIELDS" not in _code(_JS / "weather" / "maintenance.js")
 
 
-def test_the_manual_cleanup_button_still_reads_the_motion_row():
-    """`POST /api/media/cleanup` confirms a narrowed window only when the
-    request carries the number. Pointing it at a dead id silently turned
-    every manual cleanup into "use whatever is already enforced"."""
-    src = _code(_JS / "chrome" / "storage-stats.js")
-    assert "byId('ret_motion_clips')" in src
+def test_lowering_a_window_is_confirmed_without_a_manual_button():
+    """The concern this replaces is real; the mechanism it named is not.
+
+    `POST /api/media/cleanup` confirms a narrowed window only when the
+    request carries the number, and the old handler read a dead id — so
+    a manual cleanup silently meant "use whatever is already enforced".
+    But that handler hung off `#cleanupNowBtn`, and **no template
+    renders that id**: `partials/mediathek.html` records the decision to
+    drop both legacy danger buttons. Pinning a handler for an
+    unreachable button is the exact "setting nobody can reach" shape
+    this panel exists to remove.
+
+    What actually protects the operator is server-side: saving the panel
+    acknowledges every row, so a lowered window takes effect without any
+    button. That is what this asserts instead.
+    """
+    settings_src = (
+        Path(__file__).resolve().parents[1] / "app" / "routes" / "app_settings.py"
+    ).read_text(encoding="utf-8")
+    # The name changed when the row set became a catalog; what must not
+    # change is that the save path acknowledges, for every section.
+    assert "_acknowledge_retention" in settings_src
+    assert "acknowledge_payload" in settings_src
+
+    stats = _code(_JS / "chrome" / "storage-stats.js")
+    assert "cleanupNowBtn" not in stats, "a handler for an id no template renders"
+    assert "mediaSettingsForm" not in stats, "the old split settings form is back"
+
+    tpl = (
+        Path(__file__).resolve().parents[1] / "web" / "templates" / "partials" / "mediathek.html"
+    ).read_text(encoding="utf-8")
+    assert 'id="cleanupNowBtn"' not in tpl, (
+        "the button came back — then its handler has to come back too, "
+        "reading ret_motion_clips, or a manual cleanup lies again"
+    )
 
 
 # ── iOS ────────────────────────────────────────────────────────────────

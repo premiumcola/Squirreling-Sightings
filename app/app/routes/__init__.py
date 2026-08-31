@@ -85,8 +85,10 @@ def register_blueprints(app) -> None:
         trash,
         weather,
         weather_episodes,
+        weather_maintenance,
         weather_manual_events,
         weather_pin,
+        weather_suntl_test,
     )
 
     app.register_blueprint(tracking.bp)
@@ -123,6 +125,12 @@ def register_blueprints(app) -> None:
     app.register_blueprint(weather_manual_events.bp)
     # Sighting pin/unpin toggle — same reason, own module.
     app.register_blueprint(weather_pin.bp)
+    # Archive rescan + bulk thumb regen — same reason. Offline repair
+    # routes, not part of the live sighting pipeline.
+    app.register_blueprint(weather_maintenance.bp)
+    # Ad-hoc sun-timelapse test capture (start/status/cancel) — same
+    # reason, a self-contained diagnostic surface.
+    app.register_blueprint(weather_suntl_test.bp)
     app.register_blueprint(telegram.bp)
     # Device-scoped inference telemetry — deliberately not folded into
     # /api/status (per-camera) nor into the two oversized coral modules.

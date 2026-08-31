@@ -1,0 +1,29 @@
+// ─── library/_grid.js ─────────────────────────────────────────────────
+// Stage 4 of the Mediathek + Wetter-Ereignisse merge: paints one
+// `/api/library` page's `items` array as a single mixed grid — the
+// "Alles gemischt" default the user asked for. Renders in the order it
+// is given and nothing else: `/api/library` already arrives newest-first
+// (see `library._feed`'s module docstring), so there is no client-side
+// sort here, unlike `weather/_feed.js::unifiedFeedItems`, which still
+// has to merge four un-sorted arrays itself because it predates this
+// route. This grid never groups by kind either — a motion clip, a storm
+// episode and a sighting sit side by side in whatever order the server
+// sorted them.
+import { libraryCardHTML } from './_dispatch.js';
+
+const _EMPTY_HTML = '<div class="item muted" style="padding:16px">Keine Einträge vorhanden.</div>';
+
+/**
+ * Paint `items` (one `/api/library` page, or any already-ordered list of
+ * library items) into `host`. `ctx` is forwarded to every card, plus a
+ * per-item `idx` (the item's position within THIS page) and `pageItems`
+ * (the full array) — see `index.js::libraryCardHTML` for why a card
+ * needs either at all.
+ */
+export function renderLibraryGrid(host, items, ctx = {}) {
+  if (!host) return;
+  const pageItems = Array.isArray(items) ? items : [];
+  host.innerHTML = pageItems.length
+    ? pageItems.map((item, idx) => libraryCardHTML(item, { ...ctx, idx, pageItems })).join('')
+    : _EMPTY_HTML;
+}

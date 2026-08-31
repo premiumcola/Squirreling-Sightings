@@ -132,3 +132,37 @@ def test_close_lightbox_unmounts_zone_overlay():
         "closeLightbox must call unmountZoneOverlayForLightbox to "
         "release the zone-overlay ResizeObserver."
     )
+
+
+def test_recorded_video_shell_mount_failure_still_reveals_the_modal():
+    """Regression: an iOS report of "the player doesn't open at all" —
+    nothing visible, no error. Root cause: `_openRecordedVideoShell`'s
+    ONLY `modal.classList.remove('hidden')` was its very last statement,
+    with the entire synchronous `mountMediaView(...)` composition above
+    it (tier resolution, capability probes, panel tabs, the player
+    chrome, the fine-analysis fold, …) completely unguarded. ANY
+    exception anywhere in that call — a probe reading a newer,
+    policy-gated browser API being the prime suspect, see
+    test_recorded_player_chrome.py's matching probe-never-throws tests —
+    aborted the function before the modal was ever revealed, with the
+    error going nowhere the operator could see.
+
+    `mountMediaView` is now wrapped in its own try/catch that reveals
+    the modal with a visible error state regardless of what fails
+    inside it — a belt-and-braces safety net alongside hardening the
+    individual probes themselves, so a FUTURE failure anywhere else in
+    the composition also fails loud instead of vanishing."""
+    body = _slice_function(_RECORDED_JS, "_openRecordedVideoShell")
+    assert re.search(r"try\s*\{[^}]*mountMediaView\(", body, re.DOTALL), (
+        "mountMediaView(...) must be called inside a try block"
+    )
+    catch_pos = body.index("} catch")
+    catch_body = body[catch_pos:]
+    assert "classList.remove('hidden')" in catch_body, (
+        "the catch branch must still reveal the modal — a swallowed "
+        "error must not leave it silently, permanently hidden"
+    )
+    assert "showToast(" in catch_body or "_lbShowError(" in catch_body, (
+        "the catch branch must surface SOMETHING visible to the operator, "
+        "not just log to a console nobody on an iPhone can see"
+    )

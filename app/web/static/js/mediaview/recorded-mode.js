@@ -25,6 +25,7 @@
 
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
+import { showToast } from '../core/toast.js';
 import { lbState } from '../mediathek/state.js';
 import {
   lbLoadTracksForItem,
@@ -230,60 +231,83 @@ function _openRecordedVideoShell(item) {
   const hasPrev = lbState.index > 0;
   const hasNext = lbState.index >= 0 && lbState.index < list.length - 1;
 
-  const shell = mountMediaView({
-    mode,
-    item,
-    // Read-only "angewandt: X" tiling badge top-right + grid (the shell
-    // owns this now — the per-event tiling isn't stamped, so the cam's
-    // current roi_mode is the best proxy, same as the legacy badge).
-    appliedTiling: (cam.roi_mode || 'off').toLowerCase(),
-    overlays: { bboxes: true, trails: true, zones: true, masks: true },
-    // Aufnahme-Settings only for motion clips (timelapses carry no
-    // recording_settings); Wetter only when the item has a snapshot.
-    panels: {
-      ...(isTL ? {} : { settings: true }),
-      ...(_itemHasWeather(item) ? { weather: true } : {}),
-    },
-    panelRenderers: {
-      settings: (host, it) => {
-        lbRenderSettingsPanel(it, host);
-        // Auto-expand the inner collapsible (the user already chose the tab).
-        const body = host.querySelector('.lbset-body');
-        const header = host.querySelector('.lbset-header');
-        if (body && header && body.hidden) {
-          body.hidden = false;
-          header.setAttribute('aria-expanded', 'true');
-        }
+  // mountMediaView is a long synchronous composition (tier + capability
+  // probes, panel tabs, the player chrome, the fine-analysis fold, …) and
+  // this function's ONLY `classList.remove('hidden')` on the modal is its
+  // very last statement, with nothing upstream guarded — an exception
+  // ANYWHERE in the mount call used to leave the lightbox silently,
+  // permanently hidden with no error surfaced at all ("the player never
+  // opens"). Each individual capability probe now guards itself (see
+  // device-tier.js / player/_pip.js), but this call site gets its own
+  // safety net too: a FUTURE failure anywhere else in the composition
+  // must fail loud, not vanish.
+  let shell;
+  try {
+    shell = mountMediaView({
+      mode,
+      item,
+      // Read-only "angewandt: X" tiling badge top-right + grid (the shell
+      // owns this now — the per-event tiling isn't stamped, so the cam's
+      // current roi_mode is the best proxy, same as the legacy badge).
+      appliedTiling: (cam.roi_mode || 'off').toLowerCase(),
+      overlays: { bboxes: true, trails: true, zones: true, masks: true },
+      // Aufnahme-Settings only for motion clips (timelapses carry no
+      // recording_settings); Wetter only when the item has a snapshot.
+      panels: {
+        ...(isTL ? {} : { settings: true }),
+        ...(_itemHasWeather(item) ? { weather: true } : {}),
       },
-      weather: (host, it) => renderWeatherPanel(host, it),
-    },
-    initialTab: isTL ? 'weather' : 'settings',
-    actions: {
-      onPrev: hasPrev ? () => window.openLightbox?.(list[lbState.index - 1]) : undefined,
-      onNext: hasNext ? () => window.openLightbox?.(list[lbState.index + 1]) : undefined,
-      onClose: () => window.closeLightbox?.(),
-      onDownload: () => _downloadItem(item),
-      // Reuse the manual-reindex flow ("Neu erkennen"); for timelapses the
-      // playbar's own empty-state "Nach-Erkennung starten" also exists.
-      // triggerManualReindex(btn) reads the event/camera from lbState.item
-      // internally — btn is optional (busy/disabled feedback only).
-      onRetrigger: () => triggerManualReindex(),
-      // Overlay-toggle pills → the existing layer-visibility setters (same
-      // wiring the legacy _setupVideoChrome used).
-      onOverlayChange: (id, on) => {
-        if (id === 'zones' || id === 'masks') {
-          window._setZoneOverlayVisibility?.({
-            showZones: id === 'zones' ? on : undefined,
-            showMasks: id === 'masks' ? on : undefined,
-          });
-        } else if (id === 'bboxes') {
-          setBboxOverlayVisibility({ showBboxes: on });
-        } else if (id === 'trails') {
-          setBboxOverlayVisibility({ showTrails: on });
-        }
+      panelRenderers: {
+        settings: (host, it) => {
+          lbRenderSettingsPanel(it, host);
+          // Auto-expand the inner collapsible (the user already chose the tab).
+          const body = host.querySelector('.lbset-body');
+          const header = host.querySelector('.lbset-header');
+          if (body && header && body.hidden) {
+            body.hidden = false;
+            header.setAttribute('aria-expanded', 'true');
+          }
+        },
+        weather: (host, it) => renderWeatherPanel(host, it),
       },
-    },
-  });
+      initialTab: isTL ? 'weather' : 'settings',
+      actions: {
+        onPrev: hasPrev ? () => window.openLightbox?.(list[lbState.index - 1]) : undefined,
+        onNext: hasNext ? () => window.openLightbox?.(list[lbState.index + 1]) : undefined,
+        onClose: () => window.closeLightbox?.(),
+        onDownload: () => _downloadItem(item),
+        // Reuse the manual-reindex flow ("Neu erkennen"); for timelapses the
+        // playbar's own empty-state "Nach-Erkennung starten" also exists.
+        // triggerManualReindex(btn) reads the event/camera from lbState.item
+        // internally — btn is optional (busy/disabled feedback only).
+        onRetrigger: () => triggerManualReindex(),
+        // Overlay-toggle pills → the existing layer-visibility setters (same
+        // wiring the legacy _setupVideoChrome used).
+        onOverlayChange: (id, on) => {
+          if (id === 'zones' || id === 'masks') {
+            window._setZoneOverlayVisibility?.({
+              showZones: id === 'zones' ? on : undefined,
+              showMasks: id === 'masks' ? on : undefined,
+            });
+          } else if (id === 'bboxes') {
+            setBboxOverlayVisibility({ showBboxes: on });
+          } else if (id === 'trails') {
+            setBboxOverlayVisibility({ showTrails: on });
+          }
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[mediaview] recorded shell failed to mount:', err);
+    const modal = byId('lightboxModal');
+    _lbShowError('Player konnte nicht geöffnet werden.');
+    if (modal) {
+      modal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    showToast('Player konnte nicht geöffnet werden.', 'error');
+    return;
+  }
 
   const modal = byId('lightboxModal');
   const inner = byId('lightboxInner');

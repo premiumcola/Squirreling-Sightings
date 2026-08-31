@@ -50,23 +50,46 @@
 
 import { resumeOverlayAfterNative, suspendOverlayForNative } from './_native.js';
 
-/** Can this element be handed to Picture-in-Picture at all? */
+/**
+ * Can this element be handed to Picture-in-Picture at all?
+ *
+ * Wrapped in try/catch on purpose: `document.pictureInPictureEnabled` is
+ * a newer, less uniformly implemented property (standard desktop-Safari/
+ * Chromium API; iOS Safari's OWN video PiP historically used a different,
+ * non-standard surface entirely — see this file's header). A capability
+ * PROBE must never itself be the thing that throws — this ran unguarded
+ * during the recorded-clip shell's mount sequence
+ * (mediaview/recorded-mode.js::_openRecordedVideoShell), which reveals
+ * the lightbox modal only as its LAST statement with no surrounding
+ * try/catch: any exception anywhere upstream, including here, silently
+ * left the modal permanently hidden with no error shown — "the player
+ * doesn't open at all" with nothing in the failure path to explain why.
+ */
 export function canPictureInPicture(videoEl) {
-  if (!videoEl || videoEl.disablePictureInPicture) return false;
-  return !!(
-    typeof document !== 'undefined' &&
-    document.pictureInPictureEnabled &&
-    videoEl.requestPictureInPicture
-  );
+  try {
+    if (!videoEl || videoEl.disablePictureInPicture) return false;
+    return !!(
+      typeof document !== 'undefined' &&
+      document.pictureInPictureEnabled &&
+      videoEl.requestPictureInPicture
+    );
+  } catch {
+    return false;
+  }
 }
 
-/** Is this element the page's current Picture-in-Picture window? */
+/** Is this element the page's current Picture-in-Picture window? Same
+ *  never-throw contract as canPictureInPicture, same reason. */
 export function isInPictureInPicture(videoEl) {
-  return !!(
-    videoEl &&
-    typeof document !== 'undefined' &&
-    document.pictureInPictureElement === videoEl
-  );
+  try {
+    return !!(
+      videoEl &&
+      typeof document !== 'undefined' &&
+      document.pictureInPictureElement === videoEl
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

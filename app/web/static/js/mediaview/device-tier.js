@@ -58,13 +58,24 @@ export function resolveDeviceTier(sample = {}) {
  * detected exactly like core/ios-video.js's fullscreen chain: no
  * `navigator.userAgent` anywhere in this file.
  *
+ * Wrapped in try/catch: this is a capability PROBE called at the very
+ * top of the recorded-clip shell's synchronous mount sequence
+ * (shell.js::mountMediaView), which only reveals the lightbox modal as
+ * its LAST statement with no surrounding try/catch — an exception here,
+ * however unlikely, would silently leave the modal permanently hidden.
+ * A probe must never be the thing that breaks its caller.
+ *
  * @returns {'full'|'compact'}
  */
 export function getDeviceTier() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+  try {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return TIER_COMPACT;
+    }
+    const { width } = getViewportSize();
+    const hoverFine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    return resolveDeviceTier({ width, hoverFine });
+  } catch {
     return TIER_COMPACT;
   }
-  const { width } = getViewportSize();
-  const hoverFine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-  return resolveDeviceTier({ width, hoverFine });
 }

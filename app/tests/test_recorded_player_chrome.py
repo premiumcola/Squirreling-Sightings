@@ -318,6 +318,57 @@ def test_pip_unavailable_when_the_document_disallows_it():
     assert out == {"standard": False}
 
 
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_probes_never_throw_even_when_the_platform_api_does():
+    """The named regression: `document.pictureInPictureEnabled` /
+    `pictureInPictureElement` are newer, less uniformly implemented
+    properties (see _pip.js's own header on iOS Safari's different,
+    non-standard PiP surface). `canPictureInPicture`/`isInPictureInPicture`
+    run during mediaview/recorded-mode.js's SYNCHRONOUS shell-mount
+    sequence, whose only `classList.remove('hidden')` on the lightbox
+    modal is its very last statement — an uncaught throw from either
+    probe used to leave the modal permanently, silently hidden: "the
+    player never opens" with no error surfaced anywhere. Both must
+    degrade to `false`, never propagate, even when the underlying
+    getter itself throws (e.g. a permissions-policy SecurityError)."""
+    out = _js(
+        """
+        Object.defineProperty(globalThis.document, 'pictureInPictureEnabled', {
+          get() { throw new Error('policy blocked'); },
+        });
+        Object.defineProperty(globalThis.document, 'pictureInPictureElement', {
+          get() { throw new Error('policy blocked'); },
+        });
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        const video = { requestPictureInPicture() {} };
+        console.log(JSON.stringify({
+          can: m.canPictureInPicture(video),
+          isIn: m.isInPictureInPicture(video),
+        }));
+        """
+    )
+    assert out == {"can": False, "isIn": False}
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_get_device_tier_never_throws_even_when_match_media_does():
+    """Same regression class as the PiP probes above, same fix, same
+    reason: `getDeviceTier` (mediaview/device-tier.js) runs at the very
+    TOP of shell.js's mountMediaView — earlier in the same unguarded
+    synchronous mount sequence that only reveals the recorded-clip
+    lightbox as its LAST statement. A throwing `matchMedia` must resolve
+    to the conservative 'compact' tier, never propagate and blank the
+    whole player."""
+    out = _js(
+        """
+        globalThis.window.matchMedia = () => { throw new Error('blocked'); };
+        const m = await import(JS + '/mediaview/device-tier.js');
+        console.log(JSON.stringify({ tier: m.getDeviceTier() }));
+        """
+    )
+    assert out == {"tier": "compact"}
+
+
 def test_pip_module_reuses_native_overlay_suspend_resume():
     """The whole point of the split: PiP must NOT reimplement the
     suspend/resume pair _native.js already got right — it imports and

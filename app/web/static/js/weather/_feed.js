@@ -230,36 +230,3 @@ export function openStormEpisode(id) {
   location.hash = `#/gewitter/${encodeURIComponent(id)}`;
   byId('storms')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-
-// Merge sightings (already filtered + carrying their absolute lightbox
-// idx), recaps, episodes and manual events into one feed sorted
-// newest-first. Each entry keeps its own kind so the grid renderer can
-// pick the right card template and click handler. `manualEvents` is
-// optional — every pre-existing 3-arg callsite keeps working.
-export function unifiedFeedItems(filteredSightings, recaps, episodes, manualEvents) {
-  const sightings = filteredSightings.map((s, i) => ({
-    kind: 'sighting',
-    ts: s.sun_event_at || s.started_at || '',
-    idx: i,
-    data: s,
-  }));
-  const recapEntries = (recaps || []).map((m, i) => ({
-    kind: 'recap',
-    ts: m.built_at || '',
-    idx: i,
-    data: m,
-  }));
-  const episodeEntries = (episodes || []).map((ep) => ({
-    kind: 'episode',
-    ts: ep.started_at || '',
-    data: ep,
-  }));
-  const manualEntries = (manualEvents || []).map((m) => ({
-    kind: 'manual',
-    ts: m.range_start || m.created_at || '',
-    data: m,
-  }));
-  return [...sightings, ...recapEntries, ...episodeEntries, ...manualEntries].sort((a, b) =>
-    String(b.ts).localeCompare(String(a.ts)),
-  );
-}

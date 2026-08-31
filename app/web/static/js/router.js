@@ -6,8 +6,10 @@
 //   <public_base_url>/#/recap/<recap_id>
 // On match, switch to the right section, ensure the relevant data is
 // loaded, then open the corresponding lightbox at that item. After
-// opening we rewrite the hash to a non-routable anchor (#media /
-// #weather) so a page reload doesn't replay the animation.
+// opening we rewrite the hash to a non-routable anchor (#media) so a
+// page reload doesn't replay the animation. Sighting/recap links used
+// to rewrite to #weather — that section merged into #media (Stage 6 of
+// the Mediathek + Wetter-Ereignisse merge), so both now land there.
 import { state } from './core/state.js';
 import { j } from './core/api.js';
 
@@ -73,7 +75,7 @@ async function _openSightingById(sightingId) {
   }
   const items = state.weather?.items || [];
   const idx = items.findIndex((s) => s.id === sightingId);
-  document.querySelector('#weather')?.scrollIntoView({ behavior: 'auto', block: 'start' });
+  document.querySelector('#media')?.scrollIntoView({ behavior: 'auto', block: 'start' });
   if (idx >= 0 && typeof window.openWeatherLightbox === 'function') {
     window.openWeatherLightbox(idx);
     return true;
@@ -91,16 +93,14 @@ async function _openRecapById(recapId) {
   }
   const items = state.weather?.recaps || [];
   const idx = items.findIndex((r) => r.id === recapId);
-  document.querySelector('#weather')?.scrollIntoView({ behavior: 'auto', block: 'start' });
+  document.querySelector('#media')?.scrollIntoView({ behavior: 'auto', block: 'start' });
   if (idx >= 0 && typeof window.openWeatherRecap === 'function') {
     window.openWeatherRecap(items[idx], idx);
     return true;
   }
-  // Fallback — best effort: recaps render inline in the unified grid now,
+  // Fallback — best effort: recaps render inline in the merged grid now,
   // not a separate strip.
-  document
-    .querySelector('#weatherSightingsGrid')
-    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.querySelector('#libraryGrid')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   return false;
 }
 
@@ -120,7 +120,7 @@ async function _routeFromHash() {
     const ok = await _openSightingById(sid);
     if (ok) {
       try {
-        history.replaceState(null, '', '#weather');
+        history.replaceState(null, '', '#media');
       } catch {}
     }
   } else if ((m = h.match(/^#\/recap\/([^/]+)$/))) {
@@ -128,7 +128,7 @@ async function _routeFromHash() {
     const ok = await _openRecapById(rid);
     if (ok) {
       try {
-        history.replaceState(null, '', '#weather');
+        history.replaceState(null, '', '#media');
       } catch {}
     }
   }

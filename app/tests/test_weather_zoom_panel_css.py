@@ -77,10 +77,11 @@ def test_no_other_rule_in_this_partial_sets_display_without_a_hidden_opt_out():
     """A guard for the next panel added here. Any selector this file
     gives a `display` to, whose element the templates mark `hidden`,
     needs the same opt-out — so keep the list of `hidden` ids in
-    partials/weather.html and the opt-outs here in step."""
+    partials/mediathek.html (partials/weather.html merged into it in
+    Stage 6) and the opt-outs here in step."""
     html = (
         Path(__file__).resolve().parents[2] / "app" / "web" / "templates" / "partials"
-    ) / "weather.html"
+    ) / "mediathek.html"
     css = _ZOOM_CSS.read_text(encoding="utf-8")
     markup = html.read_text(encoding="utf-8")
     # Every element in the weather partial that carries a bare `hidden`

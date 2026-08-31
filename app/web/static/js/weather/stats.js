@@ -19,17 +19,6 @@ import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-s
 import { apiGet } from '../core/api.js';
 import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
 
-// The unified Wetter-Ereignisse grid (weather/sightings.js) narrows by
-// the same zoom range on every drag/reset. Reached via the window
-// bridge sightings.js publishes for cross-module callers rather than an
-// ES import — sightings.js imports openManualEventView (etc.) which
-// pulls in stats-chart/index.js, which already imports FROM this
-// module; an import back would close that into a multi-file cycle for
-// no reason a plain re-render function call doesn't already solve.
-function _refreshWeatherGrid() {
-  if (typeof window.renderWeatherSightings === 'function') window.renderWeatherSightings();
-}
-
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
 // WEATHER_TYPES colours where the parameter maps cleanly onto an event
@@ -216,12 +205,12 @@ function _closeZoomSavePanel() {
 
 // Fired by the chart's drag-to-zoom (stats-chart/_hover.js's
 // opts.onRangeSelect, wired in stats-chart/index.js). Overrides whatever
-// preset is selected — none of the five pills matches a custom range —
-// and narrows the unified grid below by the same window.
+// preset is selected — none of the five pills matches a custom range.
+// Narrowing the merged grid below by the same window is a later stage
+// (see this file's own header) — this only redraws the chart itself.
 export function onWeatherChartRangeSelect(startTs, endTs) {
   setZoomRange(startTs, endTs);
   renderWeatherStats();
-  _refreshWeatherGrid();
   _closeZoomSavePanel();
 }
 
@@ -233,7 +222,6 @@ export function onWeatherChartRangeSelect(startTs, endTs) {
 export function resetWeatherChartZoom() {
   clearZoomRange();
   renderWeatherStats();
-  _refreshWeatherGrid();
   _closeZoomSavePanel();
 }
 
@@ -250,15 +238,11 @@ function _bindWeatherStatsPills() {
       clearZoomRange();
       if (hadZoom) _closeZoomSavePanel();
       if (h === _wsStatsState.hours) {
-        if (hadZoom) {
-          renderWeatherStats();
-          _refreshWeatherGrid();
-        }
+        if (hadZoom) renderWeatherStats();
         return;
       }
       _wsStatsState.hours = h;
       loadWeatherStats();
-      if (hadZoom) _refreshWeatherGrid(); // un-filter the grid now, don't wait on the fetch
     });
   });
   const resetBtn = byId('weatherStatsZoomReset');

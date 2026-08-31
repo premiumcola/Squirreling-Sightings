@@ -452,20 +452,26 @@ def test_no_thin_borders_in_the_storms_stylesheet():
 
 
 def test_section_is_included_after_weather():
+    # partials/weather.html merged into partials/mediathek.html (Stage 6,
+    # the Mediathek + Wetter-Ereignisse section merge) — the ordering
+    # check now compares against mediathek.html, storms' old neighbour.
     index = _read(_TPL / "index.html")
     assert "partials/storms.html" in index
-    assert index.index("partials/storms.html") > index.index("partials/weather.html")
+    assert index.index("partials/storms.html") > index.index("partials/mediathek.html")
     section = _read(_TPL / "partials" / "storms.html")
     assert 'id="storms"' in section and 'id="stormsBody"' in section
     assert 'data-accent="127,174,201"' in section
 
 
 def test_scrollspy_knows_the_new_section():
+    # 'weather' dropped from sectionIds in Stage 6 (merged into 'media') —
+    # storms' relative position is now checked against 'media' instead,
+    # its new neighbour in the list.
     src = _read(_JS / "chrome" / "sidebar.js")
     ids = src[src.index("const sectionIds") :]
     ids = ids[: ids.index("]")]
     assert "'storms'" in ids
-    assert ids.index("'storms'") > ids.index("'weather'")
+    assert ids.index("'storms'") > ids.index("'media'")
 
 
 def test_sidenav_entry_uses_the_new_sprite_glyph():
@@ -477,16 +483,20 @@ def test_sidenav_entry_uses_the_new_sprite_glyph():
     ), "the bolt glyph must be promoted into the sprite"
 
 
-def test_mobile_dock_is_untouched():
+def test_mobile_dock_has_no_dedicated_storms_slot():
     """Five slots are full; a sixth breaks repeat(5, 1fr) and the 44 px
     budget at 375 px. Discovery used to be a standalone "Gewitter-Archiv →"
     jump-chip in the Wetter head; episodes now render as ordinary cards
-    inline in the unified Wetter-Ereignisse grid instead (weather/_feed.js),
-    so a phone user reaches the archive by scrolling the feed they are
-    already on rather than needing a dedicated chip or dock slot."""
+    inline in the merged library grid instead (library/_dispatch.js, via
+    weather/_feed.js's card builders), so a phone user reaches the archive
+    by scrolling the feed they are already on rather than needing a
+    dedicated chip or dock slot. The dock's own weather slot was replaced
+    by a Mediathek one in Stage 6 (the section merge, see
+    test_media_weather_merge.py) — this test only pins that #storms never
+    got its own slot."""
     dock = _read(_TPL / "partials" / "mobile_dock.html")
     assert "#storms" not in dock
-    assert "Gewitter-Archiv →" not in _read(_TPL / "partials" / "weather.html")
+    assert "Gewitter-Archiv →" not in _read(_TPL / "partials" / "mediathek.html")
     feed = _read(_JS / "weather" / "_feed.js")
     assert "#/gewitter/" in feed, "no in-feed link back into the archive's own detail view"
 

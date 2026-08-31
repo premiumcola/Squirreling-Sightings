@@ -19,9 +19,12 @@ import { state } from '../core/state.js';
   }
 
   // Section-id → dock-target. data-dock-section overrides the default
-  // self-mapping so #cameras rides Live, #media rides Statistik, #logs
-  // rides Setup. trackedSections is in DOM/scroll order so the spy
-  // loop can early-break once it crosses the probe.
+  // self-mapping so #cameras rides Live, #logs rides Setup.
+  // trackedSections is in DOM/scroll order so the spy loop can
+  // early-break once it crosses the probe. 'weather' dropped — Wetter-
+  // Ereignisse merged into #media (Stage 6 of the Mediathek +
+  // Wetter-Ereignisse merge); #media now has its own dock button
+  // instead of riding Statistik.
   const sectionIds = [
     'dashboard',
     'cameras',
@@ -29,7 +32,6 @@ import { state } from '../core/state.js';
     'netz',
     'media',
     'achievements',
-    'weather',
     'settings',
     'logs',
   ];

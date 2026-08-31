@@ -226,9 +226,9 @@ const card = { dataset: { manualId: 'manual_new' }, added: [], scrolled: false,
 const grid = { querySelectorAll: () => [card] };
 const origById = globalThis.document.getElementById;
 globalThis.document.getElementById = (id) =>
-  id === 'weatherSightingsGrid' ? grid : origById(id);
+  id === 'libraryGrid' ? grid : origById(id);
 let rendered = 0;
-globalThis.window.renderWeatherSightings = () => { rendered += 1; };
+globalThis.window.reloadLibraryPage = () => { rendered += 1; return Promise.resolve(); };
 const panel = {
   hidden: false,
   querySelector: (s) =>
@@ -239,11 +239,9 @@ const panel = {
       : [{ value: 'precipitation' }],
 };
 const mod = await import(JS + '/weather/_manual-event-save.js');
-const st = await import(JS + '/core/state.js');
-st.state.weather.page = 4;
 await mod._submitSave(panel, { start: '2026-08-29T14:00:00', end: '2026-08-29T18:00:00' });
 console.log(JSON.stringify({
-  posted, hidden: panel.hidden, rendered, page: st.state.weather.page,
+  posted, hidden: panel.hidden, rendered,
   added: card.added, scrolled: card.scrolled,
 }));
 """
@@ -259,6 +257,8 @@ def test_a_successful_save_closes_the_panel_and_reloads_the_list():
     # POST, then the manual-event list re-fetch that feeds the grid.
     assert [p["method"] for p in out["posted"]] == ["POST", "GET"]
     assert '"categories":["thunder","heavy_rain"]' in out["posted"][0]["body"]
+    # The merged library grid (library/page.js) owns the card now — one
+    # reload via window.reloadLibraryPage, awaited before the reveal.
     assert out["rendered"] == 1
 
 
@@ -266,9 +266,6 @@ def test_the_saved_card_is_highlighted_where_it_landed():
     out = _run_flow("true")
     assert out["added"] == ["ws-manual-card--new"]
     assert out["scrolled"] is True
-    # Deep in the pagination a fresh event would sit on a page the
-    # operator isn't looking at — reset so it is actually reachable.
-    assert out["page"] == 0
 
 
 def test_a_failed_save_leaves_the_panel_open_and_does_not_pretend_it_worked():

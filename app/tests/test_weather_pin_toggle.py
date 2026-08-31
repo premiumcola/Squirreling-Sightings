@@ -160,19 +160,26 @@ def test_sighting_card_html_embeds_the_pin_toggle():
     assert out == {"hasPinBtn": True, "hasIsPinned": True, "hasDeleteBtn": True}
 
 
-def test_sightings_js_binds_the_pin_toggle_after_the_grid_renders():
-    """A static source check, not an executed one — _renderWeatherGrid
-    pulls in the whole weather module graph (apiGet, state, the storms
-    package…), too much to stand up here just to prove one call site
-    exists. Mirrors test_netz_tuning_frontend_wiring.py's approach to
-    the same kind of "did the wiring survive" question."""
-    src = (_JS_ROOT / "weather" / "sightings.js").read_text(encoding="utf-8")
-    assert "bindPinToggle } from './pin-toggle.js'" in src
-    body = src[src.index("function _renderWeatherGrid") :]
+def test_library_page_binds_the_pin_toggle_after_the_grid_renders():
+    """A static source check, not an executed one — the merged grid's
+    paint step pulls in the whole library/weather module graph (apiGet,
+    state, the storms package…), too much to stand up here just to prove
+    one call site exists. Mirrors test_netz_tuning_frontend_wiring.py's
+    approach to the same kind of "did the wiring survive" question.
+
+    Stage 6 moved sightings.js's own grid painter (and its
+    bindPinToggle(grid) call) into library/page.js's _paint() +
+    library/_bind.js::bindLibraryGrid — the merged grid is now the one
+    place any weather card (sighting/recap/manual/episode) renders."""
+    page_src = (_JS_ROOT / "library" / "page.js").read_text(encoding="utf-8")
+    body = page_src[page_src.index("function _paint") :]
     body = body[: body.index("\n}\n")]
-    assert "grid.innerHTML = " in body
-    assert "bindPinToggle(grid)" in body
-    assert body.index("grid.innerHTML = ") < body.index("bindPinToggle(grid)"), (
-        "bindPinToggle must run AFTER the card HTML (incl. the pin button) "
-        "has actually landed in the DOM"
+    assert "renderLibraryGrid(grid" in body
+    assert "bindLibraryGrid(grid" in body
+    assert body.index("renderLibraryGrid(grid") < body.index("bindLibraryGrid(grid"), (
+        "bindLibraryGrid must run AFTER the card HTML has actually "
+        "landed in the DOM"
     )
+    bind_src = (_JS_ROOT / "library" / "_bind.js").read_text(encoding="utf-8")
+    assert "bindPinToggle } from '../weather/pin-toggle.js'" in bind_src
+    assert "bindPinToggle(grid)" in bind_src

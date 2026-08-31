@@ -41,9 +41,12 @@ export function zoomedSamples(samples) {
   return samples.filter((s) => s.ts >= _range.start && s.ts <= _range.end);
 }
 
-// Whether an ISO timestamp falls inside the active zoom range. Used by
-// the unified grid filter; always true when no zoom is active so every
-// existing caller (chip filtering) is unaffected.
+// Whether an ISO timestamp falls inside the active zoom range; always
+// true when no zoom is active. Not called by anything today — the
+// merged library grid (Stage 6) does not narrow by this range, on
+// purpose (see library/page.js's own header for why that wiring is a
+// later stage) — kept as this module's public contract for that stage
+// to reach for, same as sightings.js's old grid filter used to.
 export function withinZoom(tsIso) {
   if (!_range) return true;
   if (!tsIso) return false;

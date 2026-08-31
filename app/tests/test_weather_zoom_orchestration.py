@@ -47,12 +47,15 @@ def test_reset_clears_the_shared_zoom_state():
     assert out["active"] is False
 
 
-def test_range_select_reaches_for_the_window_bridge_not_an_import():
-    """sightings.js imports openManualEventView (etc.) which pulls in
-    stats-chart/index.js, which already imports FROM stats.js — an
-    import from stats.js back to sightings.js would close that into a
-    cycle. Pin that the grid refresh instead goes through
-    window.renderWeatherSightings, per the module's own docstring."""
+def test_range_select_does_not_reach_into_the_merged_grid():
+    """Stage 6 (the Mediathek + Wetter-Ereignisse section merge) retired
+    weather/sightings.js's own grid painter and window.renderWeatherSightings
+    with it — the chart's drag-zoom now only redraws ITSELF
+    (renderWeatherStats()); narrowing the merged library grid by the same
+    range is explicitly a later stage (library/page.js's own header
+    explains why). Pin that stats.js reaches for neither the retired
+    bridge nor the merged grid's reload bridge, and stays import-cycle-
+    free with respect to both sightings.js and library/page.js."""
     import pathlib
 
     src = (
@@ -64,5 +67,7 @@ def test_range_select_reaches_for_the_window_bridge_not_an_import():
         / "weather"
         / "stats.js"
     ).read_text(encoding="utf-8")
-    assert "window.renderWeatherSightings" in src
+    assert "window.renderWeatherSightings" not in src
+    assert "window.reloadLibraryPage" not in src
     assert "from './sightings.js'" not in src
+    assert "from '../library" not in src

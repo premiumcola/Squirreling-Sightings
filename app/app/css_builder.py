@@ -78,6 +78,10 @@ LOAD_ORDER = [
     # existing 06a–06f / 30a–30g families.
     "24b-storms.css",
     "25-mobile.css",
+    # Stage 6 — the merged Mediathek + Wetter-Ereignisse library grid.
+    # New selectors only (no re-declared .media-filter-bar/.media-grid
+    # rule), so loading after 25-mobile.css cannot undo its overrides.
+    "26-library-merge.css",
     "27-coral-test-modes.css",
     "28-quests.css",
     "29-birds.css",

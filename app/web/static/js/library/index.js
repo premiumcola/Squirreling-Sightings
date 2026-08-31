@@ -7,11 +7,12 @@
 // Only `timelapse` gets a fresh, small builder (`_timelapse-card.js`) —
 // see that module for why.
 //
-// This package is standalone on purpose: nothing here is mounted into
-// `partials/mediathek.html`, `partials/weather.html`, or any bootstrap
-// file yet — that is the actual section-merge stage, not this one (see
-// this package's own Stage-4 task notes). Every export below is public
-// API for that later stage to wire up.
+// Stage 6 mounts these building blocks into the real page — see
+// `page.js` (the merged section's fetch/render/paginate orchestrator),
+// `_filter-bar.js` (camera + object-class + weather-category chips) and
+// `_bind.js` (click/delete/pin wiring). This file's own exports are
+// unchanged by that — still the pure rendering primitives, still usable
+// on their own.
 //
 //   libraryCardHTML(item, ctx?)              — one item -> card HTML
 //   renderLibraryGrid(host, items, ctx?)      — one page -> a mixed grid,

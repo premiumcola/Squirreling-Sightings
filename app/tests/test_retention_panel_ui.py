@@ -99,16 +99,19 @@ def test_exactly_one_template_renders_a_retention_form():
 
 
 def test_the_weather_section_no_longer_carries_its_own_sliders():
-    weather = _read(_TPL / "partials" / "weather.html")
-    assert "ws_retention_" not in weather
-    assert "weatherMaintForm" not in weather
+    # Wetter-Wartung merged into partials/mediathek.html (Stage 6, the
+    # Mediathek + Wetter-Ereignisse section merge) — partials/weather.html
+    # no longer exists at all.
+    mediathek = _read(_TPL / "partials" / "mediathek.html")
+    assert "ws_retention_" not in mediathek
+    assert "weatherMaintForm" not in mediathek
 
 
 def test_the_weather_section_still_reaches_the_panel():
     """Merging the panels may not orphan the entry point the operator
     already uses to get to the Wetter-Fristen."""
-    weather = _read(_TPL / "partials" / "weather.html")
-    assert 'data-action="openRetentionPanel"' in weather
+    mediathek = _read(_TPL / "partials" / "mediathek.html")
+    assert 'data-action="openRetentionPanel"' in mediathek
     assert "openRetentionPanel" in _read(_JS / "maintenance" / "index.js")
 
 

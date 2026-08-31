@@ -93,6 +93,7 @@ window.bulkDeleteSelectedMedia = async function () {
     if (typeof window.renderMediaGrid === 'function') window.renderMediaGrid();
     if (typeof window.renderMediaPagination === 'function') window.renderMediaPagination();
     refreshTimelineAndStats();
+    window.reloadLibraryPage?.();
     const failed = (r.failed || []).length;
     showToast(
       failed ? `${r.deleted} gelöscht, ${failed} fehlgeschlagen` : `${r.deleted} gelöscht`,

@@ -123,6 +123,7 @@ async function _onRowAction(action, eventId) {
       await j(`/api/trash/${encodeURIComponent(eventId)}/restore`, { method: 'POST' });
       showToast('Wiederhergestellt', 'success');
       await Promise.all([_refresh(), refreshTimelineAndStats()]);
+      window.reloadLibraryPage?.();
     } catch (e) {
       showToast('Wiederherstellen fehlgeschlagen: ' + e.message, 'error');
     }

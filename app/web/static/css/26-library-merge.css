@@ -1,0 +1,50 @@
+/* ── Merged Mediathek + Wetter-Ereignisse library grid (Stage 6) ──────────
+   #libraryBlock — the "Alles gemischt" block at the top of #media:
+   combined filter bar + the /api/library grid. Everything it's built
+   from — .media-filter-bar, .media-pill, .media-grid, .media-pagination
+   — is reused unchanged from Mediathek/Wetter; this file only adds what
+   none of those already provide for this specific arrangement. */
+#libraryBlock {
+  margin: 0 0 12px;
+}
+/* Three independent chip rows (camera / object-class / weather-
+   category), each rendered as its own .media-filter-bar by
+   library/_filter-bar.js — that class already gets the mobile
+   horizontal-scroll treatment (25-mobile.css) per row; this only adds
+   the vertical gap between the three rows, which a single-row bar never
+   needed. */
+#libraryFilterBar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+/* .lib-subsection-head — demotes to a sub-section label under #media's
+   own H3, same 14 px demotion .ws-stats-head .ws-title already uses for
+   "Wetterdaten & Prognose" below it. */
+.lib-subsection-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 4px 0 10px;
+}
+.lib-subsection-head svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+/* "Mehr laden" — centred, same >=44px touch target .btn.btn-action
+   already carries elsewhere (library/_pagination.js's own doc comment).
+   The [hidden] override matches .media-pagination[hidden]'s reasoning:
+   without it, any later `display` rule on this selector would silently
+   out-rank the UA [hidden] default regardless of specificity. */
+#libraryLoadMore {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 16px;
+}
+#libraryLoadMore[hidden] {
+  display: none;
+}

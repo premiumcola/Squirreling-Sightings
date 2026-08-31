@@ -4,9 +4,10 @@
 // "Alles gemischt" default the user asked for. Renders in the order it
 // is given and nothing else: `/api/library` already arrives newest-first
 // (see `library._feed`'s module docstring), so there is no client-side
-// sort here, unlike `weather/_feed.js::unifiedFeedItems`, which still
-// has to merge four un-sorted arrays itself because it predates this
-// route. This grid never groups by kind either — a motion clip, a storm
+// sort here — unlike weather/sightings.js's old grid painter, which had
+// to merge four un-sorted arrays itself because it predated this route
+// (retired in Stage 6, once this grid took over rendering every kind).
+// This grid never groups by kind either — a motion clip, a storm
 // episode and a sighting sit side by side in whatever order the server
 // sorted them.
 import { libraryCardHTML } from './_dispatch.js';

@@ -49,6 +49,7 @@ byId('weatherRescanBtn')?.addEventListener('click', async () => {
         /* ignore */
       }
     }
+    window.reloadLibraryPage?.();
   } catch (e) {
     showToast('Wetter-Scan fehlgeschlagen: ' + (e.message || e), 'error');
   } finally {
@@ -77,6 +78,7 @@ byId('weatherThumbRegenBtn')?.addEventListener('click', async () => {
         /* ignore */
       }
     }
+    window.reloadLibraryPage?.();
   } catch (e) {
     showToast('Thumb-Erzeugung fehlgeschlagen: ' + (e.message || e), 'error');
   } finally {

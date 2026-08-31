@@ -84,6 +84,7 @@ function _deleteFromModal(id) {
       .then(() => {
         _closeManualEventModal();
         window.loadWeatherSightings(state.weather.filter);
+        window.reloadLibraryPage?.();
       })
       .catch((err) => showToast('Löschen fehlgeschlagen: ' + (err?.message || err), 'error'));
   });

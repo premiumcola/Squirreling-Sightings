@@ -1,4 +1,4 @@
-<section id="media" class="panel section" data-dock-section="statistik">
+<section id="media" class="panel section">
   <div class="section-head">
     <h3 id="mediaSectionTitle" class="media-section-title">
       <svg
@@ -74,6 +74,37 @@
       </svg>
     </button>
   </div>
+
+  {# Merged Mediathek + Wetter-Ereignisse feed (Stage 6) — GET /api/library, "Alles gemischt" (no
+  `kinds` filter) is the default and only view here: motion clips, sightings, recaps, storm
+  episodes, manual events and daily timelapses render side by side, newest first. Mounted by
+  library/page.js; filter chips (camera / object-class / weather-category) by
+  library/_filter-bar.js; card click/delete/pin wiring by library/_bind.js. Cursor-paginated ("Mehr
+  laden"), not page-numbered — see library/_pagination.js for why. #}
+  <div id="libraryBlock">
+    <div id="libraryFilterBar"></div>
+    <div class="media-grid" id="libraryGrid"></div>
+    <div class="lib-load-more" id="libraryLoadMore" hidden></div>
+  </div>
+
+  <div class="lib-subsection-head">
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="6" width="18" height="14" rx="2" />
+      <path d="M7 6V4h10v2" />
+      <circle cx="12" cy="13" r="3" />
+    </svg>
+    <span>Kamera-Ansicht &amp; Auswahl</span>
+  </div>
   <div id="mediaStorageBar" class="media-storage-bar"></div>
   <!-- Level 1: Camera overview cards -->
   <div id="mediaOverview"></div>
@@ -115,18 +146,77 @@
     </div>
   </div>
 
+  {# Wetterdaten & Prognose: persisted history of all numeric Open-Meteo parameters + sun altitude,
+  rendered as a single multi-line SVG chart with per-line normalisation. Fetches
+  /api/weather/history on visibility (IntersectionObserver) and refreshes every 60 s while the
+  section is in view. Unchanged from the old #weather section, moved here verbatim — its drag-zoom
+  still narrows only ITSELF (the "als Ereignis speichern" flow), not the merged grid above; see
+  library/page.js's own header for why that wiring is a later stage. #}
+  <div class="ws-stats-block" id="weatherStatsBlock">
+    <div class="ws-stats-head">
+      <span class="ws-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <use href="#icon-trend" />
+        </svg>
+        Wetterdaten &amp; Prognose
+      </span>
+      <div class="ws-stats-pills" id="weatherStatsPills" role="tablist" aria-label="Zeitfenster">
+        <button type="button" class="ws-stats-pill" data-hours="1">1 h</button>
+        <button type="button" class="ws-stats-pill" data-hours="6">6 h</button>
+        <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
+        <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
+        <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
+        <!-- A custom drag-zoom on the chart below matches none of the five
+                   presets above — every ws-stats-pill.is-active class then comes
+                   off (weather/stats.js::_renderWeatherStatsPillState) and this
+                   chip is the discoverable way back. Clicking any preset again
+                   resets the zoom just as well; this is the explicit affordance. -->
+        <button
+          type="button"
+          class="ws-stats-pill ws-stats-pill--reset"
+          id="weatherStatsZoomReset"
+          hidden
+          aria-label="Zoom zurücksetzen"
+          title="Zoom zurücksetzen"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+    <div class="ws-stats-chart-wrap" id="weatherStatsChartWrap">
+      <!-- populated by renderWeatherStatsChart() -->
+    </div>
+    <!-- Shown only while a custom drag-zoom is active (weather/stats.js).
+               "Als Ereignis speichern" opens weatherZoomSavePanel, populated by
+               weather/_manual-event-save.js. -->
+    <div class="ws-zoom-actions" id="weatherZoomActions" hidden>
+      <span class="ws-zoom-hint">Zeitraum ausgewählt</span>
+      <button type="button" class="btn btn-action action-green" id="weatherZoomSaveBtn">
+        Als Ereignis speichern
+      </button>
+    </div>
+    <div class="ws-zoom-save" id="weatherZoomSavePanel" hidden>
+      <!-- populated by weather/_manual-event-save.js -->
+    </div>
+    <div class="ws-stats-legend" id="weatherStatsLegend">
+      <!-- populated by renderWeatherStatsLegend() -->
+    </div>
+    <div class="ws-stats-explainer" id="weatherStatsExplainer" hidden>
+      <!-- populated by renderWeatherStatsExplainer() when a chip is isolated -->
+    </div>
+  </div>
+
   {# Mediathek-Verwaltung — the ONE place every Aufbewahrungsfrist is set. Was two panels: one
   blanket slider here, five per-category sliders in the Wetter-Sektion, two retention windows
-  (Kamera-Timelapses, Papierkorb) with no control at all. They are now one form, grouped
-  Kamera / Wetter / Papierkorb, fed from app/app/retention_catalog.py.
-
-  The Wetter-Sektion keeps its own Sonderaktionen (rescan, thumbs) and links here for the
-  fristen — see partials/weather.html. The two legacy danger buttons (purgeOrphansBtn,
-  cleanupNowBtn) stay dropped per docs/maintenance-panels.md; Auto-Cleanup + retention cover the
-  same intent and the backend endpoints stay alive. #} {% from 'partials/_maintenance_panel.html'
-  import maintenance_panel %} {% call maintenance_panel( panel_id='set-media-maint',
-  accent='143,158,181', title='Mediathek-Verwaltung', hint='Nur bei Indexproblemen — normalerweise
-  nicht nötig.', retention={ 'form_id': 'retentionForm', 'groups': retention_groups } ) %}
+  (Kamera-Timelapses, Papierkorb) with no control at all. They are now one form, grouped Kamera /
+  Wetter / Papierkorb, fed from app/app/retention_catalog.py. The Wetter-Wartung panel below keeps
+  its own Sonderaktionen (rescan, thumbs) and links here for the fristen. The two legacy danger
+  buttons (purgeOrphansBtn, cleanupNowBtn) stay dropped per docs/maintenance-panels.md; Auto-Cleanup
+  + retention cover the same intent and the backend endpoints stay alive. #} {% from
+  'partials/_maintenance_panel.html' import maintenance_panel %} {% call maintenance_panel(
+  panel_id='set-media-maint', accent='143,158,181', title='Mediathek-Verwaltung', hint='Nur bei
+  Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'retentionForm', 'groups':
+  retention_groups } ) %}
   <button type="button" id="fixThumbsBtn" class="btn btn-action action-green">
     <svg
       viewBox="0 0 16 16"
@@ -188,8 +278,8 @@
     </svg>
     Tracking neu generieren
   </button>
-  {# Read-only. Reports what is on the disk versus what the archive claims;
-     never deletes, never registers — see mediathek/integrity.js. #}
+  {# Read-only. Reports what is on the disk versus what the archive claims; never deletes, never
+  registers — see mediathek/integrity.js. #}
   <button type="button" id="mediaIntegrityBtn" class="btn btn-action action-green">
     <svg
       viewBox="0 0 16 16"
@@ -208,5 +298,76 @@
     Integrität prüfen
   </button>
   <div id="mediaIntegrityReport" class="mi-report" hidden></div>
+  {% endcall %} {# Wetter-Wartung — recovery actions only, placed after the Mediathek-Verwaltung
+  panel so both danger-adjacent panels sit together at the foot of the merged section. The five
+  per-category retention sliders that used to live here moved into the one Mediathek-Verwaltung
+  panel above — the operator asked for a single management element, and two panels meant two
+  hydration paths, of which one never worked: this one painted from /api/bootstrap's
+  `data.app.weather`, a key bootstrap_state() does not return, so a saved 30 came back as the
+  shipped 90 on every reload. The button below is this panel's entry point into the unified panel;
+  nothing about the Wetter-Fristen is configured twice. #} {% call maintenance_panel(
+  panel_id='set-weather-maint', accent='127,174,201', title='Wetter-Wartung', hint='Nur bei
+  Indexproblemen — normalerweise nicht nötig.' ) %}
+  <button type="button" id="weatherRescanBtn" class="btn btn-action action-green">
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" />
+      <circle cx="8" cy="8" r="3.5" stroke-opacity=".45" />
+      <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+      <line x1="8" y1="8" x2="13" y2="5.5" stroke-opacity=".85" />
+    </svg>
+    Wetter neu einlesen
+  </button>
+  <button type="button" id="weatherThumbRegenBtn" class="btn btn-action action-green">
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      aria-hidden="true"
+    >
+      <rect x="1" y="3" width="10" height="8" rx="1.5" />
+      <path d="M2 9l2.5-2.5 2 1.5 2.5-3L11 9" />
+      <circle cx="13" cy="11" r="2.5" />
+      <path
+        d="M13 9.5v-.8M13 12.5v-.8M11.5 11h-.8M14.5 11h-.8 M12 9.8l-.5-.5M14.5 12.2l-.5-.5 M11.5 12.2l.5-.5M14 9.8l.5-.5"
+      />
+    </svg>
+    Wetter-Thumbnails neu erzeugen
+  </button>
+  <button
+    type="button"
+    class="btn btn-action action-green"
+    data-action="openRetentionPanel"
+    title="Aufbewahrungsfristen aller Wetter-Kategorien"
+  >
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.2" />
+      <polyline points="8,4.2 8,8 10.6,9.6" />
+    </svg>
+    Aufbewahrungsfristen
+  </button>
   {% endcall %}
 </section>

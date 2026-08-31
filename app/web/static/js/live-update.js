@@ -173,6 +173,7 @@ export async function loadAll() {
   if (typeof window.initWeatherStats === 'function') window.initWeatherStats();
   if (typeof window.loadWeatherSightings === 'function') await window.loadWeatherSightings();
   if (typeof window.hydrateWeatherSettings === 'function') window.hydrateWeatherSettings();
+  if (typeof window.initLibraryPage === 'function') window.initLibraryPage();
   if (typeof window.loadTlStatus === 'function') window.loadTlStatus();
   if (typeof window._updateTlActiveTags === 'function')
     window._updateTlActiveTags(state.cameras || []);

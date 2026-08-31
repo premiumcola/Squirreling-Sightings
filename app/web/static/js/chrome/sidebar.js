@@ -99,13 +99,14 @@ function _initSidebarNav() {
   });
   // Scrollspy: pick the section whose top is closest to the viewport
   // top without going past it. Cheap enough to run on every scroll tick.
+  // 'weather' dropped — Wetter-Ereignisse merged into #media (Stage 6 of
+  // the Mediathek + Wetter-Ereignisse merge); one nav entry, one anchor.
   const sectionIds = [
     'dashboard',
     'statistik',
     'netz',
     'media',
     'achievements',
-    'weather',
     'storms',
     'cameras',
     'settings',

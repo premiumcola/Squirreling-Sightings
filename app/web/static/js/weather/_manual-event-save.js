@@ -17,7 +17,6 @@
 // modules import anything back from here, so this file adds no new
 // import cycle.
 import { byId, esc } from '../core/dom.js';
-import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
 import { getZoomRange, zoomedSamples } from './_zoom.js';
@@ -175,7 +174,7 @@ function _wireCategoryChips(panel) {
 // css/23b-weather-zoom.css).
 function _revealSavedCard(id) {
   if (!id) return;
-  const grid = byId('weatherSightingsGrid');
+  const grid = byId('libraryGrid');
   if (!grid) return;
   const cards = Array.from(grid.querySelectorAll('.ws-manual-card') || []);
   const card = cards.find((el) => el.dataset?.manualId === id);
@@ -199,12 +198,14 @@ export function _submitSave(panel, range) {
       return loadWeatherManualEvents().then(() => res?.item?.id || null);
     })
     .then((newId) => {
-      // Page 0 holds the freshest slice of the feed — the same reset
-      // sightings.js does when a filter change shrinks the result set,
-      // and without it a save made while paging deeper looks lost.
-      state.weather.page = 0;
-      if (typeof window.renderWeatherSightings === 'function') window.renderWeatherSightings();
-      _revealSavedCard(newId);
+      // The merged grid (library/page.js) owns the card now — reload it
+      // before revealing, so the new manual-event card actually exists
+      // in the DOM to scroll to.
+      const reload =
+        typeof window.reloadLibraryPage === 'function'
+          ? window.reloadLibraryPage()
+          : Promise.resolve();
+      return Promise.resolve(reload).then(() => _revealSavedCard(newId));
     })
     .catch((err) => showToast('Speichern fehlgeschlagen: ' + (err?.message || err), 'error'));
 }

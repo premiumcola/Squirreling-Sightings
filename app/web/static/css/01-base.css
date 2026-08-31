@@ -278,22 +278,6 @@ html {
 .nav a.nav-achievements-item.nav-active .nav-icon svg {
   stroke: #fbbf24;
 }
-/* Wetter: storm-blue tinted hover and active state, mirrors the
-   Sichtungen amber rule above. */
-.nav a.nav-weather-item:hover {
-  background: rgba(127, 174, 201, 0.09);
-  color: #7faec9;
-}
-.nav a.nav-weather-item:hover .nav-icon svg {
-  stroke: #7faec9;
-}
-.nav a.nav-weather-item.nav-active {
-  background: rgba(127, 174, 201, 0.13);
-  color: #7faec9;
-}
-.nav a.nav-weather-item.nav-active .nav-icon svg {
-  stroke: #7faec9;
-}
 /* ~/logs item: monospace green text, NO permanent box. The full terminal
    surface lives on the #logs panel — the nav item only previews the look
    on hover so the sidebar stays visually quiet by default. */
@@ -355,18 +339,6 @@ html {
 .sidebar.collapsed:not(:hover) .nav a.nav-achievements-item.nav-active .nav-icon {
   background: rgba(251, 191, 36, 0.2);
 }
-.sidebar.collapsed .nav a.nav-weather-item:hover {
-  background: transparent;
-}
-.sidebar.collapsed:not(:hover) .nav a.nav-weather-item:hover .nav-icon {
-  background: rgba(127, 174, 201, 0.1);
-}
-.sidebar.collapsed .nav a.nav-weather-item.nav-active {
-  background: transparent;
-}
-.sidebar.collapsed:not(:hover) .nav a.nav-weather-item.nav-active .nav-icon {
-  background: rgba(127, 174, 201, 0.2);
-}
 .sidebar.collapsed .nav a.nav-logs-item:hover {
   background: transparent;
 }
@@ -406,12 +378,6 @@ html {
 }
 .sidebar.collapsed:hover .nav a.nav-achievements-item.nav-active {
   background: rgba(251, 191, 36, 0.13);
-}
-.sidebar.collapsed:hover .nav a.nav-weather-item:hover {
-  background: rgba(127, 174, 201, 0.09);
-}
-.sidebar.collapsed:hover .nav a.nav-weather-item.nav-active {
-  background: rgba(127, 174, 201, 0.13);
 }
 .sidebar.collapsed:hover .nav a.nav-logs-item:hover {
   background: rgba(0, 255, 65, 0.06);

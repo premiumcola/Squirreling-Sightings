@@ -18,6 +18,7 @@ import { loadMedia } from './media-loader.js';
 import { openLightbox } from '../lightbox.js';
 import { mediaCardHTML } from './_cards.js';
 import { isActivelyPending, renderProcessingQueue } from './_processing.js';
+import { registerMediaItems, getRegisteredMediaItem } from './_item-registry.js';
 
 // ── Page-size sizer ─────────────────────────────────────────────────────────
 // _lastKnownCols + window._cachedPageSize are bridged on window so the
@@ -183,12 +184,18 @@ export function renderMediaGrid() {
     grid.style.transform = '';
   });
   renderMediaPagination();
+  // The merged library grid (library/page.js) paints its own motion
+  // cards from a different item pool and registers them into the same
+  // shared registry — see mediathek/_item-registry.js for why a plain
+  // `items.find(...)` closure stopped being enough once a second grid
+  // could be on screen at once.
+  registerMediaItems(items);
   window._openMediaItem = (id) => {
     if (state.mediaSelectMode) {
       window._toggleMediaSelected(id);
       return;
     }
-    const item = items.find((x) => x.event_id === id);
+    const item = items.find((x) => x.event_id === id) || getRegisteredMediaItem(id);
     if (item) openLightbox(item);
   };
   // Poll for pending recording/processing items until every visible card is ready

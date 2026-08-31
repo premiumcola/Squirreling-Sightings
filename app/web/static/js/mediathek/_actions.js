@@ -35,6 +35,7 @@ export async function deleteMediaCard(btn) {
       renderMediaGrid();
       renderMediaPagination();
       refreshTimelineAndStats();
+      window.reloadLibraryPage?.();
     }, 250);
   } catch (e) {
     showToast('Löschen fehlgeschlagen: ' + e.message, 'error');
@@ -66,6 +67,7 @@ export async function deleteTLCard(camId, filename, eventId) {
         '<div class="item muted" style="padding:16px">Keine Medien vorhanden.</div>';
     }
     refreshTimelineAndStats();
+    window.reloadLibraryPage?.();
   } catch (e) {
     showToast('Löschen fehlgeschlagen: ' + e.message, 'error');
   }

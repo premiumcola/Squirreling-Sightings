@@ -19,6 +19,21 @@
   gap: 8px;
   margin-bottom: 16px;
 }
+/* Stage 7 — visible while the grid is scoped to the Wetterdaten-chart's
+   drag-zoom (library/page.js toggles [hidden]). Depth via background
+   tint, no border, same convention as .ws-zoom-hint (23b-weather-zoom.css). */
+.lib-zoom-note {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(127, 174, 201, 0.1);
+  color: rgba(127, 174, 201, 0.9);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.lib-zoom-note[hidden] {
+  display: none;
+}
 /* .lib-subsection-head — demotes to a sub-section label under #media's
    own H3, same 14 px demotion .ws-stats-head .ws-title already uses for
    "Wetterdaten & Prognose" below it. */

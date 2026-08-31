@@ -278,6 +278,219 @@ def test_cross_source_merge_sorts_newest_first_and_pages_without_gaps_or_repeats
     assert all_items[0]["id"] == "motion:{}".format(m_newest["event_id"])
 
 
+# ── since/until explicit window (Stage 7 — Wetterdaten-chart drag-zoom) ──
+#
+# Five things pinned here:
+#
+# * omitting both params reproduces today's behaviour byte-for-byte —
+#   the two code paths (default kwargs vs. explicit `since=None,
+#   until=None`) are diffed directly, not just eyeballed;
+# * every one of the six kinds clips correctly, inclusive at BOTH
+#   edges — an item touching `since` or `until` exactly is in, one a
+#   moment past it is out (same rule `_weather_readers._overlaps`
+#   already documents for recap/manual, extended here to sighting,
+#   episode, motion and timelapse too);
+# * the sighting reader's own `_SIGHTING_PAD_H` over-fetch (see
+#   `_footage_sources.weather_candidates`) does NOT leak past an
+#   explicit `until` — `_windowed_candidates` re-clips it now;
+# * the widen loop's backward search never synthesizes a window wider
+#   than an explicit `since` — pinned via a spy on `_windowed_candidates`;
+# * `/api/library`'s own `since`/`until` query params reach the same
+#   clipping, end to end through the route.
+
+
+def test_since_until_omitted_is_byte_identical_to_explicit_none(tmp_path):
+    now = datetime.now().replace(microsecond=0)
+    store = _Store(tmp_path)
+    _write_event(tmp_path, "cam1", now, "m1")
+    ws = _FakeWeatherService(
+        recaps=[
+            {
+                "id": "r1",
+                "period_start": "2026-06-01",
+                "period_end": "2026-06-30",
+                "clip_path": "weather/recaps/r1.mp4",
+            }
+        ],
+        manuals=[
+            {
+                "id": "man1",
+                "name": "x",
+                "range_start": (now - timedelta(hours=1)).isoformat(timespec="seconds"),
+                "range_end": now.isoformat(timespec="seconds"),
+            }
+        ],
+    )
+    kwargs = dict(
+        store=store,
+        weather_service=ws,
+        storage_root=tmp_path,
+        cameras=[{"id": "cam1", "name": "cam1"}],
+        kinds=["motion", "recap", "manual"],
+        limit=10,
+    )
+    baseline = list_library_items(**kwargs)
+    explicit_none = list_library_items(since=None, until=None, **kwargs)
+    assert explicit_none == baseline
+
+
+def test_since_until_clip_recap_manual_episode_sighting_inclusive_at_boundary(tmp_path):
+    since = datetime(2026, 8, 20, 0, 0, 0)
+    until = datetime(2026, 8, 22, 23, 59, 59)
+    append_episode(
+        tmp_path,
+        {
+            "id": "ep_in",
+            "started_at": (until - timedelta(hours=1)).isoformat(timespec="seconds"),
+            "ended_at": until.isoformat(timespec="seconds"),  # touches `until` exactly
+            "duration_min": 60,
+        },
+    )
+    append_episode(
+        tmp_path,
+        {
+            "id": "ep_out",
+            "started_at": (until + timedelta(hours=1)).isoformat(timespec="seconds"),
+            "ended_at": (until + timedelta(hours=2)).isoformat(timespec="seconds"),
+            "duration_min": 60,
+        },
+    )
+    ws = _FakeWeatherService(
+        recaps=[
+            {  # period_end stretches to 23:59:59 — touches `until` exactly
+                "id": "r_in",
+                "period_start": "2026-08-22",
+                "period_end": "2026-08-22",
+                "clip_path": "weather/recaps/r_in.mp4",
+            },
+            {  # starts the calendar day after `until`
+                "id": "r_out",
+                "period_start": "2026-08-23",
+                "period_end": "2026-08-23",
+                "clip_path": "weather/recaps/r_out.mp4",
+            },
+        ],
+        manuals=[
+            {  # ends exactly at `since`
+                "id": "man_in",
+                "name": "x",
+                "range_start": (since - timedelta(hours=1)).isoformat(timespec="seconds"),
+                "range_end": since.isoformat(timespec="seconds"),
+            },
+            {  # ends one second before `since`
+                "id": "man_out",
+                "name": "x",
+                "range_start": (since - timedelta(hours=2)).isoformat(timespec="seconds"),
+                "range_end": (since - timedelta(seconds=1)).isoformat(timespec="seconds"),
+            },
+        ],
+        sightings=[
+            {  # starts exactly at `since`, zero-length
+                "id": "s_in",
+                "event_type": "thunder",
+                "cam_id": "cam1",
+                "cam_name": "Cam 1",
+                "started_at": since.isoformat(timespec="seconds"),
+                "duration_s": 0,
+                "clip_path": "weather/cam1/thunder/s_in.mp4",
+            },
+            {  # well before `since` — also probes that the reader's own
+                # `_SIGHTING_PAD_H` over-fetch (the fake service ignores
+                # since_iso/until_iso and always returns both) gets
+                # re-clipped rather than leaking through
+                "id": "s_out",
+                "event_type": "thunder",
+                "cam_id": "cam1",
+                "cam_name": "Cam 1",
+                "started_at": (since - timedelta(hours=3)).isoformat(timespec="seconds"),
+                "duration_s": 0,
+                "clip_path": "weather/cam1/thunder/s_out.mp4",
+            },
+        ],
+    )
+    result = list_library_items(
+        weather_service=ws,
+        storage_root=tmp_path,
+        cameras=[{"id": "cam1", "name": "Cam 1"}],
+        kinds=["recap", "manual", "episode", "sighting"],
+        since=since,
+        until=until,
+        limit=30,
+    )
+    ids = {it["id"] for it in result["items"]}
+    assert ids == {"recap:r_in", "manual:man_in", "episode:ep_in", "sighting:s_in"}
+
+
+def _write_timelapse(root: Path, cam: str, name: str, end_dt: datetime, period_s: float = 1.0):
+    d = root / "timelapse" / cam
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "{}.mp4".format(name)).write_bytes(_REAL_MP4)
+    (d / "{}.json".format(name)).write_text(
+        json.dumps({"time": end_dt.isoformat(timespec="seconds"), "period_s": period_s}),
+        encoding="utf-8",
+    )
+
+
+def test_since_until_clip_motion_and_timelapse_inclusive_at_boundary(tmp_path):
+    since = datetime(2026, 8, 20, 0, 0, 0)
+    until = datetime(2026, 8, 22, 23, 59, 59)
+    store = _Store(tmp_path)
+    _write_event(tmp_path, "cam1", since, "m_at_since")  # touches lower edge
+    _write_event(tmp_path, "cam1", until, "m_at_until")  # touches upper edge
+    _write_event(tmp_path, "cam1", since - timedelta(hours=1), "m_before")
+    _write_event(tmp_path, "cam1", until + timedelta(hours=1), "m_after")
+
+    _write_timelapse(tmp_path, "cam1", "t_in", until, period_s=1)  # ends at `until` exactly
+    _write_timelapse(tmp_path, "cam1", "t_out", until + timedelta(hours=2), period_s=1)
+
+    result = list_library_items(
+        store=store,
+        storage_root=tmp_path,
+        cameras=[{"id": "cam1", "name": "cam1"}],
+        kinds=["motion", "timelapse"],
+        since=since,
+        until=until,
+        limit=30,
+    )
+    motion_ids = {it["extra"]["event_id"] for it in result["items"] if it["kind"] == "motion"}
+    timelapse_urls = {it["video_url"] for it in result["items"] if it["kind"] == "timelapse"}
+    assert motion_ids == {"m_at_since", "m_at_until"}
+    assert timelapse_urls == {"/media/timelapse/cam1/t_in.mp4"}
+
+
+def test_since_bound_stops_the_widen_loop_from_searching_further_back(monkeypatch, tmp_path):
+    """No matching items anywhere, so the loop is forced through every
+    widen step (nothing ever satisfies `limit`) — the spy records every
+    `lo` handed to `_windowed_candidates` and none may fall below the
+    explicit `since` floor, per this module's own docstring."""
+    import app.library._feed as feed_mod
+
+    seen_los: list = []
+    real = feed_mod._windowed_candidates
+
+    def _spy(*args, **kwargs):
+        seen_los.append(args[9])  # positional `lo`, see _windowed_candidates's signature
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(feed_mod, "_windowed_candidates", _spy)
+
+    since = datetime(2026, 8, 20, 12, 0, 0)
+    until = datetime(2026, 8, 25, 12, 0, 0)
+    result = feed_mod.list_library_items(
+        store=_Store(tmp_path),
+        weather_service=_FakeWeatherService(),
+        storage_root=tmp_path,
+        cameras=[{"id": "cam1", "name": "cam1"}],
+        kinds=["motion"],
+        since=since,
+        until=until,
+        limit=30,
+    )
+    assert result["items"] == []
+    assert seen_los, "widen loop never ran"
+    assert min(seen_los) == since, "widen loop searched further back than the explicit `since`"
+
+
 # ── label filter parity with /api/camera/<cam>/media ────────────────────
 
 
@@ -353,6 +566,24 @@ def test_label_filter_matches_the_camera_media_route_exactly(combined_client, tm
 
     assert media_ids == {"e_fox_1", "e_fox_2"}
     assert lib_ids == media_ids
+
+
+# ── /api/library's own since/until query params ──────────────────────────
+
+
+def test_since_until_query_params_scope_the_route_response(combined_client, tmp_storage_root):
+    since = datetime(2026, 8, 20, 0, 0, 0)
+    until = datetime(2026, 8, 20, 12, 0, 0)
+    _clip(tmp_storage_root, "e_in", ["fox"], since + timedelta(hours=1))
+    _clip(tmp_storage_root, "e_out", ["fox"], until + timedelta(hours=2))
+
+    resp = combined_client.get(
+        "/api/library?kinds=motion&camera_ids={}&since={}&until={}&limit=50".format(
+            CAM, since.isoformat(timespec="seconds"), until.isoformat(timespec="seconds")
+        )
+    ).get_json()
+    ids = {it["extra"]["event_id"] for it in resp["items"]}
+    assert ids == {"e_in"}
 
 
 # ── the five pre-existing endpoints are unaffected ───────────────────────

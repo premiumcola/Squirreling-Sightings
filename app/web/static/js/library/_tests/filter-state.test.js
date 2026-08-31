@@ -15,6 +15,7 @@ import './_setup.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createLibraryFilterState, libraryQueryParams } from '../_filter-state.js';
+import { setZoomRange, clearZoomRange } from '../../weather/_zoom.js';
 
 test('a fresh filter state has every group empty', () => {
   const filter = createLibraryFilterState();
@@ -24,6 +25,7 @@ test('a fresh filter state has every group empty', () => {
 });
 
 test('an empty filter produces no query params at all — "Alles gemischt", no `kinds`', () => {
+  clearZoomRange();
   const filter = createLibraryFilterState();
   const params = libraryQueryParams(filter);
   assert.equal([...params.keys()].length, 0);
@@ -57,6 +59,7 @@ test('weather-category chips map onto categories as a csv', () => {
 });
 
 test('all three groups combine into one query string, never a `kinds` param', () => {
+  clearZoomRange();
   const filter = createLibraryFilterState();
   filter.cameraIds.add('cam1');
   filter.labels.add('bird');
@@ -66,4 +69,45 @@ test('all three groups combine into one query string, never a `kinds` param', ()
   assert.equal(params.get('labels'), 'bird');
   assert.equal(params.get('categories'), 'fog');
   assert.equal(params.has('kinds'), false);
+});
+
+// ── Stage 7: the Wetterdaten-chart's drag-zoom composes in here too ──────
+
+test('an active zoom range adds since/until, with no chip filters set', () => {
+  const filter = createLibraryFilterState();
+  setZoomRange('2026-08-20T12:00:00', '2026-08-20T18:00:00');
+  try {
+    const params = libraryQueryParams(filter);
+    assert.equal(params.get('since'), '2026-08-20T12:00:00');
+    assert.equal(params.get('until'), '2026-08-20T18:00:00');
+  } finally {
+    clearZoomRange();
+  }
+});
+
+test('a cleared zoom range omits since/until entirely — not empty strings', () => {
+  setZoomRange('2026-08-20T12:00:00', '2026-08-20T18:00:00');
+  clearZoomRange();
+  const filter = createLibraryFilterState();
+  const params = libraryQueryParams(filter);
+  assert.equal(params.has('since'), false);
+  assert.equal(params.has('until'), false);
+});
+
+test('chip filters and an active zoom range compose — neither overrides the other', () => {
+  const filter = createLibraryFilterState();
+  filter.cameraIds.add('cam1');
+  filter.labels.add('fox');
+  filter.categories.add('thunder');
+  setZoomRange('2026-08-20T12:00:00', '2026-08-20T18:00:00');
+  try {
+    const params = libraryQueryParams(filter);
+    assert.equal(params.get('camera_ids'), 'cam1');
+    assert.equal(params.get('labels'), 'fox');
+    assert.equal(params.get('categories'), 'thunder');
+    assert.equal(params.get('since'), '2026-08-20T12:00:00');
+    assert.equal(params.get('until'), '2026-08-20T18:00:00');
+  } finally {
+    clearZoomRange();
+  }
 });

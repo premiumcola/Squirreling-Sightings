@@ -32,6 +32,14 @@ Response shape::
 Paginate by passing the previous response's ``next_cursor`` back as
 ``?before=``; ``next_cursor: null`` means the last page was reached (or
 the widen loop gave up — see ``library._feed``'s module docstring).
+
+``since``/``until`` (Stage 7 — the Wetterdaten-chart drag-zoom) clip the
+page to an explicit window instead of however far the widen loop
+happens to reach on its own; naive local-wall-clock ISO timestamps
+(``2026-08-31T12:00:00``), same format every other timestamp in this
+app uses, parsed leniently via ``_safe_dt`` — an unparsable value is
+dropped rather than 400ing, same tolerance ``kinds``/cursor already
+get. Both bounds are inclusive: an item touching the edge is in.
 """
 
 from __future__ import annotations
@@ -40,6 +48,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import app_state
 from ..library import KINDS, list_library_items
+from ..weather_service._consts import _safe_dt
 
 bp = Blueprint("library", __name__)
 
@@ -80,6 +89,8 @@ def api_library_list():
         label=request.args.get('label') or None,
         labels=_csv_arg('labels'),
         categories=_csv_arg('categories'),
+        since=_safe_dt(request.args.get('since') or ''),
+        until=_safe_dt(request.args.get('until') or ''),
         before=request.args.get('before') or None,
         limit=limit,
     )

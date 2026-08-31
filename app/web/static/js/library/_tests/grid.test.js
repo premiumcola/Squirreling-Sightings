@@ -6,6 +6,7 @@ import './_setup.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderLibraryGrid } from '../index.js';
+import { setZoomRange, clearZoomRange } from '../../weather/_zoom.js';
 
 function _fakeHost() {
   return { innerHTML: '' };
@@ -35,9 +36,22 @@ test('renders a deliberately interleaved feed in the given order, not grouped by
 });
 
 test('an empty page renders the empty-state message, not a blank grid', () => {
+  clearZoomRange();
   const host = _fakeHost();
   renderLibraryGrid(host, [], {});
   assert.match(host.innerHTML, /Keine Einträge vorhanden/);
+});
+
+test('an empty page while zoomed renders a distinct message, not the generic empty state', () => {
+  const host = _fakeHost();
+  setZoomRange('2026-08-20T00:00:00', '2026-08-20T12:00:00');
+  try {
+    renderLibraryGrid(host, [], {});
+    assert.match(host.innerHTML, /gewählten Zeitraum/);
+    assert.equal(/Keine Einträge vorhanden\./.test(host.innerHTML), false);
+  } finally {
+    clearZoomRange();
+  }
 });
 
 test('a null/undefined host is a no-op, not a throw', () => {

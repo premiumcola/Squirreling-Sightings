@@ -206,23 +206,29 @@ function _closeZoomSavePanel() {
 // Fired by the chart's drag-to-zoom (stats-chart/_hover.js's
 // opts.onRangeSelect, wired in stats-chart/index.js). Overrides whatever
 // preset is selected — none of the five pills matches a custom range.
-// Narrowing the merged grid below by the same window is a later stage
-// (see this file's own header) — this only redraws the chart itself.
+// Stage 7: also narrows the merged grid below to the same window, via
+// the same `window.reloadLibraryPage` bridge every other mutation in
+// the merged section already calls (delete/restore/rescan/manual-event
+// save) — library/_filter-state.js reads the new range itself
+// (getZoomRange), this call only triggers the refetch.
 export function onWeatherChartRangeSelect(startTs, endTs) {
   setZoomRange(startTs, endTs);
   renderWeatherStats();
   _closeZoomSavePanel();
+  window.reloadLibraryPage?.();
 }
 
 // The reset chip, and clicking ANY preset (even the one already
 // active) — both documented, discoverable ways back to a preset per
 // the brief. Exported so weather.html's inline wiring (none currently)
 // or a future affordance could call it directly; today only the reset
-// button and _bindWeatherStatsPills below use it.
+// button and _bindWeatherStatsPills below use it. Also re-narrows the
+// grid back to "Alles gemischt" — see onWeatherChartRangeSelect above.
 export function resetWeatherChartZoom() {
   clearZoomRange();
   renderWeatherStats();
   _closeZoomSavePanel();
+  window.reloadLibraryPage?.();
 }
 
 function _bindWeatherStatsPills() {
@@ -236,7 +242,13 @@ function _bindWeatherStatsPills() {
       // the same hours value the panel was already showing — that's the
       // "clicking a preset again resets zoom" affordance from the brief.
       clearZoomRange();
-      if (hadZoom) _closeZoomSavePanel();
+      if (hadZoom) {
+        _closeZoomSavePanel();
+        // Same grid-reload bridge resetWeatherChartZoom uses below — a
+        // preset click clears zoom exactly like the reset chip does, so
+        // the grid has to un-narrow here too, on every branch below.
+        window.reloadLibraryPage?.();
+      }
       if (h === _wsStatsState.hours) {
         if (hadZoom) renderWeatherStats();
         return;

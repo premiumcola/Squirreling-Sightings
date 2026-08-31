@@ -16,6 +16,7 @@ import {
   renderLibraryFilterBar,
 } from './_filter-bar.js';
 import { bindLibraryGrid } from './_bind.js';
+import { isZoomActive } from '../weather/_zoom.js';
 
 const _PAGE_LIMIT = 30;
 
@@ -30,6 +31,13 @@ function _paint() {
   renderLibraryGrid(grid, _items);
   bindLibraryGrid(grid, _items);
   renderLoadMoreControl(byId('libraryLoadMore'), _pager, () => _loadPage(false));
+  // Stage 7: the only visible hint that this page is scoped to the
+  // chart's drag-zoom rather than "Alles gemischt" — an empty result
+  // already reads distinctly (see _grid.js), this covers the non-empty
+  // case, where a shorter-than-usual list could otherwise read as a
+  // silently broken feed instead of a deliberate narrowing.
+  const note = byId('libraryZoomNote');
+  if (note) note.hidden = !isZoomActive();
 }
 
 async function _loadPage(reset) {

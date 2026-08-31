@@ -11,8 +11,17 @@
 // episode and a sighting sit side by side in whatever order the server
 // sorted them.
 import { libraryCardHTML } from './_dispatch.js';
+import { isZoomActive } from '../weather/_zoom.js';
 
 const _EMPTY_HTML = '<div class="item muted" style="padding:16px">Keine Einträge vorhanden.</div>';
+// Stage 7: an empty PAGE reads very differently depending on why it's
+// empty — "nothing configured yet" (the message above) versus "nothing
+// in the range you just dragged" (below). Silently sharing one message
+// would make a real zoom-window result look like a broken/empty
+// archive. Read directly off weather/_zoom.js (a leaf module, no cycle
+// risk) rather than threading a flag through `ctx` from every caller.
+const _EMPTY_ZOOM_HTML =
+  '<div class="item muted" style="padding:16px">Keine Einträge im gewählten Zeitraum.</div>';
 
 /**
  * Paint `items` (one `/api/library` page, or any already-ordered list of
@@ -26,5 +35,7 @@ export function renderLibraryGrid(host, items, ctx = {}) {
   const pageItems = Array.isArray(items) ? items : [];
   host.innerHTML = pageItems.length
     ? pageItems.map((item, idx) => libraryCardHTML(item, { ...ctx, idx, pageItems })).join('')
-    : _EMPTY_HTML;
+    : isZoomActive()
+      ? _EMPTY_ZOOM_HTML
+      : _EMPTY_HTML;
 }

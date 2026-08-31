@@ -47,15 +47,17 @@ def test_reset_clears_the_shared_zoom_state():
     assert out["active"] is False
 
 
-def test_range_select_does_not_reach_into_the_merged_grid():
+def test_range_select_reaches_the_merged_grid_via_the_reload_bridge_not_a_direct_import():
     """Stage 6 (the Mediathek + Wetter-Ereignisse section merge) retired
     weather/sightings.js's own grid painter and window.renderWeatherSightings
-    with it — the chart's drag-zoom now only redraws ITSELF
-    (renderWeatherStats()); narrowing the merged library grid by the same
-    range is explicitly a later stage (library/page.js's own header
-    explains why). Pin that stats.js reaches for neither the retired
-    bridge nor the merged grid's reload bridge, and stays import-cycle-
-    free with respect to both sightings.js and library/page.js."""
+    with it. Stage 7 wires the chart's drag-zoom into the merged library
+    grid (library/page.js) — but through window.reloadLibraryPage, the
+    SAME global-name bridge every other mutation in the merged section
+    already uses (delete, restore, rescan, manual-event save), never a
+    direct import of library/ or the retired sightings.js — that would
+    reopen the cross-import cycle weather/_zoom.js's own header exists to
+    avoid. Supersedes this file's Stage-6-era pin, which predated the
+    bridge call this asserts is now present."""
     import pathlib
 
     src = (
@@ -68,6 +70,51 @@ def test_range_select_does_not_reach_into_the_merged_grid():
         / "stats.js"
     ).read_text(encoding="utf-8")
     assert "window.renderWeatherSightings" not in src
-    assert "window.reloadLibraryPage" not in src
+    assert "window.reloadLibraryPage" in src
     assert "from './sightings.js'" not in src
     assert "from '../library" not in src
+
+
+# ── Stage 7: the reload bridge itself fires, exactly once per transition ──
+
+
+def test_range_select_triggers_exactly_one_grid_reload():
+    out = _js(
+        """
+        const stats = await import(JS + '/weather/stats.js');
+        let calls = 0;
+        window.reloadLibraryPage = () => { calls += 1; };
+        stats.onWeatherChartRangeSelect('2026-08-29T14:00:00', '2026-08-29T18:00:00');
+        console.log(JSON.stringify({ calls }));
+        """
+    )
+    assert out["calls"] == 1
+
+
+def test_reset_triggers_exactly_one_grid_reload():
+    out = _js(
+        """
+        const stats = await import(JS + '/weather/stats.js');
+        stats.onWeatherChartRangeSelect('2026-08-29T14:00:00', '2026-08-29T18:00:00');
+        let calls = 0;
+        window.reloadLibraryPage = () => { calls += 1; };
+        stats.resetWeatherChartZoom();
+        console.log(JSON.stringify({ calls }));
+        """
+    )
+    assert out["calls"] == 1
+
+
+def test_reload_bridge_is_a_no_op_when_the_grid_is_not_mounted():
+    """`window.reloadLibraryPage` is only defined once library/page.js has
+    run (it is `undefined` on any other page rendering the chart) — the
+    optional-call must not throw."""
+    out = _js(
+        """
+        const stats = await import(JS + '/weather/stats.js');
+        stats.onWeatherChartRangeSelect('2026-08-29T14:00:00', '2026-08-29T18:00:00');
+        stats.resetWeatherChartZoom();
+        console.log(JSON.stringify({ ok: true }));
+        """
+    )
+    assert out["ok"] is True

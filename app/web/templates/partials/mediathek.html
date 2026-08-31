@@ -83,6 +83,15 @@
   laden"), not page-numbered — see library/_pagination.js for why. #}
   <div id="libraryBlock">
     <div id="libraryFilterBar"></div>
+    {# Shown only while the Wetterdaten-chart's drag-zoom (further down
+    this section) is active — library/page.js toggles it, not CSS,
+    because it depends on JS-only state (weather/_zoom.js). The chart's
+    own "Zeitraum ausgewählt" hint (#weatherZoomActions, below) says the
+    CHART is zoomed; this one says the LIST above it is too — two
+    different facts, not a duplicate of the same one. #}
+    <div class="lib-zoom-note" id="libraryZoomNote" hidden>
+      Gefiltert auf den im Chart gewählten Zeitraum.
+    </div>
     <div class="media-grid" id="libraryGrid"></div>
     <div class="lib-load-more" id="libraryLoadMore" hidden></div>
   </div>
@@ -150,8 +159,8 @@
   rendered as a single multi-line SVG chart with per-line normalisation. Fetches
   /api/weather/history on visibility (IntersectionObserver) and refreshes every 60 s while the
   section is in view. Unchanged from the old #weather section, moved here verbatim — its drag-zoom
-  still narrows only ITSELF (the "als Ereignis speichern" flow), not the merged grid above; see
-  library/page.js's own header for why that wiring is a later stage. #}
+  also narrows the merged grid above now (Stage 7, weather/stats.js's onWeatherChartRangeSelect /
+  resetWeatherChartZoom), on top of the "als Ereignis speichern" flow it always drove. #}
   <div class="ws-stats-block" id="weatherStatsBlock">
     <div class="ws-stats-head">
       <span class="ws-title">

@@ -28,6 +28,19 @@ there defeats the point of widening instead of reading everything at
 once (see ``weather_episodes._footage_sources``'s own padding-constant
 comments for the same kind of tradeoff, on a different axis).
 
+A caller may additionally pass ``since``/``until`` (Stage 7, the
+Wetterdaten-chart drag-zoom) to clip the page to an explicit window
+instead of "however far back the widen loop happens to reach". ``until``
+replaces "now" as the loop's fixed upper edge (``hi``) from the very
+first step; ``since`` is a floor the loop's widening ``lo`` is clamped
+to and, once reached, stops the search from synthesizing any wider
+window — the same way ``_FLOOR`` already stops it, just caller-supplied
+instead of the year-2000 absolute backstop. Both are inclusive: an item
+touching the boundary is in, matching ``_weather_readers._overlaps``'s
+own rule (see that module). Omitting both reproduces today's behaviour
+exactly — ``hi`` stays "now" (or the pagination cursor) and the loop
+widens all the way out to ``_FLOOR`` as it always has.
+
 Not every source benefits from a narrower window the way motion does —
 see ``._weather_readers``'s module docstring for which ones always pay
 a full read regardless of the bound. Those are fetched exactly ONCE per
@@ -268,10 +281,22 @@ def _windowed_candidates(
             # which is silently a no-op without this normalisation).
             for it in sightings:
                 it["kind"] = "sighting"
+            # `weather_candidates` pads its OWN query by `_SIGHTING_PAD_H`
+            # on each side (see that function's docstring) and returns
+            # whatever the service hands back inside that padded window
+            # without re-clipping — right for the widen loop's own
+            # `[lo, hi]` steps (an over-fetch here just means an item
+            # surfaces one widen step earlier, harmless since `matched`
+            # only ever grows), wrong for an explicit `since`/`until`
+            # the caller set: without `_overlaps` below, a sighting up to
+            # `_SIGHTING_PAD_H` outside that bound would leak into the
+            # page.
             out.extend(
                 it
                 for it in sightings
-                if _cam_scoped_ok(it, camera_ids) and _matches_categories(it, categories)
+                if _overlaps(it, lo, hi)
+                and _cam_scoped_ok(it, camera_ids)
+                and _matches_categories(it, categories)
             )
     return out
 
@@ -287,10 +312,18 @@ def list_library_items(
     label=None,
     labels=None,
     categories=None,
+    since: datetime | None = None,
+    until: datetime | None = None,
     before=None,
     limit=30,
 ) -> dict:
     """One merged, newest-first page across whichever ``kinds`` are asked for.
+
+    ``since``/``until`` clip the page to an explicit window — see the
+    module docstring's "Windowing" section for exactly how they interact
+    with the widen loop. Both inclusive at the boundary; both default to
+    ``None`` ("unbounded"), which reproduces the pre-Stage-7 behaviour
+    exactly.
 
     Returns ``{"items": [...], "next_cursor": str | None, "degraded": [...]}``.
     ``next_cursor`` is ``None`` once no more items exist (or, past
@@ -304,6 +337,8 @@ def list_library_items(
 
     cursor_start, cursor_id = _decode_cursor(before) if before else (None, None)
     hi = cursor_start if cursor_start is not None else datetime.now()
+    if until is not None:
+        hi = min(hi, until)
 
     degraded: list = []
     flat = _flat_candidates(want, weather_service, storage_root, cam_names, camera_ids, categories)
@@ -313,6 +348,12 @@ def list_library_items(
     lo = hi
     for days in _WINDOW_STEPS_DAYS:
         lo = hi - timedelta(days=days)
+        # An explicit `since` is a floor: clamp `lo` to it instead of
+        # widening past it, and this step is the last one — same role
+        # `_FLOOR` already plays, just caller-supplied.
+        since_floor = since is not None and lo <= since
+        if since_floor:
+            lo = since
         window = [it for it in flat if _overlaps(it, lo, hi)]
         window.extend(
             _windowed_candidates(
@@ -337,7 +378,7 @@ def list_library_items(
             for it in matched.values()
             if cursor_start is None or _sort_key(it) < (cursor_start, cursor_id)
         ]
-        if len(eligible) > limit or lo <= _FLOOR:
+        if len(eligible) > limit or lo <= _FLOOR or since_floor:
             break
 
     eligible.sort(key=_sort_key, reverse=True)

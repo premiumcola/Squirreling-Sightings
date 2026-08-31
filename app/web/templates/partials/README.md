@@ -29,9 +29,8 @@ past whichever panel you weren't editing. With partials:
 | `dashboard.html` | `<section id="dashboard">` — Live Feed grid |
 | `cam_edit.html` | `<section id="cameras">` — the long camera-edit form (Verbindung / Erkennung / Alerting / Zonen / Timelapse tabs) |
 | `statistik.html` | `<section id="statistik">` |
-| `mediathek.html` | `<section id="media">` |
+| `mediathek.html` | `<section id="media">` — Mediathek + Wetter-Ereignisse, merged (Stage 6) |
 | `sichtungen.html` | `<section id="achievements">` |
-| `weather.html` | `<section id="weather">` |
 | `settings.html` | `<section id="settings">` (App / Coral / Telegram / Push / Storage / Timelapse / Wetter / etc subtabs) |
 | `logs.html` | `<section id="logs">` |
 | `modals.html` | Discovery, lightbox, live-view, merge, confirm, cam-recovery modals + toast container — all body-level overlays |

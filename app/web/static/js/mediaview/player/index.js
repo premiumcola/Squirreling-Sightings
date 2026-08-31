@@ -22,6 +22,7 @@
 import { byId } from '../../core/dom.js';
 import { installChromeAutoHide } from './_autohide.js';
 import { renderTransport } from './_transport.js';
+import { renderTransportControls } from './_transport-controls.js';
 import {
   canNativeFullscreen,
   handoffToNativePlayer,
@@ -39,10 +40,15 @@ import {
  * the zone overlay and the scrubber are all bound to those ids at module
  * load). Resolved per call so the lookup survives the reparenting.
  *
- * @param {HTMLElement} stage  the shell's [data-slot="stage"] node
+ * @param {HTMLElement} stage         the shell's [data-slot="stage"] node
+ * @param {HTMLElement} [controlsHost]  the shell's [data-slot="controls"]
+ *   node — hosts Transport v2's below-stage row (speed / frame-step /
+ *   loop / detection-nav / snapshot). Optional so a caller with no such
+ *   slot still gets the core transport; renderTransportControls itself
+ *   no-ops on a missing host.
  * @returns {{ sync(): void, teardown(): void }|null}
  */
-export function mountPlayerChrome(stage) {
+export function mountPlayerChrome(stage, controlsHost) {
   if (!stage) return null;
   const getVideo = () => byId('lightboxVideo');
   const video = getVideo();
@@ -58,6 +64,7 @@ export function mountPlayerChrome(stage) {
     onInteract: () => autoHide?.reveal(),
     onNative: () => handoffToNativePlayer(getVideo()),
   });
+  const transportControls = renderTransportControls(controlsHost, { getVideo });
 
   // Fullscreen can also be entered/left without our button — the native
   // controls' own affordance, Esc, the iOS swipe-down. One watcher covers
@@ -68,12 +75,16 @@ export function mountPlayerChrome(stage) {
     onExit: (v) => {
       resumeOverlayAfterNative(v);
       transport?.sync();
+      transportControls?.sync();
       autoHide?.reveal();
     },
   });
 
   return {
-    sync: () => transport?.sync(),
+    sync: () => {
+      transport?.sync();
+      transportControls?.sync();
+    },
     teardown: () => {
       try {
         unwatch();
@@ -88,6 +99,7 @@ export function mountPlayerChrome(stage) {
       } catch {
         /* ignore */
       }
+      transportControls?.teardown();
       transport?.teardown();
       autoHide?.teardown();
       host.remove();

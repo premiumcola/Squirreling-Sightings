@@ -122,6 +122,55 @@ function _spaceOrFullscreen(e, ctx) {
   if (req) req.call(v).catch(() => {});
 }
 
+// Transport v2 shortcuts — frame-step / speed / loop / detection-nav /
+// snapshot. `deps` supplies the actual video mutation (stepFrame,
+// cycleSpeed, toggleLoop, jumpDetection, snapshot) rather than this file
+// importing mediaview/player/* directly: those modules reach into
+// mediathek/bbox-overlay/index.js (jumpDetection) and touch <canvas>
+// (snapshot), and this file's own header comment already explains why
+// its installers take collaborators as callbacks instead of importing
+// across domains — lightbox.js, which already imports all of player/*
+// for other reasons, is where the real functions live.
+//
+// Only fires while a recorded/timelapse video is actually showing
+// (ctx.videoActive) — same gate _spaceOrFullscreen uses — so live/
+// weather modes (no #lightboxVideo content) get a silent no-op rather
+// than needing to join the ArrowUp/ArrowDown `suppressed` list below,
+// which exists for keys that mean something ELSE outside video context.
+export function _transportV2Shortcut(e, ctx, deps) {
+  if (!ctx.videoActive) return false;
+  const v = ctx.video;
+  switch (e.key) {
+    case ',':
+    case '.':
+      e.preventDefault();
+      deps.stepFrame(v, e.key === '.' ? 1 : -1);
+      return true;
+    case '<':
+    case '>':
+      e.preventDefault();
+      deps.cycleSpeed(v, e.key === '>' ? 1 : -1);
+      return true;
+    case 'l':
+    case 'L':
+      e.preventDefault();
+      deps.toggleLoop(v);
+      return true;
+    case '[':
+    case ']':
+      e.preventDefault();
+      deps.jumpDetection(v, e.key === ']' ? 1 : -1);
+      return true;
+    case 's':
+    case 'S':
+      e.preventDefault();
+      deps.snapshot(v);
+      return true;
+    default:
+      return false;
+  }
+}
+
 function _openLightboxShortcut(e, deps) {
   const video = byId('lightboxVideo');
   const modal = byId('lightboxModal');
@@ -160,6 +209,8 @@ function _openLightboxShortcut(e, deps) {
     deps.handleDeleteKey();
   } else if (e.key === ' ' || e.key === 'f' || e.key === 'F') {
     _spaceOrFullscreen(e, ctx);
+  } else if (_transportV2Shortcut(e, ctx, deps)) {
+    // handled inside — frame-step / speed / loop / detection-nav / snapshot
   } else if (e.key === 'Escape') {
     deps.closeLightbox();
   }
@@ -168,7 +219,8 @@ function _openLightboxShortcut(e, deps) {
 /**
  * Document-level shortcuts for the lightbox and the media drilldown.
  * `deps` supplies every collaborator: closeLiveView, closeMediaDrilldown,
- * closeLightbox, navPrev, navNext, handleDeleteKey, showSeekOverlay.
+ * closeLightbox, navPrev, navNext, handleDeleteKey, showSeekOverlay,
+ * stepFrame, cycleSpeed, toggleLoop, jumpDetection, snapshot.
  */
 export function installLightboxKeys(deps) {
   const onKey = (e) => {

@@ -45,6 +45,16 @@ export function lbClearTrackTimeline(host) {
   el.innerHTML = '';
 }
 
+// The current clip's track list — the SAME array the × tooltip handler
+// reads via _state.timelineTrackIndex (track-loss-tooltip.js) and the
+// same one this file stamps at render time, a few lines below. Public
+// export so a consumer outside this package (the on-picture transport's
+// jump-to-detection controls, mediaview/player/_detection-nav.js) can
+// reuse the swimlane's own data instead of a second tracks.json fetch.
+export function getTimelineTracks() {
+  return _state.timelineTrackIndex || [];
+}
+
 // Classify a single sample into one of four buckets matching the
 // status visual language. Mirrors renderer._classifyTrackStatus but
 // at sample granularity so per-segment textures can be emitted along

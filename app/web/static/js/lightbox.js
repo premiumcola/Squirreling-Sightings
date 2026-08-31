@@ -36,6 +36,11 @@ import { closeLiveView } from './chrome/live-view.js';
 import { _initFsBtn } from './chrome/fullscreen.js';
 import { refreshTimelineAndStats } from './chrome/storage-stats.js';
 import { installLightboxKeys, installLightboxSwipe } from './mediaview/keyboard.js';
+import { applyFrameStep } from './mediaview/player/_frame-step.js';
+import { applySpeedChange } from './mediaview/player/_speed.js';
+import { toggleLoop } from './mediaview/player/_loop.js';
+import { applyDetectionJump } from './mediaview/player/_detection-nav.js';
+import { downloadSnapshot } from './mediaview/player/_snapshot.js';
 import {
   calcItemsPerPage,
   renderMediaGrid,
@@ -483,6 +488,15 @@ installLightboxKeys({
   navNext: _lbNavNext,
   handleDeleteKey: _lbHandleDeleteKey,
   showSeekOverlay: _lbShowSeekOverlay,
+  // Transport v2 — same functions the on-picture control row
+  // (mediaview/player/_transport-controls.js) calls, so a keyboard
+  // shortcut and its matching button are never two implementations of
+  // the same action.
+  stepFrame: applyFrameStep,
+  cycleSpeed: applySpeedChange,
+  toggleLoop,
+  jumpDetection: applyDetectionJump,
+  snapshot: downloadSnapshot,
 });
 
 _updateLbConfirmBtn(false);

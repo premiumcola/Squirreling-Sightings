@@ -222,3 +222,55 @@
     padding-bottom: 8px;
   }
 }
+
+/* ── Transport v2 · below-stage control row (mediaview/player/
+   _transport-controls.js) ────────────────────────────────────────────
+   Speed / frame-step / loop / jump-to-detection / snapshot. Lives in
+   real page flow inside the shell's generic .mv-shell-controls row
+   (30g), below the picture — NOT another disc pinned over the stage.
+   Recorded/timelapse never populated that slot before this (only
+   live's interactive Stream+mode cluster does), so there is nothing to
+   collide with there; .mv-shell-controls already provides flex-wrap +
+   :empty collapse, so no layout rules are needed here beyond the
+   button's own look. Same flat-pill idiom as .mv-retrigger /
+   .mv-mode-badge (dark pill over the dark panel, not glass-over-video —
+   there is no video under this row). */
+.mv-t2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mv-t2-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.mv-t2-btn[data-on='1'] {
+  background: rgba(56, 189, 248, 0.34);
+  color: #f0f9ff;
+}
+@media (hover: hover) {
+  .mv-t2-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+  }
+  .mv-t2-btn[data-on='1']:hover {
+    background: rgba(56, 189, 248, 0.46);
+  }
+}
+.mv-t2-speed-lbl {
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

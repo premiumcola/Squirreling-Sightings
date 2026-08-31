@@ -49,7 +49,24 @@ _CSS = _REPO / "app" / "web" / "static" / "css"
 _PLAYER = _JS / "mediaview" / "player"
 _PLAYER_CSS = _CSS / "30h-mediaview-player.css"
 
-_EXPECTED_MODULES = {"index.js", "_pref.js", "_native.js", "_transport.js", "_autohide.js"}
+_EXPECTED_MODULES = {
+    "index.js",
+    "_pref.js",
+    "_native.js",
+    "_transport.js",
+    "_autohide.js",
+    # Transport v2 (speed / frame-step / loop / detection-nav / snapshot) —
+    # pure logic + DOM composition split across one file per concern so
+    # each stays independently unit-testable (see the module's own header
+    # comments + app/web/static/js/mediaview/player/_tests/).
+    "_speed.js",
+    "_frame-step.js",
+    "_loop.js",
+    "_detection-math.js",
+    "_detection-nav.js",
+    "_snapshot.js",
+    "_transport-controls.js",
+}
 
 
 def _read(path: Path) -> str:

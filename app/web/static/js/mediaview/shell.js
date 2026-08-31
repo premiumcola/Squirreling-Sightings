@@ -26,6 +26,7 @@ import { lbRenderTrackTimeline, lbClearTrackTimeline } from '../mediathek/bbox-o
 import { renderLiveSwimlane } from './live-swimlane.js';
 import { observeLiveChromeBudget } from './live-chrome-budget.js';
 import { mountPlayerChrome } from './player/index.js';
+import { getDeviceTier, TIER_COMPACT, TIER_FULL } from './device-tier.js';
 
 // Per-mode shell behaviour. interactiveMode → live segmented control vs
 // read-only badge; contextKey → overlay-toggle persistence
@@ -173,12 +174,24 @@ function _setRoiLabel(stage, on) {
 // like the native player. Live brings its own chrome and weather has no
 // <video> at all, so both skip it. Its own function rather than an inline
 // branch — mountMediaView is long enough already.
-function _mountPlayerFor(mode, stage, components, teardowns) {
+//
+// ``controlsHost`` (the shell's [data-slot="controls"] row) is passed
+// through unchanged for Transport v2's below-stage control row (speed /
+// frame-step / loop / detection-nav / snapshot) — it stays unused by
+// recorded/timelapse until now (only live's Stream+mode cluster relocates
+// there, and only for interactive mode), so mounting there cannot repeat
+// the M-note pinned-corner collision this file documents elsewhere.
+function _mountPlayerFor(mode, stage, controlsHost, components, teardowns) {
   if (mode !== 'recorded' && mode !== 'timelapse') return;
-  const pc = mountPlayerChrome(stage);
+  const pc = mountPlayerChrome(stage, controlsHost);
   if (!pc) return;
   components.playerChrome = pc;
   teardowns.push(pc.teardown);
+}
+
+/** config.tier override, validated, else a live capability read. */
+function _resolveTier(configTier) {
+  return configTier === TIER_FULL || configTier === TIER_COMPACT ? configTier : getDeviceTier();
 }
 
 /**
@@ -198,9 +211,18 @@ export function mountMediaView(config = {}) {
   const teardowns = [];
   const components = {};
 
+  // Device/pointer-capability tier — orthogonal to `flags` (content mode)
+  // and not read by anything in THIS stage; it is threaded through now so
+  // a later stage building tier-gated features has one place to read it
+  // (root.dataset.tier for CSS, components.tier for JS) instead of
+  // inventing a second flag system next to _MODE_FLAGS.
+  const tier = _resolveTier(config.tier);
+  components.tier = tier;
+
   const root = document.createElement('div');
   root.className = 'mv-shell';
   root.dataset.mode = mode;
+  root.dataset.tier = tier;
   root.innerHTML = _SHELL_HTML;
   _relocateControls(root, flags.interactiveMode);
   const slot = (name) => root.querySelector(`[data-slot="${name}"]`);
@@ -346,7 +368,7 @@ export function mountMediaView(config = {}) {
     }
   }
 
-  _mountPlayerFor(mode, slot('stage'), components, teardowns);
+  _mountPlayerFor(mode, slot('stage'), slot('controls'), components, teardowns);
 
   const tabs = _buildTabs(panels, config.panelRenderers, config.item);
   if (tabs.length) {

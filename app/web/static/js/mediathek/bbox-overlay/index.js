@@ -28,6 +28,7 @@ import { _renderConfidenceMeter } from './confidence-meter.js';
 import { _refreshPlayButtonGlyph, _updatePlayPct } from './time-axis.js';
 import { _startRafLoop, _stopRafLoop } from './raf.js';
 import {
+  getTimelineTracks,
   lbClearTrackTimeline,
   lbRenderTrackTimeline,
   setLbTimelineHost,
@@ -38,6 +39,7 @@ import { lbStopTrackingPlayback } from './cleanup.js';
 // Public surface — verbatim list of every name the old single-file
 // module exported. Caller imports keep resolving without a path change.
 export {
+  getTimelineTracks,
   lbClearTrackTimeline,
   lbInvalidateTracks,
   lbLoadTracksForItem,

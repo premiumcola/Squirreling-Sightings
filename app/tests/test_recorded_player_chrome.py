@@ -53,6 +53,7 @@ _EXPECTED_MODULES = {
     "index.js",
     "_pref.js",
     "_native.js",
+    "_pip.js",
     "_transport.js",
     "_autohide.js",
     # Transport v2 (speed / frame-step / loop / detection-nav / snapshot) —
@@ -273,6 +274,224 @@ def test_player_teardown_cannot_strand_the_hidden_overlay():
     src = _read(_PLAYER / "index.js")
     teardown = src.split("teardown:", 1)[-1]
     assert "resumeOverlayAfterNative" in teardown
+
+
+# ── 3b · Picture-in-Picture — the same overlay problem, a different door ──
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_handoff_is_feature_detected():
+    out = _js(
+        """
+        globalThis.document.pictureInPictureEnabled = true;
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        console.log(JSON.stringify({
+          nothing: m.canPictureInPicture(null),
+          plain: m.canPictureInPicture({}),
+          standard: m.canPictureInPicture({ requestPictureInPicture() {} }),
+          disabledOnElement: m.canPictureInPicture({
+            requestPictureInPicture() {},
+            disablePictureInPicture: true,
+          }),
+        }));
+        """
+    )
+    assert out == {
+        "nothing": False,
+        "plain": False,
+        "standard": True,
+        "disabledOnElement": False,
+    }
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_unavailable_when_the_document_disallows_it():
+    out = _js(
+        """
+        globalThis.document.pictureInPictureEnabled = false;
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        console.log(JSON.stringify({
+          standard: m.canPictureInPicture({ requestPictureInPicture() {} }),
+        }));
+        """
+    )
+    assert out == {"standard": False}
+
+
+def test_pip_module_reuses_native_overlay_suspend_resume():
+    """The whole point of the split: PiP must NOT reimplement the
+    suspend/resume pair _native.js already got right — it imports and
+    calls them, unchanged."""
+    src = _read(_PLAYER / "_pip.js")
+    assert "from './_native.js'" in src
+    assert "suspendOverlayForNative" in src and "resumeOverlayAfterNative" in src
+    assert "export function suspendOverlayForNative" not in src
+    assert "export function resumeOverlayAfterNative" not in src
+
+
+def test_pip_watcher_listens_for_enter_and_leave_events():
+    src = _read(_PLAYER / "_pip.js")
+    for ev in ("enterpictureinpicture", "leavepictureinpicture"):
+        assert ev in src, f"{ev} is not handled — a PiP transition would strand the overlay"
+
+
+def test_pip_does_not_carry_a_refusal_grace_period_timer():
+    """Unlike iOS fullscreen (webkitEnterFullscreen can refuse SILENTLY —
+    no event, no rejected promise — which is why handoffToNativePlayer
+    needs _REFUSAL_GRACE_MS), requestPictureInPicture() is specified to
+    reject its promise on refusal. The .catch() already on that promise
+    is sufficient; a duplicate timeout would be dead code."""
+    src = _read(_PLAYER / "_pip.js")
+    assert "setTimeout" not in src
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_watcher_fires_on_enter_and_leave_and_tears_down_both_listeners():
+    out = _js(
+        """
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        const listeners = {};
+        const video = {
+          addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
+          removeEventListener(type, fn) {
+            listeners[type] = (listeners[type] || []).filter((f) => f !== fn);
+          },
+        };
+        let entered = 0;
+        let exited = 0;
+        const teardown = m.watchPictureInPicture(video, {
+          onEnter: () => { entered += 1; },
+          onExit: () => { exited += 1; },
+        });
+        listeners['enterpictureinpicture'].forEach((fn) => fn());
+        listeners['leavepictureinpicture'].forEach((fn) => fn());
+        const beforeTeardown = {
+          entered, exited,
+          enterCount: listeners['enterpictureinpicture'].length,
+          exitCount: listeners['leavepictureinpicture'].length,
+        };
+        teardown();
+        const afterTeardown = {
+          enterCount: listeners['enterpictureinpicture'].length,
+          exitCount: listeners['leavepictureinpicture'].length,
+        };
+        console.log(JSON.stringify({ beforeTeardown, afterTeardown }));
+        """
+    )
+    assert out["beforeTeardown"] == {
+        "entered": 1,
+        "exited": 1,
+        "enterCount": 1,
+        "exitCount": 1,
+    }
+    assert out["afterTeardown"] == {"enterCount": 0, "exitCount": 0}
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_request_suspends_the_overlay_and_a_refusal_restores_it():
+    """The named failure mode, PiP's side: a rejected requestPictureInPicture
+    must not strand the overlay hidden with nothing left to undo it."""
+    out = _js(
+        """
+        globalThis.requestAnimationFrame = () => 7;
+        globalThis.cancelAnimationFrame = () => {};
+        globalThis.document.pictureInPictureEnabled = true;
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        const { _state } = await import(JS + '/mediathek/bbox-overlay/_state.js');
+        const wrap = { dataset: {} };
+        _state.rafHandle = 42;
+        const video = {
+          paused: false, ended: false, controls: false, closest: () => wrap,
+          requestPictureInPicture: () => Promise.reject(new Error('refused')),
+        };
+        const attempted = m.requestPip(video);
+        const duringRequest = {
+          raf: _state.rafHandle, flag: wrap.dataset.nativeFs, controls: video.controls,
+        };
+        // flush the microtask queue so the internal .catch() has run
+        await new Promise((r) => setTimeout(r, 0));
+        const afterRefusal = {
+          raf: _state.rafHandle, flag: wrap.dataset.nativeFs || null, controls: video.controls,
+        };
+        console.log(JSON.stringify({ attempted, duringRequest, afterRefusal }));
+        """
+    )
+    assert out["attempted"] is True
+    assert out["duringRequest"] == {"raf": 0, "flag": "1", "controls": True}
+    assert out["afterRefusal"] == {"raf": 7, "flag": None, "controls": False}
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_request_that_throws_synchronously_restores_the_overlay():
+    out = _js(
+        """
+        globalThis.requestAnimationFrame = () => 7;
+        globalThis.cancelAnimationFrame = () => {};
+        globalThis.document.pictureInPictureEnabled = true;
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        const { _state } = await import(JS + '/mediathek/bbox-overlay/_state.js');
+        const wrap = { dataset: {} };
+        _state.rafHandle = 42;
+        const video = {
+          paused: false, ended: false, controls: false, closest: () => wrap,
+          requestPictureInPicture: () => { throw new Error('no gesture'); },
+        };
+        const attempted = m.requestPip(video);
+        console.log(JSON.stringify({
+          attempted, raf: _state.rafHandle, flag: wrap.dataset.nativeFs || null,
+          controls: video.controls,
+        }));
+        """
+    )
+    assert out == {"attempted": False, "raf": 7, "flag": None, "controls": False}
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_pip_toggle_exits_via_the_document_scoped_api_without_re_requesting():
+    """PiP's exit call is document-scoped, not element-scoped — toggling
+    off must call document.exitPictureInPicture(), never call
+    requestPictureInPicture() a second time. A rejected exit must not
+    throw back out to the caller either."""
+    out = _js(
+        """
+        const m = await import(JS + '/mediaview/player/_pip.js');
+        let exitCalls = 0;
+        let requestCalls = 0;
+        const video = {
+          requestPictureInPicture: () => { requestCalls += 1; return Promise.resolve(); },
+        };
+        globalThis.document.pictureInPictureElement = video;
+        globalThis.document.exitPictureInPicture = () => {
+          exitCalls += 1;
+          return Promise.reject(new Error('refused'));
+        };
+        const attempted = m.togglePictureInPicture(video);
+        await new Promise((r) => setTimeout(r, 0));
+        console.log(JSON.stringify({ attempted, exitCalls, requestCalls }));
+        """
+    )
+    assert out == {"attempted": True, "exitCalls": 1, "requestCalls": 0}
+
+
+def test_pip_control_reuses_the_native_warning_not_a_second_string():
+    """PiP loses the same overlay fullscreen does — the boxes/trails are
+    DOM siblings of the promoted <video> either way — so the button reuses
+    NATIVE_WARNING verbatim rather than a second, easy-to-drift German
+    string saying the same thing."""
+    transport = _read(_PLAYER / "_transport.js")
+    assert "mv-player-pip" in transport
+    assert (
+        transport.count("NATIVE_WARNING") >= 2
+    ), "both the system-player button and the PiP button should reuse the one warning constant"
+
+
+def test_pip_toggle_wired_into_the_shared_handoff_watcher():
+    """index.js must watch PiP transitions through the same combined
+    watcher as fullscreen, not a second bespoke wiring path."""
+    src = _read(_PLAYER / "index.js")
+    assert "watchPictureInPicture" in src
+    assert "canPictureInPicture" in src
+    assert "togglePictureInPicture" in src
 
 
 # ── 4 · remembering the choice ───────────────────────────────────────

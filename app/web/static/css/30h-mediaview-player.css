@@ -132,7 +132,10 @@
     color: #fff;
   }
 }
-/* 375 px: the label is the first thing to go, the 44 px disc stays. */
+/* 375 px: the label is the first thing to go, the 44 px disc stays.
+   `.mv-player-pip` carries the same base class as the system-player
+   switch, so this rule already covers it — nothing PiP-specific to add
+   here. */
 @media (max-width: 380px) {
   .mv-player-native span {
     display: none;
@@ -140,6 +143,24 @@
   .mv-player-native {
     padding: 0;
     justify-content: center;
+  }
+}
+
+/* ── Picture-in-Picture switch · pressed state ──────────────────────────
+   `.mv-player-pip` reuses `.mv-player-native`'s pill (44 px target, glass
+   look, the narrow-width label collapse above) and only adds the
+   "currently floating" state — same `data-on` idiom as the Transport v2
+   loop button (_transport-controls.js / .mv-t2-btn[data-on='1']) rather
+   than a second toggle vocabulary. Fullscreen has no equivalent state:
+   once entered, our chrome is gone too, so there is nothing left here to
+   mark pressed. */
+.mv-player-pip[data-on='1'] {
+  background: rgba(56, 189, 248, 0.34);
+  color: #f0f9ff;
+}
+@media (hover: hover) {
+  .mv-player-pip[data-on='1']:hover {
+    background: rgba(56, 189, 248, 0.46);
   }
 }
 

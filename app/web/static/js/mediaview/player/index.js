@@ -30,6 +30,54 @@ import {
   suspendOverlayForNative,
   watchNativeFullscreen,
 } from './_native.js';
+import { canPictureInPicture, togglePictureInPicture, watchPictureInPicture } from './_pip.js';
+
+/**
+ * Watch both hand-off surfaces (native fullscreen + Picture-in-Picture)
+ * at once and return one combined teardown. Extracted out of
+ * mountPlayerChrome so that function stays under the file's own 60-line
+ * ceiling. Both surfaces share the same overlay problem (a promoted
+ * <video> can't be followed by its SVG/canvas siblings) and so share
+ * the exact same onEnter/onExit reaction — suspend or restore the
+ * overlay, re-sync the two control rows, and (on the way back only, so
+ * the operator sees the chrome again where they left off) reveal the
+ * auto-hidden chrome. PiP's onEnter additionally re-syncs the transport
+ * immediately, because unlike fullscreen — where the outgoing surface
+ * disappears entirely — the transport (with its own PiP toggle) stays
+ * visible and interactive while the video floats, so its pressed state
+ * has to flip right away, not just on the way out.
+ */
+function _watchHandoffSurfaces(video, { transport, transportControls, autoHide }) {
+  const onExit = (v) => {
+    resumeOverlayAfterNative(v);
+    transport?.sync();
+    transportControls?.sync();
+    autoHide?.reveal();
+  };
+  const unwatchFs = watchNativeFullscreen(video, {
+    onEnter: (v) => suspendOverlayForNative(v),
+    onExit,
+  });
+  const unwatchPip = watchPictureInPicture(video, {
+    onEnter: (v) => {
+      suspendOverlayForNative(v);
+      transport?.sync();
+    },
+    onExit,
+  });
+  return () => {
+    try {
+      unwatchFs();
+    } catch {
+      /* ignore */
+    }
+    try {
+      unwatchPip();
+    } catch {
+      /* ignore */
+    }
+  };
+}
 
 /**
  * Mount the player chrome onto a MediaView stage.
@@ -63,22 +111,18 @@ export function mountPlayerChrome(stage, controlsHost) {
     nativeAvailable: canNativeFullscreen(video),
     onInteract: () => autoHide?.reveal(),
     onNative: () => handoffToNativePlayer(getVideo()),
+    pipAvailable: canPictureInPicture(video),
+    onPip: () => togglePictureInPicture(getVideo()),
   });
   const transportControls = renderTransportControls(controlsHost, { getVideo });
 
-  // Fullscreen can also be entered/left without our button — the native
-  // controls' own affordance, Esc, the iOS swipe-down. One watcher covers
-  // every route so the overlay state can never disagree with what the
-  // operator is looking at.
-  const unwatch = watchNativeFullscreen(video, {
-    onEnter: (v) => suspendOverlayForNative(v),
-    onExit: (v) => {
-      resumeOverlayAfterNative(v);
-      transport?.sync();
-      transportControls?.sync();
-      autoHide?.reveal();
-    },
-  });
+  // Both hand-off surfaces (system player, Picture-in-Picture) can also
+  // be entered/left without our own buttons — native controls' own
+  // affordances, Esc, the iOS swipe-down, a right-click "Picture in
+  // Picture". One combined watcher covers every route for both so the
+  // overlay state can never disagree with what the operator is looking
+  // at, regardless of how they got there.
+  const unwatch = _watchHandoffSurfaces(video, { transport, transportControls, autoHide });
 
   return {
     sync: () => {

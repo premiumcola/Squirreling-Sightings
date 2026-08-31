@@ -23,9 +23,9 @@ import json
 
 import pytest
 
-from ._node_js import JS_URI as _JS
-from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
-from ._node_js import run_js as _js
+from app.weather_episodes._consts import CHARACTERS as _BACKEND_CHARACTERS
+
+from ._node_js import JS_URI as _JS, NODE_AVAILABLE, NODE_MISSING_REASON, run_js as _js
 
 pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 
@@ -446,21 +446,12 @@ def test_the_archive_and_the_weather_panel_agree_on_decimals():
 
 
 # ── D2 · every storm character has an icon + a German label ────────────
-# Mirror of the backend vocabulary in
-# app/app/weather_episodes/_consts.py::CHARACTERS. A slug added on one
-# side and forgotten on the other must fail HERE, not surface as a
-# blank badge in the Wetter-Ereignisse grid.
-
-_BACKEND_CHARACTERS = (
-    "rain_led_thunder",
-    "lightning_led_rain",
-    "lightning_only",
-    "rain_only",
-    "wind_only",
-    "snow_only",
-    "fog_only",
-    "mixed",
-)
+# Imports the REAL backend vocabulary (CHARACTERS, above) rather than a
+# hand-copied tuple — a slug added there and forgotten on the JS side
+# must fail HERE, not surface as a blank badge in the Wetter-Ereignisse
+# grid. A duplicated literal would drift silently: add a 9th slug to
+# both a hand-typed tuple and CHARACTERS in lockstep (or to neither) and
+# the counts would still match, defeating the whole point of the test.
 
 
 def test_every_backend_character_has_an_icon_and_a_german_label():

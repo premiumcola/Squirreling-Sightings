@@ -177,8 +177,7 @@ def test_library_page_binds_the_pin_toggle_after_the_grid_renders():
     assert "renderLibraryGrid(grid" in body
     assert "bindLibraryGrid(grid" in body
     assert body.index("renderLibraryGrid(grid") < body.index("bindLibraryGrid(grid"), (
-        "bindLibraryGrid must run AFTER the card HTML has actually "
-        "landed in the DOM"
+        "bindLibraryGrid must run AFTER the card HTML has actually " "landed in the DOM"
     )
     bind_src = (_JS_ROOT / "library" / "_bind.js").read_text(encoding="utf-8")
     assert "bindPinToggle } from '../weather/pin-toggle.js'" in bind_src

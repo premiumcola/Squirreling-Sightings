@@ -99,7 +99,7 @@ def test_mobile_dock_scrollspy_dropped_weather():
 
 
 def test_the_merged_grid_never_sends_a_kinds_filter():
-    """"Alles gemischt" (no `kinds` filter) is the explicit default — the
+    """ "Alles gemischt" (no `kinds` filter) is the explicit default — the
     merged grid's own param builder must never construct one, and its
     fetch call in page.js must not append one either."""
     filter_state_src = _read(_JS / "library" / "_filter-state.js")

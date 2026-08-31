@@ -15,15 +15,20 @@ every template render, so the markup Flask sends already carries the
 resolved numbers and toggle states — no fetch, no paint-then-repaint,
 and nothing to forget when a category is added.
 
-``GET /api/maintenance/retention`` serves the same structure for anyone
-who needs it after a save without a reload. Its own module rather than a
-few more lines in ``routes/bootstrap.py`` (711 lines against a 500-line
-ceiling) or ``routes/weather.py`` (746, and an extraction in flight).
+No accompanying ``GET`` endpoint: nothing would call it. The panel is
+complete when Flask sends the page, and the save path
+(``POST /api/settings/app``) already echoes success — an endpoint whose
+only caller is a future refactor is the same dead surface as
+``POST /api/media/cleanup``'s button that no template renders.
+
+Its own module rather than a few more lines in ``routes/bootstrap.py``
+(711 lines against a 500-line ceiling) or ``routes/weather.py`` (746, and
+an extraction in flight).
 """
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint
 
 from ..retention_catalog import panel_groups
 
@@ -41,8 +46,3 @@ def inject_retention_groups() -> dict:
     instead of raising.
     """
     return {"retention_groups": panel_groups()}
-
-
-@bp.get('/api/maintenance/retention')
-def api_maintenance_retention():
-    return jsonify({"groups": panel_groups()})

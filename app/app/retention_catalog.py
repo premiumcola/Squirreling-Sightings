@@ -15,8 +15,11 @@ So the row set lives here once and every consumer derives from it:
 
 * ``settings/retention_migration.py`` backfills :data:`~settings._consts.
   STORAGE_RETENTION_DEFAULTS` / ``TRASH_DEFAULTS`` additively;
-* ``routes/retention_panel.py`` renders the panel from :func:`panel_groups`
-  and acknowledges every saved window from :func:`acknowledge_payload`;
+* ``routes/retention_panel.py`` hands the template :func:`panel_groups`,
+  already resolved, through an app-wide context processor;
+* ``routes/app_settings.py`` confirms every saved window through
+  :func:`acknowledge_payload` — one loop, so a newly added category
+  cannot be the one nobody remembered to acknowledge;
 * the template walks the same groups, stamping ``data-section`` /
   ``data-field`` on each control so the JS collector builds its payload
   from the DOM instead of a second field map;

@@ -138,9 +138,9 @@ def register_blueprints(app) -> None:
     app.register_blueprint(telemetry.bp)
     app.register_blueprint(detection_cloud.bp)
     app.register_blueprint(trash.bp)
-    # Mediathek-Verwaltung — one panel for every retention window.
-    # Carries an app_context_processor, so it must be registered for
-    # the maintenance partial to render its rows.
+    # Mediathek-Verwaltung — one panel for every retention window. Carries
+    # no routes at all: its whole job is an app_context_processor, so the
+    # maintenance partial renders no rows unless this is registered.
     app.register_blueprint(retention_panel.bp)
 
     # Registered after the blueprints so it covers every one of them.

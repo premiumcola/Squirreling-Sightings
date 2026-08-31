@@ -213,3 +213,31 @@ def test_the_partial_is_in_the_css_build_order():
     from app.css_builder import LOAD_ORDER
 
     assert "34-retention.css" in LOAD_ORDER
+
+
+# ── wiring ─────────────────────────────────────────────────────────────
+
+
+def test_the_context_processor_reaches_every_template(monkeypatch):
+    """The blueprint carries no routes — its whole job is this. Registered
+    but not injecting means a silently row-less panel."""
+    import flask
+
+    from app.routes.retention_panel import bp
+
+    monkeypatch.setattr(app_state, "settings", SimpleNamespace(data={}), raising=False)
+    monkeypatch.setattr(app_state, "base_cfg", {}, raising=False)
+    app = flask.Flask(__name__)
+    app.register_blueprint(bp)
+    with app.test_request_context("/"):
+        out = flask.render_template_string("{{ retention_groups | length }}")
+    assert out == "3"
+
+
+def test_the_blueprint_is_registered():
+    import inspect
+
+    from app import routes
+
+    src = inspect.getsource(routes.register_blueprints)
+    assert "retention_panel.bp" in src

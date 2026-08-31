@@ -112,9 +112,11 @@ def test_the_verlauf_view_empties_the_header_chip_slot():
 
 def test_the_header_puts_the_chips_top_right_on_desktop():
     """„auf jeden Fall aufm PC" — a media query, not a mobile regression."""
-    assert "grid-template-areas: 'title btn' 'cams cams'" in _CSS, "phone layout changed"
+    # `btns` (plural) since the frozen-values info button joined the
+    # Verlauf button in the same right-hand slot.
+    assert "grid-template-areas: 'title btns' 'cams cams'" in _CSS, "phone layout changed"
     desktop = _CSS[_CSS.index("@media (min-width: 760px)") :]
-    assert "grid-template-areas: 'title cams btn'" in desktop
+    assert "grid-template-areas: 'title cams btns'" in desktop
     assert "justify-content: flex-end" in desktop
 
 

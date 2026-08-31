@@ -245,13 +245,28 @@ def test_the_german_names_agree_with_the_frontend_wording():
 _JS = Path(__file__).resolve().parents[1] / "web" / "static" / "js" / "netz"
 
 
-def test_each_card_carries_a_history_button_wired_to_its_own_camera():
+def test_the_history_is_reachable_from_the_header_not_from_every_card():
+    """The per-camera Verlauf button is deliberately gone again.
+
+    It was built on request ("Ich brauch eine Historie für die Kamera …
+    mach da son kleinen History Button hin") and then withdrawn on
+    sight, because with three cameras the same glyph appeared four
+    times on one screen: "das Verlauf Icon … ist jetzt dreimal unter den
+    einzelnen Kameras und dann oben noch mal — bring den nur oben rein."
+
+    Nothing was lost: the header button opens the same archive, and the
+    archive carries its own camera chips, so filtering to one camera is
+    one tap further rather than unreachable. What this test protects is
+    that the button does not quietly come back per card.
+    """
     cards = (_JS / "_cards.js").read_text(encoding="utf-8")
     index = (_JS / "index.js").read_text(encoding="utf-8")
-    assert "data-netz-hist" in cards, "no per-camera Verlauf button on the card"
-    assert "onHistory(camId)" in cards, "the button does not carry its own camera id"
-    assert "openCameraHistory" in index, "nothing routes the card button to the archive"
-    assert "archiveFilter = { cam: camId" in index, "the archive is not filtered to the camera"
+    assert "data-netz-hist" not in cards, "the per-card Verlauf button is back"
+    assert "onHistory" not in cards, "its callback thread outlived it"
+    assert "openCameraHistory" not in index
+    # …and the archive still filters by camera, from its own chips.
+    lst = (_JS / "_archive_list.js").read_text(encoding="utf-8")
+    assert "archiveFilter" in lst, "the archive lost its camera filter"
 
 
 def test_the_detail_sheet_omits_the_net_block_for_a_setting_change():

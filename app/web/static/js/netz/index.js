@@ -34,17 +34,8 @@ function _host() {
 
 function renderNet(host) {
   renderCards(host);
-  bindCards(host, () => renderNet(host), openCameraHistory);
+  bindCards(host, () => renderNet(host));
   bindTuneDrag(host, () => renderNet(host));
-}
-
-/** The card's own Verlauf button: the same archive, pre-filtered to that
- *  camera. Not a separate view — a second history surface would be a
- *  second place for the record shape to drift, and the archive's camera
- *  chips make the filter visible and reversible. */
-function openCameraHistory(camId) {
-  netzState.archiveFilter = { cam: camId || null, label: null, open: false };
-  showTab('verlauf');
 }
 
 export async function loadNet() {
@@ -165,6 +156,18 @@ let _observer = null;
 export function initNetz() {
   const sec = byId('netz');
   if (!sec || _observer) return;
+  // The frozen-values box is header-mounted reference material; toggling
+  // it must not re-render the nets (a repaint would drop a half-finished
+  // drag), so it flips `hidden` directly rather than going through the
+  // view router.
+  byId('netzFrozenBtn')?.addEventListener('click', () => {
+    const box = byId('netzFrozenBox');
+    const btn = byId('netzFrozenBtn');
+    if (!box) return;
+    const open = box.hasAttribute('hidden');
+    box.toggleAttribute('hidden', !open);
+    btn?.setAttribute('aria-expanded', String(open));
+  });
   byId('netzViewBtn')?.addEventListener('click', () => {
     showTab(netzState.view === 'netz' ? 'verlauf' : 'netz');
   });

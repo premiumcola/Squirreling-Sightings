@@ -4,6 +4,10 @@
       ><svg width="24" height="24"><use href="#icon-cameras" /></svg
     ></span>
     <h3>Geräte</h3>
+    {# The Timelapse-aktiv pill used to own a full-width row under this header, which cost a whole
+    line for one chip. It rides the head row now, immediately left of Netzwerk-Discovery. Its
+    expandable detail panel still drops below — only the PILL moved. #}
+    <div id="tlStatusBar" class="tl-status-bar"></div>
     <button
       id="discoverBtn"
       type="button"
@@ -28,7 +32,6 @@
       Netzwerk-Discovery
     </button>
   </div>
-  <div id="tlStatusBar" class="tl-status-bar"></div>
   <div id="cameraSettingsList" class="list"></div>
   <div id="cameraEditWrapper" class="cam-edit-wrapper">
     <div class="cam-edit-inner">

@@ -142,8 +142,42 @@
   gap: 8px;
 }
 /* Timelapse status bar (cameras dashboard) */
+/* Rides the Geräte head row (left of Netzwerk-Discovery) rather than
+   owning a full-width line under it. `margin-left: auto` pushes the pill
+   and the button to the right together; the detail panel it expands is
+   positioned relative to this box and still drops below the header. */
 .tl-status-bar {
-  margin-bottom: 10px;
+  margin-left: auto;
+  position: relative;
+}
+.tl-status-bar:empty {
+  display: none;
+}
+.tl-status-bar .tl-sb-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: min(320px, 90vw);
+}
+/* `.section-head` is a nowrap flex row; the pill is a third child now,
+   so it needs permission to wrap rather than squeezing the title. */
+#cameras .section-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  /* At phone width the head row wraps; the pill then takes its own line
+     again, which is the honest layout rather than a squeezed one. */
+  .tl-status-bar {
+    margin-left: 0;
+    width: 100%;
+  }
+  .tl-status-bar .tl-sb-panel {
+    right: auto;
+    left: 0;
+  }
 }
 .tl-sb-pill {
   display: inline-flex;

@@ -20,7 +20,9 @@
 }
 
 #netz .netz-block {
-  padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
+  /* Top padding trimmed 14 → 8: the section already carries its own
+     padding, so the two stacked and the title floated. */
+  padding: 8px 12px calc(14px + env(safe-area-inset-bottom));
   border-radius: 14px;
 }
 
@@ -529,7 +531,7 @@
 .netz-head-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  grid-template-areas: 'title btn' 'cams cams';
+  grid-template-areas: 'title btns' 'cams cams';
   align-items: center;
   gap: 8px;
 }
@@ -540,7 +542,16 @@
 }
 
 .netz-head-row > .netz-view-btn {
-  grid-area: btn;
+  grid-area: btns;
+}
+/* Two header buttons share one grid area, so they flow side by side
+   without a wrapper element. */
+.netz-head-row > #netzFrozenBtn {
+  justify-self: end;
+  margin-right: 44px;
+}
+.netz-head-row > #netzViewBtn {
+  justify-self: end;
 }
 
 .netz-head-row > .netz-cams {
@@ -563,7 +574,7 @@
 @media (min-width: 760px) {
   .netz-head-row {
     grid-template-columns: auto 1fr auto;
-    grid-template-areas: 'title cams btn';
+    grid-template-areas: 'title cams btns';
   }
 
   .netz-head-row > .netz-cams {
@@ -910,4 +921,35 @@
   .netz-vertex:hover .netz-tune-dot {
     stroke: #fff;
   }
+}
+
+/* Camera identity in the Erkennungsprofil — same glyph and tint the
+   Statistik activity cloud and heat-map rows use (core/icons.js), so a
+   camera reads as the same camera across the app. */
+.netz-pill-ic,
+.netz-card-ic {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.netz-pill-ic svg,
+.netz-card-ic svg {
+  width: 16px;
+  height: 16px;
+}
+.netz-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.netz-card-hd > .netz-card-ic svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* "Werte, die fest bleiben" — header-toggled, so it needs its own
+   `[hidden]` opt-out or the `display` below would silently defeat the
+   attribute (the cascade trap swept in test_weather_zoom_panel_css.py). */
+.netz-frozen-box[hidden] {
+  display: none;
 }

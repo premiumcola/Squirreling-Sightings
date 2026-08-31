@@ -13,6 +13,7 @@
 // card's button regardless of which one was clicked.
 
 import { byId, esc, qsa } from '../core/dom.js';
+import { getCameraColor, getCameraIcon } from '../core/icons.js';
 import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
@@ -44,24 +45,6 @@ const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garte
 // Verlauf button, which puts them top-right on desktop (32-netz.css moves
 // them onto their own strip below the title on a phone).
 const CHIPS_ID = 'netzCamChips';
-
-// Same glyph as #netzViewBtn — one icon means one thing. The header
-// button opens the whole Verlauf; this one opens it filtered to the card
-// it sits on, which is the question the operator actually asks ("wie
-// wurden DIESE Einstellungen der Reihe nach geändert").
-const _HIST_ICON =
-  `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ` +
-  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
-  `<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>` +
-  `<polyline points="12 7.5 12 12.5 15.5 14"/></svg>`;
-
-function _histBtnHtml(cam) {
-  return (
-    `<button type="button" class="netz-card-hist" data-netz-hist ` +
-    `aria-label="Verlauf von ${esc(cam.name)}" title="Verlauf dieser Kamera">` +
-    `${_HIST_ICON}</button>`
-  );
-}
 
 // ── render ────────────────────────────────────────────────────────────
 
@@ -129,9 +112,11 @@ function _cardHtml(cam) {
   const focused = netzState.focusCam === cam.id ? ' is-focus' : '';
   return (
     `<article class="netz-card${focused}" data-cam="${esc(cam.id)}">` +
-    `<header class="netz-card-hd"><h4>${esc(cam.name)}</h4>` +
+    `<header class="netz-card-hd">` +
+    `<span class="netz-card-ic" style="color:${getCameraColor(cam)}" aria-hidden="true">` +
+    `${getCameraIcon(cam.name || cam.id)}</span>` +
+    `<h4>${esc(cam.name)}</h4>` +
     (role ? `<span class="netz-card-role">${esc(role)}</span>` : '') +
-    _histBtnHtml(cam) +
     `</header>` +
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
     `<div class="netz-card-controls">${_presetsHtml()}${_ghostHtml(tuning)}</div>` +
@@ -143,22 +128,29 @@ function _cardHtml(cam) {
 function _chipsHtml() {
   const cams = netzState.cameras || [];
   if (cams.length < 2) return '';
+  // Icon + tint come from the SAME helpers the Statistik activity cloud
+  // and heat-map rows use (core/icons.js), so one camera reads as the
+  // same camera everywhere in the app rather than as a bare name here
+  // and a coloured glyph there.
   return (
     `<div class="netz-pills netz-cams">` +
     cams
-      .map(
-        (c) =>
+      .map((c) => {
+        const nm = c.name || c.id;
+        return (
           `<button type="button" class="netz-pill${
             netzState.focusCam === c.id ? ' is-active' : ''
-          }" data-netz-cam="${esc(c.id)}">${esc(c.name)}</button>`,
-      )
+          }" data-netz-cam="${esc(c.id)}" style="--cam:${getCameraColor(c)}">` +
+          `<span class="netz-pill-ic" style="color:${getCameraColor(c)}" aria-hidden="true">` +
+          `${getCameraIcon(nm)}</span>${esc(nm)}</button>`
+        );
+      })
       .join('') +
     `</div>`
   );
 }
 
-/** Paint the header's camera slot. Cleared in the Verlauf view, which
- *  has camera chips of its own inside the list. */
+
 export function renderCamChips() {
   const el = byId(CHIPS_ID);
   if (el) el.innerHTML = netzState.view === 'netz' ? _chipsHtml() : '';
@@ -182,17 +174,22 @@ function _combosHtml() {
 }
 
 function _frozenHtml() {
-  // A plain box, not a <details>. "Werte, die fest bleiben" is reference
-  // material the operator should be able to SEE without a click — the
-  // difference between frozen and forgotten is whether it is readable.
+  // Was a permanently open box at the foot of the panel. It is reference
+  // material — read once, then never again — and it cost more vertical
+  // space on a phone than the nets it explains. Now it is a small button
+  // in the header; the content is unchanged, only its default state is.
   const first = netzState.cameras[0];
   const st = first ? camState(first.id) : null;
   const rows = ((st && st.frozen) || [])
     .map((f) => `<li><code>${esc(f.key)}</code><span>${esc(f.de)}</span></li>`)
     .join('');
   if (!rows) return '';
-  return `<div class="netz-frozen-box"><b>Werte, die fest bleiben</b><ul>${rows}</ul></div>`;
+  return (
+    `<div class="netz-frozen-box" id="netzFrozenBox" hidden>` +
+    `<b>Werte, die fest bleiben</b><ul>${rows}</ul></div>`
+  );
 }
+
 
 export function renderCards(host) {
   renderCamChips();
@@ -221,12 +218,8 @@ async function _save(camId, fields, okMsg, onRepaint) {
   onRepaint();
 }
 
-function _bindCard(card, onRepaint, onHistory) {
+function _bindCard(card, onRepaint) {
   const camId = card.dataset.cam;
-
-  card.querySelector('[data-netz-hist]')?.addEventListener('click', () => {
-    if (typeof onHistory === 'function') onHistory(camId);
-  });
 
   card.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
     const fields = { ...stagedFor(camId) };
@@ -286,7 +279,7 @@ function _bindAxisHints(card, camId) {
   );
 }
 
-export function bindCards(host, onRepaint, onHistory) {
+export function bindCards(host, onRepaint) {
   qsa('[data-netz-cam]', byId(CHIPS_ID) || host).forEach((b) =>
     b.addEventListener('click', () => {
       netzState.focusCam = netzState.focusCam === b.dataset.netzCam ? null : b.dataset.netzCam;
@@ -296,5 +289,5 @@ export function bindCards(host, onRepaint, onHistory) {
         ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }),
   );
-  qsa('.netz-card', host).forEach((card) => _bindCard(card, onRepaint, onHistory));
+  qsa('.netz-card', host).forEach((card) => _bindCard(card, onRepaint));
 }

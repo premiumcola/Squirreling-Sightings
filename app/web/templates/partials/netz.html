@@ -22,6 +22,34 @@ and hydration — deliberately the calm empty state, not a spinner. #}
         chips belong to the Netz. Empty until hydration — `.netz-cams:empty` collapses the slot, so
         a JS-less browser sees the same calm header it saw before. #}
         <div class="netz-pills netz-cams" id="netzCamChips"></div>
+        {# "Werte, die fest bleiben" is reference material — read once, then never again — so it
+        sits behind this button instead of costing a permanently open box at the foot of the panel.
+        Content unchanged; only its default state is. #}
+        <button
+          type="button"
+          id="netzFrozenBtn"
+          class="netz-view-btn"
+          aria-expanded="false"
+          aria-controls="netzFrozenBox"
+          aria-label="Werte, die fest bleiben"
+          title="Werte, die fest bleiben"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <line x1="12" y1="11" x2="12" y2="16" />
+            <line x1="12" y1="8" x2="12" y2="8" />
+          </svg>
+        </button>
         <button
           type="button"
           id="netzViewBtn"

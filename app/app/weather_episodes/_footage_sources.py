@@ -27,12 +27,11 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from ..library._motion_reader import motion_candidates as _lib_motion_candidates
 from ..weather_service._consts import _safe_dt
-from ._motion_scan import motion_events_between
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_MOTION_SPAN_S = 60.0
 _DEFAULT_TIMELAPSE_PERIOD_S = 86400.0
 
 # `list_sightings` paginates; the window bounds already do the pruning,
@@ -176,52 +175,18 @@ def timelapse_candidates(storage_root: Path, cam_names: dict) -> list:
     return out
 
 
-def _motion_span(obj: dict, start: datetime) -> datetime:
-    length = _num(obj.get("video_duration_s"), 0.0) or _num(obj.get("duration_s"), 0.0)
-    return start + timedelta(seconds=max(_DEFAULT_MOTION_SPAN_S, length))
-
-
 def motion_candidates(store, cam_ids: list, cam_names: dict, since=None, until=None) -> list:
     """Motion events with media, per camera, inside ``[since, until]``.
 
-    Reads via ``motion_events_between``, which prunes on the date-folder
-    name — the window is hours wide and the tree is years deep, so the
-    unbounded read this used to do (``list_events`` parses EVERY event
-    JSON before applying its ``start``) was the whole cost of the route.
-
-    The whole event payload rides along in ``extra`` because the client
-    hands motion tiles to the existing lightbox, which speaks exactly
-    the shape ``/api/camera/<id>/media`` returns.
+    The read + candidate-shape mapping is
+    ``library._motion_reader.motion_candidates`` — this wrapper's only
+    remaining job is the pad: `time` is the event's START and its clip
+    runs forwards, so an event a few minutes before the window can
+    still reach into it (see ``_MOTION_PAD_MIN`` above). The shared
+    reader takes the window as given and applies no pad of its own,
+    because the unified library feed (``library._feed``) widens its OWN
+    outer window instead — an unrelated mechanism for an unrelated
+    reason.
     """
-    lo = _iso(since - timedelta(minutes=_MOTION_PAD_MIN) if since is not None else None)
-    hi = _iso(until)
-    out: list = []
-    for cam_id in cam_ids:
-        try:
-            events = motion_events_between(store, cam_id, lo, hi)
-        except Exception as e:
-            log.warning("[weather] motion scan failed for %s: %s", cam_id, e)
-            continue
-        for obj in events:
-            start = _safe_dt(str(obj.get("time") or ""))
-            if start is None:
-                continue
-            rel = obj.get("video_relpath") or obj.get("snapshot_relpath") or ""
-            out.append(
-                {
-                    "kind": "motion",
-                    "cam_id": cam_id,
-                    "cam_name": cam_names.get(cam_id) or cam_id,
-                    "start": start,
-                    "end": _motion_span(obj, start),
-                    "video_url": "/media/{}".format(rel) if rel else "",
-                    "thumb_url": (
-                        "/media/{}".format(obj.get("snapshot_relpath"))
-                        if obj.get("snapshot_relpath")
-                        else ""
-                    ),
-                    "missing_media": not obj.get("video_relpath"),
-                    "extra": dict(obj),
-                }
-            )
-    return out
+    lo = since - timedelta(minutes=_MOTION_PAD_MIN) if since is not None else None
+    return _lib_motion_candidates(store, cam_ids, cam_names, since=lo, until=until)

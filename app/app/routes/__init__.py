@@ -72,6 +72,7 @@ def register_blueprints(app) -> None:
         coral_test_detection,
         detection_cloud,
         events,
+        library,
         media,
         netz,
         retention_panel,
@@ -106,6 +107,11 @@ def register_blueprints(app) -> None:
     app.register_blueprint(streams.bp)
     app.register_blueprint(media.bp)
     app.register_blueprint(events.bp)
+    # Stage 3 of the Mediathek + Wetter-Ereignisse merge: one merged,
+    # paginated, filtered read model over motion/sighting/recap/manual/
+    # episode/timelapse. Purely additive — every source route above and
+    # below keeps working unchanged; see app/app/library/__init__.py.
+    app.register_blueprint(library.bp)
     # NETZ · Erkennungsnetz + Verlaufs-Archiv. Own module because
     # neither cameras.py nor events.py has room, and because the net's
     # two surfaces share one helper module.

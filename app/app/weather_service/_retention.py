@@ -115,24 +115,20 @@ def acknowledge_weather_retention_from_payload(weather_payload: dict) -> None:
     window. Weather has no separate "Jetzt bereinigen" button, so
     saving the maintenance-panel sliders doubles as that attended act.
 
+    The loop itself moved to ``retention_catalog.acknowledge_payload``,
+    which does the same for every section of the unified panel — one
+    acknowledger, so a newly added category cannot be the one nobody
+    remembered to confirm. Kept as a named entry point because it is what
+    the weather sweep's own tests and callers know.
+
     Silently ignores a category key absent from the payload (an
     unconfigured category keeps deferring to the blanket bucket,
     exactly as the settings layer intends) and a value that doesn't
     parse as an int.
     """
-    from ..storage_retention import acknowledge_window
+    from ..retention_catalog import acknowledge_payload
 
-    if not isinstance(weather_payload, dict):
-        return
-    for category in (*WEATHER_RETENTION_CATEGORIES, "recaps", "manual_events"):
-        key = f"retention_{category}_days"
-        if key not in weather_payload:
-            continue
-        try:
-            days = int(weather_payload[key])
-        except (TypeError, ValueError):
-            continue
-        acknowledge_window(days, key=weather_retention_runtime_key(category))
+    acknowledge_payload("weather", weather_payload)
 
 
 class WeatherRetentionMixin:

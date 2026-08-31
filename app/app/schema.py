@@ -365,6 +365,11 @@ SECTION_SCHEMAS: dict = {
         # CORP-2 · cap on retained corpus samples per label per day.
         # Key landed by THR-1; the pruning logic ships with CORP-2.
         "corpus_quota_per_label_day": int,
+        # Kamera-Timelapses. 0 = nie löschen and is the shipped value —
+        # `timelapse_retention.sweep_camera_timelapses` returns before it
+        # computes a cutoff. Coerced like its siblings so the slider's
+        # string value lands as an int.
+        "retention_camera_timelapses_days": int,
     },
     # Soft-delete grace period. `trash._grace_days` has always read this
     # key, but it was missing from the section schema, so an

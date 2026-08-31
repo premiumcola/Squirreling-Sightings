@@ -338,15 +338,12 @@ export function hydrateSettings() {
   // Models list is now behind the Modelle sub-tab; load it lazily on
   // first open via toggleCoralTab, so hydrate doesn't spin up a request
   // users aren't looking at.
-  // Hydrate media settings form
-  const storageSec = state.config.storage || {};
-  const rdVal = storageSec.retention_days || 14;
-  const rdEl = byId('ms_retention_days');
-  if (rdEl) rdEl.value = rdVal;
-  const rdLbl = byId('ms_retention_days_val');
-  if (rdLbl) rdLbl.textContent = rdVal + ' Tage';
-  const acEl = byId('ms_auto_cleanup');
-  if (acEl) acEl.checked = !!storageSec.auto_cleanup_enabled;
+  // No media-settings hydration here any more. The retention form is
+  // server-rendered with its values already in it (retention_catalog →
+  // routes/retention_panel.py → the maintenance macro), so painting it
+  // from `state.config.storage` on every hydrateAppSettings pass would
+  // be a second source racing the first — which is exactly how the
+  // weather panel ended up showing Jinja literals forever.
 }
 
 async function updateSystemPanel() {

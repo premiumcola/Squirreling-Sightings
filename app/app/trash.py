@@ -37,11 +37,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import app_state
+from .settings._consts import TRASH_DEFAULTS
 
 log = logging.getLogger("trash")
 
 
-_DEFAULT_GRACE_DAYS = 7
+#: Imported, not restated: `settings/retention_migration.py` seeds the
+#: same number into settings.json, and a sweep whose fallback disagreed
+#: with the seeded value would purge on a different day than the panel
+#: promises.
+_DEFAULT_GRACE_DAYS = TRASH_DEFAULTS["grace_days"]
 
 
 def trash_root_for(store_root) -> Path:
@@ -397,16 +402,23 @@ def empty() -> int:
     return removed
 
 
-def cleanup_expired() -> int:
+def cleanup_expired(grace_days: int | None = None) -> int:
     """Daily sweep: hard-delete trash entries past the grace period.
 
     Called from `maintenance._run_daily_cleanup`, alongside the event
     retention sweep. Also safe to invoke manually (a cron, a test, or
-    the POST /api/trash/empty route's hard-delete path)."""
+    the POST /api/trash/empty route's hard-delete path).
+
+    ``grace_days`` overrides the configured period for one call. The
+    unattended caller passes the window `storage_retention.nightly_window`
+    cleared, so a grace period the operator LOWERED without confirming it
+    doesn't hard-delete — this is the last copy of those files — while
+    every attended caller keeps the plain configured value.
+    """
     root = _trash_root()
     if not root.exists():
         return 0
-    grace = _grace_days()
+    grace = _grace_days() if grace_days is None else max(0, int(grace_days))
     cutoff = datetime.now() - timedelta(days=grace)
     removed = 0
     for cam_dir in list(d for d in root.iterdir() if d.is_dir()):

@@ -109,6 +109,10 @@ LOAD_ORDER = [
     # NETZ · Erkennungsnetz (Radar + Drag) und sein Verlaufs-Archiv.
     "32-netz.css",
     "33-netz-archiv.css",
+    # Mediathek-Verwaltung — the unified Aufbewahrungs-Formular.
+    # After 25-mobile.css like every other late partial, so its own
+    # min-width query is the one that decides the row layout.
+    "34-retention.css",
 ]
 
 _BANNER = (

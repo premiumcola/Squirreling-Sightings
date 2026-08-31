@@ -71,24 +71,31 @@ def api_settings_app():
     )
 
 
-def _acknowledge_storage_retention(storage_payload: dict) -> None:
-    """Confirm a saved motion-clip retention window against the nightly
-    widening guard.
+#: Sections of the unified Mediathek-Verwaltung panel whose saved
+#: retention windows have to be acknowledged against the nightly
+#: widening guard. `weather` is acknowledged on its own path below, which
+#: already routes through the same catalog helper.
+_RETENTION_SECTIONS = ("storage", "trash")
 
-    Mirrors `weather_service/_retention.acknowledge_weather_retention_from_payload`
-    exactly, including its tolerance: a key that is absent stays deferred,
-    and a value that does not parse is ignored rather than raising out of
-    a settings save.
+
+def _acknowledge_retention(payload: dict) -> None:
+    """Confirm every retention window this save carries.
+
+    A category that saves without acknowledging can be RAISED and never
+    LOWERED: `storage_retention.nightly_window` keeps deferring to the
+    wider previously-enforced value forever. That defect was live for the
+    Mediathek slider until it got its own acknowledger, and the way to
+    stop it recurring per category is to derive the loop from
+    `retention_catalog` instead of hand-writing one per section.
+
+    Tolerance is the catalog helper's: a key that is absent stays
+    deferred, and a value that does not parse is ignored rather than
+    raising out of a settings save.
     """
-    if not isinstance(storage_payload, dict) or "retention_days" not in storage_payload:
-        return
-    try:
-        days = int(storage_payload["retention_days"])
-    except (TypeError, ValueError):
-        return
-    from ..storage_retention import acknowledge_window
+    from ..retention_catalog import acknowledge_payload
 
-    acknowledge_window(days)
+    for section in _RETENTION_SECTIONS:
+        acknowledge_payload(section, payload.get(section) or {})
 
 
 @bp.post('/api/settings/app')
@@ -106,14 +113,13 @@ def api_settings_app_save():
         for sec in ("app", "server", "ui", "storage", "trash"):
             if sec in payload:
                 settings.update_section(sec, payload.get(sec) or {})
-        # Saving the retention slider IS the operator's confirmation of the
-        # new window — the same act the weather panel below already
-        # acknowledges. Without this, `nightly_window` kept deferring to the
-        # previously-enforced (wider) value forever: LOWERING the Mediathek
-        # retention had no effect at all, and the only other confirmer
+        # Saving the panel IS the operator's confirmation of every window
+        # it carries. Without this, `nightly_window` kept deferring to the
+        # previously-enforced (wider) value forever: LOWERING a retention
+        # had no effect at all, and the only other confirmer
         # (`POST /api/media/cleanup`) hangs off a button no template renders.
         # Widening always worked, which is why the slider looked alive.
-        _acknowledge_storage_retention(payload.get("storage") or {})
+        _acknowledge_retention(payload)
         if "telegram" in payload:
             # Telegram credentials change → rebuild_runtimes() picks up the
             # new bot token / chat id so the next test (and any subsequent

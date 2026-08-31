@@ -85,41 +85,88 @@ def auto_cleanup_enabled() -> bool:
     return bool(_storage_setting("auto_cleanup_enabled", True))
 
 
+def _row_days(key: str) -> int:
+    """Resolved window of one Mediathek-Verwaltung row, by catalog key."""
+    from .retention_catalog import RETENTION_ROWS, resolve_days
+
+    row = next(r for r in RETENTION_ROWS if r.key == key)
+    return resolve_days(row)
+
+
+def _row_runtime_key(key: str) -> str:
+    from .retention_catalog import RETENTION_ROWS
+
+    return next(r for r in RETENTION_ROWS if r.key == key).runtime_key
+
+
+def _sweep_motion_clips(log) -> None:
+    # `nightly_window` is the guard between "the slider says 7" and "the
+    # unattended sweep deletes everything older than 7 tonight". A
+    # narrower window is announced and deferred until the operator
+    # confirms it by saving the panel (or with "Jetzt bereinigen").
+    retention = nightly_window(resolve_retention_days(), config_retention_days())
+    removed = app_state.store.cleanup_old(retention)
+    if removed:
+        log.info("[storage] Removed %d old event files (>%dd)", removed, retention)
+
+
+def _sweep_camera_timelapses(log) -> None:
+    """Kamera-Timelapses. Off unless the operator set a window — the
+    category was exempt from every sweep until this row existed, so 0
+    (nie löschen) short-circuits BEFORE the widening guard, which would
+    otherwise hand back a previously-enforced window for a row that has
+    just been switched off."""
+    from .timelapse_retention import sweep_camera_timelapses
+
+    resolved = _row_days("camera_timelapses")
+    if resolved <= 0:
+        return
+    window = nightly_window(resolved, resolved, key=_row_runtime_key("camera_timelapses"))
+    retired = sweep_camera_timelapses(app_state.store, window)
+    if retired:
+        log.info("[timelapse] %d Timelapse-Dateien in den Papierkorb verschoben", retired)
+
+
+def _sweep_trash(log) -> None:
+    """trash.cleanup_expired() shipped with the docstring "wire into the
+    existing daily maintenance cron in a follow-up commit" — that commit
+    never landed, so storage/.trash grew unbounded and only emptied via a
+    manual POST /api/trash/empty (11 GB of May entries were found once).
+    This is that follow-up.
+
+    Deliberately NOT gated on auto_cleanup_enabled: the trash holds
+    content the operator already deleted, under its own documented grace
+    period. Freezing it with the archive-retention switch would turn
+    "keep my recordings longer" into "never reclaim deleted space", which
+    is not what that toggle says.
+
+    It IS gated on the widening guard, because a shortened grace period
+    hard-deletes the last copy of files the operator may still want back.
+    """
+    from .trash import _DEFAULT_GRACE_DAYS, cleanup_expired
+
+    grace = nightly_window(
+        _row_days("trash_grace"), _DEFAULT_GRACE_DAYS, key=_row_runtime_key("trash_grace")
+    )
+    purged = cleanup_expired(grace)
+    if purged:
+        log.info("[storage] Trash: %d expired entries purged (>%dd)", purged, grace)
+
+
 def _run_daily_cleanup():
     log = logging.getLogger(__name__)
     if not auto_cleanup_enabled():
         log.info("[storage] autoclean deaktiviert (storage.auto_cleanup_enabled) — übersprungen")
     else:
-        try:
-            # `nightly_window` is the guard between "the slider says 7"
-            # and "the unattended sweep deletes everything older than 7
-            # tonight". A narrower window is announced and deferred
-            # until the operator confirms it with "Jetzt bereinigen".
-            retention = nightly_window(resolve_retention_days(), config_retention_days())
-            removed = app_state.store.cleanup_old(retention)
-            if removed:
-                log.info("[storage] Removed %d old event files (>%dd)", removed, retention)
-        except Exception as e:
-            log.warning("[storage] Failed: %s", e)
-    # trash.cleanup_expired() shipped with the docstring "wire into the
-    # existing daily maintenance cron in a follow-up commit" — that
-    # commit never landed, so storage/.trash grew unbounded and only
-    # emptied via a manual POST /api/trash/empty (11 GB of May entries
-    # were found once). This is that follow-up.
-    #
-    # Deliberately NOT gated on auto_cleanup_enabled: the trash holds
-    # content the operator already deleted, under its own documented
-    # grace period. Freezing it with the archive-retention switch would
-    # turn "keep my recordings longer" into "never reclaim deleted
-    # space", which is not what that toggle says.
+        for sweep in (_sweep_motion_clips, _sweep_camera_timelapses):
+            try:
+                sweep(log)
+            except Exception as e:
+                log.warning("[storage] Failed: %s", e)
     try:
-        from .trash import cleanup_expired
-
-        purged = cleanup_expired()
-        if purged:
-            logging.getLogger(__name__).info("[storage] Trash: %d expired entries purged", purged)
+        _sweep_trash(log)
     except Exception as e:
-        logging.getLogger(__name__).warning("[storage] Trash cleanup failed: %s", e)
+        log.warning("[storage] Trash cleanup failed: %s", e)
     t = threading.Timer(86400, _run_daily_cleanup)
     t.daemon = True
     t.start()

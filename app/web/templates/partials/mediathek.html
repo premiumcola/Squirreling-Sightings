@@ -115,17 +115,18 @@
     </div>
   </div>
 
-  {# Maintenance accordion (Sonderaktionen + retention slider + auto-cleanup toggle + Speichern).
-  Renamed Mediathek-Einstellungen → Mediathek-Wartung so both panels end in "-Wartung" and read
-  symmetrically. The two legacy danger buttons (purgeOrphansBtn, cleanupNowBtn) are dropped per
-  docs/maintenance-panels.md — Auto-Cleanup + retention already cover the same intent. Backend
-  endpoints stay alive in case something else calls them. #} {% from
-  'partials/_maintenance_panel.html' import maintenance_panel %} {% call maintenance_panel(
-  panel_id='set-media-maint', accent='143,158,181', title='Mediathek-Wartung', hint='Nur bei
-  Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'mediaSettingsForm',
-  'val_id': 'ms_retention_days_val', 'input_id': 'ms_retention_days', 'toggle_id':
-  'ms_auto_cleanup', 'days_name': 'retention_days', 'enabled_name': 'auto_cleanup_enabled',
-  'current': 14, 'min': 1, 'max': 90, } ) %}
+  {# Mediathek-Verwaltung — the ONE place every Aufbewahrungsfrist is set. Was two panels: one
+  blanket slider here, five per-category sliders in the Wetter-Sektion, two retention windows
+  (Kamera-Timelapses, Papierkorb) with no control at all. They are now one form, grouped
+  Kamera / Wetter / Papierkorb, fed from app/app/retention_catalog.py.
+
+  The Wetter-Sektion keeps its own Sonderaktionen (rescan, thumbs) and links here for the
+  fristen — see partials/weather.html. The two legacy danger buttons (purgeOrphansBtn,
+  cleanupNowBtn) stay dropped per docs/maintenance-panels.md; Auto-Cleanup + retention cover the
+  same intent and the backend endpoints stay alive. #} {% from 'partials/_maintenance_panel.html'
+  import maintenance_panel %} {% call maintenance_panel( panel_id='set-media-maint',
+  accent='143,158,181', title='Mediathek-Verwaltung', hint='Nur bei Indexproblemen — normalerweise
+  nicht nötig.', retention={ 'form_id': 'retentionForm', 'groups': retention_groups } ) %}
   <button type="button" id="fixThumbsBtn" class="btn btn-action action-green">
     <svg
       viewBox="0 0 16 16"

@@ -6,7 +6,7 @@
 // size badges, and filter pills always reflect server reality.
 import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { j, apiPost } from '../core/api.js';
+import { j } from '../core/api.js';
 import { renderTimeline } from '../timeline.js';
 
 export async function loadMediaStorageStats() {
@@ -55,25 +55,16 @@ export async function refreshTimelineAndStats() {
   }
 }
 
-// One-time wiring for the Mediathek settings form. Guards against the
-// element being absent so the module is safe to import on pages without
-// this control.
+// R23 + retention-panel merge · this module no longer wires ANY
+// settings control. The three handlers that used to live here are gone
+// for two different reasons, both verified rather than assumed:
 //
-// R23 · the #cleanupNowBtn and #purgeOrphansBtn handlers were deleted
-// here. No template has rendered either id since the two legacy danger
-// buttons were dropped from partials/mediathek.html, so both listeners
-// were bound to nothing. The retention-acknowledge path they were the
-// last confirmer for now lives server-side in
-// routes/app_settings.py::_acknowledge_storage_retention.
-byId('mediaSettingsForm')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const f = e.target.elements;
-  const payload = {
-    storage: {
-      retention_days: Number(f['retention_days'].value || 14),
-      auto_cleanup_enabled: !!f['auto_cleanup_enabled']?.checked,
-    },
-  };
-  await apiPost('/api/settings/app', payload);
-  if (typeof window.loadAll === 'function') await window.loadAll();
-});
+//   #cleanupNowBtn / #purgeOrphansBtn — no template has rendered either
+//     id since the two legacy danger buttons were dropped
+//     (partials/mediathek.html records that decision).
+//   #mediaSettingsForm — superseded. Every Aufbewahrungsfrist now lives
+//     in the one #retentionForm panel, saved by js/maintenance/index.js
+//     via a DOM walk over data-section/data-field.
+//
+// What remains here is what the module is named for: loading and
+// rendering the storage statistics.

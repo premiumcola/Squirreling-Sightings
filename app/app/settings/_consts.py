@@ -317,6 +317,34 @@ STORAGE_DEFAULTS: dict = {
     "corpus_quota_per_label_day": CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT,
 }
 
+# Kamera-Timelapses. 0 is not "delete immediately" here — it is the
+# explicit OFF position of this one knob, rendered as "Nie löschen" and
+# short-circuited before the sweep ever computes a cutoff
+# (timelapse_retention.sweep_camera_timelapses).
+#
+# It ships as 0 on purpose. `storage_retention._collect_expired` has
+# always skipped every `tl_*` id, so a camera timelapse has never been
+# deleted by anything on any install; turning that into a 14-day sweep
+# by shipping a non-zero default would delete years of footage on the
+# first night after an upgrade, silently. The category is now
+# CONFIGURABLE, not newly mortal — mortality is an act the operator
+# performs on a screen that shows the number.
+CAMERA_TIMELAPSE_RETENTION_DAYS_DEFAULT = 0
+
+#: Additive backfill for the `storage` section, applied by
+#: `settings/retention_migration.py`. Deliberately NOT carrying
+#: `retention_days`: see that module for why seeding it would change
+#: which config layer wins.
+STORAGE_RETENTION_DEFAULTS: dict = {
+    "retention_camera_timelapses_days": CAMERA_TIMELAPSE_RETENTION_DAYS_DEFAULT,
+}
+
+#: Soft-delete grace period. `trash._DEFAULT_GRACE_DAYS` imports this so
+#: the sweep's fallback and the seeded value can never drift apart.
+TRASH_DEFAULTS: dict = {
+    "grace_days": 7,
+}
+
 
 # Per-camera sun-timelapse defaults — both phases off until the user
 # opts in.

@@ -1,0 +1,209 @@
+/* ── Mediathek-Verwaltung · Aufbewahrungsfristen ───────────────────────────
+   The unified retention form (#retentionForm) inside the
+   set-media-maint accordion. Eight rows where there used to be one
+   slider here and five in the Wetter-Sektion.
+
+   The layout question this file answers is height. Eight sliders each
+   stacked over their own label is ~700 px on an iPhone SE — more than a
+   full screen of controls with no landmarks. Two decisions cut that:
+
+     * Rows are grouped (Kamera / Wetter / Papierkorb) with a heading
+       and one shared Auto-Cleanup switch per group, so the list reads
+       as three short blocks rather than one long one.
+     * From 560 px up, label · slider · number sit on ONE line (~48 px
+       per row). Below that the slider drops to its own line under the
+       label, which is the only arrangement where the German labels
+       still fit at 375 px without truncating.
+
+   Both controls are live at once on purpose: the range is the coarse
+   one, the number input is the fine one the operator asked for. The
+   range is aria-hidden + tabindex=-1 — it mirrors the number input, so
+   exposing both to a screen reader would announce every row twice. */
+
+.ret-form {
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── group ── */
+.ret-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.ret-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+.ret-group-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ret-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.ret-auto-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ret-group-note {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── row ── */
+.ret-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'head value'
+    'range range';
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  padding: 4px 0;
+}
+.ret-row-head {
+  grid-area: head;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ret-row-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ret-row-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+.ret-row-value {
+  grid-area: value;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.ret-unit {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ret-unit--off {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+}
+
+/* 16 px minimum, else iOS zooms the whole page on focus. The 44 px
+   height is the touch target; width fits "1000" plus the stepper. */
+.ret-num {
+  width: 74px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: right;
+}
+.ret-num:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The input owns 44 px of vertical space while the track is 6 px, so the
+   thumb is grabbable on a phone without the row growing to match. Track
+   and thumb are painted here rather than inherited from 25-mobile.css's
+   global `input[type='range']` rule: that one is scoped to a max-width
+   query, and a slider that is 44 px tall on a phone and 6 px on a laptop
+   would be two different controls. */
+.ret-range {
+  grid-area: range;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.ret-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.ret-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0a0a0a;
+}
+.ret-range::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.ret-range::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0a0a0a;
+}
+
+@media (hover: hover) {
+  .ret-num:hover {
+    background: rgba(255, 255, 255, 0.13);
+  }
+}
+
+@media (min-width: 560px) {
+  .ret-row {
+    grid-template-columns: minmax(150px, 1.2fr) minmax(90px, 1fr) auto;
+    grid-template-areas: 'head range value';
+    row-gap: 0;
+  }
+}
+
+/* ── save row ── */
+.ret-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+.ret-status {
+  font-size: 12px;
+  color: var(--muted);
+}

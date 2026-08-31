@@ -40,6 +40,7 @@ from .migrations import (
     migrate_thunder_lpi_scale,
     migrate_weather_defaults,
 )
+from .retention_migration import migrate_retention_defaults
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +123,11 @@ class SettingsStore:
         migrate_telegram_push_defaults(self.data)
         migrate_server_location_defaults(self.data)
         migrate_weather_defaults(self.data)
+        # Runs AFTER migrate_weather_defaults, which owns the weather
+        # categories; this one adds only the storage + trash rows of the
+        # same panel. Additive, idempotent, and deliberately silent on
+        # `storage.retention_days` — see the module docstring.
+        migrate_retention_defaults(self.data)
         # Runs AFTER the backfill so the thunder block exists even on a
         # settings.json that predates it.
         migrate_thunder_lpi_scale(self.data)

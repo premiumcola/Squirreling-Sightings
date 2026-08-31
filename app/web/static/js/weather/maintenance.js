@@ -15,17 +15,15 @@
 // the global `loadWeatherSightings()` exposed by sightings.js so the
 // newly registered cards appear without a manual reload.
 //
-// Per-category retention sliders — one blanket slider used to govern
-// every kind of weather media; a quarterly recap and a daily sunrise
-// clip have nothing in common retention-wise, so each category now has
-// its own slider + its own settings.json key. Consumed nightly by
-// weather_service/_retention.py's sweep. RETENTION_FIELDS is the single
-// source of truth for which slider maps to which payload/DOM name —
-// add a category here and both the save and the bootstrap-paint below
-// pick it up automatically.
+// The per-category retention sliders that used to live here moved into
+// the unified Mediathek-Verwaltung panel (js/maintenance/index.js). They
+// also never worked: this file painted them from /api/bootstrap's
+// `data.app.weather`, and `bootstrap_state()` returns no `app` key, so
+// every slider showed its Jinja literal and a saved value never came
+// back. The section's "Aufbewahrungsfristen" button opens the one panel.
 
 import { byId } from '../core/dom.js';
-import { j, apiGet, apiPost } from '../core/api.js';
+import { j } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 
 byId('weatherRescanBtn')?.addEventListener('click', async () => {
@@ -58,73 +56,6 @@ byId('weatherRescanBtn')?.addEventListener('click', async () => {
     btn.classList.remove('scanning');
   }
 });
-
-// field name (also the settings.json key under `weather.`) → slider DOM id.
-// Kept in one place so a category can't drift between the save handler
-// and the bootstrap-paint below.
-const RETENTION_FIELDS = {
-  retention_sightings_days: 'ws_retention_sightings',
-  retention_event_timelapses_days: 'ws_retention_event_tl',
-  retention_sun_timelapses_days: 'ws_retention_sun_tl',
-  retention_recaps_days: 'ws_retention_recaps',
-};
-
-// ── Retention / auto-cleanup save handler ─────────────────────────────────
-// Mirrors the Mediathek mediaSettingsForm submit in chrome/storage-stats.js
-// — POSTs the sliders + toggle into ``weather`` so the same
-// /api/settings/app endpoint persists them. The legacy blanket
-// `retention_days` field is deliberately NOT sent any more (the per-
-// category sliders replace it in the UI) — update_section deep-merges,
-// so omitting it leaves whatever a real install already saved there
-// untouched; it keeps working server-side as the fallback bucket for
-// any category this form doesn't cover.
-byId('weatherMaintForm')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const f = e.target.elements;
-  const weather = { auto_cleanup_enabled: !!f['auto_cleanup_enabled']?.checked };
-  for (const field of Object.keys(RETENTION_FIELDS)) {
-    if (f[field]) {
-      weather[field] = Number(f[field].value || 0);
-    }
-  }
-  try {
-    await apiPost('/api/settings/app', { weather });
-    showToast('Wetter-Aufbewahrung gespeichert.', 'success');
-  } catch (err) {
-    showToast('Speichern fehlgeschlagen: ' + (err.message || err), 'error');
-  }
-});
-
-// ── Bootstrap initial values from current settings ────────────────────────
-// On first load, paint every slider + the toggle with whatever the server
-// already persisted (falls back to each category's shipped default the
-// very first time — mirrors WEATHER_RETENTION_DEFAULTS server-side). Same
-// approach as camedit/index.js for the mediathek slider — best-effort,
-// silent on failure.
-(async function _initWeatherMaintFromSettings() {
-  try {
-    const data = await apiGet('/api/bootstrap');
-    const w = (data && data.app && data.app.weather) || {};
-    const auto = w.auto_cleanup_enabled !== false;
-    const tog = byId('ws_auto_cleanup');
-    if (tog) {
-      tog.checked = auto;
-    }
-    for (const [field, inputId] of Object.entries(RETENTION_FIELDS)) {
-      const sl = byId(inputId);
-      if (!sl) continue;
-      const fallback = Number(sl.value || 90);
-      const days = Number(w[field] ?? fallback);
-      sl.value = days;
-      const lbl = byId(inputId + '_val');
-      if (lbl) {
-        lbl.textContent = days + ' Tage';
-      }
-    }
-  } catch {
-    /* silent */
-  }
-})();
 
 byId('weatherThumbRegenBtn')?.addEventListener('click', async () => {
   const btn = byId('weatherThumbRegenBtn');

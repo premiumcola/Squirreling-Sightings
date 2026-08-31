@@ -1,27 +1,36 @@
-{# ── Shared maintenance-panel macro ───────────────────────────────────────── Renders the outer
-accordion shell + "Sonderaktionen" sub-block that both ``partials/mediathek.html``
-(Mediathek-Wartung) and ``partials/weather.html`` (Wetter-Wartung) used to repeat verbatim. Usage::
-{% from 'partials/_maintenance_panel.html' import maintenance_panel %} {% call maintenance_panel(
-panel_id='set-media-maint', accent='143,158,181', title='Mediathek-Wartung', hint='Nur bei
-Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'mediaSettingsForm', 'val_id':
-'ms_retention_days_val', 'input_id': 'ms_retention_days', 'toggle_id': 'ms_auto_cleanup',
-'days_name': 'retention_days', 'enabled_name': 'auto_cleanup_enabled', 'current': 14, 'min': 1,
-'max': 90, }, ) %}
-<button id="fixThumbsBtn" class="btn btn-action action-green">…</button>
-<button id="rescanMediaBtn" class="btn btn-action action-green">…</button>
-<button id="reindexTrackingBtn" class="btn btn-action action-green">…</button>
-{% endcall %} - ``panel_id`` — DOM id (also used by ``toggleSetSection`` onclick). - ``accent`` —
-CSS RGB triplet for ``data-accent``. - ``title`` — accordion header label. - ``hint`` — short
-subtitle under "Sonderaktionen". - ``retention`` — optional dict; when present, renders the
-retention slider(s) + auto-cleanup toggle + Speichern row. When ``None``, the action row is the
-only body. Single-slider callers (Mediathek) set the row keys directly on ``retention`` itself
-(``val_id``/``input_id``/``days_name``/``current``/``min``/``max``, as above). A caller with more
-than one independently-configurable retention value (Wetter-Wartung's per-category sliders) sets
-``retention.rows`` instead — a list of dicts with those same per-row keys plus an optional
-``label`` (defaults to "Aufbewahrung") — and every row shares the one ``form_id``/``toggle_id``/
-``enabled_name``/Speichern button. Action buttons are rendered by the macro CALLER (each panel's
-own icons + ids stay distinct) — the macro just lays out the row. #} {% macro maintenance_panel(panel_id,
-accent, title, hint, retention=None) %}
+{# ── Shared maintenance-panel macro ─────────────────────────────────────────
+
+Renders the outer accordion shell + "Sonderaktionen" sub-block, plus — for the one caller that asks
+for it — the whole Aufbewahrung form. Usage::
+
+  {% from 'partials/_maintenance_panel.html' import maintenance_panel %}
+  {% call maintenance_panel(
+       panel_id='set-media-maint', accent='143,158,181',
+       title='Mediathek-Verwaltung',
+       hint='Nur bei Indexproblemen — normalerweise nicht nötig.',
+       retention={'form_id': 'retentionForm', 'groups': retention_groups}) %}
+    <button id="fixThumbsBtn" class="btn btn-action action-green">…</button>
+  {% endcall %}
+
+- ``panel_id`` — DOM id (also used by ``toggleSetSection``).
+- ``accent`` — CSS RGB triplet for ``data-accent``.
+- ``title`` — accordion header label.
+- ``hint`` — short subtitle under "Sonderaktionen".
+- ``retention`` — optional dict ``{form_id, groups}``. When ``None`` the action row is the only
+  body, which is what ``partials/weather.html`` now passes: its retention sliders moved into the
+  one unified panel.
+
+``groups`` is NOT written by hand any more. It comes from ``retention_groups``, injected by
+``routes/retention_panel.py``'s context processor out of ``app/app/retention_catalog.py`` —
+already resolved against settings.json + config.yaml, so the markup Flask sends carries the real
+numbers instead of Jinja literals that some later fetch has to correct. Each control stamps
+``data-section``/``data-field`` (its settings.json coordinates) so ``js/maintenance/`` builds the
+save payload by walking the DOM, per CLAUDE.md's rule against collecting from cached JS state.
+Adding a category is one entry in the catalog and nothing here.
+
+Action buttons are rendered by the macro CALLER (each panel's own icons + ids stay distinct) — the
+macro just lays out the row. #} {% macro maintenance_panel(panel_id, accent, title, hint,
+retention=None) %}
 <div class="set-section" id="{{ panel_id }}" data-accent="{{ accent }}">
   <button type="button" class="set-hd" data-action="toggleSetSection" data-section="{{ panel_id }}">
     <span class="set-icon"
@@ -62,52 +71,72 @@ accent, title, hint, retention=None) %}
         <div class="media-special-actions-row">{{ caller() }}</div>
       </div>
       {% if retention %}
-      <form id="{{ retention.form_id }}" class="form" style="padding-top: 8px">
-        <div style="display: grid; gap: 10px; margin-bottom: 10px">
-          {% for row in (retention.rows if retention.rows is defined else [retention]) %}
-          <div>
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: baseline;
-                margin-bottom: 4px;
-              "
-            >
-              <span style="font-size: 13px; color: var(--muted)"
-                >{{ row.label if row.label is defined else 'Aufbewahrung' }}</span
-              >
-              <span
-                id="{{ row.val_id }}"
-                style="font-size: 13px; font-weight: 700; color: var(--text)"
-                >{{ row.current }} Tage</span
-              >
+      <form id="{{ retention.form_id }}" class="form ret-form">
+        {% for group in (retention.groups or []) %}
+        <section class="ret-group" data-group="{{ group.key }}">
+          <div class="ret-group-head">
+            <h4 class="ret-group-title">{{ group.title }}</h4>
+            {% if group.toggle_id %}
+            <span class="ret-auto">
+              <span class="ret-auto-label" id="{{ group.toggle_id }}_label">Auto-Cleanup</span>
+              <label class="switch"
+                ><input
+                  type="checkbox"
+                  id="{{ group.toggle_id }}"
+                  data-section="{{ group.toggle_section }}"
+                  data-field="{{ group.toggle_field }}"
+                  aria-labelledby="{{ group.toggle_id }}_label"
+                  {% if group.toggle_on %}checked{% endif %} /><span class="slider"></span
+              ></label>
+            </span>
+            {% endif %}
+          </div>
+          <p class="ret-group-note">{{ group.note }}</p>
+          {% for row in group.rows %}
+          <div class="ret-row">
+            <div class="ret-row-head">
+              <label class="ret-row-label" for="{{ row.input_id }}">{{ row.label }}</label>
+              <span class="ret-row-hint">{{ row.hint }}</span>
             </div>
             <input
-              id="{{ row.input_id }}"
-              name="{{ row.days_name }}"
+              class="ret-range"
+              id="{{ row.range_id }}"
               type="range"
               min="{{ row.min }}"
               max="{{ row.max }}"
               step="1"
               value="{{ row.current }}"
-              style="width: 100%; accent-color: #cbd5e1"
-              oninput="byId('{{ row.val_id }}').textContent=this.value+' Tage'"
+              tabindex="-1"
+              aria-hidden="true"
+              data-range-for="{{ row.input_id }}"
             />
+            <span class="ret-row-value">
+              <input
+                class="ret-num"
+                id="{{ row.input_id }}"
+                type="number"
+                inputmode="numeric"
+                min="{{ row.min }}"
+                max="{{ row.max }}"
+                step="1"
+                value="{{ row.current }}"
+                data-section="{{ row.section }}"
+                data-field="{{ row.field }}"
+                {% if row.off_at_zero %}data-off-at-zero="1"{% endif %}
+                aria-label="{{ row.label }} — Aufbewahrung in Tagen"
+              />
+              <span class="ret-unit" id="{{ row.input_id }}_unit"
+                >{% if row.off_at_zero and row.current == 0 %}= nie löschen{% else %}Tage{% endif
+                %}</span
+              >
+            </span>
           </div>
           {% endfor %}
-          <label class="toggle-row" style="margin: 0; white-space: nowrap; gap: 8px">
-            <span style="font-size: 13px">Auto-Cleanup</span>
-            <label class="switch"
-              ><input
-                type="checkbox"
-                id="{{ retention.toggle_id }}"
-                name="{{ retention.enabled_name }}" /><span class="slider"></span
-            ></label>
-          </label>
-        </div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-          <button type="submit" class="btn btn-save" style="margin-left: auto">
+        </section>
+        {% endfor %}
+        <div class="ret-actions">
+          <span class="ret-status" id="{{ retention.form_id }}_status" role="status"></span>
+          <button type="submit" class="btn btn-save">
             <svg
               viewBox="0 0 16 16"
               width="15"

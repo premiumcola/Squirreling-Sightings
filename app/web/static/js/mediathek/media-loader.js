@@ -7,7 +7,7 @@
 // re-renders the pill bar.
 import { state } from '../core/state.js';
 import { j } from '../core/api.js';
-import { calcItemsPerPage } from './orchestration.js';
+import { calcItemsPerPage } from './_paging.js';
 import { syncMediaPills } from './filters.js';
 
 // ── loadMedia ───────────────────────────────────────────────────────────────

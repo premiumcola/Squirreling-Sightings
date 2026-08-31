@@ -9,7 +9,8 @@ import { state } from '../core/state.js';
 import { OBJ_LABEL, objIconSvg } from '../core/icons.js';
 import { CAT_COLORS } from '../timeline.js';
 import { loadMedia } from './media-loader.js';
-import { renderMediaGrid, renderMediaPagination, openAllMediaDrilldown } from './orchestration.js';
+import { renderMediaGrid, renderMediaPagination } from './_paging.js';
+import { openAllMediaDrilldown } from './_drilldown.js';
 
 // ── Filter pill bar ─────────────────────────────────────────────────────────
 // Sort happens at render time (by count desc); this list seeds the

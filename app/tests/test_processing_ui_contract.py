@@ -24,7 +24,10 @@ import pytest
 
 WEB = Path(__file__).resolve().parent.parent / "web" / "static"
 JS = WEB / "js" / "mediathek" / "_processing.js"
-ORCH = WEB / "js" / "mediathek" / "orchestration.js"
+# R23 · orchestration.js was split; the two consumers of _processing.js are
+# now the page painter (queue strip + poll) and the card builder (stage tile).
+PAGING = WEB / "js" / "mediathek" / "_paging.js"
+CARDS = WEB / "js" / "mediathek" / "_cards.js"
 CSS_FILE = WEB / "css" / "14-mediathek-1.css"
 CSS_MARKER = "In-flight clips: stage tile + queue strip"
 
@@ -42,8 +45,13 @@ def js() -> str:
 
 
 @pytest.fixture(scope="module")
-def orch() -> str:
-    return ORCH.read_text(encoding="utf-8")
+def paging() -> str:
+    return PAGING.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def cards() -> str:
+    return CARDS.read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")
@@ -60,36 +68,37 @@ def css() -> str:
 
 
 # ── wiring ─────────────────────────────────────────────────────────────────
-def test_the_grid_uses_the_processing_module(orch):
-    """The placeholder used to be an inline template literal in
-    orchestration.js. It is not allowed back — that file is already
-    924 lines against a 400-line ceiling."""
-    assert "from './_processing.js'" in orch
-    assert "processingTileHTML(item" in orch
-    assert "renderProcessingQueue(" in orch
+def test_the_grid_uses_the_processing_module(paging, cards):
+    """The placeholder used to be an inline template literal in the
+    orchestrator. It is not allowed back — the card builder imports the
+    stage tile, the page painter imports the queue strip."""
+    assert "from './_processing.js'" in cards
+    assert "processingTileHTML(item" in cards
+    assert "from './_processing.js'" in paging
+    assert "renderProcessingQueue(" in paging
 
 
-def test_the_poll_watches_the_whole_library_not_just_the_page(orch):
+def test_the_poll_watches_the_whole_library_not_just_the_page(paging):
     """`state.media` is one page. A clip that starts recording while the
     user is on page 2 lands on page 1 and would never be polled."""
-    poll = orch[orch.index("export function _ensureProcessingPoll") :][:800]
+    poll = paging[paging.index("export function _ensureProcessingPoll") :][:800]
     assert "state._allMedia" in poll
 
 
-def test_a_stalled_clip_does_not_keep_the_poll_alive(orch, js):
+def test_a_stalled_clip_does_not_keep_the_poll_alive(paging, js):
     """It stays on screen, but nothing will advance it. Polling for it
     every 3 s costs a full event-tree scan per camera, forever."""
-    poll = orch[orch.index("export function _ensureProcessingPoll") :][:800]
+    poll = paging[paging.index("export function _ensureProcessingPoll") :][:800]
     assert "isActivelyPending" in poll
     active = js[js.index("export function isActivelyPending") :]
     assert "!item.stage_stalled" in active[: active.index("\n}")]
 
 
-def test_an_in_flight_card_does_not_route_into_the_lightbox(orch):
+def test_an_in_flight_card_does_not_route_into_the_lightbox(cards):
     """There is nothing to play yet, and the tap has another job: it
     opens the stage detail."""
-    assert "const wrapClick = isProcessing" in orch
-    assert "needsProcessingTile(item)" in orch
+    assert "const wrapClick = isProcessing" in cards
+    assert "needsProcessingTile(item)" in cards
 
 
 # ── reduced motion: degrade, never disappear ───────────────────────────────

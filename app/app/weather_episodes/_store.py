@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 from ..io_utils import append_jsonl, iter_jsonl
+from ._character import classify_character
 from ._consts import (
     EPISODE_FILE,
     KIND_DELETE,
@@ -27,6 +28,7 @@ from ._consts import (
     PATCHABLE_FIELDS,
     log,
 )
+from ._preview import build_curve_preview
 
 
 def episodes_path(storage_root) -> Path:
@@ -76,22 +78,42 @@ def _fold(storage_root) -> dict:
                     rec[key] = fields[key]
         if rid in counts:
             rec["footage_count"] = counts[rid]
+        # A record archived before this feature existed carries no
+        # `character` key. Classify it here, in memory, on every read —
+        # never rewrite the ledger for it. `_build.build_record` stamps
+        # the field going forward, so this branch only ever runs for
+        # that shrinking set of pre-existing records.
+        if "character" not in rec:
+            rec["character"] = classify_character(
+                rec.get("samples") or [],
+                rec.get("peaks") or {},
+                rec.get("totals"),
+                rec.get("thresholds"),
+            )
         out[rid] = rec
     return out
 
 
 def _strip_samples(rec: dict) -> dict:
-    """List view of a record — everything but the curve slice.
+    """List view of a record — everything but the full curve slice.
 
     A 30-day archive of storms carries tens of thousands of samples; a
     list endpoint that shipped them would be megabytes per request.
+    ``curve_preview`` — a single field's values, bounded to this ONE
+    episode's own short window — rides along instead, so the grid card
+    can still draw a sparkline without the list response growing with
+    every year the (never rolling) archive accumulates. See
+    ``_preview.build_curve_preview``.
 
     ``footage_count`` rides along when the fold found a stamped one. It
     is absent — never "0" — for an episode nobody has counted yet, so
     the row chip stays hidden instead of claiming there is no footage.
     """
+    preview = build_curve_preview(rec)
     out = {k: v for k, v in rec.items() if k != "samples"}
     out["sample_count"] = rec.get("sample_count", len(rec.get("samples") or []))
+    if preview is not None:
+        out["curve_preview"] = preview
     return out
 
 

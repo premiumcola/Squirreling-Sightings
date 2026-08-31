@@ -10,7 +10,7 @@
 import { esc } from '../core/dom.js';
 import { _wsStatsState, WEATHER_FIELD_UNIT_DE, wsFieldDigits } from '../weather/stats.js';
 import { isMetricInverted } from '../weather/metric-direction.js';
-import { STORM_CLASSES, STORM_METRICS } from './_state.js';
+import { STORM_CHARACTERS, STORM_CLASSES, STORM_METRICS } from './_state.js';
 
 export { esc };
 
@@ -85,6 +85,18 @@ export function effectiveClass(ep) {
 
 export function classMeta(cls) {
   return STORM_CLASSES[cls] || { de: cls || 'unbekannt', color: '#94a3b8', icon: '' };
+}
+
+/**
+ * The episode's CHARACTER — composition + sequence of its own curve,
+ * distinct from `classMeta`'s alarm-class lookup above (see
+ * STORM_CHARACTERS' own comment in storms/_state.js). A record from
+ * before this feature existed, or a bare test fixture, has no
+ * `character` field at all — that renders as no badge, not "unbekannt"
+ * (the fallback here only guards a truly UNKNOWN, non-empty slug).
+ */
+export function characterMeta(character) {
+  return STORM_CHARACTERS[character] || { de: character || 'unbekannt', icon: '' };
 }
 
 /**

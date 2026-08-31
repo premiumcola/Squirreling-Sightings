@@ -19,6 +19,8 @@ reason a Python-only checkout cannot run its tests.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from ._node_js import JS_URI as _JS
@@ -441,3 +443,58 @@ def test_the_archive_and_the_weather_panel_agree_on_decimals():
     assert out["panel"] == "12.40 mm/h"
     assert out["archive"] == "12,40 mm/h"
     assert out["gustDigits"] == 0
+
+
+# ── D2 · every storm character has an icon + a German label ────────────
+# Mirror of the backend vocabulary in
+# app/app/weather_episodes/_consts.py::CHARACTERS. A slug added on one
+# side and forgotten on the other must fail HERE, not surface as a
+# blank badge in the Wetter-Ereignisse grid.
+
+_BACKEND_CHARACTERS = (
+    "rain_led_thunder",
+    "lightning_led_rain",
+    "lightning_only",
+    "rain_only",
+    "wind_only",
+    "snow_only",
+    "fog_only",
+    "mixed",
+)
+
+
+def test_every_backend_character_has_an_icon_and_a_german_label():
+    out = _js(
+        """
+        const { STORM_CHARACTERS } = await import(JS + '/storms/_state.js');
+        const { characterMeta } = await import(JS + '/storms/_helpers.js');
+        const slugs = %s;
+        const complete = slugs.every((slug) => {
+          const meta = characterMeta(slug);
+          return typeof meta.de === 'string' && meta.de.length > 0
+              && typeof meta.icon === 'string' && meta.icon.includes('<svg');
+        });
+        console.log(JSON.stringify({
+          complete,
+          mapKeyCount: Object.keys(STORM_CHARACTERS).length,
+          slugCount: slugs.length,
+        }));
+        """
+        % json.dumps(list(_BACKEND_CHARACTERS))
+    )
+    assert out["complete"] is True, "a character slug is missing its de label or icon"
+    assert out["mapKeyCount"] == out["slugCount"], "STORM_CHARACTERS has drifted from the backend"
+
+
+def test_an_unknown_character_falls_back_without_crashing():
+    out = _js(
+        """
+        const { characterMeta } = await import(JS + '/storms/_helpers.js');
+        console.log(JSON.stringify({
+          unknown: characterMeta('tornado'),
+          empty: characterMeta(undefined),
+        }));
+        """
+    )
+    assert out["unknown"]["de"] == "tornado"
+    assert out["empty"]["de"] == "unbekannt"

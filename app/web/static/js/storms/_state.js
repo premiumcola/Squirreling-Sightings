@@ -36,6 +36,40 @@ export const STORM_CLASSES = {
 
 export const STORM_CLASS_ORDER = Object.keys(STORM_CLASSES);
 
+// ── Storm CHARACTER — composition + sequence of the curve itself ───────
+// Distinct from STORM_CLASSES above: a class answers "which alarm
+// fired" (backend: _segment.dominant_event); a character answers "what
+// did the whole curve look like" (backend: weather_episodes/_character.py,
+// whose module docstring carries the full rule table this map mirrors).
+// Both are stamped on every episode record and both render — neither
+// replaces the other.
+//
+// The two sequence icons encode ORDER, not just composition: the axis
+// that peaks FIRST sits on the left of the arrow. Everything else reuses
+// an existing glyph — the shape it draws already means the same thing
+// elsewhere in this app, so a second, differently-drawn "Regen" icon
+// here would only cost recognisability.
+const ICON_RAIN_TO_BOLT =
+  '<svg viewBox="0 0 32 24" width="20" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 4c-2.1 3-3.3 5.1-3.3 7.1a3.3 3.3 0 0 0 6.6 0C9.8 9.1 8.6 7 6.5 4z"/><path d="M13 12h5"/><path d="M16 9l3 3-3 3"/><path d="M25 3l-3.5 7h3L23 18"/></svg>';
+const ICON_BOLT_TO_RAIN =
+  '<svg viewBox="0 0 32 24" width="20" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3l-3.5 7h3L7 18"/><path d="M14 12h5"/><path d="M17 9l3 3-3 3"/><path d="M25.5 4c-2.1 3-3.3 5.1-3.3 7.1a3.3 3.3 0 0 0 6.6 0c0-2-1.2-4.1-3.3-7.1z"/></svg>';
+const ICON_MIXED =
+  '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="5" cy="12" r="2.2"/></svg>';
+
+// Keys are a bit-for-bit mirror of the backend's CHARACTERS tuple
+// (weather_episodes/_consts.py) — a slug missing here falls back to
+// the "unbekannt" default in storms/_helpers.js::characterMeta.
+export const STORM_CHARACTERS = {
+  rain_led_thunder: { de: 'Vorlauf-Regen', icon: ICON_RAIN_TO_BOLT },
+  lightning_led_rain: { de: 'Blitzfront', icon: ICON_BOLT_TO_RAIN },
+  lightning_only: { de: 'Blitzsturm', icon: WEATHER_TYPES.thunder.icon },
+  rain_only: { de: 'Landregen', icon: WEATHER_TYPES.heavy_rain.icon },
+  wind_only: { de: 'Sturmböen', icon: ICON_WIND },
+  snow_only: { de: 'Schneefall', icon: WEATHER_TYPES.snow.icon },
+  fog_only: { de: 'Nebelereignis', icon: WEATHER_TYPES.fog.icon },
+  mixed: { de: 'Mischform', icon: ICON_MIXED },
+};
+
 export const STORM_MAX_COMPARE = 4;
 
 // Compare slot colours — the first four of the app's "N distinguishable

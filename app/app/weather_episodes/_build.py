@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from ._character import classify_character
 from ._consts import FIELD_DIRECTION, MAX_INTEGRATION_GAP_MIN, PEAK_FIELDS
 from ._intensity import intensity_score
 from ._segment import dominant_event, sample_strength
@@ -121,6 +122,10 @@ def build_record(samples: list, seg, thresholds: dict, *, pre_min, post_min) -> 
     totals = {"precipitation_mm": _precipitation_total(samples, seg)}
     lo, hi = _slice_bounds(samples, seg, pre_min, post_min)
     duration_min = int(round((ended.ts - started.ts).total_seconds() / 60.0))
+    thr_snapshot = threshold_snapshot(thresholds)
+    slice_samples = [
+        {"ts": samples[i].iso, "values": dict(samples[i].values)} for i in range(lo, hi + 1)
+    ]
     return {
         "id": "{}_{}".format(started.iso, auto_class),
         "started_at": started.iso,
@@ -134,12 +139,13 @@ def build_record(samples: list, seg, thresholds: dict, *, pre_min, post_min) -> 
         "user_note": None,
         "peaks": peaks,
         "totals": totals,
-        "thresholds": threshold_snapshot(thresholds),
+        "thresholds": thr_snapshot,
         "intensity": intensity_score(peaks, totals),
+        # The curve's own SHAPE — composition + sequence, alongside
+        # (never instead of) auto_class. See _character.py.
+        "character": classify_character(slice_samples, peaks, totals, thr_snapshot),
         "pre_min": int(pre_min),
         "post_min": int(post_min),
         "sample_count": hi - lo + 1,
-        "samples": [
-            {"ts": samples[i].iso, "values": dict(samples[i].values)} for i in range(lo, hi + 1)
-        ],
+        "samples": slice_samples,
     }

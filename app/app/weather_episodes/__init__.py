@@ -26,18 +26,24 @@ Public surface::
     get_episode(storage_root, episode_id)
     patch_episode(storage_root, episode_id, fields)
     delete_episode(storage_root, episode_id)
+    classify_character(samples, peaks, totals=None, thresholds=None)
 
 ``sweep`` is idempotent: it re-derives every episode from the full
 history each call and appends only ids that are not on disk yet, so the
 first call after a deploy backfills the entire window and later calls
 cost nothing. See ``_archive`` for why there is no separate backfill
-mode and ``_intensity`` for the score and its reference values.
+mode, ``_intensity`` for the score and its reference values, and
+``_character`` for the curve-shape vocabulary every record also carries
+(computed at archive time going forward, lazily for anything older —
+see ``_store._fold``).
 """
 
 from __future__ import annotations
 
 from ._archive import detect_episodes, resolve_episode_cfg, sweep
+from ._character import classify_character
 from ._consts import (
+    CHARACTERS,
     EPISODE_DEFAULTS,
     KIND_DELETE,
     KIND_EPISODE,
@@ -49,6 +55,7 @@ from ._consts import (
 )
 from ._footage import build_footage_index, episode_footage, episode_window
 from ._intensity import axis_scores, intensity_score
+from ._preview import build_curve_preview, lead_field
 from ._store import (
     append_footage_count,
     delete_episode,
@@ -60,6 +67,7 @@ from ._store import (
 )
 
 __all__ = [
+    "CHARACTERS",
     "EPISODE_DEFAULTS",
     "KIND_DELETE",
     "KIND_EPISODE",
@@ -70,7 +78,9 @@ __all__ = [
     "USER_NOTE_MAX",
     "append_footage_count",
     "axis_scores",
+    "build_curve_preview",
     "build_footage_index",
+    "classify_character",
     "delete_episode",
     "detect_episodes",
     "episode_footage",
@@ -79,6 +89,7 @@ __all__ = [
     "existing_ids",
     "get_episode",
     "intensity_score",
+    "lead_field",
     "list_episodes",
     "patch_episode",
     "resolve_episode_cfg",

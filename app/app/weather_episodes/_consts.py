@@ -139,3 +139,48 @@ INTENSITY_TOTAL_REFERENCE: dict[str, float] = {
 # contributes its cap, not its real width, so a two-day hole cannot
 # invent 500 mm of rain.
 MAX_INTEGRATION_GAP_MIN = 60.0
+
+# ── Storm character — composition + sequence of the curve itself ──────
+# See _character.py for the full rule table. `auto_class` above answers
+# "which single alarm fired"; `character` answers "what did the whole
+# curve look like" and lives alongside it on every record, never in
+# place of it.
+CHARACTER_RAIN_LED_THUNDER = "rain_led_thunder"
+CHARACTER_LIGHTNING_LED_RAIN = "lightning_led_rain"
+CHARACTER_LIGHTNING_ONLY = "lightning_only"
+CHARACTER_RAIN_ONLY = "rain_only"
+CHARACTER_WIND_ONLY = "wind_only"
+CHARACTER_SNOW_ONLY = "snow_only"
+CHARACTER_FOG_ONLY = "fog_only"
+CHARACTER_MIXED = "mixed"
+
+# The full vocabulary. Frontend mirror: storms/_state.js's
+# STORM_CHARACTERS — every slug here needs a `de` label + icon there.
+CHARACTERS: tuple[str, ...] = (
+    CHARACTER_RAIN_LED_THUNDER,
+    CHARACTER_LIGHTNING_LED_RAIN,
+    CHARACTER_LIGHTNING_ONLY,
+    CHARACTER_RAIN_ONLY,
+    CHARACTER_WIND_ONLY,
+    CHARACTER_SNOW_ONLY,
+    CHARACTER_FOG_ONLY,
+    CHARACTER_MIXED,
+)
+
+# Fixed involvement floor per PEAK_FIELDS axis — an axis only counts
+# as "part of this storm's shape" once its OWN peak crosses this line.
+# These mirror this project's OWN shipped event defaults
+# (settings/_consts.py:WEATHER_DEFAULTS["events"]) rather than whatever
+# the operator has them set to today, so a storm's character does not
+# silently reclassify itself years later when someone retunes a
+# threshold. `_character._floor_for` prefers the episode's own stamped
+# `thresholds` snapshot when one exists — this is only the fallback for
+# a field whose event was disabled, unconfigured, or (for a record
+# archived before this feature existed) simply never stamped.
+CHARACTER_FLOOR: dict[str, float] = {
+    "lightning_potential": 0.2,  # J/kg — thunder detector default
+    "precipitation": 5.0,  # mm/h — heavy_rain detector default
+    "snowfall": 0.5,  # cm/h — snow detector default
+    "wind_gusts_10m": 60.0,  # km/h — storm detector default
+    "visibility": 1000.0,  # m — fog detector default ceiling
+}

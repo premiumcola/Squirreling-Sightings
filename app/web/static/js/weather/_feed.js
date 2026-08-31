@@ -16,12 +16,14 @@ import { precipitationLabel } from '../core/weather-precip.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import { pinToggleHTML } from './pin-toggle.js';
 import { manualEventCategories, manualCategoryMeta } from './_manual-event-cats.js';
+import { episodeSparklineSvg } from './_episode-sparkline.js';
 import {
   episodeTitle,
   fmtDayMonth,
   fmtTime,
   fmtDuration,
   classMeta,
+  characterMeta,
   effectiveClass,
 } from '../storms/_helpers.js';
 
@@ -159,10 +161,24 @@ export function episodeCardHTML(ep) {
   ]
     .filter(Boolean)
     .join(' · ');
+  // The curve's own SHAPE, alongside (never instead of) the alarm-class
+  // icon in the play slot. Absent on a bare fixture or a record from
+  // before this feature existed — both render no badge / no sparkline
+  // rather than a placeholder.
+  const charMeta = ep.character ? characterMeta(ep.character) : null;
+  const characterHTML = charMeta
+    ? `<div class="ws-ep-character" title="${esc(charMeta.de)}">` +
+      `<span class="ws-ep-character-icon" aria-hidden="true">${charMeta.icon}</span>` +
+      `<span class="ws-ep-character-label">${esc(charMeta.de)}</span></div>`
+    : '';
+  const spark = episodeSparklineSvg(ep.curve_preview, meta.color);
+  const sparkHTML = spark ? `<div class="ws-ep-spark-wrap">${spark}</div>` : '';
   return `
       <div class="ws-recap-card" data-ep-id="${esc(ep.id)}">
         <div class="ws-recap-card-period">${esc(episodeTitle(ep))}</div>
         <div class="ws-recap-card-meta">${esc(metaLine)}</div>
+        ${characterHTML}
+        ${sparkHTML}
         <span class="ws-recap-card-play" aria-hidden="true">${meta.icon}</span>
       </div>`;
 }

@@ -16,6 +16,8 @@ import pytest
 from app import app_state
 from app.routes import weather_episodes as episode_routes
 from app.weather_episodes import (
+    CHARACTERS,
+    classify_character,
     delete_episode,
     detect_episodes,
     episodes_path,
@@ -112,6 +114,11 @@ def test_detects_one_episode_with_its_boundaries():
     assert rec["peak_at"] == rows[13]["ts"]  # the 2400 J/kg slot
     assert rec["peaks"]["lightning_potential"] == 2400.0
     assert rec["id"] == "{}_thunder".format(rows[12]["ts"])
+    # A pure-lightning window (no precipitation anywhere in the slice)
+    # is lightning_only — build_record stamps `character` right beside
+    # `auto_class` without disturbing it.
+    assert rec["auto_class"] == "thunder"
+    assert rec["character"] == "lightning_only"
 
 
 def test_settle_time_prevents_fragmentation():
@@ -245,6 +252,130 @@ def test_intensity_is_monotone_in_every_axis():
     assert intensity_score(high) > intensity_score(low)
 
 
+# ── Character: composition + sequence of the curve itself ──────────────
+
+
+def _curve(*points):
+    """`(minute_offset, {field: value})` pairs -> a samples list in the
+    exact shape `classify_character` (and an archived record's own
+    `samples`) expects. Uses CHARACTER_FLOOR's fixed defaults unless a
+    test passes its own `thresholds`."""
+    base = datetime(2026, 8, 20, 6, 0, 0)
+    return [
+        {
+            "ts": (base + timedelta(minutes=minute)).isoformat(timespec="seconds"),
+            "values": dict(vals),
+        }
+        for minute, vals in points
+    ]
+
+
+def test_rain_then_lightning_is_rain_led_thunder():
+    """The headline case: precipitation ramps up and peaks at minute 10,
+    lightning follows and peaks at minute 40."""
+    samples = _curve(
+        (0, {"precipitation": 1.0, "lightning_potential": 0.0}),
+        (10, {"precipitation": 12.0, "lightning_potential": 0.1}),
+        (20, {"precipitation": 2.0, "lightning_potential": 0.3}),
+        (40, {"precipitation": 1.0, "lightning_potential": 1.5}),
+    )
+    peaks = {"precipitation": 12.0, "lightning_potential": 1.5}
+    assert classify_character(samples, peaks) == "rain_led_thunder"
+
+
+def test_lightning_then_rain_is_the_reverse_character():
+    """Same two axes, opposite order: lightning peaks at minute 10, the
+    heavy rain arrives later at minute 40."""
+    samples = _curve(
+        (0, {"precipitation": 1.0, "lightning_potential": 0.05}),
+        (10, {"precipitation": 2.0, "lightning_potential": 1.6}),
+        (40, {"precipitation": 9.0, "lightning_potential": 0.1}),
+    )
+    peaks = {"precipitation": 9.0, "lightning_potential": 1.6}
+    assert classify_character(samples, peaks) == "lightning_led_rain"
+
+
+def test_wind_only_with_flat_precipitation_and_lightning():
+    samples = _curve(
+        (0, {"wind_gusts_10m": 25.0, "precipitation": 0.0, "lightning_potential": 0.0}),
+        (15, {"wind_gusts_10m": 75.0, "precipitation": 0.0, "lightning_potential": 0.0}),
+        (30, {"wind_gusts_10m": 30.0, "precipitation": 0.0, "lightning_potential": 0.0}),
+    )
+    peaks = {"wind_gusts_10m": 75.0, "precipitation": 0.0, "lightning_potential": 0.0}
+    assert classify_character(samples, peaks) == "wind_only"
+
+
+def test_a_pure_visibility_dip_is_fog_only():
+    samples = _curve((0, {"visibility": 9000.0}), (10, {"visibility": 400.0}))
+    assert classify_character(samples, {"visibility": 400.0}) == "fog_only"
+
+
+def test_lightning_dominant_with_negligible_rain_is_lightning_only():
+    samples = _curve((0, {"lightning_potential": 0.05}), (10, {"lightning_potential": 1.2}))
+    peaks = {"lightning_potential": 1.2, "precipitation": 1.0}  # below the rain floor
+    assert classify_character(samples, peaks) == "lightning_only"
+
+
+def test_rain_alone_is_rain_only():
+    samples = _curve((0, {"precipitation": 9.0}))
+    assert classify_character(samples, {"precipitation": 9.0}) == "rain_only"
+
+
+def test_snow_alone_is_snow_only():
+    samples = _curve((0, {"snowfall": 1.2}))
+    assert classify_character(samples, {"snowfall": 1.2}) == "snow_only"
+
+
+def test_nothing_past_its_floor_is_mixed():
+    assert classify_character([], {}) == "mixed"
+    below_floor = _curve((0, {"precipitation": 1.0}))
+    assert classify_character(below_floor, {"precipitation": 1.0}) == "mixed"
+
+
+def test_an_unnamed_combination_falls_back_to_mixed():
+    """Wind + rain, no lightning, is a real storm but not one of the
+    eight named shapes."""
+    samples = _curve((0, {"precipitation": 9.0, "wind_gusts_10m": 70.0}))
+    peaks = {"precipitation": 9.0, "wind_gusts_10m": 70.0}
+    assert classify_character(samples, peaks) == "mixed"
+
+
+def test_a_tied_peak_sample_cannot_claim_an_order():
+    """Both axes reach their worst reading in the SAME sample — no
+    ordering can be read off the curve, so none is claimed."""
+    samples = _curve(
+        (0, {"precipitation": 1.0, "lightning_potential": 0.05}),
+        (10, {"precipitation": 9.0, "lightning_potential": 1.4}),
+    )
+    peaks = {"precipitation": 9.0, "lightning_potential": 1.4}
+    assert classify_character(samples, peaks) == "mixed"
+
+
+def test_the_episodes_own_stamped_threshold_wins_over_the_fixed_floor():
+    """A configured threshold far above CHARACTER_FLOOR's default means
+    the same peak that WOULD be "involved" under the fallback is not,
+    once the episode's own snapshot is available."""
+    samples = _curve((0, {"precipitation": 9.0}))
+    thresholds = {"precipitation": 100.0}
+    assert classify_character(samples, {"precipitation": 9.0}, thresholds=thresholds) == "mixed"
+
+
+def test_every_named_character_is_reachable_and_in_the_vocabulary():
+    """Every non-fallback slug this module can return is exercised by
+    the tests above; this pins that CHARACTERS lists exactly them plus
+    the fallback, so a forgotten vocabulary entry fails here first."""
+    assert set(CHARACTERS) == {
+        "rain_led_thunder",
+        "lightning_led_rain",
+        "lightning_only",
+        "rain_only",
+        "wind_only",
+        "snow_only",
+        "fog_only",
+        "mixed",
+    }
+
+
 # ── Archive: persistence, idempotency, patches ─────────────────────────
 
 
@@ -289,6 +420,66 @@ def test_list_omits_samples_and_sorts_newest_first(tmp_path):
     # The full record still carries its curve.
     full = get_episode(tmp_path, items[0]["id"])
     assert len(full["samples"]) == full["sample_count"]
+
+
+def test_build_record_stamps_a_character_alongside_auto_class(tmp_path, storm_rows):
+    """The new field coexists with the old one — same episode, both
+    present, `auto_class` unchanged from what it always was."""
+    sweep(tmp_path, storm_rows, events_cfg=EVENTS, episode_cfg=TIGHT)
+    ep = get_episode(tmp_path, list_episodes(tmp_path)[0]["id"])
+    assert ep["auto_class"] == "thunder"
+    assert ep["character"] in CHARACTERS
+
+
+def test_list_view_carries_a_curve_preview_for_the_card_sparkline(tmp_path, storm_rows):
+    sweep(tmp_path, storm_rows, events_cfg=EVENTS, episode_cfg=TIGHT)
+    item = list_episodes(tmp_path)[0]
+    preview = item["curve_preview"]
+    assert preview["field"] == "lightning_potential"
+    assert len(preview["values"]) == item["sample_count"]
+    assert any(v is not None for v in preview["values"])
+
+
+def test_a_legacy_record_is_classified_on_read_without_touching_the_ledger(tmp_path):
+    """A base record written before this feature existed — no
+    `character` key at all, otherwise a normal episode. Both list and
+    get must classify it in memory; the file on disk must not change."""
+    legacy = {
+        "kind": "episode",
+        "id": "legacy_1",
+        "started_at": "2026-01-01T10:00:00",
+        "ended_at": "2026-01-01T11:00:00",
+        "duration_min": 60,
+        "auto_class": "thunder",
+        "auto_events": ["thunder"],
+        "user_class": None,
+        "user_name": None,
+        "user_note": None,
+        "peaks": {"lightning_potential": 1.5},
+        "totals": {"precipitation_mm": 0.0},
+        "thresholds": {"lightning_potential": 1.0},
+        "intensity": 0.75,
+        "pre_min": 60,
+        "post_min": 60,
+        "sample_count": 2,
+        "samples": [
+            {"ts": "2026-01-01T09:00:00", "values": {"lightning_potential": 0.1}},
+            {"ts": "2026-01-01T10:00:00", "values": {"lightning_potential": 1.5}},
+        ],
+    }
+    path = episodes_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(legacy) + "\n")
+    before = path.read_bytes()
+
+    full = get_episode(tmp_path, "legacy_1")
+    assert full["character"] == "lightning_only"
+    item = list_episodes(tmp_path)[0]
+    assert item["character"] == "lightning_only"
+
+    after = path.read_bytes()
+    assert after == before, "reading a legacy record must never rewrite the ledger"
 
 
 def test_patch_folds_over_base_without_rewriting_it(tmp_path, storm_rows):
@@ -455,6 +646,10 @@ def test_route_list_has_no_samples(client, tmp_path):
     assert body["count"] == 1
     assert "samples" not in body["items"][0]
     assert body["pending"] is None
+    # The character + its card-sized curve preview ride along on the
+    # list view, even though the full samples array does not.
+    assert body["items"][0]["character"] in CHARACTERS
+    assert body["items"][0]["curve_preview"]["field"] in body["items"][0]["peaks"]
 
 
 def test_route_get_carries_samples(client, tmp_path):
@@ -462,6 +657,7 @@ def test_route_get_carries_samples(client, tmp_path):
     body = client.get("/api/weather/episodes/{}".format(ep_id)).get_json()
     assert body["id"] == ep_id
     assert len(body["samples"]) == body["sample_count"]
+    assert body["character"] in CHARACTERS
     assert client.get("/api/weather/episodes/nope").status_code == 404
 
 

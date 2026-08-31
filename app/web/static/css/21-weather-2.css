@@ -198,12 +198,59 @@
   justify-content: center;
   pointer-events: none;
 }
+
+/* Gewitter-episode "character" badge + sparkline — extra content only
+   this card kind carries, so the right-hand gap the play circle needs
+   is scoped to it via [data-ep-id] rather than widened for every
+   .ws-recap-card (recaps and manual events have no third/fourth row). */
+.ws-recap-card[data-ep-id] {
+  padding-right: 46px; /* 34px play circle + 10px offset + 2px breathing room */
+}
+.ws-ep-character {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ws-ep-character-icon {
+  display: inline-flex;
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+.ws-ep-character-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.ws-ep-character-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-ep-spark-wrap {
+  display: flex;
+  align-items: center;
+}
+.ws-ep-spark {
+  width: 100%;
+  max-width: 96px;
+  height: 14px;
+  opacity: 0.8;
+}
 @media (max-width: 640px) {
   .ws-recap-card {
     padding: 10px 12px;
   }
+  .ws-recap-card[data-ep-id] {
+    padding-right: 44px;
+  }
   .ws-recap-card-period {
     font-size: 13px;
+  }
+  .ws-ep-spark {
+    max-width: 72px;
   }
 }
 

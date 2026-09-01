@@ -118,9 +118,9 @@ def test_recorded_mode_loads_tracks_sidecar():
     Pin its presence so a cleanup doesn't drop the bbox/trail overlay
     and the swimlane data along with it."""
     body = _slice_function(_RECORDED_JS, "_openRecordedVideoShell")
-    assert "lbLoadTracksForItem(" in body, (
-        "_openRecordedVideoShell must still trigger the tracks fetcher"
-    )
+    assert (
+        "lbLoadTracksForItem(" in body
+    ), "_openRecordedVideoShell must still trigger the tracks fetcher"
 
 
 def test_close_lightbox_unmounts_zone_overlay():
@@ -147,22 +147,49 @@ def test_recorded_video_shell_mount_failure_still_reveals_the_modal():
     aborted the function before the modal was ever revealed, with the
     error going nowhere the operator could see.
 
-    `mountMediaView` is now wrapped in its own try/catch that reveals
-    the modal with a visible error state regardless of what fails
-    inside it — a belt-and-braces safety net alongside hardening the
-    individual probes themselves, so a FUTURE failure anywhere else in
-    the composition also fails loud instead of vanishing."""
+    Follow-up regression (same symptom, a NEW gap): the try/catch this
+    test originally pinned covered ONLY the `mountMediaView(...)` call.
+    Everything AFTER a successful mount — reparenting the legacy media
+    wrap, relocating Behalten/Löschen, wiring the <video> src, mounting
+    the zone/mask overlay (now `wireRecordedShellPostMount`, split into
+    recorded-shell-compose.js) — ran completely unguarded, with the
+    modal's only reveal still its last statement. A throw anywhere in
+    that back half reproduced the exact same "player never opens"
+    symptom through a gap nothing was watching. The try now wraps BOTH
+    halves of the composition, and the catch branch's own recovery
+    (`_recoverFromShellFailure`) is itself failure-proof — every one of
+    its steps is individually guarded, so a throw in the cleanup or the
+    error messaging can never re-hide the modal either."""
     body = _slice_function(_RECORDED_JS, "_openRecordedVideoShell")
-    assert re.search(r"try\s*\{[^}]*mountMediaView\(", body, re.DOTALL), (
-        "mountMediaView(...) must be called inside a try block"
-    )
+    assert re.search(
+        r"try\s*\{[^}]*mountMediaView\(", body, re.DOTALL
+    ), "mountMediaView(...) must be called inside a try block"
+    try_pos = body.index("try {")
     catch_pos = body.index("} catch")
+    try_body = body[try_pos:catch_pos]
+    assert "wireRecordedShellPostMount(" in try_body, (
+        "the post-mount DOM wiring (reparent / relocate / video src / "
+        "overlay mount) must share the SAME try block as mountMediaView "
+        "— a throw there must fail loud too, not vanish through a gap "
+        "below the original safety net"
+    )
     catch_body = body[catch_pos:]
     assert "classList.remove('hidden')" in catch_body, (
         "the catch branch must still reveal the modal — a swallowed "
         "error must not leave it silently, permanently hidden"
     )
-    assert "showToast(" in catch_body or "_lbShowError(" in catch_body, (
-        "the catch branch must surface SOMETHING visible to the operator, "
-        "not just log to a console nobody on an iPhone can see"
+    assert "_recoverFromShellFailure(" in catch_body, (
+        "the catch branch must run the shared recovery helper (cleanup "
+        "+ visible error), not just log to a console nobody sees"
+    )
+    recovery_body = _slice_function(_RECORDED_JS, "_recoverFromShellFailure")
+    assert "showToast(" in recovery_body or "_lbShowError(" in recovery_body, (
+        "the recovery helper must surface SOMETHING visible to the "
+        "operator, not just log to a console nobody on an iPhone can see"
+    )
+    assert recovery_body.count("try {") >= 3, (
+        "every recovery step (teardown, stray-root cleanup, error "
+        "messaging) must be independently guarded — a throw in ONE step "
+        "must not stop the others from running or undo the caller's "
+        "forced modal reveal"
     )

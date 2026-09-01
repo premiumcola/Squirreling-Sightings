@@ -27,12 +27,7 @@ import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
 import { lbState } from '../mediathek/state.js';
-import {
-  lbLoadTracksForItem,
-  setBboxOverlayVisibility,
-  setLbTimelineHost,
-} from '../mediathek/bbox-overlay/index.js';
-import { triggerManualReindex } from '../mediathek/bbox-overlay/reindex.js';
+import { lbLoadTracksForItem, setLbTimelineHost } from '../mediathek/bbox-overlay/index.js';
 import {
   calcItemsPerPage,
   renderMediaGrid,
@@ -42,49 +37,16 @@ import {
   _isFullscreenVideoItem,
   _teardownVideoChrome,
   _lbShowError,
-  resetLightboxToErrorState,
   _renderLbLabels,
 } from '../lightbox.js';
-import {
-  mountZoneOverlayForLightbox,
-  unmountZoneOverlayForLightbox,
-} from './canvas/zone-overlay-mount.js';
+import { unmountZoneOverlayForLightbox } from './canvas/zone-overlay-mount.js';
 import { _LB_TRASH_HTML, _updateLbConfirmBtn, _lbResetToPhoto } from './panels/lb-helpers.js';
 import { mountMediaView } from './shell.js';
-import { lbRenderSettingsPanel } from './panels/recording-settings.js';
-import { renderWeatherPanel } from './panels/weather.js';
+import { buildRecordedShellConfig, wireRecordedShellPostMount } from './recorded-shell-compose.js';
 
 // Module-singleton recorded-shell state. Tracks the mounted shell + how
 // to restore the reparented media wrap and the relocated action buttons.
 let _recState = null;
-
-// Two snapshot shapes carry weather: item.weather (normalised) or
-// item.api_snapshot (raw Open-Meteo). Mirrors panels/orchestration.js.
-function _itemHasWeather(item) {
-  return !!(
-    (item.weather && typeof item.weather === 'object') ||
-    (item.api_snapshot && typeof item.api_snapshot === 'object')
-  );
-}
-
-function _videoSrcOf(item) {
-  return (
-    (item.video_relpath ? `/media/${item.video_relpath}` : '') ||
-    item.video_url ||
-    item.url ||
-    (item.relpath ? `/media/${item.relpath}` : '')
-  );
-}
-
-// Relocate a legacy action button into a new parent, remembering where it
-// came from so teardown can put it back exactly. Idempotent per button.
-function _relocate(id, newParent, beforeNode) {
-  const el = byId(id);
-  if (!el || !newParent) return null;
-  const home = { el, parent: el.parentNode, next: el.nextSibling };
-  newParent.insertBefore(el, beforeNode || null);
-  return home;
-}
 
 // Restore everything the shell borrowed, then drop the shell. Order
 // matters: move the media wrap + buttons OUT of the shell BEFORE removing
@@ -230,203 +192,73 @@ function _openRecordedVideoShell(item) {
   const list = state._allMedia || [];
   const hasPrev = lbState.index > 0;
   const hasNext = lbState.index >= 0 && lbState.index < list.length - 1;
-
-  // mountMediaView is a long synchronous composition (tier + capability
-  // probes, panel tabs, the player chrome, the fine-analysis fold, …) and
-  // this function's ONLY `classList.remove('hidden')` on the modal is its
-  // very last statement, with nothing upstream guarded — an exception
-  // ANYWHERE in the mount call used to leave the lightbox silently,
-  // permanently hidden with no error surfaced at all ("the player never
-  // opens"). Each individual capability probe now guards itself (see
-  // device-tier.js / player/_pip.js), but this call site gets its own
-  // safety net too: a FUTURE failure anywhere else in the composition
-  // must fail loud, not vanish.
-  let shell;
-  try {
-    shell = mountMediaView({
-      mode,
-      item,
-      // Read-only "angewandt: X" tiling badge top-right + grid (the shell
-      // owns this now — the per-event tiling isn't stamped, so the cam's
-      // current roi_mode is the best proxy, same as the legacy badge).
-      appliedTiling: (cam.roi_mode || 'off').toLowerCase(),
-      overlays: { bboxes: true, trails: true, zones: true, masks: true },
-      // Aufnahme-Settings only for motion clips (timelapses carry no
-      // recording_settings); Wetter only when the item has a snapshot.
-      panels: {
-        ...(isTL ? {} : { settings: true }),
-        ...(_itemHasWeather(item) ? { weather: true } : {}),
-      },
-      panelRenderers: {
-        settings: (host, it) => {
-          lbRenderSettingsPanel(it, host);
-          // Auto-expand the inner collapsible (the user already chose the tab).
-          const body = host.querySelector('.lbset-body');
-          const header = host.querySelector('.lbset-header');
-          if (body && header && body.hidden) {
-            body.hidden = false;
-            header.setAttribute('aria-expanded', 'true');
-          }
-        },
-        weather: (host, it) => renderWeatherPanel(host, it),
-      },
-      initialTab: isTL ? 'weather' : 'settings',
-      actions: {
-        onPrev: hasPrev ? () => window.openLightbox?.(list[lbState.index - 1]) : undefined,
-        onNext: hasNext ? () => window.openLightbox?.(list[lbState.index + 1]) : undefined,
-        onClose: () => window.closeLightbox?.(),
-        onDownload: () => _downloadItem(item),
-        // Reuse the manual-reindex flow ("Neu erkennen"); for timelapses the
-        // playbar's own empty-state "Nach-Erkennung starten" also exists.
-        // triggerManualReindex(btn) reads the event/camera from lbState.item
-        // internally — btn is optional (busy/disabled feedback only).
-        onRetrigger: () => triggerManualReindex(),
-        // Overlay-toggle pills → the existing layer-visibility setters (same
-        // wiring the legacy _setupVideoChrome used).
-        onOverlayChange: (id, on) => {
-          if (id === 'zones' || id === 'masks') {
-            window._setZoneOverlayVisibility?.({
-              showZones: id === 'zones' ? on : undefined,
-              showMasks: id === 'masks' ? on : undefined,
-            });
-          } else if (id === 'bboxes') {
-            setBboxOverlayVisibility({ showBboxes: on });
-          } else if (id === 'trails') {
-            setBboxOverlayVisibility({ showTrails: on });
-          }
-        },
-      },
-    });
-  } catch (err) {
-    console.error('[mediaview] recorded shell failed to mount:', err);
-    const modal = byId('lightboxModal');
-    _lbShowError('Player konnte nicht geöffnet werden.');
-    if (modal) {
-      modal.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-    showToast('Player konnte nicht geöffnet werden.', 'error');
-    return;
-  }
-
   const modal = byId('lightboxModal');
   const inner = byId('lightboxInner');
   if (!modal || !inner) return;
-  modal.classList.add('lb-recorded');
-  inner.appendChild(shell.root);
 
-  // Reparent the legacy media wrap into the shell frame (keeps the painter,
-  // zone overlay + scrubber bound to #lightboxVideo/#lightboxMediaWrap).
-  const homes = [];
-  const wrap = byId('lightboxMediaWrap');
-  const frame = shell.root.querySelector('[data-slot="frame"]');
-  if (wrap && frame) {
-    homes.push({ el: wrap, parent: wrap.parentNode, next: wrap.nextSibling });
-    frame.appendChild(wrap);
+  // The WHOLE composition — mount + DOM reparenting + video/overlay wiring
+  // (recorded-shell-compose.js) — shares ONE safety net. It used to stop
+  // at mountMediaView(...) (see this function's git history): everything
+  // after a successful mount ran completely unguarded, with the modal's
+  // only `classList.remove('hidden')` as the very last statement. A
+  // throw ANYWHERE in that back half reproduced the exact "player never
+  // opens, nothing visible happens" bug the original fix was built to
+  // close, just one step further down where nothing was watching. Fail
+  // loud everywhere in this composition now, not just in the first half.
+  let mountRef = null;
+  try {
+    const shell = mountMediaView(
+      buildRecordedShellConfig(item, { mode, isTL, cam, hasPrev, hasNext, list }),
+    );
+    mountRef = { shell, homes: [] };
+    // Registered BEFORE wiring finishes (not after) so a throw partway
+    // through wiring still leaves `_teardownRecordedShell` able to
+    // restore whatever homes were already pushed by then.
+    _recState = mountRef;
+    const vidSrc = wireRecordedShellPostMount(mountRef, item, isTL, modal, inner);
+    // Fetch tracks.json → lights up the bbox/trail overlay + the swimlane.
+    if (vidSrc) lbLoadTracksForItem(item);
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  } catch (err) {
+    console.error('[mediaview] recorded shell failed to mount:', err);
+    _recoverFromShellFailure(mountRef);
+    // Force the reveal LAST, outside the guarded recovery steps, so it
+    // survives even if every one of those also threw.
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
   }
-  // Pin the timeline host to the shell's playbar so EVERY host-less
-  // lbRenderTrackTimeline re-render (the async tracks-fetch, the
-  // loadedmetadata rescale, manual reindex, rescan-poll) lands in the
-  // visible playbar instead of the hidden legacy #lightboxBottomStack —
-  // otherwise the populated swimlane + the scrubber wiring go off-screen.
-  const playbar = shell.root.querySelector('[data-slot="playbar"]');
-  setLbTimelineHost(playbar || null);
-  // Relocate Behalten (motion only) + Löschen into the shell title bar so
-  // their existing handlers (confirm toggle, delete two-step, auto-advance)
-  // keep working verbatim.
-  const tbActions = shell.root.querySelector('.mv-tb-actions');
-  const firstAction = tbActions?.firstChild || null;
-  if (!isTL) {
-    homes.push(_relocate('lightboxConfirm', tbActions, firstAction));
-  }
-  homes.push(_relocate('lightboxDelete', tbActions, firstAction));
-
-  _recState = { shell, homes };
-
-  // Confirm/delete button initial state.
-  if (!isTL) _updateLbConfirmBtn(item.confirmed);
-  const delBtn = byId('lightboxDelete');
-  if (delBtn) {
-    delBtn.classList.remove('confirm-delete');
-    delBtn.innerHTML = _LB_TRASH_HTML;
-    delBtn.title = isTL
-      ? 'Timelapse löschen'
-      : item.confirmed
-        ? 'Bestätigt — trotzdem löschen?'
-        : 'Löschen';
-  }
-
-  // Wire the media element + start the painter/scrubber (same flow the
-  // legacy recorded open used, just inside the reparented wrap).
-  _lbResetToPhoto();
-  // Timelapses can't be confirmed — _lbResetToPhoto just un-hid #lightboxConfirm,
-  // and it's NOT relocated for TL, so it'd sit as a stray green Behalten check
-  // inside the reparented wrap. Hide it (mirrors the legacy openTLPlayer).
-  if (isTL) {
-    const cb = byId('lightboxConfirm');
-    if (cb) cb.style.display = 'none';
-  }
-  const vidSrc = _videoSrcOf(item);
-  const pendingMsg =
-    item.status === 'recording'
-      ? 'Video wird aufgenommen…'
-      : item.status === 'processing'
-        ? 'Video wird verarbeitet…'
-        : null;
-  if (pendingMsg) {
-    _lbShowError(pendingMsg);
-  } else if (vidSrc) {
-    const imgEl = byId('lightboxImg');
-    if (imgEl) imgEl.style.display = 'none';
-    const videoEl = byId('lightboxVideo');
-    if (videoEl) {
-      videoEl.style.display = 'block';
-      videoEl.src = vidSrc;
-      videoEl.muted = true;
-      videoEl.loop = true;
-      const _onVideoError = () => {
-        if (videoEl._lbErrorBound !== _onVideoError) return;
-        videoEl.removeEventListener('error', _onVideoError);
-        videoEl._lbErrorBound = null;
-        resetLightboxToErrorState('Video-Datei ist nicht mehr verfügbar.');
-      };
-      videoEl._lbErrorBound = _onVideoError;
-      videoEl.addEventListener('error', _onVideoError);
-      videoEl.load();
-      videoEl.play().catch(() => {});
-    }
-  } else {
-    _lbShowError('Video nicht verfügbar');
-  }
-
-  // Read-only zone/mask overlay on the reused media wrap.
-  mountZoneOverlayForLightbox(item, { hideMasks: isTL });
-  // Sync the four layers' initial visibility from the shell's toggle state
-  // (persisted bboxes/trails; declared defaults for zones/masks).
-  const initial = shell.components?.overlayToggles?.getState?.() || {};
-  if ('zones' in initial || 'masks' in initial) {
-    window._setZoneOverlayVisibility?.({ showZones: !!initial.zones, showMasks: !!initial.masks });
-  }
-  if ('bboxes' in initial || 'trails' in initial) {
-    setBboxOverlayVisibility({ showBboxes: !!initial.bboxes, showTrails: !!initial.trails });
-  }
-  // Fetch tracks.json → lights up the bbox/trail overlay + the swimlane.
-  if (vidSrc) lbLoadTracksForItem(item);
-
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
 }
 
-// Trigger a browser download of the clip without leaving the player.
-function _downloadItem(item) {
-  const src = _videoSrcOf(item);
-  if (!src) return;
-  const a = document.createElement('a');
-  a.href = src;
-  a.download = (item.video_relpath || item.relpath || 'clip').split('/').pop();
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+// Best-effort cleanup after ANY failure in the recorded-shell mount/wire
+// composition, then surface something visible to the operator — each
+// step independently guarded so a throw in the cleanup or the messaging
+// itself can never undo the forced modal reveal the caller does next.
+function _recoverFromShellFailure(mountRef) {
+  try {
+    _teardownRecordedShell();
+  } catch {
+    /* ignore */
+  }
+  // _recState (== mountRef, if it got that far) was only fully wired at
+  // the very end — an earlier throw can leave a mounted-but-not-yet-
+  // tracked shell.root behind. Drop it directly so a half-built player
+  // doesn't linger in the DOM under the error state.
+  try {
+    mountRef?.shell?.root?.remove?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    _lbShowError('Player konnte nicht geöffnet werden.');
+  } catch {
+    /* ignore */
+  }
+  try {
+    showToast('Player konnte nicht geöffnet werden.', 'error');
+  } catch {
+    /* ignore */
+  }
 }
 
 // Bridge for lightbox.closeLightbox (Esc / backdrop / close button) so they

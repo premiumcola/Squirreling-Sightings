@@ -1,9 +1,14 @@
 /* ── Merged Mediathek + Wetter-Ereignisse library grid (Stage 6) ──────────
-   #libraryBlock — the "Alles gemischt" block at the top of #media:
-   combined filter bar + the /api/library grid. Everything it's built
-   from — .media-filter-bar, .media-pill, .media-grid, .media-pagination
-   — is reused unchanged from Mediathek/Wetter; this file only adds what
-   none of those already provide for this specific arrangement. */
+   #libraryBlock — the "Alles gemischt" grid + its "Mehr laden" control.
+   #libraryFilterBar sits OUTSIDE it, at the very top of #media, above
+   the camera overview too — reordered per operator feedback so the
+   filters read as controlling the whole section, not just this one
+   feed, and so this long, cursor-paginated grid isn't the first thing
+   the page shows (that's the short camera overview now). Everything
+   this block is built from — .media-filter-bar, .media-pill,
+   .media-grid, .media-pagination — is reused unchanged from
+   Mediathek/Wetter; this file only adds what none of those already
+   provide for this specific arrangement. */
 #libraryBlock {
   margin: 0 0 12px;
 }

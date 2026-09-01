@@ -75,26 +75,13 @@
     </button>
   </div>
 
-  {# Merged Mediathek + Wetter-Ereignisse feed (Stage 6) — GET /api/library, "Alles gemischt" (no
-  `kinds` filter) is the default and only view here: motion clips, sightings, recaps, storm
-  episodes, manual events and daily timelapses render side by side, newest first. Mounted by
-  library/page.js; filter chips (camera / object-class / weather-category) by
-  library/_filter-bar.js; card click/delete/pin wiring by library/_bind.js. Cursor-paginated ("Mehr
-  laden"), not page-numbered — see library/_pagination.js for why. #}
-  <div id="libraryBlock">
-    <div id="libraryFilterBar"></div>
-    {# Shown only while the Wetterdaten-chart's drag-zoom (further down
-    this section) is active — library/page.js toggles it, not CSS,
-    because it depends on JS-only state (weather/_zoom.js). The chart's
-    own "Zeitraum ausgewählt" hint (#weatherZoomActions, below) says the
-    CHART is zoomed; this one says the LIST above it is too — two
-    different facts, not a duplicate of the same one. #}
-    <div class="lib-zoom-note" id="libraryZoomNote" hidden>
-      Gefiltert auf den im Chart gewählten Zeitraum.
-    </div>
-    <div class="media-grid" id="libraryGrid"></div>
-    <div class="lib-load-more" id="libraryLoadMore" hidden></div>
-  </div>
+  {# Reordered per operator feedback: the merged "Alles gemischt" feed (originally right under the
+  filters) read as a second, competing Mediathek next to the camera overview below it — a long,
+  cursor-paginated list was the first thing on the page before the operator ever saw a per-camera
+  summary. Now: filters → the short camera overview (unchanged) → the full merged feed. Nothing
+  about either piece's own behaviour changed, only their order — see library/page.js and
+  mediathek/_overview.js, neither of which assumes a DOM position. #}
+  <div id="libraryFilterBar"></div>
 
   <div class="lib-subsection-head">
     <svg
@@ -153,6 +140,45 @@
         Abbrechen
       </button>
     </div>
+  </div>
+
+  <div class="lib-subsection-head">
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </svg>
+    <span>Alle Ereignisse</span>
+  </div>
+  {# Merged Mediathek + Wetter-Ereignisse feed (Stage 6) — GET /api/library, "Alles gemischt" (no
+  `kinds` filter) is the default and only view here: motion clips, sightings, recaps, storm
+  episodes, manual events and daily timelapses render side by side, newest first. Mounted by
+  library/page.js; filter chips (camera / object-class / weather-category) by
+  library/_filter-bar.js (a SECOND filter bar — deliberately: it scopes this feed by object-class /
+  weather-category the way #mediaFilterBar above only ever scoped by camera); card
+  click/delete/pin wiring by library/_bind.js. Cursor-paginated ("Mehr laden"), not page-numbered —
+  see library/_pagination.js for why. #}
+  <div id="libraryBlock">
+    {# Shown only while the Wetterdaten-chart's drag-zoom (further down
+    this section) is active — library/page.js toggles it, not CSS,
+    because it depends on JS-only state (weather/_zoom.js). The chart's
+    own "Zeitraum ausgewählt" hint (#weatherZoomActions, below) says the
+    CHART is zoomed; this one says the LIST above it is too — two
+    different facts, not a duplicate of the same one. #}
+    <div class="lib-zoom-note" id="libraryZoomNote" hidden>
+      Gefiltert auf den im Chart gewählten Zeitraum.
+    </div>
+    <div class="media-grid" id="libraryGrid"></div>
+    <div class="lib-load-more" id="libraryLoadMore" hidden></div>
   </div>
 
   {# Wetterdaten & Prognose: persisted history of all numeric Open-Meteo parameters + sun altitude,

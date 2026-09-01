@@ -568,6 +568,88 @@ def test_label_filter_matches_the_camera_media_route_exactly(combined_client, tm
     assert lib_ids == media_ids
 
 
+def test_labels_filter_excludes_unrelated_non_motion_kinds_when_kinds_unset(tmp_path):
+    """Regression: `_windowed_candidates`'s `labels` param only ever
+    reaches `motion_candidates` — `_flat_candidates` (recap/manual/
+    episode/timelapse) and the sighting branch apply NO label filtering
+    at all. Before `_resolve_want` narrowed the kind scope, a
+    `labels=cat` request with no explicit `kinds` therefore returned
+    every storm episode / sighting / recap / manual event / timelapse
+    in the window too, completely unfiltered by the label just asked
+    for. A cat motion clip must still come back; an unrelated storm
+    episode and an unrelated thunder sighting in the very same window
+    must not."""
+    now = datetime.now().replace(microsecond=0)
+    store = _Store(tmp_path)
+    _write_event(tmp_path, "cam1", now, "e_cat", labels=["cat"])
+    append_episode(
+        tmp_path,
+        {
+            "id": "ep_storm",
+            "started_at": (now - timedelta(minutes=10)).isoformat(timespec="seconds"),
+            "ended_at": (now - timedelta(minutes=5)).isoformat(timespec="seconds"),
+            "duration_min": 5,
+        },
+    )
+    ws = _FakeWeatherService(
+        sightings=[
+            {
+                "id": "sight_thunder",
+                "event_type": "thunder",
+                "cam_id": "cam1",
+                "cam_name": "Cam 1",
+                "started_at": (now - timedelta(minutes=3)).isoformat(timespec="seconds"),
+                "duration_s": 30,
+                "clip_path": "weather/cam1/thunder/sight_thunder.mp4",
+            }
+        ],
+        manuals=[
+            {
+                "id": "man_unrelated",
+                "name": "x",
+                "range_start": (now - timedelta(minutes=8)).isoformat(timespec="seconds"),
+                "range_end": (now - timedelta(minutes=7)).isoformat(timespec="seconds"),
+            }
+        ],
+    )
+
+    result = list_library_items(
+        store=store,
+        weather_service=ws,
+        storage_root=tmp_path,
+        cameras=[{"id": "cam1", "name": "cam1"}],
+        labels=["cat"],
+        limit=30,
+    )
+    assert {it["id"] for it in result["items"]} == {"motion:e_cat"}
+
+
+def test_explicit_kinds_still_overrides_the_labels_narrowing(tmp_path):
+    """`kinds` explicitly naming a non-motion kind still wins — the
+    narrowing in `_resolve_want` only kicks in when the caller left
+    `kinds` unset, exactly like `list_library_items`'s own docstring
+    for `since`/`until` distinguishes "not given" from "given but
+    unbounded"."""
+    now = datetime.now().replace(microsecond=0)
+    append_episode(
+        tmp_path,
+        {
+            "id": "ep_storm",
+            "started_at": (now - timedelta(minutes=10)).isoformat(timespec="seconds"),
+            "ended_at": (now - timedelta(minutes=5)).isoformat(timespec="seconds"),
+            "duration_min": 5,
+        },
+    )
+    result = list_library_items(
+        storage_root=tmp_path,
+        cameras=[{"id": "cam1", "name": "cam1"}],
+        kinds=["episode"],
+        labels=["cat"],
+        limit=30,
+    )
+    assert {it["id"] for it in result["items"]} == {"episode:ep_storm"}
+
+
 # ── /api/library's own since/until query params ──────────────────────────
 
 

@@ -180,6 +180,99 @@ def _cam_scoped_ok(item: dict, camera_ids) -> bool:
     return not cam_id or cam_id in camera_ids
 
 
+def _resolve_want(kinds, label, labels) -> set:
+    """The kind scope for one request.
+
+    An explicit ``kinds`` always wins. Otherwise: ``label``/``labels``
+    only ever reach ``motion_candidates`` (see ``_windowed_candidates``
+    below) — no other kind has an object-detector label concept, a
+    weather ``sighting`` included, whose ``event_type`` is a WEATHER
+    category, not a label. Without this narrowing, a caller that asks
+    for e.g. ``labels=cat`` and never names ``kinds`` got every recap /
+    manual-event / episode / timelapse / sighting in the window too,
+    completely unfiltered by the label just asked for — silently
+    riding through ``_flat_candidates``, which has no ``labels``
+    parameter at all. Restricting ``want`` to the kinds that CAN honour
+    the filter (``motion`` today) is the fix.
+    """
+    want = (set(kinds) if kinds else set(KINDS)) & set(KINDS)
+    if (label or labels) and kinds is None:
+        want &= {"motion"}
+    return want
+
+
+def _widen_matches(
+    *,
+    want,
+    store,
+    weather_service,
+    cam_ids,
+    cam_names,
+    camera_ids,
+    label,
+    labels,
+    categories,
+    flat,
+    hi,
+    since,
+    degraded,
+    keep_widening,
+) -> dict[str, dict]:
+    """Merge candidates into one ``item_id -> item`` dict, widening the
+    ``[lo, hi]`` window outward one ``_WINDOW_STEPS_DAYS`` step at a
+    time until ``keep_widening(matched)`` says stop, ``since``/``_FLOOR``
+    is reached, or the steps run out.
+
+    Shared by ``list_library_items`` (stops as soon as enough items for
+    one page are in hand — ``keep_widening`` checks the cursor-filtered
+    count against ``limit``) and ``_facets.count_library_facets``
+    (``keep_widening`` always returns ``True``, so this runs to full
+    exhaustion — a facet/total count needs the complete matching set,
+    not just enough for a page). See the module docstring's "Windowing"
+    section for why the steps are shaped the way they are.
+    """
+    matched: dict[str, dict] = {}
+    lo = hi
+    for days in _WINDOW_STEPS_DAYS:
+        lo = hi - timedelta(days=days)
+        since_floor = since is not None and lo <= since
+        if since_floor:
+            lo = since
+        window = [it for it in flat if _overlaps(it, lo, hi)]
+        window.extend(
+            _windowed_candidates(
+                want,
+                store,
+                weather_service,
+                cam_ids,
+                cam_names,
+                camera_ids,
+                label,
+                labels,
+                categories,
+                lo,
+                hi,
+                degraded,
+            )
+        )
+        for it in window:
+            matched[_item_id(it)] = it
+        if not keep_widening(matched) or lo <= _FLOOR or since_floor:
+            break
+    return matched
+
+
+def _eligible_items(matched: dict, cursor_start, cursor_id) -> list:
+    """``matched.values()`` strictly past the pagination cursor — the
+    slice both the widen loop's own stop check and the final page
+    build need, computed the same way in both places."""
+    return [
+        it
+        for it in matched.values()
+        if cursor_start is None or _sort_key(it) < (cursor_start, cursor_id)
+    ]
+
+
 def _resolve_cameras(cameras, camera_ids):
     """``(cam_ids, cam_names)`` for the motion/sighting/timelapse readers.
 
@@ -332,7 +425,7 @@ def list_library_items(
     read rather than being silently dropped, mirroring
     ``weather_episodes.build_footage_index``'s own convention.
     """
-    want = (set(kinds) if kinds else set(KINDS)) & set(KINDS)
+    want = _resolve_want(kinds, label, labels)
     cam_ids, cam_names = _resolve_cameras(cameras, camera_ids)
 
     cursor_start, cursor_id = _decode_cursor(before) if before else (None, None)
@@ -343,44 +436,26 @@ def list_library_items(
     degraded: list = []
     flat = _flat_candidates(want, weather_service, storage_root, cam_names, camera_ids, categories)
 
-    matched: dict[str, dict] = {}
-    eligible: list = []
-    lo = hi
-    for days in _WINDOW_STEPS_DAYS:
-        lo = hi - timedelta(days=days)
-        # An explicit `since` is a floor: clamp `lo` to it instead of
-        # widening past it, and this step is the last one — same role
-        # `_FLOOR` already plays, just caller-supplied.
-        since_floor = since is not None and lo <= since
-        if since_floor:
-            lo = since
-        window = [it for it in flat if _overlaps(it, lo, hi)]
-        window.extend(
-            _windowed_candidates(
-                want,
-                store,
-                weather_service,
-                cam_ids,
-                cam_names,
-                camera_ids,
-                label,
-                labels,
-                categories,
-                lo,
-                hi,
-                degraded,
-            )
-        )
-        for it in window:
-            matched[_item_id(it)] = it
-        eligible = [
-            it
-            for it in matched.values()
-            if cursor_start is None or _sort_key(it) < (cursor_start, cursor_id)
-        ]
-        if len(eligible) > limit or lo <= _FLOOR or since_floor:
-            break
-
+    matched = _widen_matches(
+        want=want,
+        store=store,
+        weather_service=weather_service,
+        cam_ids=cam_ids,
+        cam_names=cam_names,
+        camera_ids=camera_ids,
+        label=label,
+        labels=labels,
+        categories=categories,
+        flat=flat,
+        hi=hi,
+        since=since,
+        degraded=degraded,
+        # Stop as soon as one page's worth (past the cursor) is in hand
+        # — the early-stop behaviour this function has always had; see
+        # `_widen_matches`'s own docstring for the exhaustive counterpart.
+        keep_widening=lambda m: len(_eligible_items(m, cursor_start, cursor_id)) <= limit,
+    )
+    eligible = _eligible_items(matched, cursor_start, cursor_id)
     eligible.sort(key=_sort_key, reverse=True)
     page = eligible[:limit]
     next_cursor = _encode_cursor(page[-1]) if len(eligible) > limit and page else None

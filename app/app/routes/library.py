@@ -40,6 +40,11 @@ happens to reach on its own; naive local-wall-clock ISO timestamps
 app uses, parsed leniently via ``_safe_dt`` — an unparsable value is
 dropped rather than 400ing, same tolerance ``kinds``/cursor already
 get. Both bounds are inclusive: an item touching the edge is in.
+
+``GET /api/library/facets`` (the relevance-pruned, live-counted filter
+bar) takes the same filter params minus ``before``/``limit`` — see
+``library._facets.count_library_facets`` for the exact response shape
+and the faceted-counting rule each dimension follows.
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
-from ..library import KINDS, list_library_items
+from ..library import KINDS, count_library_facets, list_library_items
 from ..weather_service._consts import _safe_dt
 
 bp = Blueprint("library", __name__)
@@ -93,5 +98,39 @@ def api_library_list():
         until=_safe_dt(request.args.get('until') or ''),
         before=request.args.get('before') or None,
         limit=limit,
+    )
+    return jsonify(result)
+
+
+def _effective_labels() -> list[str] | None:
+    """``labels`` wins over the singular ``label`` when both are given —
+    same precedence ``_motion_reader._label_filter_set`` already
+    applies, mirrored here so the facets endpoint reads the identical
+    query params ``/api/library`` itself does."""
+    labels = _csv_arg('labels')
+    if labels:
+        return labels
+    label = request.args.get('label') or None
+    return [label] if label else None
+
+
+@bp.get('/api/library/facets')
+def api_library_facets():
+    kinds = _csv_arg('kinds')
+    if kinds is not None:
+        kinds = [k for k in kinds if k in KINDS] or None
+
+    cameras = app_state.get_effective_config().get("cameras", [])
+    result = count_library_facets(
+        store=app_state.store,
+        weather_service=app_state.weather_service,
+        storage_root=app_state.storage_root,
+        cameras=cameras,
+        kinds=kinds,
+        camera_ids=_csv_arg('camera_ids'),
+        labels=_effective_labels(),
+        categories=_csv_arg('categories'),
+        since=_safe_dt(request.args.get('since') or ''),
+        until=_safe_dt(request.args.get('until') or ''),
     )
     return jsonify(result)

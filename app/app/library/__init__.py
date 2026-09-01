@@ -21,6 +21,7 @@ with a cursor that survives cross-source timestamp ties.
 Public surface::
 
     list_library_items(...)
+    count_library_facets(...)
     motion_events_between(...)
     motion_candidates(...)
     recap_candidates(...)
@@ -30,12 +31,14 @@ Public surface::
 
 from __future__ import annotations
 
+from ._facets import count_library_facets
 from ._feed import KINDS, list_library_items
 from ._motion_reader import motion_candidates, motion_events_between
 from ._weather_readers import episode_candidates, manual_event_candidates, recap_candidates
 
 __all__ = [
     "KINDS",
+    "count_library_facets",
     "episode_candidates",
     "list_library_items",
     "manual_event_candidates",

@@ -644,6 +644,10 @@ byId('cameraForm').onsubmit = async (e) => {
       .map((x) => x.trim())
       .filter(Boolean),
     enabled: f['enabled'] ? f['enabled'].checked : (existingCam?.enabled ?? true),
+    // Outdoor/indoor flag — Allgemein tab. Gates whether cross-camera
+    // weather content (recap/manual/episode) surfaces in the Mediathek
+    // once this camera is the sole entry in the active camera filter.
+    outdoor: f['outdoor'] ? f['outdoor'].checked : (existingCam?.outdoor ?? true),
     armed: f['armed'].checked,
     // Prefer the live Alerting tab toggle state; fall back to persisted value.
     telegram_enabled: f['telegram_enabled']

@@ -243,6 +243,83 @@ def test_labels_filter_excludes_unrelated_categories_and_non_motion_cameras(tmp_
     assert facets["total"] == 1
 
 
+# ── outdoor-scope rule (indoor camera ⇒ weather facets suppressed) ───────
+#
+# Regression for the operator report: scoping the Mediathek down to a
+# single indoor camera ("Werkstatt") still showed non-zero counts for
+# weather category chips ("Gewitter"/"Starkregen") the view could never
+# actually produce a result for. `_cam_scoped_ok`'s outdoor-aware
+# behaviour must reach the facets path too, not just `/api/library`
+# itself — pinned via both the `categories` dimension AND `total`.
+
+_INDOOR_CAM = {"id": "werkstatt", "name": "Werkstatt", "outdoor": False}
+_OUTDOOR_CAM = {"id": "garten", "name": "Garten", "outdoor": True}
+
+
+def test_categories_facet_is_empty_for_an_indoor_only_camera_scope(tmp_path):
+    now = datetime.now().replace(microsecond=0)
+    ws = _FakeWeatherService(
+        manuals=[
+            {
+                "id": "m_storm",
+                "name": "Starker Regen mit vielen Blitzen",
+                "categories": ["heavy_rain"],
+                "range_start": (now - timedelta(minutes=5)).isoformat(timespec="seconds"),
+                "range_end": now.isoformat(timespec="seconds"),
+            }
+        ]
+    )
+    facets = count_library_facets(
+        weather_service=ws,
+        cameras=[_INDOOR_CAM, _OUTDOOR_CAM],
+        camera_ids=["werkstatt"],
+    )
+    assert facets["categories"] == {}
+    assert facets["total"] == 0
+
+
+def test_categories_facet_is_populated_once_scope_includes_an_outdoor_camera(tmp_path):
+    now = datetime.now().replace(microsecond=0)
+    ws = _FakeWeatherService(
+        manuals=[
+            {
+                "id": "m_storm",
+                "name": "Starker Regen mit vielen Blitzen",
+                "categories": ["heavy_rain"],
+                "range_start": (now - timedelta(minutes=5)).isoformat(timespec="seconds"),
+                "range_end": now.isoformat(timespec="seconds"),
+            }
+        ]
+    )
+    facets = count_library_facets(
+        weather_service=ws,
+        cameras=[_INDOOR_CAM, _OUTDOOR_CAM],
+        camera_ids=["werkstatt", "garten"],
+    )
+    assert facets["categories"] == {"heavy_rain": 1}
+    assert facets["total"] == 1
+
+
+def test_categories_facet_unaffected_when_no_camera_filter_is_active(tmp_path):
+    """'Alles gemischt' — the outdoor rule only applies once a real
+    camera_ids filter is active."""
+    now = datetime.now().replace(microsecond=0)
+    ws = _FakeWeatherService(
+        manuals=[
+            {
+                "id": "m_storm",
+                "name": "x",
+                "categories": ["heavy_rain"],
+                "range_start": (now - timedelta(minutes=5)).isoformat(timespec="seconds"),
+                "range_end": now.isoformat(timespec="seconds"),
+            }
+        ]
+    )
+    facets = count_library_facets(weather_service=ws, cameras=[_INDOOR_CAM])
+    assert facets["categories"] == {"heavy_rain": 1}
+    assert facets["total"] == 1
+
+
 # ── GET /api/library/facets route ─────────────────────────────────────────
 
 

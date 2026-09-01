@@ -110,6 +110,26 @@ class TestValidateAndCoerce:
         assert CAMERA_SCHEMA["hybrid_mode"] == (str, "off")
         assert CAMERA_SCHEMA["label_veto"] == (dict, {})
 
+    # ── outdoor flag ──────────────────────────────────────────────────────────
+    def test_outdoor_defaults_true_when_absent(self):
+        data = {"id": "cam1", "name": "Cam"}
+        out = validate_and_coerce(data, CAMERA_SCHEMA)
+        assert "outdoor" not in out, "validate_and_coerce only fills required fields"
+        # The default lives in CAMERA_SCHEMA itself, consumed by
+        # default_camera()/cam.get("outdoor", True) at the read sites —
+        # pinned here so a future edit can't silently change it.
+        assert CAMERA_SCHEMA["outdoor"] == (bool, True)
+
+    def test_outdoor_explicit_false_survives_validation(self):
+        data = {"id": "cam1", "name": "Werkstatt", "outdoor": False}
+        out = validate_and_coerce(data, CAMERA_SCHEMA)
+        assert out["outdoor"] is False
+
+    def test_outdoor_str_to_bool_coercion(self):
+        data = {"id": "cam1", "name": "Cam", "outdoor": "false"}
+        out = validate_and_coerce(data, CAMERA_SCHEMA)
+        assert out["outdoor"] is False
+
     def test_storage_section_coerces_corpus_quota(self):
         out = validate_and_coerce({"corpus_quota_per_label_day": "50"}, SECTION_SCHEMAS["storage"])
         assert out["corpus_quota_per_label_day"] == 50

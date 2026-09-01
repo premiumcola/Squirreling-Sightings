@@ -44,6 +44,7 @@ from ._feed import (
     _category_of,
     _flat_candidates,
     _matches_categories,
+    _outdoor_scope_ok,
     _resolve_cameras,
     _resolve_want,
     _widen_matches,
@@ -113,10 +114,15 @@ def count_library_facets(
         degraded=degraded,
         keep_widening=lambda _matched: True,
     )
-    return _tally_facets(matched.values(), camera_ids, labels, categories)
+    # Real active camera_ids (not the None passed to `_flat_candidates`/
+    # `_widen_matches` above, which deliberately gathers the unfiltered
+    # superset) — this is what decides whether cam_id="" weather items
+    # are relevant for the CURRENT scope. See `_outdoor_scope_ok`.
+    weather_visible = _outdoor_scope_ok(cameras, camera_ids)
+    return _tally_facets(matched.values(), camera_ids, labels, categories, weather_visible)
 
 
-def _tally_facets(items, camera_ids, labels, categories) -> dict:
+def _tally_facets(items, camera_ids, labels, categories, weather_visible=True) -> dict:
     cam_active = set(camera_ids) if camera_ids else None
     label_active = set(labels) if labels else None
     cat_active = set(categories) if categories else None
@@ -127,7 +133,7 @@ def _tally_facets(items, camera_ids, labels, categories) -> dict:
     total = 0
 
     for it in items:
-        cam_ok = _cam_scoped_ok(it, cam_active)
+        cam_ok = _cam_scoped_ok(it, cam_active, weather_visible)
         label_ok = _matches_labels(it, label_active)
         cat_ok = _matches_categories(it, cat_active)
 

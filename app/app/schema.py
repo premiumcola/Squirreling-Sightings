@@ -107,6 +107,15 @@ CAMERA_SCHEMA: dict = {
     "username": (str, ""),
     "password": (str, ""),
     "location": (str, ""),
+    # Whether this camera physically points outdoors. Default True —
+    # most cameras in this wildlife-monitoring app watch a yard, porch
+    # or driveway; the exception (e.g. an indoor "Werkstatt" cam) is
+    # flipped to False explicitly. Read by
+    # library._feed._outdoor_scope_ok to decide whether camera-agnostic
+    # weather content (recap/manual/episode kinds, which carry
+    # cam_id="") is relevant when the active Mediathek camera filter
+    # scopes down to indoor-only cameras.
+    "outdoor": (bool, True),
     "armed": (bool, True),
     "telegram_enabled": (bool, True),
     "mqtt_enabled": (bool, True),

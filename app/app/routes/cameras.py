@@ -79,6 +79,12 @@ def api_cameras():
         s["object_filter"] = cam.get("object_filter", [])
         s["telegram_enabled"] = cam.get("telegram_enabled", True)
         s["mqtt_enabled"] = cam.get("mqtt_enabled", True)
+        # Outdoor/indoor flag — the Mediathek camera filter's outdoor
+        # scope check (library._feed._outdoor_scope_ok) reads this from
+        # state.config.cameras, but state.cameras (this endpoint) is the
+        # cam-edit hydration fallback, so it has to carry the field too —
+        # same lesson as `color` in test_camera_color_reaches_ui.py.
+        s["outdoor"] = cam.get("outdoor", True)
         s["whitelist_names"] = cam.get("whitelist_names", [])
         # Unified per-camera schedule. Migration in SettingsStore guarantees
         # the new shape; the legacy recording_schedule_* fields no longer

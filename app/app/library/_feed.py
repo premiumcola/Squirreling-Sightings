@@ -170,14 +170,39 @@ def _matches_categories(item: dict, categories) -> bool:
     return bool(_category_of(item) & set(categories))
 
 
-def _cam_scoped_ok(item: dict, camera_ids) -> bool:
+def _outdoor_scope_ok(cameras, camera_ids) -> bool:
+    """Whether camera-agnostic weather content (recap/manual/episode,
+    which carry ``cam_id=""``) is relevant for the active ``camera_ids``
+    filter.
+
+    True with no filter at all ("Alles gemischt" keeps showing
+    everything). Otherwise True iff at least one camera in the filter
+    is marked outdoor (``CAMERA_SCHEMA["outdoor"]``, default True) —
+    False only when every camera the filter names is indoor (e.g. an
+    indoor "Werkstatt" cam), which is the operator-reported bug this
+    exists to fix: a storm episode / recap / manual weather event has
+    nothing to do with an indoor-only view. An id in the filter that no
+    longer resolves to a known camera (e.g. archived) defaults to
+    outdoor, the same default a fresh camera schema gets — an unknown
+    camera should not silently suppress weather content."""
+    if not camera_ids:
+        return True
+    outdoor_by_id = {c.get("id"): c.get("outdoor", True) for c in (cameras or []) if c.get("id")}
+    return any(outdoor_by_id.get(cid, True) for cid in camera_ids)
+
+
+def _cam_scoped_ok(item: dict, camera_ids, weather_visible: bool = True) -> bool:
     if not camera_ids:
         return True
     cam_id = item.get("cam_id") or ""
-    # Cross-camera kinds (recap/manual/episode) carry cam_id="" and are
-    # never hidden by a camera filter — there is no single camera to
-    # match against.
-    return not cam_id or cam_id in camera_ids
+    if not cam_id:
+        # Cross-camera kinds (recap/manual/episode) carry cam_id="" —
+        # there is no single camera to match against, so whether they
+        # pass a camera filter is decided by the filter's outdoor-ness
+        # instead (see `_outdoor_scope_ok`). A real cam_id below is
+        # matched against the filter set exactly as before.
+        return weather_visible
+    return cam_id in camera_ids
 
 
 def _resolve_want(kinds, label, labels) -> set:
@@ -307,11 +332,18 @@ def _public_item(item: dict) -> dict:
 
 
 def _flat_candidates(
-    want, weather_service, storage_root, cam_names, camera_ids, categories
+    want, weather_service, storage_root, cam_names, camera_ids, categories, weather_visible=True
 ) -> list:
     """Everything from the un-windowed sources, fetched once, filtered
     to camera + category here since their own readers don't take those
-    knobs (see ``._weather_readers``)."""
+    knobs (see ``._weather_readers``).
+
+    ``weather_visible`` (see ``_outdoor_scope_ok``) gates the cam_id=""
+    recap/manual/episode items when ``camera_ids`` is a real filter;
+    it is irrelevant — and safe to leave at its default — whenever
+    ``camera_ids`` is falsy, since ``_cam_scoped_ok`` short-circuits to
+    True before ever looking at it (the shape ``count_library_facets``
+    relies on when it gathers the unfiltered candidate superset)."""
     out: list = []
     if "recap" in want:
         out.extend(recap_candidates(weather_service))
@@ -324,7 +356,9 @@ def _flat_candidates(
 
         out.extend(timelapse_candidates(storage_root, cam_names))
     return [
-        it for it in out if _cam_scoped_ok(it, camera_ids) and _matches_categories(it, categories)
+        it
+        for it in out
+        if _cam_scoped_ok(it, camera_ids, weather_visible) and _matches_categories(it, categories)
     ]
 
 
@@ -434,7 +468,16 @@ def list_library_items(
         hi = min(hi, until)
 
     degraded: list = []
-    flat = _flat_candidates(want, weather_service, storage_root, cam_names, camera_ids, categories)
+    # Computed ONCE per request (not per item) — whether the active
+    # camera_ids filter includes at least one outdoor camera, or has no
+    # filter at all. Gates every cam_id="" recap/manual/episode item
+    # `_flat_candidates` gathers below; motion/sighting/timelapse items
+    # always carry a real cam_id and are unaffected (see
+    # `_outdoor_scope_ok`/`_cam_scoped_ok`).
+    weather_visible = _outdoor_scope_ok(cameras, camera_ids)
+    flat = _flat_candidates(
+        want, weather_service, storage_root, cam_names, camera_ids, categories, weather_visible
+    )
 
     matched = _widen_matches(
         want=want,

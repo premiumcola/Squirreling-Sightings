@@ -96,6 +96,39 @@
     <span class="field-label cam-id-preview-subtitle"
       >Kamera-ID &middot; wird automatisch aus Hersteller, Modell, Name und IP-Endung erzeugt</span
     >
+    <!-- Außen-/Innenkamera — steuert, ob kamera-übergreifende
+                     Wetter-Einträge (Sturm-Episoden, Recaps, manuelle
+                     Wetter-Events) in der Mediathek auftauchen, wenn die
+                     Kamera-Filter-Auswahl NUR Innenkameras enthält. Default
+                     an, weil die meisten Kameras in diesem Wildlife-Setup
+                     draußen hängen; die Ausnahme (z. B. "Werkstatt") wird
+                     hier manuell umgeschaltet. Reuses the .chan-row/
+                     .switch-input markup from the Alerting tab — the CSS
+                     is class-scoped, not tab-scoped. -->
+    <label class="chan-row">
+      <span class="chan-icon">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="4" />
+          <path
+            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+          />
+        </svg>
+      </span>
+      <span class="chan-text">
+        <span class="chan-name">Außenkamera</span>
+        <span class="chan-sub">Wetter-Ereignisse nur bei &ge; 1 Außenkamera im Filter</span>
+      </span>
+      <input type="checkbox" name="outdoor" class="switch-input" checked />
+      <span class="switch"></span>
+    </label>
     <!-- Erkennungs-Modus — architecture-level switch (motion vs.
                      KI vs. both). Lives here on the Allgemein tab rather
                      than the Erkennung tab because it picks WHICH pipeline

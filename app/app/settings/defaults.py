@@ -47,6 +47,12 @@ def default_camera(cam: dict | None = None) -> dict:
         "manufacturer": cam.get("manufacturer", ""),
         "model": cam.get("model", ""),
         "location": cam.get("location", ""),
+        # Outdoor/indoor flag (schema: CAMERA_SCHEMA["outdoor"]). Missing
+        # here would drop a saved value on the next `existing.update()`
+        # merge for a NEW camera the same way `color`'s absence once did
+        # (see test_camera_color_reaches_ui.py) — default True mirrors
+        # the schema default.
+        "outdoor": cam.get("outdoor", True),
         # Identity colour override (schema: CAMERA_SCHEMA["color"]).
         # Missing here meant the default skeleton a NEW camera is seeded
         # from had no `color` at all, so a colour picked during creation

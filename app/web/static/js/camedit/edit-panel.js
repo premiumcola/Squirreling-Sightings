@@ -60,6 +60,9 @@ function _hydrateIdentity(f, c) {
   f['name'].value = c.name || '';
   if (f['manufacturer']) f['manufacturer'].value = c.manufacturer || '';
   if (f['model']) f['model'].value = c.model || '';
+  // Outdoor/indoor flag — default true so a legacy camera without the
+  // field hydrates as outdoor (schema default).
+  if (f['outdoor']) f['outdoor'].checked = c.outdoor !== false;
   // tx412 — the icon-emoji <input> was retired. The icon derives at
   // render time from getCameraIcon(name); writing it back into an input
   // is what produced the "<svg…> as input value" bug.

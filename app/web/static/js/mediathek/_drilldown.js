@@ -17,15 +17,17 @@ import { renderMediaFilterPills, _seedTopMediaLabel, _pruneEmptyMediaFilters } f
 import { renderProcessingQueue } from './_processing.js';
 import { _setActiveMocCard } from './_overview.js';
 import { renderMediaGrid, _reflowPageAfterLayout } from './_paging.js';
+import { showMediathekView } from './_view-toggle.js';
 
 const _LOADING_HTML =
   '<div style="padding:32px;text-align:center;color:var(--muted)">Lade Medien…</div>';
 
 // Swap overview → drilldown and bring the select-mode toggle + heading in
-// line with the state the caller just wrote.
+// line with the state the caller just wrote. Also hides #libraryBlock
+// (the merged library results, the toggle's third state) if it happened
+// to be showing — see mediathek/_view-toggle.js.
 function _showDrilldown() {
-  byId('mediaOverview').style.display = 'none';
-  byId('mediaDrilldown').style.display = '';
+  showMediathekView('mediaDrilldown');
   _updateMediaSelectToggle();
   updateMediaSectionTitle();
 }
@@ -80,8 +82,7 @@ export async function openAllMediaDrilldown(preFilterLabel) {
   _clearLoadedLibrary();
   if (state.mediaLabels.size === 0) _seedTopMediaLabel();
   renderMediaFilterPills('drilldown');
-  byId('mediaOverview').style.display = 'none';
-  byId('mediaDrilldown').style.display = '';
+  showMediathekView('mediaDrilldown');
   _setActiveMocCard('__all__');
   _updateMediaSelectToggle();
   updateMediaSectionTitle();
@@ -100,8 +101,7 @@ export async function openMediaDrilldown(camId) {
   if (pag) pag.innerHTML = '';
   _seedTopMediaLabel();
   renderMediaFilterPills('drilldown');
-  byId('mediaOverview').style.display = 'none';
-  byId('mediaDrilldown').style.display = '';
+  showMediathekView('mediaDrilldown');
   _setActiveMocCard(camId);
   _updateMediaSelectToggle();
   updateMediaSectionTitle();
@@ -114,8 +114,7 @@ export function closeMediaDrilldown() {
   state.mediaCamera = null;
   state.media = [];
   if (state.mediaSelectMode) _exitMediaSelectMode();
-  byId('mediaDrilldown').style.display = 'none';
-  byId('mediaOverview').style.display = '';
+  showMediathekView('mediaOverview');
   _setActiveMocCard(null);
   _updateMediaSelectToggle();
   updateMediaSectionTitle();

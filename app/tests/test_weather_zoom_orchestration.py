@@ -105,6 +105,43 @@ def test_reset_triggers_exactly_one_grid_reload():
     assert out["calls"] == 1
 
 
+# ── Stage 9: the reload is wrapped so the chart stays scroll-anchored ────
+
+
+def test_reload_call_sites_are_wrapped_in_the_scroll_anchor_helper():
+    """Regression: dragging a zoom-select on the chart and releasing used
+    to leave `window.reloadLibraryPage?.()` unwrapped — #libraryBlock
+    sits above #weatherStatsChartWrap in the DOM, so a narrowed reload
+    could shrink it by thousands of pixels while the operator was still
+    looking at the chart, and the browser's scroll position (which
+    doesn't move on its own) would land the viewport somewhere in the
+    unrelated #achievements/"Sichtungen" section further down the page.
+    All three call sites (drag-zoom, the reset chip, a preset click that
+    clears an active zoom) must go through the anchor helper, not a bare
+    reload."""
+    import pathlib
+
+    src = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "app"
+        / "web"
+        / "static"
+        / "js"
+        / "weather"
+        / "stats.js"
+    ).read_text(encoding="utf-8")
+    assert "from '../core/scroll-anchor.js'" in src
+    assert "withScrollAnchor(byId('weatherStatsChartWrap')" in src
+    assert src.count("window.reloadLibraryPage?.()") == 1, (
+        "exactly one raw call site — inside the shared "
+        "_reloadLibraryKeepingChartAnchored helper, not duplicated per caller"
+    )
+    # One definition + three call sites (drag-zoom, the reset chip, and
+    # the zoom-clearing preset-pill branch) — all routed through the
+    # same anchored helper, none reaching the raw bridge directly.
+    assert src.count("_reloadLibraryKeepingChartAnchored()") == 4
+
+
 def test_reload_bridge_is_a_no_op_when_the_grid_is_not_mounted():
     """`window.reloadLibraryPage` is only defined once library/page.js has
     run (it is `undefined` on any other page rendering the chart) — the

@@ -84,6 +84,7 @@ registerAction('loadCamRecoveryDiscovery', _shim('loadCamRecoveryDiscovery'));
 registerAction('closeCamRecoveryModal', _shim('closeCamRecoveryModal'));
 registerAction('toggleMediaSelectMode', _shim('toggleMediaSelectMode'));
 registerAction('closeMediaDrilldown', _shim('closeMediaDrilldown'));
+registerAction('resetLibraryView', _shim('resetLibraryView'));
 registerAction('bulkDeleteSelectedMedia', _shim('bulkDeleteSelectedMedia'));
 registerAction('toggleSetSection', _shim('toggleSetSection', 'section'));
 // cam-edit Verbindung tab

@@ -18,6 +18,7 @@ import { renderWeatherStatsChart } from './stats-chart/index.js';
 import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-summary.js';
 import { apiGet } from '../core/api.js';
 import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
+import { withScrollAnchor } from '../core/scroll-anchor.js';
 
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
@@ -203,6 +204,23 @@ function _closeZoomSavePanel() {
   if (panel) panel.hidden = true;
 }
 
+// Every reload of the merged grid triggered from here goes through this
+// — #libraryBlock sits above #weatherStatsChartWrap in the DOM, so a
+// narrowed-down reload can shrink it by thousands of pixels while the
+// operator is still looking at the chart below. Without correction, the
+// browser's scroll position (an absolute pixel offset) doesn't move just
+// because the content above it did: the chart — and the unrelated
+// #achievements/"Sichtungen" section right after this one in the page —
+// gets dragged sharply upward under a scrollY that stayed put, landing
+// the viewport somewhere in that unrelated section. withScrollAnchor
+// (core/scroll-anchor.js) measures the chart wrap's viewport position
+// before and after the reload and corrects scroll by the delta so it
+// never visibly moves — root-caused and fixed against exactly that
+// symptom report.
+function _reloadLibraryKeepingChartAnchored() {
+  withScrollAnchor(byId('weatherStatsChartWrap'), () => window.reloadLibraryPage?.());
+}
+
 // Fired by the chart's drag-to-zoom (stats-chart/_hover.js's
 // opts.onRangeSelect, wired in stats-chart/index.js). Overrides whatever
 // preset is selected — none of the five pills matches a custom range.
@@ -215,7 +233,7 @@ export function onWeatherChartRangeSelect(startTs, endTs) {
   setZoomRange(startTs, endTs);
   renderWeatherStats();
   _closeZoomSavePanel();
-  window.reloadLibraryPage?.();
+  _reloadLibraryKeepingChartAnchored();
 }
 
 // The reset chip, and clicking ANY preset (even the one already
@@ -228,7 +246,7 @@ export function resetWeatherChartZoom() {
   clearZoomRange();
   renderWeatherStats();
   _closeZoomSavePanel();
-  window.reloadLibraryPage?.();
+  _reloadLibraryKeepingChartAnchored();
 }
 
 function _bindWeatherStatsPills() {
@@ -247,7 +265,7 @@ function _bindWeatherStatsPills() {
         // Same grid-reload bridge resetWeatherChartZoom uses below — a
         // preset click clears zoom exactly like the reset chip does, so
         // the grid has to un-narrow here too, on every branch below.
-        window.reloadLibraryPage?.();
+        _reloadLibraryKeepingChartAnchored();
       }
       if (h === _wsStatsState.hours) {
         if (hadZoom) renderWeatherStats();

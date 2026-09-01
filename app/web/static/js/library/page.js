@@ -8,6 +8,7 @@
 // Stage 3/4 building blocks.
 import { byId } from '../core/dom.js';
 import { apiGet } from '../core/api.js';
+import { state } from '../core/state.js';
 import { renderLibraryGrid } from './_grid.js';
 import { createLibraryPager, renderLoadMoreControl } from './_pagination.js';
 import {
@@ -17,6 +18,7 @@ import {
 } from './_filter-bar.js';
 import { bindLibraryGrid } from './_bind.js';
 import { isZoomActive } from '../weather/_zoom.js';
+import { showMediathekView } from '../mediathek/_view-toggle.js';
 
 const _PAGE_LIMIT = 30;
 
@@ -70,8 +72,35 @@ async function _loadPage(reset) {
   }
 }
 
+// True while a quick tile (Tiere/Menschen/Wetterereignisse) or any
+// #libraryFilterBar chip is active — the one condition that decides
+// whether #libraryBlock (the toggle's third state, mediathek/
+// _view-toggle.js) or the #mediaOverview tiles are showing.
+function _hasActiveLibraryFilter() {
+  return !!(_filter.cameraIds.size || _filter.labels.size || _filter.categories.size || _kinds);
+}
+
+// Flips the shared overview/drilldown/results toggle to match the
+// current filter state. A camera tile still opens the per-camera
+// drilldown as its own thing (mediathek/_drilldown.js) — but
+// #libraryFilterBar stays reachable while that drilldown is open, so a
+// chip click there has to be able to override it: reuse the exact same
+// "leave the drilldown" bridge its own "← Alle Kameras" button calls
+// (window.closeMediaDrilldown, set by mediathek/orchestration.js) rather
+// than re-deriving that cleanup here, then let showMediathekView promote
+// the results grid over the overview it just landed on.
+function _syncMediathekView() {
+  if (_hasActiveLibraryFilter()) {
+    if (state.mediaDrillOpen) window.closeMediaDrilldown?.();
+    showMediathekView('libraryBlock');
+  } else {
+    showMediathekView('mediaOverview');
+  }
+}
+
 function _onFilterChange() {
   renderLibraryFilterBar(_filter, _onFilterChange);
+  _syncMediathekView();
   return _loadPage(true);
 }
 
@@ -80,7 +109,20 @@ function _onFilterChange() {
 export function initLibraryPage() {
   if (!byId('libraryGrid')) return;
   renderLibraryFilterBar(_filter, _onFilterChange);
+  _syncMediathekView();
   return _loadPage(true);
+}
+
+/** The results grid's "← Übersicht" affordance — clears every filter
+ * dimension (chips AND whatever quick tile set `_kinds`/`labels`) and
+ * hands control back to `_syncMediathekView`, which then shows the tile
+ * overview again since nothing is active any more. */
+export function resetLibraryView() {
+  _filter.cameraIds.clear();
+  _filter.labels.clear();
+  _filter.categories.clear();
+  _kinds = null;
+  return _onFilterChange();
 }
 
 /** Re-fetch page 1 with the current filter — every mutation elsewhere
@@ -137,3 +179,4 @@ window.initLibraryPage = initLibraryPage;
 window.reloadLibraryPage = reloadLibraryPage;
 window.setLibraryLabelFilter = setLibraryLabelFilter;
 window.setLibraryKindFilter = setLibraryKindFilter;
+window.resetLibraryView = resetLibraryView;

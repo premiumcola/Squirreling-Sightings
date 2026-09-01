@@ -190,6 +190,13 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .media-drill-back {
+  display: inline-flex;
+  align-items: center;
+  /* min-height, not a fixed height: iOS touch-target floor (>=44px) for
+     both this button's own drilldown use and the results-grid "←
+     Übersicht" affordance (mediathek.html#libraryResultsHead) that
+     reuses this class unchanged. */
+  min-height: 44px;
   background: var(--surface);
   border: none;
   border-radius: 10px;

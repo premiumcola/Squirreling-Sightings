@@ -93,24 +93,37 @@ function _markersSvg(markers, samples, pad, cw, ch) {
   return svg;
 }
 
-// Body of the chart: axes + lines + threshold overlay, as one SVG
-// string. Split out of renderStatsChartInto purely to keep both under
-// the 60-line function ceiling.
-function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }) {
-  const { VB_W, VB_H, cw, ch } = geo;
-  const tickSvg = buildXTicks({ samples, pad: PAD, cw, ch, vbH: VB_H, hours });
-  // Lines — collect per-field meta so the threshold pass can renormalise
-  // each tick against the same {lo, hi} the line was drawn against.
+// Per-field line paths, collected with their {lo, hi} meta so the
+// threshold pass (below) can renormalise each tick against the same
+// scale the line was drawn against. Split out of _buildChartSvg to keep
+// both under the 60-line function ceiling.
+//
+// Positioned by real elapsed TIME (xValues), not raw sample index — the
+// SAME tFirst..tLast proportional mapping buildXTicks and _hover.js's
+// drag/hover math already use. Samples are NOT evenly spaced in time (a
+// missed poll, a service restart, or _history_store.py's downsample()
+// bucketing by raw-sample COUNT rather than wall-clock span all leave
+// uneven gaps) — without this, buildLinePath's own default (even-by-
+// INDEX) spacing draws a point somewhere other than where the axis and
+// the drag-to-zoom math agree its timestamp actually sits, so a dragged
+// selection can resolve to a different time range than the one visibly
+// under the pointer. See stats-chart/_multi.js's own comment on this
+// exact contract, which the storm-compare chart already upholds via the
+// same xValues/xLo/xHi opts.
+//
+// Hidden fields never reach `fields` at all (wsVisibleFields already
+// filtered them) — nothing here dims a curve by omission any more. What
+// remains competes for attention by how much it actually moved in this
+// window, via wsLineEmphasis — UNLESS exactly one field is on screen,
+// where there is nothing to compete with and it always reads clearly.
+function _buildLinesSvg(samples, fields, isolated, cw, ch) {
+  const xValues = samples.map((s) => new Date(s.ts).getTime());
+  const xLo = xValues[0];
+  const xHi = xValues[xValues.length - 1];
   let linesSvg = '';
   const lineMetas = {};
-  // Hidden fields never reach `fields` at all (wsVisibleFields already
-  // filtered them) — nothing here dims a curve by omission any more.
-  // What remains competes for attention by how much it actually moved
-  // in this window, via wsLineEmphasis — UNLESS exactly one field is on
-  // screen, where there is nothing to compete with and it always reads
-  // clearly.
   for (const key of fields) {
-    const meta = buildLinePath(samples, key, PAD.l, PAD.t, cw, ch);
+    const meta = buildLinePath(samples, key, PAD.l, PAD.t, cw, ch, { xValues, xLo, xHi });
     if (!meta) continue;
     lineMetas[key] = meta;
     const colour = WEATHER_STATS_PALETTE[key] || '#94a3b8';
@@ -119,6 +132,16 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
       : wsLineEmphasis(key, meta.lo, meta.hi);
     linesSvg += `<path d="${meta.path}" fill="none" stroke="${colour}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
   }
+  return { linesSvg, lineMetas };
+}
+
+// Body of the chart: axes + lines + threshold overlay, as one SVG
+// string. Split out of renderStatsChartInto purely to keep both under
+// the 60-line function ceiling.
+function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }) {
+  const { VB_W, VB_H, cw, ch } = geo;
+  const tickSvg = buildXTicks({ samples, pad: PAD, cw, ch, vbH: VB_H, hours });
+  const { linesSvg, lineMetas } = _buildLinesSvg(samples, fields, isolated, cw, ch);
   const yAxisSvg = buildYAxis({ isolated, lineMetas, data, pad: PAD, cw, ch });
   // Threshold overlay — delegated to stats-thresholds.js so this file
   // stays focused on geometry.
@@ -139,6 +162,8 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
       ${markers && markers.length ? _markersSvg(markers, samples, PAD, cw, ch) : ''}
       <line class="ws-chart-guide" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
       <rect class="ws-chart-brush" x="0" y="${PAD.t}" width="0" height="${ch}" fill="rgba(127,174,201,.22)" style="display:none;pointer-events:none"/>
+      <line class="ws-chart-drag-start" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
+      <line class="ws-chart-drag-end" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
       <rect class="ws-chart-hover-area" x="${PAD.l}" y="${PAD.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
     </svg>`;
   return svg + noThresholdHint + '<div class="ws-chart-tooltip" hidden></div>';

@@ -89,6 +89,8 @@ function _context(wrap, samples, fields, pad, cw, vbW, data, opts) {
   // compare chart's own SVG has none) — every brush helper below no-ops
   // when this is null.
   const brush = svg.querySelector('.ws-chart-brush');
+  const dragStart = svg.querySelector('.ws-chart-drag-start');
+  const dragEnd = svg.querySelector('.ws-chart-drag-end');
   const tFirst = new Date(samples[0]?.ts).getTime();
   const tLast = new Date(samples[samples.length - 1]?.ts).getTime();
   const first = new Date(tFirst);
@@ -100,6 +102,8 @@ function _context(wrap, samples, fields, pad, cw, vbW, data, opts) {
     guide,
     tip,
     brush,
+    dragStart,
+    dragEnd,
     drag: null,
     samples,
     fields,
@@ -205,6 +209,51 @@ function _hideBrushRect(c) {
   if (c.brush) c.brush.style.display = 'none';
 }
 
+// Start/end edge guides — sibling lines to the plain hover `.ws-chart-
+// guide`, painted only while a drag is in progress, so the operator can
+// see exactly which two timestamps the drag currently spans BEFORE
+// releasing ("die Endlinie müsste auch angezeichnet werden und am besten
+// die Anfangslinie"). `x1`/`x2` are raw pointer x — always the visual
+// drag start / current pointer position, regardless of drag direction.
+function _paintDragGuides(c, x1, x2) {
+  if (c.dragStart) {
+    c.dragStart.setAttribute('x1', x1.toFixed(1));
+    c.dragStart.setAttribute('x2', x1.toFixed(1));
+    c.dragStart.style.display = '';
+  }
+  if (c.dragEnd) {
+    c.dragEnd.setAttribute('x1', x2.toFixed(1));
+    c.dragEnd.setAttribute('x2', x2.toFixed(1));
+    c.dragEnd.style.display = '';
+  }
+}
+
+function _hideDragGuides(c) {
+  if (c.dragStart) c.dragStart.style.display = 'none';
+  if (c.dragEnd) c.dragEnd.style.display = 'none';
+}
+
+// The tooltip, repurposed during a drag to show the two timestamps the
+// current selection resolves to — same nearest-sample snap and the same
+// `_defaultHead` formatting the plain hover tooltip and the eventual
+// `onRangeSelect(startTs, endTs)` both use, so what the operator reads
+// here while dragging is never a re-derived or differently-rounded
+// value. Chronological order regardless of drag direction (right-to-left
+// drags are common), matching how _onUp resolves start/end below.
+function _paintDragTooltip(c, endX, ev) {
+  const tA = _xToTs(c, c.drag.startX);
+  const tB = _xToTs(c, endX);
+  const idxLo = _nearestIdx(c.samples, Math.min(tA, tB));
+  const idxHi = _nearestIdx(c.samples, Math.max(tA, tB));
+  const tsLo = new Date(c.samples[idxLo].ts).getTime();
+  const tsHi = new Date(c.samples[idxHi].ts).getTime();
+  const headLo = _defaultHead(tsLo, c.spansMultiDay);
+  const headHi = _defaultHead(tsHi, c.spansMultiDay);
+  c.tip.innerHTML = `<div class="ws-tt-time">${headLo} → ${headHi}</div>`;
+  c.tip.hidden = false;
+  _placeTip(c.tip, c.wrap, ev);
+}
+
 function _onDown(c, ev) {
   _onMove(c, ev); // unchanged tap-shows-tooltip behaviour
   if (typeof c.opts.onRangeSelect !== 'function') return;
@@ -224,7 +273,10 @@ function _onDragMove(c, ev) {
   const x = _localXOf(c, ev);
   if (x === null) return;
   _paintBrushRect(c, c.drag.startX, x);
-  c.tip.hidden = true; // the selection rect replaces the value tooltip while dragging
+  _paintDragGuides(c, c.drag.startX, x);
+  // The drag readout replaces the plain value tooltip while dragging —
+  // same element, repointed by _paintDragTooltip.
+  _paintDragTooltip(c, x, ev);
 }
 
 function _onUp(c, ev) {
@@ -233,7 +285,14 @@ function _onUp(c, ev) {
   const { startX } = c.drag;
   c.drag = null;
   _hideBrushRect(c);
-  if (x === null || Math.abs(x - startX) < BRUSH_MIN_PX) return; // a tap, not a drag
+  _hideDragGuides(c);
+  if (x === null || Math.abs(x - startX) < BRUSH_MIN_PX) {
+    // A tap, not a drag — restore the plain value tooltip instead of
+    // leaving the drag readout's stale "start → end" text on screen.
+    if (x !== null) _paintAt(c, x, ev);
+    else _hide(c);
+    return;
+  }
   const tA = _xToTs(c, startX);
   const tB = _xToTs(c, x);
   const idxA = _nearestIdx(c.samples, Math.min(tA, tB));
@@ -248,8 +307,11 @@ export function bindChartHover(wrap, samples, fields, pad, cw, vbW, data, opts =
   const c = _context(wrap, samples, fields, pad, cw, vbW, data, opts);
   if (!c) return;
   const move = (ev) => {
-    _onMove(c, ev);
-    _onDragMove(c, ev);
+    // While a drag is live, the drag guides/readout fully supersede the
+    // plain hover crosshair — running both would draw the crosshair and
+    // `.ws-chart-drag-end` on top of each other at the same x.
+    if (c.drag) _onDragMove(c, ev);
+    else _onMove(c, ev);
   };
   c.area.addEventListener('pointermove', move);
   c.area.addEventListener('pointerdown', (ev) => _onDown(c, ev));

@@ -5,9 +5,10 @@
     ></span>
     <h3>Live Feed</h3>
     {# Erkennungsprofil is inline per camera now (netz/_panel.js, one
-    panel beside each tile below) — "Was zusammen wirkt" is the one bit of
-    that feature that is camera-independent reference text, so it keeps a
-    single page-level home here instead of repeating on every panel. #}
+    panel beside each tile below) — "Was zusammen wirkt" and "Werte, die
+    fest bleiben" are both camera-independent reference text, so they
+    share a single page-level home here instead of repeating on every
+    panel. #}
     <button
       type="button"
       id="netzCombosBtn"
@@ -15,8 +16,8 @@
       style="margin-left: auto"
       aria-expanded="false"
       aria-controls="netzCombosBox"
-      aria-label="Was zusammen wirkt"
-      title="Was zusammen wirkt"
+      aria-label="Hinweise zum Erkennungsprofil"
+      title="Hinweise zum Erkennungsprofil"
     >
       <svg
         viewBox="0 0 24 24"
@@ -35,6 +36,11 @@
       </svg>
     </button>
   </div>
+  {# The group colour key — Tempo/Bewegung/Kleintier/Verfolgung/Meldung,
+  plus what the solid/dashed lines and the ringed dot mean — used to be
+  repeated identically inside every camera's panel body. One render here
+  instead (netz/_panel.js's initGroupLegend). #}
+  <div id="netzGroupLegend"></div>
   <div class="netz-combos" id="netzCombosBox" hidden></div>
   <div id="cameraCards" class="camera-grid"></div>
 </section>

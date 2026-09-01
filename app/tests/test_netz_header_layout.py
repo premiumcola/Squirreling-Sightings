@@ -11,11 +11,18 @@ out of the way to make room:
     pill moved into the corner the build-info chip vacated: the hero row,
     not the Geräte head row it used to ride.
 
-The single shared "Werte, die fest bleiben" button and the single shared
-Verlauf button are gone too — there is no longer one header to hang them
-off. Each camera's own panel now carries its own frozen-values button and
-its own Verlauf toggle (netz/_panel.js), scoped to that camera's own
-state instead of camera 0's.
+The single shared Verlauf button is gone too — there is no longer one
+header to hang it off. Each camera's own panel now carries its own
+Verlauf toggle (netz/_panel.js), scoped to that camera's own state
+instead of camera 0's.
+
+"Werte, die fest bleiben" made a second trip: briefly per-panel (one
+button per camera), then back to page-level once more — FROZEN_KEYS
+(app/app/routes/_netz_helpers.py) was always one flat constant sent
+identically to every camera, so a per-panel button never had anything
+camera-specific to show. It now shares the "Was zusammen wirkt" box
+(netz/_cards.js's frozenSectionHtml), the same page-level home combosHtml
+already used.
 """
 
 from __future__ import annotations
@@ -50,41 +57,21 @@ def test_the_shared_global_verlauf_button_is_gone():
     assert 'id="netzViewBtn"' not in _PANEL
 
 
-# ── 2 · frozen values behind a PER-PANEL header button ──────────────────
+# ── 2 · frozen values are page-level again — this time explicit ────────
 
 
-def test_the_frozen_box_is_scoped_to_its_own_camera():
-    """One box id per camera (`netzFrozenBox-<id>`), not one shared
-    `#netzFrozenBox` — camera 3's operator must see camera 3's frozen
-    values, not camera 0's leftover from the old shared-header design."""
-    assert "netzFrozenBox-" in _PANEL
+def test_the_frozen_box_has_no_per_panel_button():
+    """No `netzFrozenBox-<id>` id, no per-panel toggle button — see
+    netz/_cards.js's frozenSectionHtml for where the content lives now."""
+    assert "netzFrozenBox-" not in _PANEL
+    assert "data-netz-toggle-frozen" not in _PANEL
     assert 'id="netzFrozenBtn"' not in _PANEL
-    assert 'id="netzFrozenBox"' not in _PANEL
 
 
-def test_the_frozen_box_starts_hidden_behind_its_panels_own_button():
-    assert "data-netz-toggle-frozen" in _PANEL
-    assert 'aria-controls="netzFrozenBox-' in _PANEL
-    assert 'class="netz-frozen-box" id="netzFrozenBox-' in _PANEL
-    assert "hidden>" in _PANEL
-
-
-def test_the_frozen_box_has_a_hidden_opt_out():
-    """`display` in an author rule beats the UA's `[hidden]`. This exact
-    trap was swept repo-wide in test_weather_zoom_panel_css.py; a newly
-    toggled element must not reintroduce it."""
-    netz_css = (_CSS / "32-netz.css").read_text(encoding="utf-8")
-    assert ".netz-frozen-box[hidden]" in netz_css
-
-
-def test_toggling_the_box_does_not_repaint_the_panel():
-    """A repaint mid-drag drops the drag. The toggle flips the attribute
-    directly instead of routing through renderPanel."""
-    start = _PANEL.index("function _bindHeader(")
-    body = _PANEL[start : _PANEL.index("\n}", start)]
-    frozen_part = body[body.index("data-netz-toggle-frozen") :]
-    assert "toggleAttribute" in frozen_part
-    assert "renderPanel(" not in frozen_part
+def test_the_frozen_content_rides_the_shared_combos_box():
+    cards = (_JS / "netz" / "_cards.js").read_text(encoding="utf-8")
+    assert "export function frozenSectionHtml" in cards
+    assert "frozenSectionHtml()" in _PANEL
 
 
 # ── 3 · camera identity, shared with the Statistik cloud ─────────────

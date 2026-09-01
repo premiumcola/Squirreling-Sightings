@@ -24,6 +24,7 @@ import { fetchArchive, fetchState } from './_api.js';
 import {
   ensurePanelsMounted,
   initCombosInfo,
+  initGroupLegend,
   redrawOnResize,
   renderPanel,
 } from './_panel.js';
@@ -58,6 +59,7 @@ export async function initNetPanels() {
   await _fetchMissingStates(cams);
   ensurePanelsMounted();
   initCombosInfo();
+  initGroupLegend();
   if (_bootDeepLinkArmed) {
     _bootDeepLinkArmed = false;
     _openQuestionsDeepLink();

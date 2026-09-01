@@ -525,21 +525,62 @@
   color: #e2e8f0;
 }
 
-.netz-card-role {
-  flex: 0 0 auto;
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-/* The Verlauf toggle and the frozen-info button (both .netz-view-btn,
-   `flex-shrink: 0`) follow directly after — not `margin-left: auto`, the
-   documented iOS inline-flex layout hazard; the h4's `flex: 1 1 auto`
-   already eats the slack. */
+/* The Verlauf chip (.netz-chip-toggle, `flex-shrink: 0` via its own rule)
+   follows directly after — not `margin-left: auto`, the documented iOS
+   inline-flex layout hazard; the h4's `flex: 1 1 auto` already eats the
+   slack. No role badge, no second icon button: just the camera's own
+   identity and the one toggle this header still owns. */
 
 .netz-card-chart {
   position: relative;
   display: flex;
   justify-content: center;
+}
+
+/* ── height parity with the neighbouring Live-Feed tile ─────────────────
+   "die Erkennungsansicht ist noch deutlich zu hoch" — .cv-card sizes
+   itself from its own aspect-ratio, so the grid row it shares with this
+   panel (03-dashboard.css's .camera-grid) can only be as tall as the
+   panel is. `contain: size` on .cam-net-slot (03-dashboard.css) removes
+   the panel's own content from that row's auto-height calc, so the tile
+   is the row's only height contributor; `align-items: stretch` there
+   then hands this card that same height back. Scoped to the ≥901px
+   breakpoint the two-column grid itself uses — on a phone the grid is a
+   single column and there is no tile height to match. */
+@media (min-width: 901px) {
+  .netz-card {
+    height: 100%;
+  }
+
+  .netz-card-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .netz-card-chart {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: center;
+  }
+
+  .netz-card-controls,
+  .netz-stage {
+    flex: 0 0 auto;
+  }
+
+  /* Fills whatever height the flex column above gives it instead of
+     deriving its own height from its width (the base .netz-svg rule) —
+     the ellipse still cannot distort: no explicit preserveAspectRatio
+     means the SVG default (xMidYMid meet) applies, which letterboxes
+     rather than stretching. */
+  .netz-svg.netz-tune-svg {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+  }
 }
 
 /* Axis label + its current value. Two lines, a real font size — the fixed
@@ -662,9 +703,6 @@
 
 /* ── per-card controls + the plain frozen box ─────────────────────────── */
 
-/* Presets and the Ghost switch share ONE row. The switch used to own a
-   full 44 px line for a single boolean — disproportionate on a card that
-   already carries a radar and a staging bar. */
 .netz-card-controls {
   display: flex;
   flex-wrap: wrap;
@@ -673,26 +711,12 @@
   margin-top: 8px;
 }
 
-/* The preset buttons come from 06c-cam-edit-erkennung.css. Inside the
-   card they join the same row, so the block margin goes and the target
-   grows to the 44 px the iOS checklist asks for. */
-.netz-card-controls .erk-track-presets {
-  margin: 0;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.netz-card-controls .erk-track-preset {
-  min-height: 44px;
-  padding: 0 12px;
-  font-size: 12px;
-}
-
 /* A compact on/off chip: pressed = the setting is active. Same visual
    language as .netz-pill, so the card has one chip shape, not two. */
 .netz-chip-toggle {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 6px;
   min-height: 44px;
   padding: 0 12px;
@@ -764,6 +788,15 @@
   pointer-events: none;
 }
 
+/* A locked axis (a class whose Meldung is off) is drawn but never
+   grabbable — the `.is-off` class was always applied for that, this is
+   its first actual visual rule. Every dot now carries real colour even
+   when muted (netz/_tune_radar.js's _vertexSvg), so dimming is the only
+   thing left to say "this one doesn't respond to a drag". */
+.netz-vertex.is-off .netz-tune-dot {
+  opacity: 0.45;
+}
+
 .netz-vertex.is-dragging .netz-tune-halo {
   opacity: 0.45;
 }
@@ -810,20 +843,18 @@
   height: 18px;
 }
 
-/* "Werte, die fest bleiben" and "Was zusammen wirkt" are both
-   header-toggled, so each needs its own `[hidden]` opt-out or the
-   `display` below would silently defeat the attribute (the cascade trap
-   swept in test_weather_zoom_panel_css.py). */
-.netz-frozen-box[hidden] {
-  display: none;
-}
-
-/* Page-level "Was zusammen wirkt" info box — one header button
-   (#netzCombosBtn in dashboard.html) for the whole Live-Feed section,
-   see netz/_panel.js's initCombosInfo. */
+/* Page-level "Was zusammen wirkt" + "Werte, die fest bleiben" info box —
+   one header button (#netzCombosBtn in dashboard.html) for the whole
+   Live-Feed section, see netz/_panel.js's initCombosInfo. .netz-frozen-box
+   rides inside it now (frozenSectionHtml in _cards.js) purely for its own
+   heading/list styling — visibility is this box's [hidden], not a second
+   one of its own. */
 .netz-combos[hidden] {
   display: none;
 }
 #netzCombosBox {
   margin: 0 0 12px;
+}
+#netzCombosBox .netz-frozen-box {
+  margin-top: 10px;
 }

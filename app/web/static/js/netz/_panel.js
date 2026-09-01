@@ -20,7 +20,7 @@ import { byId, esc } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { getCameraColor, getCameraIcon } from '../core/icons.js';
 import { fetchArchive, fetchArchiveRecord } from './_api.js';
-import { bindNetBody, combosHtml, frozenListHtml, netBodyHtml } from './_cards.js';
+import { bindNetBody, combosHtml, frozenSectionHtml, netBodyHtml } from './_cards.js';
 import { tuneGroupLegendHtml } from './_tune_radar.js';
 import { bindTuneDrag, isTuneDragging } from './_tune_drag.js';
 import { renderArchiveDetail } from './_archive_detail.js';
@@ -28,25 +28,11 @@ import { renderArchiveList } from './_archive_list.js';
 import {
   archiveFilterFor,
   archiveViewFor,
-  camState,
   netzState,
   setArchiveView,
   setView,
   viewFor,
 } from './_state.js';
-
-const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garten' };
-
-const _HIST_ICON =
-  `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ` +
-  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
-  `<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>`;
-
-const _INFO_ICON =
-  `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ` +
-  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
-  `<circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/>` +
-  `<line x1="12" y1="8" x2="12" y2="8"/></svg>`;
 
 function _slotFor(camId) {
   return byId('cameraCards')?.querySelector(
@@ -56,42 +42,31 @@ function _slotFor(camId) {
 
 // ── panel shell ─────────────────────────────────────────────────────────
 
+// Camera icon + name, and one small text chip for the Verlauf toggle — no
+// role badge (redundant with the camera's own identity), no icon-only
+// button (the history glyph the toggle used to be read as "Aktualisieren"
+// — a label removes the ambiguity outright instead of finding a clearer
+// icon), no per-panel frozen-values button (folded into the page-level
+// "Was zusammen wirkt" box instead — see frozenSectionHtml in _cards.js).
 function _headerHtml(cam, camId) {
-  const st = camState(camId);
-  const role = st ? _ROLE_DE[st.role] || st.role || '' : '';
   const inVerlauf = viewFor(camId) === 'verlauf';
-  const frozen = frozenListHtml(camId);
   return (
     `<header class="netz-card-hd">` +
     `<span class="netz-card-ic" style="color:${getCameraColor(cam)}" aria-hidden="true">` +
     `${getCameraIcon(cam.name || camId)}</span>` +
     `<h4>${esc(cam.name)}</h4>` +
-    (role ? `<span class="netz-card-role">${esc(role)}</span>` : '') +
-    `<button type="button" class="netz-view-btn" data-netz-toggle-verlauf ` +
-    `aria-pressed="${inVerlauf ? 'true' : 'false'}" ` +
-    `aria-label="${inVerlauf ? 'Zurück zu den Netzen' : 'Verlauf'}" ` +
-    `title="${inVerlauf ? 'Zurück zu den Netzen' : 'Verlauf'}">${_HIST_ICON}</button>` +
-    (frozen
-      ? `<button type="button" class="netz-view-btn" data-netz-toggle-frozen ` +
-        `aria-expanded="false" aria-controls="netzFrozenBox-${esc(camId)}" ` +
-        `aria-label="Werte, die fest bleiben" title="Werte, die fest bleiben">` +
-        `${_INFO_ICON}</button>`
-      : '') +
+    `<button type="button" class="netz-chip-toggle" data-netz-toggle-verlauf ` +
+    `aria-pressed="${inVerlauf ? 'true' : 'false'}">${inVerlauf ? 'Zurück' : 'Verlauf'}</button>` +
     `</header>`
   );
 }
 
 function _shellHtml(cam) {
   const camId = cam.id;
-  const frozen = frozenListHtml(camId);
   return (
     `<article class="netz-card" data-cam="${esc(camId)}">` +
     _headerHtml(cam, camId) +
     `<div class="netz-card-body"></div>` +
-    (frozen
-      ? `<div class="netz-frozen-box" id="netzFrozenBox-${esc(camId)}" hidden>` +
-        `<b>Werte, die fest bleiben</b>${frozen}</div>`
-      : '') +
     `</article>`
   );
 }
@@ -113,7 +88,10 @@ export function renderPanel(camId) {
   if (viewFor(camId) === 'verlauf') {
     _renderArchiveInto(body, camId);
   } else {
-    body.innerHTML = tuneGroupLegendHtml() + netBodyHtml(cam);
+    // The group legend used to be prepended here, once per panel —
+    // camera-independent reference text, so it now has ONE page-level
+    // home (initGroupLegend below) instead of repeating on every panel.
+    body.innerHTML = netBodyHtml(cam);
     bindNetBody(article, () => renderPanel(camId));
     bindTuneDrag(body, () => renderPanel(camId));
   }
@@ -123,17 +101,6 @@ function _bindHeader(article, camId) {
   article.querySelector('[data-netz-toggle-verlauf]')?.addEventListener('click', () => {
     setView(camId, viewFor(camId) === 'verlauf' ? 'netz' : 'verlauf');
     renderPanel(camId);
-  });
-  // The frozen box flips its `hidden` attribute directly instead of going
-  // through renderPanel — a repaint mid-drag drops the drag, and toggling
-  // reference material has no reason to touch the net at all.
-  article.querySelector('[data-netz-toggle-frozen]')?.addEventListener('click', () => {
-    const box = byId(`netzFrozenBox-${camId}`);
-    const btn = article.querySelector('[data-netz-toggle-frozen]');
-    if (!box) return;
-    const open = box.hasAttribute('hidden');
-    box.toggleAttribute('hidden', !open);
-    btn?.setAttribute('aria-expanded', String(open));
   });
 }
 
@@ -206,20 +173,33 @@ export function redrawOnResize() {
   });
 }
 
-// ── page-level "Was zusammen wirkt" info button ──────────────────────────
-// Cross-axis interaction notes are camera-independent reference text, so
-// they get ONE header button for the whole Live-Feed section rather than
-// being repeated on every panel (CLAUDE.md: no duplication).
+// ── page-level "Was zusammen wirkt" + "Werte, die fest bleiben" ─────────
+// Both are camera-independent reference text (FROZEN_KEYS is one flat
+// backend constant, identical for every camera), so they get ONE header
+// button for the whole Live-Feed section rather than being repeated on
+// every panel (CLAUDE.md: no duplication).
 
 export function initCombosInfo() {
   const btn = byId('netzCombosBtn');
   const box = byId('netzCombosBox');
   if (!btn || !box || box.dataset.wired) return;
   box.dataset.wired = '1';
-  box.innerHTML = combosHtml();
+  box.innerHTML = combosHtml() + frozenSectionHtml();
   btn.addEventListener('click', () => {
     const open = box.hasAttribute('hidden');
     box.toggleAttribute('hidden', !open);
     btn.setAttribute('aria-expanded', String(open));
   });
+}
+
+// ── page-level group legend ──────────────────────────────────────────────
+// tuneGroupLegendHtml() used to be prepended into every panel's body — the
+// same colour key, byte-for-byte, on every one of N cards. One static
+// render into a fixed slot under the section header instead.
+
+export function initGroupLegend() {
+  const box = byId('netzGroupLegend');
+  if (!box || box.dataset.wired) return;
+  box.dataset.wired = '1';
+  box.innerHTML = tuneGroupLegendHtml();
 }

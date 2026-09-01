@@ -1,8 +1,9 @@
 // ─── netz/_cards.js ────────────────────────────────────────────────────────
 // One camera's net BODY: the settings radar, its controls, and the save
 // path. The panel SHELL around it (header, camera identity, the
-// Netz/Verlauf toggle, the frozen-values box) lives in netz/_panel.js,
-// which mounts one of these beside every camera's Live-Feed tile.
+// Netz/Verlauf toggle) lives in netz/_panel.js, which mounts one of these
+// beside every camera's Live-Feed tile. The frozen-values box has no
+// per-panel home any more — see frozenSectionHtml() below.
 //
 // EVERY write takes its camera id from `card.dataset.cam` — the DOM node
 // the operator actually touched — never from a module-level "current
@@ -27,17 +28,9 @@ import {
   clearStagedFor,
   effectiveTuning,
   netzState,
-  stageValue,
   stagedCountFor,
   stagedFor,
 } from './_state.js';
-
-const _TRACK_PRESETS = {
-  careful: { spawn: 0.55, cont: 0.3, grace: 4, iou: 0.3 },
-  balanced: { spawn: 0.5, cont: 0.2, grace: 6, iou: 0.2 },
-  robust: { spawn: 0.45, cont: 0.15, grace: 10, iou: 0.15 },
-};
-const _TRACK_PRESET_LABELS = { careful: 'Vorsichtig', balanced: 'Ausgewogen', robust: 'Robust' };
 
 // ── render ────────────────────────────────────────────────────────────
 
@@ -49,21 +42,6 @@ function _stagingHtml(camId) {
     `<span>${n} ${n === 1 ? 'Wert' : 'Werte'} geändert</span>` +
     `<button type="button" class="netz-btn netz-btn--ghost" data-tune-discard>Verwerfen</button>` +
     `<button type="button" class="netz-btn" data-tune-apply>Übernehmen</button></div>`
-  );
-}
-
-function _presetsHtml() {
-  return (
-    `<div class="erk-track-presets" role="group" aria-label="Tracking-Vorlagen">` +
-    `<span class="erk-track-presets-lbl">Vorlage:</span>` +
-    Object.keys(_TRACK_PRESETS)
-      .map(
-        (k) =>
-          `<button type="button" class="erk-track-preset" data-tune-preset="${k}">` +
-          `${_TRACK_PRESET_LABELS[k]}</button>`,
-      )
-      .join('') +
-    `</div>`
   );
 }
 
@@ -103,7 +81,7 @@ export function netBodyHtml(cam) {
   netzState.tuneAxes[cam.id] = axes;
   return (
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
-    `<div class="netz-card-controls">${_presetsHtml()}${_ghostHtml(tuning)}</div>` +
+    `<div class="netz-card-controls">${_ghostHtml(tuning)}</div>` +
     _stagingHtml(cam.id)
   );
 }
@@ -129,16 +107,29 @@ export function combosHtml() {
   );
 }
 
-/** "Werte, die fest bleiben" — reference rows for ONE camera. Was rendered
- *  for `netzState.cameras[0]` only, back when the box lived once in a
- *  shared header regardless of which camera the operator was looking at;
- *  now every panel has its own, so this always reflects the RIGHT camera. */
+/** "Werte, die fest bleiben" — reference rows for ONE camera. FROZEN_KEYS
+ *  (app/routes/_netz_helpers.py) is one flat constant sent identically to
+ *  every camera, so any loaded camera's list is the whole answer — this
+ *  stays per-camera only so a test fixture can catch a future regression
+ *  where that stops being true. */
 export function frozenListHtml(camId) {
   const st = camState(camId);
   const rows = ((st && st.frozen) || [])
     .map((f) => `<li><code>${esc(f.key)}</code><span>${esc(f.de)}</span></li>`)
     .join('');
   return rows ? `<ul>${rows}</ul>` : '';
+}
+
+/** The page-level home for "Werte, die fest bleiben" — folded into the
+ *  same info box "Was zusammen wirkt" already uses (netz/_panel.js's
+ *  initCombosInfo) instead of repeating identical content on every
+ *  camera's panel. Reads whichever camera has state loaded first; since
+ *  the list is camera-independent by construction, any one of them is
+ *  the right answer. */
+export function frozenSectionHtml() {
+  const camId = (netzState.cameras || []).find((c) => camState(c.id))?.id;
+  const rows = camId ? frozenListHtml(camId) : '';
+  return rows ? `<div class="netz-frozen-box"><b>Werte, die fest bleiben</b>${rows}</div>` : '';
 }
 
 // ── bind ──────────────────────────────────────────────────────────────
@@ -191,29 +182,6 @@ export function bindNetBody(card, onRepaint) {
     const wasOn = ev.currentTarget.getAttribute('aria-pressed') === 'true';
     await _save(camId, { track_filter_ghosts: !wasOn }, 'Erkennungsprofil übernommen.', onRepaint);
   });
-
-  qsa('[data-tune-preset]', card).forEach((btn) =>
-    btn.addEventListener('click', () => {
-      const p = _TRACK_PRESETS[btn.dataset.tunePreset];
-      if (!p) return;
-      // A preset STAGES its four fields, it does not commit them. Clicking
-      // one used to overwrite four axes on the spot with nothing to
-      // return to — „dann verdreht's ja alles, dann komm ich nicht
-      // zurück". Staged, the bar's „Verwerfen" IS the way back, and it
-      // costs no extra control on an already busy panel.
-      stageValue(camId, 'track_spawn_min_score', p.spawn);
-      stageValue(camId, 'track_continue_min_score', p.cont);
-      stageValue(camId, 'track_miss_grace_seconds', p.grace);
-      stageValue(camId, 'track_iou_match_threshold', p.iou);
-      showToast(
-        `Vorlage ${_TRACK_PRESET_LABELS[btn.dataset.tunePreset]} vorgemerkt — ` +
-          `„Übernehmen" speichert, „Verwerfen" nimmt sie zurück.`,
-        'info',
-        { lifetime: 6000 },
-      );
-      onRepaint();
-    }),
-  );
 
   _bindAxisHints(card, camId);
 }

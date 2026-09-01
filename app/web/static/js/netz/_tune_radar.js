@@ -33,9 +33,14 @@ import { LABEL_OFF_X, LABEL_W, labelsSvg } from './_tune_labels.js';
 // viewBox geometry. Wider than tall so the left/right label rails have
 // horizontal room; PAD_X is exactly what one rail needs, derived from the
 // label metrics rather than guessed, so the boxes cannot hang off the
-// viewBox when either number is tuned.
-export const TUNE_W = 440;
-export const TUNE_H = 340;
+// viewBox when either number is tuned. 560x300 (was 440x340) both widens
+// the ellipse itself — "die Erkennungsansicht auch noch etwas in die
+// Länge strecken" — and shortens it, which is what actually buys back
+// the panel height a Live-Feed tile leaves it (see the height-parity
+// block in 03-dashboard.css: the SVG fills whatever box flex gives it,
+// so a shorter viewBox means the on-screen chart is shorter too).
+export const TUNE_W = 560;
+export const TUNE_H = 300;
 const PAD_X = LABEL_W + LABEL_OFF_X + 4;
 const PAD_Y = 40;
 // Snap window around an axis's own default, so "back to Werk" is
@@ -130,11 +135,14 @@ function _polygonSvg(points) {
 
 function _vertexSvg(axis, i, n, geo, interactive) {
   const p = tunePolar(i, n, Math.max(0, Math.min(100, axis.E)) / 100, geo);
-  // Hollow means "still on the shipped value". Anything that moved it —
-  // the operator OR the nightly learner — fills the dot.
+  // Every dot carries its group colour now, moved or not — "which group"
+  // reads at a glance even before the operator has touched anything
+  // (used to be legible only on dots that had already moved, since an
+  // at-Werk dot was hollow). "Moved from Werk" is a thin white ring
+  // instead: an at-Werk dot's ring is just its own colour again, i.e.
+  // no visible ring at all.
   const moved = !!axis.provenance && axis.provenance !== 'werk';
-  const fill = moved ? axis.color : 'none';
-  const stroke = moved ? axis.color : 'rgba(255,255,255,.34)';
+  const stroke = moved ? 'rgba(255,255,255,.85)' : axis.color;
   // A locked axis is drawn, never grabbable: no halo, no hit disc. See
   // _class_rows.js — a class whose Meldung is switched off has a stored
   // threshold that nothing consults, and a draggable vertex there would
@@ -157,7 +165,7 @@ function _vertexSvg(axis, i, n, geo, interactive) {
     `<g class="netz-vertex${axis.locked ? ' is-off' : ''}" ` +
     `data-tune-axis="${esc(axis.key)}">${halo}` +
     `<circle class="netz-tune-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5.5" ` +
-    `fill="${fill}" stroke="${stroke}" stroke-width="1.8"/>${hit}</g>`
+    `fill="${esc(axis.color)}" stroke="${stroke}" stroke-width="1.8"/>${hit}</g>`
   );
 }
 
@@ -225,7 +233,30 @@ export function renderTuneRadar({ axes, interactive = true }) {
   );
 }
 
-/** The four group names as coloured chips — the key to the axis colours. */
+// A short line/dot glyph for each of the three shape meanings on the
+// chart — "was ist die gestrichelte Linie, was die feste?" gets answered
+// on the chart itself instead of only once in chat.
+function _lineSwatch(dashed) {
+  const stroke = dashed ? '#ffffff' : 'rgba(120,200,255,.85)';
+  const dash = dashed ? ' stroke-dasharray="3 3" stroke-opacity=".65"' : '';
+  return (
+    `<svg width="18" height="10" viewBox="0 0 18 10" aria-hidden="true">` +
+    `<line x1="1" y1="5" x2="17" y2="5" stroke="${stroke}" stroke-width="2"${dash}/></svg>`
+  );
+}
+
+function _dotSwatch() {
+  return (
+    `<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">` +
+    `<circle cx="7" cy="7" r="4.5" fill="#7ac8ff" stroke="rgba(255,255,255,.85)" ` +
+    `stroke-width="1.5"/></svg>`
+  );
+}
+
+/** The group names as coloured chips, plus the three line/dot meanings on
+ *  the chart itself (solid polygon, dashed Werk outline, moved-vertex
+ *  ring) — shown ONCE for the whole Live-Feed section (netz/_panel.js's
+ *  initGroupLegend) rather than repeated identically on every panel. */
 export function tuneGroupLegendHtml() {
   return (
     `<div class="netz-tgroups">` +
@@ -236,6 +267,9 @@ export function tuneGroupLegendHtml() {
           `${esc(g.label)}</span>`,
       )
       .join('') +
+    `<span class="netz-tgroup">${_lineSwatch(false)}Aktuelles Profil</span>` +
+    `<span class="netz-tgroup">${_lineSwatch(true)}Werkseinstellung</span>` +
+    `<span class="netz-tgroup">${_dotSwatch()}Geändert</span>` +
     `</div>`
   );
 }

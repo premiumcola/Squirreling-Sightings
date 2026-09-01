@@ -462,58 +462,6 @@
   color: rgba(226, 232, 240, 0.78);
   letter-spacing: 0.01em;
 }
-/* Preset row — three "Vorlage anwenden" buttons sit above the input
-   grid so the user can fill all four fields with one click and then
-   tweak from a known-good baseline. */
-.erk-track-presets {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
-  flex-wrap: wrap;
-}
-.erk-track-presets-lbl {
-  font-size: 11px;
-  color: rgba(226, 232, 240, 0.55);
-  letter-spacing: 0.01em;
-}
-.erk-track-preset {
-  background: rgba(255, 255, 255, 0.05);
-  border: 0;
-  padding: 6px 12px;
-  border-radius: 8px;
-  color: rgba(226, 232, 240, 0.82);
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  min-height: 32px;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-/* Behind the hover guard: on iOS an unguarded :hover sticks after a tap
-   and the button stays lit until something else is touched. These buttons
-   are also rendered on the Erkennungsprofil cards, which is a phone
-   surface first. */
-@media (hover: hover) {
-  .erk-track-preset:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-  }
-}
-.erk-track-preset[data-flash='1'] {
-  background: rgba(75, 163, 255, 0.3);
-  color: #fff;
-  box-shadow: 0 0 0 2px rgba(75, 163, 255, 0.45);
-}
-@media (max-width: 480px) {
-  .erk-track-preset {
-    min-height: 38px;
-    padding: 8px 12px;
-  }
-}
 .erk-track-cell input[type='number'] {
   width: 100%;
   min-height: 44px;
@@ -620,9 +568,6 @@
   .erk-track-grid {
     grid-template-columns: 1fr;
     gap: 10px;
-  }
-  .erk-track-presets {
-    margin-bottom: 8px;
   }
 }
 

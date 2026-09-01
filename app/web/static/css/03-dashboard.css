@@ -28,6 +28,26 @@
   min-width: 0;
 }
 
+/* Height parity: the Erkennungsprofil panel must never be taller than
+   the tile it rides beside. .cv-card's height is fixed by its own
+   aspect-ratio regardless of stretch (an aspect-ratio box has a definite
+   computed height, so stretch is a no-op on it); `contain: size` here
+   removes the SLOT's own content from the row's auto-height calc, so
+   .cv-card is the row's only height contributor, and `align-items:
+   stretch` then hands the slot — and the .netz-card filling it, see
+   32-netz.css — that exact height back. Scoped to the same breakpoint
+   the two-column grid itself uses: on a phone each tile and panel gets
+   its own row, so there is no shared row height to match, and sizing by
+   content is exactly what should happen there. */
+@media (min-width: 901px) {
+  .camera-grid {
+    align-items: stretch;
+  }
+  .cam-net-slot {
+    contain: size;
+  }
+}
+
 /* Card = just the video frame. --cv-overlay-inset (8 px) is the
    one-and-only chrome gap from each tile edge to its nearest chrome
    element. v17 redesign moves the variable from .cv-frame onto

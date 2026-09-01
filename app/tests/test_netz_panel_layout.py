@@ -6,16 +6,25 @@ tile — not one shared panel next to the whole grid. That retires the
 single `#netz` section with its camera-chip switcher entirely; these
 tests pin the replacement shape.
 
-Three operator complaints from the PREVIOUS shape still apply verbatim to
-every panel now (they were never about the page-level chrome that is
-gone):
+One operator complaint from the PREVIOUS shape still applies verbatim to
+every panel now (it was never about the page-level chrome that is gone):
 
-  3. „Wenn ich die einfach anklick, dann verdreht's ja alles, dann komm
-     ich nicht zurück." A preset used to PATCH four fields immediately.
-     It still stages them, so the staging bar's „Verwerfen" is the way
-     back.
   5. Ghost-Spuren was a full-width row of its own for a single switch.
      It is still a chip in the controls row.
+
+The Vorlage/preset row this file used to pin (three buttons that staged
+four fields at once) is GONE — "nimm die Vorlagen raus, ich will da
+nichts einfach anklicken und mit einem Klick die ganzen Einstellungen
+verhauen." track_continue_min_score, the one field that existed only to
+be preset-written, is still a real backend field (app/app/tracker_core/
+_resolve.py, app/app/thresholds/_ladder.py) — it just lost its one-click
+UI shortcut, not its meaning; the cam-edit form's own field still writes
+it directly.
+
+"Werte, die fest bleiben" also moved: FROZEN_KEYS (app/app/routes/
+_netz_helpers.py) is one flat constant sent identically to every camera,
+so there was never a real per-camera difference to preserve by repeating
+it on N panels — it now shares the page-level "Was zusammen wirkt" box.
 
 There is no jsdom here: the DOM-shaped assertions run the real modules
 under node via ``_node_js.run_js``, and the rest are source/CSS
@@ -118,52 +127,36 @@ def test_there_is_no_camera_chip_switcher_left():
     assert ".netz-head-row {" not in _CSS
 
 
-# ── 3 · a preset is recoverable ───────────────────────────────────────
+# ── 3 · the preset row is gone, and its field is still reachable ──────
 
 
-def test_a_preset_stages_instead_of_saving():
-    """The undo IS the staging bar. A preset that PATCHes on click has no
-    way back — four fields overwritten, no record of the previous four."""
-    assert "_TRACK_PRESETS" in _CARDS
-    presets = _CARDS[_CARDS.index("data-tune-preset]", _CARDS.index("qsa(")) :]
-    assert "stageValue(" in presets, "the preset buttons no longer stage"
-    assert "_save(" not in presets, "the preset buttons still write straight through"
+def test_the_preset_row_is_gone():
+    """„Ich will da nichts einfach anklicken und mit einem Klick die
+    ganzen Einstellungen verhauen." CLAUDE.md: don't leave a corpse."""
+    assert "_TRACK_PRESETS" not in _CARDS
+    assert "_presetsHtml" not in _CARDS
+    assert "data-tune-preset" not in _CARDS
+    assert "erk-track-preset" not in _CSS
 
 
-@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
-def test_a_staged_preset_shows_the_discard_bar():
-    """Four staged fields → the bar with „Verwerfen" is on the panel."""
-    out = _js(
-        f"""
-        {_SETUP}
-        ['track_spawn_min_score', 'track_continue_min_score',
-         'track_miss_grace_seconds', 'track_iou_match_threshold']
-          .forEach((k, i) => S.stageValue('cam_a', k, 0.3 + i));
-        const html = cards.netBodyHtml({{ id: 'cam_a', name: 'Werkstatt' }});
-        console.log(JSON.stringify({{
-          count: S.stagedCountFor('cam_a'),
-          hasDiscard: html.includes('data-tune-discard'),
-          other: S.stagedCountFor('cam_b'),
-        }}));
-        """
-    )
-    assert out["count"] == 4
-    assert out["hasDiscard"] is True
-    assert out["other"] == 0
+def test_the_preset_only_field_is_still_a_real_backend_field():
+    """track_continue_min_score lost its one-click preset shortcut, not
+    its meaning — the cam-edit form still writes it directly."""
+    resolve = (_REPO / "app" / "app" / "tracker_core" / "_resolve.py").read_text(encoding="utf-8")
+    assert "track_continue_min_score" in resolve
 
 
 # ── 4 · the ghost toggle is a chip, not a row ─────────────────────────
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
-def test_the_ghost_toggle_sits_after_the_presets_as_a_chip():
+def test_the_ghost_toggle_is_a_chip_not_a_row():
     out = _js(
         f"""
         {_SETUP}
         const html = cards.netBodyHtml({{ id: 'cam_a', name: 'Werkstatt' }});
         console.log(JSON.stringify({{
           hasGhost: html.includes('data-tune-ghost'),
-          afterPresets: html.indexOf('data-tune-ghost') > html.indexOf('data-tune-preset'),
           isChip: html.includes('netz-chip-toggle'),
           ownRow: html.includes('netz-card-ghost'),
           pressed: html.includes('aria-pressed="true"'),
@@ -171,7 +164,6 @@ def test_the_ghost_toggle_sits_after_the_presets_as_a_chip():
         """
     )
     assert out["hasGhost"] is True
-    assert out["afterPresets"] is True, "the ghost chip is not part of the preset row"
     assert out["isChip"] is True
     assert out["ownRow"] is False, "the ghost toggle still owns a full-width row"
     assert out["pressed"] is True, "the toggle does not report its state to assistive tech"
@@ -182,15 +174,32 @@ def test_the_ghost_chip_keeps_a_44px_touch_target():
     assert "min-height: 44px" in chip[: chip.index("}")]
 
 
-# ── 5 · "Werte, die fest bleiben" is per camera, not cameras[0] ───────
+# ── 5 · "Werte, die fest bleiben" is page-level, not per panel ────────
+
+
+def test_the_frozen_box_has_no_per_panel_home():
+    """No per-panel button, no per-panel `hidden` box any more — see
+    frozenSectionHtml below for where it actually lives now."""
+    assert "netz-frozen-box" not in _PANEL
+    assert "data-netz-toggle-frozen" not in _PANEL
+    assert "netzFrozenBox-" not in _PANEL
+
+
+def test_frozen_section_html_lives_in_the_shared_combos_box():
+    assert "export function frozenSectionHtml" in _CARDS
+    assert _PANEL.count("frozenSectionHtml()") == 1
+    call_at = _PANEL.index("frozenSectionHtml()")
+    fn_start = _PANEL.index("function initCombosInfo(")
+    fn_end = _PANEL.index("\n}", fn_start)
+    assert fn_start < call_at < fn_end
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
-def test_the_frozen_list_reflects_its_own_camera_not_the_first_one():
-    """Regression guard for a bug the single-header design carried
-    unnoticed: the box always read `netzState.cameras[0]`, so camera B's
-    operator saw camera A's frozen values (or none) regardless of which
-    panel they were looking at."""
+def test_frozen_list_html_still_reflects_whichever_camera_its_asked_for():
+    """frozenSectionHtml picks any one loaded camera — this pins that the
+    underlying per-camera lookup it relies on is still correct, in case a
+    future camera-specific `frozen` list ever needs the box to say more
+    than one camera's worth."""
     out = _js(
         f"""
         {_SETUP}
@@ -233,3 +242,112 @@ def test_every_write_path_takes_its_camera_from_the_dom():
     dataset is the only correct source."""
     assert "card.dataset.cam" in _CARDS
     assert "netzState.camId" not in _CARDS
+
+
+# ── 8 · the group/line/dot legend is page-level too ───────────────────
+
+
+def test_the_group_legend_is_not_rendered_per_panel():
+    """tuneGroupLegendHtml() used to be prepended into every renderPanel
+    call — the same colour key, byte-for-byte, on every one of N cards."""
+    fn_start = _PANEL.index("export function renderPanel(")
+    fn_end = _PANEL.index("\n}", fn_start)
+    assert "tuneGroupLegendHtml()" not in _PANEL[fn_start:fn_end]
+
+
+def test_the_group_legend_has_one_page_level_home():
+    assert "export function initGroupLegend" in _PANEL
+    assert "netzGroupLegend" in _PANEL
+    tpl = (_REPO / "app" / "web" / "templates" / "partials" / "dashboard.html").read_text(
+        encoding="utf-8"
+    )
+    assert tpl.count('id="netzGroupLegend"') == 1
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_the_legend_explains_the_dashed_and_solid_lines():
+    """„Erklär mir, was ist die gestrichelte Linie und was die feste?"
+    — answered on the chart itself now, not only once in chat."""
+    out = _js(
+        """
+        const radar = await import(JS + '/netz/_tune_radar.js');
+        const html = radar.tuneGroupLegendHtml();
+        console.log(JSON.stringify({
+          current: html.includes('Aktuelles Profil'),
+          werk: html.includes('Werkseinstellung'),
+          changed: html.includes('Geändert'),
+          dashed: html.includes('stroke-dasharray'),
+        }));
+        """
+    )
+    assert out["current"] is True
+    assert out["werk"] is True
+    assert out["changed"] is True
+    assert out["dashed"] is True, "the Werk swatch must actually look dashed, not just be labelled"
+
+
+# ── 9 · the header is camera identity + one toggle, nothing else ──────
+
+
+def test_the_header_has_no_role_badge():
+    assert "_ROLE_DE" not in _PANEL
+    assert "netz-card-role" not in _PANEL
+    assert "netz-card-role" not in _CSS
+
+
+def test_the_verlauf_toggle_is_a_labelled_chip_not_a_bare_icon():
+    """The history-clock icon read as "Aktualisieren" (refresh) to an
+    operator — a text label removes the ambiguity outright rather than
+    hunting for a clearer icon."""
+    hd = _PANEL[_PANEL.index("function _headerHtml(") : _PANEL.index("function _shellHtml(")]
+    assert "data-netz-toggle-verlauf" in hd
+    assert "netz-chip-toggle" in hd
+    assert "_HIST_ICON" not in _PANEL
+    assert "'Verlauf'" in hd or '"Verlauf"' in hd or "Verlauf" in hd
+
+
+def test_there_is_no_icon_only_button_in_the_header():
+    """„Ist jetzt dominiert das Icon mit den Informationen, wo ja oben
+    schon 'n Icon ist" — the frozen-info button that used to sit beside
+    the Verlauf icon is gone; the header's only button is a labelled
+    text chip, not a second circular icon-only control."""
+    hd = _PANEL[_PANEL.index("function _headerHtml(") : _PANEL.index("function _shellHtml(")]
+    assert "netz-view-btn" not in hd
+    assert hd.count("<button") == 1
+
+
+# ── 10 · the panel matches its tile's height, not the phone's ─────────
+
+
+def test_the_panel_stretches_to_the_tiles_height_on_desktop():
+    seg = _DASHBOARD_CSS[_DASHBOARD_CSS.index("@media (min-width: 901px) {") :][:400]
+    assert "contain: size" in seg
+    assert "align-items: stretch" in seg
+
+
+def test_the_chart_fills_its_flexed_box_on_desktop():
+    seg = _CSS[_CSS.index("@media (min-width: 901px) {") :][:900]
+    assert ".netz-card {" in seg and "height: 100%" in seg
+    assert ".netz-svg.netz-tune-svg {" in seg
+    assert "width: 100%" in seg[seg.index(".netz-svg.netz-tune-svg {") :]
+
+
+def test_the_radar_is_wider_than_it_is_tall():
+    tune_radar = (_JS / "netz" / "_tune_radar.js").read_text(encoding="utf-8")
+    m_w = tune_radar[tune_radar.index("TUNE_W = ") :].split("\n", 1)[0]
+    m_h = tune_radar[tune_radar.index("TUNE_H = ") :].split("\n", 1)[0]
+    w = int("".join(c for c in m_w if c.isdigit()))
+    h = int("".join(c for c in m_h if c.isdigit()))
+    assert w > h
+
+
+# ── 11 · every vertex carries real colour, moved or not ───────────────
+
+
+def test_every_vertex_dot_is_filled_with_its_group_colour():
+    tune_radar = (_JS / "netz" / "_tune_radar.js").read_text(encoding="utf-8")
+    fn_start = tune_radar.index("function _vertexSvg(")
+    fn_end = tune_radar.index("\n}", fn_start)
+    fn = tune_radar[fn_start:fn_end]
+    assert 'fill="${esc(axis.color)}"' in fn
+    assert 'fill="none"' not in fn, "a hollow dot is no longer how 'still at Werk' is shown"

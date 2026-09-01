@@ -9,6 +9,7 @@ import { byId, esc } from './core/dom.js';
 import { state } from './core/state.js';
 import { j } from './core/api.js';
 import { BIRD_SVGS, MAMMAL_SVGS } from './core/animal-icons.js';
+import { mediaCardHTML } from './mediathek/orchestration.js';
 
 // ── Sichtungen drilldown (inline accordion) ──────────────────────────────
 // State is module-level so the renderer can reflect the open card with
@@ -54,13 +55,7 @@ function _achDrillRenderItems() {
     grid.innerHTML =
       '<div class="item muted" style="padding:16px;grid-column:1/-1">Noch keine archivierten Aufnahmen für diese Art.</div>';
   } else {
-    // mediaCardHTML still lives in legacy.js; resolve via window
-    // until the lightbox surgery extracts the rest of mediathek.
-    const cardFn = window.mediaCardHTML;
-    grid.innerHTML =
-      typeof cardFn === 'function'
-        ? _achDrillItems.map(cardFn).join('')
-        : '<div class="item muted">Mediathek noch nicht geladen.</div>';
+    grid.innerHTML = _achDrillItems.map(mediaCardHTML).join('');
   }
   const more = byId('achDrillMore');
   if (more) {

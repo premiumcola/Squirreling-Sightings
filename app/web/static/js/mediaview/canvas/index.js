@@ -25,6 +25,7 @@
 // in-element offset equals the layer's offset inside the frame.
 
 import { fittedRect } from '../../core/video-fit.js';
+import { isIOS } from '../../core/ios-video.js';
 
 // Bottom → top: zone/mask under trails under bbox, so a bounding box is
 // never hidden behind a trail or a zone polygon. Mirrors the recorded +
@@ -68,6 +69,12 @@ export function mountCanvasSource(host, source = {}) {
     el.loop = source.loop !== false;
     el.controls = source.controls !== false;
     el.preload = 'metadata';
+    // Keep every clip in OUR player on desktop — Chrome offers native
+    // Picture-in-Picture for any playing/controllable <video> by
+    // default, letting it pop out of the app's own chrome entirely.
+    // iOS keeps native video behaviour (same exception recorded-shell-
+    // compose.js's own video element already carries).
+    el.disablePictureInPicture = !isIOS;
     if (source.url) {
       el.src = source.url;
       el.load();

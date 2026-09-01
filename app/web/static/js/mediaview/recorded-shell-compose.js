@@ -20,6 +20,7 @@
 // try/catch instead of just the first. Extracting the two seams also
 // means each function stays small enough to read as one thing.
 import { byId } from '../core/dom.js';
+import { isIOS } from '../core/ios-video.js';
 import { lbState } from '../mediathek/state.js';
 import { setBboxOverlayVisibility, setLbTimelineHost } from '../mediathek/bbox-overlay/index.js';
 import { triggerManualReindex } from '../mediathek/bbox-overlay/reindex.js';
@@ -167,6 +168,18 @@ function _wireRecordedVideoSrc(item) {
     videoEl.src = vidSrc;
     videoEl.muted = true;
     videoEl.loop = true;
+    // Chrome (and other Chromium browsers) offer native Picture-in-
+    // Picture — an auto-detach affordance in the browser's own Global
+    // Media Controls popup — for any playing <video> by default. The
+    // operator wants every recorded clip to stay inside OUR player on
+    // desktop; only iOS keeps native video behaviour (its own established
+    // exception elsewhere in this file — playsinline, webkitEnterFullscreen
+    // in core/ios-video.js). Setting this also cleanly disables the
+    // player's own PiP button on non-iOS: player/_pip.js::
+    // canPictureInPicture already checks `videoEl.disablePictureInPicture`
+    // and returns false, so the button simply never renders there — no
+    // dangling control that would silently fail if tapped.
+    videoEl.disablePictureInPicture = !isIOS;
     const _onVideoError = () => {
       if (videoEl._lbErrorBound !== _onVideoError) return;
       videoEl.removeEventListener('error', _onVideoError);

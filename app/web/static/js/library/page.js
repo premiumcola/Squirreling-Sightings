@@ -84,5 +84,24 @@ export function reloadLibraryPage() {
   return _loadPage(true);
 }
 
+/** Jump straight into the merged feed filtered to exactly `labels` — the
+ * camera-overview's "Tiere" / "Menschen" quick tiles (mediathek/
+ * _overview.js) call this by global name rather than importing this
+ * module directly, the same window-bridge pattern reloadLibraryPage's
+ * own callers already use. Replaces whatever filter was active (a
+ * predictable, single-purpose jump, not a merge with leftover camera/
+ * category chips from a previous visit) and scrolls the now-filtered
+ * grid into view, since it renders below the camera overview these
+ * tiles live in. */
+export function setLibraryLabelFilter(labels) {
+  _filter.cameraIds.clear();
+  _filter.categories.clear();
+  _filter.labels = new Set(labels || []);
+  const done = _onFilterChange();
+  byId('libraryBlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return done;
+}
+
 window.initLibraryPage = initLibraryPage;
 window.reloadLibraryPage = reloadLibraryPage;
+window.setLibraryLabelFilter = setLibraryLabelFilter;

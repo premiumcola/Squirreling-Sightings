@@ -9,9 +9,55 @@
 // bridges go through window.openMediaDrilldown / openAllMediaDrilldown.
 import { byId, esc, safeHexColor } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { getCameraIcon, getCameraColor } from '../core/icons.js';
+import { getCameraIcon, getCameraColor, objIconSvg } from '../core/icons.js';
 import { _buildMocChips } from './_chips.js';
 import { renderMediaFilterPills } from './filters.js';
+
+// Quick-jump tiles into the MERGED grid (library/page.js), not the
+// per-camera drilldown the tiles above open — "Tiere" and "Menschen"
+// are cross-camera, cross-kind questions ("show me every animal, on
+// any camera"), which is exactly what the merged feed already answers
+// and the drilldown (motion clips, one camera at a time) cannot: it has
+// no concept of grouping several object labels into one tap.
+// `objIconSvg('wildlife', …)` is the same generic-paw fallback the
+// per-label pill row already falls back to for fox/hedgehog/marten/deer
+// (core/icons.js), so "Tiere" reads as one obvious step up from those
+// species-specific icons rather than a new visual language.
+const _QUICK_LABEL_TILES = [
+  {
+    id: '__animals__',
+    name: 'Tiere',
+    icon: () => objIconSvg('wildlife', 48),
+    labels: ['cat', 'bird', 'dog', 'squirrel', 'fox', 'hedgehog', 'marten', 'deer'],
+  },
+  {
+    id: '__people__',
+    name: 'Menschen',
+    icon: () => objIconSvg('person', 48),
+    labels: ['person'],
+  },
+];
+
+function _quickLabelTileHTML(tile) {
+  return `<div class="moc-card moc-quick" data-quick-id="${tile.id}" data-quick-labels="${tile.labels.join(',')}">
+    <div class="moc-all-thumb moc-quick-thumb">${tile.icon()}</div>
+    <div class="moc-body">
+      <div class="moc-name">${esc(tile.name)}</div>
+      <div class="moc-desc">Alle Kameras &middot; Kurzeinstieg</div>
+    </div>
+  </div>`;
+}
+
+/** Wired separately from the inline onclicks the camera/"Alle Medien"
+ *  tiles use — an array of labels doesn't serialise cleanly into an
+ *  inline attribute the way a single camera id string does. */
+function _bindQuickLabelTiles() {
+  document.querySelectorAll('.moc-quick[data-quick-labels]').forEach((card) => {
+    card.addEventListener('click', () => {
+      window.setLibraryLabelFilter?.(card.dataset.quickLabels.split(','));
+    });
+  });
+}
 
 function _fmtMb(mb) {
   if (!mb || mb <= 0) return '0 MB';
@@ -169,14 +215,18 @@ export function renderMediaOverview() {
 
   const ts = Date.now();
   const camCards = cams.map((c) => _camCardHTML(c, statsByid[c.id] || {}, ts)).join('');
+  const quickTiles = _QUICK_LABEL_TILES.map(_quickLabelTileHTML).join('');
   const archivedHtml = _archivedSectionHTML(state.mediaArchived || []);
 
   // Category filter bar — populated dynamically (see renderMediaFilterPills('overview') below)
   const catSection = `<div class="media-filter-bar moc-filter-bar" id="mediaFilterBarOverview"></div>`;
 
   ov.innerHTML =
-    catSection + `<div class="media-overview-grid">${allCard}${camCards}</div>` + archivedHtml;
+    catSection +
+    `<div class="media-overview-grid">${allCard}${camCards}${quickTiles}</div>` +
+    archivedHtml;
   renderMediaFilterPills('overview');
+  _bindQuickLabelTiles();
 }
 
 // Single source of truth for which moc-card is highlighted. data-cam-id is

@@ -4,7 +4,8 @@
    was a dark capsule that read as a hero banner; the title now reads
    as a section header above Live Feed. .hero is just a flex row that
    keeps the brand-glyph + title + subtitle stack on the left and the
-   build-info chip on the right. */
+   Timelapse-aktiv pill on the right (the build-info chip that used to
+   live there moved into Einstellungen → App & Server). */
 .hero {
   /* No top padding (the safe-area inset lives on .main) and no
      bottom padding either — the hero now butts directly against
@@ -14,6 +15,7 @@
   padding: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   background: transparent;
   /* Pull the next .main grid item up so the visible gap between
@@ -190,56 +192,23 @@ select option {
   background: #1e1e1e;
   color: #c8c8c8;
 }
-/* ── Hero build-info (top-right column) ────────────────────────────────────── */
-.hero-build {
+/* ── Hero timelapse-status corner (top-right column) ─────────────────────
+   .tl-status-bar's own pill/panel rules (07-timelapse-1.css) are unscoped
+   — they already work wherever the component is mounted. This block only
+   adds the HERO-ROW placement: push it to the right on the title's flex
+   line (.hero's own flex-wrap: wrap, set above, is what lets it drop to
+   its own line below), and give it its own full-width line on a phone
+   instead of crowding the wordmark (mirrors .tl-status-bar's own ≤560px
+   rule, same breakpoint, so both files agree on where the pill drops
+   down). */
+.hero .tl-status-bar {
   flex-shrink: 0;
   margin-left: auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 6px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.45);
-  text-align: right;
-  letter-spacing: 0.02em;
-  padding-left: 16px;
-  white-space: nowrap;
 }
-.hero-build:empty {
-  display: none;
-}
-.hero-build .hero-build-count {
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 700;
-}
-.hero-build .hero-build-count:hover {
-  text-decoration: underline;
-}
-.hero-build .hero-build-count--dev {
-  color: rgba(255, 255, 255, 0.35);
-  font-weight: 600;
-}
-.hero-build .hero-build-commit {
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 6px;
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 10.5px;
-}
-.hero-build .hero-build-date {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 10.5px;
-}
-.hero-build .hero-build-sep {
-  color: rgba(255, 255, 255, 0.25);
-}
-@media (max-width: 640px) {
-  .hero-build {
-    font-size: 10px;
-    padding-left: 8px;
+@media (max-width: 560px) {
+  .hero .tl-status-bar {
+    flex: 1 1 100%;
+    margin-left: 0;
   }
 }
 
@@ -264,18 +233,5 @@ select option {
   .hero-title-wrap {
     padding-left: 120px;
     min-height: 64px;
-  }
-  .hero-build {
-    display: none;
-  }
-}
-@media (max-width: 768px) {
-  .hero-build {
-    font-size: 10px;
-  }
-  .hero-build > * {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }

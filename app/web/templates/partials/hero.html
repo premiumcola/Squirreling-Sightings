@@ -17,6 +17,10 @@
     </h1>
     <p class="hero-subtitle">Coral TPU · weather-aware · quest-driven</p>
   </div>
-  <div id="heroBuildInfo" class="hero-build" aria-label="Build-Info"></div>
+  {# Timelapse-aktiv summary pill — moved here from the Geräte head row so
+  the corner the build-info chip vacated (now in Einstellungen → App &amp;
+  Server) isn't empty. Populated by camedit/timelapse-status.js; the
+  component and its data are unchanged, only the mount point moved. #}
+  <div id="tlStatusBar" class="tl-status-bar"></div>
   <button id="openWizardBtn" class="btn-action ghost hidden">⚙️ Setup-Wizard</button>
 </section>

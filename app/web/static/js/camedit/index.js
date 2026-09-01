@@ -78,8 +78,11 @@ const download = (url) => window.open(url, '_blank');
 // carries no brand element, so every branch was a null-guarded no-op.
 // The wizard inputs that fed those keys went with it.
 
-// _camGridCols / SURVEIL_ACC / SURVEIL_LABEL / _isInScheduleWindow /
-// _surveilMode / _surveilEyeSvg now live in dashboard.js (Stage 3a).
+// SURVEIL_ACC / SURVEIL_LABEL / _isInScheduleWindow / _surveilMode /
+// _surveilEyeSvg now live in dashboard.js (Stage 3a). _camGridCols was
+// dropped there in the Erkennungsprofil reshape — every camera gets its
+// own full-width tile+panel row now, so there is no per-count column
+// class to pick any more.
 
 // renderDashboard now lives in dashboard.js (Stage 3b).
 
@@ -365,20 +368,6 @@ async function updateSystemPanel() {
         restartShort = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${pad(d.getHours())}:${pad(d.getMinutes())}`;
       } catch {}
     }
-    const heroEl = byId('heroBuildInfo');
-    if (heroEl) {
-      const url = 'https://github.com/premiumcola/cam-manager/commits/main/';
-      const shortCommit = commit.length > 7 ? commit.slice(0, 7) : commit;
-      const countPart =
-        b.count && b.count !== '—'
-          ? `<a href="${url}" target="_blank" class="hero-build-count">Build #${esc(String(b.count))}</a>`
-          : `<span class="hero-build-count hero-build-count--dev">Build · dev</span>`;
-      const commitPart = `<code class="hero-build-commit" title="Git commit">${esc(shortCommit)}</code>`;
-      const restartPart = s.process_start
-        ? `<span class="hero-build-date" title="Letzter Neustart: ${esc(s.process_start)}">⟳ ${esc(restartShort)}</span>`
-        : '';
-      heroEl.innerHTML = `${countPart}<span class="hero-build-sep">·</span>${commitPart}${restartPart ? `<span class="hero-build-sep">·</span>${restartPart}` : ''}`;
-    }
     const memUsed = s.mem_used_mb || 0;
     const memTotal = s.mem_total_mb || 0;
     const procMem = s.proc_mem_mb || 0;
@@ -392,11 +381,19 @@ async function updateSystemPanel() {
     const shortCommit = commit.length > 7 ? commit.slice(0, 7) : commit;
     const publicUrl = state.config?.server?.public_base_url || '';
     const subnet = state.config?.default_discovery_subnet || '';
+    // Build-number badge — was the hero header's top-right chip
+    // ("Build #1584 · 130e32d · ⟳ …"), moved here wholesale per the
+    // operator ("die Bildinformation ... brauch ich nicht mehr ganz
+    // oben"). Same renderer, same /api/system data, just relocated.
+    const buildUrl = 'https://github.com/premiumcola/cam-manager/commits/main/';
+    const buildBadge =
+      count && count !== '—'
+        ? `<a href="${buildUrl}" target="_blank" class="app-info-build-link">#${esc(String(count))}</a>`
+        : `<span class="app-info-build-link app-info-build-link--dev">dev</span>`;
     panel.innerHTML = `
       <div class="app-info-block">
         <div class="app-info-section-title">Build &amp; System</div>
-        <div class="app-info-row"><span class="app-info-row-label">Build</span><span class="app-info-row-val"><code>${esc(shortCommit)}</code> · ${esc(date)}</span></div>
-        <div class="app-info-row"><span class="app-info-row-label">Commits</span><span class="app-info-row-val">${esc(String(count))}</span></div>
+        <div class="app-info-row"><span class="app-info-row-label">Build</span><span class="app-info-row-val">${buildBadge} <code>${esc(shortCommit)}</code> · ${esc(date)}</span></div>
         ${s.process_start ? `<div class="app-info-row"><span class="app-info-row-label">Letzter Neustart</span><span class="app-info-row-val" title="${esc(s.process_start)}">${esc(restartShort)}</span></div>` : ''}
         ${uptime ? `<div class="app-info-row"><span class="app-info-row-label">Container-Uptime</span><span class="app-info-row-val">${uptimeStr}</span></div>` : ''}
         ${s.camera_count !== undefined ? `<div class="app-info-row"><span class="app-info-row-label">Aktive Kameras</span><span class="app-info-row-val">${s.camera_count}</span></div>` : ''}

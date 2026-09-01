@@ -141,11 +141,12 @@
   display: grid;
   gap: 8px;
 }
-/* Timelapse status bar (cameras dashboard) */
-/* Rides the Geräte head row (left of Netzwerk-Discovery) rather than
-   owning a full-width line under it. `margin-left: auto` pushes the pill
-   and the button to the right together; the detail panel it expands is
-   positioned relative to this box and still drops below the header. */
+/* Timelapse status bar. Mounted in the hero row's top-right corner now
+   (02-hero.css adds the `.hero .tl-status-bar` placement rules) — these
+   rules are the component's OWN chrome and stay unscoped so they keep
+   working wherever it is mounted. `margin-left: auto` pushes the pill to
+   the right of whatever precedes it; the detail panel it expands is
+   positioned relative to this box and drops below. */
 .tl-status-bar {
   margin-left: auto;
   position: relative;
@@ -159,12 +160,6 @@
   right: 0;
   z-index: 20;
   min-width: min(320px, 90vw);
-}
-/* `.section-head` is a nowrap flex row; the pill is a third child now,
-   so it needs permission to wrap rather than squeezing the title. */
-#cameras .section-head {
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 @media (max-width: 560px) {

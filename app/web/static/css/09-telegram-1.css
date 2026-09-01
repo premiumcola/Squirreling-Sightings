@@ -265,6 +265,20 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
 }
+/* Build-number badge — links to the commit history, same GitHub target
+   the hero header's chip used before it moved into this panel. */
+.app-info-build-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+.app-info-build-link:hover {
+  text-decoration: underline;
+}
+.app-info-build-link--dev {
+  color: #9ba1a8;
+  font-weight: 600;
+}
 .app-info-section-title {
   font-size: 10px;
   text-transform: uppercase;

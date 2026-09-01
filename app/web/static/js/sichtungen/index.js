@@ -18,7 +18,10 @@ import {
   closeAchDrilldown as _closeAchDrilldownImpl,
   loadMoreAchDrill,
 } from './_drilldown.js';
-import { loadBirdDossiers } from './_dossier-panel.js';
+import {
+  loadBirdDossiers,
+  selectSpeciesDossierByName as _selectSpeciesDossierImpl,
+} from './_dossier-panel.js';
 import {
   setQuestsData,
   renderQuestsPinboard,
@@ -29,6 +32,13 @@ import {
 window.toggleAchDrilldown = (id, name) => _toggleAchDrilldownImpl(id, name, renderAchievements);
 window.closeAchDrilldown = () => _closeAchDrilldownImpl(renderAchievements);
 window.loadMoreAchDrill = loadMoreAchDrill;
+// Same shape as the drilldown bridges above: the dossier panel gets
+// renderAchievements as its repaint callback so a bird tile's own active
+// highlight follows the panel opening AND closing (tapping the open
+// species again closes it), without _dossier-panel.js importing
+// _achievements.js and closing an import cycle.
+window.selectSpeciesDossierByName = (name) =>
+  _selectSpeciesDossierImpl(name, renderAchievements);
 // Legacy name kept so any lingering inline callers don't break.
 window.openAchievementDrilldown = (id, name) => window.toggleAchDrilldown(id, name);
 

@@ -196,6 +196,51 @@ def test_load_dossiers_does_not_auto_select_a_default_species():
     )
 
 
+def test_tapping_the_open_species_tile_closes_the_panel():
+    """The tile IS the dismiss affordance — this panel deliberately has no
+    X and no backdrop (test_dossier_panel_has_no_close_button above), so a
+    second tap on the ALREADY-OPEN species must close it. A tap on any
+    other tile still switches, never closes."""
+    body = _slice_function(_DOSSIER_PANEL_JS, "selectSpeciesDossierByName")
+    assert "_closePanel()" in body, (
+        "selectSpeciesDossierByName must close the panel when the tapped "
+        "species is the one already open — the tile is the only dismiss "
+        "affordance this panel has."
+    )
+    assert re.search(r"latin\s*===\s*_selectedLatin", body), (
+        "the close branch must be gated on the tapped species being the "
+        "currently selected one — a different tile has to switch."
+    )
+    close_body = _slice_function(_DOSSIER_PANEL_JS, "_closePanel")
+    assert "_selectedLatin = null" in close_body
+    assert "panel.hidden = true" in close_body
+    # A hidden-but-mounted panel keeps its <video>/<audio> children alive
+    # and buffering; emptying it is what actually stops playback.
+    assert "innerHTML = ''" in close_body, (
+        "_closePanel must empty the panel, not merely hide it — a hidden "
+        "panel's media elements keep playing/buffering."
+    )
+
+
+def test_dossier_repaints_the_grid_without_importing_achievements():
+    """The tapped tile's own active highlight has to follow the panel
+    opening AND closing. _achievements.js already imports
+    isSpeciesDossierActive from _dossier-panel.js, so importing
+    renderAchievements back would close a cycle — the callback is
+    injected from index.js instead, exactly like the drilldown bridges."""
+    src = _read(_DOSSIER_PANEL_JS)
+    # Prose mentions of the sibling module are fine; a real import is not.
+    assert not re.search(r"^\s*import[\s\S]{0,200}?_achievements\.js", src, re.M), (
+        "_dossier-panel.js must not import _achievements.js — that closes "
+        "an import cycle. index.js injects renderAchievements instead."
+    )
+    assert "_repaintGrid" in src
+    index_src = _read(_JS_ROOT / "sichtungen" / "index.js")
+    assert re.search(
+        r"window\.selectSpeciesDossierByName\s*=[\s\S]{0,160}renderAchievements", index_src
+    ), "index.js must bridge selectSpeciesDossierByName with renderAchievements as its repaint callback"
+
+
 def test_no_scroll_jump_anywhere_in_the_dossier_panel():
     """The operator's complaint: clicking any tile used to jump the page
     down via scrollIntoView. The dossier must render in place, wherever

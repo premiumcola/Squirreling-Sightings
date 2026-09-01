@@ -20,16 +20,16 @@
 // library/_grid.js + library/_bind.js — no new media-fetch path, no new
 // card renderer.
 //
-// Selection instead of open/close: a bird achievement tile (locked OR
-// unlocked, see _achievements.js) calls selectSpeciesDossierByName to
-// point this panel at that species. There is no "close" — the panel
-// just shows whichever species was picked last. Unlike the deleted
-// module, it shows NOTHING until a tile is actually tapped (2026-09
-// fix — a still-locked, never-sighted species used to open itself on
-// every page load just because it happened to be first in the list).
-// That is the page's own established "no dismiss chrome" answer
-// (mirrors _drilldown.js's second-click-closes convention isn't needed
-// here because nothing is being popped open in the first place).
+// Selection instead of open/close chrome: a bird achievement tile
+// (locked OR unlocked, see _achievements.js) calls
+// selectSpeciesDossierByName to point this panel at that species. The
+// tile IS the dismiss affordance — tapping the OPEN species' own tile
+// again closes the panel, exactly the second-click-closes convention
+// _drilldown.js already uses for unlocked non-bird tiles, so the page
+// needs no X and no backdrop. It shows NOTHING until a tile is actually
+// tapped (2026-09 fix — a still-locked, never-sighted species used to
+// open itself on every page load just because it happened to be first
+// in the list).
 import { byId, esc } from '../core/dom.js';
 import { apiGet, j } from '../core/api.js';
 import { renderLibraryGrid } from '../library/_grid.js';
@@ -56,6 +56,15 @@ let _dossiersLoaded = false;
 // A species name clicked before dossiers had loaded — resolved once
 // loadBirdDossiers() finishes (see the end of that function).
 let _pendingName = null;
+// Repaints the achievement grid so the tapped tile's own active
+// highlight follows the panel open/close. Injected from index.js (which
+// owns the window.* bridge) rather than imported here: _achievements.js
+// already imports isSpeciesDossierActive FROM this module, so importing
+// renderAchievements back would close a cycle — the exact reason
+// index.js hands renderAchievements to the drilldown functions too.
+// Cached because loadBirdDossiers() resolves a queued click of its own,
+// with no caller to pass it in again.
+let _repaintGrid = null;
 
 function _normName(name) {
   return (name || '').trim().toLowerCase();
@@ -113,11 +122,16 @@ export async function loadBirdDossiers() {
 //      daily prebuild sweep — bird_dossiers.py::sweep_prebuild — hasn't
 //      reached it) → show an inline "not ready" state, not a silent
 //      no-op.
-export function selectSpeciesDossierByName(germanName) {
+export function selectSpeciesDossierByName(germanName, onRepaint) {
+  if (onRepaint) _repaintGrid = onRepaint;
   const latin = _nameToLatin.get(_normName(germanName));
   if (latin) {
     _pendingName = null;
-    _selectSpecies(latin);
+    // Tapping the already-open species' own tile closes the panel again
+    // — the tile is the toggle, which is why this panel needs no close
+    // button of its own. A DIFFERENT tile always switches, never closes.
+    if (latin === _selectedLatin) _closePanel();
+    else _selectSpecies(latin);
     return;
   }
   if (!_dossiersLoaded) {
@@ -128,7 +142,6 @@ export function selectSpeciesDossierByName(germanName) {
   console.warn('[sichtungen] no dossier for', germanName);
   _renderStateMessage(germanName, 'missing');
 }
-window.selectSpeciesDossierByName = selectSpeciesDossierByName;
 
 // Inline feedback for the two non-selection cases above — always
 // visible (unhides the panel even if it was hidden for having zero
@@ -258,4 +271,19 @@ function _selectSpecies(latin) {
   const panel = byId('speciesDossierPanel');
   if (panel) panel.hidden = false;
   _renderPanel(d);
+  _repaintGrid?.();
+}
+
+// Second tap on the open species' own tile. Empties the panel rather
+// than just hiding it: a hidden-but-mounted panel keeps its <video> and
+// <audio> elements alive and buffering, and the next open rebuilds the
+// markup from scratch anyway.
+function _closePanel() {
+  _selectedLatin = null;
+  const panel = byId('speciesDossierPanel');
+  if (panel) {
+    panel.innerHTML = '';
+    panel.hidden = true;
+  }
+  _repaintGrid?.();
 }

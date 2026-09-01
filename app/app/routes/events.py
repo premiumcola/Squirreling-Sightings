@@ -24,6 +24,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import app_state, trash as _trash
 from ..detection_feedback import record_verdict
+from ..event_relabel import apply_label_change
 
 bp = Blueprint("events", __name__)
 
@@ -156,15 +157,11 @@ def api_event_labels(cam_id, event_id):
     event = store.get_event(cam_id, event_id)
     if not event:
         return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
-    event["labels"] = labels
-    # Keep top_label in sync with labels so timeline/badges/stats agree.
-    # If the previous top_label was removed, fall back to first remaining label,
-    # or "motion" when the user cleared the list entirely.
+    # Keep top_label in sync with labels so timeline/badges/stats agree,
+    # and drop cat_name/bird_species when the class they pin just left
+    # the list — see event_relabel for why both matter.
     prev_top = event.get("top_label")
-    if not labels:
-        event["top_label"] = "motion"
-    elif prev_top not in labels:
-        event["top_label"] = labels[0]
+    apply_label_change(event, labels)
     store.update_event(cam_id, event_id, event)
     # Only a changed top_label is a correction. Adding a secondary label
     # leaves the detector's verdict standing — recording that as "wrong"
@@ -188,7 +185,18 @@ def api_event_labels(cam_id, event_id):
             source="web",
             corrected_label=event["top_label"],
         )
-    return jsonify({"ok": True, "labels": labels, "top_label": event["top_label"]})
+    return jsonify(
+        {
+            "ok": True,
+            "labels": labels,
+            "top_label": event["top_label"],
+            # cat_name/bird_species may just have been cleared by
+            # apply_label_change() — the frontend needs both to drop a
+            # stale identity chip without a full reload.
+            "cat_name": event.get("cat_name"),
+            "bird_species": event.get("bird_species"),
+        }
+    )
 
 
 @bp.post('/api/camera/<cam_id>/review/<event_id>')

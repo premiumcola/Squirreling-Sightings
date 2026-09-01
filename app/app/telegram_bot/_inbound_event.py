@@ -9,7 +9,11 @@ matters:
     _handle_event_cb
       ├─ record_verdict        → storage/_diag/*.jsonl   [durable]
       ├─ net_archive.append_verdict → storage/net_archive/… [durable]
-      ├─ stamp confirmed/confirmed_at on the event JSON   [protects it]
+      ├─ "ok" → stamp confirmed/confirmed_at on the event JSON
+      ├─ "no"/"c:<label>" → take the disproven label OFF the event's
+      │  OWN record too (event_relabel.apply_label_change) — the two
+      │  ledgers above feed threshold tuning, not the badge/filters/
+      │  achievements, which all read `labels` straight off the event
       └─ _set_badge (markup → one grey noop button)
 
 Verdict FIRST, badge second, and the badge edit's failure swallowed —
@@ -30,6 +34,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from .. import net_archive
 from ..detection_feedback import record_verdict
+from ..event_relabel import apply_label_change, labels_after_correction
 from ..telegram_helpers import LABEL_DE
 from ._outbound._question import question_class_markup, question_markup
 
@@ -101,6 +106,31 @@ class EventCallbackMixin:
             event["confirmed_at"] = datetime.now().isoformat(timespec="seconds")
             self.store.update_event(cam_id, eid, event)
 
+    def _correct_event_label(
+        self, eid: str, cam_id: str | None, wrong_label: str | None, corrected: str | None
+    ) -> None:
+        """Take the disproven label OFF the event's OWN record.
+
+        A "Nein"/correction used to only ever reach the diagnostic
+        ledger and the threshold-tuning archive — both feed the 03:30
+        learner, neither is what the Mediathek badge, the label filters
+        or the achievement counters read. Those all derive `labels`
+        straight off the event on every render, so without this the
+        event still showed "Katze" everywhere forever. Routed through
+        the same ``event_relabel`` helpers the web lightbox's label
+        toggle uses, so a Telegram "Nein" and a web untoggle leave the
+        event in the same state.
+        """
+        if not (cam_id and wrong_label and self.store):
+            return
+        with contextlib.suppress(Exception):
+            event = self.store.get_event(cam_id, eid)
+            if not event:
+                return
+            new_labels = labels_after_correction(event.get("labels") or [], wrong_label, corrected)
+            apply_label_change(event, new_labels)
+            self.store.update_event(cam_id, eid, event)
+
     def _book_verdict(self, eid: str, *, correct: bool, source: str, corrected: str | None = None):
         """Both durable writes, in one place so no branch can skip one."""
         ctx = self._event_context(eid)
@@ -127,6 +157,8 @@ class EventCallbackMixin:
             )
         if correct:
             self._stamp_confirmed(eid, ctx.get("cam"))
+        else:
+            self._correct_event_label(eid, ctx.get("cam"), ctx.get("label"), corrected)
         return ctx
 
     def _already_judged(self, eid: str):

@@ -266,20 +266,22 @@ export function _renderLbLabels() {
           },
         );
         if (res.ok) {
-          lbState.item.labels = res.labels;
-          if (res.top_label !== undefined) lbState.item.top_label = res.top_label;
+          // cat_name/bird_species may have just been cleared server-side
+          // (the class they pinned left `labels`) — sync both so a stale
+          // identity chip doesn't survive an untoggle without a reload.
+          const applyRes = (target) => {
+            target.labels = res.labels;
+            if (res.top_label !== undefined) target.top_label = res.top_label;
+            if ('cat_name' in res) target.cat_name = res.cat_name;
+            if ('bird_species' in res) target.bird_species = res.bird_species;
+          };
+          applyRes(lbState.item);
           const idx = (state.media || []).findIndex((x) => x.event_id === lbState.item.event_id);
-          if (idx >= 0) {
-            state.media[idx].labels = res.labels;
-            if (res.top_label !== undefined) state.media[idx].top_label = res.top_label;
-          }
+          if (idx >= 0) applyRes(state.media[idx]);
           const aIdx = (state._allMedia || []).findIndex(
             (x) => x.event_id === lbState.item.event_id,
           );
-          if (aIdx >= 0) {
-            state._allMedia[aIdx].labels = res.labels;
-            if (res.top_label !== undefined) state._allMedia[aIdx].top_label = res.top_label;
-          }
+          if (aIdx >= 0) applyRes(state._allMedia[aIdx]);
           _renderLbLabels();
           // sync thumbnail in media grid
           const thumbCard = byId('mediaGrid')?.querySelector(

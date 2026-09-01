@@ -17,6 +17,24 @@ import { refreshTimelineAndStats } from '../chrome/storage-stats.js';
 
 const _TRASH_ICON_SVG = `<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
 
+// No-preview placeholder — a trashed entry whose snapshot never made
+// it into the trash dir (interrupted move, pre-migration entry).
+const _NO_THUMB_ICON_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>`;
+
+// Leading thumbnail for one trash row — trash.list_trashed() (backend)
+// exposes `thumb_url` read-only from whatever snapshot the entry's
+// move-to-trash already carried in; no new fetch, no new route. The
+// placeholder icon always renders underneath so a failed/missing
+// image never leaves an empty box (same "onerror removes the <img>,
+// placeholder shows through" pattern as mediathek/_cards.js).
+export function _trashThumbHTML(it) {
+  const src = it.thumb_url || '';
+  const img = src
+    ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">`
+    : '';
+  return `<div class="trash-row__thumb">${_NO_THUMB_ICON_SVG}${img}</div>`;
+}
+
 function _fmtDate(iso) {
   if (!iso) return '—';
   try {
@@ -80,6 +98,7 @@ function _renderRows(body, foot, items) {
     .map(
       (it) => `
     <div class="trash-row" data-event-id="${esc(it.event_id || '')}">
+      ${_trashThumbHTML(it)}
       <div class="trash-row__info">
         <div class="trash-row__name">${esc(it.event_id || '?')}</div>
         <div class="trash-row__meta">${esc(it.cam_id || '—')} · gelöscht ${_fmtDate(it.trashed_at)}</div>

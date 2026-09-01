@@ -229,6 +229,38 @@ def retire_to_trash(store_root, cam_id: str, event_id: str, paths: list) -> int:
     return len(moved)
 
 
+def _thumb_url(ev_dir: Path, cam_id: str | None, event_id: str | None) -> str | None:
+    """Preview-image URL for one trashed entry, or ``None``.
+
+    ``move_to_trash``/``retire_to_trash`` keep a file's basename when
+    moving it in, so the event's own snapshot is normally still sitting
+    right in the entry dir as ``<event_id>.jpg`` — no new file gets
+    moved or written for this, it's read-only exposure of what's
+    already there. Falls back to any other ``*.jpg`` the entry holds
+    (a manifest with an unusual naming convention should still show
+    *something*), but never ``*.best.jpg`` — that's a Telegram-only
+    bbox-burned render (telegram_bot/_outbound/_best_frame.py), not the
+    event's real snapshot, and may not even exist for most events.
+
+    The result is served by the existing ``/media/<path:subpath>``
+    route (routes/bootstrap.py), which resolves under
+    ``app_state.storage_root`` — the very root ``.trash`` lives under —
+    so this needs no new route and no path-traversal surface: the
+    filename is always ``img.name``, never attacker- or caller-supplied
+    input.
+    """
+    if not cam_id or not event_id:
+        return None
+    canonical = ev_dir / f"{event_id}.jpg"
+    img = canonical if canonical.exists() else None
+    if img is None:
+        candidates = sorted(p for p in ev_dir.glob("*.jpg") if not p.name.endswith(".best.jpg"))
+        img = candidates[0] if candidates else None
+    if img is None:
+        return None
+    return f"/media/.trash/{cam_id}/{event_id}/{img.name}"
+
+
 def list_trashed() -> list[dict]:
     """All trashed events with metadata + days-until-expiry. Sorted
     newest-first so the UI shows the most-recently-deleted on top."""
@@ -255,13 +287,16 @@ def list_trashed() -> list[dict]:
             except Exception:
                 expires_at = None
                 days_left = None
+            cam_id = meta.get("cam_id")
+            event_id = meta.get("event_id")
             out.append(
                 {
-                    "cam_id": meta.get("cam_id"),
-                    "event_id": meta.get("event_id"),
+                    "cam_id": cam_id,
+                    "event_id": event_id,
                     "trashed_at": trashed_at,
                     "expires_at": expires_at.isoformat(timespec="seconds") if expires_at else None,
                     "days_left": days_left,
+                    "thumb_url": _thumb_url(ev_dir, cam_id, event_id),
                 }
             )
     out.sort(key=lambda e: e.get("trashed_at") or "", reverse=True)

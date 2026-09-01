@@ -8,6 +8,14 @@ How it grows:
     of (a) Wikipedia summary + thumbnail, (b) a Xeno-canto audio sample
     with attribution. Subsequent sightings → just a counter bump.
 
+    Separately, `sweep_prebuild` (called from maintenance.py's daily
+    tick) warms the SAME reference content for species that have never
+    been detected yet, so a still-locked achievement tile has something
+    to show the moment it's clicked instead of a blank "warte auf die
+    erste Sichtung" state. It never touches `sighting_count` or
+    `first_seen_at` — a species built this way stays locked until a
+    real sighting calls `on_new_species`.
+
 External APIs are deliberately best-effort:
     Network failures and rate-limits never poison the camera pipeline.
     A missed Wikipedia fetch leaves `wikipedia_fetched_at = null` in the
@@ -27,205 +35,26 @@ from __future__ import annotations
 
 import json as _json_mod
 import logging
-import os
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
-
-log = logging.getLogger("app.bird_dossiers")
-
-# Xeno-canto API v3 requires a per-account `key` parameter (v2 is gone
-# as of early 2026). When `XENO_CANTO_API_KEY` is unset, the audio
-# fetch is silently skipped — `audio_url` stays None and the frontend
-# hides the player. q:A means "Quality A"; len:5-15 picks recordings
-# short enough to play inline as MP3 in the modal.
-_XC_API_KEY = os.environ.get("XENO_CANTO_API_KEY", "").strip()
-_XC_QUERY_TEMPLATE = (
-    "https://xeno-canto.org/api/3/recordings" "?query={latin}+q:A+len:5-15&key={key}"
-)
-
-# The MediaWiki REST summary endpoint. Returns title, extract, thumbnail,
-# content_urls, and a couple of cross-language hints. Works on every
-# language wiki — we try DE first, EN as fallback.
-_WIKI_SUMMARY_URL_DE = "https://de.wikipedia.org/api/rest_v1/page/summary/{latin}"
-_WIKI_SUMMARY_URL_EN = "https://en.wikipedia.org/api/rest_v1/page/summary/{latin}"
-
-_HTTP_TIMEOUT = 5.0
-_USER_AGENT = "squirreling-sightings bird-dossier-builder (https://github.com/premiumcola/cam-manager)"
-
-# ── Rate-limit lock ────────────────────────────────────────────────────────
-# The spec mandates ≤1 outgoing request/sec to Wikipedia + Xeno-canto.
-# A single global lock + a "next allowed slot" timestamp is the simplest
-# bound: every fetch grabs the lock, sleeps until the slot opens, fires
-# its request, then sets the next slot to now+1 s. Multiple species
-# detected in the same minute serialise behind this; nothing is dropped.
-_rate_lock = threading.Lock()
-_next_request_slot = [0.0]
-
 
 # Re-export from the shared helper so the single internal callers
 # (this module and any future ones) all land on one implementation.
+from .bird_dossiers_fetch import fetch_wikipedia as _fetch_wikipedia
+from .bird_dossiers_fetch import fetch_xeno_canto as _fetch_xeno_canto
 from .io_utils import atomic_write_json as _atomic_write_json  # noqa: F401
 
+log = logging.getLogger("app.bird_dossiers")
 
-def _rate_limited_get(url: str) -> dict | None:
-    """GET `url`, return parsed JSON or None on any failure (404, timeout,
-    network error, malformed JSON). Never raises. Caller is expected to
-    treat None as "fetch failed, try again later"."""
-    import urllib.request as _ur
-
-    with _rate_lock:
-        sleep_for = max(0.0, _next_request_slot[0] - time.time())
-        if sleep_for > 0:
-            time.sleep(sleep_for)
-        _next_request_slot[0] = time.time() + 1.0
-    try:
-        req = _ur.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "application/json"})
-        with _ur.urlopen(req, timeout=_HTTP_TIMEOUT) as r:
-            if r.status >= 400:
-                return None
-            return _json_mod.loads(r.read().decode("utf-8", errors="replace"))
-    except Exception as e:
-        log.debug("[dossiers] GET %s failed: %s", url, e)
-        return None
-
-
-def _strip_subspecies(latin: str) -> str:
-    """Drop the third name in a trinomial — "Erithacus rubecula rubecula"
-    → "Erithacus rubecula". Wikipedia normally indexes species at the
-    binomial, so the trinomial 404s but the binomial fallback hits.
-    Returns the input unchanged when it isn't a trinomial."""
-    parts = latin.split()
-    return f"{parts[0]} {parts[1]}" if len(parts) >= 3 else latin
-
-
-def _fetch_wikipedia(latin: str) -> dict | None:
-    """Try DE summary first, EN fallback, subspecies-stripped fallback.
-
-    Returns None when all three lookups fail. The caller stores None
-    fields rather than the literal None — see _apply_wikipedia."""
-    candidates = [latin]
-    stripped = _strip_subspecies(latin)
-    if stripped != latin:
-        candidates.append(stripped)
-    for cand in candidates:
-        for url_tmpl in (_WIKI_SUMMARY_URL_DE, _WIKI_SUMMARY_URL_EN):
-            url = url_tmpl.format(latin=quote(cand))
-            data = _rate_limited_get(url)
-            if not data:
-                continue
-            if data.get("type") == "disambiguation":
-                continue
-            extract = data.get("extract") or ""
-            if not extract.strip():
-                continue
-            return data
-    return None
-
-
-# Map xeno-canto English call-type strings to a short German caption.
-# Keys are matched case-insensitively via substring search; the order
-# matters because longer keys must be tested before shorter ones
-# they could collide with — "flight call" must win over "call",
-# "alarm call" over "call". Unrecognised types fall back to the raw
-# string capitalised — better than nothing.
-_XC_TYPE_DE: dict[str, str] = {
-    "flight call": "Flugruf",
-    "alarm call": "Warnruf",
-    "begging call": "Bettelruf",
-    "alarm": "Warnruf",
-    "begging": "Bettelruf",
-    "subsong": "Subgesang",
-    "song": "Gesang",
-    "drumming": "Trommeln",
-    "duet": "Duett",
-    "wing": "Flügelschlag",
-    "call": "Ruf",
-}
-
-
-def _de_type(raw: str | None) -> str:
-    """Translate an xeno-canto call-type string to a short German caption."""
-    if not raw:
-        return "Aufnahme"
-    s = raw.lower().strip()
-    for k, v in _XC_TYPE_DE.items():
-        if k in s:
-            return v
-    return raw.strip().capitalize() or "Aufnahme"
-
-
-def _fetch_xeno_canto(latin: str, max_recordings: int = 3) -> list[dict]:
-    """Pull up to `max_recordings` quality-A 5-15 s clips for the species.
-
-    Returns a list of recording dicts (`id`, `file_url`, `type_en`,
-    `type_de`, `recordist`, `license_url`, `length`). Empty list when
-    no recordings are available — typical for rare or recently-named
-    species — OR when no API key is configured. Both cases let the
-    frontend hide the audio block.
-
-    Subspecies fallback mirrors the Wikipedia path. The picker prefers
-    a diverse set of call types when available (one Gesang + one Ruf
-    + one Warnruf reads better than three Gesänge), then fills the
-    remaining slots in API order.
-    """
-    if not _XC_API_KEY:
-        return []
-    candidates = [latin]
-    stripped = _strip_subspecies(latin)
-    if stripped != latin:
-        candidates.append(stripped)
-    for cand in candidates:
-        url = _XC_QUERY_TEMPLATE.format(latin=quote(cand), key=_XC_API_KEY)
-        data = _rate_limited_get(url)
-        if not data:
-            continue
-        recordings = data.get("recordings") or []
-        if not recordings:
-            continue
-        # Diversity-first picker: walk the list and prefer a new type
-        # each round; when we run out of new types, fall back to API
-        # order to fill remaining slots.
-        seen_types: set[str] = set()
-        first_pass: list[dict] = []
-        leftover: list[dict] = []
-        for rec in recordings:
-            type_de = _de_type(rec.get("type"))
-            if type_de in seen_types:
-                leftover.append(rec)
-                continue
-            seen_types.add(type_de)
-            first_pass.append(rec)
-            if len(first_pass) >= max_recordings:
-                break
-        picked = first_pass
-        for rec in leftover:
-            if len(picked) >= max_recordings:
-                break
-            picked.append(rec)
-        out: list[dict] = []
-        for rec in picked:
-            file_url = rec.get("file") or ""
-            if file_url.startswith("//"):
-                file_url = "https:" + file_url
-            if not file_url:
-                continue
-            out.append(
-                {
-                    "id": str(rec.get("id") or "").strip() or None,
-                    "file_url": file_url,
-                    "type_en": rec.get("type") or "",
-                    "type_de": _de_type(rec.get("type")),
-                    "recordist": rec.get("rec") or None,
-                    "license_url": rec.get("lic") or None,
-                    "length": rec.get("length") or None,
-                }
-            )
-        if out:
-            return out
-    return []
+#: Per-call budget for `BirdDossierService.sweep_prebuild` — new
+#: placeholder dossiers created per maintenance tick. Each one spawns up
+#: to two rate-limited network fetches (~1-2 s apart, see
+#: bird_dossiers_fetch.py's `_rate_lock`), so a bound keeps one daily
+#: tick from firing dozens of requests at once; the vocabulary is small
+#: (well under 100 species), so this still finishes a full first pass
+#: within a few days.
+DOSSIER_PREBUILD_BUDGET = 15
 
 
 # ── Service ────────────────────────────────────────────────────────────────
@@ -271,6 +100,48 @@ class BirdDossierService:
             log.warning("[dossiers] save failed: %s", e)
 
     # ── Public API ─────────────────────────────────────────────────────
+    @staticmethod
+    def _blank_dossier(
+        latin: str,
+        common_de: str | None,
+        *,
+        first_seen_at: str | None,
+        first_seen_event_id: str | None,
+        first_seen_camera_id: str | None,
+        sighting_count: int,
+    ) -> dict:
+        """The dossier dict shape, shared by every entry point that can
+        create one — a real first sighting (`on_new_species`) or the
+        no-sighting-yet reference-content warm-up (`_create_placeholder`).
+        Keeping one shape in one place means a field added for one path
+        can't silently drift out of sync with the other."""
+        return {
+            "common_name_de": common_de,
+            "common_name_en": None,
+            "latin": latin,
+            "first_seen_at": first_seen_at,
+            "first_seen_event_id": first_seen_event_id,
+            "first_seen_camera_id": first_seen_camera_id,
+            "sighting_count": sighting_count,
+            "wikipedia_summary": None,
+            "wikipedia_url": None,
+            "wikipedia_thumb_url": None,
+            "wikipedia_fetched_at": None,
+            # Multi-clip xeno-canto store. Each entry carries id /
+            # file_url / type_en / type_de / recordist / license_url /
+            # length so the frontend can render a labelled <audio>
+            # row per clip and the cache check can skip refetch on
+            # subsequent views. The legacy single-clip fields below
+            # mirror recordings[0] for backward-compat with older
+            # dossier consumers; the frontend prefers `recordings`.
+            "recordings": [],
+            "audio_url": None,
+            "audio_attribution": None,
+            "audio_license": None,
+            "audio_fetched_at": None,
+            "wiki_distribution_thumb": None,
+        }
+
     def on_new_species(
         self, latin: str, common_de: str | None, event_id: str, camera_id: str
     ) -> bool:
@@ -289,36 +160,79 @@ class BirdDossierService:
                 self._save_locked()
                 return False
             now_iso = datetime.now().isoformat(timespec="seconds")
-            self.data["dossiers"][latin] = {
-                "common_name_de": common_de,
-                "common_name_en": None,
-                "latin": latin,
-                "first_seen_at": now_iso,
-                "first_seen_event_id": event_id,
-                "first_seen_camera_id": camera_id,
-                "sighting_count": 1,
-                "wikipedia_summary": None,
-                "wikipedia_url": None,
-                "wikipedia_thumb_url": None,
-                "wikipedia_fetched_at": None,
-                # Multi-clip xeno-canto store. Each entry carries id /
-                # file_url / type_en / type_de / recordist / license_url /
-                # length so the frontend can render a labelled <audio>
-                # row per clip and the cache check can skip refetch on
-                # subsequent views. The legacy single-clip fields below
-                # mirror recordings[0] for backward-compat with older
-                # dossier consumers; the frontend prefers `recordings`.
-                "recordings": [],
-                "audio_url": None,
-                "audio_attribution": None,
-                "audio_license": None,
-                "audio_fetched_at": None,
-                "wiki_distribution_thumb": None,
-            }
+            self.data["dossiers"][latin] = self._blank_dossier(
+                latin,
+                common_de,
+                first_seen_at=now_iso,
+                first_seen_event_id=event_id,
+                first_seen_camera_id=camera_id,
+                sighting_count=1,
+            )
             self._save_locked()
         log.info("[dossiers] new species: %s (%s) — fetching", latin, common_de or "?")
         self._spawn_fetch(latin)
         return True
+
+    def _create_placeholder(self, latin: str, common_de: str | None) -> bool:
+        """Pre-build a bare, never-detected dossier entry (sighting_count
+        stays 0, first_seen_* stays None) and spawn its Wikipedia +
+        Xeno-canto fetch — see `sweep_prebuild`. Returns False without
+        any side effect if a dossier already exists for `latin`; a real
+        detection's data (on_new_species / increment_sighting) always
+        wins and is never overwritten by this path."""
+        latin = (latin or "").strip()
+        if not latin:
+            return False
+        with self._lock:
+            if latin in self.data["dossiers"]:
+                return False
+            self.data["dossiers"][latin] = self._blank_dossier(
+                latin,
+                common_de,
+                first_seen_at=None,
+                first_seen_event_id=None,
+                first_seen_camera_id=None,
+                sighting_count=0,
+            )
+            self._save_locked()
+        log.info("[dossiers] pre-built reference dossier: %s (%s)", latin, common_de or "?")
+        self._spawn_fetch(latin)
+        return True
+
+    def sweep_prebuild(self, vocabulary: dict, *, budget: int = DOSSIER_PREBUILD_BUDGET) -> dict:
+        """Bounded pass that warms the reference-content cache for every
+        species in `vocabulary` (latin → German common name, e.g. the
+        classifier's full latin_to_de map) that has no dossier yet —
+        detected or not. Mirrors bird_species_backfill.py::
+        sweep_bird_species_backfill's own "budget per call, piggyback on
+        the daily maintenance timer" shape: at most `budget` NEW
+        placeholders are created per call, so a large vocabulary can't
+        turn one maintenance tick into a fetch storm. Species already
+        covered (by a real sighting or an earlier sweep call) are
+        skipped cheaply and don't count against the budget — a call
+        picks up exactly where the previous one left off.
+
+        Deliberately does NOT touch achievements.json, sighting counts,
+        or first_seen_at — a species built here stays LOCKED in the
+        achievement grid until a real detection calls on_new_species.
+        This only makes a still-locked tile's dossier content (photo,
+        text, audio) ready to show the instant it's clicked.
+        """
+        examined = 0
+        created = 0
+        for latin, common_de in (vocabulary or {}).items():
+            if not latin:
+                continue
+            with self._lock:
+                exists = latin in self.data["dossiers"]
+            if exists:
+                continue
+            if created >= budget:
+                break
+            examined += 1
+            if self._create_placeholder(latin, common_de):
+                created += 1
+        return {"examined": examined, "created": created}
 
     def increment_sighting(self, latin: str) -> None:
         """Bump the counter without going through the new-species path.

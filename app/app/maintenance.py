@@ -197,6 +197,41 @@ def _sweep_bird_species(log) -> None:
         )
 
 
+def _sweep_bird_dossier_prebuild(log) -> None:
+    """Sibling to `_sweep_bird_species` above: bounded catch-up pass
+    that warms the reference-dossier cache (Wikipedia + Xeno-canto) for
+    every species in the classifier's Latin→German vocabulary, not just
+    the ones a camera has actually detected — see
+    BirdDossierService.sweep_prebuild's own docstring for the full
+    rationale. Piggybacks on this same daily timer rather than a new
+    thread, exactly like `_sweep_bird_species` does; a large vocabulary
+    finishes across a handful of daily ticks thanks to the per-call
+    budget, never in one.
+
+    Independent of the classifier's availability: unlike the species
+    backfill sweep, this only needs the static latin_to_de map (a JSON
+    file load) — no TFLite interpreter, no inference. It still needs
+    `app_state.bird_dossiers` to exist, which server.py only skips
+    building when the storage layer itself failed to init.
+    """
+    from .bird_dossiers import DOSSIER_PREBUILD_BUDGET
+    from .detectors._label_loader import _load_bird_latin_to_de
+
+    svc = app_state.bird_dossiers
+    if svc is None:
+        return
+    vocabulary = _load_bird_latin_to_de(None)
+    if not vocabulary:
+        return
+    result = svc.sweep_prebuild(vocabulary, budget=DOSSIER_PREBUILD_BUDGET)
+    if result["created"]:
+        log.info(
+            "[dossiers] prebuild sweep: %d/%d new reference dossiers warmed",
+            result["created"],
+            result["examined"],
+        )
+
+
 def _run_daily_cleanup():
     log = logging.getLogger(__name__)
     if not auto_cleanup_enabled():
@@ -215,6 +250,10 @@ def _run_daily_cleanup():
         _sweep_bird_species(log)
     except Exception as e:
         log.warning("[det] bird backfill sweep failed: %s", e)
+    try:
+        _sweep_bird_dossier_prebuild(log)
+    except Exception as e:
+        log.warning("[dossiers] prebuild sweep failed: %s", e)
     t = threading.Timer(86400, _run_daily_cleanup)
     t.daemon = True
     t.start()

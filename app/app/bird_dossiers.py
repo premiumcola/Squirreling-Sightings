@@ -49,12 +49,21 @@ log = logging.getLogger("app.bird_dossiers")
 
 #: Per-call budget for `BirdDossierService.sweep_prebuild` — new
 #: placeholder dossiers created per maintenance tick. Each one spawns up
-#: to two rate-limited network fetches (~1-2 s apart, see
-#: bird_dossiers_fetch.py's `_rate_lock`), so a bound keeps one daily
-#: tick from firing dozens of requests at once; the vocabulary is small
-#: (well under 100 species), so this still finishes a full first pass
-#: within a few days.
-DOSSIER_PREBUILD_BUDGET = 15
+#: to two rate-limited network fetches, serialised ~1 s apart (see
+#: bird_dossiers_fetch.py's `_rate_lock`) — so the real cost of a FULL
+#: pass over the whole vocabulary (well under 100 species) is a couple
+#: of minutes, not a multi-day trickle. maintenance.py's daily-cleanup
+#: timer already runs once immediately at every boot (server.py calls
+#: `_run_daily_cleanup()` directly, not just via its own 24 h
+#: re-schedule) — so one generous budget here means "every species has
+#: a reference dossier within minutes of the next restart", not days.
+#: 15 was too conservative: it was reasoned about as "protect against a
+#: fetch storm", but a fetch storm was never the actual risk — the rate
+#: lock already caps that at exactly 1 req/s regardless of the budget.
+#: A few hundred is still a real ceiling (protects a future, much
+#: larger vocabulary from blocking one sweep for an unreasonable time),
+#: just not one the current vocabulary ever bumps into.
+DOSSIER_PREBUILD_BUDGET = 200
 
 
 # ── Service ────────────────────────────────────────────────────────────────

@@ -454,7 +454,8 @@
   border-radius: 14px;
   margin-top: 2px;
 }
-#settings .set-section + .set-section {
+#settings .set-section + .set-section,
+#media .set-section + .set-section {
   margin-top: 8px;
 }
 .set-inner .set-section {

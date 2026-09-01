@@ -212,14 +212,25 @@
   margin-top: 10px;
   padding: 14px 16px;
   border-radius: 14px;
-  background: rgba(168, 85, 247, 0.07);
-  border: 1.5px solid rgba(168, 85, 247, 0.2);
+  /* Opaque-ish so the radar chart underneath the pill stops bleeding
+     through; the blur softens whatever residual edge shows past the
+     0.97 alpha. Kept a hint of the purple identity instead of a flat
+     --panel copy so it still reads as the timelapse popover. */
+  background: rgba(21, 15, 28, 0.97);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(168, 85, 247, 0.25);
   display: grid;
   gap: 14px;
 }
 .tl-sb-cam {
   display: grid;
   gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  /* Depth from background contrast against the now-opaque panel, not
+     a border line — one visible card per camera. */
+  background: var(--surface);
 }
 .tl-sb-cam-name {
   font-weight: 700;

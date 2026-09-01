@@ -12,7 +12,6 @@
 //     sightings list (clickable into the lightbox).
 import { byId, esc } from './core/dom.js';
 import { j } from './core/api.js';
-import { renderSpeciesDossierPanel } from './mediathek/species-dossier.js';
 
 let _dossiers = [];
 
@@ -36,11 +35,6 @@ export async function loadBirdDossiers() {
     _dossiers = [];
   }
   renderBirdDossiers();
-  // Mediathek's own dossier panel (left: reference card + switcher,
-  // right: the operator's clips) rides the same fetch — see
-  // mediathek/species-dossier.js's header for why it lives there
-  // instead of in the Sichtungen panel this module renders into.
-  renderSpeciesDossierPanel(_dossiers);
 }
 window.loadBirdDossiers = loadBirdDossiers;
 

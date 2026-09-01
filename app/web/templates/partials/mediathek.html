@@ -177,48 +177,6 @@
     <div id="libraryPagination" class="media-pagination"></div>
   </div>
 
-  {# Species dossier panel (F08 Mediathek integration) — operator ask 2026-08-31: "Vogeldossier
-  unten in die Mediathek, links das Dossier, rechts die Videos". Left: a reference card for one
-  unlocked species (Wikipedia photo + xeno-canto play affordance, opens the accredited
-  birds.js::openBirdDossier modal — see mediathek/species-dossier.js's header for why the audio
-  itself isn't re-rendered here) plus a switcher over every unlocked species. Right: the
-  operator's OWN clips of that species via GET /api/library?labels=, the same param
-  library/_filter-bar.js's object-class chips and mediathek/_overview.js's "Tiere" quick tile
-  already use. Hidden until at least one species has been identified —
-  mediathek/species-dossier.js::renderSpeciesDossierPanel toggles [hidden]. #}
-  <div class="species-dossier-panel" id="speciesDossierPanel" hidden>
-    <div class="species-dossier-head">
-      <svg
-        viewBox="0 0 24 24"
-        width="15"
-        height="15"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M3 5c2-1 4-1 6 0v11c-2-1-4-1-6 0V5z" />
-        <path d="M15 5c2-1 4-1 6 0v11c-2-1-4-1-6 0V5z" />
-        <path d="M9 5c1-.6 2-.6 3 0M9 16c1-.6 2-.6 3 0" />
-      </svg>
-      <span>Vogel-Dossier</span>
-    </div>
-    <div class="species-dossier-grid">
-      <div class="species-dossier-card" id="speciesDossierCard"></div>
-      <div class="species-dossier-clips">
-        <div class="species-dossier-clips-head">
-          <span class="species-dossier-clips-title" id="speciesDossierClipsTitle"></span>
-          <button type="button" class="btn btn-neutral" id="speciesDossierViewAllBtn">
-            Alle ansehen
-          </button>
-        </div>
-        <div class="media-grid" id="speciesDossierGrid"></div>
-      </div>
-    </div>
-  </div>
-
   {# Wetterdaten & Prognose: persisted history of all numeric Open-Meteo parameters + sun altitude,
   rendered as a single multi-line SVG chart with per-line normalisation. Fetches
   /api/weather/history on visibility (IntersectionObserver) and refreshes every 60 s while the

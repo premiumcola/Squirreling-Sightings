@@ -83,11 +83,13 @@
    padding, so the hero fills the FULL card width while visually
    breaking out above and to the left of the card's content — "links
    überlappend, ein bisschen größer" — without ever exceeding the
-   column's own box (zero horizontal-scroll risk). A wide aspect-ratio
-   (vs. the original 4/3) is most of this redesign's height cut — it
-   still reads as a photograph, just a shorter one. */
+   column's own box (zero horizontal-scroll risk). The 2/1 aspect ratio
+   is also exactly what turns two side-by-side EQUAL-width photo boxes
+   into two clean 1:1 squares — no extra math needed per box. */
 .sd-hero {
   position: relative;
+  display: flex;
+  gap: 2px;
   margin: -20px -18px 14px;
   border-radius: 18px;
   overflow: hidden;
@@ -95,10 +97,21 @@
   aspect-ratio: 2/1;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 }
-.sd-hero img {
+/* Two reference photos (2026-09: was one, object-fit:cover, that cropped
+   the animal — a Hausrotschwanz's head was cut clean off). `contain` on
+   a dark surface always shows the whole animal, letterboxed if the
+   source photo isn't itself square, never cropped. */
+.sd-hero-photo {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: #0c0c0c;
+}
+.sd-hero-photo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 .sd-hero-placeholder {
@@ -107,7 +120,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 46px;
+  font-size: 34px;
   opacity: 0.5;
 }
 /* Bottom scrim + name burned into the photo — replaces the old

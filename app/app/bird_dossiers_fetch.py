@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 log = logging.getLogger("app.bird_dossiers")
 
@@ -107,6 +107,61 @@ def fetch_wikipedia(latin: str) -> dict | None:
             if not extract.strip():
                 continue
             return data
+    return None
+
+
+# Filenames that mark a media-list item as unsuitable for the second
+# dossier photo — a distribution map, a UI icon, or a Commons/Wikimedia
+# housekeeping graphic, none of which show the actual animal.
+_SECOND_PHOTO_SKIP_WORDS = (
+    "icon",
+    "map",
+    "verbreitung",
+    "distribution",
+    "range",
+    "logo",
+    "commons",
+)
+
+
+def fetch_second_photo(wiki: dict | None) -> str | None:
+    """Given a successful `fetch_wikipedia` result, pull the page's media
+    list and return a second, distinct photo URL — so the dossier can show
+    two reference views of the species side by side. Skips maps/icons/SVGs
+    and the primary thumbnail itself. None on any failure, an unsuitable
+    list, or when `wiki` itself is falsy (no point querying a page that
+    doesn't exist)."""
+    if not wiki:
+        return None
+    page_url = ((wiki.get("content_urls") or {}).get("desktop") or {}).get("page")
+    title = wiki.get("title")
+    if not page_url or not title:
+        return None
+    host = urlparse(page_url).netloc
+    if not host:
+        return None
+    primary_name = ((wiki.get("thumbnail") or {}).get("source") or "").rsplit("/", 1)[-1].lower()
+    url = f"https://{host}/api/rest_v1/page/media-list/{quote(title)}"
+    data = _rate_limited_get(url)
+    if not data:
+        return None
+    for item in data.get("items") or []:
+        if item.get("type") != "image":
+            continue
+        srcset = item.get("srcset") or []
+        original = (item.get("original") or {}).get("source") or (
+            srcset[-1].get("src") if srcset else None
+        )
+        if not original:
+            continue
+        if original.startswith("//"):
+            original = "https:" + original
+        name = original.rsplit("/", 1)[-1].lower()
+        if name.endswith(".svg") or name == primary_name:
+            continue
+        if any(w in name for w in _SECOND_PHOTO_SKIP_WORDS):
+            continue
+        return original
     return None
 
 

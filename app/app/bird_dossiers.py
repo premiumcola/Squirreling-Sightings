@@ -41,6 +41,7 @@ from pathlib import Path
 
 # Re-export from the shared helper so the single internal callers
 # (this module and any future ones) all land on one implementation.
+from .bird_dossiers_fetch import fetch_second_photo as _fetch_second_photo
 from .bird_dossiers_fetch import fetch_wikipedia as _fetch_wikipedia
 from .bird_dossiers_fetch import fetch_xeno_canto as _fetch_xeno_canto
 from .io_utils import atomic_write_json as _atomic_write_json  # noqa: F401
@@ -135,6 +136,11 @@ class BirdDossierService:
             "wikipedia_summary": None,
             "wikipedia_url": None,
             "wikipedia_thumb_url": None,
+            # A second, distinct reference photo (see fetch_second_photo)
+            # so the dossier can show two views of the species side by
+            # side — one photo alone doesn't let the operator compare
+            # against what their own camera caught.
+            "wikipedia_thumb_url_2": None,
             "wikipedia_fetched_at": None,
             # Multi-clip xeno-canto store. Each entry carries id /
             # file_url / type_en / type_de / recordist / license_url /
@@ -148,7 +154,6 @@ class BirdDossierService:
             "audio_attribution": None,
             "audio_license": None,
             "audio_fetched_at": None,
-            "wiki_distribution_thumb": None,
         }
 
     def on_new_species(
@@ -295,6 +300,10 @@ class BirdDossierService:
 
     def _fetch_and_apply(self, latin: str) -> None:
         wiki = _fetch_wikipedia(latin)
+        # A second reference photo — same rate-limited GET path, so it
+        # naturally serialises 1 s after the summary fetch above rather
+        # than racing it. None on a wiki miss (nothing to query against).
+        second_photo = _fetch_second_photo(wiki)
         # Cache check: if recordings are already populated, skip the
         # xeno-canto round-trip. The frontend's "open dossier" path
         # ends up here whenever a fresh species is detected; for known
@@ -308,7 +317,7 @@ class BirdDossierService:
             d = self.data["dossiers"].get(latin)
             if d is None:
                 return
-            self._apply_wikipedia(d, wiki, now_iso)
+            self._apply_wikipedia(d, wiki, second_photo, now_iso)
             if not already_have_audio:
                 self._apply_xeno_canto(d, recordings, now_iso)
             self._save_locked()
@@ -322,7 +331,9 @@ class BirdDossierService:
         )
 
     @staticmethod
-    def _apply_wikipedia(dossier: dict, wiki: dict | None, now_iso: str) -> None:
+    def _apply_wikipedia(
+        dossier: dict, wiki: dict | None, second_photo: str | None, now_iso: str
+    ) -> None:
         """Merge a successful Wikipedia summary into the dossier dict.
 
         On miss: leave wikipedia_fetched_at NULL so a future trigger
@@ -335,6 +346,7 @@ class BirdDossierService:
         dossier["wikipedia_summary"] = wiki.get("extract") or None
         dossier["wikipedia_url"] = page_url or None
         dossier["wikipedia_thumb_url"] = thumb or None
+        dossier["wikipedia_thumb_url_2"] = second_photo or None
         dossier["wikipedia_fetched_at"] = now_iso
         # Title is normally the German common name when the DE wiki hit;
         # use it to backfill common_name_de if the classifier didn't

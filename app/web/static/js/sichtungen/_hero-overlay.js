@@ -27,16 +27,24 @@ function _recordingsOf(d) {
   return [];
 }
 
-// Hero photo: image (or placeholder), a bottom gradient scrim with the
-// species name burned in (replaces the old plain-text .sd-name line —
-// CLAUDE.md forbids showing the same info twice), and — only when a
-// recording actually exists — a prominent centred play/pause button.
-// No audio → no button at all (never a tappable-looking dead end).
-export function heroHtml(d) {
-  const src = d.wikipedia_thumb_url || '';
-  const img = src
+function _photoHtml(src) {
+  return src
     ? `<img src="${esc(src)}" alt="" loading="lazy"/>`
     : '<div class="sd-hero-placeholder">🐦</div>';
+}
+
+// Hero: two reference photos side by side (so the operator can compare
+// their own recording against more than one view), each contained —
+// never cropped — inside its own 1:1 box (the two boxes together make
+// up the wide .sd-hero frame, see 29-birds.css). Only the first photo
+// carries the bottom gradient scrim with the species name burned in
+// (replaces the old plain-text .sd-name line — CLAUDE.md forbids
+// showing the same info twice) and, only when a recording actually
+// exists, a prominent centred play/pause button. No audio → no button
+// at all (never a tappable-looking dead end). A missing second photo
+// falls back to the same placeholder as a missing first one, so the
+// two-box layout never collapses to a single lopsided frame.
+export function heroHtml(d) {
   const hasAudio = _recordingsOf(d).length > 0;
   const playBtn = hasAudio
     ? `<button type="button" class="sd-hero-play" id="sdHeroPlay" aria-pressed="false" aria-label="Vogelstimme abspielen">
@@ -46,10 +54,15 @@ export function heroHtml(d) {
     : '';
   const name = esc(d.common_name_de || d.latin);
   return `<div class="sd-hero">
-    ${img}
-    <div class="sd-hero-scrim"></div>
-    <div class="sd-hero-name">${name}</div>
-    ${playBtn}
+    <div class="sd-hero-photo">
+      ${_photoHtml(d.wikipedia_thumb_url)}
+      <div class="sd-hero-scrim"></div>
+      <div class="sd-hero-name">${name}</div>
+      ${playBtn}
+    </div>
+    <div class="sd-hero-photo">
+      ${_photoHtml(d.wikipedia_thumb_url_2)}
+    </div>
   </div>`;
 }
 

@@ -162,8 +162,12 @@ def test_prebuilt_species_actually_fetches_reference_content(tmp_path, monkeypat
             }
         ]
 
+    def _fake_second_photo(wiki):
+        return "https://example.invalid/robin-side-view.jpg"
+
     monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", _fake_wiki)
     monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", _fake_xc)
+    monkeypatch.setattr("app.bird_dossiers._fetch_second_photo", _fake_second_photo)
 
     created = svc._create_placeholder("Erithacus rubecula", "Rotkehlchen")
     assert created is True
@@ -176,6 +180,31 @@ def test_prebuilt_species_actually_fetches_reference_content(tmp_path, monkeypat
     assert d["sighting_count"] == 0  # still locked — content only
     assert d["wikipedia_summary"] == "Erithacus rubecula ist ein Singvogel."
     assert d["wikipedia_thumb_url"] == "https://example.invalid/robin.jpg"
+    assert d["wikipedia_thumb_url_2"] == "https://example.invalid/robin-side-view.jpg"
     assert len(d["recordings"]) == 1
     assert d["recordings"][0]["recordist"] == "Test Recordist"
     assert d["audio_attribution"] == "Test Recordist"
+
+
+def test_second_photo_fetch_receives_the_wikipedia_result(tmp_path, monkeypatch):
+    """fetch_second_photo must be called with the wiki summary dict (it
+    needs the page title + host to query the media list) — never blind,
+    and never at all when the summary fetch itself missed."""
+    svc = _service(tmp_path, monkeypatch)  # spawn_noop=True — one deterministic manual call below
+    seen = []
+
+    def _fake_wiki(latin):
+        return None
+
+    monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", _fake_wiki)
+    monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", lambda latin, max_recordings=3: [])
+    monkeypatch.setattr(
+        "app.bird_dossiers._fetch_second_photo", lambda wiki: seen.append(wiki) or None
+    )
+
+    svc._create_placeholder("Turdus merula", "Amsel")
+    svc._fetch_worker("Turdus merula")
+
+    assert seen == [None]  # called once, with the (missed) wiki result
+    d = svc.get_dossier("Turdus merula")
+    assert d["wikipedia_thumb_url_2"] is None

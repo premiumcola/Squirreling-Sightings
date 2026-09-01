@@ -29,7 +29,7 @@ export {
 } from './_paging.js';
 
 import { renderMediaOverview } from './_overview.js';
-export { renderMediaOverview, _setActiveMocCard, _MOC_ALL_SVG } from './_overview.js';
+export { renderMediaOverview, _setActiveMocCard } from './_overview.js';
 
 import {
   openMediaDrilldown,

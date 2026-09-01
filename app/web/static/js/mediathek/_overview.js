@@ -67,53 +67,8 @@ function _fmtMb(mb) {
 // Archive icon — box with lid and latch
 const _ARCHIVE_ICON = `<svg width="13" height="12" viewBox="0 0 13 12" fill="none" aria-hidden="true" style="flex-shrink:0"><rect x="1" y="4.5" width="11" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/><rect x="0.5" y="2" width="12" height="2.5" rx="1" stroke="currentColor" stroke-width="1.1"/><rect x="4.5" y="6.25" width="4" height="2" rx="0.75" stroke="currentColor" stroke-width="1"/></svg>`;
 
-// All-media multi-camera grid icon — 4 quads: TL=timelapse(violet), TR=motion(blue), BL=person(blue), BR=object(amber)
-// Single coherent stacked-media glyph for the "Alle Medien" tile.
-// Replaces a previous 2×2 collage of small thumbnails (timelapse,
-// walker, face, archive bag) which read as cluttered. Three overlapping
-// rounded "media cards" stacked top-down with a play triangle on the
-// front card communicate "all archived clips" cleanly. Single muted-
-// blue family, flat fill, ≥ 8 px corner radius per CLAUDE.md design
-// rules. Container CSS centers + pads it so the mark sits with
-// comfortable breathing room on all four sides of the tile.
-// Composite bounding box of the three rects spans x=14-70, y=10-54
-// (centre 42,32). The 80×80 viewBox centre is 40,40 — so the
-// composite is 2 px right and 8 px above where it should sit. The
-// translate(-2,8) on the wrapping <g> pulls the whole stack back
-// onto the geometric centre with equal padding on all four sides.
-export const _MOC_ALL_SVG = `<svg width="96" height="96" viewBox="0 0 80 80" fill="none" aria-hidden="true">
-  <g transform="translate(-2, 8)">
-    <rect x="14" y="22" width="44" height="32" rx="6" fill="#3a5878" opacity=".55"/>
-    <rect x="20" y="16" width="44" height="32" rx="6" fill="#4a7090" opacity=".8"/>
-    <rect x="26" y="10" width="44" height="32" rx="6" fill="#7faec9"/>
-    <polygon points="44,18 44,34 58,26" fill="#1a2535"/>
-  </g>
-</svg>`;
-
 const _THUMB_BADGE_STYLE =
   'position:absolute;bottom:6px;right:6px;font-size:10px;font-weight:700;color:#e2e8f0;background:rgba(0,0,0,.68);backdrop-filter:blur(3px);padding:2px 6px;border-radius:4px;z-index:2';
-
-// Sum every per-camera stats row into one "Alle Medien" row, merging the
-// per-label counters key by key.
-function _totalStats() {
-  return (state.mediaStats || []).reduce(
-    (acc, s) => {
-      const lc = { ...acc.label_counts };
-      if (s.label_counts)
-        Object.entries(s.label_counts).forEach(([k, v]) => {
-          lc[k] = (lc[k] || 0) + v;
-        });
-      return {
-        size_mb: (acc.size_mb || 0) + (s.size_mb || 0),
-        event_count: (acc.event_count || 0) + (s.event_count || 0),
-        jpg_count: (acc.jpg_count || 0) + (s.jpg_count || 0),
-        timelapse_count: (acc.timelapse_count || 0) + (s.timelapse_count || 0),
-        label_counts: lc,
-      };
-    },
-    { size_mb: 0, event_count: 0, jpg_count: 0, timelapse_count: 0, label_counts: {} },
-  );
-}
 
 function _camCardHTML(c, s, ts) {
   const icon = getCameraIcon(c.name || c.id);
@@ -200,19 +155,13 @@ export function renderMediaOverview() {
   (state.mediaStats || []).forEach((s) => {
     statsByid[s.camera_id || s.id || s.name] = s;
   });
-  const totalStats = _totalStats();
 
-  const allCard = `<div class="moc-card" data-cam-id="__all__" onclick="openAllMediaDrilldown()">
-    <div class="moc-all-thumb">${_MOC_ALL_SVG}<div style="${_THUMB_BADGE_STYLE}">${_fmtMb(totalStats.size_mb)}</div></div>
-    <div class="moc-body">
-      <div class="moc-name">Alle Medien</div>
-      <div class="moc-desc">${cams.length} Kamera${cams.length !== 1 ? 's' : ''} · Gesamtarchiv</div>
-      <div class="moc-counts">
-        ${_buildMocChips(totalStats)}
-      </div>
-    </div>
-  </div>`;
-
+  // "Alle Medien" (a card into the legacy all-cameras drilldown) is gone
+  // on purpose: the "Tiere"/"Menschen" quick tiles now answer the
+  // cross-camera question the operator actually asks ("show me every
+  // animal, on any camera"), and a per-camera tile still answers "show
+  // me this camera's". A THIRD "everything, unsorted" entry point on
+  // top of those two was the thing being asked to disappear.
   const ts = Date.now();
   const camCards = cams.map((c) => _camCardHTML(c, statsByid[c.id] || {}, ts)).join('');
   const quickTiles = _QUICK_LABEL_TILES.map(_quickLabelTileHTML).join('');
@@ -222,9 +171,7 @@ export function renderMediaOverview() {
   const catSection = `<div class="media-filter-bar moc-filter-bar" id="mediaFilterBarOverview"></div>`;
 
   ov.innerHTML =
-    catSection +
-    `<div class="media-overview-grid">${allCard}${camCards}${quickTiles}</div>` +
-    archivedHtml;
+    catSection + `<div class="media-overview-grid">${camCards}${quickTiles}</div>` + archivedHtml;
   renderMediaFilterPills('overview');
   _bindQuickLabelTiles();
 }

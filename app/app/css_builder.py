@@ -122,6 +122,10 @@ LOAD_ORDER = [
     # --z-modal-action token from 00-elevation-tokens.css, already
     # loaded first.
     "35-mediaview-shortcut-help.css",
+    # Species dossier panel at the bottom of the Mediathek section —
+    # reuses .bird-modal-hero / .ws-card-play, no re-declared rules, so
+    # loading after 25-mobile.css is safe like every other late partial.
+    "36-species-dossier.css",
 ]
 
 _BANNER = (

@@ -518,7 +518,12 @@ export function renderQuestsArchive() {
 }
 window.renderQuestsArchive = renderQuestsArchive;
 
-function _achTier(count) {
+// Exported — mediathek/species-dossier.js reuses the same bronze/
+// silver/gold thresholds for the dossier panel's tier badge, applied
+// to bird_dossiers.json's own per-latin sighting_count rather than the
+// achievements.json counter this module reads. Same threshold rule,
+// different counter — CLAUDE.md forbids a second copy of the mapping.
+export function _achTier(count) {
   if (!count || count < 1) return 'locked';
   if (count >= 20) return 'gold';
   if (count >= 5) return 'silver';

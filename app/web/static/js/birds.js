@@ -12,8 +12,17 @@
 //     sightings list (clickable into the lightbox).
 import { byId, esc } from './core/dom.js';
 import { j } from './core/api.js';
+import { renderSpeciesDossierPanel } from './mediathek/species-dossier.js';
 
 let _dossiers = [];
+
+// Read-only accessor — mediathek/species-dossier.js's switcher needs the
+// same unlocked-species list this module already fetched; refetching
+// `/api/bird-dossiers` a second time for the same data would violate
+// CLAUDE.md's "no duplications" rule.
+export function getBirdDossiers() {
+  return _dossiers;
+}
 
 function _relDays(iso) {
   if (!iso) return '';
@@ -35,6 +44,11 @@ export async function loadBirdDossiers() {
     _dossiers = [];
   }
   renderBirdDossiers();
+  // Mediathek's own dossier panel (left: reference card + switcher,
+  // right: the operator's clips) rides the same fetch — see
+  // mediathek/species-dossier.js's header for why it lives there
+  // instead of in the Sichtungen panel this module renders into.
+  renderSpeciesDossierPanel(_dossiers);
 }
 window.loadBirdDossiers = loadBirdDossiers;
 

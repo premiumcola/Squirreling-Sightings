@@ -1,0 +1,182 @@
+/* ── Species dossier panel (Mediathek) ───────────────────────────────── */
+/* Sits below the merged library block (#libraryBlock) — operator ask
+   2026-08-31: "Vogeldossier unten in die Mediathek, links das Dossier,
+   rechts die Videos". Left column reuses .bird-modal-hero (29-birds.css)
+   for the reference photo verbatim and .ws-card-play (19-weather-1.css)
+   for the audio play badge — same classes, not reinvented. Right column
+   is the plain .media-grid every other card grid in this app already
+   uses. After 25-mobile.css in css_builder.py's LOAD_ORDER like every
+   late partial, so this file owns its own @media queries. */
+.species-dossier-panel {
+  margin-top: 22px;
+}
+/* Own heading class, deliberately NOT .lib-subsection-head — that class
+   is reserved for exactly one occurrence in mediathek.html (see
+   tests/test_media_library_toggle.py's regression guard); this panel is
+   a separate, always-present feature, not one of the toggle's states.
+   Same 14px demotion look regardless. */
+.species-dossier-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 4px 0 10px;
+}
+.species-dossier-head svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.species-dossier-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .species-dossier-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.species-dossier-card {
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(155deg, rgba(var(--acc), 0.1) 0%, rgba(0, 0, 0, 0.18) 100%);
+}
+/* .bird-modal-hero already gives the 16/9 rounded frame + cover'd img;
+   this class only adds the positioning context the reused .ws-card-play
+   badge needs, plus the click/keyboard affordance. */
+.species-dossier-hero-wrap {
+  position: relative;
+  cursor: pointer;
+}
+.species-dossier-hero-wrap:active {
+  transform: scale(0.99);
+}
+.species-dossier-hero-wrap img {
+  transition: transform 0.25s;
+}
+@media (hover: hover) {
+  .species-dossier-hero-wrap:hover img {
+    transform: scale(1.03);
+  }
+  .species-dossier-hero-wrap:hover .ws-card-play {
+    transform: translate(-50%, -50%) scale(1.08);
+    background: rgba(127, 174, 201, 0.65);
+  }
+}
+.species-dossier-hero-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  opacity: 0.5;
+}
+.species-dossier-name {
+  margin-top: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.species-dossier-latin {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.species-dossier-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+/* Same bronze/silver/gold palette as .medal-count-badge (12-sichtungen.css) */
+.species-dossier-tier-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.species-dossier-tier-badge.bronze {
+  background: #7a3e10;
+  color: #f0a050;
+  border: 1px solid #e08040;
+}
+.species-dossier-tier-badge.silver {
+  background: #304050;
+  color: #b0d0e8;
+  border: 1px solid #90b8d0;
+}
+.species-dossier-tier-badge.gold {
+  background: #4a3a08;
+  color: #f0d040;
+  border: 1px solid #e0b820;
+}
+.species-dossier-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+.species-dossier-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+/* 44x44 touch targets (iOS checklist) */
+.species-dossier-switch-btn {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .species-dossier-switch-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+.species-dossier-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  /* >=16px: iOS Safari auto-zooms a <select> below this like any input */
+  font-size: 16px;
+}
+.species-dossier-clips-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.species-dossier-clips-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.species-dossier-empty {
+  padding: 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}

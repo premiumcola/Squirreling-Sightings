@@ -118,15 +118,19 @@ function _tileClickAttrs(a, isUnlocked) {
   return { attr: '', active: false };
 }
 
+// Squirrel tiles used to render at 1.5× size (132px medal, 2-column
+// span, a two-line name) — that extra span is exactly what broke the
+// grid's packing: a lone wider tile mid-row forces the browser to wrap
+// early and leave the rest of that row's trailing cells empty (the
+// operator's red-boxed gaps). Every tile is now the same size, so the
+// grid packs left-to-right with no holes.
 function _renderCard(a) {
   const info = _achData[a.id];
   const isUnlocked = !!info;
   const count = isUnlocked ? info.count || 1 : 0;
   const tier = _achTier(count);
-  const isSquirrelXL = a.cat === 'mammals' && a.id.startsWith('eichhoernchen_');
-  const medalSize = isSquirrelXL ? 132 : 88;
   const iconSvg = a.cat === 'birds' ? BIRD_SVGS[a.id] || null : MAMMAL_SVGS[a.id] || null;
-  const medalHtml = _medalSVG(a.id, tier, iconSvg, isUnlocked, medalSize);
+  const medalHtml = _medalSVG(a.id, tier, iconSvg, isUnlocked, 88);
   const emojiOverlay = !iconSvg
     ? `<span class="medal-emoji${isUnlocked ? '' : ' medal-emoji-locked'}">${isUnlocked ? a.icon : '🔒'}</span>`
     : '';
@@ -137,18 +141,13 @@ function _renderCard(a) {
   const countSpan = isUnlocked
     ? `<span class="medal-count" style="color:${countColors[tier] || '#d4a820'}">${count}× gesehen</span>`
     : '';
-  const footline = isSquirrelXL
-    ? `<div class="medal-footline">${countSpan}</div>`
-    : `<div class="medal-footline">${countSpan}${_rarityText(a.freq, isUnlocked)}</div>`;
+  const footline = `<div class="medal-footline">${countSpan}${_rarityText(a.freq, isUnlocked)}</div>`;
   const nameParts = a.name.match(/^(.+?)\s*(\(.+\))?$/);
   const baseName = nameParts?.[1] || a.name;
   const variantSuffix = nameParts?.[2] || '';
-  const nameHtml = isSquirrelXL
-    ? `<div class="medal-name-base">${esc(baseName)}</div>${variantSuffix ? `<div class="medal-variant">${esc(variantSuffix)}</div>` : ''}`
-    : `${esc(baseName)}${variantSuffix ? `<span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.3);font-style:italic;margin-left:3px">${esc(variantSuffix)}</span>` : ''}`;
+  const nameHtml = `${esc(baseName)}${variantSuffix ? `<span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.3);font-style:italic;margin-left:3px">${esc(variantSuffix)}</span>` : ''}`;
   const { attr: clickable, active } = _tileClickAttrs(a, isUnlocked);
-  const xlCls = isSquirrelXL ? ' ach-card--xl' : '';
-  return `<div class="ach-card ${tier}${active ? ' ach-card--active' : ''}${xlCls}" ${clickable}>
+  return `<div class="ach-card ${tier}${active ? ' ach-card--active' : ''}" ${clickable}>
     <div class="medal-wrap">
       ${medalHtml}
       ${emojiOverlay}

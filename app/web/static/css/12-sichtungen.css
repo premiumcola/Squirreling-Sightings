@@ -83,12 +83,16 @@
   font-weight: 600;
   white-space: nowrap;
 }
-/* Compact grid: smaller tile, tighter gaps, 5-6 cols on desktop at
-   typical viewport widths. */
+/* Compact grid: smaller tile, tighter gaps, 6-7 cols on desktop at
+   typical viewport widths. `dense` backfills any hole a differently-
+   sized cell could still leave (there are none any more since every
+   tile spans 1 column — see _achievements.js — but it costs nothing to
+   keep the packing provably tight). */
 .ach-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 10px;
+  grid-auto-flow: dense;
+  gap: 8px;
 }
 .ach-card {
   display: flex;
@@ -216,32 +220,6 @@
   flex-wrap: wrap;
   min-height: 14px;
 }
-/* Squirrel XL tiles — flagship animal of the project, pinned to front */
-.ach-card--xl {
-  grid-column: span 2;
-}
-.ach-card--xl .medal-wrap {
-  width: 132px;
-  height: 132px;
-}
-.ach-card--xl .medal-name-base {
-  font-size: 13px;
-  font-weight: 700;
-}
-.ach-card--xl .medal-variant {
-  font-size: 11px;
-  font-style: italic;
-  color: rgba(255, 255, 255, 0.45);
-  margin-top: 2px;
-  line-height: 1.2;
-}
-.ach-card.locked.ach-card--xl .medal-name-base {
-  color: rgba(255, 255, 255, 0.4);
-}
-.ach-card.locked.ach-card--xl .medal-variant {
-  color: rgba(255, 255, 255, 0.25);
-}
-
 /* Active card — the medal that "opened" the drilldown. Subtle outline
    so the eye can trace which species the grid below belongs to. */
 .ach-card--active {
@@ -345,32 +323,17 @@
     grid-column: span 2;
     padding: 6px 2px 4px;
   }
-  .ach-card--xl {
-    grid-column: span 3;
-  }
   .medal-wrap {
     width: 64px;
     height: 64px;
     margin-top: 6px;
   }
-  .ach-card--xl .medal-wrap {
-    width: 88px;
-    height: 88px;
-  }
 }
 /* iPhone 15 / 15 Pro / Pro Max width band — denser 4-per-row layout
-   so the lateral whitespace becomes medal area instead. Uses an 8-
-   track base so regular tiles span 2 (4 per row) and XL squirrel
-   tiles span 4 (2 per row) — keeps the existing "XL is twice the
-   width" relationship. iPhone SE (≤375 px) stays on the 6-track
-   3-per-row layout above so the 44 px touch-target floor isn't
-   risked by tighter cells. */
+   so the lateral whitespace becomes medal area instead. iPhone SE
+   (≤375 px) stays on the 6-track 3-per-row layout above so the 44 px
+   touch-target floor isn't risked by tighter cells. */
 @media (min-width: 390px) and (max-width: 768px) {
-  /* 12-track base so regular tiles (span 3 = 4 per row) AND the
-     three XL squirrel variants (span 4 = 3 per row) both land
-     cleanly. The previous 8-track grid forced XL squirrels into a
-     2+1 wrap; the user wants them in one row. Medal sizes scale
-     down to match the narrower XL cell — 72/104 → 64/84. */
   .ach-cards-grid {
     grid-template-columns: repeat(12, 1fr);
     gap: 8px;
@@ -379,17 +342,10 @@
     grid-column: span 3;
     padding: 6px 2px 4px;
   }
-  .ach-card--xl {
-    grid-column: span 4;
-  }
   .medal-wrap {
     width: 64px;
     height: 64px;
     margin-top: 6px;
-  }
-  .ach-card--xl .medal-wrap {
-    width: 84px;
-    height: 84px;
   }
   .medal-name {
     font-size: 11px;
@@ -397,14 +353,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  /* XL medal base label was 13 px desktop — at 88 px medal width that
-     reads heavy. Drop to match the variant line. */
-  .ach-card--xl .medal-name-base {
-    font-size: 11px;
-  }
-  .ach-card--xl .medal-variant {
-    font-size: 10px;
   }
 }
 

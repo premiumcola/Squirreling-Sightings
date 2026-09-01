@@ -77,7 +77,11 @@ const _TOGGLES = {
 // pill look is the shared one — recorded gains the icons too). currentColor
 // stroke so the active/inactive colour rules in CSS apply uniformly; stroke
 // only, no fill, matching the thin-line chrome aesthetic.
-const _TOGGLE_ICONS = {
+//
+// Exported so a control mounted OUTSIDE this pill bar (the Aufnahme-
+// Settings panel's own bbox-overlay checkbox — settings-panel.js) can
+// reuse the exact same glyph instead of carrying a second copy of it.
+export const _TOGGLE_ICONS = {
   bboxes:
     '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>',
   trails:
@@ -164,6 +168,35 @@ function _saveState(contextKey, state) {
   } catch {
     /* quota / private mode — silent */
   }
+}
+
+/**
+ * Read a single toggle's current effective state — the persisted
+ * value when persistable and present, else its declared default —
+ * without mounting the pill bar. Lets a control rendered elsewhere
+ * (the Aufnahme-Settings panel's own bbox-overlay checkbox) start in
+ * sync with the pill bar, off the exact same localStorage bucket,
+ * instead of guessing a default of its own.
+ */
+export function getOverlayToggleState(contextKey, id) {
+  const t = _TOGGLES[id];
+  if (!t) return false;
+  const persisted = _loadState(contextKey);
+  return t.persist && id in persisted ? !!persisted[id] : !!t.default;
+}
+
+/**
+ * Persist a single toggle's state under the same bucket the pill bar
+ * itself reads/writes, so a control mounted elsewhere and the pill
+ * bar agree on the next open. No-op for non-persistable toggles
+ * (zones/masks) — the same rule `_saveState` already enforces for
+ * the pill bar's own writes.
+ */
+export function setOverlayToggleState(contextKey, id, on) {
+  if (!_TOGGLES[id] || !_TOGGLES[id].persist) return;
+  const persisted = _loadState(contextKey);
+  persisted[id] = !!on;
+  _saveState(contextKey, persisted);
 }
 
 /**

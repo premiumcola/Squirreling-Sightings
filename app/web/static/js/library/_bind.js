@@ -93,8 +93,14 @@ function _bindRecapCards(grid) {
   });
 }
 
+// `[data-ep-id]` alone, not `.ws-recap-card[data-ep-id]`: an episode
+// WITH a stamped footage_hero renders on the `.ws-card--episode` shell
+// instead (weather/_episode-footage-card.js, the thumbnail-primary
+// card) — the click target is the same "open the full storm detail"
+// action either way, so one selector covers both shells rather than
+// this file needing to know which one painted.
 function _bindEpisodeCards(grid) {
-  grid.querySelectorAll('.ws-recap-card[data-ep-id]').forEach((card) => {
+  grid.querySelectorAll('[data-ep-id]').forEach((card) => {
     card.addEventListener('click', () => openStormEpisode(card.dataset.epId));
   });
 }

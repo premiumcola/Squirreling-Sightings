@@ -78,13 +78,16 @@ def detect_episodes(rows, *, events_cfg=None, episode_cfg=None) -> tuple:
 
 
 def _stamp_footage(storage_root, counter) -> int:
-    """Count the recordings around episodes that carry no count yet.
+    """Count the recordings around episodes that carry no count yet, and
+    the single best-overlap playable one (the merged Library grid's
+    "hero footage" pointer — see ``_footage.episode_hero``).
 
-    This is where the archive list's footage chip gets its number. It
-    runs HERE — on the poll thread, once per episode, ever — rather than
-    on the list route, which used to re-walk the whole motion tree on
-    every request for a number that cannot change once the window is
-    closed. Budgeted per sweep (see FOOTAGE_BACKFILL_PER_SWEEP).
+    This is where the archive list's footage chip (and the grid card's
+    thumbnail) gets its data. It runs HERE — on the poll thread, once
+    per episode, ever — rather than on a request thread, which used to
+    re-walk the whole motion tree on every list-route hit for a number
+    that cannot change once the window is closed. Budgeted per sweep
+    (see FOOTAGE_BACKFILL_PER_SWEEP).
 
     A counter that fails or declines (returns ``None``) ends the batch:
     the media stores are unavailable right now and the next sweep is
@@ -97,13 +100,14 @@ def _stamp_footage(storage_root, counter) -> int:
         if rec.get("footage_count") is not None:
             continue
         try:
-            count = counter(rec)
+            result = counter(rec)
         except Exception as e:
             log.warning("[weather] footage count failed for %s: %s", rec.get("id"), e)
             break
-        if count is None:
+        if result is None:
             break
-        if append_footage_count(storage_root, rec["id"], count):
+        count, hero = result["count"], result.get("hero")
+        if append_footage_count(storage_root, rec["id"], count, hero):
             stamped += 1
             log.info("[weather] episode %s: %d recording(s) in window", rec["id"], count)
     return stamped
@@ -112,9 +116,12 @@ def _stamp_footage(storage_root, counter) -> int:
 def sweep(storage_root, rows, *, events_cfg=None, episode_cfg=None, footage_counter=None) -> dict:
     """Detect + archive in one pass. Safe to call on every poll.
 
-    ``footage_counter`` is an optional ``record -> int | None`` that
-    scans the media stores for ONE episode's window. Injected rather
-    than imported so this package never reaches into app_state.
+    ``footage_counter`` is an optional
+    ``record -> {"count": int, "hero": dict | None} | None`` that scans
+    the media stores for ONE episode's window — ``hero`` is
+    ``_footage.episode_hero``'s pick from that same scan, not a second
+    one. Injected rather than imported so this package never reaches
+    into app_state.
     """
     records, pending = detect_episodes(rows, events_cfg=events_cfg, episode_cfg=episode_cfg)
     known = existing_ids(storage_root)

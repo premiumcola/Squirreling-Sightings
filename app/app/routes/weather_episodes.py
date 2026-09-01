@@ -25,6 +25,7 @@ from ..weather_episodes import (
     build_footage_index,
     delete_episode,
     episode_footage,
+    episode_hero,
     episode_window,
     get_episode,
     list_episodes,
@@ -151,10 +152,12 @@ def api_weather_episode_footage(episode_id: str):
     turning the whole page into an error, because the archive is a
     passive record and one dead source must not hide the other three.
 
-    The total is stamped back into the ledger when it differs from what
-    is stored, so the list's chip is corrected by the very scan the
-    operator just paid for — and an episode archived before the count
-    existed gets one the first time it is opened.
+    The total (and the single best-overlap PLAYABLE item — the merged
+    Library grid's "hero footage" pointer, see
+    ``weather_episodes.episode_hero``) is stamped back into the ledger
+    when either differs from what is stored, so both are corrected by
+    the very scan the operator just paid for — and an episode archived
+    before either existed gets them the first time it is opened.
     """
     root = app_state.storage_root
     if root is None or len(episode_id) > _MAX_ID_LEN:
@@ -168,8 +171,10 @@ def api_weather_episode_footage(episode_id: str):
     # failure — only an unreadable source may block the stamp, or a
     # partial scan would be written down as the truth.
     incomplete = "weather_service_unavailable" in degraded
-    if not incomplete and payload["total"] != rec.get("footage_count"):
-        append_footage_count(root, episode_id, payload["total"])
+    if not incomplete:
+        hero = episode_hero(candidates, rec)
+        if payload["total"] != rec.get("footage_count") or hero != rec.get("footage_hero"):
+            append_footage_count(root, episode_id, payload["total"], hero)
     return jsonify(payload)
 
 

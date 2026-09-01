@@ -11,9 +11,13 @@ What's pinned here:
   * exactly one nav entry / dock slot for the merged section, not two
   * the scrollspy id lists (desktop sidebar + mobile dock) dropped
     'weather'
-  * the merged grid's own query-param builder never sends a `kinds`
-    filter — "Alles gemischt" is the server's own default and this
-    grid's only view
+  * the merged grid's own DEFAULT query-param builder never sends a
+    `kinds` filter — "Alles gemischt" is the server's own default and
+    stays the grid's view for everyone who never taps the
+    "Wetterereignisse" quick tile. That tile (added later, mediathek/
+    _overview.js) is the one deliberate, opt-in exception — see
+    library/page.js::setLibraryKindFilter and
+    test_media_overview_quick_tiles.py for that path
   * every maintenance action from BOTH old sections still renders
     somewhere in the merged section
   * an episode card in the merged grid still deep-links out to
@@ -98,16 +102,23 @@ def test_mobile_dock_scrollspy_dropped_weather():
 # ── the merged grid: /api/library query-param mapping ──────────────────
 
 
-def test_the_merged_grid_never_sends_a_kinds_filter():
-    """ "Alles gemischt" (no `kinds` filter) is the explicit default — the
-    merged grid's own param builder must never construct one, and its
-    fetch call in page.js must not append one either."""
+def test_the_merged_grid_never_sends_a_kinds_filter_by_default():
+    """ "Alles gemischt" (no `kinds` filter) is the explicit default —
+    `_filter-state.js`'s own param builder (every camera/label/category
+    chip, plus the Wetterdaten-chart zoom) must never construct one.
+
+    `page.js` DOES know the param now (the "Wetterereignisse" quick
+    tile's `setLibraryKindFilter`, added after this stage) — but only
+    behind the opt-in `_kinds` state variable that tile is the sole
+    setter of, never unconditionally and never on the default boot path
+    (`initLibraryPage` → `_loadPage`). See
+    test_media_overview_quick_tiles.py for that path's own tests."""
     filter_state_src = _read(_JS / "library" / "_filter-state.js")
     assert '"kinds"' not in filter_state_src
     assert "'kinds'" not in filter_state_src
     page_src = _read(_JS / "library" / "page.js")
-    assert "'kinds'" not in page_src
-    assert '"kinds"' not in page_src
+    assert page_src.count("params.set('kinds'") == 1
+    assert "if (_kinds) params.set('kinds'" in page_src
 
 
 def test_camera_chips_map_onto_camera_ids():

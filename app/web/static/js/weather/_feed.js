@@ -17,6 +17,8 @@ import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import { pinToggleHTML } from './pin-toggle.js';
 import { manualEventCategories, manualCategoryMeta } from './_manual-event-cats.js';
 import { episodeSparklineSvg } from './_episode-sparkline.js';
+import { episodeFootageCardHTML } from './_episode-footage-card.js';
+import { _WS_BADGE_STYLE, _WS_SUB_BADGE_BASE } from './_card-style.js';
 import {
   episodeTitle,
   fmtDayMonth,
@@ -45,14 +47,16 @@ export function sightingLabel(s, meta) {
 }
 
 // ── Mediathek-style card chrome ───────────────────────────────────────────
-// The two inline-style strings below are copied verbatim from mediaCardHTML()
-// in mediathek/orchestration.js so the badge font / blur / radius match the
-// Library cards 1:1 without re-exporting private constants. _WS_SUB_BADGE_BASE
-// gets the event's own colour appended per card at build time.
-const _WS_BADGE_STYLE =
-  'font-size:10px;font-weight:700;color:#e2e8f0;background:rgba(0,0,0,.68);backdrop-filter:blur(3px);padding:2px 6px;border-radius:4px;line-height:1.45;white-space:nowrap';
-const _WS_SUB_BADGE_BASE =
-  'font-size:10px;background:none;backdrop-filter:blur(3px);padding:0 6px;border-radius:4px;line-height:1.45;white-space:nowrap;margin-top:1px;opacity:0.85';
+// `_WS_BADGE_STYLE` / `_WS_SUB_BADGE_BASE` (imported above from
+// _card-style.js, not defined here) are the two inline-style strings
+// copied verbatim from mediaCardHTML() in mediathek/orchestration.js so
+// the badge font / blur / radius match the Library cards 1:1 without
+// re-exporting private constants. They live in their own leaf module
+// rather than here so weather/_episode-footage-card.js can share them
+// too, without importing back into this file (this file already
+// imports episodeFootageCardHTML FROM it — a mutual import would be a
+// cycle). `_WS_SUB_BADGE_BASE` gets the event's own colour appended per
+// card at build time.
 
 // Duration m:ss + byte→KB/MB formatters — mirror Mediathek's fmtDur / fmtByt
 // so the bottom-right stack reads identically to the Library cards.
@@ -150,8 +154,32 @@ export function recapCardHTML(m, idx) {
 // A card into the Gewitter-Archiv's own detail view (storms/index.js's
 // hash router), not the MediaView lightbox — an episode is a whole
 // window with compare/footage/notes, not a single playable clip.
+//
+// `footage_hero` (stamped by `_store.append_footage_count`, see
+// weather_episodes/_footage.py::episode_hero) flips WHICH shell this
+// renders: a matching recording is genuinely a different kind of card
+// — a thumbnail-primary one, `weather/_episode-footage-card.js` — not
+// a variant of this curve-only one, so the branch lives here and the
+// two bodies stay separate rather than one function accreting both
+// (would cross the 60-line ceiling; see that module's own header for
+// why the split is a real different shell, not a refactor for its own
+// sake). An episode with NO footage_hero renders through the body
+// below, unchanged from before this feature existed — pinned by a
+// before/after test in library/_tests.
 export function episodeCardHTML(ep) {
   const meta = classMeta(effectiveClass(ep));
+  const charMeta = ep.character ? characterMeta(ep.character) : null;
+  // The curve's own SHAPE, alongside (never instead of) the alarm-class
+  // icon. Absent on a bare fixture or a record from before this
+  // feature existed — both render no badge rather than a placeholder.
+  const characterHTML = charMeta
+    ? `<div class="ws-ep-character" title="${esc(charMeta.de)}">` +
+      `<span class="ws-ep-character-icon" aria-hidden="true">${charMeta.icon}</span>` +
+      `<span class="ws-ep-character-label">${esc(charMeta.de)}</span></div>`
+    : '';
+  if (ep.footage_hero) {
+    return episodeFootageCardHTML(ep, meta, characterHTML);
+  }
   const fc = ep.footage_count;
   const metaLine = [
     fmtDayMonth(ep.started_at),
@@ -161,16 +189,6 @@ export function episodeCardHTML(ep) {
   ]
     .filter(Boolean)
     .join(' · ');
-  // The curve's own SHAPE, alongside (never instead of) the alarm-class
-  // icon in the play slot. Absent on a bare fixture or a record from
-  // before this feature existed — both render no badge / no sparkline
-  // rather than a placeholder.
-  const charMeta = ep.character ? characterMeta(ep.character) : null;
-  const characterHTML = charMeta
-    ? `<div class="ws-ep-character" title="${esc(charMeta.de)}">` +
-      `<span class="ws-ep-character-icon" aria-hidden="true">${charMeta.icon}</span>` +
-      `<span class="ws-ep-character-label">${esc(charMeta.de)}</span></div>`
-    : '';
   const spark = episodeSparklineSvg(ep.curve_preview, meta.color);
   const sparkHTML = spark ? `<div class="ws-ep-spark-wrap">${spark}</div>` : '';
   return `

@@ -67,9 +67,10 @@ def test_the_people_tile_is_exactly_person_not_a_wider_net():
 def test_quick_tiles_jump_to_the_merged_grid_not_the_drilldown():
     src = _read(_OVERVIEW)
     assert "window.setLibraryLabelFilter" in src
-    assert "openAllMediaDrilldown" not in src.split("_bindQuickLabelTiles")[1].split(
-        "function _fmtMb"
-    )[0], "the quick tiles must not reuse the per-camera drilldown opener"
+    assert (
+        "openAllMediaDrilldown"
+        not in src.split("_bindQuickLabelTiles")[1].split("function _fmtMb")[0]
+    ), "the quick tiles must not reuse the per-camera drilldown opener"
 
 
 def test_set_library_label_filter_is_exported_and_bridged():
@@ -98,3 +99,61 @@ def test_set_library_label_filter_scrolls_the_now_filtered_grid_into_view():
     fn = src[src.index("export function setLibraryLabelFilter") :]
     fn = fn[: fn.index("\n}") + 2]
     assert "scrollIntoView" in fn
+
+
+# ── "Wetterereignisse" — the third tile, a `kinds` filter not `labels` ──
+
+
+def test_the_weather_tile_maps_to_kinds_not_labels():
+    """A weather sighting/recap/episode/manual-event carries no object
+    label at all — filtering it by `labels` would always match zero, so
+    this tile has to be the one exception that names `kinds` instead."""
+    tiles = _slice_array(_read(_OVERVIEW), "_QUICK_LABEL_TILES")
+    weather_block = tiles[tiles.index("__weather__") :]
+    for kind in ("sighting", "recap", "episode", "manual"):
+        assert f"'{kind}'" in weather_block, f"Wetterereignisse tile is missing kind {kind}"
+    assert "kinds:" in weather_block
+    # Never confused with the object-label vocabulary the other two
+    # tiles use — a weather record carries no `labels` filter value.
+    assert "labels:" not in weather_block
+
+
+def test_the_weather_tile_is_wired_to_set_library_kind_filter():
+    src = _read(_OVERVIEW)
+    assert "window.setLibraryKindFilter" in src
+    assert "data-quick-kinds" in src
+
+
+def test_set_library_kind_filter_is_exported_and_bridged():
+    src = _read(_PAGE)
+    assert "export function setLibraryKindFilter" in src
+    assert "window.setLibraryKindFilter = setLibraryKindFilter" in src
+
+
+def test_set_library_kind_filter_replaces_rather_than_merges_the_filter():
+    """Same replace-not-merge contract as the label tiles: leftover
+    camera/label/category chips from an earlier visit must not silently
+    narrow the "Wetterereignisse" view the operator just asked for."""
+    src = _read(_PAGE)
+    fn = src[src.index("export function setLibraryKindFilter") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert "_filter.cameraIds.clear()" in fn
+    assert "_filter.categories.clear()" in fn
+    assert "_filter.labels.clear()" in fn
+
+
+def test_default_boot_never_sends_a_kinds_param():
+    """`kinds` is set ONLY inside `setLibraryKindFilter` — `_loadPage`
+    guards the param behind the `_kinds` state variable, which starts
+    `null` and nothing on the default boot path (`initLibraryPage` →
+    `_loadPage`) ever touches. Anyone who never taps the
+    "Wetterereignisse" tile keeps "Alles gemischt" as the default —
+    that is the whole point of `kinds` being a NEW, opt-in param rather
+    than something `libraryQueryParams` composes for every caller."""
+    src = _read(_PAGE)
+    assert "let _kinds = null;" in src
+    # Only one call site ever puts `kinds` on the wire, and it is
+    # guarded by the state variable, not unconditional.
+    assert src.count("params.set('kinds'") == 1
+    guarded = src[src.index("if (_kinds)") : src.index("if (_kinds)") + 80]
+    assert "params.set('kinds'" in guarded

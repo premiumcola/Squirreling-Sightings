@@ -23,6 +23,22 @@ import { renderMediaFilterPills } from './filters.js';
 // per-label pill row already falls back to for fox/hedgehog/marten/deer
 // (core/icons.js), so "Tiere" reads as one obvious step up from those
 // species-specific icons rather than a new visual language.
+//
+// "Wetterereignisse" is a DIFFERENT filter dimension than the other
+// two: `labels` are object-detector classes (person/cat/…), which a
+// weather sighting/recap/episode/manual-event never carries — filtering
+// them by `labels` would just always match zero. It carries `kinds`
+// instead (`sighting`/`recap`/`episode`/`manual` — see
+// `/api/library`'s own `KINDS` vocabulary, `library._feed.py`), wired
+// to `window.setLibraryKindFilter`, the sibling `library/page.js` adds
+// specifically for this tile. Kept in the SAME array (rather than a
+// second list) because `_quickLabelTileHTML`/`_bindQuickLabelTiles`
+// already render/bind by iterating one array — a `kinds` tile is just
+// one more entry with a different discriminator field, not a reason to
+// duplicate that plumbing. The name `_QUICK_LABEL_TILES` stays as-is
+// (a `labels`-vs-`kinds` rename would ripple into
+// tests/test_media_overview_quick_tiles.py's own source-text
+// assertions for no real benefit).
 const _QUICK_LABEL_TILES = [
   {
     id: '__animals__',
@@ -36,10 +52,24 @@ const _QUICK_LABEL_TILES = [
     icon: () => objIconSvg('person', 48),
     labels: ['person'],
   },
+  {
+    id: '__weather__',
+    name: 'Wetterereignisse',
+    // Same lightning-bolt path core/weather-types.js's own `thunder`
+    // entry already draws (filled here instead of stroked, and scaled
+    // to this tile's 48px slot) — the recognisable "storm" glyph this
+    // app already uses elsewhere, not a new icon invented for one tile.
+    icon: () =>
+      '<svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2L3 14h7l-1 8 11-14h-7l0-6z"/></svg>',
+    kinds: ['sighting', 'recap', 'episode', 'manual'],
+  },
 ];
 
 function _quickLabelTileHTML(tile) {
-  return `<div class="moc-card moc-quick" data-quick-id="${tile.id}" data-quick-labels="${tile.labels.join(',')}">
+  const filterAttr = tile.kinds
+    ? `data-quick-kinds="${tile.kinds.join(',')}"`
+    : `data-quick-labels="${tile.labels.join(',')}"`;
+  return `<div class="moc-card moc-quick" data-quick-id="${tile.id}" ${filterAttr}>
     <div class="moc-all-thumb moc-quick-thumb">${tile.icon()}</div>
     <div class="moc-body">
       <div class="moc-name">${esc(tile.name)}</div>
@@ -49,12 +79,17 @@ function _quickLabelTileHTML(tile) {
 }
 
 /** Wired separately from the inline onclicks the camera/"Alle Medien"
- *  tiles use — an array of labels doesn't serialise cleanly into an
- *  inline attribute the way a single camera id string does. */
+ *  tiles use — an array of labels/kinds doesn't serialise cleanly into
+ *  an inline attribute the way a single camera id string does. */
 function _bindQuickLabelTiles() {
   document.querySelectorAll('.moc-quick[data-quick-labels]').forEach((card) => {
     card.addEventListener('click', () => {
       window.setLibraryLabelFilter?.(card.dataset.quickLabels.split(','));
+    });
+  });
+  document.querySelectorAll('.moc-quick[data-quick-kinds]').forEach((card) => {
+    card.addEventListener('click', () => {
+      window.setLibraryKindFilter?.(card.dataset.quickKinds.split(','));
     });
   });
 }

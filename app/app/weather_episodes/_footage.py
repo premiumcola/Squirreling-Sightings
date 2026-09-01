@@ -192,6 +192,64 @@ def _item(cand: dict, overlap: float) -> dict:
     return item
 
 
+def _hero_item(cand: dict, overlap: float) -> dict:
+    """Slim projection of one candidate for the episode's stamped hero
+    pointer — kind/label/thumb/video/time only, deliberately NOT the
+    full `_item()` shape (`extra`, `span`, `overlap_s`). This rides
+    inside the append-only episode ledger forever (see
+    ``_store.append_footage_count``'s ``hero`` param), unlike
+    ``_item()``'s payload, which is built fresh on every footage-route
+    hit and never stored — a slice of `extra` (an api_snapshot, say)
+    would grow the ledger on every re-scan for no reader that needs it.
+    """
+    return {
+        "kind": cand["kind"],
+        "kind_label": kind_label(cand["kind"]),
+        "cam_name": cand.get("cam_name") or cand.get("cam_id") or "",
+        "time_label": _time_label(cand["start"], cand["end"]),
+        "thumb_url": cand.get("thumb_url") or "",
+        "video_url": cand.get("video_url") or "",
+    }
+
+
+def episode_hero(candidates: list, rec: dict) -> dict | None:
+    """The single best-overlap PLAYABLE candidate for ``rec``'s window.
+
+    "Playable" excludes anything ``missing_media`` or without both a
+    thumbnail and a video URL — a hero the merged grid cannot actually
+    show a picture of is worse than no hero (it would fall back to the
+    curve-only card anyway, just later and less honestly). ``None``
+    means exactly that fallback case, the same "absent, never a lie"
+    contract ``footage_count`` already has.
+
+    Computed alongside (never instead of) ``episode_footage``'s grouped
+    payload, from the same already-fetched ``candidates`` list — an
+    in-memory second pass, not a second store read. The result is what
+    ``_store.append_footage_count`` stamps into the ledger next to
+    ``footage_count`` as ``hero``, so the merged grid's card
+    (``library/_weather_readers.episode_candidates`` copies the whole
+    folded record into ``extra``) reads it for free from data it
+    already has — no per-card footage fetch. See that module's
+    docstring for the cost model this avoids: the grid can show 30
+    episode cards on one page, and a request per card would mean 30
+    requests per paint.
+    """
+    start, end = episode_window(rec)
+    if start is None:
+        return None
+    best = None
+    best_overlap = 0.0
+    for cand in candidates:
+        if cand.get("missing_media") or not cand.get("thumb_url") or not cand.get("video_url"):
+            continue
+        overlap = _overlap_s(start, end, cand["start"], cand["end"])
+        if overlap <= 0:
+            continue
+        if best is None or overlap > best_overlap:
+            best, best_overlap = cand, overlap
+    return _hero_item(best, best_overlap) if best is not None else None
+
+
 def episode_footage(candidates: list, degraded: list, rec: dict) -> dict:
     """The payload for one episode: grouped items, total, degraded flags."""
     start, end = episode_window(rec)

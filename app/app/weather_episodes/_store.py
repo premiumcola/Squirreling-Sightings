@@ -45,6 +45,7 @@ def _fold(storage_root) -> dict:
     order: list = []
     patches: dict = {}
     counts: dict = {}
+    heroes: dict = {}
     deleted: set = set()
     for rec in iter_jsonl(episodes_path(storage_root)):
         kind = rec.get("kind")
@@ -64,6 +65,12 @@ def _fold(storage_root) -> dict:
                 counts[rid] = max(0, int(rec.get("count")))
             except (TypeError, ValueError):
                 continue
+            # `hero` rides the SAME record as `count` — both are stamped
+            # from one scan (`_store.append_footage_count`) — so the
+            # newest footage record wins for both together, never a mix
+            # of an old hero with a new count or vice versa.
+            hero = rec.get("hero")
+            heroes[rid] = hero if isinstance(hero, dict) else None
         elif kind == KIND_DELETE:
             deleted.add(rid)
     out: dict = {}
@@ -78,6 +85,13 @@ def _fold(storage_root) -> dict:
                     rec[key] = fields[key]
         if rid in counts:
             rec["footage_count"] = counts[rid]
+        # Absent, never `null` — the merged grid's card checks
+        # `extra.footage_hero` truthy and falls back to the curve-only
+        # layout; a stamped `null` (no playable candidate found on the
+        # last scan) reads identically to "never scanned", which is
+        # exactly the fallback both cases want.
+        if heroes.get(rid) is not None:
+            rec["footage_hero"] = heroes[rid]
         # A record archived before this feature existed carries no
         # `character` key. Classify it here, in memory, on every read —
         # never rewrite the ledger for it. `_build.build_record` stamps
@@ -108,6 +122,13 @@ def _strip_samples(rec: dict) -> dict:
     ``footage_count`` rides along when the fold found a stamped one. It
     is absent — never "0" — for an episode nobody has counted yet, so
     the row chip stays hidden instead of claiming there is no footage.
+
+    ``footage_hero`` rides along the same way, for free — it is just
+    another key on ``rec`` once ``_fold`` has stamped it, so no extra
+    handling is needed here. The merged Library grid's episode card
+    (``library._weather_readers.episode_candidates`` copies this WHOLE
+    stripped record into its item's ``extra``) reads it straight from
+    the list response instead of firing a per-card footage request.
     """
     preview = build_curve_preview(rec)
     out = {k: v for k, v in rec.items() if k != "samples"}
@@ -157,8 +178,21 @@ def append_episode(storage_root, record: dict) -> bool:
     return append_jsonl(episodes_path(storage_root), payload)
 
 
-def append_footage_count(storage_root, episode_id: str, count: int) -> bool:
-    """Stamp how many recordings overlap this episode's window.
+def append_footage_count(
+    storage_root, episode_id: str, count: int, hero: dict | None = None
+) -> bool:
+    """Stamp how many recordings overlap this episode's window, and
+    (optionally) the single best-overlap PLAYABLE one — the merged
+    grid's "hero footage" pointer (see ``_footage.episode_hero``).
+
+    Both ride the SAME ledger record because both come from the SAME
+    scan — stamping them separately would let a re-stamp update one
+    without the other and leave a stale hero next to a fresh count.
+    ``hero`` is always written, even as ``None`` (a re-scan that no
+    longer finds a playable candidate has to be able to clear a stale
+    one), so it is a real field on the ledger record — ``_fold`` is what
+    turns a ``None`` hero into "no ``footage_hero`` key at all" for the
+    read side.
 
     Written by whoever last scanned the media stores for that window —
     the sweep for a new or unstamped episode, the footage route for one
@@ -172,6 +206,7 @@ def append_footage_count(storage_root, episode_id: str, count: int) -> bool:
             "id": episode_id,
             "ts": round(time.time(), 1),
             "count": max(0, int(count)),
+            "hero": hero if isinstance(hero, dict) else None,
         },
     )
 

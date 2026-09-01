@@ -165,19 +165,27 @@ class HistoryMixin:
             self._episode_pending = result.get("pending")
 
     def _episode_footage_counter(self, root):
-        """``record -> overlapping-recording count``, for the list chip.
+        """``record -> {"count": int, "hero": dict | None}``, for the
+        list chip and the merged Library grid's footage-primary card.
 
-        The count is stamped into the archive ledger HERE — on the poll
-        thread, once per episode — because the list route must not walk
-        the media tree to render a chip. Bounded to the record's OWN
-        window, so one call reads the two date folders that window
-        touches instead of every event ever recorded.
+        Both are stamped into the archive ledger HERE — on the poll
+        thread, once per episode — because neither the list route nor
+        the merged grid must walk the media tree to render. Bounded to
+        the record's OWN window, so one call reads the two date folders
+        that window touches instead of every event ever recorded.
+        ``hero`` is ``episode_hero``'s pick from the SAME scan
+        ``episode_footage`` already paid for, not a second one.
 
         Returns ``None`` for a record with no usable window, which tells
         the sweep to stop rather than stamp a wrong number.
         """
         from .. import app_state
-        from ..weather_episodes import build_footage_index, episode_footage, episode_window
+        from ..weather_episodes import (
+            build_footage_index,
+            episode_footage,
+            episode_hero,
+            episode_window,
+        )
 
         def _count(rec: dict):
             start, end = episode_window(rec)
@@ -198,7 +206,8 @@ class HistoryMixin:
             )
             if "weather_service_unavailable" in degraded:
                 return None
-            return int(episode_footage(candidates, degraded, rec)["total"])
+            total = int(episode_footage(candidates, degraded, rec)["total"])
+            return {"count": total, "hero": episode_hero(candidates, rec)}
 
         return _count
 

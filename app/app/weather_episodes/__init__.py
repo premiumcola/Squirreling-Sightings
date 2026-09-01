@@ -53,7 +53,7 @@ from ._consts import (
     USER_NAME_MAX,
     USER_NOTE_MAX,
 )
-from ._footage import build_footage_index, episode_footage, episode_window
+from ._footage import build_footage_index, episode_footage, episode_hero, episode_window
 from ._intensity import axis_scores, intensity_score
 from ._preview import build_curve_preview, lead_field
 from ._store import (
@@ -84,6 +84,7 @@ __all__ = [
     "delete_episode",
     "detect_episodes",
     "episode_footage",
+    "episode_hero",
     "episode_window",
     "episodes_path",
     "existing_ids",

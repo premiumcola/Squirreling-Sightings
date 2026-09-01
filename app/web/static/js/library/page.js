@@ -24,6 +24,13 @@ const _filter = createLibraryFilterState();
 const _pager = createLibraryPager();
 let _items = [];
 let _loading = false;
+// `kinds` on purpose lives OUTSIDE `_filter`/`libraryQueryParams` — that
+// function's own contract ("no kinds ever set here") is what keeps
+// "Alles gemischt" the feed's default for every caller that never
+// touches this. Only `setLibraryKindFilter` (below) ever sets it; `null`
+// means "every kind", the same default the backend already applies when
+// the param is simply absent (routes/library.py::api_library_list).
+let _kinds = null;
 
 function _paint() {
   const grid = byId('libraryGrid');
@@ -49,6 +56,7 @@ async function _loadPage(reset) {
   }
   try {
     const params = libraryQueryParams(_filter);
+    if (_kinds) params.set('kinds', _kinds.join(','));
     params.set('limit', String(_PAGE_LIMIT));
     if (_pager.cursor) params.set('before', _pager.cursor);
     const page = await apiGet(`/api/library?${params.toString()}`);
@@ -97,6 +105,29 @@ export function setLibraryLabelFilter(labels) {
   _filter.cameraIds.clear();
   _filter.categories.clear();
   _filter.labels = new Set(labels || []);
+  _kinds = null;
+  const done = _onFilterChange();
+  byId('libraryBlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return done;
+}
+
+/** Jump straight into the merged feed filtered to exactly `kinds` — the
+ * camera-overview's "Wetterereignisse" quick tile (mediathek/
+ * _overview.js) calls this by global name, the sibling of
+ * setLibraryLabelFilter above for the one quick tile that answers a
+ * KIND question ("every weather record") rather than an object-label
+ * one. This is the first-ever frontend caller of `/api/library`'s
+ * `kinds` param — every other surface (including this page's own
+ * default boot) deliberately never sets it, so "Alles gemischt" stays
+ * the default for everyone who never taps this tile. Same
+ * replace-not-merge contract as setLibraryLabelFilter: clears every
+ * other filter dimension rather than layering onto whatever was
+ * active. */
+export function setLibraryKindFilter(kinds) {
+  _filter.cameraIds.clear();
+  _filter.categories.clear();
+  _filter.labels.clear();
+  _kinds = Array.isArray(kinds) && kinds.length ? [...kinds] : null;
   const done = _onFilterChange();
   byId('libraryBlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return done;
@@ -105,3 +136,4 @@ export function setLibraryLabelFilter(labels) {
 window.initLibraryPage = initLibraryPage;
 window.reloadLibraryPage = reloadLibraryPage;
 window.setLibraryLabelFilter = setLibraryLabelFilter;
+window.setLibraryKindFilter = setLibraryKindFilter;

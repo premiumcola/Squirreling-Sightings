@@ -40,6 +40,7 @@ from app.weather_episodes import (
     build_footage_index,
     detect_episodes,
     episode_footage,
+    episode_hero,
     episode_window,
     list_episodes,
     sweep,
@@ -228,6 +229,60 @@ def test_a_touching_but_non_overlapping_clip_is_excluded():
     assert payload["total"] == 0
 
 
+# ── footage: the "hero" pick (merged Library grid's card) ──────────────
+
+
+def test_episode_hero_picks_the_highest_overlap_playable_candidate():
+    rec = _record()
+    win_start, _ = episode_window(rec)
+    candidates = [
+        _cand("motion", win_start + timedelta(minutes=1), 1),  # short overlap
+        _cand("thunder_rising", win_start, 20),  # the widest overlap
+        _cand("timelapse", win_start + timedelta(minutes=2), 3),
+    ]
+    hero = episode_hero(candidates, rec)
+    assert hero is not None
+    assert hero["kind"] == "thunder_rising"
+    assert hero["kind_label"] == "Aufziehendes Gewitter"
+    assert hero["cam_name"] == "cam1"
+    assert hero["video_url"] == "/media/x.mp4"
+    assert hero["thumb_url"] == "/media/x.jpg"
+
+
+def test_episode_hero_is_the_slim_shape_not_the_full_footage_item():
+    """This rides inside the append-only episode ledger forever (see
+    _store.append_footage_count's `hero` param) — it must NOT carry
+    `extra`/`span`/`overlap_s`/`cam_id`/`missing_media`, or every
+    re-scan would grow the ledger for fields no reader needs."""
+    rec = _record()
+    win_start, _ = episode_window(rec)
+    hero = episode_hero([_cand("thunder", win_start, 5)], rec)
+    assert set(hero) == {"kind", "kind_label", "cam_name", "time_label", "thumb_url", "video_url"}
+
+
+def test_episode_hero_skips_candidates_with_no_playable_media():
+    """A candidate with `missing_media` or no `thumb_url`/`video_url`
+    would render as an orphan box, not a picture — worse than falling
+    back to the curve-only card, so it must lose to a real (even
+    lower-overlap) candidate rather than winning on overlap alone."""
+    rec = _record()
+    win_start, _ = episode_window(rec)
+    unplayable = dict(_cand("thunder_rising", win_start, 20), missing_media=True)
+    thumbless = dict(_cand("motion", win_start, 20), thumb_url="")
+    playable = _cand("timelapse", win_start + timedelta(minutes=2), 1)
+    hero = episode_hero([unplayable, thumbless, playable], rec)
+    assert hero is not None
+    assert hero["kind"] == "timelapse"
+
+
+def test_episode_hero_is_none_when_nothing_overlaps():
+    rec = _record()
+    win_end = episode_window(rec)[1]
+    hero = episode_hero([_cand("motion", win_end + timedelta(days=2), 1)], rec)
+    assert hero is None
+    assert episode_hero([], rec) is None
+
+
 # ── footage: degradation ───────────────────────────────────────────────
 
 
@@ -404,21 +459,42 @@ def test_the_footage_route_stamps_the_count_it_just_computed(client, tmp_path):
     assert row["footage_count"] == 1
 
 
+def test_the_footage_route_stamps_the_hero_alongside_the_count(client):
+    """Same scan, same stamp — the merged Library grid's card reads this
+    straight off the list row's `footage_hero`, with no per-card fetch
+    of its own (see weather_episodes._footage.episode_hero's docstring
+    for the cost model this is protecting)."""
+    http, ep_id = client
+    http.get("/api/weather/episodes/{}/footage".format(ep_id))
+    row = next(
+        it for it in http.get("/api/weather/episodes").get_json()["items"] if it["id"] == ep_id
+    )
+    assert row["footage_hero"]["video_url"] == "/api/weather/sightings/cam1__thunder__x/clip"
+    assert row["footage_hero"]["cam_name"] == "Hof"
+
+
 def test_the_sweep_stamps_the_count_on_the_poll_thread(tmp_path):
     """Where the number is supposed to come from in production: once per
-    episode, on the weather poll's own thread, never on a request."""
+    episode, on the weather poll's own thread, never on a request. The
+    counter's real contract (weather_service._history's
+    _episode_footage_counter) returns {"count", "hero"} together — both
+    stamped from the SAME scan, see append_footage_count's own hero
+    param."""
     seen = []
+    hero = {"kind": "thunder", "kind_label": "Gewitter", "cam_name": "Hof", "time_label": "14:12"}
 
     def _counter(rec):
         seen.append(rec["id"])
-        return 4
+        return {"count": 4, "hero": hero}
 
     result = sweep(
         tmp_path, _one_storm(), events_cfg=EVENTS, episode_cfg=TIGHT, footage_counter=_counter
     )
     assert result["stamped"] == 1
     assert len(seen) == 1
-    assert list_episodes(tmp_path)[0]["footage_count"] == 4
+    row = list_episodes(tmp_path)[0]
+    assert row["footage_count"] == 4
+    assert row["footage_hero"] == hero
     # Idempotent: a second sweep re-counts nothing already stamped.
     again = sweep(
         tmp_path, _one_storm(), events_cfg=EVENTS, episode_cfg=TIGHT, footage_counter=_counter

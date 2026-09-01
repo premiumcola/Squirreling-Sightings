@@ -239,6 +239,31 @@
   height: 14px;
   opacity: 0.8;
 }
+
+/* Footage-primary episode card (weather/_episode-footage-card.js) — an
+   episode WITH a stamped footage_hero renders on the .ws-card
+   thumbnail shell (the same 16:9 shape sightingCardHTML uses) instead
+   of the text-only .ws-recap-card above it. `.ws-card` already stacks
+   a plain block child below its thumb-wrap in normal flow (no flex
+   needed here) and its own `overflow:hidden`/`border-radius` already
+   clip this footer to match — nothing to add for that. Character
+   badge + sparkline move OUT of corner overlays and into this footer
+   strip, reusing .ws-ep-character/.ws-ep-spark-wrap/.ws-ep-spark
+   as-is (just in a static row instead of an absolute overlay), so the
+   recording's own image stays the one uncluttered primary visual. */
+.ws-ep-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.ws-card--episode .ws-ep-character {
+  min-width: 0;
+}
+.ws-card--episode .ws-ep-spark-wrap {
+  flex: none;
+  margin-left: auto;
+}
 @media (max-width: 640px) {
   .ws-recap-card {
     padding: 10px 12px;
@@ -251,6 +276,9 @@
   }
   .ws-ep-spark {
     max-width: 72px;
+  }
+  .ws-ep-foot {
+    padding: 7px 9px;
   }
 }
 

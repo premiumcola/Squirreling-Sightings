@@ -41,7 +41,7 @@ registerAction('toggleSettingsNav', (_el, ev) => {
 registerAction('navScrollToSettings', (_el, _ev) => {
   const sec = byId('settings');
   if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  _setActiveNav('settings');
+  _lockNavClickTo('settings');
   return false;
 });
 
@@ -59,7 +59,7 @@ registerAction('navJumpToSetting', (el, _ev) => {
     }
   }
   sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  _setActiveNav('settings');
+  _lockNavClickTo('settings');
   return false;
 });
 
@@ -87,15 +87,37 @@ function _setActiveNav(targetId) {
 }
 window._setActiveNav = _setActiveNav;
 
+// Click-lock keeps the clicked target pinned for ~900 ms while the
+// smooth-scroll settles — mirrors chrome/mobile-dock.js's own click-lock
+// for the exact same race: every intermediate scroll tick during a
+// smooth-scroll animation re-picks "whichever section the viewport is
+// nearest RIGHT NOW", which is very often a section sitting between the
+// click origin and the target — reported regression: Gewitter-Archiv
+// sits mid-list and kept flashing active regardless of what was
+// actually clicked, since each tick stomped the eager set below until
+// the animation finally settled on the real target. Re-asserting the
+// locked target on every tick (not just skipping the tick) matches the
+// mobile-dock fix exactly, so a slower frame that lands mid-lock still
+// shows the right thing instead of a brief gap.
+let _navClickLockTarget = null;
+let _navClickLockTimer = 0;
+function _lockNavClickTo(targetId) {
+  _setActiveNav(targetId);
+  _navClickLockTarget = targetId;
+  if (_navClickLockTimer) clearTimeout(_navClickLockTimer);
+  _navClickLockTimer = setTimeout(() => {
+    _navClickLockTarget = null;
+  }, 900);
+}
+
 function _initSidebarNav() {
-  // Click: set active immediately so the highlight tracks the user's
-  // intent before the scroll animation finishes. Skip the
-  // Einstellungen button — it doesn't represent a navigable section,
-  // only the accordion toggle.
+  // Click: lock the highlight to the clicked target immediately (see
+  // _lockNavClickTo above) so the highlight tracks the user's intent
+  // and the scrollspy below can't flicker it away mid-animation. Skip
+  // the Einstellungen button — it doesn't represent a navigable
+  // section, only the accordion toggle.
   document.querySelectorAll('.nav a[data-target]').forEach((a) => {
-    a.addEventListener('click', () => {
-      _setActiveNav(a.dataset.target);
-    });
+    a.addEventListener('click', () => _lockNavClickTo(a.dataset.target));
   });
   // Scrollspy: pick the section whose top is closest to the viewport
   // top without going past it. Cheap enough to run on every scroll tick.
@@ -115,6 +137,10 @@ function _initSidebarNav() {
   let raf = 0;
   const tick = () => {
     raf = 0;
+    if (_navClickLockTarget) {
+      _setActiveNav(_navClickLockTarget);
+      return;
+    }
     const top = 80; // account for sticky header / hero offset
     let bestId = null,
       bestY = -Infinity;

@@ -35,9 +35,11 @@
    straight into the photo (2026-09 redesign — see .sd-hero-name /
    .sd-hero-play below), then latin/tier, Wikipedia extract, a compact
    Xeno-canto recordings list. Right column: the operator's own camera
-   clips (library/_grid.js's plain .media-grid rendering, reused
-   verbatim). The 2026-09 redesign also roughly halved this panel's
-   total height (tighter card padding, a wider hero aspect-ratio, the
+   clips — library/_grid.js's plain .media-card markup, painted into
+   .sd-clips-grid below (that host's OWN grid rule, not 03-dashboard.css's
+   .media-grid class, which this host never carries). The 2026-09
+   redesign also roughly halved this panel's total height (tighter card
+   padding, a wider hero aspect-ratio, the
    name folded into the photo instead of its own line, a clamped wiki
    excerpt, no native <audio controls> rows) and dropped the species
    switcher — a grid tile above is the species picker now, a second
@@ -353,6 +355,18 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+}
+/* library/_grid.js paints .media-card items into this host with no grid
+   of its own (03-dashboard.css's own .media-grid is a DIFFERENT element
+   this host never gets the class of) — without a grid here every card
+   just stacked as a full-width block, so a single clip filled the whole
+   column like a giant video. A wider min-width than the compact
+   Mediathek grid (192px): this column is a smaller, secondary area, so
+   its cards read better a bit larger, never edge-to-edge. */
+.sd-clips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
 }
 .sd-clips-empty {
   padding: 16px;

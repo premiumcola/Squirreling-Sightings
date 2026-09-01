@@ -179,6 +179,23 @@ def test_pending_click_is_resolved_once_dossiers_finish_loading():
     assert "selectSpeciesDossierByName" in body
 
 
+def test_load_dossiers_does_not_auto_select_a_default_species():
+    """2026-09 fix: a never-sighted species (locked, sighting_count 0) must
+    not open itself just because it happens to be first in the list — the
+    panel stays collapsed until the operator taps a tile."""
+    body = _slice_function(_DOSSIER_PANEL_JS, "loadBirdDossiers")
+    assert "_dossiers[0]" not in body, (
+        "loadBirdDossiers must not fall back to _dossiers[0] as a default "
+        "selection — that is exactly what auto-opened a never-sighted "
+        "species on every page load."
+    )
+    assert "_selectedLatin &&" in body, (
+        "the only case loadBirdDossiers may re-render is a species that "
+        "was ALREADY selected by an earlier tile click — never a fresh "
+        "default."
+    )
+
+
 def test_state_message_never_a_bare_console_warn():
     """The whole point of this fix: a missing/unloaded dossier must always
     paint something into the panel, not just log to the console."""

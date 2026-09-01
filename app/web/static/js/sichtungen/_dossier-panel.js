@@ -22,12 +22,14 @@
 //
 // Selection instead of open/close: a bird achievement tile (locked OR
 // unlocked, see _achievements.js) calls selectSpeciesDossierByName to
-// point this panel at that species and scroll it into view. There is no
-// "close" — the panel just shows whichever species was picked last,
-// exactly like the deleted module always showed *something* once data
-// existed. That is the page's own established "no dismiss chrome"
-// answer (mirrors _drilldown.js's second-click-closes convention isn't
-// needed here because nothing is being popped open in the first place).
+// point this panel at that species. There is no "close" — the panel
+// just shows whichever species was picked last. Unlike the deleted
+// module, it shows NOTHING until a tile is actually tapped (2026-09
+// fix — a still-locked, never-sighted species used to open itself on
+// every page load just because it happened to be first in the list).
+// That is the page's own established "no dismiss chrome" answer
+// (mirrors _drilldown.js's second-click-closes convention isn't needed
+// here because nothing is being popped open in the first place).
 import { byId, esc } from '../core/dom.js';
 import { apiGet, j } from '../core/api.js';
 import { renderLibraryGrid } from '../library/_grid.js';
@@ -76,8 +78,8 @@ export async function loadBirdDossiers() {
   const panel = byId('speciesDossierPanel');
   if (!panel) return;
   // A tile was clicked while this fetch was still in flight — resolve
-  // that click now instead of silently falling back to the default
-  // species below (the user asked for a specific one).
+  // that click now instead of silently falling back to some default
+  // species (the user asked for a specific one).
   if (_pendingName) {
     const name = _pendingName;
     _pendingName = null;
@@ -88,9 +90,15 @@ export async function loadBirdDossiers() {
     panel.hidden = true;
     return;
   }
-  panel.hidden = false;
-  const stillPresent = _dossiers.some((d) => d.latin === _selectedLatin);
-  _selectSpecies(stillPresent ? _selectedLatin : _dossiers[0].latin, false);
+  // Collapsed by default — no species is auto-opened on load, only a
+  // tile tap does that (selectSpeciesDossierByName below). A species
+  // already open from an earlier click just gets its data refreshed in
+  // place (e.g. a periodic re-poll), never a species that was never
+  // clicked (the old "first dossier in the list opens itself" behaviour
+  // showed a never-sighted Rotkehlchen expanded on every page load).
+  if (_selectedLatin && _dossiers.some((d) => d.latin === _selectedLatin)) {
+    _selectSpecies(_selectedLatin);
+  }
 }
 
 // Bound to window — called from an achievement tile's inline onclick
@@ -237,6 +245,11 @@ function _selectSpecies(latin, scrollIntoView) {
   const d = _dossiers.find((x) => x.latin === latin);
   if (!d) return;
   _selectedLatin = latin;
+  // The panel starts `hidden` in the template (nothing is open until a
+  // tile is tapped, see loadBirdDossiers) — the first-ever selection has
+  // to unhide it itself instead of relying on some earlier default-open.
+  const panel = byId('speciesDossierPanel');
+  if (panel) panel.hidden = false;
   _renderPanel(d);
   if (scrollIntoView) {
     byId('speciesDossierPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });

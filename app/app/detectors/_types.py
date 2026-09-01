@@ -57,6 +57,18 @@ def _apply_region_filter(dets: list[Detection], enabled: bool) -> list[Detection
     return [d for d in dets if d.label not in IMPOSSIBLE_LABELS]
 
 
+# Which stage of the cascade last decided what a detection IS. Written
+# into ``Detection.model`` by the stage itself, so an event JSON can say
+# whether "Eichhörnchen" came from the wildlife classifier or "Meise"
+# from the bird classifier, and a person's name from the re-id — a
+# re-simulation cannot reproduce a label it cannot attribute.
+STAGE_DETECTOR = "detector"
+STAGE_BIRD = "bird_classifier"
+STAGE_WILDLIFE = "wildlife_classifier"
+STAGE_CAT_REID = "cat_reid"
+STAGE_PERSON_REID = "person_reid"
+
+
 @dataclass
 class Detection:
     label: str
@@ -78,6 +90,10 @@ class Detection:
     # detect missed) rather than the normal full-frame pass. Surfaced in
     # the event JSON + UI so a tiling-found hit is distinguishable.
     via_roi: bool = False
+    # One of the STAGE_* constants above — the stage that produced the
+    # label (or identity) this detection carries. None only for a
+    # detection built outside the cascade (tests, legacy sidecars).
+    model: str | None = None
 
     def to_dict(self):
         x1, y1, x2, y2 = self.bbox
@@ -93,4 +109,5 @@ class Detection:
             "identity": self.identity,
             "raw_cls_id": int(self.raw_cls_id),
             "via_roi": bool(self.via_roi),
+            "model": self.model,
         }

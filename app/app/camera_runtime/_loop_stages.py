@@ -154,6 +154,7 @@ class LoopStagesMixin:
                 "snapshot_relpath": rel.as_posix() if snapshot_url else None,
                 "video_url": None,
                 "video_relpath": None,
+                "provenance": self._build_provenance_snapshot(),
             }
             self.store.add_event(self.camera_id, event)
             self._dispatch_snapshot_event(event, ev_meta, snap_path, snapshot_url, public_base)

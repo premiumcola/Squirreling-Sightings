@@ -6,11 +6,14 @@ from pathlib import Path
 from ._ffmpeg_clip import FfmpegClipMixin
 from ._opencv_fallback import OpenCVFallbackMixin
 from ._preroll import MotionPrerollMixin
+from ._provenance import ProvenanceMixin
 from ._publish import PublishMixin
 from .._consts import _FFMPEG_AVAILABLE, log
 
 
-class RecordingMixin(PublishMixin, FfmpegClipMixin, OpenCVFallbackMixin, MotionPrerollMixin):
+class RecordingMixin(
+    PublishMixin, FfmpegClipMixin, OpenCVFallbackMixin, MotionPrerollMixin, ProvenanceMixin
+):
     """Motion-clip lifecycle: ffmpeg start/stop + reencode + finalize + adhoc.
 
     Mixin for CameraRuntime. Methods access shared state via `self.*`

@@ -23,6 +23,9 @@ import requests
 from ..detect_setup import apply_bottom_crop, apply_object_filter, make_spawn_for
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
+    STAGE_BIRD,
+    STAGE_CAT_REID,
+    STAGE_PERSON_REID,
     BirdSpeciesClassifier,
     CoralObjectDetector,
     Detection,
@@ -351,6 +354,7 @@ class MainLoopMixin:
                                 d.species_score = (
                                     float(species_score) if species_score is not None else None
                                 )
+                                d.model = STAGE_BIRD
                 # Wildlife second-stage (fox / squirrel / hedgehog — none of
                 # which exist as a COCO class). Lives in _wildlife_stage.py;
                 # it classifies a CROP around the motion box rather than the
@@ -372,6 +376,7 @@ class MainLoopMixin:
                             m = self.cat_registry.match_details(crop)
                             if m:
                                 d.identity = m.get("name")
+                                d.model = STAGE_CAT_REID
                 if self.person_registry:
                     for d in detections:
                         if d.label == "person":
@@ -379,6 +384,7 @@ class MainLoopMixin:
                             m = self.person_registry.match_details(crop)
                             if m:
                                 d.identity = m.get("name")
+                                d.model = STAGE_PERSON_REID
                 drawn = draw_detections(proc_frame, detections)
                 with self.lock:
                     self.preview = drawn

@@ -179,6 +179,9 @@ class CameraRuntime(
         # transient spikes don't dominate; the /status bubble reads the
         # current average from inference_avg_ms property below.
         self._inference_times_ms: deque = deque(maxlen=30)
+        # What the RTSP stream itself advertises (CAP_PROP_FPS), read once
+        # per (re)open — the denominator that makes analysed_fps a ratio.
+        self._source_fps: float = 0.0
         # M2 · D2 tile-rescue counters, since process start. Attempts vs
         # hits separates "never fires" from "fires and finds nothing" —
         # two very different problems that looked identical in the log,

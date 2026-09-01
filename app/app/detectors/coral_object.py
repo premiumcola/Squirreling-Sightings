@@ -15,23 +15,19 @@ import cv2
 import numpy as np
 
 from ._decision_log import log_decision
-from ._device_lock import inference_lock
 from ._edgetpu import make_delegate_interpreter
 from ._filters import LabelFilterMixin
 from ._label_loader import load_label_map
+from ._postprocess import pycoral_snapshot, ssd_snapshot, to_detections
 from ._preprocess import letterbox
 from ._timing import InferenceTimingMixin
-from ._types import Detection, _apply_region_filter
+from ._types import Detection
+from ._warmup import WarmupMixin
 
 log = logging.getLogger(__name__)
 
-# Size of the throwaway warmup frame. 4:3 rather than square so the
-# warmup exercises the letterbox padding branch as well, and small
-# enough that the resize itself costs nothing next to the invoke.
-_WARMUP_W, _WARMUP_H = 320, 240
 
-
-class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
+class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin, WarmupMixin):
     """Object detector with three-tier fallback:
     1. pycoral + EdgeTPU  → mode="coral"
     2. tflite-runtime CPU → mode="cpu"
@@ -223,136 +219,6 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
             return True
         return False
 
-    def _on_warmup_failed(self, exc: Exception) -> None:
-        """Treat a failed warmup as a failed TIER, not a slow first frame.
-
-        The warmup started life as a latency optimisation. It turned out
-        to be the only thing that ever checks whether the chosen tier can
-        actually run an inference — and on a real box it caught exactly
-        that:
-
-            Encountered an unresolved custom op … Node number 8
-            (EdgeTpuDelegateForCustomOp) failed to invoke.
-
-        The delegate had loaded, so `_try_delegate` reported success and
-        the detector advertised `mode="coral"`, `available=True`. Every
-        real frame then raised the same error, no detection ever
-        survived, no motion event was ever built, and nothing downstream
-        could tell the difference between "nothing moved" and "the
-        detector is dead". `load_delegate` succeeding proves a device is
-        present; it proves nothing about the compiled model matching the
-        installed libedgetpu.
-
-        So on the TPU path a failed warmup drops to the CPU tier, which
-        runs the non-compiled twin of the same model. Slower, and
-        correct — the opposite trade of staying fast and blind. On the
-        CPU tier there is nowhere left to fall, so the failure is logged
-        and the detector stays up: a synthetic black frame is a weak
-        reason to refuse real ones.
-        """
-        if self.mode != "coral":
-            log.warning("[det] Warmup fehlgeschlagen (%s) – Detektor bleibt verfügbar", exc)
-            return
-        log.error(
-            "[det] TPU-Warmup fehlgeschlagen (%s) – der Delegate lädt, kann aber "
-            "nicht rechnen. Fallback auf CPU, sonst bliebe die Erkennung stumm.",
-            exc,
-        )
-        model_path = self.cfg.get("model_path") or ""
-        with self._infer_lock:
-            self._coral_error = f"warmup failed: {exc}"
-            self.interpreter = None
-            self.available = False
-            self.mode = "motion_only"
-            self._cpu_mode = False
-            recovered = self._try_cpu(model_path)
-        if recovered:
-            # The lock identity depends on the tier — a CPU detector must
-            # not keep holding the process-wide TPU lock, or it would
-            # serialise itself against the other cameras for no reason.
-            self._infer_lock = inference_lock(self.mode, self.device)
-            log.info("[det] Nach fehlgeschlagenem TPU-Warmup auf CPU umgestellt")
-        else:
-            self.reason = f"tpu warmup failed, no CPU fallback: {exc}"
-            log.error("[det] Kein CPU-Modell als Rückfall vorhanden – nur Bewegungserkennung aktiv")
-
-    def _activate_tier(self) -> None:
-        """Wiring that can only happen once the tier is known.
-
-        Called from every successful tier, never from the failure path —
-        an unavailable detector runs no inference and needs neither.
-        """
-        self._infer_lock = inference_lock(self.mode, self.device)
-        # Warm up OFF the constructing thread. A detector is not built in
-        # the background: rebuild_runtimes / restart_single_camera reach
-        # here from Flask request threads (camera save, wizard, settings
-        # import, /api/reload) and from the Telegram bot thread, and the
-        # Coral test panel builds one per HTTP request. Since the device
-        # lock is now process-wide, a synchronous warmup would park those
-        # threads behind whatever is currently on the TPU — including the
-        # model-switch route, which is precisely the escape hatch from a
-        # wedged stick. A daemon thread keeps the latency win (the first
-        # real frame still finds a warm interpreter) without ever holding
-        # a request hostage.
-        self._warmup_thread = threading.Thread(
-            target=self._warmup,
-            name=f"det-warmup-{self.mode}",
-            daemon=True,
-        )
-        self._warmup_thread.start()
-
-    def wait_for_warmup(self, timeout: float = 30.0) -> bool:
-        """Block until the warmup finishes. Returns False on timeout.
-
-        Production never needs this — the warmup races the first frame
-        and losing that race merely costs one slow frame. It exists so
-        tests can assert on warmup deterministically instead of sleeping,
-        and so a future diagnostic endpoint can report readiness.
-        """
-        thread = getattr(self, "_warmup_thread", None)
-        if thread is None:
-            return True
-        thread.join(timeout)
-        return not thread.is_alive()
-
-    def _warmup(self) -> None:
-        """Run one throwaway inference so the first real frame is warm.
-
-        On the TPU the first invoke pushes the model parameters across
-        USB into the device's on-chip cache; on CPU it triggers the
-        first-call allocations. Either way the cost lands on whichever
-        frame happens to be first — which, after a restart or a settings
-        save, is the first motion event, the one frame we would least
-        like to be slow.
-
-        Failure is deliberately non-fatal. Warmup is a latency
-        optimisation, and a detector that stumbles on a synthetic black
-        frame may well be fine on a real one; refusing to come up would
-        convert a slow first frame into no detection at all. The reason
-        is logged rather than swallowed silently — on the real box it
-        would be the first sign the model and the delegate disagree.
-        """
-        frame = np.zeros((_WARMUP_H, _WARMUP_W, 3), dtype=np.uint8)
-        started = time.perf_counter()
-        # Keep the cold sample out of the rolling window — see
-        # _record_timing. It is not a measurement of steady state.
-        self._warming = True
-        try:
-            # threshold=1.0: run the full path but keep the post-filter
-            # work at zero. We want the invoke, not the detections.
-            self.detect_frame_raw(frame, threshold=1.0)
-        except Exception as e:
-            self._warming = False
-            self._on_warmup_failed(e)
-            return
-        finally:
-            self._warming = False
-        log.info(
-            "[det] Warmup abgeschlossen (%s): %.0f ms",
-            self.mode,
-            (time.perf_counter() - started) * 1000.0,
-        )
-
     def detect_frame(
         self,
         frame: np.ndarray,
@@ -442,31 +308,17 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
             # tuples while still inside the lock so the underlying tensor
             # references are released before the next caller can run set_input.
             objs = self.detect.get_objects(self.interpreter, score_threshold=score_threshold)
-            snapshot = [
-                (
-                    int(o.id),
-                    float(o.score),
-                    (
-                        float(o.bbox.xmin),
-                        float(o.bbox.ymin),
-                        float(o.bbox.xmax),
-                        float(o.bbox.ymax),
-                    ),
-                )
-                for o in objs
-            ]
+            snapshot = pycoral_snapshot(objs)
         self._record_timing(_t_pre, _t_wait, _t_invoke, _t_post)
-        h, w = frame.shape[:2]
-        inv_scale = 1.0 / scale if scale > 0 else 1.0
-        out: list[Detection] = []
-        for cid, score, (xmin, ymin, xmax, ymax) in snapshot:
-            x1 = max(0, min(w, int(round((xmin - pad_x) * inv_scale))))
-            y1 = max(0, min(h, int(round((ymin - pad_y) * inv_scale))))
-            x2 = max(0, min(w, int(round((xmax - pad_x) * inv_scale))))
-            y2 = max(0, min(h, int(round((ymax - pad_y) * inv_scale))))
-            label = self.labels.get(cid, str(cid))
-            out.append(Detection(label=label, score=score, bbox=(x1, y1, x2, y2), raw_cls_id=cid))
-        return _apply_region_filter(out, self._region_filter)
+        return to_detections(
+            snapshot,
+            frame_hw=frame.shape[:2],
+            scale=scale,
+            pad_x=pad_x,
+            pad_y=pad_y,
+            labels=self.labels,
+            region_filter=self._region_filter,
+        )
 
     def _detect_cpu(self, frame: np.ndarray, threshold: float | None = None) -> list[Detection]:
         """Inference via tflite-runtime on CPU (SSD MobileNet layout).
@@ -508,21 +360,15 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin):
             classes = np.copy(self.interpreter.get_tensor(output_details[1]['index'])[0])
             scores = np.copy(self.interpreter.get_tensor(output_details[2]['index'])[0])
         self._record_timing(_t_pre, _t_wait, _t_invoke, _t_post)
-        h, w = frame.shape[:2]
-        inv_scale = 1.0 / scale if scale > 0 else 1.0
-        out: list[Detection] = []
-        for i in range(len(scores)):
-            score = float(scores[i])
-            if score < score_threshold:
-                continue
-            ymin, xmin, ymax, xmax = boxes[i]
-            x1 = max(0, min(w, int(round((xmin * in_w - pad_x) * inv_scale))))
-            y1 = max(0, min(h, int(round((ymin * in_h - pad_y) * inv_scale))))
-            x2 = max(0, min(w, int(round((xmax * in_w - pad_x) * inv_scale))))
-            y2 = max(0, min(h, int(round((ymax * in_h - pad_y) * inv_scale))))
-            cls_id = int(classes[i])
-            label = self.labels.get(cls_id, str(cls_id))
-            out.append(
-                Detection(label=label, score=score, bbox=(x1, y1, x2, y2), raw_cls_id=cls_id)
-            )
-        return _apply_region_filter(out, self._region_filter)
+        snapshot = ssd_snapshot(
+            boxes, classes, scores, in_w=in_w, in_h=in_h, threshold=score_threshold
+        )
+        return to_detections(
+            snapshot,
+            frame_hw=frame.shape[:2],
+            scale=scale,
+            pad_x=pad_x,
+            pad_y=pad_y,
+            labels=self.labels,
+            region_filter=self._region_filter,
+        )

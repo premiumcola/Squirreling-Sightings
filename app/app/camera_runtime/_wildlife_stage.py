@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 
-from ..detectors import Detection
+from ..detectors import STAGE_WILDLIFE, Detection
 from ._consts import _refine_wildlife_bbox, _suppress_overlap
 
 log = logging.getLogger(__name__)
@@ -212,6 +212,7 @@ class WildlifeStageMixin:
             bbox=bb,
             species=raw_lbl,
             species_score=float(wscore) if wscore is not None else None,
+            model=STAGE_WILDLIFE,
         )
         survivors = self._filter_masked_detections(proc_frame, [wl_det])
         survivors = self._filter_zoned_detections(proc_frame, survivors)

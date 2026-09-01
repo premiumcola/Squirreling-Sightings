@@ -378,5 +378,9 @@ def api_event_get(event_id: str):
             "time": payload.get("time"),
             "video_relpath": payload.get("video_relpath"),
             "snapshot_relpath": payload.get("snapshot_relpath"),
+            # The settings snapshot the event was produced under — the
+            # list route hands the whole JSON through, this one must not
+            # be the only reader that loses it.
+            "provenance": payload.get("provenance"),
         }
     )

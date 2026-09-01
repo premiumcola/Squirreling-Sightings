@@ -159,6 +159,7 @@ class Track:
         "last_bbox_h_px",
         "last_bbox_frac_h",
         "last_bbox_frac_area",
+        "model",
     )
 
     def __init__(self, track_id: str, label: str, frame_idx: int):
@@ -181,6 +182,9 @@ class Track:
         self.last_bbox_h_px: int | None = None
         self.last_bbox_frac_h: float | None = None
         self.last_bbox_frac_area: float | None = None
+        # Cascade stage that produced the most recent detect sample —
+        # a ``detectors.STAGE_*`` constant, None until the first one.
+        self.model: str | None = None
 
     def add_sample(
         self,
@@ -190,6 +194,7 @@ class Track:
         score: float | None,
         source: str,
         label: str | None = None,
+        model: str | None = None,
     ):
         # Squelch micro-jitter samples — only emit when the bbox moved
         # by ≥ SAMPLE_BBOX_DELTA_PX pixels at the centroid OR this is a
@@ -214,6 +219,8 @@ class Track:
             }
         )
         self.last_frame = frame_idx
+        if model and source == "detect":
+            self.model = model
         if score is not None and score > self.best_score:
             self.best_score = float(score)
             self.best_frame_idx = frame_idx
@@ -293,6 +300,7 @@ class Track:
             "last_frame": self.last_frame,
             "best_score": round(self.best_score, 4),
             "best_frame": self.best_frame_idx,
+            "model": self.model,
             "samples": self.samples,
         }
         if self.end_reason is not None:
@@ -542,7 +550,15 @@ def associate_detections(
                 "x2": int(d.bbox[2]),
                 "y2": int(d.bbox[3]),
             }
-            tr.add_sample(frame_idx, t_s, bbox_dict, float(d.score), "detect", d.label)
+            tr.add_sample(
+                frame_idx,
+                t_s,
+                bbox_dict,
+                float(d.score),
+                "detect",
+                d.label,
+                getattr(d, "model", None),
+            )
             state.samples_emitted += 1
             update_best_top(state, d, frame_idx, t_s)
             matches.append((d, tr))
@@ -622,7 +638,15 @@ def associate_detections(
             # on a person) gets absorbed into the same track and the
             # majority "person" wins, so no parallel cross-label
             # ghost ever materialises.
-            blocker.add_sample(frame_idx, t_s, bbox_dict, float(d.score), "detect", d.label)
+            blocker.add_sample(
+                frame_idx,
+                t_s,
+                bbox_dict,
+                float(d.score),
+                "detect",
+                d.label,
+                getattr(d, "model", None),
+            )
             blocker.missed_windows = 0
             state.samples_emitted += 1
             update_best_top(state, d, frame_idx, t_s)
@@ -640,7 +664,15 @@ def associate_detections(
             revived.active = True
             revived.end_reason = None
             revived.missed_windows = 0
-            revived.add_sample(frame_idx, t_s, bbox_dict, float(d.score), "detect", d.label)
+            revived.add_sample(
+                frame_idx,
+                t_s,
+                bbox_dict,
+                float(d.score),
+                "detect",
+                d.label,
+                getattr(d, "model", None),
+            )
             state.active.append(revived)
             state.samples_emitted += 1
             update_best_top(state, d, frame_idx, t_s)
@@ -648,7 +680,9 @@ def associate_detections(
             continue
         tid = short_id()
         tr = Track(tid, d.label, frame_idx)
-        tr.add_sample(frame_idx, t_s, bbox_dict, float(d.score), "detect", d.label)
+        tr.add_sample(
+            frame_idx, t_s, bbox_dict, float(d.score), "detect", d.label, getattr(d, "model", None)
+        )
         state.active.append(tr)
         state.samples_emitted += 1
         update_best_top(state, d, frame_idx, t_s)

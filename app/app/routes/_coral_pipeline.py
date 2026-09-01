@@ -36,6 +36,8 @@ from pathlib import Path
 import cv2
 
 from ..detectors import (
+    STAGE_BIRD,
+    STAGE_WILDLIFE,
     BirdSpeciesClassifier,
     CoralObjectDetector,
     Detection,
@@ -144,6 +146,7 @@ def classify_bird_full(frame, bird_clf):
         species=sp,
         species_latin=sp_latin,
         species_score=float(sp_score) if sp_score is not None else None,
+        model=STAGE_BIRD,
     )
 
 
@@ -170,6 +173,7 @@ def classify_wildlife_full(frame, wl_clf):
             species=raw_lbl,
             species_latin=None,
             species_score=float(wscore) if wscore is not None else None,
+            model=STAGE_WILDLIFE,
         )
     info = None
     if raw_lbl is not None:
@@ -224,6 +228,7 @@ def run_mode_cascade(frame, detector, bird_clf, wl_clf, folder_name, counters):
                 dd.species = sp
                 dd.species_latin = sp_latin
                 dd.species_score = float(sp_score) if sp_score is not None else None
+                dd.model = STAGE_BIRD
                 species_counts[sp] = species_counts.get(sp, 0) + 1
         stages_run.append("bird_classifier")
     # Wildlife (ImageNet) classification — only runs for folders
@@ -266,6 +271,7 @@ def run_mode_cascade(frame, detector, bird_clf, wl_clf, folder_name, counters):
                         species=raw_lbl,
                         species_latin=None,
                         species_score=float(wscore) if wscore is not None else None,
+                        model=STAGE_WILDLIFE,
                     ),
                     "wildlife",
                 )

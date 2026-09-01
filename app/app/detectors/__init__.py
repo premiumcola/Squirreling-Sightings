@@ -19,7 +19,16 @@ from ._label_loader import (
     _pretty_bird_label,
     load_label_map,
 )
-from ._types import IMPOSSIBLE_LABELS, Detection, _apply_region_filter
+from ._types import (
+    IMPOSSIBLE_LABELS,
+    STAGE_BIRD,
+    STAGE_CAT_REID,
+    STAGE_DETECTOR,
+    STAGE_PERSON_REID,
+    STAGE_WILDLIFE,
+    Detection,
+    _apply_region_filter,
+)
 from ._wildlife_rules import (
     _inat_wildlife_category,
     _is_sciuridae_inat,
@@ -40,6 +49,11 @@ __all__ = [
     "CoralObjectDetector",
     "Detection",
     "IMPOSSIBLE_LABELS",
+    "STAGE_BIRD",
+    "STAGE_CAT_REID",
+    "STAGE_DETECTOR",
+    "STAGE_PERSON_REID",
+    "STAGE_WILDLIFE",
     "WildlifeClassifier",
     "_apply_region_filter",
     "_extract_latin",

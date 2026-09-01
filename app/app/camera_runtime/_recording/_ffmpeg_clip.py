@@ -71,6 +71,7 @@ class FfmpegClipMixin:
             "stage": STAGE_RECORDING,
             "stage_since": start_time.isoformat(timespec="seconds"),
             "recording_settings": self._build_recording_settings_snapshot(),
+            "provenance": self._build_provenance_snapshot(),
         }
         # The ffmpeg stream-copy path (this caller) starts the encoder at
         # trigger time — no in-memory pre-buffer covers the gap between

@@ -277,6 +277,7 @@ class OpenCVFallbackMixin:
             "file_size_bytes": file_size_bytes,
             "recording_settings": recording_settings,
             "achievement": achievement,
+            "provenance": self._build_provenance_snapshot(),
         }
         if encode_error:
             event["encode_error"] = encode_error

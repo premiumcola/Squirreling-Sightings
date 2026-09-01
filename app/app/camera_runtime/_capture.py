@@ -167,6 +167,8 @@ class CaptureMixin:
             # FFmpeg backend, so a consumer slower than the camera walks
             # an ever-growing backlog. See _frame_reader.
             self.capture = DrainedCapture(cap, self.camera_id)
+            with contextlib.suppress(Exception):
+                self._source_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
             # Mark the RTSP-open moment so the [cam:<id>] RTSP opened line
             # can include the first-frame latency. Picked up by _loop()
             # the next time a fresh frame is decoded.

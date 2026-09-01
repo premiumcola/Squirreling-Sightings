@@ -25,6 +25,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from ..detectors._describe import describe_backend
 from ..detectors._projection import (
     MAX_RESCUE_RATE_PER_S,
     MODE_TILES,
@@ -98,25 +99,17 @@ def _basename(path) -> str | None:
 def _stage_row(stage: str, cam_id: str | None, obj, model, timing) -> dict:
     """One row of the stage table: which device, which API, which model.
 
-    ``device`` and ``api`` are two columns on purpose. ``mode == "coral"``
-    with ``_cpu_mode == True`` means "TPU, reached through the tflite
-    delegate instead of pycoral" — collapsing that into one badge is how
-    a working delegate ends up reported as a CPU fallback.
+    Device/API come from ``describe_backend`` — the same words the event
+    provenance snapshot uses, so the panel and the sidecar cannot
+    disagree about what "coral via delegate" is called.
     """
-    mode = getattr(obj, "mode", "none")
-    cpu_api = bool(getattr(obj, "_cpu_mode", False))
-    reason = getattr(obj, "reason", "disabled")
-    if mode == "coral":
-        device, api = "tpu", ("tflite-delegate" if cpu_api else "pycoral")
-    elif mode == "cpu":
-        device, api = "cpu", "tflite-cpu"
-    else:
-        device, api = "off", None
+    backend = describe_backend(obj)
+    reason = backend["reason"]
     return {
         "stage": stage,
         "cam_id": cam_id,
-        "device": device,
-        "api": api,
+        "device": backend["device"],
+        "api": backend["api"],
         # A classifier on the CPU is the SHIPPED design, not a fault: the
         # TPU caches model parameters in ~8 MB of on-chip SRAM and the live
         # path switches models inside one frame, so keeping the detector

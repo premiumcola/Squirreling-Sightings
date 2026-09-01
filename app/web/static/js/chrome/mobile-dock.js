@@ -24,14 +24,15 @@ import { state } from '../core/state.js';
   // early-break once it crosses the probe. 'weather' dropped — Wetter-
   // Ereignisse merged into #media (Stage 6 of the Mediathek +
   // Wetter-Ereignisse merge); #media now has its own dock button
-  // instead of riding Statistik.
+  // instead of riding Statistik. 'netz' dropped — Erkennungsprofil no
+  // longer has a section of its own; its content lives inline per
+  // camera inside #dashboard now.
   const sectionIds = [
     'dashboard',
-    'cameras',
-    'statistik',
-    'netz',
     'media',
     'achievements',
+    'statistik',
+    'cameras',
     'settings',
     'logs',
   ];

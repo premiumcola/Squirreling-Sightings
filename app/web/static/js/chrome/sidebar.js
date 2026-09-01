@@ -123,12 +123,14 @@ function _initSidebarNav() {
   // top without going past it. Cheap enough to run on every scroll tick.
   // 'weather' dropped — Wetter-Ereignisse merged into #media (Stage 6 of
   // the Mediathek + Wetter-Ereignisse merge); one nav entry, one anchor.
+  // 'netz' dropped — Erkennungsprofil no longer has a section of its
+  // own; its content lives inline per camera inside #dashboard now. In
+  // DOM/scroll order to match the page flow after the reorg.
   const sectionIds = [
     'dashboard',
-    'statistik',
-    'netz',
     'media',
     'achievements',
+    'statistik',
     'storms',
     'cameras',
     'settings',

@@ -1,8 +1,9 @@
 // ─── netz/_cards.js ────────────────────────────────────────────────────────
-// One camera's net BODY: the settings radar, its controls, and the save
-// path. The panel SHELL around it (header, camera identity, the
-// Netz/Verlauf toggle) lives in netz/_panel.js, which mounts one of these
-// beside every camera's Live-Feed tile. The frozen-values box has no
+// One camera's net BODY: the settings radar, the staging bar, the ghost
+// switch, and the save path. The panel SHELL around it (header, camera
+// identity, the Netz/Verlauf toggle) lives in netz/_panel.js, which
+// mounts one of these beside every camera's Live-Feed tile and composes
+// ghostToggleHtml() into that header. The frozen-values box has no
 // per-panel home any more — see frozenSectionHtml() below.
 //
 // EVERY write takes its camera id from `card.dataset.cam` — the DOM node
@@ -45,29 +46,42 @@ function _stagingHtml(camId) {
   );
 }
 
-// One switch does not need a row of its own — it used to own a full
-// 44 px line under the presets for a single boolean. As a chip it sits at
-// the end of the preset row, keeps the 44 px target, and reports its
-// state through aria-pressed instead of a second label.
-function _ghostHtml(tuning) {
-  const on = tuning.track_filter_ghosts !== false;
+// One switch does not need a row of its own. It has been a full 44 px
+// line, then a text chip in a controls row under the chart — a row that
+// cost the net exactly its own height on every panel ("da ist ja viel
+// Freiraum … macht das Netz einfach viel größer"). Now it is an icon-only
+// button in the panel header (netz/_panel.js composes it beside the
+// Verlauf toggle), same 44 px target, state through aria-pressed, and the
+// tooltip says what a ghost track IS — the name alone never did.
+const _GHOST_TITLE =
+  'Ghost-Spuren ausblenden – Spuren, die ihr Objekt verloren haben und nur noch ' +
+  'aus der Gnadenfrist bestehen';
+
+export function ghostToggleHtml(camId) {
+  const on = effectiveTuning(camId).track_filter_ghosts !== false;
   return (
-    `<button type="button" class="netz-chip-toggle" data-tune-ghost ` +
-    `aria-pressed="${on ? 'true' : 'false'}" aria-label="Ghost-Spuren ausblenden" ` +
-    `title="Ghost-Spuren ausblenden">` +
-    `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" ` +
+    `<button type="button" class="netz-view-btn" data-tune-ghost ` +
+    `aria-pressed="${on ? 'true' : 'false'}" aria-label="${_GHOST_TITLE}" ` +
+    `title="${_GHOST_TITLE}">` +
+    `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" ` +
     `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
     `<path d="M12 3a7 7 0 0 0-7 7v11l2.5-2 2.5 2 2-2 2 2 2.5-2 2.5 2V10a7 7 0 0 0-7-7Z"/>` +
-    `<path d="M9.5 10.5h.01M14.5 10.5h.01"/></svg>Ghost</button>`
+    `<path d="M9.5 10.5h.01M14.5 10.5h.01"/></svg></button>`
   );
 }
 
-/** The radar + its controls + the staging bar for ONE camera — everything
- *  below the panel's own header, which netz/_panel.js owns. Before this
- *  camera's /api/netz/state has resolved (camState is still null) it
- *  renders the calm "wird geladen …" state instead of a chart with
- *  nothing to draw. */
-export function netBodyHtml(cam) {
+/** The radar + the staging bar for ONE camera — everything below the
+ *  panel's own header, which netz/_panel.js owns. Before this camera's
+ *  /api/netz/state has resolved (camState is still null) it renders the
+ *  calm "wird geladen …" state instead of a chart with nothing to draw.
+ *
+ *  `size` is the chart box's measured px size (netz/_panel.js measures
+ *  it right before calling) — the radar is drawn AT that size, so the
+ *  box is the only thing that decides how big the net is. The staging
+ *  bar rides INSIDE the box as an overlay: it exists only while values
+ *  are staged, and a bar that came and went below the chart would make
+ *  the net jump by its own height every time. */
+export function netBodyHtml(cam, size = null) {
   const st = camState(cam.id);
   if (!st) {
     return `<div class="netz-empty"><div class="netz-empty-sub">wird geladen …</div></div>`;
@@ -80,9 +94,8 @@ export function netBodyHtml(cam) {
   const axes = [...buildTuneAxes(tuning), ...buildClassAxes(st)];
   netzState.tuneAxes[cam.id] = axes;
   return (
-    `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
-    `<div class="netz-card-controls">${_ghostHtml(tuning)}</div>` +
-    _stagingHtml(cam.id)
+    `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true, size })}` +
+    `${_stagingHtml(cam.id)}</div>`
   );
 }
 
@@ -178,10 +191,17 @@ export function bindNetBody(card, onRepaint) {
     onRepaint();
   });
 
+  _bindAxisHints(card, camId);
+}
+
+/** The ghost switch sits in the panel HEADER, which is rendered in both
+ *  the net and the Verlauf view — so it is wired from the header's own
+ *  bind (netz/_panel.js), not from bindNetBody, which only runs for the
+ *  net. Same card-scoped rule: the camera is `card.dataset.cam`. */
+export function bindGhostToggle(card, onRepaint) {
+  const camId = card.dataset.cam;
   card.querySelector('[data-tune-ghost]')?.addEventListener('click', async (ev) => {
     const wasOn = ev.currentTarget.getAttribute('aria-pressed') === 'true';
     await _save(camId, { track_filter_ghosts: !wasOn }, 'Erkennungsprofil übernommen.', onRepaint);
   });
-
-  _bindAxisHints(card, camId);
 }

@@ -10,7 +10,15 @@ One operator complaint from the PREVIOUS shape still applies verbatim to
 every panel now (it was never about the page-level chrome that is gone):
 
   5. Ghost-Spuren was a full-width row of its own for a single switch.
-     It is still a chip in the controls row.
+     It is now an icon button in the header — the controls row it used
+     to be a chip in is gone too ("Brauchen wir's, sonst nehmen's raus
+     und macht das Netz einfach viel größer").
+
+And the one that started the latest reshape: the net was "so viel zu
+klein, man kann's gar nicht erkennen" — a 560 x 300 viewBox letterboxed
+inside a box far bigger than that. The radar is now drawn at its chart
+box's own measured px size (section 10), the header is one button-row
+tall, and the staging bar overlays the net instead of reserving a row.
 
 The Vorlage/preset row this file used to pin (three buttons that staged
 four fields at once) is GONE — "nimm die Vorlagen raus, ich will da
@@ -146,32 +154,56 @@ def test_the_preset_only_field_is_still_a_real_backend_field():
     assert "track_continue_min_score" in resolve
 
 
-# ── 4 · the ghost toggle is a chip, not a row ─────────────────────────
+# ── 4 · the ghost toggle is a header icon button, not a row ──────────
+
+_GHOST_TITLE = (
+    "Ghost-Spuren ausblenden – Spuren, die ihr Objekt verloren haben "
+    "und nur noch aus der Gnadenfrist bestehen"
+)
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
-def test_the_ghost_toggle_is_a_chip_not_a_row():
+def test_the_ghost_toggle_is_a_header_icon_button_not_a_row():
+    """It sits in the header (rendered by _panel.js for BOTH sub-views),
+    so the net body no longer carries it — and no controls row either."""
     out = _js(
         f"""
         {_SETUP}
-        const html = cards.netBodyHtml({{ id: 'cam_a', name: 'Werkstatt' }});
+        const btn = cards.ghostToggleHtml('cam_a');
+        const body = cards.netBodyHtml({{ id: 'cam_a', name: 'Werkstatt' }});
         console.log(JSON.stringify({{
-          hasGhost: html.includes('data-tune-ghost'),
-          isChip: html.includes('netz-chip-toggle'),
-          ownRow: html.includes('netz-card-ghost'),
-          pressed: html.includes('aria-pressed="true"'),
+          hasGhost: btn.includes('data-tune-ghost'),
+          isIconBtn: btn.includes('netz-view-btn'),
+          pressed: btn.includes('aria-pressed="true"'),
+          label: btn.includes('aria-label="{_GHOST_TITLE}"'),
+          tip: btn.includes('title="{_GHOST_TITLE}"'),
+          bodyHasGhost: body.includes('data-tune-ghost'),
+          bodyHasControls: body.includes('netz-card-controls'),
         }}));
         """
     )
     assert out["hasGhost"] is True
-    assert out["isChip"] is True
-    assert out["ownRow"] is False, "the ghost toggle still owns a full-width row"
+    assert out["isIconBtn"] is True
     assert out["pressed"] is True, "the toggle does not report its state to assistive tech"
+    assert out["label"] is True, "an icon-only button needs its explanation as aria-label"
+    assert out["tip"] is True
+    assert out["bodyHasGhost"] is False, "the ghost toggle is still in the net body"
+    assert out["bodyHasControls"] is False, "the controls row is still reserving height"
 
 
-def test_the_ghost_chip_keeps_a_44px_touch_target():
-    chip = _CSS[_CSS.index(".netz-chip-toggle {") :]
-    assert "min-height: 44px" in chip[: chip.index("}")]
+def test_the_controls_row_and_the_chip_style_are_gone():
+    assert "netz-card-controls" not in _CARDS
+    assert "netz-card-controls" not in _CSS
+    assert "netz-chip-toggle" not in _CARDS
+    assert "netz-chip-toggle" not in _PANEL
+    assert "netz-chip-toggle" not in _CSS
+
+
+def test_the_header_buttons_keep_a_44px_touch_target():
+    btn = _CSS[_CSS.index(".netz-view-btn {") :]
+    rule = btn[: btn.index("}")]
+    assert "width: 44px" in rule
+    assert "height: 44px" in rule
 
 
 # ── 5 · "Werte, die fest bleiben" is page-level, not per panel ────────
@@ -286,7 +318,13 @@ def test_the_legend_explains_the_dashed_and_solid_lines():
     assert out["dashed"] is True, "the Werk swatch must actually look dashed, not just be labelled"
 
 
-# ── 9 · the header is camera identity + one toggle, nothing else ──────
+# ── 9 · the header is ONE row: identity + two icon buttons ───────────
+
+_VERLAUF_TITLE = "Verlauf – frühere Profile dieser Kamera ansehen und wiederherstellen"
+
+
+def _header_src():
+    return _PANEL[_PANEL.index("function _headerHtml(") : _PANEL.index("function _shellHtml(")]
 
 
 def test_the_header_has_no_role_badge():
@@ -295,25 +333,44 @@ def test_the_header_has_no_role_badge():
     assert "netz-card-role" not in _CSS
 
 
-def test_the_verlauf_toggle_is_a_labelled_chip_not_a_bare_icon():
-    """The history-clock icon read as "Aktualisieren" (refresh) to an
-    operator — a text label removes the ambiguity outright rather than
-    hunting for a clearer icon."""
-    hd = _PANEL[_PANEL.index("function _headerHtml(") : _PANEL.index("function _shellHtml(")]
+def test_the_header_is_icon_name_and_exactly_two_icon_buttons():
+    """Camera icon + name on the left, Verlauf and ghost on the right —
+    nothing else, so the row is one 44 px button tall and every other
+    px of the panel goes to the net."""
+    hd = _header_src()
+    assert "netz-card-ic" in hd
+    assert "<h4>" in hd
     assert "data-netz-toggle-verlauf" in hd
-    assert "netz-chip-toggle" in hd
-    assert "_HIST_ICON" not in _PANEL
-    assert "'Verlauf'" in hd or '"Verlauf"' in hd or "Verlauf" in hd
-
-
-def test_there_is_no_icon_only_button_in_the_header():
-    """„Ist jetzt dominiert das Icon mit den Informationen, wo ja oben
-    schon 'n Icon ist" — the frozen-info button that used to sit beside
-    the Verlauf icon is gone; the header's only button is a labelled
-    text chip, not a second circular icon-only control."""
-    hd = _PANEL[_PANEL.index("function _headerHtml(") : _PANEL.index("function _shellHtml(")]
-    assert "netz-view-btn" not in hd
+    assert "ghostToggleHtml(camId)" in hd
+    # One literal <button> (Verlauf) + the ghost one built in _cards.js.
     assert hd.count("<button") == 1
+    assert hd.count("netz-view-btn") == 1
+    assert "netz-card-controls" not in hd
+
+
+def test_the_verlauf_button_explains_itself_in_its_tooltip():
+    """The history-clock icon once read as "Aktualisieren" (refresh) to
+    an operator and got a text label for it. That label cost header
+    height; the explanation now rides the button as title + aria-label,
+    verbatim, and the pressed state is exposed for assistive tech."""
+    hd = _header_src()
+    assert f"const _VERLAUF_TITLE = '{_VERLAUF_TITLE}'" in _PANEL
+    assert "_HISTORY_ICON" in hd
+    assert 'aria-label="${title}" title="${title}"' in hd
+    assert "aria-pressed=" in hd
+
+
+def test_the_header_row_ellipsises_the_name_instead_of_wrapping():
+    """A long camera name must not make the header two lines tall, and
+    the buttons must not be pushed with `margin-left: auto` (the documented
+    iOS inline-flex hazard) — the h4 eats the slack instead."""
+    hd = _CSS[_CSS.index(".netz-card-hd h4 {") :]
+    rule = hd[: hd.index("}")]
+    assert "white-space: nowrap" in rule
+    assert "text-overflow: ellipsis" in rule
+    assert "flex: 1 1 auto" in rule
+    hd_rule = _CSS[_CSS.index(".netz-card-hd {") :]
+    assert "margin-left: auto" not in hd_rule[: hd_rule.index("}")]
 
 
 # ── 10 · the panel matches its tile's height, not the phone's ─────────
@@ -325,17 +382,119 @@ def test_the_panel_stretches_to_the_tiles_height_on_desktop():
     assert "align-items: stretch" in seg
 
 
-def test_the_chart_fills_its_flexed_box_on_desktop():
+def test_the_chart_box_fills_the_flexed_card_on_desktop():
+    """The card is the tile's height; the body flexes to fill it; the
+    chart box takes whatever the body has left."""
     seg = _CSS[_CSS.index("@media (min-width: 901px) {") :][:900]
     assert ".netz-card {" in seg and "height: 100%" in seg
-    assert ".netz-svg.netz-tune-svg {" in seg
-    assert "width: 100%" in seg[seg.index(".netz-svg.netz-tune-svg {") :]
+    chart = seg[seg.index(".netz-card-chart {") :]
+    assert "flex: 1 1 auto" in chart[: chart.index("}")]
+    assert "min-height: 0" in chart[: chart.index("}")]
 
 
-def test_the_radar_is_wider_than_it_is_tall():
-    tune_radar = (_JS / "netz" / "_tune_radar.js").read_text(encoding="utf-8")
-    m_w = tune_radar[tune_radar.index("TUNE_W = ") :].split("\n", 1)[0]
-    m_h = tune_radar[tune_radar.index("TUNE_H = ") :].split("\n", 1)[0]
+def test_the_chart_box_has_a_real_height_on_a_phone():
+    """No tile height to inherit in the single-column layout — a clamp()
+    whose 260 px floor wins on a 375/393 px screen (60vw = 225–236 px)."""
+    chart = _CSS[_CSS.index(".netz-card-chart {") :]
+    rule = chart[: chart.index("}")]
+    assert "height: clamp(260px, 60vw, 380px)" in rule
+    assert "position: relative" in rule
+    assert "vh" not in rule
+
+
+def test_the_svg_is_edge_to_edge_in_both_directions():
+    """Outside any media block: the same 100 % x 100 % on every screen.
+    Letterboxing is what made the net "so viel zu klein"."""
+    svg = _CSS[_CSS.index(".netz-svg.netz-tune-svg {") :]
+    rule = svg[: svg.index("}")]
+    assert "width: 100%" in rule
+    assert "height: 100%" in rule
+    assert "display: block" in rule
+
+
+# ── 10b · the radar is drawn at the box's own px size ─────────────────
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_the_net_body_draws_the_radar_at_the_measured_size():
+    """viewBox == the box's px size, 1 unit = 1 px — a bigger box is a
+    bigger ring, not the same 560 x 300 drawing with more margin."""
+    out = _js(
+        f"""
+        {_SETUP}
+        const cam = {{ id: 'cam_a', name: 'Werkstatt' }};
+        const big = cards.netBodyHtml(cam, {{ width: 700, height: 340 }});
+        const none = cards.netBodyHtml(cam);
+        console.log(JSON.stringify({{
+          bigBox: big.includes('viewBox="0 0 700 340" width="700" height="340"'),
+          fallback: none.includes('viewBox="0 0 560 300" width="560" height="300"'),
+          chartWrapsSvg: big.indexOf('netz-card-chart') < big.indexOf('netz-tune-svg'),
+        }}));
+        """
+    )
+    assert out["bigBox"] is True
+    assert out["fallback"] is True
+    assert out["chartWrapsSvg"] is True
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_the_staging_bar_lives_inside_the_chart_box():
+    """It overlays the net's bottom edge (absolute inside .netz-card-chart,
+    see the CSS test below) — so it has to be a child of that box, and it
+    only exists while values are staged."""
+    out = _js(
+        f"""
+        {_SETUP}
+        const cam = {{ id: 'cam_a', name: 'Werkstatt' }};
+        const clean = cards.netBodyHtml(cam, {{ width: 700, height: 340 }});
+        S.stageValue('cam_a', 'roi_mode', '2x2');
+        const staged = cards.netBodyHtml(cam, {{ width: 700, height: 340 }});
+        const chartEnd = staged.lastIndexOf('</div>');
+        console.log(JSON.stringify({{
+          cleanHasBar: clean.includes('netz-stage'),
+          stagedHasBar: staged.includes('netz-stage'),
+          barInsideChart: staged.indexOf('netz-stage') < chartEnd,
+        }}));
+        """
+    )
+    assert out["cleanHasBar"] is False, "the bar reserves height while nothing is staged"
+    assert out["stagedHasBar"] is True
+    assert out["barInsideChart"] is True
+
+
+def test_the_staging_bar_is_an_overlay_not_a_row():
+    stage = _CSS[_CSS.index(".netz-stage {") :]
+    rule = stage[: stage.index("}")]
+    assert "position: absolute" in rule
+    assert "bottom:" in rule
+    assert "position: fixed" not in rule
+    assert "position: sticky" not in rule
+
+
+def test_the_panel_measures_the_box_before_drawing_into_it():
+    """The empty-probe measurement: lay out an empty .netz-card-chart in
+    the body, read its px size, then render the radar for that size."""
+    assert "function _measureChart(" in _PANEL
+    assert "getBoundingClientRect()" in _PANEL
+    assert "netBodyHtml(cam, _measureChart(body))" in _PANEL
+
+
+def test_the_panel_repaints_when_its_box_changes_size():
+    """A ResizeObserver per slot (rotation, sidebar, window drag) on top
+    of the window-resize path in netz/index.js — and never mid-drag, which
+    would tear the dragged SVG out from under the finger."""
+    assert "ResizeObserver" in _PANEL
+    assert "function _repaintIfResized(" in _PANEL
+    fn_start = _PANEL.index("function _repaintIfResized(")
+    fn_end = _PANEL.index("\n}", fn_start)
+    assert "isTuneDragging()" in _PANEL[fn_start:fn_end]
+    assert "export function redrawOnResize" in _PANEL
+
+
+def test_the_fallback_radar_is_wider_than_it_is_tall():
+    geometry = (_JS / "netz" / "_tune_geometry.js").read_text(encoding="utf-8")
+    m_w = geometry[geometry.index("TUNE_W = ") :].split("\n", 1)[0]
+    m_h = geometry[geometry.index("TUNE_H = ") :].split("\n", 1)[0]
     w = int("".join(c for c in m_w if c.isdigit()))
     h = int("".join(c for c in m_h if c.isdigit()))
     assert w > h

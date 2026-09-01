@@ -17,58 +17,20 @@
 //     the ring label here would have been a confident lie.
 //
 // THE MISTAKE NOT TO REPEAT is still in force (_radar.js:13-20): the
-// viewBox and the width/height attributes carry the SAME aspect ratio, so
-// the mapping stays uniform 1:1 and glyphs cannot distort. An ellipse is
-// safe; a square viewBox stretched by CSS is not.
+// viewBox and the width/height attributes carry the SAME numbers, so the
+// mapping stays uniform 1:1 and glyphs cannot distort. Those numbers are
+// the chart box's own measured px size now (netz/_panel.js measures,
+// _tune_geometry.js turns the size into the ring) — the SVG fills its
+// box edge to edge instead of letterboxing a fixed 560 x 300 inside it.
 //
-// eFromRadius/radiusForE in _mapping.js are a bit-for-bit mirror of
-// app/app/thresholds/_apply.py and are pinned by test_netz_mapping_mirror
-// — they are deliberately NOT reused or extended here. The ellipse
-// inverse below is local to the settings path.
+// The ellipse math itself (radarGeometry, tunePolar, eFromEllipse) lives
+// in _tune_geometry.js, DOM-free, so the drag layer and a node test can
+// share it with the renderer.
 
 import { esc } from '../core/dom.js';
 import { TUNE_GROUPS } from './_settings_axes.js';
-import { LABEL_OFF_X, LABEL_W, labelsSvg } from './_tune_labels.js';
-
-// viewBox geometry. Wider than tall so the left/right label rails have
-// horizontal room; PAD_X is exactly what one rail needs, derived from the
-// label metrics rather than guessed, so the boxes cannot hang off the
-// viewBox when either number is tuned. 560x300 (was 440x340) both widens
-// the ellipse itself — "die Erkennungsansicht auch noch etwas in die
-// Länge strecken" — and shortens it, which is what actually buys back
-// the panel height a Live-Feed tile leaves it (see the height-parity
-// block in 03-dashboard.css: the SVG fills whatever box flex gives it,
-// so a shorter viewBox means the on-screen chart is shorter too).
-export const TUNE_W = 560;
-export const TUNE_H = 300;
-const PAD_X = LABEL_W + LABEL_OFF_X + 4;
-const PAD_Y = 40;
-// Snap window around an axis's own default, so "back to Werk" is
-// recoverable by feel — the equivalent of _mapping.js's factory snap.
-const SNAP = 2;
-
-export function tuneGeometry(w = TUNE_W, h = TUNE_H) {
-  return { cx: w / 2, cy: h / 2, rx: w / 2 - PAD_X, ry: h / 2 - PAD_Y };
-}
-
-/** Point on the ellipse for (axis index, radial fraction 0-1). Index 0
- *  points straight up, the rest run clockwise. */
-export function tunePolar(i, n, frac, geo) {
-  const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
-  return { x: geo.cx + Math.cos(a) * geo.rx * frac, y: geo.cy + Math.sin(a) * geo.ry * frac };
-}
-
-/** Pointer offset from the centre → E (0-100), normalised PER AXIS so the
- *  same visual distance reads the same E on the long and the short axis.
- *  A plain hypot() would make the vertical axes reach 100 sooner than the
- *  horizontal ones on an ellipse. */
-export function eFromEllipse(dx, dy, geo, defaultE = null) {
-  if (!(geo.rx > 0) || !(geo.ry > 0)) return 0;
-  const frac = Math.hypot(dx / geo.rx, dy / geo.ry);
-  const raw = Math.max(0, Math.min(100, Math.round(frac * 100)));
-  if (defaultE !== null && Math.abs(raw - defaultE) <= SNAP) return defaultE;
-  return raw;
-}
+import { radarGeometry, tunePolar } from './_tune_geometry.js';
+import { labelsSvg } from './_tune_labels.js';
 
 function _pointsFor(axes, values, geo) {
   return axes
@@ -169,6 +131,14 @@ function _vertexSvg(axis, i, n, geo, interactive) {
   );
 }
 
+/** The geometry an already-rendered radar was drawn with, read back from
+ *  its own viewBox — the one place the size survives once the render
+ *  call that measured it has returned. */
+export function svgGeometry(svg) {
+  const vb = svg.viewBox.baseVal;
+  return radarGeometry({ width: vb.width, height: vb.height });
+}
+
 /** Move ONE vertex in an already-rendered SVG, in place.
  *
  *  The drag used to re-render the whole chart (rings, spokes, polygon,
@@ -182,7 +152,7 @@ export function moveTuneVertex(svg, axes, key) {
   if (!svg) return;
   const i = axes.findIndex((a) => a.key === key);
   if (i < 0) return;
-  const geo = tuneGeometry();
+  const geo = svgGeometry(svg);
   const axis = axes[i];
   const p = tunePolar(i, axes.length, Math.max(0, Math.min(100, axis.E)) / 100, geo);
   const g = svg.querySelector(`.netz-vertex[data-tune-axis="${CSS.escape(key)}"]`);
@@ -212,14 +182,18 @@ export function moveTuneVertex(svg, axes, key) {
  *                                    buildClassAxes() rows — ONE net per
  *                                    camera carries both concerns.
  * @param {boolean} opts.interactive  false = a static, non-draggable copy
+ * @param {object}  [opts.size]       `{width, height}` — the chart box's
+ *                                    measured px size, which becomes the
+ *                                    viewBox 1:1. Omitted (no box to
+ *                                    measure yet) = the 560 x 300 fallback.
  */
-export function renderTuneRadar({ axes, interactive = true }) {
-  const geo = tuneGeometry();
+export function renderTuneRadar({ axes, interactive = true, size = null }) {
+  const geo = radarGeometry(size || {});
   const values = axes.map((a) => a.E);
   const ends = _spokeEnds(axes, geo);
   return (
-    `<svg class="netz-svg netz-tune-svg" viewBox="0 0 ${TUNE_W} ${TUNE_H}" ` +
-    `width="${TUNE_W}" height="${TUNE_H}" role="img" aria-label="Erkennungsprofil">` +
+    `<svg class="netz-svg netz-tune-svg" viewBox="0 0 ${geo.w} ${geo.h}" ` +
+    `width="${geo.w}" height="${geo.h}" role="img" aria-label="Erkennungsprofil">` +
     _ringsSvg(geo) +
     _spokesSvg(ends, geo) +
     _defaultSvg(axes, geo) +
@@ -228,7 +202,7 @@ export function renderTuneRadar({ axes, interactive = true }) {
     // Label + its CURRENT VALUE, on the rail. Showing the value on the
     // chart is what makes the net readable without tapping every spoke —
     // the complaint the redesign started from.
-    labelsSvg(ends, geo, TUNE_H, interactive) +
+    labelsSvg(ends, geo, interactive) +
     `</svg>`
   );
 }

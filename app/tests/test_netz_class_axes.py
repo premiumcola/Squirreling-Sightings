@@ -154,30 +154,38 @@ def test_a_class_axis_never_joins_the_staging_bar():
 # ── the label rail survives the extra spokes ──────────────────────────
 
 
+# The radar is drawn at its chart box's measured px size (netz/
+# _tune_geometry.js) — `size` is that measurement; `{}` is the 560 x 300
+# fallback a render without a box gets.
 _RAIL = """
   const L = await import(JS + '/netz/_tune_labels.js');
-  const R = await import(JS + '/netz/_tune_radar.js');
-  const geo = R.tuneGeometry();
-  const mk = (n) => Array.from({ length: n }, (_, i) => ({
+  const G = await import(JS + '/netz/_tune_geometry.js');
+  const geoFor = (size) => G.radarGeometry(size);
+  const mk = (n, geo) => Array.from({ length: n }, (_, i) => ({
     axis: { key: 'k' + i, label: 'Wildtier-Empfindlichkeit', display: '50 %', color: '#fff' },
-    ...R.tunePolar(i, n, 1, geo),
+    ...G.tunePolar(i, n, 1, geo),
   }));
-  const boxes = (n) => {
-    const { rows, rowH } = L.placeLabels(mk(n), geo, R.TUNE_H);
+  const boxes = (n, size = {}) => {
+    const geo = geoFor(size);
+    const { rows, rowH } = L.placeLabels(mk(n, geo), geo);
     return rows.map((r) => ({ side: r.side, top: r.y - rowH / 2, bot: r.y + rowH / 2, x: r.x }));
   };
 """
 
+# The fallback, a 375 px phone's box (260 px floor), a desktop box.
+_SIZES = ["{}", "{ width: 331, height: 260 }", "{ width: 690, height: 336 }"]
 
+
+@pytest.mark.parametrize("size", _SIZES)
 @pytest.mark.parametrize("n", [10, 13, 15, 21])
-def test_no_two_label_boxes_overlap_at_any_axis_count(n):
+def test_no_two_label_boxes_overlap_at_any_axis_count(n, size):
     """The whole reason _tune_labels.js exists. Boxes on the same rail are
     laid out top-down and must not intersect — at 15 spokes the old
     on-circle placement overlapped by ~30 px around the bottom."""
     out = _js(
         f"""
         {_RAIL}
-        console.log(JSON.stringify(boxes({n})));
+        console.log(JSON.stringify(boxes({n}, {size})));
         """
     )
     for side in ("l", "r"):
@@ -186,20 +194,21 @@ def test_no_two_label_boxes_overlap_at_any_axis_count(n):
             assert cur["top"] >= prev["bot"] - 0.01, f"labels overlap on rail {side}: {prev} {cur}"
 
 
+@pytest.mark.parametrize("size", _SIZES)
 @pytest.mark.parametrize("n", [10, 15, 21])
-def test_every_label_box_stays_inside_the_viewbox(n):
+def test_every_label_box_stays_inside_the_viewbox(n, size):
     """A label pushed off the bottom by the de-collision pass is a label
-    the operator cannot read — and the viewBox height is fixed on purpose,
-    because a taller one would shrink every glyph in a fixed-width card."""
+    the operator cannot read — and the box is whatever the panel measured,
+    so this has to hold at a phone's size as well as a desktop's."""
     out = _js(
         f"""
         {_RAIL}
-        const H = R.TUNE_H;
+        const geo = geoFor({size});
         console.log(JSON.stringify({{
-          boxes: boxes({n}),
-          h: H,
-          w: R.TUNE_W,
-          labelW: L.LABEL_W,
+          boxes: boxes({n}, {size}),
+          h: geo.h,
+          w: geo.w,
+          labelW: G.LABEL_W,
         }}));
         """
     )

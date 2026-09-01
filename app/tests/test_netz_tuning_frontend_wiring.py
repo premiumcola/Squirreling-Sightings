@@ -106,6 +106,9 @@ def test_the_settings_radar_keeps_a_uniform_viewbox_mapping():
     ratio differs from the element's scales x and y by different factors
     and visibly distorts the glyphs. An ellipse is fine; a stretched
     square is not — so the width/height attributes must carry the same
-    numbers as the viewBox."""
-    assert 'viewBox="0 0 ${TUNE_W} ${TUNE_H}" ` +\n    `width="${TUNE_W}" height="${TUNE_H}"' in _TUNE_RADAR_JS
+    numbers as the viewBox. Those numbers are now the chart box's own
+    measured px size (netz/_tune_geometry.js) — still one pair, still
+    1:1."""
+    same_pair = 'viewBox="0 0 ${geo.w} ${geo.h}" ` +\n    `width="${geo.w}" height="${geo.h}"'
+    assert same_pair in _TUNE_RADAR_JS
     assert "preserveAspectRatio" not in _TUNE_RADAR_JS

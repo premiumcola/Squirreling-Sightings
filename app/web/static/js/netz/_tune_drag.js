@@ -21,7 +21,8 @@ import { showConfirm, showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { classAxisSpec, isClassAxisKey, resetClassAxis, saveClassAxis } from './_class_rows.js';
 import { TUNE_SPECS, tuneDisplay, tuneRawFromE } from './_settings_axes.js';
-import { eFromEllipse, moveTuneVertex, tuneGeometry, TUNE_H, TUNE_W } from './_tune_radar.js';
+import { eFromEllipse } from './_tune_geometry.js';
+import { moveTuneVertex, svgGeometry } from './_tune_radar.js';
 import { applySaved, axisFor, netzState, stageValue, unstage } from './_state.js';
 
 const LONG_PRESS_MS = 500;
@@ -56,19 +57,23 @@ function _hidePill(card) {
   if (el) el.dataset.on = '0';
 }
 
-/** Screen geometry of THIS card's radar, mapped back to viewBox units.
- *  The SVG scales uniformly (viewBox and width/height share an aspect
- *  ratio), so one scale factor converts client px to viewBox px. */
+/** Screen geometry of THIS card's radar: the ring it was drawn with (read
+ *  back from its own viewBox) mapped to client px. After a measured
+ *  render the viewBox IS the box's px size, so scale is 1 and the offsets
+ *  0 — the general xMidYMid-meet mapping below is what keeps a drag right
+ *  on the 560 x 300 fallback too (a render before the box had a size). */
 function _geometry(card) {
   const svg = card.querySelector('.netz-tune-svg');
   if (!svg) return null;
   const box = svg.getBoundingClientRect();
-  if (!(box.width > 0)) return null;
-  const scale = box.width / TUNE_W;
-  const geo = tuneGeometry();
+  if (!(box.width > 0) || !(box.height > 0)) return null;
+  const geo = svgGeometry(svg);
+  const scale = Math.min(box.width / geo.w, box.height / geo.h);
+  const ox = box.left + (box.width - geo.w * scale) / 2;
+  const oy = box.top + (box.height - geo.h * scale) / 2;
   return {
-    cx: box.left + geo.cx * scale,
-    cy: box.top + (TUNE_H / 2) * scale,
+    cx: ox + geo.cx * scale,
+    cy: oy + geo.cy * scale,
     rx: geo.rx * scale,
     ry: geo.ry * scale,
   };

@@ -313,19 +313,25 @@
   font-style: normal;
 }
 
-/* ── staging bar ────────────────────────────────────────────────────── */
+/* ── staging bar ────────────────────────────────────────────────────────
+   An overlay along the bottom edge of the chart box (.netz-card-chart is
+   its containing block), present only while values are staged — a bar in
+   the flow would reserve its own height under the net on every panel, or
+   make the net jump by that height each time a first drag brings it in.
+   Absolute, never fixed: it rides the box, not the viewport. */
 
 .netz-stage {
-  position: sticky;
-  bottom: 0;
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 6px 6px 6px 12px;
   border-radius: 12px;
   background: rgba(15, 24, 37, 0.97);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   font-size: 13px;
   font-weight: 600;
   color: #e2e8f0;
@@ -334,6 +340,10 @@
 
 .netz-stage span {
   flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .netz-btn {
@@ -474,7 +484,12 @@
    .netz-cards horizontal scroll strip) is gone — every camera gets its
    own permanent panel beside its own Live-Feed tile now (dashboard.js's
    .cam-net-slot), so there is no single view to switch between and
-   nothing left to pick a camera FOR. */
+   nothing left to pick a camera FOR.
+
+   .netz-view-btn is THE icon-only button of this section: the page-level
+   "Hinweise" button (dashboard.html) and, per panel, the Verlauf toggle
+   and the ghost switch in the header (netz/_panel.js) — one shape, one
+   44 px target, pressed = green. */
 
 .netz-view-btn {
   width: 44px;
@@ -499,7 +514,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 10px 10px 12px;
+  padding: 4px 10px 10px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   scroll-snap-align: start;
@@ -509,10 +524,17 @@
   background: rgba(34, 197, 94, 0.1);
 }
 
+/* ONE row, one button tall: icon + name, then the Verlauf and ghost
+   buttons (.netz-view-btn, 44 px, `flex-shrink: 0`). They follow the h4
+   directly — not `margin-left: auto`, the documented iOS inline-flex
+   layout hazard; the h4's `flex: 1 1 auto` already eats the slack, and
+   it ellipsises rather than wrapping so a long camera name can never
+   make the row two lines tall. Every px this row does not take is a px
+   the net below gets. */
 .netz-card-hd {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 2px;
 }
 
@@ -523,18 +545,34 @@
   font-size: 14px;
   font-weight: 700;
   color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* The Verlauf chip (.netz-chip-toggle, `flex-shrink: 0` via its own rule)
-   follows directly after — not `margin-left: auto`, the documented iOS
-   inline-flex layout hazard; the h4's `flex: 1 1 auto` already eats the
-   slack. No role badge, no second icon button: just the camera's own
-   identity and the one toggle this header still owns. */
-
+/* ── the chart box IS the net's size ─────────────────────────────────────
+   netz/_panel.js measures this box in px and the radar's viewBox is
+   exactly that (netz/_tune_geometry.js), so nothing here may let the box
+   size itself from the radar inside it — the box is sized by its
+   CONTAINER only, and an empty box measures the same as a drawn one.
+   On a phone that is a fixed clamp(): 60vw is 225–236 px on a 375/393 px
+   screen, so the 260 px floor wins there and the ring still has room for
+   both label rails. The staging bar overlays the bottom edge (see
+   .netz-stage) instead of taking a row of its own. */
 .netz-card-chart {
   position: relative;
-  display: flex;
-  justify-content: center;
+  height: clamp(260px, 60vw, 380px);
+}
+
+/* Edge to edge in both directions. The viewBox carries the box's own px
+   size, so 100 % x 100 % is a 1:1 mapping — no letterboxing, and the
+   ellipse still cannot distort (the two share their aspect ratio by
+   construction, not by preserveAspectRatio). */
+.netz-svg.netz-tune-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
 }
 
 /* ── height parity with the neighbouring Live-Feed tile ─────────────────
@@ -560,26 +598,11 @@
     overflow-y: auto;
   }
 
+  /* Whatever the flex column above has left, all of it. */
   .netz-card-chart {
+    height: auto;
     flex: 1 1 auto;
     min-height: 0;
-    align-items: center;
-  }
-
-  .netz-card-controls,
-  .netz-stage {
-    flex: 0 0 auto;
-  }
-
-  /* Fills whatever height the flex column above gives it instead of
-     deriving its own height from its width (the base .netz-svg rule) —
-     the ellipse still cannot distort: no explicit preserveAspectRatio
-     means the SVG default (xMidYMid meet) applies, which letterboxes
-     rather than stretching. */
-  .netz-svg.netz-tune-svg {
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
   }
 }
 
@@ -701,38 +724,7 @@
   border-radius: 50%;
 }
 
-/* ── per-card controls + the plain frozen box ─────────────────────────── */
-
-.netz-card-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin-top: 8px;
-}
-
-/* A compact on/off chip: pressed = the setting is active. Same visual
-   language as .netz-pill, so the card has one chip shape, not two. */
-.netz-chip-toggle {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.netz-chip-toggle[aria-pressed='true'] {
-  background: rgba(34, 197, 94, 0.24);
-  color: #eaf7ee;
-}
+/* ── the plain frozen box ─────────────────────────────────────────────── */
 
 /* A plain box, not a <details>: reference material the operator should be
    able to read without a click. */

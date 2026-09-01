@@ -20,23 +20,18 @@
 // to the spoke it belongs to. Standard treatment for dense radial labels,
 // and it degrades gracefully — with 10 axes almost nothing moves.
 //
-// THE VIEWBOX STAYS 440 x 340 whatever the axis count. The panel's width
-// is whatever its .cam-net-slot column gives it (the SVG scales down via
-// width/height="100%" in CSS), so a wider viewBox would only shrink every
-// glyph — the extra axes are paid for out of ROW HEIGHT on the rail, the
-// one dimension that can actually give.
+// THE VIEWBOX IS THE CHART BOX'S OWN PX SIZE (_tune_geometry.js), 1 unit
+// = 1 px, whatever the axis count. A label box is always LABEL_W wide at
+// a real 11 px font — the extra axes are paid for out of ROW HEIGHT on
+// the rail, the one dimension that can actually give, never by shrinking
+// the glyphs.
 //
 // This module owns no geometry of its own: it is handed the spoke
 // endpoints _tune_radar.js already computed, which is what keeps the
 // import one-way and the angle math single-sourced.
 
 import { esc } from '../core/dom.js';
-
-/** Label box width, and the gap between the ring and the rail. PAD_X in
- *  _tune_radar.js is derived from these — the ring has to leave exactly
- *  this much room or the rail hangs off the viewBox. */
-export const LABEL_W = 96;
-export const LABEL_OFF_X = 12;
+import { LABEL_OFF_X, LABEL_W } from './_tune_geometry.js';
 
 // Row height on the rail: the natural 36 px while there is room, never
 // below 22 (two 9 px lines plus leading). 21 axes = 11 per side = 29 px.
@@ -77,13 +72,14 @@ function _spread(rows, rowH, h) {
  *
  * @param {Array}  points  `[{axis, x, y}]` — one spoke ENDPOINT per axis,
  *                         in axis order, as computed by _tune_radar.js.
- * @param {object} geo     `{cx, cy, rx, ry}` of the ring.
- * @param {number} h       viewBox height.
+ * @param {object} geo     radarGeometry() — the ring plus `h`, the
+ *                         viewBox height the rails may use.
  * @returns {{rows: Array, rowH: number}} rows carry `{axis, sx, sy, x, y,
  *          side}` — `sx/sy` the spoke end, `x/y` the label box anchor.
  */
-export function placeLabels(points, geo, h) {
+export function placeLabels(points, geo) {
   const n = points.length;
+  const { h } = geo;
   const rowH = labelRowHeight(n, h);
   const right = [];
   const left = [];
@@ -137,8 +133,8 @@ function _boxSvg(r, rowH, interactive) {
 
 /** Connectors first, then the boxes — the leader must never draw over
  *  the text it points at. */
-export function labelsSvg(points, geo, h, interactive) {
-  const { rows, rowH } = placeLabels(points, geo, h);
+export function labelsSvg(points, geo, interactive) {
+  const { rows, rowH } = placeLabels(points, geo);
   return (
     rows.map((r) => _leaderSvg(r)).join('') +
     rows.map((r) => _boxSvg(r, rowH, interactive)).join('')

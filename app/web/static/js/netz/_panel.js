@@ -20,8 +20,15 @@ import { byId, esc } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { getCameraColor, getCameraIcon } from '../core/icons.js';
 import { fetchArchive, fetchArchiveRecord } from './_api.js';
-import { bindNetBody, combosHtml, frozenSectionHtml, netBodyHtml } from './_cards.js';
-import { tuneGroupLegendHtml } from './_tune_radar.js';
+import {
+  bindGhostToggle,
+  bindNetBody,
+  combosHtml,
+  frozenSectionHtml,
+  ghostToggleHtml,
+  netBodyHtml,
+} from './_cards.js';
+import { svgGeometry, tuneGroupLegendHtml } from './_tune_radar.js';
 import { bindTuneDrag, isTuneDragging } from './_tune_drag.js';
 import { renderArchiveDetail } from './_archive_detail.js';
 import { renderArchiveList } from './_archive_list.js';
@@ -42,21 +49,37 @@ function _slotFor(camId) {
 
 // ── panel shell ─────────────────────────────────────────────────────────
 
-// Camera icon + name, and one small text chip for the Verlauf toggle — no
-// role badge (redundant with the camera's own identity), no icon-only
-// button (the history glyph the toggle used to be read as "Aktualisieren"
-// — a label removes the ambiguity outright instead of finding a clearer
-// icon), no per-panel frozen-values button (folded into the page-level
-// "Was zusammen wirkt" box instead — see frozenSectionHtml in _cards.js).
+// ONE compact row: camera icon + name on the left, two icon-only buttons
+// on the right — Verlauf and the ghost switch. The header and a separate
+// controls row under the chart used to cost the net two rows of its own
+// height beside a tile that never grows ("der Name … da kann eben oben
+// eine Ecke sein … sonst nehmt's raus und macht das Netz einfach viel
+// größer"). The history glyph once read as "Aktualisieren" and got a
+// text label for it; the tooltip now carries that explanation instead,
+// which is what keeps the row one button-height tall. No role badge
+// (redundant with the camera's own identity), no per-panel frozen-values
+// button (folded into the page-level "Was zusammen wirkt" box — see
+// frozenSectionHtml in _cards.js).
+const _HISTORY_ICON =
+  `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ` +
+  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+  `<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>` +
+  `<polyline points="12 7.5 12 12.5 15.5 14"/></svg>`;
+const _VERLAUF_TITLE = 'Verlauf – frühere Profile dieser Kamera ansehen und wiederherstellen';
+const _BACK_TITLE = 'Zurück zum Netz';
+
 function _headerHtml(cam, camId) {
   const inVerlauf = viewFor(camId) === 'verlauf';
+  const title = inVerlauf ? _BACK_TITLE : _VERLAUF_TITLE;
   return (
     `<header class="netz-card-hd">` +
     `<span class="netz-card-ic" style="color:${getCameraColor(cam)}" aria-hidden="true">` +
     `${getCameraIcon(cam.name || camId)}</span>` +
     `<h4>${esc(cam.name)}</h4>` +
-    `<button type="button" class="netz-chip-toggle" data-netz-toggle-verlauf ` +
-    `aria-pressed="${inVerlauf ? 'true' : 'false'}">${inVerlauf ? 'Zurück' : 'Verlauf'}</button>` +
+    `<button type="button" class="netz-view-btn" data-netz-toggle-verlauf ` +
+    `aria-pressed="${inVerlauf ? 'true' : 'false'}" aria-label="${title}" title="${title}">` +
+    `${_HISTORY_ICON}</button>` +
+    ghostToggleHtml(camId) +
     `</header>`
   );
 }
@@ -69,6 +92,28 @@ function _shellHtml(cam) {
     `<div class="netz-card-body"></div>` +
     `</article>`
   );
+}
+
+// ── chart size ──────────────────────────────────────────────────────────
+// The radar is drawn AT its box's px size (viewBox 1:1, see
+// _tune_geometry.js), so the box has to be known BEFORE the body is
+// rendered. .netz-card-chart is container-sized by CSS alone — flex-
+// filled beside the tile on desktop, a fixed clamp() on a phone
+// (32-netz.css) — never by the radar inside it, which is what makes an
+// EMPTY box measure exactly what the drawn one will.
+
+function _chartSizeOf(chart) {
+  const r = chart.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 ? { width: r.width, height: r.height } : null;
+}
+
+/** Measure the box the net body is about to get, by laying out an empty
+ *  one in its place. Null when the panel has no size yet (a hidden
+ *  section) — the render then falls back to 560 x 300 and the resize
+ *  observer below repaints it the moment the box gets a size. */
+function _measureChart(body) {
+  body.innerHTML = '<div class="netz-card-chart"></div>';
+  return _chartSizeOf(body.firstElementChild);
 }
 
 // ── render ────────────────────────────────────────────────────────────
@@ -91,10 +136,11 @@ export function renderPanel(camId) {
     // The group legend used to be prepended here, once per panel —
     // camera-independent reference text, so it now has ONE page-level
     // home (initGroupLegend below) instead of repeating on every panel.
-    body.innerHTML = netBodyHtml(cam);
+    body.innerHTML = netBodyHtml(cam, _measureChart(body));
     bindNetBody(article, () => renderPanel(camId));
     bindTuneDrag(body, () => renderPanel(camId));
   }
+  _observeSlot(slot);
 }
 
 function _bindHeader(article, camId) {
@@ -102,6 +148,7 @@ function _bindHeader(article, camId) {
     setView(camId, viewFor(camId) === 'verlauf' ? 'netz' : 'verlauf');
     renderPanel(camId);
   });
+  bindGhostToggle(article, () => renderPanel(camId));
 }
 
 // ── Verlauf sub-view ─────────────────────────────────────────────────────
@@ -161,16 +208,62 @@ export function ensurePanelsMounted() {
   });
 }
 
-/** Re-draw every panel currently showing its net (not its Verlauf) — the
- *  viewBox mapping is uniform but the rendered px size is not, so a
- *  rotation or a window drag needs a repaint. Skipped entirely while a
- *  vertex is being dragged: rebuilding that panel's SVG mid-drag would
- *  drop the pointer capture (netz/_tune_drag.js's own resize comment). */
+/** Repaint ONE panel's net if its chart box no longer matches the size
+ *  its radar was drawn at — a rotation, a window drag, the tile beside
+ *  it changing height. Skipped while a vertex is being dragged:
+ *  rebuilding that panel's SVG mid-drag would drop the pointer capture
+ *  (netz/_tune_drag.js's own resize comment). The size check is what
+ *  keeps this cheap on iOS, where every address-bar collapse fires a
+ *  resize that changes nothing about the box. */
+function _repaintIfResized(camId) {
+  if (isTuneDragging() || viewFor(camId) !== 'netz') return;
+  const chart = _slotFor(camId)?.querySelector('.netz-card-chart');
+  const svg = chart?.querySelector('.netz-tune-svg');
+  if (!svg) return;
+  const size = _chartSizeOf(chart);
+  if (!size) return;
+  const geo = svgGeometry(svg);
+  if (Math.abs(geo.w - size.width) < 1 && Math.abs(geo.h - size.height) < 1) return;
+  renderPanel(camId);
+}
+
+/** Every panel currently showing its net — the window-resize path
+ *  (netz/index.js). */
 export function redrawOnResize() {
-  if (isTuneDragging()) return;
-  (netzState.cameras || []).forEach((cam) => {
-    if (viewFor(cam.id) === 'netz' && _slotFor(cam.id)?.firstElementChild) renderPanel(cam.id);
-  });
+  (netzState.cameras || []).forEach((cam) => _repaintIfResized(cam.id));
+}
+
+// The slot resizes without any window event too: the desktop grid row
+// takes its height from the Live-Feed tile (03-dashboard.css), so the
+// tile loading, or the column changing width, changes the box under the
+// radar. One observer for every slot; the callback only schedules — a
+// repaint that changed the observed box from inside the callback would
+// trip the browser's "loop completed with undelivered notifications"
+// guard, and the debounce coalesces the burst a live drag of the window
+// edge produces. Slots are preserved across dashboard.js re-renders, so
+// observing the same node again is the no-op the spec makes it.
+const _repaintTimers = new Map();
+
+function _scheduleRepaint(camId) {
+  clearTimeout(_repaintTimers.get(camId));
+  _repaintTimers.set(
+    camId,
+    setTimeout(() => {
+      _repaintTimers.delete(camId);
+      _repaintIfResized(camId);
+    }, 120),
+  );
+}
+
+const _slotObserver =
+  typeof ResizeObserver === 'function'
+    ? new ResizeObserver((entries) => {
+        entries.forEach((e) => _scheduleRepaint(e.target.dataset.camid));
+      })
+    : null;
+
+function _observeSlot(slot) {
+  _slotObserver?.observe(slot);
 }
 
 // ── page-level "Was zusammen wirkt" + "Werte, die fest bleiben" ─────────

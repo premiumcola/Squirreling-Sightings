@@ -92,8 +92,11 @@ window.addEventListener('hashchange', () => {
   _openQuestionsDeepLink();
 });
 
-// Re-draw on resize so the viewBox keeps its uniform mapping through a
-// rotation or a window drag. Debounced, and skipped mid-drag.
+// Re-draw on resize: the radar is drawn at its box's px size, so a
+// rotation or a window drag needs a repaint (the per-slot ResizeObserver
+// in _panel.js catches the same and more; both go through one size check,
+// so a resize that leaves the box alone costs nothing). Debounced, and
+// skipped mid-drag.
 let _resizeTimer = null;
 window.addEventListener(
   'resize',

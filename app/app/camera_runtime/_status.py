@@ -156,6 +156,12 @@ class StatusMixin:
             "coral_reason": getattr(self.detector, "reason", "disabled"),
             "bird_species_available": getattr(self.bird_classifier, "available", False),
             "bird_species_mode": getattr(self.bird_classifier, "mode", "none"),
+            # camedit/index.js's status hint already reads this field
+            # (`cam0?.bird_species_reason`) — it was simply never sent,
+            # so the "⚠️ Vogelarten-Klassifikation: …" warning line
+            # could never render even when the classifier was genuinely
+            # unavailable. Mirrors coral_reason above.
+            "bird_species_reason": getattr(self.bird_classifier, "reason", "disabled"),
             # Connection health diagnostics
             "frame_age_s": frame_age_s,
             "reconnect_count": self._reconnect_count,

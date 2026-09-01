@@ -153,6 +153,48 @@ def _sweep_trash(log) -> None:
         log.info("[storage] Trash: %d expired entries purged (>%dd)", purged, grace)
 
 
+def _sweep_bird_species(log) -> None:
+    """Bounded catch-up pass: fills `bird_species` on already-archived
+    events whose live classifier crop never ran or never scored high
+    enough — see bird_species_backfill.py for the full rationale.
+
+    Piggybacks on this existing daily timer rather than a new thread:
+    the operator explicitly framed this as non-realtime, so once a day
+    is plenty for passive catch-up. A manual "Vogelarten nachträglich
+    bestimmen" trigger (POST /api/bird-species/backfill, routes/
+    sichtungen.py) covers "I just installed the model, don't make me
+    wait until tonight".
+
+    NOT gated on auto_cleanup_enabled — this sweep only ever ADDS a
+    field to an existing event, it never deletes anything, so it has
+    nothing to do with that toggle's contract.
+    """
+    from .bird_species_backfill import (
+        build_backfill_classifier,
+        dossier_hook_for,
+        sweep_bird_species_backfill,
+    )
+
+    classifier = build_backfill_classifier(app_state.get_effective_config())
+    if not classifier.available:
+        return
+    cams = app_state.get_effective_config().get("cameras", []) or []
+    cam_ids = [c["id"] for c in cams if c.get("id")]
+    result = sweep_bird_species_backfill(
+        app_state.store,
+        app_state.storage_root,
+        classifier,
+        cam_ids,
+        dossier_hook=dossier_hook_for(app_state.bird_dossiers),
+    )
+    if result["changed"]:
+        log.info(
+            "[det] bird backfill: %d/%d archived events stamped with a species",
+            result["changed"],
+            result["examined"],
+        )
+
+
 def _run_daily_cleanup():
     log = logging.getLogger(__name__)
     if not auto_cleanup_enabled():
@@ -167,6 +209,10 @@ def _run_daily_cleanup():
         _sweep_trash(log)
     except Exception as e:
         log.warning("[storage] Trash cleanup failed: %s", e)
+    try:
+        _sweep_bird_species(log)
+    except Exception as e:
+        log.warning("[det] bird backfill sweep failed: %s", e)
     t = threading.Timer(86400, _run_daily_cleanup)
     t.daemon = True
     t.start()

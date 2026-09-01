@@ -178,6 +178,48 @@ def api_achievements_unlock():
     return jsonify({"ok": True, "already_had": already, "achievements": data})
 
 
+# ── Bird-species backfill ────────────────────────────────────────────────
+# Manual "Vogelarten nachträglich bestimmen" trigger — mirrors routes/
+# tracking.py's /api/tracking/reindex-all button: an operator-driven,
+# on-demand pass instead of waiting for the daily maintenance sweep
+# (maintenance.py::_sweep_bird_species). Useful right after installing
+# the classifier model, when the passive catch-up would otherwise wait
+# up to 24h.
+
+
+@bp.post('/api/bird-species/backfill')
+def api_bird_species_backfill():
+    from ..bird_species_backfill import (
+        MANUAL_BACKFILL_BUDGET,
+        build_backfill_classifier,
+        dossier_hook_for,
+        sweep_bird_species_backfill,
+    )
+
+    classifier = build_backfill_classifier(app_state.get_effective_config())
+    if not classifier.available:
+        return jsonify(
+            {
+                "ok": False,
+                "error": "Vogelarten-Klassifikator nicht verfügbar",
+                "reason": classifier.reason,
+                "examined": 0,
+                "changed": 0,
+            }
+        ), 503
+    cams = app_state.get_effective_config().get("cameras", []) or []
+    cam_ids = [c["id"] for c in cams if c.get("id")]
+    result = sweep_bird_species_backfill(
+        app_state.store,
+        app_state.storage_root,
+        classifier,
+        cam_ids,
+        budget=MANUAL_BACKFILL_BUDGET,
+        dossier_hook=dossier_hook_for(app_state.bird_dossiers),
+    )
+    return jsonify({"ok": True, **result})
+
+
 # ── Bird dossiers (F08) ────────────────────────────────────────────────────
 
 

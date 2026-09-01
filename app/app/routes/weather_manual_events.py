@@ -23,6 +23,7 @@ from ..weather_service._manual_events import (
     MANUAL_EVENT_CATEGORIES_MAX,
     MANUAL_EVENT_CHARACTERISTIC_MAX,
     MANUAL_EVENT_NAME_MAX,
+    MANUAL_EVENT_PHASES,
 )
 
 bp = Blueprint("weather_manual_events", __name__)
@@ -73,9 +74,48 @@ def _validate_categories(body: dict):
     return clean, None
 
 
+def _validate_annotations(body: dict, range_start: str, range_end: str):
+    """Return ``(annotations, error)`` for the chart markers a saved
+    manual event may carry — one entry per (curve, timestamp, phase) the
+    operator placed while drawing on the zoomed chart (see
+    weather/_chart-annotations.js). Optional; defaults to an empty list.
+
+    Any invalid entry fails the WHOLE body, same pattern
+    ``_validate_categories``/``_validate_body`` already use for
+    curves/categories — this is data the operator is deliberately
+    curating for later use, so a malformed entry must surface as an
+    error, never silently vanish.
+    """
+    raw = body.get("annotations")
+    if raw is None:
+        return [], None
+    if not isinstance(raw, list):
+        return None, "annotations must be a list"
+    lo = datetime.fromisoformat(range_start)
+    hi = datetime.fromisoformat(range_end)
+    clean: list[dict] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            return None, "each annotation must be an object"
+        curve = entry.get("curve")
+        if not isinstance(curve, str) or curve not in HISTORY_FIELDS:
+            return None, f"annotation curve must be one of {list(HISTORY_FIELDS)}"
+        ts = _parse_iso(entry.get("ts"))
+        if not ts:
+            return None, "annotation ts must be an ISO timestamp"
+        if not (lo <= datetime.fromisoformat(ts) <= hi):
+            return None, "annotation ts must fall within the saved range"
+        phase = entry.get("phase")
+        if phase not in MANUAL_EVENT_PHASES:
+            return None, f"annotation phase must be one of {list(MANUAL_EVENT_PHASES)}"
+        clean.append({"curve": curve, "ts": ts, "phase": phase})
+    return clean, None
+
+
 def _validate_body(body: dict):
     """Return ``(fields, error)``. ``fields`` carries name/categories/
-    characteristic/range_start/range_end/curves once every check passes."""
+    characteristic/range_start/range_end/curves/annotations once every
+    check passes."""
     name = body.get("name")
     if not isinstance(name, str) or not name.strip():
         return None, "name is required"
@@ -108,6 +148,9 @@ def _validate_body(body: dict):
             return None, f"curves must be a subset of {list(HISTORY_FIELDS)}"
         if c not in clean_curves:
             clean_curves.append(c)
+    annotations, err = _validate_annotations(body, range_start, range_end)
+    if err:
+        return None, err
     return {
         "name": name,
         "categories": categories,
@@ -115,6 +158,7 @@ def _validate_body(body: dict):
         "range_start": range_start,
         "range_end": range_end,
         "curves": clean_curves,
+        "annotations": annotations,
     }, None
 
 

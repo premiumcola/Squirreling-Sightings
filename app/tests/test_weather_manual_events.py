@@ -19,6 +19,7 @@ from app import app_state  # noqa: E402
 from app.routes import weather_manual_events as routes  # noqa: E402
 from app.weather_service._manual_events import (  # noqa: E402
     MANUAL_EVENT_CATEGORIES_MAX,
+    MANUAL_EVENT_PHASES,
     ManualEventsMixin,
     manual_event_categories,
 )
@@ -93,6 +94,56 @@ def test_delete_removes_the_file_and_reports_it(tmp_path):
     assert ws.get_manual_event(created["id"]) is None
     # Deleting again is a clean False, not an exception.
     assert ws.delete_manual_event(created["id"]) is False
+
+
+# ── annotations (curve+timestamp+phase chart markers) ────────────────────
+
+
+def test_create_persists_annotations(tmp_path):
+    ws = _FakeWS(tmp_path)
+    annotations = [
+        {"curve": "visibility", "ts": "2026-08-29T15:00:00", "phase": "aufbau"},
+        {"curve": "lightning_potential", "ts": "2026-08-29T16:30:00", "phase": "kern"},
+    ]
+    created = ws.create_manual_event(
+        "Gewitter mit Blitzen",
+        *RANGE_A,
+        ["precipitation", "lightning_potential", "visibility"],
+        category="thunder",
+        annotations=annotations,
+    )
+    assert created["annotations"] == annotations
+    assert ws.list_manual_events()[0]["annotations"] == annotations
+
+
+def test_annotations_default_to_an_empty_list(tmp_path):
+    ws = _FakeWS(tmp_path)
+    created = ws.create_manual_event("A", *RANGE_A, ["snowfall"], category="snow")
+    assert created["annotations"] == []
+
+
+def test_a_legacy_record_without_annotations_gains_an_empty_list(tmp_path):
+    """Records saved before this feature existed carry no `annotations`
+    key at all — normalize_manual_event must fill it in on read, same as
+    it already does for `categories`, so every consumer can rely on the
+    key existing without a defensive check."""
+    legacy = {
+        "id": "manual_20260801T120000_abc123",
+        "name": "Altes Gewitter",
+        "category": "thunder",
+        "characteristic": "",
+        "range_start": RANGE_A[0],
+        "range_end": RANGE_A[1],
+        "curves": ["lightning_potential"],
+        "created_at": "2026-08-01T12:00:00",
+    }
+    root = tmp_path / "manual_events"
+    root.mkdir(parents=True)
+    (root / f"{legacy['id']}.json").write_text(json.dumps(legacy), encoding="utf-8")
+    ws = _FakeWS(tmp_path)
+    items = ws.list_manual_events()
+    assert items[0]["annotations"] == []
+    assert ws.get_manual_event(legacy["id"])["annotations"] == []
 
 
 def test_two_events_saved_in_the_same_second_do_not_collide(tmp_path):
@@ -339,3 +390,107 @@ def test_create_dedupes_repeated_categories(client):
     r = client.post("/api/weather/manual-events", json=body)
     assert r.status_code == 201
     assert r.get_json()["item"]["categories"] == ["thunder", "fog"]
+
+
+# ── annotations validation over HTTP ──────────────────────────────────────
+# The chart-marker list is data the operator deliberately curated
+# ("Du musst wissen, wo der Pfeil liegt und auf was sich der Fall
+# bezieht") — an invalid entry must fail the whole request, never get
+# silently dropped.
+
+
+def _annotation(**overrides):
+    a = {"curve": "lightning_potential", "ts": "2026-08-29T16:00:00", "phase": "kern"}
+    a.update(overrides)
+    return a
+
+
+def test_annotations_default_to_an_empty_list_over_http(client):
+    r = client.post("/api/weather/manual-events", json=_body())
+    assert r.status_code == 201
+    assert r.get_json()["item"]["annotations"] == []
+
+
+def test_create_accepts_valid_annotations(client):
+    annotations = [
+        _annotation(curve="visibility", ts="2026-08-29T14:30:00", phase="aufbau"),
+        _annotation(curve="precipitation", ts="2026-08-29T17:00:00", phase="abbau"),
+    ]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 201
+    assert r.get_json()["item"]["annotations"] == annotations
+
+
+def test_create_accepts_an_annotation_ts_exactly_on_the_range_boundary(client):
+    """Inclusive on both ends — a marker on the very first or last
+    sample of the saved range is legitimate, not an off-by-one reject."""
+    annotations = [_annotation(ts=RANGE_A[0]), _annotation(ts=RANGE_A[1])]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 201
+
+
+def test_create_rejects_annotations_that_are_not_a_list(client):
+    r = client.post("/api/weather/manual-events", json=_body(annotations="oops"))
+    assert r.status_code == 400
+    assert "annotations" in r.get_json()["error"]
+
+
+def test_create_rejects_an_annotation_with_an_unknown_curve(client):
+    r = client.post(
+        "/api/weather/manual-events",
+        json=_body(annotations=[_annotation(curve="not_a_real_field")]),
+    )
+    assert r.status_code == 400
+    assert "curve" in r.get_json()["error"]
+
+
+def test_create_rejects_an_annotation_with_an_unparsable_ts(client):
+    r = client.post(
+        "/api/weather/manual-events",
+        json=_body(annotations=[_annotation(ts="not-a-timestamp")]),
+    )
+    assert r.status_code == 400
+    assert "ts" in r.get_json()["error"]
+
+
+def test_create_rejects_an_annotation_ts_before_the_range(client):
+    r = client.post(
+        "/api/weather/manual-events",
+        json=_body(annotations=[_annotation(ts="2026-08-29T10:00:00")]),
+    )
+    assert r.status_code == 400
+    assert "range" in r.get_json()["error"]
+
+
+def test_create_rejects_an_annotation_ts_after_the_range(client):
+    r = client.post(
+        "/api/weather/manual-events",
+        json=_body(annotations=[_annotation(ts="2026-08-29T23:00:00")]),
+    )
+    assert r.status_code == 400
+    assert "range" in r.get_json()["error"]
+
+
+def test_create_rejects_an_annotation_with_an_unknown_phase(client):
+    r = client.post(
+        "/api/weather/manual-events",
+        json=_body(annotations=[_annotation(phase="not_a_real_phase")]),
+    )
+    assert r.status_code == 400
+    assert "phase" in r.get_json()["error"]
+
+
+def test_create_rejects_a_non_object_annotation(client):
+    r = client.post("/api/weather/manual-events", json=_body(annotations=["oops"]))
+    assert r.status_code == 400
+
+
+def test_one_bad_annotation_among_several_fails_the_whole_body_and_nothing_is_saved(client):
+    """Fail-the-whole-body, same rule curves/categories already follow —
+    a malformed entry must surface as an error, not vanish while its
+    siblings save fine."""
+    annotations = [_annotation(), _annotation(phase="not_a_real_phase")]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 400
+    listed = client.get("/api/weather/manual-events").get_json()["items"]
+    assert listed == []

@@ -73,6 +73,15 @@ MANUAL_EVENT_CATEGORIES: tuple[str, ...] = (
 #: app/web/static/js/weather/_manual-event-cats.js.
 MANUAL_EVENT_CATEGORIES_MAX = 3
 
+#: Life-cycle phase an operator-placed chart marker belongs to — the
+#: three-stage vocabulary the operator's own storm walkthrough already
+#: uses: visibility dropping + cloud cover rising = building, wind gusts
+#: + precipitation starting = developing toward the eye; lightning
+#: potential + precipitation at max = the eye/core; then it calms = decay.
+#: Keep in sync with ANNOTATION_PHASES in
+#: app/web/static/js/weather/_chart-annotations.js.
+MANUAL_EVENT_PHASES: tuple[str, ...] = ("aufbau", "kern", "abbau")
+
 
 def manual_event_categories(record: dict) -> list[str]:
     """The category list of a manual-event record, old shape or new.
@@ -108,6 +117,8 @@ def normalize_manual_event(record: dict) -> dict:
     if cats:
         record["categories"] = cats
         record["category"] = cats[0]
+    if not isinstance(record.get("annotations"), list):
+        record["annotations"] = []
     return record
 
 
@@ -119,6 +130,11 @@ class ManualEventsMixin:
     action, e.g. categories=[thunder, heavy_rain], curves=[precipitation,
     lightning_potential], characteristic="Regen setzt ein, dann Blitze
     auf hohem Niveau … mittelgroßes Gewitter"). No clip attached.
+
+    ``annotations`` additionally carries structured (curve, timestamp,
+    phase) markers the operator placed directly on the chart while
+    zoomed in — WHERE the mark sits and WHAT case it refers to, not just
+    prose. See MANUAL_EVENT_PHASES above.
 
     Mixin for WeatherService. Persisted exactly like RecapsMixin's
     recaps: one JSON file per record under
@@ -166,17 +182,24 @@ class ManualEventsMixin:
         category: str | None = None,
         characteristic: str = "",
         categories: list[str] | None = None,
+        annotations: list[dict] | None = None,
     ) -> dict:
         """Write a new manual-event manifest and return it.
 
-        The route validates name/range/curves/categories before calling
-        this — this method only mints the id and persists, mirroring how
-        ``_build_recap`` is handed already-picked, already-valid inputs.
+        The route validates name/range/curves/categories/annotations
+        before calling this — this method only mints the id and persists,
+        mirroring how ``_build_recap`` is handed already-picked,
+        already-valid inputs.
 
         Takes either shape: ``categories=[…]`` (what the form sends now)
         or the original single ``category=…``. Both land on disk as a
         ``categories`` list plus a ``category`` first-entry mirror, so a
         reader that only knows the old field keeps working.
+
+        ``annotations`` — one entry per chart marker the operator placed
+        while zoomed in, each ``{curve, ts, phase}`` (phase one of
+        MANUAL_EVENT_PHASES). Optional; defaults to an empty list, same
+        as every manual event saved before this feature existed.
         """
         cats = manual_event_categories({"categories": categories, "category": category})
         now = datetime.now()
@@ -190,6 +213,7 @@ class ManualEventsMixin:
             "range_start": range_start,
             "range_end": range_end,
             "curves": list(curves),
+            "annotations": list(annotations) if annotations else [],
             "created_at": now.isoformat(timespec="seconds"),
         }
         _atomic_write_json(self._manual_events_dir() / f"{event_id}.json", manifest)

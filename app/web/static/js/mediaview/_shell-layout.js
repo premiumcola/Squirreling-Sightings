@@ -61,6 +61,13 @@ export const _TAB_META = {
   detections: { id: 'detections', label: 'Detections' },
   tracksList: { id: 'tracks', label: 'Tracks' },
   settings: { id: 'settings', label: 'Aufnahme-Settings' },
+  // Label-correction bubbles — same tap-to-toggle gesture the photo
+  // lightbox has always had (panels/labels.js::_renderLbLabels), now
+  // also reachable for a recorded VIDEO clip via this tab. Not offered
+  // for timelapses (buildRecordedShellConfig gates it off): a
+  // timelapse carries the synthetic "timelapse" pseudo-label, never a
+  // real classifier verdict there is anything to correct.
+  labels: { id: 'labels', label: 'Labels' },
   recordingSettings: { id: 'erkennung', label: 'Erkennung' },
   weather: { id: 'weather', label: 'Wetter' },
 };

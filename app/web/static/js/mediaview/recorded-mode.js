@@ -33,14 +33,10 @@ import {
   renderMediaGrid,
   renderMediaPagination,
 } from '../mediathek/orchestration.js';
-import {
-  _isFullscreenVideoItem,
-  _teardownVideoChrome,
-  _lbShowError,
-  _renderLbLabels,
-} from '../lightbox.js';
+import { _isFullscreenVideoItem, _teardownVideoChrome, _lbShowError } from '../lightbox.js';
 import { unmountZoneOverlayForLightbox } from './canvas/zone-overlay-mount.js';
 import { _LB_TRASH_HTML, _updateLbConfirmBtn, _lbResetToPhoto } from './panels/lb-helpers.js';
+import { _renderLbLabels } from './panels/labels.js';
 import { mountMediaView } from './shell.js';
 import { buildRecordedShellConfig, wireRecordedShellPostMount } from './recorded-shell-compose.js';
 

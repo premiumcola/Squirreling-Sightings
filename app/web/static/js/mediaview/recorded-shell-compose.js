@@ -28,6 +28,7 @@ import { mountZoneOverlayForLightbox } from './canvas/zone-overlay-mount.js';
 import { _LB_TRASH_HTML, _updateLbConfirmBtn, _lbResetToPhoto } from './panels/lb-helpers.js';
 import { lbRenderSettingsPanel } from './panels/recording-settings.js';
 import { renderWeatherPanel } from './panels/weather.js';
+import { _renderLbLabels } from './panels/labels.js';
 
 // Two snapshot shapes carry weather: item.weather (normalised) or
 // item.api_snapshot (raw Open-Meteo). Mirrors panels/orchestration.js.
@@ -75,10 +76,12 @@ export function buildRecordedShellConfig(item, ctx) {
     // current roi_mode is the best proxy, same as the legacy badge).
     appliedTiling: (cam.roi_mode || 'off').toLowerCase(),
     overlays: { bboxes: true, trails: true, zones: true, masks: true },
-    // Aufnahme-Settings only for motion clips (timelapses carry no
-    // recording_settings); Wetter only when the item has a snapshot.
+    // Aufnahme-Settings + Labels only for motion clips (timelapses
+    // carry no recording_settings, and only the synthetic "timelapse"
+    // pseudo-label — never a real classifier verdict to correct);
+    // Wetter only when the item has a snapshot.
     panels: {
-      ...(isTL ? {} : { settings: true }),
+      ...(isTL ? {} : { settings: true, labels: true }),
       ...(_itemHasWeather(item) ? { weather: true } : {}),
     },
     panelRenderers: {
@@ -93,6 +96,10 @@ export function buildRecordedShellConfig(item, ctx) {
         }
       },
       weather: (host, it) => renderWeatherPanel(host, it),
+      // _renderLbLabels reads the active item off lbState.item (set by
+      // recorded-mode.js::openRecorded before this shell mounts), same
+      // as the photo path — `it` isn't needed here.
+      labels: (host) => _renderLbLabels(host),
     },
     initialTab: isTL ? 'weather' : 'settings',
     actions: {

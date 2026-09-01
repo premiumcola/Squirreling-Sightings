@@ -6,7 +6,7 @@
 // Stage 23 grew this module to own the cross-domain orchestration too:
 //   * openLightbox / closeLightbox + photo/video player switch
 //   * openTLPlayer / _tlNavItems for timelapse playback (now shell-routed)
-//   * _lbHandleDeleteKey / _lbNavList / _lbShowSeekOverlay / _renderLbLabels
+//   * _lbHandleDeleteKey / _lbNavList / _lbShowSeekOverlay
 //   * lightbox prev/next/close button wiring
 //   * confirm + delete button onclicks (motion + timelapse paths)
 //   * the resize listener that re-paginates the grid on viewport changes
@@ -25,7 +25,6 @@ import { byId, esc } from './core/dom.js';
 import { state } from './core/state.js';
 import { j } from './core/api.js';
 import { showToast } from './core/toast.js';
-import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from './core/icons.js';
 import { lbState } from './mediathek/state.js';
 import { lbStopTrackingPlayback, lbClearTrackTimeline } from './mediathek/bbox-overlay/index.js';
 import { openMediaView } from './mediaview/index.js';
@@ -230,80 +229,11 @@ function _lbSkipToValidNeighbour(dir) {
 }
 
 // ── Stage-23 orchestration ──────────────────────────────────────────────────
-export function _renderLbLabels() {
-  const el = byId('lightboxLabels');
-  if (!el || !lbState.item) return;
-  const active = new Set(lbState.item.labels || []);
-  const species = lbState.item.bird_species || '';
-  const birdColor = colors.bird || '#0ea5e9';
-  const bubbles = TL_LABELS.map((l) => {
-    const isActive = active.has(l);
-    const rawSvg = OBJ_SVG[l] || OBJ_SVG.alarm;
-    const svg = rawSvg.replace('width="16" height="16"', 'width="38" height="38"');
-    const title = OBJ_LABEL[l] || l;
-    const c = colors[l] || colors.unknown;
-    const speciesSub =
-      l === 'bird' && species && isActive
-        ? `<span style="position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:${birdColor};font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap;border:1px solid ${birdColor}55;pointer-events:none">${esc(species)}</span>`
-        : '';
-    return `<span data-label="${l}" title="${title}" style="position:relative;width:54px;height:54px;border-radius:50%;background:${isActive ? c + '30' : 'rgba(0,0,0,0.60)'};filter:drop-shadow(0 2px 8px rgba(0,0,0,0.8));display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;pointer-events:auto;transition:background .15s,opacity .15s,border-color .15s;opacity:${isActive ? '1' : '0.6'};border:2px solid ${isActive ? c + 'cc' : 'rgba(255,255,255,0.08)'}">${svg}${speciesSub}</span>`;
-  }).join('');
-  el.innerHTML = bubbles;
-  el.querySelectorAll('[data-label]').forEach((btn) => {
-    btn.onclick = async () => {
-      const lbl = btn.dataset.label;
-      const cur = new Set(lbState.item.labels || []);
-      if (cur.has(lbl)) cur.delete(lbl);
-      else cur.add(lbl);
-      const newLabels = [...cur];
-      try {
-        const res = await j(
-          `/api/camera/${lbState.item.camera_id}/events/${lbState.item.event_id}/labels`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ labels: newLabels }),
-          },
-        );
-        if (res.ok) {
-          // cat_name/bird_species may have just been cleared server-side
-          // (the class they pinned left `labels`) — sync both so a stale
-          // identity chip doesn't survive an untoggle without a reload.
-          const applyRes = (target) => {
-            target.labels = res.labels;
-            if (res.top_label !== undefined) target.top_label = res.top_label;
-            if ('cat_name' in res) target.cat_name = res.cat_name;
-            if ('bird_species' in res) target.bird_species = res.bird_species;
-          };
-          applyRes(lbState.item);
-          const idx = (state.media || []).findIndex((x) => x.event_id === lbState.item.event_id);
-          if (idx >= 0) applyRes(state.media[idx]);
-          const aIdx = (state._allMedia || []).findIndex(
-            (x) => x.event_id === lbState.item.event_id,
-          );
-          if (aIdx >= 0) applyRes(state._allMedia[aIdx]);
-          _renderLbLabels();
-          // sync thumbnail in media grid
-          const thumbCard = byId('mediaGrid')?.querySelector(
-            `[data-event-id="${CSS.escape(lbState.item.event_id)}"]`,
-          );
-          if (thumbCard) {
-            const bubblesEl = thumbCard.querySelector('.media-label-bubbles');
-            if (bubblesEl)
-              bubblesEl.innerHTML = res.labels
-                .slice(0, 3)
-                .map((l) => objBubble(l, 26))
-                .join('');
-          }
-          // Re-pull timeline + storage stats so badges and dots reflect the retag.
-          refreshTimelineAndStats();
-        }
-      } catch (_err) {
-        showToast('Label-Änderung fehlgeschlagen', 'error');
-      }
-    };
-  });
-}
+// _renderLbLabels (the label-correction bubbles) moved out to
+// mediaview/panels/labels.js — it's now reachable from both the photo
+// lightbox (recorded-mode.js) and the recorded-shell "Labels" tab
+// (recorded-shell-compose.js), so it lives with the shell's other
+// per-tab panel renderers rather than in this orchestration file.
 
 function _lbHandleDeleteKey() {
   if (!lbState.item) return;

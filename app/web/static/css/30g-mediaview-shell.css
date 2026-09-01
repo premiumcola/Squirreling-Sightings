@@ -745,6 +745,19 @@
   text-align: right;
 }
 
+/* ── Label-correction bubbles (recorded-shell "Labels" tab) ─────────
+   Single owner: lightbox.js::_renderLbLabels renders these bubbles
+   for both the photo lightbox (#lightboxLabels, absolutely positioned
+   over the image — its own flex/gap layout lives inline in
+   modals.html) and this tab (a plain block div in normal document
+   flow, styled here). Every bubble already carries its full styling
+   inline; this wrapper only supplies the row layout. */
+.mv-labels-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* ── #lightboxModal · weather mode (L1 · one container) ──────────────
    Weather folds into the shared #lightboxModal instead of a separate
    mv-modal overlay (modal.js deleted). The shell mounts into

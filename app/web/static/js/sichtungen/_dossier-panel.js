@@ -117,7 +117,7 @@ export function selectSpeciesDossierByName(germanName) {
   const latin = _nameToLatin.get(_normName(germanName));
   if (latin) {
     _pendingName = null;
-    _selectSpecies(latin, true);
+    _selectSpecies(latin);
     return;
   }
   if (!_dossiersLoaded) {
@@ -132,8 +132,9 @@ window.selectSpeciesDossierByName = selectSpeciesDossierByName;
 
 // Inline feedback for the two non-selection cases above — always
 // visible (unhides the panel even if it was hidden for having zero
-// dossiers overall), always scrolled into view, so a tile click always
-// visibly does *something*.
+// dossiers overall), so a tile click always visibly does *something*.
+// Never scrolls the page — the panel renders in place, below the grid,
+// wherever the operator already is.
 function _renderStateMessage(germanName, kind) {
   const panel = byId('speciesDossierPanel');
   if (!panel) return;
@@ -143,7 +144,6 @@ function _renderStateMessage(germanName, kind) {
     kind === 'pending'
       ? `<div class="sd-state sd-state--pending">⏳ Dossier für <strong>${name}</strong> wird geladen …</div>`
       : `<div class="sd-state sd-state--missing">🕓 Für <strong>${name}</strong> ist noch kein Dossier vorbereitet — bitte später erneut versuchen.</div>`;
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function _tierBadgeOrLockedHint(count) {
@@ -241,7 +241,10 @@ function _renderPanel(d) {
   _loadClips(d);
 }
 
-function _selectSpecies(latin, scrollIntoView) {
+// Never scrolls the page — the dossier renders in place below the grid
+// (the operator's own "unangenehm runterspringen" complaint), whether
+// this is the first-ever selection or a re-render of the open species.
+function _selectSpecies(latin) {
   const d = _dossiers.find((x) => x.latin === latin);
   if (!d) return;
   _selectedLatin = latin;
@@ -251,7 +254,4 @@ function _selectSpecies(latin, scrollIntoView) {
   const panel = byId('speciesDossierPanel');
   if (panel) panel.hidden = false;
   _renderPanel(d);
-  if (scrollIntoView) {
-    byId('speciesDossierPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
 }

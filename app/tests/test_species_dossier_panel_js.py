@@ -196,6 +196,15 @@ def test_load_dossiers_does_not_auto_select_a_default_species():
     )
 
 
+def test_no_scroll_jump_anywhere_in_the_dossier_panel():
+    """The operator's complaint: clicking any tile used to jump the page
+    down via scrollIntoView. The dossier must render in place, wherever
+    the operator already is, on every path (a fresh selection, a pending
+    state, a missing-dossier state)."""
+    src = _read(_DOSSIER_PANEL_JS)
+    assert "scrollIntoView" not in src
+
+
 def test_state_message_never_a_bare_console_warn():
     """The whole point of this fix: a missing/unloaded dossier must always
     paint something into the panel, not just log to the console."""

@@ -13,9 +13,12 @@
 //
 // Self-initialising leaf module (imported once, for its side effect, by
 // main.js) — it reads the chart's zoom range and visible-fields state
-// from ./_zoom.js and ./stats.js respectively but neither of those
-// modules import anything back from here, so this file adds no new
-// import cycle.
+// from ./_zoom.js and ./stats.js respectively, and now also owns the
+// "Kurven markieren" toggle for weather/_chart-annotations.js's chart
+// markers (the ACTUAL pointer-mode + rendering logic lives there and in
+// stats-chart/_hover.js — this file only reads its collected payload and
+// flips its on/off state). None of those modules import anything back
+// from here, so this file still adds no new import cycle.
 import { byId, esc } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { WEATHER_TYPES } from '../core/weather-types.js';
@@ -27,10 +30,17 @@ import {
   WEATHER_FIELD_LABEL_DE,
   wsVisibleFields,
   wsLineEmphasis,
+  renderWeatherStatsChart,
 } from './stats.js';
 import { buildLinePath } from './stats-chart/_paths.js';
 import { createManualEvent, loadWeatherManualEvents } from './_manual-events.js';
 import { MANUAL_CATEGORIES_MAX } from './_manual-event-cats.js';
+import {
+  annotationsPayload,
+  isMarkModeActive,
+  resetChartAnnotations,
+  setMarkModeActive,
+} from './_chart-annotations.js';
 
 // Only fields with an unambiguous 1:1 detector-category mapping earn a
 // default guess (see routes/weather.py's HISTORY_FIELD_TO_EVENT for the
@@ -89,6 +99,19 @@ export function _categoryChipsHTML(activeCategories) {
   }).join('');
 }
 
+// Flag glyph — "a small flag/pin rendered at that exact (curve,
+// timestamp) point" is literally what marking places on the chart, so
+// the toggle that turns marking on/off carries the same shape.
+const _MARK_TOGGLE_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3v18M5 4h11l-2 4 2 4H5"/></svg>`;
+
+function _markToggleHTML() {
+  const on = isMarkModeActive();
+  return (
+    `<button type="button" class="ws-zsave-mark-toggle${on ? ' is-active' : ''}" ` +
+    `id="wsZsaveMarkToggle" aria-pressed="${on}">${_MARK_TOGGLE_ICON}Kurven markieren</button>`
+  );
+}
+
 function _curveCheckboxesHTML(checkedFields) {
   return _WS_FIELD_ORDER
     .map((key) => {
@@ -116,6 +139,11 @@ function _formHTML(activeCategories, checkedFields) {
     <div class="ws-zsave-row">
       <span class="ws-zsave-label">Relevante Kurven</span>
       <div class="ws-zsave-curves" id="wsZsaveCurves">${_curveCheckboxesHTML(checkedFields)}</div>
+    </div>
+    <div class="ws-zsave-row">
+      <span class="ws-zsave-label">Kurven markieren <span class="ws-zsave-hint">optional</span></span>
+      <div id="wsZsaveMarkRow">${_markToggleHTML()}</div>
+      <p class="ws-zsave-mark-hint">Antippen, um eine Kurve im gezeigten Zeitraum an einem Punkt zu markieren und die Phase (Aufbau / Kern / Abbau) zuzuordnen.</p>
     </div>
     <div class="ws-zsave-row">
       <label class="ws-zsave-label" for="wsZsaveNote">Charakteristik</label>
@@ -155,6 +183,7 @@ export function _collectPayload(panel, range) {
       range_start: range.start,
       range_end: range.end,
       curves,
+      annotations: annotationsPayload(),
     },
   };
 }
@@ -174,6 +203,32 @@ function _wireCategoryChips(panel) {
       btn.setAttribute('aria-pressed', String(!on));
     });
   });
+}
+
+// The chart's own pointer behaviour flips to marking mode (see
+// stats-chart/_hover.js's markMode branch) — needs a chart redraw to
+// take effect, since the mode is read once per bind, not live-polled.
+function _wireMarkModeToggle(panel) {
+  const btn = panel.querySelector('#wsZsaveMarkToggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    setMarkModeActive(!isMarkModeActive());
+    btn.classList.toggle('is-active', isMarkModeActive());
+    btn.setAttribute('aria-pressed', String(isMarkModeActive()));
+    renderWeatherStatsChart();
+  });
+}
+
+// Every path that closes the save panel must also leave marking mode —
+// otherwise the chart stays bound with markMode:true (and the now-
+// discarded marker set still drawn) after the panel the markers belong
+// to is gone. Pure state reset + a redraw so the chart reflects it
+// immediately; see weather/_chart-annotations.js's own "pure state,
+// caller redraws" contract.
+function _exitMarkMode(panel) {
+  panel.hidden = true;
+  resetChartAnnotations();
+  renderWeatherStatsChart();
 }
 
 // The saved record IS the confirmation — the operator asked for it to
@@ -206,7 +261,7 @@ export function _submitSave(panel, range) {
   }
   return createManualEvent(payload)
     .then((res) => {
-      panel.hidden = true;
+      _exitMarkMode(panel);
       return loadWeatherManualEvents().then(() => res?.item?.id || null);
     })
     .then((newId) => {
@@ -224,8 +279,9 @@ export function _submitSave(panel, range) {
 
 function _wireForm(panel, range) {
   _wireCategoryChips(panel);
+  _wireMarkModeToggle(panel);
   panel.querySelector('#wsZsaveCancel')?.addEventListener('click', () => {
-    panel.hidden = true;
+    _exitMarkMode(panel);
   });
   panel.querySelector('#wsZsaveSubmit')?.addEventListener('click', () => {
     _submitSave(panel, range);
@@ -236,7 +292,7 @@ function _toggleSaveForm() {
   const panel = byId('weatherZoomSavePanel');
   if (!panel) return;
   if (!panel.hidden) {
-    panel.hidden = true;
+    _exitMarkMode(panel);
     return;
   }
   const range = getZoomRange();

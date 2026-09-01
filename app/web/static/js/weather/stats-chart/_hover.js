@@ -20,6 +20,20 @@
 // (see weather/_zoom.js's docstring for why). Undefined `onRangeSelect`
 // (every existing caller, including the storm compare chart) leaves this
 // entirely inert — pointerdown still only paints the tooltip.
+//
+// `opts.markMode` + `opts.onMark` add a THIRD pointer behaviour —
+// weather/_chart-annotations.js's data-anchored chart markers — mutually
+// exclusive with drag-to-zoom (a truthy `markMode` skips starting a
+// drag entirely; see _onDown). A tap (not a drag) inside the plot area
+// resolves the nearest sample by time, same _xToTs/_nearestIdx snapping
+// onRangeSelect uses, and hands the caller `(geo, idx, x, y)` where
+// `geo` is the small explicit shape _chart-annotations.js's geometry
+// functions share — this file stays unaware of what a "marker" even is,
+// same decoupling `onRangeSelect` already has from weather/_zoom.js.
+// `opts.ch` (chart height, injected by stats-chart/index.js's
+// renderStatsChartInto — no other caller needs it) is what makes the
+// vertical half of that geometry possible; every branch below that
+// doesn't touch markMode ignores it entirely.
 
 import { WEATHER_STATS_PALETTE, _wsFmtVal } from '../stats.js';
 
@@ -105,10 +119,14 @@ function _context(wrap, samples, fields, pad, cw, vbW, data, opts) {
     dragStart,
     dragEnd,
     drag: null,
+    markStart: null,
     samples,
     fields,
     pad,
     cw,
+    // Chart height — only meaningful (and only ever set) when the caller
+    // also wants markMode; see this file's own header comment.
+    ch: Number.isFinite(opts.ch) ? opts.ch : null,
     vbW,
     opts,
     tFirst,
@@ -162,6 +180,17 @@ function _localXOf(c, ev) {
   // landing between render and pointer event) would otherwise silently
   // offset every lookup.
   return (ev.clientX - rect.left) * (c.vbW / rect.width);
+}
+
+// Same correction as _localXOf, vertical axis — only used by the
+// markMode tap handler (nothing else in this file needs a y position),
+// so it silently returns null when `c.ch` was never supplied.
+function _localYOf(c, ev) {
+  if (c.ch === null) return null;
+  const rect = c.svg.getBoundingClientRect();
+  if (rect.height === 0) return null;
+  const vbH = c.pad.t + c.ch + c.pad.b;
+  return (ev.clientY - rect.top) * (vbH / rect.height);
 }
 
 function _onMove(c, ev) {
@@ -256,6 +285,13 @@ function _paintDragTooltip(c, endX, ev) {
 
 function _onDown(c, ev) {
   _onMove(c, ev); // unchanged tap-shows-tooltip behaviour
+  if (c.opts.markMode) {
+    // Marking never starts a drag-to-zoom — the two are mutually
+    // exclusive. Only track where the tap started; _onUp resolves
+    // tap-vs-drag exactly like the brush below does.
+    c.markStart = _localXOf(c, ev);
+    return;
+  }
   if (typeof c.opts.onRangeSelect !== 'function') return;
   if (!Number.isFinite(c.tFirst) || !Number.isFinite(c.tLast) || c.tSpan <= 0) return;
   const startX = _localXOf(c, ev);
@@ -279,7 +315,40 @@ function _onDragMove(c, ev) {
   _paintDragTooltip(c, x, ev);
 }
 
+// markMode's own tap-vs-drag resolution — same BRUSH_MIN_PX threshold
+// the brush below uses, but a tap here means "place or remove a
+// marker", never a range. A drag past the threshold reads as an
+// accidental pan and produces no marker at all — marking never zooms.
+function _onMarkUp(c, ev) {
+  const x = _localXOf(c, ev);
+  const startX = c.markStart;
+  c.markStart = null;
+  _hide(c); // the value tooltip from _onDown's _onMove must not fight the phase picker
+  if (x === null || startX === null) return;
+  if (Math.abs(x - startX) >= BRUSH_MIN_PX) return;
+  if (x < c.pad.l || x > c.pad.l + c.cw) return;
+  const y = _localYOf(c, ev);
+  if (y === null || typeof c.opts.onMark !== 'function') return;
+  const idx = _nearestIdx(c.samples, _xToTs(c, x));
+  const geo = {
+    samples: c.samples,
+    fields: c.fields,
+    pad: c.pad,
+    cw: c.cw,
+    ch: c.ch,
+    tFirst: c.tFirst,
+    tSpan: c.tSpan,
+    wrap: c.wrap,
+    svg: c.svg,
+  };
+  c.opts.onMark(geo, idx, x, y);
+}
+
 function _onUp(c, ev) {
+  if (c.opts.markMode) {
+    _onMarkUp(c, ev);
+    return;
+  }
   if (!c.drag) return;
   const x = _localXOf(c, ev);
   const { startX } = c.drag;

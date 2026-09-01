@@ -63,6 +63,30 @@ function _runsToPath(runs) {
   return d;
 }
 
+// Per-field value range a line gets normalised against — factored out of
+// buildLinePath so a second consumer (weather/_chart-annotations.js's
+// curve-marker hit-test / redraw, which has to know exactly where a
+// curve's pixel sits at a given sample to place or hit-test a marker on
+// it) computes the SAME {lo, hi} the line was actually drawn against,
+// rather than a second, potentially-drifting copy of the "flat line pins
+// to mid-band" rule. `optLo`/`optHi` mirror buildLinePath's own lo/hi
+// override.
+export function fieldValueRange(samples, key, optLo, optHi) {
+  const def = [];
+  for (const s of samples) {
+    const v = (s.values || {})[key];
+    if (typeof v === 'number' && isFinite(v)) def.push(v);
+  }
+  if (def.length < 2) return null;
+  let lo = Number.isFinite(optLo) ? optLo : Math.min(...def);
+  let hi = Number.isFinite(optHi) ? optHi : Math.max(...def);
+  if (hi - lo < 1e-9) {
+    lo -= 0.5;
+    hi += 0.5;
+  } // flat line: pin to mid-band
+  return { lo, hi };
+}
+
 // `opts` (all optional, all defaulting to the pre-existing behaviour):
 //   lo / hi          — force a shared value scale instead of per-line
 //                      min/max. The storm compare view REQUIRES this:
@@ -82,14 +106,9 @@ export function buildLinePath(samples, key, x0, y0, w, h, opts = {}) {
     const v = (s.values || {})[key];
     vals.push(typeof v === 'number' && isFinite(v) ? v : null);
   }
-  const def = vals.filter((v) => v != null);
-  if (def.length < 2) return null;
-  let lo = Number.isFinite(opts.lo) ? opts.lo : Math.min(...def);
-  let hi = Number.isFinite(opts.hi) ? opts.hi : Math.max(...def);
-  if (hi - lo < 1e-9) {
-    lo -= 0.5;
-    hi += 0.5;
-  } // flat line: pin to mid-band
+  const range = fieldValueRange(samples, key, opts.lo, opts.hi);
+  if (!range) return null;
+  const { lo, hi } = range;
   const N = vals.length;
   const xAt = _xMapper(opts, x0, w, N);
   const runs = [];

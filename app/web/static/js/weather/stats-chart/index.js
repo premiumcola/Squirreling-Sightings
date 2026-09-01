@@ -20,6 +20,12 @@ import { _buildThresholdSvg } from '../stats-thresholds.js';
 import { buildLinePath } from './_paths.js';
 import { buildXTicks, buildYAxis } from './_axes.js';
 import { bindChartHover } from './_hover.js';
+import {
+  buildAnnotationMarkersSvg,
+  chartAnnotations,
+  handleChartTap,
+  isMarkModeActive,
+} from '../_chart-annotations.js';
 
 const PAD = { l: 42, r: 72, t: 12, b: 26 };
 
@@ -135,10 +141,31 @@ function _buildLinesSvg(samples, fields, isolated, cw, ch) {
   return { linesSvg, lineMetas };
 }
 
+// weather/_chart-annotations.js's marker layer needs the same tFirst/
+// tSpan proportional-time geometry every other piece of this chart uses
+// (buildXTicks, _hover.js's _context) — computed once here rather than
+// threading it in from the caller, since only this function's SVG-build
+// path (and the live chart's own hover-bind, separately) ever need it.
+function _annotationsGeo(samples, fields, cw, ch) {
+  const tFirst = new Date(samples[0]?.ts).getTime();
+  const tLast = new Date(samples[samples.length - 1]?.ts).getTime();
+  return { samples, fields, pad: PAD, cw, ch, tFirst, tSpan: tLast - tFirst };
+}
+
 // Body of the chart: axes + lines + threshold overlay, as one SVG
 // string. Split out of renderStatsChartInto purely to keep both under
 // the 60-line function ceiling.
-function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }) {
+function _buildChartSvg({
+  samples,
+  data,
+  isolated,
+  fields,
+  hours,
+  geo,
+  markers,
+  annotations,
+  annotationsInteractive,
+}) {
   const { VB_W, VB_H, cw, ch } = geo;
   const tickSvg = buildXTicks({ samples, pad: PAD, cw, ch, vbH: VB_H, hours });
   const { linesSvg, lineMetas } = _buildLinesSvg(samples, fields, isolated, cw, ch);
@@ -153,6 +180,18 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
     cw,
     ch,
   });
+  // Curve+phase markers (weather/_chart-annotations.js) — ONE renderer
+  // for both the live editing chart (interactive, while marking — see
+  // renderWeatherStatsChart below) and the read-only redraw when viewing
+  // a saved manual event (_manual-events.js never sets
+  // annotationsInteractive, regardless of the LIVE chart's own mark
+  // mode elsewhere on the page).
+  const annotSvg = annotations?.length
+    ? buildAnnotationMarkersSvg(annotations, _annotationsGeo(samples, fields, cw, ch), {
+        interactive: !!annotationsInteractive,
+        palette: WEATHER_STATS_PALETTE,
+      })
+    : '';
   const svg = `
     <svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none" role="img" aria-label="Wetterverlauf">
       ${yAxisSvg}
@@ -160,6 +199,7 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
       ${linesSvg}
       ${thresholdSvg}
       ${markers && markers.length ? _markersSvg(markers, samples, PAD, cw, ch) : ''}
+      ${annotSvg}
       <line class="ws-chart-guide" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
       <rect class="ws-chart-brush" x="0" y="${PAD.t}" width="0" height="${ch}" fill="rgba(127,174,201,.22)" style="display:none;pointer-events:none"/>
       <line class="ws-chart-drag-start" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
@@ -175,10 +215,14 @@ function _buildChartSvg({ samples, data, isolated, fields, hours, geo, markers }
 // detail view needs the same chart with its OWN isolated field, since
 // the global one belongs to the Wetter panel above it.
 //
-// `opts.isolated` — field key to draw alone (null = every line).
-// `opts.hours`    — window size, only used for the legacy x-tick fallback.
-// `opts.markers`  — [{ ts, label, colour }] vertical guides at absolute times.
-// `opts.hover`    — forwarded to bindChartHover (head / rows / onGuide).
+// `opts.isolated`    — field key to draw alone (null = every line).
+// `opts.hours`       — window size, only used for the legacy x-tick fallback.
+// `opts.markers`     — [{ ts, label, colour }] vertical guides at absolute times.
+// `opts.annotations` — [{ curve, ts, phase }] curve+phase markers
+//                      (weather/_chart-annotations.js); read-only unless
+//                      `opts.hover.markMode` is also set.
+// `opts.hover`       — forwarded to bindChartHover (head / rows / onGuide /
+//                      onRangeSelect / markMode / onMark).
 export function renderStatsChartInto(wrap, data, opts = {}) {
   if (!wrap) return;
   const samples = data?.samples || [];
@@ -205,6 +249,7 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
   // subset; storms/_detail.js never passes it, so it keeps its original
   // "isolated one field, else every field" behaviour unchanged.
   const fields = opts.fields || (isolated ? [isolated] : _WS_FIELD_ORDER);
+  const annotationsInteractive = !!opts.hover?.markMode;
   wrap.innerHTML = _buildChartSvg({
     samples,
     data,
@@ -213,8 +258,25 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
     hours: opts.hours || 24,
     geo,
     markers: opts.markers,
+    annotations: opts.annotations,
+    annotationsInteractive,
   });
-  bindChartHover(wrap, samples, fields, PAD, geo.cw, geo.VB_W, data, opts.hover || {});
+  // `ch` rides along inside the hover opts (not a new positional
+  // parameter) — only markMode's own y-math (stats-chart/_hover.js)
+  // ever reads it; every other caller/branch ignores it.
+  bindChartHover(wrap, samples, fields, PAD, geo.cw, geo.VB_W, data, {
+    ...opts.hover,
+    ch: geo.ch,
+  });
+}
+
+// The live chart's own marker-tap wiring — resolves a tap to
+// add/remove a curve+phase marker, then redraws this exact chart so the
+// change is visible immediately. Kept as its own function (rather than
+// an inline arrow in the opts literal below) only so it has a name in a
+// stack trace.
+function _onWeatherChartMark(geo, idx, x, y) {
+  handleChartTap(geo, idx, x, y, renderWeatherStatsChart);
 }
 
 // A custom drag-zoom (weather/_zoom.js) is a client-side slice of the
@@ -234,6 +296,11 @@ export function renderWeatherStatsChart() {
     isolated: _wsStatsState.isolated,
     fields: wsVisibleFields(),
     hours: _wsStatsState.hours || 24,
-    hover: { onRangeSelect: onWeatherChartRangeSelect },
+    annotations: chartAnnotations(),
+    hover: {
+      onRangeSelect: onWeatherChartRangeSelect,
+      markMode: isMarkModeActive(),
+      onMark: _onWeatherChartMark,
+    },
   });
 }

@@ -47,6 +47,7 @@ globalThis.document = { addEventListener() {}, querySelector: () => el(),
   querySelectorAll: () => [], getElementById: () => el(), createElement: () => el(),
   createElementNS: () => el(), body: el(), documentElement: el() };
 globalThis.IntersectionObserver = class { observe() {} disconnect() {} };
+globalThis.ResizeObserver = class { observe() {} disconnect() {} };
 globalThis.history = { replaceState() {} };
 globalThis.fetch = () => Promise.reject(new Error('no network in tests'));
 """

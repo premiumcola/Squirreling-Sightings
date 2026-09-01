@@ -170,7 +170,11 @@ export async function openManualEventView(id) {
   try {
     const q = `since=${encodeURIComponent(m.range_start)}&until=${encodeURIComponent(m.range_end)}`;
     const data = await apiGet(`/api/weather/history?${q}`);
-    renderStatsChartInto(wrap, data, { fields: m.curves });
+    // Read-only redraw of whatever curve+phase markers were placed at
+    // save time (weather/_chart-annotations.js) — no `hover.markMode`,
+    // so buildAnnotationMarkersSvg draws them without a "×" and without
+    // any tap-to-place/remove wiring; just the flags, for review.
+    renderStatsChartInto(wrap, data, { fields: m.curves, annotations: m.annotations });
   } catch (_err) {
     if (wrap) {
       wrap.innerHTML = '<div class="ws-stats-empty">Verlauf konnte nicht geladen werden.</div>';

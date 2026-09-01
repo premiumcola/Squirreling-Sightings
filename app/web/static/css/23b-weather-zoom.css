@@ -185,6 +185,80 @@
   min-height: 44px;
 }
 
+/* ── "Kurven markieren" toggle + inline phase picker ──────────────────────
+   weather/_chart-annotations.js's data-anchored chart markers — click a
+   curve at a moment on the chart above, pick aufbau/kern/abbau. */
+.ws-zsave-mark-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ws-zsave-mark-toggle.is-active {
+  background: color-mix(in srgb, #7faec9 32%, transparent);
+  color: #fff;
+  box-shadow: inset 0 0 0 2px #7faec9;
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .ws-zsave-mark-toggle:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .ws-zsave-mark-toggle.is-active:hover {
+    background: color-mix(in srgb, #7faec9 42%, transparent);
+  }
+}
+.ws-zsave-mark-hint {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Inline phase picker — appears ON the chart at the tapped point while
+   marking. Same floating-surface language as .ws-chart-tooltip
+   (25-mobile.css) but with real pointer-events, since its buttons must
+   be tappable — the tooltip itself stays pointer-events:none. */
+.ws-chart-annot-picker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(15, 15, 18, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  z-index: 12;
+}
+.ws-chart-annot-pick {
+  min-height: 44px;
+  min-width: 128px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--pc, #edf4fb);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .ws-chart-annot-pick:hover {
+    background: color-mix(in srgb, var(--pc, #7faec9) 26%, transparent);
+  }
+}
+
 /* ── Manual-event grid card ───────────────────────────────────────────────
    Same .ws-recap-card chrome as recaps and Gewitter-episodes; the only
    difference is the right-hand slot, which holds one badge per category

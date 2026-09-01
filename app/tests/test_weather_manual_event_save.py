@@ -223,6 +223,73 @@ def test_saving_without_a_category_is_still_refused():
     assert "payload" not in out
 
 
+def test_the_payload_carries_an_empty_annotations_list_by_default():
+    """Nothing marked on the chart — the payload still carries the key,
+    empty, matching MANUAL_EVENT_PHASES' backend default."""
+    out = _collect("['thunder']")
+    assert out["payload"]["annotations"] == []
+
+
+# _collectPayload reads chart-marker state from weather/_chart-annotations.js
+# (module-level, populated by the chart's own mark-mode pointer wiring —
+# see stats-chart/_hover.js / test_weather_chart_brush.py). Placing a
+# marker here needs a real listener registry the shared node-harness
+# stub doesn't provide (same limitation test_weather_chart_brush.py's own
+# header comment documents) — a small local fake picker/wrap sidesteps
+# it, mirroring weather/_tests/chart-annotations.test.js's own harness.
+_ANNOTATION_STUB = """
+function fakePickBtn(phase) {
+  const self = { dataset: { phase } };
+  self.closest = (sel) => (sel === '.ws-chart-annot-pick' ? self : null);
+  return self;
+}
+function fakePicker() {
+  const listeners = {};
+  return {
+    addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
+    _fire(type, ev) { (listeners[type] || []).forEach((fn) => fn(ev)); },
+    className: '', innerHTML: '', style: {}, offsetWidth: 100, offsetHeight: 60,
+    contains: () => false, remove() {},
+  };
+}
+function fakeWrap() {
+  let mounted = null;
+  return {
+    appendChild(el) { mounted = el; },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 300, height: 200 }; },
+    querySelector(sel) { return sel === '.ws-chart-annot-picker' ? mounted : null; },
+  };
+}
+globalThis.document.createElement = () => fakePicker();
+globalThis.document.removeEventListener = () => {};
+const annot = await import(JS + '/weather/_chart-annotations.js');
+const annotSamples = [
+  { ts: '2026-08-29T14:00:00', values: { precipitation: 0 } },
+  { ts: '2026-08-29T15:00:00', values: { precipitation: 10 } },
+];
+const annotGeo = {
+  samples: annotSamples, fields: ['precipitation'], pad: { l: 0, t: 0, b: 0 },
+  cw: 100, ch: 100,
+  tFirst: new Date(annotSamples[0].ts).getTime(),
+  tSpan: new Date(annotSamples[1].ts).getTime() - new Date(annotSamples[0].ts).getTime(),
+  wrap: fakeWrap(), svg: null,
+};
+annot.handleChartTap(annotGeo, 1, 50, 50, () => {});
+annotGeo.wrap.querySelector('.ws-chart-annot-picker')._fire('click', { target: fakePickBtn('kern') });
+"""
+
+
+def test_the_payload_includes_a_placed_chart_annotation():
+    out = _js(
+        _ANNOTATION_STUB
+        + _PANEL_STUB
+        + "console.log(JSON.stringify(mod._collectPayload(panel(['thunder']), RANGE)));"
+    )
+    assert out["payload"]["annotations"] == [
+        {"curve": "precipitation", "ts": "2026-08-29T15:00:00", "phase": "kern"}
+    ]
+
+
 # ── the save flow: panel closes, the new card lands in the list ─────────
 # "wenn ich speicher, dann sollte es in dem Editscreen weggehen und eben
 # runter in die History direkt kommen. Aktuell bleibt der Editscreen

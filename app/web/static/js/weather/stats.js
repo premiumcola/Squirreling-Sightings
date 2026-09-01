@@ -19,6 +19,7 @@ import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-s
 import { apiGet } from '../core/api.js';
 import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
 import { withScrollAnchor } from '../core/scroll-anchor.js';
+import { resetChartAnnotations } from './_chart-annotations.js';
 
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
@@ -197,11 +198,19 @@ function _renderWeatherStatsPillState() {
 // (weather/_manual-event-save.js) was showing — it rebuilds itself from
 // scratch on every "Als Ereignis speichern" click, so forcing it closed
 // here is simpler than reaching across modules to refresh its contents
-// in place. Plain DOM toggle, no import: the two modules never need to
-// know about each other beyond this shared element id.
+// in place. Plain DOM toggle, the two modules never need to know about
+// each other beyond this shared element id — except chart-marking mode
+// (weather/_chart-annotations.js), which MUST turn off in lockstep: a
+// zoom change means the chart's samples are about to be a different
+// window (or no zoom at all), and marking is only ever meaningful while
+// the save panel showing THIS window is open. Resetting here — not only
+// inside _manual-event-save.js's own close paths — covers every way the
+// zoom can change out from under an open save panel (a preset click,
+// the reset chip), not only the save form's own Abbrechen/Speichern.
 function _closeZoomSavePanel() {
   const panel = byId('weatherZoomSavePanel');
   if (panel) panel.hidden = true;
+  resetChartAnnotations();
 }
 
 // Every reload of the merged grid triggered from here goes through this
@@ -244,8 +253,12 @@ export function onWeatherChartRangeSelect(startTs, endTs) {
 // grid back to "Alles gemischt" — see onWeatherChartRangeSelect above.
 export function resetWeatherChartZoom() {
   clearZoomRange();
-  renderWeatherStats();
+  // Closed (and mark-mode cleared) BEFORE the redraw below — unlike
+  // onWeatherChartRangeSelect, this can fire while marking is active
+  // (the reset chip isn't gated by the chart's own pointer mode), so the
+  // very next render must already reflect markMode:false.
   _closeZoomSavePanel();
+  renderWeatherStats();
   _reloadLibraryKeepingChartAnchored();
 }
 

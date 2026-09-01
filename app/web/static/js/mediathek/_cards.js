@@ -37,8 +37,15 @@ export function camColor(camId) {
 }
 export function getMediaAccentColor(labels) {
   if (Array.isArray(labels)) {
+    // `motion` is the fallback bucket, never a real match — same rule
+    // core/primary-label.js::primaryLabel already applies for the badge
+    // text. Without this, an event tagged `["motion", "person"]` (motion
+    // fired first, classified as a person afterwards) hit `colors.motion`
+    // before ever reaching `person`, so the play button rendered grey
+    // while the badge right next to it correctly said "Person" — two
+    // helpers reading the same `labels` array and disagreeing.
     for (const l of labels) {
-      if (colors[l]) return colors[l];
+      if (l !== 'motion' && colors[l]) return colors[l];
     }
   }
   return colors.motion || '#93c5fd';

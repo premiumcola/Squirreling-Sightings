@@ -33,11 +33,18 @@ let _loading = false;
 // the param is simply absent (routes/library.py::api_library_list).
 let _kinds = null;
 
-function _paint() {
-  const grid = byId('libraryGrid');
-  if (!grid) return;
-  renderLibraryGrid(grid, _items);
-  bindLibraryGrid(grid, _items);
+// Split out of _paint() so a facets fetch that resolves AFTER the grid
+// has already painted (renderLibraryFilterBar's own fetch — see
+// _onFilterChange below — races independently against _loadPage's
+// /api/library fetch, and routinely loses since /api/library/facets
+// does the more expensive full-exhaustion widen, _facets.py's own
+// docstring) can still correct the "Seite N von M" label once the real
+// total is known, instead of leaving it stuck on the previous filter's
+// number. getLibraryFacetsTotal() itself is race-safe (_filter-facets.
+// js's createFacetsCache only ever commits the latest call), so calling
+// this again from a late-resolving fetch always repaints a CURRENT
+// value, never a stale one — see _filter-bar.js's own header.
+function _repaintPagination() {
   renderLibraryPagination(
     byId('libraryPagination'),
     _cursorStack,
@@ -45,6 +52,14 @@ function _paint() {
     calcLibraryPageSize(),
     _goToLibraryPage,
   );
+}
+
+function _paint() {
+  const grid = byId('libraryGrid');
+  if (!grid) return;
+  renderLibraryGrid(grid, _items);
+  bindLibraryGrid(grid, _items);
+  _repaintPagination();
   // Stage 7: the only visible hint that this page is scoped to the
   // chart's drag-zoom rather than "Alles gemischt" — an empty result
   // already reads distinctly (see _grid.js), this covers the non-empty
@@ -119,7 +134,14 @@ function _syncMediathekView() {
 }
 
 function _onFilterChange() {
-  renderLibraryFilterBar(_filter, _kinds, _onFilterChange);
+  // Not awaited — repainting the count badges is not on the critical
+  // path for the grid's own reload (renderLibraryFilterBar's own
+  // header) — but its facets fetch is also the ONLY source for the
+  // pagination widget's "von M" total (getLibraryFacetsTotal), so once
+  // it resolves (often after _loadPage's own /api/library fetch has
+  // already painted a stale total below), repaint just the pagination
+  // widget to pick up the fresh number.
+  renderLibraryFilterBar(_filter, _kinds, _onFilterChange).then(_repaintPagination);
   _syncMediathekView();
   return _loadPage(true);
 }
@@ -128,7 +150,7 @@ function _onFilterChange() {
  * as initWeatherStats()/loadWeatherSightings(). */
 export function initLibraryPage() {
   if (!byId('libraryGrid')) return;
-  renderLibraryFilterBar(_filter, _kinds, _onFilterChange);
+  renderLibraryFilterBar(_filter, _kinds, _onFilterChange).then(_repaintPagination);
   _syncMediathekView();
   return _loadPage(true);
 }

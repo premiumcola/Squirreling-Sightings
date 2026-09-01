@@ -99,7 +99,7 @@ function _syncMediathekView() {
 }
 
 function _onFilterChange() {
-  renderLibraryFilterBar(_filter, _onFilterChange);
+  renderLibraryFilterBar(_filter, _kinds, _onFilterChange);
   _syncMediathekView();
   return _loadPage(true);
 }
@@ -108,7 +108,7 @@ function _onFilterChange() {
  * as initWeatherStats()/loadWeatherSightings(). */
 export function initLibraryPage() {
   if (!byId('libraryGrid')) return;
-  renderLibraryFilterBar(_filter, _onFilterChange);
+  renderLibraryFilterBar(_filter, _kinds, _onFilterChange);
   _syncMediathekView();
   return _loadPage(true);
 }

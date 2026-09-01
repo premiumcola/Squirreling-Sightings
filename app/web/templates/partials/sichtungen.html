@@ -15,26 +15,29 @@
              collapsible header when populated. -->
   <div id="questsArchive" class="quests-archive"></div>
   <!-- Animal sightings section head — uses the same h4 + subtitle
-             pattern as the Quests pinboard above and the Vogel-Dossiers
+             pattern as the Quests pinboard above and the species dossier
              below so the three sub-sections share one typographic scale.
              Without it, the medal grid started with no framing line and
              the user couldn't tell where "Quests" ended and "Tiere"
-             began. -->
+             began. The plain-text "Top-20 Bayern · Bronze / Silber /
+             Gold" subtitle that used to sit here is gone — the nicer
+             icon-based legend (sichtungen/_achievements.js::_renderLegend)
+             now renders straight into achievementsLegendSlot instead of
+             showing the same information twice (CLAUDE.md). -->
   <div class="birds-section-head" id="achievementsSectionHead">
     <h4 class="birds-section-title">🐾 Tiere</h4>
-    <span class="birds-section-subtitle">Top-20 Bayern · Bronze / Silber / Gold</span>
+    <div class="ach-legend" id="achievementsLegendSlot"></div>
   </div>
   <div id="achievementsProgress" class="ach-progress-bar"></div>
   <div id="achievementsGrid" class="ach-grid"></div>
-  <div id="birdDossiers">
-    <div class="birds-section-head">
-      <h4 class="birds-section-title">📖 Vogel-Dossiers</h4>
-      <span class="birds-section-subtitle"
-        >Persönlicher Bestimmungsschlüssel · auto-recherchiert</span
-      >
-    </div>
-    <div id="birdsGallery"></div>
-  </div>
+  <!-- Species dossier — redesigned inline reference panel (left: photo
+             + Wikipedia text + Xeno-canto audio, right: the operator's own
+             clips), replacing the old birds.js gallery-of-tiles-that-open-
+             a-modal. Populated by sichtungen/_dossier-panel.js; hidden
+             until at least one species has dossier data. No X, no
+             backdrop — picking a species (via a Tiere tile above or this
+             panel's own switcher) just re-points what's already inline. -->
+  <div id="speciesDossierPanel" class="sd-panel" hidden></div>
 </section>
 
 <!-- Wetter — eigene Top-Level-Sektion (war bis Phase Sun-TL ein Sub-Block

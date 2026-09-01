@@ -53,25 +53,35 @@
 .ach-grid {
   margin-top: 2px;
 }
+/* Bronze/Silber/Gold legend — moved into the "🐾 Tiere" header row
+   (#achievementsSectionHead) replacing the old plain-text subtitle
+   (2026-08-31 species-dossier redesign, ask #1). This is now the ONLY
+   place this legend renders — the below-grid copy it used to duplicate
+   is gone, not just hidden. Margins are reset to 0 since the flex
+   header row (29-birds.css::.birds-section-head) owns the spacing;
+   the old below-grid placement needed its own top/bottom/left margins,
+   this one doesn't. */
 .ach-legend {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 10px;
-  margin-bottom: 2px;
-  margin-left: 4px;
+  align-items: center;
   font-size: 12px;
   color: var(--muted);
-  align-items: center;
 }
 .ach-leg-dot {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   margin-right: 4px;
   vertical-align: middle;
   flex-shrink: 0;
+}
+.ach-leg-label {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 /* Compact grid: smaller tile, tighter gaps, 5-6 cols on desktop at
    typical viewport widths. */

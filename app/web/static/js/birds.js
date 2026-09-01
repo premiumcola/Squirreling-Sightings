@@ -16,14 +16,6 @@ import { renderSpeciesDossierPanel } from './mediathek/species-dossier.js';
 
 let _dossiers = [];
 
-// Read-only accessor — mediathek/species-dossier.js's switcher needs the
-// same unlocked-species list this module already fetched; refetching
-// `/api/bird-dossiers` a second time for the same data would violate
-// CLAUDE.md's "no duplications" rule.
-export function getBirdDossiers() {
-  return _dossiers;
-}
-
 function _relDays(iso) {
   if (!iso) return '';
   const t = Date.parse(iso);

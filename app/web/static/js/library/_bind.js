@@ -5,26 +5,50 @@
 // owns that kind. No new interaction model: every handler below re-
 // attaches the SAME opener the old per-kind grid used.
 //
-// Motion cards are the one exception that needs no wiring here at
-// all — `mediathek/_cards.js::mediaCardHTML` embeds its click/confirm/
-// delete handlers as inline onclicks (`window._openMediaItem` /
-// `window.deleteMediaCard` / `window.confirmMediaCard`), so they fire
-// on their own. They still need their full item registered (see
-// `mediathek/_item-registry.js`) — `adaptMotionItem` already carries
-// the full event payload in `extra`.
+// Motion cards mostly need no wiring here — `mediathek/_cards.js::
+// mediaCardHTML` embeds its click/confirm/delete handlers as inline
+// onclicks (`window._openMediaItem` / `window.deleteMediaCard` /
+// `window.confirmMediaCard`), so they fire on their own. `deleteMediaCard`
+// / `confirmMediaCard` are installed unconditionally at module load
+// (mediathek/orchestration.js top level) — always there.
+//
+// `window._openMediaItem` is NOT: its only definition lives inside
+// mediathek/_paging.js::renderMediaGrid, reassigned every time the
+// per-camera DRILLDOWN paints. Before the library merge that was fine —
+// the drilldown was the only place a motion card could ever be clicked
+// from. Now a motion card can render in THIS grid before the operator
+// has ever opened a single camera's drilldown, and the inline onclick
+// throws into a `window._openMediaItem` that plain doesn't exist yet —
+// silently, since a broken inline onclick has nowhere to report to.
+// "Today's bird clip does nothing when tapped" was exactly this: no
+// drilldown had been opened yet.
+//
+// Fix: install it here too, freshest-render-wins exactly like the
+// drilldown does — resolve from THIS page's items first (adaptMotionItem
+// already carries the full event payload in `extra`), fall back to the
+// shared registry (mediathek/_item-registry.js) for a card painted by
+// the OTHER grid. Ignores state.mediaSelectMode on purpose: bulk-select
+// is a drilldown-only affordance (#mediaSelectBar lives there, not in
+// this grid) — a merged-grid card always just opens.
 import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
+import { openLightbox } from '../lightbox.js';
 import { bindPinToggle } from '../weather/pin-toggle.js';
 import { openWeatherLightbox, openWeatherRecapLightbox } from '../weather/_lightbox.js';
 import { openStormEpisode } from '../weather/_feed.js';
 import { deleteSighting } from '../weather/sightings.js';
 import { openManualEventView } from '../weather/_manual-events.js';
-import { registerMediaItems } from '../mediathek/_item-registry.js';
+import { getRegisteredMediaItem, registerMediaItems } from '../mediathek/_item-registry.js';
 import { adaptMotionItem } from './_motion-adapter.js';
+import { resolveMotionItem } from './_motion-open.js';
 
 function _registerMotionItems(page) {
   const items = page.filter((it) => it.kind === 'motion').map(adaptMotionItem);
   registerMediaItems(items);
+  window._openMediaItem = (id) => {
+    const item = resolveMotionItem(items, id, getRegisteredMediaItem);
+    if (item) openLightbox(item);
+  };
 }
 
 function _bindSightingCards(grid) {

@@ -233,6 +233,42 @@ def test_open_storm_episode_itself_is_unchanged():
     assert "#/gewitter/" in feed_src
 
 
+def test_the_merged_grid_installs_window_open_media_item_itself():
+    """Regression: a motion card's onclick (mediathek/_cards.js::
+    mediaCardHTML, reused unchanged by this grid) calls
+    `window._openMediaItem` inline. Before this fix its ONLY definition
+    lived inside mediathek/_paging.js::renderMediaGrid — reassigned every
+    time the PER-CAMERA DRILLDOWN painted, never when this grid did. A
+    motion card here could render and be tapped before the operator ever
+    opened a single camera's drilldown, and the inline onclick called a
+    function that plain did not exist yet — silently, since a broken
+    inline onclick has nowhere to report to. "Today's bird clip does
+    nothing when tapped" was exactly that.
+
+    _bind.js must now install its OWN `window._openMediaItem` too,
+    reassigned on every render of THIS grid same as the drilldown does
+    for its own — whichever grid painted most recently is the one whose
+    click behaviour is live, which is the correct invariant, not an
+    accidental one."""
+    bind_src = _read(_JS / "library" / "_bind.js")
+    assert "window._openMediaItem" in bind_src, (
+        "the merged grid's motion cards must install their own opener, "
+        "not rely on the drilldown having rendered first"
+    )
+    assert "resolveMotionItem" in bind_src
+    assert "from './_motion-open.js'" in bind_src
+
+
+def test_resolve_motion_item_is_a_leaf_module_reusable_without_the_lightbox():
+    """resolveMotionItem is split into its own file specifically so the
+    resolution ORDER (this page's items, then the cross-grid registry)
+    is unit-testable without lightbox.js's whole import tree — verified
+    directly (not just asserted) in library/_tests/bind.test.js."""
+    src = _read(_JS / "library" / "_motion-open.js")
+    assert "export function resolveMotionItem" in src
+    assert "from '" not in src, "must stay a leaf module — no lightbox.js weight"
+
+
 # ── router.js's Telegram deep links still land on the merged section ───
 
 

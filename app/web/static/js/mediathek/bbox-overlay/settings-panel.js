@@ -12,6 +12,19 @@
 // recording_settings) get a single muted line instead.
 import { byId } from '../../core/dom.js';
 import { colors, OBJ_LABEL } from '../../core/icons.js';
+import { setBboxOverlayVisibility } from './renderer.js';
+import {
+  _TOGGLE_ICONS,
+  getOverlayToggleState,
+  setOverlayToggleState,
+} from '../../mediaview/overlay-toggles.js';
+
+// The pill bar's own persistence bucket scopes toggles by mode
+// (mediathek/timelapse/weather/live) — this panel only ever renders
+// for recorded motion clips, so it always reads/writes the same
+// 'mediathek' bucket the shell's overlay-toggle pills use for that
+// mode (see mediaview/_shell-layout.js's _MODE_FLAGS.recorded).
+const _OVERLAY_CONTEXT_KEY = 'mediathek';
 
 // Tabler-flavour SVGs mirror the cam-edit step icons. Tightly inlined
 // so the lightbox doesn't pull on the wizard's HTML at render time.
@@ -100,37 +113,47 @@ function _achStep5(ach) {
   return '—';
 }
 
-export function lbRenderSettingsPanel(item, hostOverride) {
-  // hostOverride lets the mediaview tabs container render the
-  // settings panel inside a tab body instead of the global
-  // #lightboxSettings element. Default behaviour (no override) keeps
-  // the legacy callsite working bit-for-bit.
-  const host = hostOverride || byId('lightboxSettings');
-  if (!host) return;
-  if (!item || item.type === 'timelapse') {
-    host.innerHTML = '';
-    return;
-  }
-  const rs = item.recording_settings;
-  if (!rs || typeof rs !== 'object' || rs.mode === 'timelapse') {
-    host.innerHTML = `<div class="lbset-missing">Settings nicht aufgezeichnet · ältere Aufnahme</div>`;
-    return;
-  }
-  const ach = item.achievement || {};
+// The bbox/SVG-outline toggle. Previously only reachable via the pill
+// bar pinned over the video (overlay-toggles.js) — the operator asked
+// for it to also be reachable from the Aufnahme-Settings tab itself,
+// without a full rebuild of this panel. Sits ABOVE the collapsible
+// header (not inside .lbset-body) so it's visible without expanding
+// anything, and reads/writes the exact same rendering flag + storage
+// bucket the pill bar uses — never a second, parallel bbox toggle.
+function _overlayToggleRowHtml() {
+  const on = getOverlayToggleState(_OVERLAY_CONTEXT_KEY, 'bboxes');
+  return `
+    <div class="lbset-overlay-row">
+      <label class="lbset-overlay-toggle" title="Erkannte Objekte als Rahmen über dem Video einblenden">
+        <input type="checkbox" class="lbset-overlay-checkbox"${on ? ' checked' : ''}>
+        <span class="lbset-overlay-toggle-ico" aria-hidden="true">${_TOGGLE_ICONS.bboxes}</span>
+        <span class="lbset-overlay-toggle-lbl">Umrandung (SVG-Overlay)</span>
+      </label>
+    </div>`;
+}
 
-  // Pre-render per-step rows. Each step shows Gesetzt (the recording
-  // config) and Erreicht (what the clip's data actually produced),
-  // plus the wizard-mirroring numeric circle + icon + title + hint.
+function _wireOverlayToggle(host) {
+  const checkbox = host.querySelector('.lbset-overlay-checkbox');
+  if (!checkbox) return;
+  checkbox.addEventListener('change', () => {
+    const on = checkbox.checked;
+    setBboxOverlayVisibility({ showBboxes: on });
+    setOverlayToggleState(_OVERLAY_CONTEXT_KEY, 'bboxes', on);
+  });
+}
+
+// Pre-render per-step rows. Each step shows Gesetzt (the recording
+// config) and Erreicht (what the clip's data actually produced),
+// plus the wizard-mirroring numeric circle + icon + title + hint.
+function _buildSteps(rs, ach) {
   const objFilterCell = rs.object_filter == null ? 'alle Klassen' : _fmtClassList(rs.object_filter);
-
   const conf2nd =
     rs.conf_thresh_per_class && Object.keys(rs.conf_thresh_per_class).length > 0
       ? Object.entries(rs.conf_thresh_per_class)
           .map(([k, v]) => `${OBJ_LABEL[k] || k} ${Math.round(parseFloat(v) * 100)} %`)
           .join(', ')
       : null;
-
-  const steps = [
+  return [
     {
       num: 1,
       title: 'Was suchen?',
@@ -169,8 +192,10 @@ export function lbRenderSettingsPanel(item, hostOverride) {
       achVal: _achStep5(ach),
     },
   ];
+}
 
-  const stepsHtml = steps
+function _stepsHtml(steps) {
+  return steps
     .map(
       (st) => `
     <div class="lbset-step">
@@ -189,14 +214,16 @@ export function lbRenderSettingsPanel(item, hostOverride) {
     </div>`,
     )
     .join('');
+}
 
-  // Trailing "+" row — non-wizard items that still belong here so
-  // the user has the full picture in one place.
+// Trailing "+" row — non-wizard items that still belong here so the
+// user has the full picture in one place.
+function _extrasHtml(rs) {
   const nachlauf =
     rs.post_motion_seconds != null && rs.post_motion_seconds > 0
       ? `${rs.post_motion_seconds} s`
       : 'Standard';
-  const extrasHtml = `
+  return `
     <div class="lbset-extras">
       <div class="lbset-extras-row">
         <span class="lbset-extras-label">Nachlauf-Aufnahme</span>
@@ -207,12 +234,49 @@ export function lbRenderSettingsPanel(item, hostOverride) {
         <span class="lbset-extras-value lbset-row-muted">15 % h · 2 % a · fix</span>
       </div>
     </div>`;
+}
+
+function _wireHeaderCollapse(host) {
+  const header = host.querySelector('.lbset-header');
+  const body = host.querySelector('.lbset-body');
+  if (!header || !body) return;
+  header.addEventListener('click', () => {
+    const open = body.hidden;
+    body.hidden = !open;
+    header.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+}
+
+export function lbRenderSettingsPanel(item, hostOverride) {
+  // hostOverride lets the mediaview tabs container render the
+  // settings panel inside a tab body instead of the global
+  // #lightboxSettings element. Default behaviour (no override) keeps
+  // the legacy callsite working bit-for-bit.
+  const host = hostOverride || byId('lightboxSettings');
+  if (!host) return;
+  if (!item || item.type === 'timelapse') {
+    host.innerHTML = '';
+    return;
+  }
+  const rs = item.recording_settings;
+  if (!rs || typeof rs !== 'object' || rs.mode === 'timelapse') {
+    host.innerHTML = `${_overlayToggleRowHtml()}<div class="lbset-missing">Settings nicht aufgezeichnet · ältere Aufnahme</div>`;
+    _wireOverlayToggle(host);
+    return;
+  }
+  const ach = item.achievement || {};
+  const steps = _buildSteps(rs, ach);
+  const stepsHtml = _stepsHtml(steps);
+  const extrasHtml = _extrasHtml(rs);
 
   // Default-collapsed — the chevron points right (CSS rotates -90°)
   // and the body sits hidden until the user taps the header. Keeps
   // the bottom of the lightbox quiet when the user just wants to
   // watch the clip; tapping the chip surfaces the full breakdown.
+  // The overlay toggle sits ABOVE this collapsible so it's reachable
+  // without expanding anything.
   host.innerHTML = `
+    ${_overlayToggleRowHtml()}
     <button type="button" class="lbset-header" aria-expanded="false" aria-controls="lightboxSettingsBody">
       <span class="lbset-header-icon">${_SET_HEADER_ICON}</span>
       <span class="lbset-header-title">Erkennung · gesetzt vs. erreicht</span>
@@ -225,13 +289,6 @@ export function lbRenderSettingsPanel(item, hostOverride) {
       ${extrasHtml}
     </div>`;
 
-  const header = host.querySelector('.lbset-header');
-  const body = host.querySelector('.lbset-body');
-  if (header && body) {
-    header.addEventListener('click', () => {
-      const open = body.hidden;
-      body.hidden = !open;
-      header.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-  }
+  _wireHeaderCollapse(host);
+  _wireOverlayToggle(host);
 }

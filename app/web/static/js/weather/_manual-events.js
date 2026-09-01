@@ -13,7 +13,7 @@
 // circular.
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { showToast, showConfirm } from '../core/toast.js';
+import { showToast } from '../core/toast.js';
 import { apiGet, apiPost, apiDelete } from '../core/api.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import { manualEventCategories, manualCategoryMeta } from './_manual-event-cats.js';
@@ -77,16 +77,59 @@ function _manualEventBodyHTML(m) {
     </div>`;
 }
 
-function _deleteFromModal(id) {
-  showConfirm('Dieses Wetter-Ereignis wirklich löschen?').then((ok) => {
-    if (!ok) return;
+// Milliseconds an armed delete button stays armed before quietly
+// reverting — long enough for a deliberate second tap, short enough
+// that a button left alone doesn't stay in its "sicher?" state
+// indefinitely.
+const _DELETE_ARM_MS = 4000;
+
+// Press-again-in-place delete, replacing a separate confirm popup the
+// operator reported rendering BEHIND the modal that opened it ("der
+// Bestätigungsscreen... ist hinter dem eigentlichen Screen") — a
+// second, independently-stacked overlay was never necessary here; the
+// button that starts the action can just as well be the one that
+// confirms it. First tap arms the button (label + colour flip to a
+// clearly "this is now dangerous" dark red, matching the operator's
+// own "sicher Fragezeichen dunkelrot"); a second tap while armed
+// deletes for real. Any other interaction (blur, the auto-revert
+// timer, a failed delete) disarms it, so a stray tap minutes later can
+// never land on an already-armed button.
+export function _wireDeleteButton(btn, id) {
+  let armed = false;
+  let timer = 0;
+  const disarm = () => {
+    armed = false;
+    if (timer) {
+      clearTimeout(timer);
+      timer = 0;
+    }
+    btn.classList.remove('is-armed');
+    btn.innerHTML = `${_LB_TRASH_ICON_ONLY} Löschen`;
+  };
+  const doDelete = () => {
     apiDelete(`/api/weather/manual-events/${encodeURIComponent(id)}`)
       .then(() => {
         _closeManualEventModal();
         window.loadWeatherSightings(state.weather.filter);
         window.reloadLibraryPage?.();
       })
-      .catch((err) => showToast('Löschen fehlgeschlagen: ' + (err?.message || err), 'error'));
+      .catch((err) => {
+        disarm();
+        showToast('Löschen fehlgeschlagen: ' + (err?.message || err), 'error', {
+          action: { label: 'Erneut versuchen', onClick: doDelete },
+        });
+      });
+  };
+  btn.addEventListener('click', () => {
+    if (armed) {
+      disarm();
+      doDelete();
+      return;
+    }
+    armed = true;
+    btn.classList.add('is-armed');
+    btn.innerHTML = `${_LB_TRASH_ICON_ONLY} Sicher?`;
+    timer = setTimeout(disarm, _DELETE_ARM_MS);
   });
 }
 
@@ -101,9 +144,8 @@ function _mountManualEventModal(m, metas) {
     if (e.target === modal) _closeManualEventModal();
   });
   modal.querySelector('.ws-manual-modal-close')?.addEventListener('click', _closeManualEventModal);
-  modal
-    .querySelector('.ws-manual-modal-delete')
-    ?.addEventListener('click', () => _deleteFromModal(m.id));
+  const deleteBtn = modal.querySelector('.ws-manual-modal-delete');
+  if (deleteBtn) _wireDeleteButton(deleteBtn, m.id);
   const onEsc = (e) => {
     if (e.key !== 'Escape') return;
     _closeManualEventModal();

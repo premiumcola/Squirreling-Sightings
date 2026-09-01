@@ -340,9 +340,21 @@
   font-weight: 600;
   cursor: pointer;
 }
+/* Armed state — first tap, awaiting the confirming second tap. Solid
+   dark red (not the resting translucent tint above) so the "this is
+   now dangerous" step reads at a glance, matching the operator's own
+   "sicher Fragezeichen dunkelrot" — replaces a separate confirm popup
+   that used to render behind this modal. */
+.ws-manual-modal-delete.is-armed {
+  background: #b91c1c;
+  color: #fff;
+}
 @media (hover: hover) {
   .ws-manual-modal-delete:hover {
     background: rgba(244, 63, 94, 0.26);
+  }
+  .ws-manual-modal-delete.is-armed:hover {
+    background: #991b1b;
   }
 }
 

@@ -135,7 +135,11 @@ def test_chips_carry_aria_pressed_for_every_selection():
     assert out["pressed"] == 2
     assert out["active"] == 2
     # Every remaining chip is explicitly unpressed — no chip without state.
-    assert out["unpressed"] == 7
+    # 5 total (thunder, heavy_rain, snow, fog, thunder_rising — the
+    # curated manual-event category set, not every WEATHER_TYPES key;
+    # see _manual-event-save.js's _MANUAL_EVENT_CATEGORY_KEYS), minus
+    # the 2 pressed above.
+    assert out["unpressed"] == 3
 
 
 def test_no_selection_leaves_every_chip_unpressed():
@@ -151,6 +155,28 @@ def test_no_selection_leaves_every_chip_unpressed():
     )
     assert out["pressed"] == 0
     assert out["active"] == 0
+
+
+def test_only_the_curated_categories_are_offered_not_every_weather_type():
+    """Regression: the picker used to render EVERY WEATHER_TYPES key,
+    including the three automatic-timelapse trigger subtypes
+    (thunder_rising/front_passing/storm_front — only thunder_rising is
+    a real judgement call, the other two are capture-pipeline report
+    artefacts) and the two daily sun-timelapse types — none of which
+    are a category an operator judging a hand-picked storm window would
+    ever choose between. Reported via annotated screenshot: "was sind
+    das für Ausreißer, die alle raus"."""
+    out = _js(
+        """
+        const mod = await import(JS + '/weather/_manual-event-save.js');
+        const html = mod._categoryChipsHTML(new Set());
+        const keys = [...html.matchAll(/data-category="([^"]+)"/g)].map((m) => m[1]);
+        console.log(JSON.stringify({ keys }));
+        """
+    )
+    assert out["keys"] == ["thunder", "heavy_rain", "snow", "fog", "thunder_rising"]
+    for excluded in ("sun_timelapse_rise", "sun_timelapse_set", "front_passing", "storm_front"):
+        assert excluded not in out["keys"]
 
 
 # _collectPayload walks the panel DOM (CLAUDE.md's collector rule), so a

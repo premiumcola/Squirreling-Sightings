@@ -63,18 +63,30 @@ export function _deriveDefaultCategory(samples) {
   return best;
 }
 
+// The categories a manually-saved event can actually be. WEATHER_TYPES
+// itself carries more keys than this — sun_timelapse_rise/_set and the
+// thunder_rising/front_passing/storm_front trio are trigger subtypes
+// for the automatic 60-min weather-timelapse capture mechanism (see
+// core/weather-types.js's own comment on that table), not categories an
+// operator judging a storm by hand would ever pick between — showing
+// all nine here read as "the others didn't hold up" ("was sind das für
+// Ausreißer, die alle raus"). thunder_rising survives because it's a
+// real judgement call ("Gewitter zieht auf" — a storm building) an
+// operator can make about a window they're looking at, same as the
+// four core categories; the other three are report-format artefacts
+// of the capture pipeline, not storm characterisations.
+const _MANUAL_EVENT_CATEGORY_KEYS = ['thunder', 'heavy_rain', 'snow', 'fog', 'thunder_rising'];
+
 // Multi-select: an event is genuinely more than one thing (the
 // operator's own example is a thunderstorm that ALSO brings heavy rain),
 // so several chips can be lit at once — up to MANUAL_CATEGORIES_MAX.
 // `aria-pressed` carries the selected state, not colour alone.
 export function _categoryChipsHTML(activeCategories) {
-  return Object.keys(WEATHER_TYPES)
-    .map((key) => {
-      const meta = WEATHER_TYPES[key];
-      const on = activeCategories.has(key);
-      return `<button type="button" class="ws-zsave-cat${on ? ' is-active' : ''}" aria-pressed="${on}" data-category="${esc(key)}" style="--cb:${meta.color}"><span class="ws-zsave-cat-ic" aria-hidden="true">${meta.icon}</span>${esc(meta.de)}</button>`;
-    })
-    .join('');
+  return _MANUAL_EVENT_CATEGORY_KEYS.map((key) => {
+    const meta = WEATHER_TYPES[key];
+    const on = activeCategories.has(key);
+    return `<button type="button" class="ws-zsave-cat${on ? ' is-active' : ''}" aria-pressed="${on}" data-category="${esc(key)}" style="--cb:${meta.color}"><span class="ws-zsave-cat-ic" aria-hidden="true">${meta.icon}</span>${esc(meta.de)}</button>`;
+  }).join('');
 }
 
 function _curveCheckboxesHTML(checkedFields) {

@@ -223,8 +223,21 @@ function _extrasHtml(rs) {
     rs.post_motion_seconds != null && rs.post_motion_seconds > 0
       ? `${rs.post_motion_seconds} s`
       : 'Standard';
+  // pre_motion_seconds is the REAL achieved pre-roll for THIS clip, not
+  // the configured target — 0 on a clip recorded before the pre-roll
+  // splice existed, on a camera that just started (ring not full yet),
+  // or when the splice itself failed. See camera_runtime/_recording/
+  // _preroll.py for how this number is produced.
+  const vorlauf =
+    rs.pre_motion_seconds != null && rs.pre_motion_seconds > 0
+      ? `${rs.pre_motion_seconds} s`
+      : 'Keiner';
   return `
     <div class="lbset-extras">
+      <div class="lbset-extras-row">
+        <span class="lbset-extras-label">Vorlauf-Aufnahme</span>
+        <span class="lbset-extras-value">${vorlauf}</span>
+      </div>
       <div class="lbset-extras-row">
         <span class="lbset-extras-label">Nachlauf-Aufnahme</span>
         <span class="lbset-extras-value">${nachlauf}</span>

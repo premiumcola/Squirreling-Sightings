@@ -127,6 +127,10 @@ CAMERA_SCHEMA: dict = {
     "motion_enabled": (bool, True),
     "detection_trigger": (str, "motion_and_objects"),
     "post_motion_tail_s": (float, 0.0),
+    # 0 = inherit global processing.pre_motion_seconds (default 3.0). Seconds
+    # of main-stream JPEG pre-roll spliced onto ffmpeg stream-copy motion
+    # clips — see camera_runtime/_recording/_preroll.py.
+    "pre_motion_seconds": (float, 0.0),
     # D3 · small-animal ROI/tiling re-detection mode (off|roi|2x2|3x3). The
     # D2 production pipeline runs this pass on the HD frame only when the
     # full-frame detect found nothing AND the D1 motion-blob tracker saw a

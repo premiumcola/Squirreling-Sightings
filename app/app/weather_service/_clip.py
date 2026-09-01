@@ -19,6 +19,7 @@ from pathlib import Path
 
 import requests
 
+from ..media_encode import encode_jpeg_frames_to_mp4
 from ._consts import (
     EVENT_ICON_HEX,
     EVENT_LABEL_DE,
@@ -142,66 +143,13 @@ class ClipMixin:
     def _encode_clip(frames: list[tuple[float, bytes]], out_path: Path, fps: int) -> bool:
         """Pipe the JPEG stream straight into ffmpeg's mjpeg demuxer.
         Stream-copy would be cleanest but mjpeg→h264 transcode is essentially
-        free on these clip lengths and gives us a browser-friendly mp4."""
-        if not shutil.which("ffmpeg"):
-            log.warning("[weather] ffmpeg not available — cannot encode clip")
-            return False
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-f",
-            "image2pipe",
-            "-vcodec",
-            "mjpeg",
-            "-framerate",
-            str(int(fps)),
-            "-i",
-            "pipe:0",
-            "-vcodec",
-            "libx264",
-            "-preset",
-            "fast",
-            "-crf",
-            "23",
-            "-pix_fmt",
-            "yuv420p",
-            "-movflags",
-            "+faststart",
-            str(out_path),
-        ]
-        try:
-            proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            write_failed = False
-            for _ts, jpg in frames:
-                try:
-                    proc.stdin.write(jpg)
-                except Exception:
-                    write_failed = True
-                    break
-            # Don't proc.stdin.close() here — communicate() does it for us, and
-            # a manual close before communicate raises "flush of closed file"
-            # on the next communicate() call.
-            try:
-                _out, err = proc.communicate(timeout=30)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                log.warning("[weather] ffmpeg timeout — killed")
-                return False
-            if proc.returncode != 0:
-                log.warning(
-                    "[weather] ffmpeg rc=%s stderr=%s",
-                    proc.returncode,
-                    (err or b"").decode("utf-8", "replace")[-300:],
-                )
-                return False
-            if write_failed:
-                log.debug("[weather] partial frame write — clip may be short")
-            return out_path.exists() and out_path.stat().st_size > 1024
-        except Exception as e:
-            log.warning("[weather] ffmpeg pipe error: %s", e)
-            return False
+        free on these clip lengths and gives us a browser-friendly mp4.
+
+        Delegates to the shared encoder (media_encode.py) — the motion
+        recording pre-roll splice needs the exact same primitive for the
+        exact same input shape (independently captured JPEG stills → one
+        h264 mp4), so the command line lives in one place, not two."""
+        return encode_jpeg_frames_to_mp4(frames, out_path, fps, log_tag="[weather]")
 
     # ── Read paths used by API endpoints ────────────────────────────────────
 

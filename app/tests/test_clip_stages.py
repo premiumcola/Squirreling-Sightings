@@ -216,7 +216,11 @@ def test_a_store_that_blows_up_does_not_take_the_encode_down():
 
 def test_the_recorder_announces_every_transition():
     """Three call sites, one per stage change. A dropped one leaves the
-    tile stuck on the previous phase for the rest of the clip."""
+    tile stuck on the previous phase for the rest of the clip.
+
+    Lives in _ffmpeg_clip.py — the ffmpeg stream-copy lifecycle was split
+    out of _recording/__init__.py to keep that file under CLAUDE.md's
+    500-line ceiling once the pre-roll splice landed there too."""
     from pathlib import Path
 
     src = (
@@ -224,7 +228,7 @@ def test_the_recorder_announces_every_transition():
         / "app"
         / "camera_runtime"
         / "_recording"
-        / "__init__.py"
+        / "_ffmpeg_clip.py"
     ).read_text(encoding="utf-8")
     assert '"stage": STAGE_RECORDING' in src, "the stub must be born knowing its stage"
     assert "_set_clip_stage(event_id, STAGE_QUEUED)" in src

@@ -33,6 +33,7 @@ from ._loop_stages import LoopStagesMixin
 from ._main_loop import MainLoopMixin
 from ._motion import MotionMixin
 from ._recording import RecordingMixin
+from ._recording._preroll import MotionPreroll, resolve_pre_motion_seconds
 from ._recording_step import RecordingStepMixin
 from ._rescue import RescueMixin
 from ._status import StatusMixin
@@ -197,7 +198,23 @@ class CameraRuntime(
         # Video recording state (ring pre-buffer + session tracking)
         self._pre_buffer: deque = deque(
             maxlen=300
-        )  # (frame, epoch_float) pairs; time-filtered to 3s on use
+        )  # (frame, epoch_float) pairs; time-filtered to 3s on use — OpenCV fallback only
+        # Main-stream JPEG pre-roll ring for the ffmpeg stream-copy path —
+        # see _recording/_preroll.py's module docstring for why this is a
+        # separate mechanism from both _pre_buffer above (OpenCV-fallback-
+        # only, raw BGR, not fed on the ffmpeg path) and WeatherPrebuffer
+        # below (sub-stream resolution, different consumer). Camera-level
+        # pre_motion_seconds (0 = inherit global processing.pre_motion_seconds,
+        # default 3.0) mirrors post_motion_tail_s's existing convention.
+        # Every camera-config change restarts the runtime, so resolving
+        # this once here (not per-frame) is safe — it cannot go stale
+        # while this instance is alive.
+        _pre_motion_s = resolve_pre_motion_seconds(self.cfg, self.global_cfg)
+        self.motion_preroll = MotionPreroll(self.camera_id, capacity_s=_pre_motion_s)
+        # Frozen pre-roll snapshot for the clip currently recording —
+        # captured at _start_ffmpeg_recording, consumed + cleared at
+        # _stop_ffmpeg_and_queue_reencode.
+        self._rec_preroll_frames: list = []
         self._recording: bool = False
         self._rec_frames: list = []  # OpenCV fallback only
         self._rec_start_time: datetime | None = None

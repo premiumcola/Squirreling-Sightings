@@ -24,6 +24,15 @@ import pytest
 
 REC = Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_recording"
 
+# Where each finalize path actually lives since the __init__.py split
+# (_ffmpeg_clip.py = production ffmpeg stream-copy path, _opencv_fallback.py
+# = the legacy in-memory frame-buffer path). Kept as one map so a future
+# move only needs updating here, not at every call site below.
+_FINALIZE_FILE = {
+    "_reencode_motion_clip": "_ffmpeg_clip.py",
+    "_finalize_motion_clip": "_opencv_fallback.py",
+}
+
 
 def _src(name: str) -> str:
     return (REC / name).read_text(encoding="utf-8")
@@ -39,9 +48,8 @@ def _function_body(src: str, name: str) -> str:
 def test_both_finalize_paths_publish():
     """The load-bearing assertion. If either path stops calling the
     shared publisher, that recording mode goes silent again."""
-    src = _src("__init__.py")
-    for fn in ("_reencode_motion_clip", "_finalize_motion_clip"):
-        body = _function_body(src, fn)
+    for fn, filename in _FINALIZE_FILE.items():
+        body = _function_body(_src(filename), fn)
         assert "_publish_finalized_event(" in body, (
             f"{fn} does not publish its event — that recording mode will "
             "record clips and never alert, exactly as before"
@@ -53,9 +61,11 @@ def test_the_alert_has_exactly_one_call_site():
     wrong one. One site cannot be half-removed."""
     publish = _src("_publish.py")
     assert publish.count("send_event_alert(") == 1
-    assert "send_event_alert(" not in _src(
-        "__init__.py"
-    ), "the alert must live only in _publish.py, reachable from both paths"
+    for filename in ("__init__.py", "_ffmpeg_clip.py", "_opencv_fallback.py", "_preroll.py"):
+        assert "send_event_alert(" not in _src(filename), (
+            f"the alert must live only in _publish.py, reachable from both paths "
+            f"(found a second call site in {filename})"
+        )
 
 
 @pytest.mark.parametrize(
@@ -77,14 +87,14 @@ def test_every_consequence_runs_from_the_shared_step(consequence):
 def test_ffmpeg_path_stamps_first_since():
     """It updates an existing stub, so the marker is applied in the
     publish step rather than before a first write."""
-    body = _function_body(_src("__init__.py"), "_reencode_motion_clip")
+    body = _function_body(_src("_ffmpeg_clip.py"), "_reencode_motion_clip")
     assert "apply_first_since=False" not in body
 
 
 def test_opencv_path_stamps_first_since_before_add_event():
     """Its add_event is the FIRST write of the JSON, so the marker has to
     be on the dict already — hence apply_first_since=False downstream."""
-    body = _function_body(_src("__init__.py"), "_finalize_motion_clip")
+    body = _function_body(_src("_opencv_fallback.py"), "_finalize_motion_clip")
     stamp = body.index("_apply_first_since(")
     add = body.index("self.store.add_event(")
     assert stamp < add, "the marker must be stamped before the JSON is first written"

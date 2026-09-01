@@ -43,14 +43,21 @@ class RecordingStepMixin:
         # cameras never reach it, and the recording-block gate skips it on
         # motion frames), so a rate counted here understates the loop the
         # tracker ticks in — see _cadence.py.
-        # Clip boundary knobs (configurable); ffmpeg stream-copy ignores
-        # the pre-buffer, so it is only filled on the OpenCV fallback path.
+        # Clip boundary knobs (configurable).
         _proc = self.global_cfg.get("processing") or {}
         _clip_max = int(_proc.get("clip_max_duration_s", 120))
         _post_tail = float(
             self.cfg.get("post_motion_tail_s") or _proc.get("post_motion_tail_s", 3.0)
         )
-        if not _FFMPEG_AVAILABLE:
+        # Feed whichever pre-roll buffer this recording backend actually
+        # uses, every tick, motion or not — a trigger can fire on ANY
+        # tick, so the buffer has to already be full by then. ffmpeg
+        # stream-copy has no frame-level access of its own (a separate
+        # subprocess reads RTSP directly), so its pre-roll comes from this
+        # JPEG ring instead — see _recording/_preroll.py.
+        if _FFMPEG_AVAILABLE:
+            self.motion_preroll.push(proc_frame)
+        else:
             self._pre_buffer.append((proc_frame.copy(), time.time()))
 
         if has_motion:

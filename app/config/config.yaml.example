@@ -29,6 +29,13 @@ processing:
   # file to browser-compatible H.264 after the clip ends.
   clip_max_duration_s: 120        # maximum clip length in seconds
   post_motion_tail_s: 3           # seconds of quiet before clip ends
+  # Seconds of lead-in spliced onto the front of each motion clip from a
+  # continuously-running main-stream JPEG ring (camera_runtime/_recording/
+  # _preroll.py). 0 disables the ring entirely (no per-frame JPEG-encode
+  # cost). Only applies to the ffmpeg stream-copy path — see that module's
+  # docstring for the playback trade-off (spliced segment plays at the
+  # detection sample rate, not the camera's native fps).
+  pre_motion_seconds: 3
   motion:
     enabled: true
     min_area: 1800
@@ -104,6 +111,7 @@ cameras:
     motion_enabled: true
     detection_trigger: motion_and_objects   # motion_and_objects | objects_only | motion_only
     post_motion_tail_s: 0          # 0 = inherit global default
+    pre_motion_seconds: 0          # 0 = inherit global default
     timelapse:
       enabled: true
       fps: 25

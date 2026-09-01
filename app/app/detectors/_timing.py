@@ -11,6 +11,8 @@ import math
 import time
 from collections import deque
 
+from ._utilisation import RollingUtilisation
+
 # 60 samples ≈ 20 s of one camera's inference at ~3 Hz. Long enough to
 # average out a single slow frame, short enough that the numbers still
 # describe "now" rather than the last ten minutes.
@@ -34,6 +36,9 @@ class InferenceTimingMixin:
 
     def _init_timings(self) -> None:
         self._timings: deque = deque(maxlen=_TIMING_WINDOW)
+        # Same perf_counter timeline as the t_* arguments below, so the
+        # invoke end-time recorded per sample is the one measured.
+        self._utilisation = RollingUtilisation(clock=time.perf_counter)
 
     def _record_timing(self, t_pre: float, t_wait: float, t_invoke: float, t_post: float) -> None:
         """Store one inference split into its four real cost centres.
@@ -53,6 +58,7 @@ class InferenceTimingMixin:
         if self._warming:
             return
         now = time.perf_counter()
+        self._utilisation.record(t_post - t_invoke, at=t_post)
         self._timings.append(
             {
                 "pre": (t_wait - t_pre) * 1000.0,
@@ -61,6 +67,10 @@ class InferenceTimingMixin:
                 "post": (now - t_post) * 1000.0,
             }
         )
+
+    def utilisation(self) -> dict:
+        """Rolling ~10 s load of this interpreter — see ``_utilisation``."""
+        return self._utilisation.snapshot()
 
     def timing_breakdown(self) -> dict:
         """Rolling averages in ms, or an empty dict before the first run.

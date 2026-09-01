@@ -20,7 +20,7 @@ import hashlib
 from dataclasses import asdict
 from datetime import datetime
 
-from ...detectors._describe import describe_model
+from ...detectors._describe import describe_model, inat_backend
 from ...mask_zones import signature as _poly_signature
 from ...net_archive._tuning import TUNING_LABELS_DE
 from ...thresholds._apply import camera_role
@@ -94,7 +94,7 @@ def _models(detector, bird, wildlife) -> dict:
     }
     if getattr(wildlife, "_inat_interpreter", None) is not None:
         inat = describe_model(wildlife, "active_inat_model_path")
-        inat["device"] = "cpu" if getattr(wildlife, "_inat_cpu_mode", True) else "tpu"
+        inat.update(inat_backend(wildlife))
         out["wildlife_inat"] = inat
     out["tpu_active"] = any(m.get("device") == "tpu" for m in out.values())
     return out

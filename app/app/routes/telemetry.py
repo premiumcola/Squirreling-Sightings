@@ -25,7 +25,8 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
-from ..detectors._describe import describe_backend
+from ..detectors._describe import iter_stages
+from ..detectors._utilisation import fleet_tpu_utilisation
 from ..detectors._projection import (
     MAX_RESCUE_RATE_PER_S,
     MODE_TILES,
@@ -96,14 +97,13 @@ def _basename(path) -> str | None:
     return Path(str(path)).name if path else None
 
 
-def _stage_row(stage: str, cam_id: str | None, obj, model, timing) -> dict:
+def _stage_row(stage: str, cam_id: str | None, backend: dict, model, timing) -> dict:
     """One row of the stage table: which device, which API, which model.
 
-    Device/API come from ``describe_backend`` — the same words the event
+    ``backend`` is ``describe_backend``'s dict — the same words the event
     provenance snapshot uses, so the panel and the sidecar cannot
     disagree about what "coral via delegate" is called.
     """
-    backend = describe_backend(obj)
     reason = backend["reason"]
     return {
         "stage": stage,
@@ -125,57 +125,12 @@ def _stage_row(stage: str, cam_id: str | None, obj, model, timing) -> dict:
 
 def _stages(runtimes: dict) -> list[dict]:
     """Four rows per camera — the detector plus the three classifier
-    interpreters (wildlife holds two)."""
+    interpreters (wildlife holds two). ``iter_stages`` owns the walk."""
     rows: list[dict] = []
     for cam_id, rt in runtimes.items():
-        det = getattr(rt, "detector", None)
-        if det is not None:
-            rows.append(
-                _stage_row(
-                    "detector",
-                    cam_id,
-                    det,
-                    getattr(det, "active_model_path", None),
-                    det.timing_breakdown() if hasattr(det, "timing_breakdown") else {},
-                )
-            )
-        bird = getattr(rt, "bird_classifier", None)
-        if bird is not None:
-            rows.append(
-                _stage_row(
-                    "bird",
-                    cam_id,
-                    bird,
-                    getattr(bird, "active_model_path", None),
-                    bird.timing_breakdown() if hasattr(bird, "timing_breakdown") else {},
-                )
-            )
-        wild = getattr(rt, "wildlife_classifier", None)
-        if wild is not None:
-            rows.append(
-                _stage_row(
-                    "wildlife",
-                    cam_id,
-                    wild,
-                    getattr(wild, "active_model_path", None),
-                    wild.timing_breakdown() if hasattr(wild, "timing_breakdown") else {},
-                )
-            )
-            inat = getattr(wild, "_inat_timing", None)
-            if getattr(wild, "_inat_interpreter", None) is not None:
-                rows.append(
-                    {
-                        **_stage_row(
-                            "wildlife_inat",
-                            cam_id,
-                            wild,
-                            getattr(wild, "active_inat_model_path", None),
-                            inat.timing_breakdown() if inat is not None else {},
-                        ),
-                        "device": "cpu" if getattr(wild, "_inat_cpu_mode", True) else "tpu",
-                        "api": "tflite-cpu" if getattr(wild, "_inat_cpu_mode", True) else "pycoral",
-                    }
-                )
+        for st in iter_stages(rt):
+            timing = st.timing.timing_breakdown() if hasattr(st.timing, "timing_breakdown") else {}
+            rows.append(_stage_row(st.name, cam_id, st.backend, st.model_path, timing))
     return rows
 
 
@@ -291,6 +246,9 @@ def _build_payload() -> dict:
         },
         "stages": stage_rows,
         "cameras": cams,
+        # Rolling ~10 s TPU load, per camera and summed — the number the
+        # stage timings cannot give: whether the accelerator has headroom.
+        "utilisation": fleet_tpu_utilisation(runtimes),
         "projection": _projection(stage_rows, cams, tpu_active),
     }
 

@@ -26,6 +26,7 @@ from ..detectors import (
     WildlifeClassifier,
     draw_detections,
 )
+from ..detectors._utilisation import tpu_utilisation
 from ..event_logic import (
     choose_alarm_level,
     compute_severity_from_matrix,
@@ -174,23 +175,31 @@ class StatusMixin:
             "live_viewers": self._live_viewers,
             "stream_mode": "live" if self._live_viewers > 0 else "baseline",
             "supervisor_restarts": self._supervisor_restarts,
-            "inference_avg_ms": (sum(self._inference_times_ms) / len(self._inference_times_ms))
-            if self._inference_times_ms
-            else None,
-            # Per-stage split of that same number. inference_avg_ms alone
-            # cannot distinguish "the TPU is slow" from "another camera
-            # held the lock" from "letterboxing a 4-MP frame is expensive",
-            # and those three want opposite fixes. See
-            # CoralObjectDetector._record_timing.
-            "inference_breakdown_ms": (
-                self.detector.timing_breakdown()
-                if hasattr(getattr(self, "detector", None), "timing_breakdown")
-                else {}
-            ),
+            **self._inference_status_fields(),
             "roi_rescue_attempts": self._roi_rescue_attempts,
             "roi_rescue_hits": self._roi_rescue_hits,
             "roi_rescue_rate_60s": self._roi_rescue_rate_60s(),
             "reconnect_count_24h": self._reconnect_count_24h(),
+        }
+
+    def _inference_status_fields(self) -> dict:
+        """The three inference readouts of ``status()``.
+
+        ``inference_avg_ms`` alone cannot distinguish "the TPU is slow"
+        from "another camera held the lock" from "letterboxing a 4-MP
+        frame is expensive", and those three want opposite fixes —
+        ``inference_breakdown_ms`` splits them (see
+        ``CoralObjectDetector._record_timing``). ``tpu_util`` is this
+        camera's rolling ~10 s load on the TPU, or None while none of its
+        stages run there."""
+        det = getattr(self, "detector", None)
+        times = self._inference_times_ms
+        return {
+            "inference_avg_ms": (sum(times) / len(times)) if times else None,
+            "inference_breakdown_ms": (
+                det.timing_breakdown() if hasattr(det, "timing_breakdown") else {}
+            ),
+            "tpu_util": tpu_utilisation(self),
         }
 
     def _masked_rtsp_url(self, url: str | None = None) -> str:

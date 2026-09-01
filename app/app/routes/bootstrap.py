@@ -16,6 +16,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, render_template, request, send_from_directory
 
 from .. import app_state
+from ..detectors._utilisation import fleet_tpu_utilisation
 from ..discovery import discover_hosts, discover_hosts_stream
 from ..io_utils import path_exists_cached
 from ._camera_helpers import _auto_detect_device_info
@@ -588,6 +589,7 @@ def api_status():
             "cat_profiles": app_state.cat_registry.list_profiles(),
             "person_profiles": app_state.person_registry.list_profiles(),
             "telegram_actions": settings.data.get("telegram_actions", [])[:12],
+            "tpu": fleet_tpu_utilisation(runtimes),
         }
     )
 

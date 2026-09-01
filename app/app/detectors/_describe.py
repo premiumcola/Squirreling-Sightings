@@ -9,6 +9,8 @@ to derive "TPU or CPU, and through which API" from ``mode`` and
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -63,3 +65,52 @@ def describe_model(obj, path_attr: str = "active_model_path") -> dict:
     out["file"] = Path(str(path)).name if path else None
     out["sha256"] = model_fingerprint(path)
     return out
+
+
+def inat_backend(wild) -> dict:
+    """The iNat second-opinion interpreter has no ``mode`` of its own —
+    only a CPU flag next to its parent classifier."""
+    cpu = bool(getattr(wild, "_inat_cpu_mode", True))
+    return {"device": "cpu" if cpu else "tpu", "api": "tflite-cpu" if cpu else "pycoral"}
+
+
+@dataclass(frozen=True)
+class Stage:
+    """One interpreter a camera runtime owns.
+
+    ``holder`` is the object that carries ``mode`` / model path;
+    ``timing`` the one that carries the timing mixin — the same object
+    except for the iNat stage, which has a separate timing holder.
+    """
+
+    name: str
+    holder: object
+    timing: object
+    backend: dict
+    model_path: str | None
+
+
+def iter_stages(rt) -> Iterator[Stage]:
+    """Every interpreter of one runtime, in cascade order — the detector,
+    the bird classifier, the wildlife classifier and its iNat stage."""
+    for name, attr in (("detector", "detector"), ("bird", "bird_classifier")):
+        obj = getattr(rt, attr, None)
+        if obj is not None:
+            yield Stage(
+                name, obj, obj, describe_backend(obj), getattr(obj, "active_model_path", None)
+            )
+    wild = getattr(rt, "wildlife_classifier", None)
+    if wild is None:
+        return
+    yield Stage(
+        "wildlife", wild, wild, describe_backend(wild), getattr(wild, "active_model_path", None)
+    )
+    if getattr(wild, "_inat_interpreter", None) is not None:
+        backend = {**describe_backend(wild), **inat_backend(wild)}
+        yield Stage(
+            "wildlife_inat",
+            wild,
+            getattr(wild, "_inat_timing", None),
+            backend,
+            getattr(wild, "active_inat_model_path", None),
+        )

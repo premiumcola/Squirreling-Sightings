@@ -34,6 +34,19 @@ Covers:
   * a bird achievement tile is clickable even while locked (the
     Rotkehlchen ask); a locked mammal tile is not (no dossier data
     exists for mammals).
+  * 2026-09 redesign: clicking a species tile before /api/bird-dossiers
+    has loaded shows an inline "loading" state and resolves once the
+    fetch lands, instead of a silent console.warn no-op (the "clicking
+    again or scrolling sometimes makes it work" bug — root cause was a
+    race between loadAchievements() rendering clickable tiles and
+    loadBirdDossiers() populating the name→latin lookup those tiles'
+    clicks depend on, both fired unawaited from main.js). A species
+    that genuinely has no dossier yet gets a "not ready" inline state
+    instead, also never a silent no-op.
+  * the species switcher (prev/next + dropdown) is gone — deleted
+    entirely, not hidden — a grid tile is the only species picker now.
+  * the hero photo carries the species name (folded in, no longer a
+    separate .sd-name line) and, only when audio exists, a play button.
 """
 
 from __future__ import annotations
@@ -47,6 +60,7 @@ _TEMPLATES_ROOT = Path(__file__).resolve().parents[2] / "app" / "web" / "templat
 
 _DOSSIER_PANEL_JS = _JS_ROOT / "sichtungen" / "_dossier-panel.js"
 _ACHIEVEMENTS_JS = _JS_ROOT / "sichtungen" / "_achievements.js"
+_HERO_OVERLAY_JS = _JS_ROOT / "sichtungen" / "_hero-overlay.js"
 _SICHTUNGEN_HTML = _TEMPLATES_ROOT / "partials" / "sichtungen.html"
 _BIRDS_CSS = _CSS_ROOT / "29-birds.css"
 
@@ -125,12 +139,58 @@ def test_meta_html_only_shows_the_sighting_count_when_positive():
     )
 
 
-def test_select_by_name_no_ops_on_an_unknown_species():
+def test_select_by_name_shows_pending_state_before_dossiers_loaded():
+    """Root-cause fix for the 'clicking again or scrolling sometimes makes
+    it work' report: a tile click that lands before /api/bird-dossiers has
+    resolved must show inline feedback and queue itself for retry, never
+    just no-op — the old behaviour was a bare console.warn + return."""
     body = _slice_function(_DOSSIER_PANEL_JS, "selectSpeciesDossierByName")
-    assert "return" in body, (
-        "selectSpeciesDossierByName must return early when the name has no "
-        "matching dossier yet, instead of throwing or blanking the panel."
+    assert "_dossiersLoaded" in body, (
+        "selectSpeciesDossierByName must branch on whether dossiers have "
+        "loaded yet at all — the race is between this call and the async "
+        "/api/bird-dossiers fetch, not just 'species unknown'."
     )
+    assert "_renderStateMessage" in body and "'pending'" in body, (
+        "an unresolved lookup before dossiers have loaded must render an "
+        "inline pending/loading state, not silently return."
+    )
+    assert "_pendingName" in body, (
+        "the clicked name must be remembered so loadBirdDossiers() can "
+        "resolve the same selection once its fetch lands."
+    )
+
+
+def test_select_by_name_shows_missing_state_for_a_genuine_gap():
+    """Once dossiers HAVE loaded, a species with no dossier at all (the
+    prebuild sweep hasn't reached it yet) must also get inline feedback —
+    never a silent no-op — per the operator's explicit ask."""
+    body = _slice_function(_DOSSIER_PANEL_JS, "selectSpeciesDossierByName")
+    assert "'missing'" in body
+    assert "_renderStateMessage" in body
+
+
+def test_pending_click_is_resolved_once_dossiers_finish_loading():
+    body = _slice_function(_DOSSIER_PANEL_JS, "loadBirdDossiers")
+    assert "_pendingName" in body, (
+        "loadBirdDossiers must check for a species clicked while its fetch "
+        "was in flight and resolve that exact selection once loaded, "
+        "instead of always falling back to the default first species."
+    )
+    assert "selectSpeciesDossierByName" in body
+
+
+def test_state_message_never_a_bare_console_warn():
+    """The whole point of this fix: a missing/unloaded dossier must always
+    paint something into the panel, not just log to the console."""
+    src = _read(_DOSSIER_PANEL_JS)
+    body = _slice_function(_DOSSIER_PANEL_JS, "_renderStateMessage")
+    assert "panel.innerHTML" in body
+    assert "sd-state" in body
+    # console.warn is still fine as a *supplementary* dev diagnostic, but
+    # it must never be the only observable effect of a failed lookup —
+    # every branch that can fail resolution has to reach _renderStateMessage.
+    assert "_renderStateMessage(germanName, 'pending')" in src
+    assert "_renderStateMessage(germanName, 'missing')" in src
 
 
 # ── legend renders exactly once ──────────────────────────────────────────
@@ -228,8 +288,9 @@ def test_hero_bleed_exactly_cancels_the_cards_own_padding():
     css = _read(_BIRDS_CSS)
     card_padding = _numeric_padding(css, ".sd-card")  # top, [right,] bottom, left (shorthand)
     hero_margin = _numeric_margins(css, ".sd-hero")  # top, [right,] bottom
-    # .sd-card { padding: 30px 22px 22px; } → top=30, side=22
-    # .sd-hero { margin: -30px -22px 18px; } → top=-30, side=-22
+    # Values were compacted by the 2026-09 height-cut redesign (originally
+    # padding: 30px 22px 22px / margin: -30px -22px 18px) — the invariant
+    # below (not the exact numbers) is what this test actually pins.
     top_pad, side_pad, _bottom_pad = card_padding
     top_margin, side_margin, _bottom_margin = hero_margin
     assert top_margin == -top_pad, (
@@ -254,3 +315,83 @@ def test_hero_bleed_still_cancels_padding_on_the_mobile_card():
     top_margin, side_margin = hero_margin[0], hero_margin[1]
     assert top_margin == -top_pad
     assert side_margin == -side_pad
+
+
+# ── species switcher deleted, not hidden (2026-09 redesign) ─────────────
+
+
+def test_switcher_function_and_wiring_are_gone_from_dossier_panel_js():
+    src = _read(_DOSSIER_PANEL_JS)
+    for banned in ("_switcherHtml", "_cycle(", "sdPrevBtn", "sdNextBtn", "sdSelect"):
+        assert banned not in src, (
+            f"{banned!r} still present in _dossier-panel.js — the species switcher must be "
+            "fully deleted (CLAUDE.md no-dead-code rule), not left as unused dead code. A "
+            "grid tile is the only species picker now."
+        )
+
+
+def test_switcher_css_is_gone_from_birds_css():
+    css = _read(_BIRDS_CSS)
+    for banned in (".sd-switcher", ".sd-switch-btn", ".sd-select"):
+        assert banned not in css, (
+            f"{banned!r} still present in 29-birds.css — dead CSS left behind after the "
+            "switcher markup was deleted from the JS."
+        )
+
+
+# ── hero overlay: name burned in + play button (2026-09 redesign) ───────
+
+
+def test_hero_overlay_module_exists_and_is_used():
+    assert _HERO_OVERLAY_JS.exists(), (
+        "_hero-overlay.js must exist — the hero-photo overlay markup (name scrim, play "
+        "button, compact audio rows) was extracted out of _dossier-panel.js to stay under "
+        "CLAUDE.md's 400-line file ceiling."
+    )
+    panel_src = _read(_DOSSIER_PANEL_JS)
+    assert "from './_hero-overlay.js'" in panel_src
+    assert "heroHtml" in panel_src and "audioListHtml" in panel_src and "wireHeroAudio" in panel_src
+
+
+def test_hero_burns_the_species_name_into_the_photo():
+    body = _slice_function(_HERO_OVERLAY_JS, "heroHtml")
+    assert "sd-hero-name" in body, "the species name must render inside the hero photo itself."
+    assert "sd-hero-scrim" in body, (
+        "the name must sit over a gradient scrim, not flat text on the raw photo — "
+        "legibility over photos of varying brightness."
+    )
+
+
+def test_hero_play_button_only_renders_when_audio_exists():
+    body = _slice_function(_HERO_OVERLAY_JS, "heroHtml")
+    assert "hasAudio" in body and "sd-hero-play" in body, (
+        "the hero play button must be conditional on a recording actually existing — it "
+        "must never render as a tappable-looking icon that silently does nothing."
+    )
+
+
+def test_hero_play_button_is_wired_to_the_existing_audio_elements():
+    """The play icon must control the SAME <audio> elements the compact
+    recordings list renders (CC-BY attribution stays attached to a real
+    player), not a separate playback path."""
+    hero_src = _read(_HERO_OVERLAY_JS)
+    assert "sd-audio-el" in hero_src, (
+        "wireHeroAudio must target the .sd-audio-el elements audioListHtml() renders."
+    )
+    wire_body = _slice_function(_HERO_OVERLAY_JS, "wireHeroAudio")
+    assert "sdHeroPlay" in wire_body
+    assert ".play()" in wire_body and ".pause" in wire_body
+
+
+def test_no_native_audio_controls_widget_left_in_the_compact_list():
+    """The old design used <audio controls> per recording (~44px+ each);
+    the redesign drives playback through the hero button + compact rows
+    instead — a stray `controls` attribute on the rendered <audio> tag
+    would silently reintroduce the old, bulkier per-row native player.
+    Scoped to the markup-building function itself (not the whole file) so
+    an unrelated code comment mentioning "controls" can't false-positive
+    this."""
+    body = _slice_function(_HERO_OVERLAY_JS, "_audioItemHtml")
+    assert "<audio" in body
+    audio_tag = body[body.index("<audio") : body.index("<audio") + 80]
+    assert "controls" not in audio_tag

@@ -6,15 +6,19 @@
 // THERE once any species has dossier data, never a popup: no X, no
 // backdrop. Left column is the dossier itself — a hero photo that
 // bleeds past its own card's padding (the "überlappend, ein bisschen
-// größer" ask), name/latin/tier, the Wikipedia extract, and the
-// Xeno-canto audio player with mandatory attribution. Right column is
-// the operator's own camera clips of that species.
+// größer" ask) with the species name + a play/chirp button burned
+// straight into the photo (see _hero-overlay.js), the latin name/tier,
+// the Wikipedia extract, and a compact list of Xeno-canto recordings
+// with mandatory attribution. Right column is the operator's own
+// camera clips of that species. There is no species switcher any
+// more (2026-09 redesign) — a grid tile IS the species picker now, a
+// second one inside the panel was redundant.
 //
 // Data flow is the one the deleted mediathek/species-dossier.js already
-// worked out (git show 97b0dff): /api/bird-dossiers for the list + a
-// prev/next/select switcher, GET /api/library?labels=<name>&kinds=motion
-// for the clips grid via library/_grid.js + library/_bind.js — no new
-// media-fetch path, no new card renderer.
+// worked out (git show 97b0dff): /api/bird-dossiers for the list, GET
+// /api/library?labels=<name>&kinds=motion for the clips grid via
+// library/_grid.js + library/_bind.js — no new media-fetch path, no new
+// card renderer.
 //
 // Selection instead of open/close: a bird achievement tile (locked OR
 // unlocked, see _achievements.js) calls selectSpeciesDossierByName to
@@ -29,6 +33,7 @@ import { apiGet, j } from '../core/api.js';
 import { renderLibraryGrid } from '../library/_grid.js';
 import { bindLibraryGrid } from '../library/_bind.js';
 import { _achTier } from './_ach-defs.js';
+import { heroHtml, audioListHtml, wireHeroAudio } from './_hero-overlay.js';
 
 const _CLIPS_LIMIT = 8;
 const _TIER_LABEL = { bronze: 'Bronze', silver: 'Silber', gold: 'Gold' };
@@ -36,6 +41,19 @@ const _TIER_LABEL = { bronze: 'Bronze', silver: 'Silber', gold: 'Gold' };
 let _dossiers = [];
 let _nameToLatin = new Map();
 let _selectedLatin = null;
+// True once the first /api/bird-dossiers response has landed (success
+// or failure) — distinguishes "still loading" from "loaded, but this
+// species genuinely has no dossier yet" for selectSpeciesDossierByName
+// below. A tile click that arrives before this flips shows an inline
+// loading state instead of silently doing nothing (see the 2026-09
+// dossier-panel fix: the old version raced loadAchievements() vs.
+// loadBirdDossiers() in main.js — clicking a tile while the dossier
+// fetch was still in flight looked up an empty _nameToLatin and no-oped
+// with just a console.warn).
+let _dossiersLoaded = false;
+// A species name clicked before dossiers had loaded — resolved once
+// loadBirdDossiers() finishes (see the end of that function).
+let _pendingName = null;
 
 function _normName(name) {
   return (name || '').trim().toLowerCase();
@@ -54,8 +72,18 @@ export async function loadBirdDossiers() {
     _dossiers = [];
   }
   _nameToLatin = new Map(_dossiers.map((d) => [_normName(d.common_name_de), d.latin]));
+  _dossiersLoaded = true;
   const panel = byId('speciesDossierPanel');
   if (!panel) return;
+  // A tile was clicked while this fetch was still in flight — resolve
+  // that click now instead of silently falling back to the default
+  // species below (the user asked for a specific one).
+  if (_pendingName) {
+    const name = _pendingName;
+    _pendingName = null;
+    selectSpeciesDossierByName(name);
+    return;
+  }
   if (!_dossiers.length) {
     panel.hidden = true;
     return;
@@ -66,25 +94,48 @@ export async function loadBirdDossiers() {
 }
 
 // Bound to window — called from an achievement tile's inline onclick
-// (see _achievements.js::_tileClickAttrs). No-ops quietly when the
-// species has no dossier yet (e.g. the daily prebuild sweep hasn't
-// reached it — see bird_dossiers.py::sweep_prebuild — so this stays a
-// transitional gap, not a permanent dead end).
+// (see _achievements.js::_tileClickAttrs). Three cases:
+//   1. dossiers already loaded + species found  → select it now.
+//   2. dossiers not loaded yet (the /api/bird-dossiers fetch this page
+//      load's loadBirdDossiers() kicked off — see main.js — is still in
+//      flight, racing loadAchievements()'s tile render) → show an
+//      inline loading state immediately and resolve once that fetch
+//      lands (loadBirdDossiers() above checks _pendingName).
+//   3. dossiers loaded but this species genuinely has none yet (the
+//      daily prebuild sweep — bird_dossiers.py::sweep_prebuild — hasn't
+//      reached it) → show an inline "not ready" state, not a silent
+//      no-op.
 export function selectSpeciesDossierByName(germanName) {
   const latin = _nameToLatin.get(_normName(germanName));
-  if (!latin) {
-    console.warn('[sichtungen] no dossier yet for', germanName);
+  if (latin) {
+    _pendingName = null;
+    _selectSpecies(latin, true);
     return;
   }
-  _selectSpecies(latin, true);
+  if (!_dossiersLoaded) {
+    _pendingName = germanName;
+    _renderStateMessage(germanName, 'pending');
+    return;
+  }
+  console.warn('[sichtungen] no dossier for', germanName);
+  _renderStateMessage(germanName, 'missing');
 }
 window.selectSpeciesDossierByName = selectSpeciesDossierByName;
 
-function _cycle(offset) {
-  const idx = _dossiers.findIndex((x) => x.latin === _selectedLatin);
-  if (idx < 0 || !_dossiers.length) return;
-  const next = _dossiers[(idx + offset + _dossiers.length) % _dossiers.length];
-  _selectSpecies(next.latin, false);
+// Inline feedback for the two non-selection cases above — always
+// visible (unhides the panel even if it was hidden for having zero
+// dossiers overall), always scrolled into view, so a tile click always
+// visibly does *something*.
+function _renderStateMessage(germanName, kind) {
+  const panel = byId('speciesDossierPanel');
+  if (!panel) return;
+  panel.hidden = false;
+  const name = esc(germanName || '');
+  panel.innerHTML =
+    kind === 'pending'
+      ? `<div class="sd-state sd-state--pending">⏳ Dossier für <strong>${name}</strong> wird geladen …</div>`
+      : `<div class="sd-state sd-state--missing">🕓 Für <strong>${name}</strong> ist noch kein Dossier vorbereitet — bitte später erneut versuchen.</div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function _tierBadgeOrLockedHint(count) {
@@ -95,27 +146,17 @@ function _tierBadgeOrLockedHint(count) {
   return `<span class="sd-tier-badge ${tier}">${_TIER_LABEL[tier]}</span>`;
 }
 
-function _heroHtml(d) {
-  const src = d.wikipedia_thumb_url || '';
-  const img = src
-    ? `<img src="${esc(src)}" alt="" loading="lazy"/>`
-    : '<div class="sd-hero-placeholder">🐦</div>';
-  const playable = (Array.isArray(d.recordings) && d.recordings.length) || !!d.audio_url;
-  const badge = playable
-    ? '<span class="sd-audio-badge" title="Vogelstimme verfügbar">🎵</span>'
-    : '';
-  return `<div class="sd-hero">${img}${badge}</div>`;
-}
-
 function _metaHtml(d) {
   const count = d.sighting_count || 0;
   // Small eyebrow label — the only remaining trace of the old standalone
   // "📖 Vogel-Dossiers" section heading, now living inside the panel
   // itself instead of a persistent header outside it (nothing to
   // duplicate: this panel IS the dossier, there's no second copy of the
-  // label elsewhere on the page).
+  // label elsewhere on the page). The common (German) name itself now
+  // lives burned into the hero photo (see _hero-overlay.js::heroHtml) —
+  // not repeated here, that would be the exact duplication CLAUDE.md
+  // forbids.
   return `<div class="sd-eyebrow">📖 Art-Dossier</div>
-    <div class="sd-name">${esc(d.common_name_de || d.latin)}</div>
     <div class="sd-latin">${esc(d.latin)}</div>
     <div class="sd-badges">
       ${_tierBadgeOrLockedHint(count)}
@@ -130,75 +171,17 @@ function _wikiHtml(d) {
   return '<p class="sd-summary sd-summary--missing">Keine Wikipedia-Daten verfügbar — der nächste Abgleich versucht es erneut.</p>';
 }
 
-function _audioRowHtml(r) {
-  const recordist = esc(r.recordist || 'unbekannt');
-  const license = r.license_url
-    ? ` · <a href="${esc(r.license_url)}" target="_blank" rel="noopener noreferrer">Lizenz</a>`
-    : '';
-  return `<div class="sd-audio-row">
-    <span class="sd-audio-type">${esc(r.type_de || 'Aufnahme')}</span>
-    <audio class="sd-audio-player" controls preload="none" src="${esc(r.file_url)}"></audio>
-    <div class="sd-audio-attribution">♪ ${recordist}${license}</div>
-  </div>`;
-}
-
-// Renders up to three labelled <audio controls> rows with mandatory
-// attribution next to each player (CC-BY compliance — see
-// bird_dossiers.py's module docstring). Falls back to the single-clip
-// legacy fields for older dossiers that haven't been re-fetched.
-function _audioHtml(d) {
-  const list =
-    Array.isArray(d.recordings) && d.recordings.length
-      ? d.recordings.slice(0, 3)
-      : d.audio_url
-        ? [
-            {
-              file_url: d.audio_url,
-              type_de: 'Aufnahme',
-              recordist: d.audio_attribution,
-              license_url: d.audio_license,
-            },
-          ]
-        : [];
-  if (!list.length) return '';
-  return `<div class="sd-audio">
-    ${list.map(_audioRowHtml).join('')}
-    <div class="sd-audio-source">Quelle: <a href="https://xeno-canto.org/" target="_blank" rel="noopener noreferrer">xeno-canto.org</a></div>
-  </div>`;
-}
-
-function _switcherHtml() {
-  const opts = _dossiers
-    .map((d) => {
-      const sel = d.latin === _selectedLatin ? ' selected' : '';
-      return `<option value="${esc(d.latin)}"${sel}>${esc(d.common_name_de || d.latin)}</option>`;
-    })
-    .join('');
-  return `<div class="sd-switcher">
-    <button type="button" class="sd-switch-btn" id="sdPrevBtn" aria-label="Vorherige Art">‹</button>
-    <select class="sd-select" id="sdSelect" aria-label="Art wählen">${opts}</select>
-    <button type="button" class="sd-switch-btn" id="sdNextBtn" aria-label="Nächste Art">›</button>
-  </div>`;
-}
-
 function _leftColumnHtml(d) {
   const wikiLink = d.wikipedia_url
     ? `<a class="sd-wiki-link" href="${esc(d.wikipedia_url)}" target="_blank" rel="noopener noreferrer">Auf Wikipedia ansehen ↗</a>`
     : '';
   return `<div class="sd-card">
-    ${_heroHtml(d)}
+    ${heroHtml(d)}
     ${_metaHtml(d)}
     ${_wikiHtml(d)}
-    ${_audioHtml(d)}
+    ${audioListHtml(d)}
     ${wikiLink}
-    ${_switcherHtml()}
   </div>`;
-}
-
-function _wireLeftColumn() {
-  byId('sdPrevBtn')?.addEventListener('click', () => _cycle(-1));
-  byId('sdNextBtn')?.addEventListener('click', () => _cycle(1));
-  byId('sdSelect')?.addEventListener('change', (e) => _selectSpecies(e.target.value, false));
 }
 
 async function _loadClips(d) {
@@ -246,7 +229,7 @@ function _renderPanel(d) {
       <div class="sd-clips-grid" id="sdClipsGrid"></div>
     </div>
   </div>`;
-  _wireLeftColumn();
+  wireHeroAudio(panel);
   _loadClips(d);
 }
 

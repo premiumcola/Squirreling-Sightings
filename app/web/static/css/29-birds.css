@@ -31,9 +31,17 @@
    its own card's padding on the top/left/right edges (the classic
    full-bleed-inside-a-padded-card trick — net column width is
    unchanged, so this can never cause horizontal scroll at any
-   viewport), plus name/latin/tier, Wikipedia extract, Xeno-canto
-   audio. Right column: the operator's own camera clips
-   (library/_grid.js's plain .media-grid rendering, reused verbatim). */
+   viewport), with the species name + a play/chirp button burned
+   straight into the photo (2026-09 redesign — see .sd-hero-name /
+   .sd-hero-play below), then latin/tier, Wikipedia extract, a compact
+   Xeno-canto recordings list. Right column: the operator's own camera
+   clips (library/_grid.js's plain .media-grid rendering, reused
+   verbatim). The 2026-09 redesign also roughly halved this panel's
+   total height (tighter card padding, a wider hero aspect-ratio, the
+   name folded into the photo instead of its own line, a clamped wiki
+   excerpt, no native <audio controls> rows) and dropped the species
+   switcher — a grid tile above is the species picker now, a second
+   one inside the panel duplicated it. */
 .sd-panel {
   margin-top: 22px;
 }
@@ -50,24 +58,41 @@
 }
 .sd-card {
   position: relative;
-  padding: 30px 22px 22px;
+  padding: 20px 18px 16px;
   border-radius: 18px;
   background: linear-gradient(155deg, rgba(var(--acc), 0.13) 0%, rgba(0, 0, 0, 0.24) 100%);
   overflow: visible;
+}
+/* Inline loading / not-ready feedback (see _dossier-panel.js's
+   _renderStateMessage) — replaces the old silent console.warn no-op
+   when a tile is clicked before dossiers have loaded, or for a
+   species with no dossier yet. Same card language as .sd-card, no
+   grid/hero — just a short centred line. */
+.sd-state {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(155deg, rgba(var(--acc), 0.13) 0%, rgba(0, 0, 0, 0.24) 100%);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+}
+.sd-state--missing {
+  color: var(--muted);
 }
 /* The overlap: negative margin exactly cancels .sd-card's own top/side
    padding, so the hero fills the FULL card width while visually
    breaking out above and to the left of the card's content — "links
    überlappend, ein bisschen größer" — without ever exceeding the
-   column's own box (zero horizontal-scroll risk). aspect-ratio keeps
-   it a "photograph", not a banner. */
+   column's own box (zero horizontal-scroll risk). A wide aspect-ratio
+   (vs. the original 4/3) is most of this redesign's height cut — it
+   still reads as a photograph, just a shorter one. */
 .sd-hero {
   position: relative;
-  margin: -30px -22px 18px;
+  margin: -20px -18px 14px;
   border-radius: 18px;
   overflow: hidden;
   background: #000;
-  aspect-ratio: 4/3;
+  aspect-ratio: 2/1;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 }
 .sd-hero img {
@@ -85,19 +110,71 @@
   font-size: 46px;
   opacity: 0.5;
 }
-.sd-audio-badge {
+/* Bottom scrim + name burned into the photo — replaces the old
+   standalone .sd-name line below the hero (CLAUDE.md: no info shown
+   twice). The gradient (not flat text-on-image) keeps the name legible
+   over photos of any brightness. */
+.sd-hero-scrim {
   position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, transparent 55%);
+  pointer-events: none;
+}
+.sd-hero-name {
+  position: absolute;
+  left: 14px;
+  right: 14px;
   bottom: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+/* Prominent centred play/chirp button — only rendered when a
+   recording actually exists (heroHtml() in _hero-overlay.js), so a
+   tappable-looking icon never silently does nothing. >=44px touch
+   target either side (iOS checklist). Two stacked SVG icons swap via
+   the --playing class instead of rewriting innerHTML per tap. */
+.sd-hero-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 56px;
+  height: 56px;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(3px);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+@media (hover: hover) {
+  .sd-hero-play:hover {
+    background: rgba(0, 0, 0, 0.72);
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+.sd-hero-play--playing {
+  background: rgba(var(--acc), 0.75);
+}
+.sd-hero-play-icon--pause {
+  display: none;
+}
+.sd-hero-play--playing .sd-hero-play-icon--play {
+  display: none;
+}
+.sd-hero-play--playing .sd-hero-play-icon--pause {
+  display: block;
 }
 .sd-eyebrow {
   font-size: 11px;
@@ -106,24 +183,18 @@
   text-transform: uppercase;
   color: rgba(var(--acc), 0.85);
 }
-.sd-name {
-  margin-top: 4px;
-  font-size: 20px;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.97);
-}
 .sd-latin {
   font-size: 13px;
   font-style: italic;
   color: rgba(255, 255, 255, 0.5);
-  margin-top: 2px;
+  margin-top: 6px;
 }
 .sd-badges {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 .sd-tier-badge {
   font-size: 11px;
@@ -152,36 +223,78 @@
   font-size: 12px;
   color: var(--muted);
 }
+/* line-clamp bounds a long Wikipedia extract to a fixed 3-line height
+   instead of letting a verbose entry blow up the panel — the "only
+   keep content that earns its vertical space" cut. Short extracts are
+   unaffected (nothing to clamp). */
 .sd-summary {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: rgba(255, 255, 255, 0.82);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .sd-summary--missing {
   font-style: italic;
   color: var(--muted);
+  -webkit-line-clamp: unset;
 }
-/* Audio — up to three Xeno-canto recordings, each labelled with its
-   call type. Attribution sits directly under its own player (CC-BY
-   compliance — bird_dossiers.py's module docstring). */
+/* Compact recordings list — up to three, each a small labelled row
+   button (data-audio-idx wires it to _hero-overlay.js::wireHeroAudio)
+   plus its own attribution line (CC-BY compliance — bird_dossiers.py's
+   module docstring). No native <audio controls> widget any more:
+   playback runs through this row + the hero's own play button, which
+   is what keeps this section short. */
 .sd-audio {
-  margin-top: 14px;
-  padding: 12px 14px;
+  margin-top: 10px;
+  padding: 8px 10px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
+}
+.sd-audio-item + .sd-audio-item {
+  padding-top: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .sd-audio-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
-.sd-audio-row + .sd-audio-row {
-  padding-top: 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+@media (hover: hover) {
+  .sd-audio-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+.sd-audio-row--active {
+  background: rgba(var(--acc), 0.14);
+}
+.sd-audio-row-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
 }
 .sd-audio-type {
   font-size: 11px;
@@ -190,18 +303,11 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.sd-audio-player {
-  width: 100%;
-  outline: none;
-  /* iOS Safari renders <audio controls> at ~44 px high, already at the
-     touch-target floor — lock the height so a future UA style can't
-     shrink it below that on mobile. */
-  min-height: 44px;
-}
 .sd-audio-attribution {
   font-size: 11px;
   color: var(--muted);
   line-height: 1.4;
+  padding: 0 4px;
 }
 .sd-audio-attribution a {
   color: rgba(var(--acc), 0.95);
@@ -214,10 +320,11 @@
   font-size: 11px;
   font-style: italic;
   color: var(--muted);
+  padding: 0 4px;
 }
 .sd-wiki-link {
   display: inline-block;
-  margin-top: 12px;
+  margin-top: 10px;
   font-size: 13px;
   font-weight: 600;
   color: rgba(var(--acc), 0.95);
@@ -225,46 +332,6 @@
 }
 .sd-wiki-link:hover {
   text-decoration: underline;
-}
-/* Prev/next + dropdown — browses every species with a dossier, not
-   just the Top-20 achievement grid above (a species outside the Top-20
-   can still get one, e.g. a rarer bird the classifier still knows). */
-.sd-switcher {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 18px;
-}
-.sd-switch-btn {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  border: none;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .sd-switch-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-  }
-}
-.sd-select {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 44px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-  /* >=16px: iOS Safari auto-zooms a <select> below this like any input */
-  font-size: 16px;
 }
 .sd-clips-head {
   margin-bottom: 10px;
@@ -285,14 +352,14 @@
 
 @media (max-width: 480px) {
   .sd-card {
-    padding: 20px 16px 18px;
+    padding: 14px 14px 14px;
     border-radius: 16px;
   }
   .sd-hero {
-    margin: -20px -16px 16px;
+    margin: -14px -14px 12px;
     border-radius: 16px;
   }
-  .sd-name {
-    font-size: 18px;
+  .sd-hero-name {
+    font-size: 15px;
   }
 }

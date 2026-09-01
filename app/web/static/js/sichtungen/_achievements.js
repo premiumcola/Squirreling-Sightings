@@ -101,7 +101,9 @@ function _tileClickAttrs(a, isUnlocked) {
   if (a.cat === 'birds') {
     // Locked or unlocked — a pre-built or real dossier may already
     // exist (see the module docstring above). selectSpeciesDossierByName
-    // itself no-ops gracefully when nothing is available yet.
+    // itself shows an inline loading/not-ready state in the panel when
+    // nothing is available yet (see _dossier-panel.js) — never a silent
+    // no-op.
     return {
       attr: `onclick="selectSpeciesDossierByName('${esc(a.name)}')" style="cursor:pointer"`,
       active: isSpeciesDossierActive(a.name),

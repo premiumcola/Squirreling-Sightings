@@ -172,6 +172,7 @@ def _sweep_bird_species(log) -> None:
     from .bird_species_backfill import (
         build_backfill_classifier,
         dossier_hook_for,
+        dossier_lookup_for,
         sweep_bird_species_backfill,
     )
 
@@ -186,6 +187,7 @@ def _sweep_bird_species(log) -> None:
         classifier,
         cam_ids,
         dossier_hook=dossier_hook_for(app_state.bird_dossiers),
+        dossier_lookup=dossier_lookup_for(app_state.bird_dossiers),
     )
     if result["changed"]:
         log.info(

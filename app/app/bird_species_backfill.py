@@ -38,6 +38,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .bird_species_rank import DossierLookup, pick_headline_species
+
 log = logging.getLogger(__name__)
 
 #: Candidate events examined per automatic daily-sweep call. Bounded so
@@ -61,6 +63,16 @@ def dossier_hook_for(bird_dossiers_svc) -> Callable[[str, str | None, str, str],
     return bird_dossiers_svc.on_new_species if bird_dossiers_svc is not None else None
 
 
+def dossier_lookup_for(bird_dossiers_svc) -> DossierLookup | None:
+    """Adapt an (optional) BirdDossierService into the `dossier_lookup`
+    shape `backfill_event_species` / `sweep_bird_species_backfill`
+    expect. Mirrors `dossier_hook_for` above — same None-guard, just
+    for the read side (`get_dossier`, used to rank species by rarity)
+    instead of the write side (`on_new_species`, used to grow the
+    dossier once classification lands)."""
+    return bird_dossiers_svc.get_dossier if bird_dossiers_svc is not None else None
+
+
 def build_backfill_classifier(effective_cfg: dict):
     """Instantiate BirdSpeciesClassifier from `processing.bird_species`
     the same way the archive-facing paths already do — see
@@ -78,8 +90,8 @@ def _needs_backfill(event: dict) -> bool:
     """An event is a backfill candidate when it carries no top-level
     `bird_species` yet AND at least one bird detection is missing its
     per-detection `species`. Mirrors the aggregate
-    camera_runtime/_motion.py::_build_event_meta computes live:
-    `next(d.species for d in detections if d.label == "bird" and d.species)`.
+    camera_runtime/_motion.py::_build_event_meta computes live — see
+    bird_species_rank.py::pick_headline_species for the shared rule.
 
     Idempotency guard: an event that already has `bird_species` is
     never reconsidered, even if a later bird detection in the same
@@ -168,10 +180,18 @@ def backfill_event_species(
     event: dict,
     classifier,
     frame_loader: Callable[[dict], np.ndarray | None],
+    *,
+    dossier_lookup: DossierLookup | None = None,
 ) -> bool:
     """Stamp species onto every bird detection in `event` missing one,
     and recompute the event-level `bird_species` aggregate. Mutates
     `event` in place. Returns True when anything changed.
+
+    `dossier_lookup`, when given, ranks the event's distinct species by
+    rarity (see bird_species_rank.py::pick_headline_species) — a
+    species never seen before always wins, otherwise the lowest
+    `sighting_count` does. Omitted (None), the aggregate falls back to
+    "first bird detection in stored order", the historic rule.
 
     Never raises — a missing file, an unreadable video, a corrupt crop,
     or a classifier exception all degrade to "leave it unset, log a
@@ -223,11 +243,14 @@ def backfill_event_species(
     if not stamped_any:
         return False
 
-    # Same aggregate rule the live path uses: first bird detection (in
-    # stored order) that carries a species.
-    event["bird_species"] = next(
-        (d.get("species") for d in dets if d.get("label") == "bird" and d.get("species")), None
-    )
+    # Same aggregate rule the live path uses — rarest/never-recorded
+    # species wins; stored order is only the tiebreaker.
+    species_candidates = [
+        (d.get("species"), d.get("species_latin"))
+        for d in dets
+        if d.get("label") == "bird" and d.get("species")
+    ]
+    event["bird_species"] = pick_headline_species(species_candidates, dossier_lookup)
     return True
 
 
@@ -288,6 +311,7 @@ def sweep_bird_species_backfill(
     *,
     budget: int = DEFAULT_SWEEP_BUDGET,
     dossier_hook: Callable[[str, str | None, str, str], None] | None = None,
+    dossier_lookup: DossierLookup | None = None,
 ) -> dict:
     """Bounded catch-up pass over the archive.
 
@@ -305,6 +329,12 @@ def sweep_bird_species_backfill(
     camera_runtime/_recording/_publish.py::_publish_dossiers, so a
     backfilled species actually grows the Vogel-Dossiers field guide
     instead of only updating the raw event JSON.
+
+    `dossier_lookup(latin)`, when given, is passed straight through to
+    `backfill_event_species` to rank a multi-species event's aggregate
+    by rarity. It is read BEFORE `dossier_hook` bumps this event's own
+    counts (dossier_hook runs after `store.update_event`, below), so
+    the ranking never sees this event's own sightings as prior art.
     """
     if classifier is None or not getattr(classifier, "available", False):
         return {"examined": 0, "changed": 0, "reason": "classifier_unavailable"}
@@ -319,7 +349,9 @@ def sweep_bird_species_backfill(
             break
         examined += 1
         try:
-            did_change = backfill_event_species(event, classifier, frame_loader)
+            did_change = backfill_event_species(
+                event, classifier, frame_loader, dossier_lookup=dossier_lookup
+            )
         except Exception as e:
             log.warning("[det] bird backfill: event=%s errored, skipping: %s", event_id, e)
             did_change = False

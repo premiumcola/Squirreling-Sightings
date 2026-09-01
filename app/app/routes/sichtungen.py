@@ -193,6 +193,7 @@ def api_bird_species_backfill():
         MANUAL_BACKFILL_BUDGET,
         build_backfill_classifier,
         dossier_hook_for,
+        dossier_lookup_for,
         sweep_bird_species_backfill,
     )
 
@@ -216,6 +217,7 @@ def api_bird_species_backfill():
         cam_ids,
         budget=MANUAL_BACKFILL_BUDGET,
         dossier_hook=dossier_hook_for(app_state.bird_dossiers),
+        dossier_lookup=dossier_lookup_for(app_state.bird_dossiers),
     )
     return jsonify({"ok": True, **result})
 

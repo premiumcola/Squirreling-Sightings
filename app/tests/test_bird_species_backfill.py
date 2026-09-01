@@ -40,6 +40,7 @@ from app.bird_species_backfill import (
     backfill_event_species,
     build_backfill_classifier,
     dossier_hook_for,
+    dossier_lookup_for,
     find_backfill_candidates,
     sweep_bird_species_backfill,
 )
@@ -70,6 +71,23 @@ class _RaisingClassifier:
         raise RuntimeError("model exploded")
 
 
+class _QueueClassifier:
+    """Returns one (species, species_latin, score) result per call, in
+    order — stands in for a real classifier telling apart several
+    different birds present in the same clip."""
+
+    available = True
+
+    def __init__(self, results):
+        self._results = list(results)
+        self.calls = 0
+
+    def classify_crop(self, crop):
+        result = self._results[self.calls]
+        self.calls += 1
+        return result
+
+
 def _bird_event(event_id="e1", bbox=None, species=None, bird_species=None):
     return {
         "event_id": event_id,
@@ -87,7 +105,24 @@ def _bird_event(event_id="e1", bbox=None, species=None, bird_species=None):
     }
 
 
-def _frame(w=100, h=100):
+def _multi_bird_event(event_id="e1", n=3):
+    """An event with `n` unclassified bird detections at distinct
+    bboxes, so each can be re-cropped and classified independently."""
+    dets = [
+        {
+            "label": "bird",
+            "score": 0.8,
+            "bbox": {"x1": i * 10, "y1": i * 10, "x2": i * 10 + 20, "y2": i * 10 + 20},
+            "species": None,
+            "species_latin": None,
+            "species_score": None,
+        }
+        for i in range(n)
+    ]
+    return {"event_id": event_id, "bird_species": None, "detections": dets}
+
+
+def _frame(w=200, h=200):
     return np.zeros((h, w, 3), dtype=np.uint8)
 
 
@@ -132,6 +167,67 @@ def test_backfill_skips_a_second_unclassified_bird_once_the_event_has_a_species(
     changed = backfill_event_species(event, clf, lambda ev: _frame())
     assert changed is False
     assert clf.calls == 0
+
+
+def _dossier_lookup(counts: dict[str, int]):
+    """dossier_lookup stub: `latin -> {"sighting_count": n}` for every
+    key in `counts`, None (never recorded) for anything else."""
+
+    def _fn(latin: str):
+        return {"sighting_count": counts[latin]} if latin in counts else None
+
+    return _fn
+
+
+def test_backfill_aggregate_picks_the_rarest_species_not_first_in_order():
+    """3 different bird species in one clip — the rarest one becomes
+    the event's headline `bird_species`, even though it's the SECOND
+    detection classified, not the first."""
+    event = _multi_bird_event(n=3)
+    clf = _QueueClassifier(
+        [
+            ("Amsel", "Turdus merula", 0.9),  # idx 0, common
+            ("Rotkehlchen", "Erithacus rubecula", 0.9),  # idx 1, rarest
+            ("Kohlmeise", "Parus major", 0.9),  # idx 2, mid
+        ]
+    )
+    lookup = _dossier_lookup({"Turdus merula": 5, "Erithacus rubecula": 1, "Parus major": 10})
+    changed = backfill_event_species(event, clf, lambda ev: _frame(), dossier_lookup=lookup)
+    assert changed is True
+    assert clf.calls == 3
+    assert event["bird_species"] == "Rotkehlchen"
+
+
+def test_backfill_aggregate_prefers_a_never_recorded_species():
+    """A species with no dossier entry at all outranks an already-seen
+    one, regardless of that species' sighting_count."""
+    event = _multi_bird_event(n=2)
+    clf = _QueueClassifier(
+        [
+            ("Amsel", "Turdus merula", 0.9),  # idx 0, seen once — very rare but recorded
+            ("Seltener Gast", "Genus novus", 0.9),  # idx 1, never recorded
+        ]
+    )
+    lookup = _dossier_lookup({"Turdus merula": 1})
+    changed = backfill_event_species(event, clf, lambda ev: _frame(), dossier_lookup=lookup)
+    assert changed is True
+    assert event["bird_species"] == "Seltener Gast"
+
+
+def test_backfill_aggregate_tie_break_keeps_stored_order():
+    """Equal sighting_count resolves deterministically to whichever
+    detection is first in stored order."""
+    event = _multi_bird_event(n=2)
+    clf = _QueueClassifier(
+        [
+            ("Kohlmeise", "Parus major", 0.9),
+            ("Blaumeise", "Cyanistes caeruleus", 0.9),
+        ]
+    )
+    lookup = _dossier_lookup({"Parus major": 3, "Cyanistes caeruleus": 3})
+    changed = backfill_event_species(event, clf, lambda ev: _frame(), dossier_lookup=lookup)
+    assert changed is True
+    assert event["bird_species"] == "Kohlmeise"
 
 
 def test_backfill_degrades_when_no_frame_is_available():
@@ -240,6 +336,23 @@ def test_dossier_hook_for_binds_on_new_species():
     assert svc.calls == [("Erithacus rubecula", "Rotkehlchen", "e1", "cam1")]
 
 
+# ── dossier_lookup_for ────────────────────────────────────────────────────
+
+
+def test_dossier_lookup_for_is_none_without_a_service():
+    assert dossier_lookup_for(None) is None
+
+
+def test_dossier_lookup_for_binds_get_dossier():
+    class _Svc:
+        def get_dossier(self, latin):
+            return {"sighting_count": 7} if latin == "Turdus merula" else None
+
+    lookup = dossier_lookup_for(_Svc())
+    assert lookup("Turdus merula") == {"sighting_count": 7}
+    assert lookup("Genus novus") is None
+
+
 # ── find_backfill_candidates / sweep: real EventStore, tmp_path ────────
 
 
@@ -315,6 +428,52 @@ def test_sweep_stamps_the_store_and_fires_the_dossier_hook_once(tmp_path):
     assert stored["bird_species"] == "Rotkehlchen"
     assert stored["detections"][0]["species_latin"] == "Erithacus rubecula"
     assert hook_calls == [("Erithacus rubecula", "Rotkehlchen", "e1", "cam1")]
+
+
+def test_sweep_threads_dossier_lookup_through_to_pick_the_rarest_species(tmp_path):
+    """End-to-end: dossier_lookup passed into sweep_bird_species_backfill
+    reaches backfill_event_species and drives the rarity pick, not just
+    the plain "first" fallback."""
+    store = EventStore(str(tmp_path))
+    snap_rel = "motion_detection/cam1/e1.jpg"
+    _write_snapshot(tmp_path / snap_rel)
+    store.add_event(
+        "cam1",
+        {
+            "event_id": "e1",
+            "bird_species": None,
+            "snapshot_relpath": snap_rel,
+            "detections": [
+                {
+                    "label": "bird",
+                    "score": 0.8,
+                    "bbox": {"x1": 10, "y1": 10, "x2": 40, "y2": 40},
+                    "species": None,
+                },
+                {
+                    "label": "bird",
+                    "score": 0.7,
+                    "bbox": {"x1": 50, "y1": 50, "x2": 80, "y2": 80},
+                    "species": None,
+                },
+            ],
+        },
+    )
+    clf = _QueueClassifier(
+        [
+            ("Amsel", "Turdus merula", 0.9),  # idx 0, common
+            ("Rotkehlchen", "Erithacus rubecula", 0.9),  # idx 1, rarer
+        ]
+    )
+    result = sweep_bird_species_backfill(
+        store,
+        tmp_path,
+        clf,
+        ["cam1"],
+        dossier_lookup=_dossier_lookup({"Turdus merula": 9, "Erithacus rubecula": 1}),
+    )
+    assert result == {"examined": 1, "changed": 1}
+    assert store.get_event("cam1", "e1")["bird_species"] == "Rotkehlchen"
 
 
 def test_sweep_never_crashes_on_one_bad_event(tmp_path):

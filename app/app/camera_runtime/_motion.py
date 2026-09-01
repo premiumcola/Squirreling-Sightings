@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 import requests
 
+from ..bird_species_rank import pick_headline_species
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
     BirdSpeciesClassifier,
@@ -45,6 +46,39 @@ from ._consts import (
     log_cam,
     log_tl,
 )
+
+
+def _resolve_bird_species(detections: list) -> str | None:
+    """Event-level `bird_species` aggregate for `_build_event_meta`:
+    rarest-or-never-recorded-first among every bird detection's species
+    in this frame — see bird_species_rank.py::pick_headline_species for
+    the rule shared with the offline backfill sweep.
+
+    Looks up dossier counts via the live BirdDossierService the same
+    way _recording/_publish.py::_publish_dossiers already reads it —
+    a single in-memory dict lookup behind a lock, no network I/O and
+    no meaningful latency, so there's no timing/locking concern that
+    would keep this off the hot detection path (unlike the backfill
+    sweep, which only gets a lookup handed to it by its caller).
+    Degrades to the historic "first in stored order" fallback (via
+    pick_headline_species's own None-handling) when the service isn't
+    wired up yet or anything about reaching it fails — must never take
+    event creation down.
+    """
+    candidates = [
+        (d.species, d.species_latin) for d in detections if d.label == "bird" and d.species
+    ]
+    if not candidates:
+        return None
+    lookup = None
+    try:
+        from .. import app_state as _app_state
+
+        svc = getattr(_app_state, "bird_dossiers", None)
+        lookup = svc.get_dossier if svc is not None else None
+    except Exception:
+        lookup = None
+    return pick_headline_species(candidates, lookup)
 
 
 class MotionMixin:
@@ -285,9 +319,7 @@ class MotionMixin:
         person_match = next(
             (d.identity for d in detections if d.label == "person" and d.identity), None
         )
-        bird_species = next(
-            (d.species for d in detections if d.label == "bird" and d.species), None
-        )
+        bird_species = _resolve_bird_species(detections)
         sched = self.cfg.get("schedule") or {}
         # "Hart-Modus" — when active, person → alarm regardless of profile.
         # When the schedule is disabled this is treated as 24/7 active so a

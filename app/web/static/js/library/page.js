@@ -1,29 +1,28 @@
 // ─── library/page.js ─────────────────────────────────────────────────────
 // Stage 6 of the Mediathek + Wetter-Ereignisse merge: the merged
 // section's actual mount point. Fetches `/api/library` — `kinds`
-// omitted, "Alles gemischt" is the feed's own default — accumulates
-// pages behind "Mehr laden" (the cursor pager from Stage 4 has no page
-// count to jump to, see `library/_pagination.js`'s own header), and
-// wires the combined filter bar + card interactions on top of the
-// Stage 3/4 building blocks.
+// omitted, "Alles gemischt" is the feed's own default — pages through it
+// page-numbered, "genau wie bei den Kameras" (Stage 11, see
+// `library/_pagination.js`'s own header), and wires the combined filter
+// bar + card interactions on top of the Stage 3/4 building blocks.
 import { byId } from '../core/dom.js';
 import { apiGet } from '../core/api.js';
 import { state } from '../core/state.js';
 import { renderLibraryGrid } from './_grid.js';
-import { createLibraryPager, renderLoadMoreControl } from './_pagination.js';
+import { createLibraryCursorStack, renderLibraryPagination } from './_pagination.js';
+import { calcLibraryPageSize } from './_page-size.js';
 import {
   createLibraryFilterState,
   libraryQueryParams,
   renderLibraryFilterBar,
+  getLibraryFacetsTotal,
 } from './_filter-bar.js';
 import { bindLibraryGrid } from './_bind.js';
 import { isZoomActive } from '../weather/_zoom.js';
 import { showMediathekView } from '../mediathek/_view-toggle.js';
 
-const _PAGE_LIMIT = 30;
-
 const _filter = createLibraryFilterState();
-const _pager = createLibraryPager();
+const _cursorStack = createLibraryCursorStack();
 let _items = [];
 let _loading = false;
 // `kinds` on purpose lives OUTSIDE `_filter`/`libraryQueryParams` — that
@@ -39,7 +38,13 @@ function _paint() {
   if (!grid) return;
   renderLibraryGrid(grid, _items);
   bindLibraryGrid(grid, _items);
-  renderLoadMoreControl(byId('libraryLoadMore'), _pager, () => _loadPage(false));
+  renderLibraryPagination(
+    byId('libraryPagination'),
+    _cursorStack,
+    getLibraryFacetsTotal(),
+    calcLibraryPageSize(),
+    _goToLibraryPage,
+  );
   // Stage 7: the only visible hint that this page is scoped to the
   // chart's drag-zoom rather than "Alles gemischt" — an empty result
   // already reads distinctly (see _grid.js), this covers the non-empty
@@ -49,27 +54,42 @@ function _paint() {
   if (note) note.hidden = !isZoomActive();
 }
 
-async function _loadPage(reset) {
+/** One `/api/library` fetch, replacing `_items` outright — never
+ * concatenating, unlike the old "Mehr laden" accumulate model. `cursor`
+ * defaults to the cursor stack's own `current` (re-fetching the same
+ * page, e.g. after a filter change once `reset` has just cleared it back
+ * to page 1); the page-widget's ‹/› pass an explicit one instead, since
+ * by the time this runs the stack has already advanced/gone back past
+ * it (see `_goToLibraryPage`). */
+async function _loadPage(reset, cursor) {
   if (_loading) return;
   _loading = true;
-  if (reset) {
-    _pager.reset();
-    _items = [];
-  }
+  if (reset) _cursorStack.reset();
+  const before = cursor !== undefined ? cursor : _cursorStack.current;
   try {
     const params = libraryQueryParams(_filter);
     if (_kinds) params.set('kinds', _kinds.join(','));
-    params.set('limit', String(_PAGE_LIMIT));
-    if (_pager.cursor) params.set('before', _pager.cursor);
+    params.set('limit', String(calcLibraryPageSize()));
+    if (before) params.set('before', before);
     const page = await apiGet(`/api/library?${params.toString()}`);
-    _items = _items.concat(page.items || []);
-    _pager.applyPage(page);
+    _items = page.items || [];
+    _cursorStack.applyPage(page);
     _paint();
   } catch (e) {
     console.error('[library] page load failed:', e);
   } finally {
     _loading = false;
   }
+}
+
+/** ‹/› handler for `renderLibraryPagination` — `_cursorStack.back()`/
+ * `.advance()` already do the push/pop and hand back the cursor to
+ * re-fetch with (`undefined` when there is nowhere to go, in which case
+ * this is a no-op rather than a redundant re-fetch of the same page). */
+function _goToLibraryPage(direction) {
+  const cursor = direction === 'back' ? _cursorStack.back() : _cursorStack.advance();
+  if (cursor === undefined) return;
+  return _loadPage(false, cursor);
 }
 
 // True while a quick tile (Tiere/Menschen/Wetterereignisse) or any

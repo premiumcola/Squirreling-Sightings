@@ -216,7 +216,9 @@ def test_the_merged_grid_has_its_own_host_ids():
     mediathek = _read(_TPL / "partials" / "mediathek.html")
     assert 'id="libraryFilterBar"' in mediathek
     assert 'id="libraryGrid"' in mediathek
-    assert 'id="libraryLoadMore"' in mediathek
+    # Stage 11: page-numbered pagination (library/_pagination.js) replaced
+    # the old "Mehr laden" accumulate control at this same mount point.
+    assert 'id="libraryPagination"' in mediathek
 
 
 def test_library_page_is_wired_into_boot():

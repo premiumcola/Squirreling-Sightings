@@ -13,8 +13,11 @@ Two operator asks, from two annotated screenshots:
   2. The always-visible "Alle Ereignisse" heading that used to sit above
      #libraryBlock as a permanent, separate section is gone completely
      — "die Summe muss komplett raus". The grid markup itself
-     (#libraryGrid / #libraryLoadMore) is unchanged, only its always-on
-     framing.
+     (#libraryGrid / #libraryPagination) is unchanged, only its
+     always-on framing. (#libraryLoadMore, the old "Mehr laden" control
+     this test originally pinned by that name, was itself replaced by
+     the page-numbered #libraryPagination in Stage 11 — a later, unrelated
+     change; see library/_pagination.js and library/_cursor-stack.js.)
 
 mediathek/_view-toggle.js::showMediathekView is the single toggle
 behind all three states; mediathek/_tests/view-toggle.test.js and
@@ -83,10 +86,10 @@ def test_the_three_states_are_still_all_present_and_still_siblings():
 
 def test_library_grid_markup_itself_is_unchanged():
     """The operator asked for the ALWAYS-VISIBLE FRAMING gone, not the
-    grid — #libraryGrid / #libraryLoadMore / #libraryZoomNote still
+    grid — #libraryGrid / #libraryPagination / #libraryZoomNote still
     render, just under the toggle instead of a permanent heading."""
     mediathek = _read(_MEDIATHEK)
-    for needle in ('id="libraryGrid"', 'id="libraryLoadMore"', 'id="libraryZoomNote"'):
+    for needle in ('id="libraryGrid"', 'id="libraryPagination"', 'id="libraryZoomNote"'):
         assert needle in mediathek
 
 

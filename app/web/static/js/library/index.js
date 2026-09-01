@@ -14,15 +14,22 @@
 // unchanged by that — still the pure rendering primitives, still usable
 // on their own.
 //
-//   libraryCardHTML(item, ctx?)              — one item -> card HTML
-//   renderLibraryGrid(host, items, ctx?)      — one page -> a mixed grid,
-//                                               in server order, no
-//                                               grouping by kind
-//   createLibraryPager()                      — cursor state machine for
-//                                               `/api/library`'s
-//                                               `next_cursor`
-//   renderLoadMoreControl(host, pager, fn)     — the "Mehr laden"
-//                                               affordance for that pager
+//   libraryCardHTML(item, ctx?)                 — one item -> card HTML
+//   renderLibraryGrid(host, items, ctx?)         — one page -> a mixed
+//                                                  grid, in server
+//                                                  order, no grouping by
+//                                                  kind
+//   createLibraryCursorStack()                   — Stage 11's client-held
+//                                                  prev/next cursor
+//                                                  history behind the
+//                                                  page-numbered widget
+//                                                  (`/api/library`'s own
+//                                                  pagination is still
+//                                                  cursor-based — see
+//                                                  `_cursor-stack.js`)
+//   renderLibraryPagination(host, stack, total,
+//     pageSize, onGoTo)                          — the "Seite N von M"
+//                                                  widget for that stack
 export { libraryCardHTML } from './_dispatch.js';
 export { renderLibraryGrid } from './_grid.js';
-export { createLibraryPager, renderLoadMoreControl } from './_pagination.js';
+export { createLibraryCursorStack, renderLibraryPagination } from './_pagination.js';

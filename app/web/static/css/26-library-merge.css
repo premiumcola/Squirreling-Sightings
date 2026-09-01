@@ -1,5 +1,8 @@
 /* ── Merged Mediathek + Wetter-Ereignisse library grid (Stage 6) ──────────
-   #libraryBlock — the "Alles gemischt" grid + its "Mehr laden" control.
+   #libraryBlock — the "Alles gemischt" grid + its page-numbered
+   #libraryPagination (Stage 11 — reuses #mediaPagination's own
+   .media-pagination/.page-pill/.page-label CSS unchanged, no rule of
+   its own needed here).
    #libraryFilterBar sits OUTSIDE it, at the very top of #media, above
    the camera overview too — reordered per operator feedback so the
    filters read as controlling the whole section, not just this one
@@ -68,17 +71,4 @@
 .lib-subsection-head svg {
   flex-shrink: 0;
   color: var(--muted);
-}
-/* "Mehr laden" — centred, same >=44px touch target .btn.btn-action
-   already carries elsewhere (library/_pagination.js's own doc comment).
-   The [hidden] override matches .media-pagination[hidden]'s reasoning:
-   without it, any later `display` rule on this selector would silently
-   out-rank the UA [hidden] default regardless of specificity. */
-#libraryLoadMore {
-  display: flex;
-  justify-content: center;
-  margin: 14px 0 16px;
-}
-#libraryLoadMore[hidden] {
-  display: none;
 }

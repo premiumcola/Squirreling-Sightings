@@ -152,12 +152,13 @@
   (library/page.js::_hasActiveLibraryFilter), hidden again — back to the tile overview — once
   resetLibraryView (the "← Übersicht" button below) or the last active chip clears every filter
   dimension. The permanently-visible summary heading that used to sit above this block is gone per
-  operator feedback; the grid markup itself (#libraryGrid, #libraryLoadMore) is unchanged, only its
-  visibility. Filter chips (camera / object-class / weather-category) by library/_filter-bar.js (a
-  SECOND filter bar — deliberately: it scopes this feed by object-class / weather-category the way
-  #mediaFilterBar above only ever scoped by camera); card click/delete/pin wiring by
-  library/_bind.js. Cursor-paginated ("Mehr laden"), not page-numbered — see library/_pagination.js
-  for why. #}
+  operator feedback; the grid markup itself (#libraryGrid, #libraryPagination) is unchanged, only
+  its visibility. Filter chips (camera / object-class / weather-category) by library/_filter-bar.js
+  (a SECOND filter bar — deliberately: it scopes this feed by object-class / weather-category the
+  way #mediaFilterBar above only ever scoped by camera); card click/delete/pin wiring by
+  library/_bind.js. Page-numbered "Seite N von M" (Stage 11), genau wie bei den Kameras — reuses
+  #mediaPagination's own .media-pagination/.page-pill markup; see library/_pagination.js for the
+  client-held cursor-stack mechanics behind it. #}
   <div id="libraryBlock" style="display: none">
     <div class="media-drill-head" id="libraryResultsHead">
       <button type="button" class="media-drill-back" data-action="resetLibraryView">
@@ -173,7 +174,7 @@
       Gefiltert auf den im Chart gewählten Zeitraum.
     </div>
     <div class="media-grid" id="libraryGrid"></div>
-    <div class="lib-load-more" id="libraryLoadMore" hidden></div>
+    <div id="libraryPagination" class="media-pagination"></div>
   </div>
 
   {# Wetterdaten & Prognose: persisted history of all numeric Open-Meteo parameters + sun altitude,

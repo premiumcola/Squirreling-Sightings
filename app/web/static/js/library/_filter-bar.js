@@ -104,3 +104,14 @@ export async function renderLibraryFilterBar(filter, kinds, onChange) {
   _paint(bar, filter, facets);
   _wireChips(bar, filter, onChange);
 }
+
+/** The most recently known `/api/library/facets` `total` — the exact
+ * matching-set size for the CURRENT filter/kinds, already fetched here
+ * for the chip counts. `library/_pagination.js`'s "Seite N von M" reuses
+ * this rather than firing a second request for the same number (see
+ * that module's own header for the accepted staleness tradeoff: this
+ * reads whatever `_facetsCache` last resolved, which may be a render or
+ * two behind a fetch still in flight). */
+export function getLibraryFacetsTotal() {
+  return _facetsCache.current.total;
+}

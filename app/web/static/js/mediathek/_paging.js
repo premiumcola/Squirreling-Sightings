@@ -13,6 +13,7 @@
 // ResizeObserver bootstrapper — it only nudges the column count on window.
 import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
+import { GRID_PAGE_ROWS, calcGridPageSize } from '../core/grid-page-size.js';
 import { loadMediaStorageStats } from '../chrome/storage-stats.js';
 import { loadMedia } from './media-loader.js';
 import { openLightbox } from '../lightbox.js';
@@ -27,29 +28,16 @@ import { registerMediaItems, getRegisteredMediaItem } from './_item-registry.js'
 // re-render below would never see the update.
 window._lastKnownCols ??= 0;
 window._cachedPageSize ??= 0;
-export const _MEDIA_ROWS = 4;
+// Kept as this module's own export — `mediathek/orchestration.js` and
+// others already import `_MEDIA_ROWS` by this name — but the VALUE now
+// comes from `core/grid-page-size.js`'s `GRID_PAGE_ROWS`, the one
+// library/_pagination.js's own page size matches for visual parity.
+export const _MEDIA_ROWS = GRID_PAGE_ROWS;
 export function calcItemsPerPage() {
-  const grid = byId('mediaGrid');
-  let containerW = 0;
-  if (grid) {
-    const gr = grid.getBoundingClientRect();
-    if (gr.width > 0) containerW = gr.width;
-  }
-  if (!containerW) {
-    const isMobile = window.innerWidth <= 768;
-    const mediaEl = byId('media');
-    containerW = Math.max(
-      193,
-      mediaEl && mediaEl.clientWidth > 192
-        ? mediaEl.clientWidth - 24
-        : window.innerWidth - (isMobile ? 24 : 320),
-    );
-  }
-  const GAP = 10,
-    MIN_CARD = 192;
-  const cols =
-    window._lastKnownCols || Math.max(1, Math.floor((containerW + GAP) / (MIN_CARD + GAP)));
-  return _MEDIA_ROWS * cols;
+  return calcGridPageSize(byId('mediaGrid'), {
+    rows: _MEDIA_ROWS,
+    lastKnownCols: window._lastKnownCols,
+  });
 }
 
 // ── Page slicing ────────────────────────────────────────────────────────────

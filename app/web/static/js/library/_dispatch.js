@@ -10,6 +10,7 @@
 // `_grid.js` can import the dispatcher without an index.js ⇄ _grid.js
 // import cycle — index.js only re-exports both.
 import { esc } from '../core/dom.js';
+import { state } from '../core/state.js';
 import { mediaCardHTML } from '../mediathek/_cards.js';
 import {
   sightingCardHTML,
@@ -63,18 +64,27 @@ export function libraryCardHTML(item, ctx = {}) {
   switch (item.kind) {
     case 'motion':
       return mediaCardHTML(adaptMotionItem(item));
-    case 'sighting':
+    case 'sighting': {
       // idx: this item's position within the current PAGE, not a true
       // cross-page absolute index — see the ctx doc above.
-      // isActive=false: `sightingCardHTML`'s real semantic for this
-      // flag is "is the sighting's camera still in the active config"
-      // (weather/_feed.js's own comment), which needs `state.cameras` —
-      // this standalone package isn't wired into any page's live state
-      // yet (that's explicitly a later stage), so there is nothing
-      // honest to answer "true" with. `false` is the same conservative
-      // default the rest of this stage takes for anything it cannot
-      // verify yet: a dimmed thumb, never a wrong claim of liveness.
-      return sightingCardHTML(adaptSightingItem(item), idx, false);
+      //
+      // Regression fixed here: `isActive`'s real semantic
+      // (weather/_feed.js's own comment on sightingCardHTML) is "is the
+      // sighting's camera still in the active config" — Stage 4 shipped
+      // this hardcoded `false` with an explicit "not wired into any
+      // page's live state yet, later stage" note, and Stage 6 (which DID
+      // wire this grid into the real page) never came back to close it
+      // out. The visible symptom: every sighting card in the merged
+      // grid rendered the striped "camera removed" placeholder
+      // (sightingCardHTML's `ws-card-thumb--orphan`) instead of its real
+      // thumbnail, regardless of whether the camera was actually still
+      // configured — reported as "kein Vorschaubild" across sunrise/
+      // sunset/Nebel/manual-event cards. `state` is now imported like
+      // every other module in this package already does, so there is
+      // something honest to answer with.
+      const isActive = (state.cameras || []).some((c) => c.id === item.cam_id);
+      return sightingCardHTML(adaptSightingItem(item), idx, isActive);
+    }
     case 'recap':
       return recapCardHTML(adaptRecapItem(item), idx);
     case 'manual':

@@ -177,6 +177,37 @@ test('sighting kind dispatches to sightingCardHTML', () => {
   assert.match(html, /data-id="sight_1"/);
 });
 
+test('a sighting whose camera is still configured gets a real thumbnail, not the orphan placeholder', async () => {
+  // Regression: Stage 4 shipped `isActive` hardcoded `false` (documented
+  // as "not wired into live state yet, later stage") and nobody closed
+  // that out once Stage 6 actually wired this grid into the real page —
+  // every sighting card rendered the striped "camera removed" state
+  // regardless of whether the camera was really still configured.
+  // Reported as "kein Vorschaubild" across sunrise/sunset/Nebel cards.
+  const { state } = await import('../../core/state.js');
+  const before = state.cameras;
+  state.cameras = [{ id: 'cam1', name: 'Cam 1' }];
+  try {
+    const html = libraryCardHTML(SIGHTING_ITEM, {});
+    assert.doesNotMatch(html, /ws-card-thumb--orphan/);
+    assert.match(html, /src="\/api\/weather\/sightings\/sight_1\/thumb"/);
+  } finally {
+    state.cameras = before;
+  }
+});
+
+test('a sighting whose camera is gone still falls back to the orphan placeholder', async () => {
+  const { state } = await import('../../core/state.js');
+  const before = state.cameras;
+  state.cameras = [{ id: 'some_other_cam', name: 'Other' }];
+  try {
+    const html = libraryCardHTML(SIGHTING_ITEM, {});
+    assert.match(html, /ws-card-thumb--orphan/);
+  } finally {
+    state.cameras = before;
+  }
+});
+
 test('recap kind dispatches to recapCardHTML', () => {
   const html = libraryCardHTML(RECAP_ITEM, {});
   assert.match(html, /data-recap-idx="0"/);

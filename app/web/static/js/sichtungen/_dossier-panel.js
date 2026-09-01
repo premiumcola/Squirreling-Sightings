@@ -149,7 +149,10 @@ function _renderStateMessage(germanName, kind) {
 function _tierBadgeOrLockedHint(count) {
   const tier = _achTier(count);
   if (tier === 'locked') {
-    return '<span class="sd-locked-hint">🔒 Noch nicht in deinem Garten gesichtet</span>';
+    // No lock icon here (2026-09) — the tile above already shows the
+    // locked state (see _achievements.js's medal-lock-overlay), so a
+    // second lock glyph right below it duplicated the same information.
+    return '<span class="sd-locked-hint">Noch nicht in deinem Garten gesichtet</span>';
   }
   return `<span class="sd-tier-badge ${tier}">${_TIER_LABEL[tier]}</span>`;
 }
@@ -157,14 +160,15 @@ function _tierBadgeOrLockedHint(count) {
 function _metaHtml(d) {
   const count = d.sighting_count || 0;
   // Small eyebrow label — the only remaining trace of the old standalone
-  // "📖 Vogel-Dossiers" section heading, now living inside the panel
-  // itself instead of a persistent header outside it (nothing to
-  // duplicate: this panel IS the dossier, there's no second copy of the
-  // label elsewhere on the page). The common (German) name itself now
-  // lives burned into the hero photo (see _hero-overlay.js::heroHtml) —
-  // not repeated here, that would be the exact duplication CLAUDE.md
-  // forbids.
-  return `<div class="sd-eyebrow">📖 Art-Dossier</div>
+  // "Vogel-Dossiers" section heading, now living inside the panel itself
+  // instead of a persistent header outside it (nothing to duplicate:
+  // this panel IS the dossier, there's no second copy of the label
+  // elsewhere on the page). No icon in front of it (2026-09) — the panel
+  // itself IS visibly a dossier, an icon on the label added nothing. The
+  // common (German) name itself now lives burned into the hero photo
+  // (see _hero-overlay.js::heroHtml) — not repeated here, that would be
+  // the exact duplication CLAUDE.md forbids.
+  return `<div class="sd-eyebrow">Art-Dossier</div>
     <div class="sd-latin">${esc(d.latin)}</div>
     <div class="sd-badges">
       ${_tierBadgeOrLockedHint(count)}

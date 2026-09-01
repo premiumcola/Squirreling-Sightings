@@ -25,8 +25,9 @@
 //
 // The filename is unchanged on purpose. Renaming it (and
 // test_netz_class_rows.py with it) would be a wide, purely cosmetic diff
-// for zero behavioural gain — the same call netz.html documents for its
-// own `netz*` identifiers.
+// for zero behavioural gain — internal `netz*` identifiers stay `netz*`
+// throughout this package even where the user-visible text says
+// "Erkennungsprofil".
 //
 // THE SAVE PATH IS THE OTHER HALF OF THIS FILE, and it is NOT the radar's.
 // Camera-wide axes stage and commit through `patchTuning`; these commit on

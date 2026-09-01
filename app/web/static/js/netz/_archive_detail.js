@@ -107,8 +107,9 @@ export function renderArchiveDetail(host, rec, handlers) {
   host.innerHTML =
     `<div class="netz-det">` +
     `<button type="button" class="netz-back" data-arc-back>← Verlauf</button>` +
+    // No camera-name chip here — a detail record is always opened from
+    // inside that camera's own panel, which already says which camera.
     `<div class="netz-det-head">${classChip(det.label) || settingChip(cons.field_de)}` +
-    `<span class="netz-arc-cam">${esc(rec.cam_name || '')}</span>` +
     `<span class="netz-arc-time">${esc(fmtDateTime(rec.ts))}${esc(score)}</span></div>` +
     (isChangeRecord(rec.kind)
       ? ''

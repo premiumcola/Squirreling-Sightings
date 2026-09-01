@@ -19,6 +19,8 @@ import { j, apiPost } from './core/api.js';
 import { getCameraIcon, getCameraColor, OBJ_LABEL, DASHBOARD_SVG } from './core/icons.js';
 import { isIOS } from './core/ios-video.js';
 import { openLiveViewIosNative } from './chrome/live-view.js';
+import { initNetPanels } from './netz/index.js';
+import { isTuneDragging } from './netz/_tune_drag.js';
 
 // ── Snapshot polling — moved to dashboard/snapshot-poll.js (N15) ───────────
 // Re-export every name so existing imports of these from '../dashboard.js'
@@ -40,14 +42,6 @@ import {
 window._camImgRetry = _camImgRetryFn;
 window._cvImgLoaded = _cvImgLoadedFn;
 
-// ── Camera-grid column class — picks the right cam-grid-N class so CSS
-//     can size tiles based on count without JS math. -n = generic flow. ─
-export function _camGridCols(n) {
-  if (n <= 1) return 'cam-grid-1';
-  if (n <= 2) return 'cam-grid-2';
-  if (n <= 4) return 'cam-grid-4';
-  return 'cam-grid-n';
-}
 
 // ── Surveillance-mode classification ───────────────────────────────────────
 // Drives the colour + label + animation of the .cv-surveil bottom-overlay
@@ -783,10 +777,30 @@ function _channelCluster(c, kind, state) {
 // is reachable on window via the bridge block at the bottom of this
 // module + the window.editCamera bridge that still lives in legacy.js.
 export function renderDashboard() {
+  // A radar drag (netz/_tune_drag.js) sets a pointer capture on an SVG
+  // node inside a .cam-net-slot; the innerHTML rebuild below would tear
+  // that node out from under the finger and strand the drag. The poll
+  // that drives most renderDashboard() calls fires every 3 s, comfortably
+  // longer than any real drag — skipping this one tick and picking the
+  // camera-tile refresh back up on the next is the same trade the resize
+  // handler in netz/index.js already makes.
+  if (isTuneDragging()) return;
   const cams = state.cameras;
-  const gridCls = _camGridCols(cams.length);
-  byId('cameraCards').className = `camera-grid ${gridCls}`;
-  byId('cameraCards').innerHTML = cams
+  const grid = byId('cameraCards');
+  // Each camera's Erkennungsprofil panel (netz/_panel.js) lives in the
+  // slot right after its tile, but OUTSIDE the render cycle below — it
+  // repaints only on its own interactions, never as a side effect of the
+  // 3 s camera-tile poll (an open Verlauf list or a staged-but-not-saved
+  // value must survive a poll tick untouched). Since the innerHTML reset
+  // below detaches every child regardless, existing slots are captured
+  // here and spliced back into their freshly-templated replacement so
+  // their content survives the rebuild.
+  const savedSlots = new Map();
+  grid.querySelectorAll('.cam-net-slot').forEach((slot) => {
+    if (slot.firstElementChild) savedSlots.set(slot.dataset.camid, slot);
+  });
+  grid.className = 'camera-grid';
+  grid.innerHTML = cams
     .map((c) => {
       const hdOn = _hdCards.has(c.id);
       const snapUrl = hdOn
@@ -879,9 +893,16 @@ ${
 }
     </div>
   </div>
-</article>`;
+</article><div class="cam-net-slot" data-camid="${esc(c.id)}"></div>`;
     })
     .join('');
+  // Splice preserved panel DOM back into its camera's fresh (empty) slot.
+  // A camera that is new this render (or whose panel hasn't mounted yet)
+  // simply keeps the empty placeholder — netz/_panel.js fills those in.
+  grid.querySelectorAll('.cam-net-slot').forEach((slot) => {
+    const saved = savedSlots.get(slot.dataset.camid);
+    if (saved) slot.replaceWith(saved);
+  });
   // Wire the live-pill hover/touch open/close per card (one set of
   // listeners per render; innerHTML wipes prior listeners). The
   // touch-outside handler closes any open pill when the user taps
@@ -892,6 +913,11 @@ ${
   // the helper prevents double-binding across re-renders.
   _wireHdIdleReset();
   _wirePillOpenClose();
+  // Mount/refresh the Erkennungsprofil panels for whatever camera list
+  // just rendered. Cheap on repeat calls (see initNetPanels' own doc) —
+  // fire-and-forget so a slow /api/netz/state fetch never blocks the
+  // camera-tile paint above.
+  initNetPanels();
 }
 
 // Open/close wiring for every expandable pill on the dashboard —
@@ -943,9 +969,12 @@ function _wirePillOpenClose() {
 // status==='active' return.
 export function showCameraReloadAnimation(camId) {
   const cameraCards = byId('cameraCards');
+  // Scoped to .cv-card: #cameraCards also holds a same-camId
+  // .cam-net-slot sibling per tile (the Erkennungsprofil panel), which
+  // has no .cv-loading-placeholder/.cv-img of its own to animate.
   const cards = camId
-    ? [cameraCards?.querySelector(`[data-camid="${CSS.escape(camId)}"]`)]
-    : [...(cameraCards?.querySelectorAll('[data-camid]') || [])];
+    ? [cameraCards?.querySelector(`.cv-card[data-camid="${CSS.escape(camId)}"]`)]
+    : [...(cameraCards?.querySelectorAll('.cv-card[data-camid]') || [])];
   cards.filter(Boolean).forEach((card) => {
     const placeholder = card.querySelector('.cv-loading-placeholder');
     const img = card.querySelector('.cv-img');

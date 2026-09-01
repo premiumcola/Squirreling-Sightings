@@ -4,6 +4,37 @@
       ><svg width="24" height="24"><use href="#icon-livefeed" /></svg
     ></span>
     <h3>Live Feed</h3>
+    {# Erkennungsprofil is inline per camera now (netz/_panel.js, one
+    panel beside each tile below) — "Was zusammen wirkt" is the one bit of
+    that feature that is camera-independent reference text, so it keeps a
+    single page-level home here instead of repeating on every panel. #}
+    <button
+      type="button"
+      id="netzCombosBtn"
+      class="netz-view-btn"
+      style="margin-left: auto"
+      aria-expanded="false"
+      aria-controls="netzCombosBox"
+      aria-label="Was zusammen wirkt"
+      title="Was zusammen wirkt"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="18"
+        height="18"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <line x1="12" y1="11" x2="12" y2="16" />
+        <line x1="12" y1="8" x2="12" y2="8" />
+      </svg>
+    </button>
   </div>
+  <div class="netz-combos" id="netzCombosBox" hidden></div>
   <div id="cameraCards" class="camera-grid"></div>
 </section>

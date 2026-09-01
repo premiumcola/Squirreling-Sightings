@@ -20,10 +20,11 @@
 // to the spoke it belongs to. Standard treatment for dense radial labels,
 // and it degrades gracefully — with 10 axes almost nothing moves.
 //
-// THE VIEWBOX STAYS 440 x 340 whatever the axis count. The card's width
-// is fixed by the .netz-cards grid, so a wider viewBox would only shrink
-// every glyph — the extra axes are paid for out of ROW HEIGHT on the
-// rail, the one dimension that can actually give.
+// THE VIEWBOX STAYS 440 x 340 whatever the axis count. The panel's width
+// is whatever its .cam-net-slot column gives it (the SVG scales down via
+// width/height="100%" in CSS), so a wider viewBox would only shrink every
+// glyph — the extra axes are paid for out of ROW HEIGHT on the rail, the
+// one dimension that can actually give.
 //
 // This module owns no geometry of its own: it is handed the spoke
 // endpoints _tune_radar.js already computed, which is what keeps the

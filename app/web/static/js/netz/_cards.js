@@ -1,23 +1,24 @@
 // ─── netz/_cards.js ────────────────────────────────────────────────────────
-// One card per camera: the settings radar, its controls, and the save
-// path. Replaces the old single-camera _tuning.js.
+// One camera's net BODY: the settings radar, its controls, and the save
+// path. The panel SHELL around it (header, camera identity, the
+// Netz/Verlauf toggle, the frozen-values box) lives in netz/_panel.js,
+// which mounts one of these beside every camera's Live-Feed tile.
 //
 // EVERY write takes its camera id from `card.dataset.cam` — the DOM node
 // the operator actually touched — never from a module-level "current
-// camera". With N cards in one host a module scalar is exactly how a drag
+// camera". With N panels on the page a module scalar is exactly how a drag
 // on camera B ends up PATCHing camera A, and it fails silently (the
 // request succeeds, against the wrong camera).
 //
 // For the same reason every querySelector here is scoped to `card`, not
-// to the host: `host.querySelector('[data-tune-apply]')` finds the FIRST
-// card's button regardless of which one was clicked.
+// to the page: `document.querySelector('[data-tune-apply]')` would find
+// the FIRST panel's button regardless of which one was clicked.
 
-import { byId, esc, qsa } from '../core/dom.js';
-import { getCameraColor, getCameraIcon } from '../core/icons.js';
+import { esc, qsa } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
-import { renderTuneRadar, tuneGroupLegendHtml } from './_tune_radar.js';
+import { renderTuneRadar } from './_tune_radar.js';
 import { buildClassAxes, classAxisHint, classAxisSpec } from './_class_rows.js';
 import {
   applySaved,
@@ -37,14 +38,6 @@ const _TRACK_PRESETS = {
   robust: { spawn: 0.45, cont: 0.15, grace: 10, iou: 0.15 },
 };
 const _TRACK_PRESET_LABELS = { careful: 'Vorsichtig', balanced: 'Ausgewogen', robust: 'Robust' };
-const _ROLE_DE = { security: 'Sicherheit', wildlife: 'Wildtiere', garden: 'Garten' };
-
-// The camera chips render into the section HEADER, not into the body
-// host: #netzBody is swapped wholesale between the Netz and the Verlauf
-// view, and the chips belong to the Netz. The slot sits beside the
-// Verlauf button, which puts them top-right on desktop (32-netz.css moves
-// them onto their own strip below the title on a phone).
-const CHIPS_ID = 'netzCamChips';
 
 // ── render ────────────────────────────────────────────────────────────
 
@@ -91,72 +84,35 @@ function _ghostHtml(tuning) {
   );
 }
 
-function _cardHtml(cam) {
+/** The radar + its controls + the staging bar for ONE camera — everything
+ *  below the panel's own header, which netz/_panel.js owns. Before this
+ *  camera's /api/netz/state has resolved (camState is still null) it
+ *  renders the calm "wird geladen …" state instead of a chart with
+ *  nothing to draw. */
+export function netBodyHtml(cam) {
   const st = camState(cam.id);
   if (!st) {
-    return (
-      `<article class="netz-card" data-cam="${esc(cam.id)}">` +
-      `<header class="netz-card-hd"><h4>${esc(cam.name)}</h4></header>` +
-      `<div class="netz-empty"><div class="netz-empty-sub">wird geladen …</div></div>` +
-      `</article>`
-    );
+    return `<div class="netz-empty"><div class="netz-empty-sub">wird geladen …</div></div>`;
   }
   const tuning = effectiveTuning(cam.id);
   // ONE net per camera. The camera-wide settings first, so each colour
   // group keeps a contiguous arc, then this camera's per-class
   // Meldeschwellen — which classes those are comes from the camera's own
-  // Klassen-Filter, so the spoke count differs from card to card.
+  // Klassen-Filter, so the spoke count differs from panel to panel.
   const axes = [...buildTuneAxes(tuning), ...buildClassAxes(st)];
   netzState.tuneAxes[cam.id] = axes;
-  const role = _ROLE_DE[st.role] || st.role || '';
-  const focused = netzState.focusCam === cam.id ? ' is-focus' : '';
   return (
-    `<article class="netz-card${focused}" data-cam="${esc(cam.id)}">` +
-    `<header class="netz-card-hd">` +
-    `<span class="netz-card-ic" style="color:${getCameraColor(cam)}" aria-hidden="true">` +
-    `${getCameraIcon(cam.name || cam.id)}</span>` +
-    `<h4>${esc(cam.name)}</h4>` +
-    (role ? `<span class="netz-card-role">${esc(role)}</span>` : '') +
-    `</header>` +
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true })}</div>` +
     `<div class="netz-card-controls">${_presetsHtml()}${_ghostHtml(tuning)}</div>` +
-    _stagingHtml(cam.id) +
-    `</article>`
+    _stagingHtml(cam.id)
   );
 }
 
-function _chipsHtml() {
-  const cams = netzState.cameras || [];
-  if (cams.length < 2) return '';
-  // Icon + tint come from the SAME helpers the Statistik activity cloud
-  // and heat-map rows use (core/icons.js), so one camera reads as the
-  // same camera everywhere in the app rather than as a bare name here
-  // and a coloured glyph there.
-  return (
-    `<div class="netz-pills netz-cams">` +
-    cams
-      .map((c) => {
-        const nm = c.name || c.id;
-        return (
-          `<button type="button" class="netz-pill${
-            netzState.focusCam === c.id ? ' is-active' : ''
-          }" data-netz-cam="${esc(c.id)}" style="--cam:${getCameraColor(c)}">` +
-          `<span class="netz-pill-ic" style="color:${getCameraColor(c)}" aria-hidden="true">` +
-          `${getCameraIcon(nm)}</span>${esc(nm)}</button>`
-        );
-      })
-      .join('') +
-    `</div>`
-  );
-}
-
-
-export function renderCamChips() {
-  const el = byId(CHIPS_ID);
-  if (el) el.innerHTML = netzState.view === 'netz' ? _chipsHtml() : '';
-}
-
-function _combosHtml() {
+/** "Was zusammen wirkt" — cross-axis interaction notes. Camera-independent
+ *  reference text, so it is shown ONCE for the whole Live-Feed section
+ *  (netz/_panel.js mounts it behind a header info button) rather than
+ *  repeated on every panel. */
+export function combosHtml() {
   return (
     `<div class="netz-combos"><b>Was zusammen wirkt</b>` +
     TUNE_COMBOS.map((c) => {
@@ -173,36 +129,16 @@ function _combosHtml() {
   );
 }
 
-function _frozenHtml() {
-  // Was a permanently open box at the foot of the panel. It is reference
-  // material — read once, then never again — and it cost more vertical
-  // space on a phone than the nets it explains. Now it is a small button
-  // in the header; the content is unchanged, only its default state is.
-  const first = netzState.cameras[0];
-  const st = first ? camState(first.id) : null;
+/** "Werte, die fest bleiben" — reference rows for ONE camera. Was rendered
+ *  for `netzState.cameras[0]` only, back when the box lived once in a
+ *  shared header regardless of which camera the operator was looking at;
+ *  now every panel has its own, so this always reflects the RIGHT camera. */
+export function frozenListHtml(camId) {
+  const st = camState(camId);
   const rows = ((st && st.frozen) || [])
     .map((f) => `<li><code>${esc(f.key)}</code><span>${esc(f.de)}</span></li>`)
     .join('');
-  if (!rows) return '';
-  return (
-    `<div class="netz-frozen-box" id="netzFrozenBox" hidden>` +
-    `<b>Werte, die fest bleiben</b><ul>${rows}</ul></div>`
-  );
-}
-
-
-export function renderCards(host) {
-  renderCamChips();
-  const cams = netzState.cameras || [];
-  if (!cams.length) {
-    host.innerHTML = `<div class="netz-empty"><div class="netz-empty-sub">Keine Kamera konfiguriert.</div></div>`;
-    return;
-  }
-  host.innerHTML =
-    tuneGroupLegendHtml() +
-    `<div class="netz-cards">${cams.map((c) => _cardHtml(c)).join('')}</div>` +
-    _combosHtml() +
-    _frozenHtml();
+  return rows ? `<ul>${rows}</ul>` : '';
 }
 
 // ── bind ──────────────────────────────────────────────────────────────
@@ -218,7 +154,25 @@ async function _save(camId, fields, okMsg, onRepaint) {
   onRepaint();
 }
 
-function _bindCard(card, onRepaint) {
+/** Tap a spoke's label → what that axis does. One lookup covers both
+ *  concerns on the net; a class axis whose Meldung is off says WHY it is
+ *  greyed out, which is the whole job of a disabled control's hint. */
+function _bindAxisHints(card, camId) {
+  qsa('[data-tune-axis-label]', card).forEach((b) =>
+    b.addEventListener('click', () => {
+      const key = b.dataset.tuneAxisLabel;
+      const spec = TUNE_SPECS[key] || classAxisSpec(key);
+      if (!spec) return;
+      const hint = TUNE_SPECS[key] ? spec.hint : classAxisHint(axisFor(camId, key));
+      showToast(`${spec.label}\n${hint}`, 'info', { lifetime: 7000 });
+    }),
+  );
+}
+
+/** Wire the interactive controls inside ONE panel's net body. `card` is
+ *  the panel root — the camera id always comes from `card.dataset.cam`,
+ *  never from a parameter the caller might mix up between panels. */
+export function bindNetBody(card, onRepaint) {
   const camId = card.dataset.cam;
 
   card.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
@@ -246,7 +200,7 @@ function _bindCard(card, onRepaint) {
       // one used to overwrite four axes on the spot with nothing to
       // return to — „dann verdreht's ja alles, dann komm ich nicht
       // zurück". Staged, the bar's „Verwerfen" IS the way back, and it
-      // costs no extra control on an already busy card.
+      // costs no extra control on an already busy panel.
       stageValue(camId, 'track_spawn_min_score', p.spawn);
       stageValue(camId, 'track_continue_min_score', p.cont);
       stageValue(camId, 'track_miss_grace_seconds', p.grace);
@@ -262,32 +216,4 @@ function _bindCard(card, onRepaint) {
   );
 
   _bindAxisHints(card, camId);
-}
-
-/** Tap a spoke's label → what that axis does. One lookup covers both
- *  concerns on the net; a class axis whose Meldung is off says WHY it is
- *  greyed out, which is the whole job of a disabled control's hint. */
-function _bindAxisHints(card, camId) {
-  qsa('[data-tune-axis-label]', card).forEach((b) =>
-    b.addEventListener('click', () => {
-      const key = b.dataset.tuneAxisLabel;
-      const spec = TUNE_SPECS[key] || classAxisSpec(key);
-      if (!spec) return;
-      const hint = TUNE_SPECS[key] ? spec.hint : classAxisHint(axisFor(camId, key));
-      showToast(`${spec.label}\n${hint}`, 'info', { lifetime: 7000 });
-    }),
-  );
-}
-
-export function bindCards(host, onRepaint) {
-  qsa('[data-netz-cam]', byId(CHIPS_ID) || host).forEach((b) =>
-    b.addEventListener('click', () => {
-      netzState.focusCam = netzState.focusCam === b.dataset.netzCam ? null : b.dataset.netzCam;
-      onRepaint();
-      host
-        .querySelector(`.netz-card[data-cam="${CSS.escape(b.dataset.netzCam)}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-    }),
-  );
-  qsa('.netz-card', host).forEach((card) => _bindCard(card, onRepaint));
 }

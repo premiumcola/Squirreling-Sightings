@@ -1,5 +1,9 @@
 // ─── netz/_archive_list.js ─────────────────────────────────────────────────
-// Verlauf — the list, its filters, and the header stat.
+// Verlauf — the list, its filters, and the header stat. ONE camera's
+// history: the panel that mounts this already knows which camera it is
+// (its own `fetchArchive({cam: camId, …})` call), so there is no camera
+// picker here any more — that only made sense back when one shared
+// Verlauf view covered every camera at once.
 //
 // Structure copied from storms/_list.js (list → detail → one section,
 // one state in the DOM at a time, so the back button navigates for free
@@ -8,17 +12,15 @@
 // weather-specific.
 //
 // storms/_list.js's PROGRESSIVE DISCLOSURE rule is adopted verbatim: a
-// control appears when it starts doing something. Camera chips at >= 2
-// cameras, class chips at >= 4 records, the "nur offen" toggle at >= 1
-// unjudged. Below those counts the control is ABSENT, not disabled — no
-// dead chrome.
+// control appears when it starts doing something. Class chips at >= 4
+// records, the "nur offen" toggle at >= 1 unjudged. Below those counts the
+// control is ABSENT, not disabled — no dead chrome.
 
 import { esc } from '../core/dom.js';
 import { archiveFrameUrl } from './_api.js';
-import { netzState } from './_state.js';
+import { archiveFilterFor } from './_state.js';
 import { classChip, fmtDateTime, labelDe, settingChip, verdictWord } from './_helpers.js';
 
-const MIN_CAMS_FOR_CHIPS = 2;
 const MIN_RECORDS_FOR_CLASS_CHIPS = 4;
 
 // The audit sentence the whole feature exists to be able to print.
@@ -32,27 +34,11 @@ function _headHtml(data) {
   return `<div class="netz-arc-head"><span class="netz-arc-stat">${esc(stat)}</span></div>`;
 }
 
-function _camChips(data) {
-  const cams = data.cameras || [];
-  if (cams.length < MIN_CAMS_FOR_CHIPS) return '';
-  const sel = netzState.archiveFilter.cam;
-  const all =
-    `<button type="button" class="netz-pill${sel ? '' : ' is-active'}" ` +
-    `data-arc-cam="">Alle</button>`;
-  return `<div class="netz-pills">${all}${cams
-    .map(
-      (c) =>
-        `<button type="button" class="netz-pill${sel === c.id ? ' is-active' : ''}" ` +
-        `data-arc-cam="${esc(c.id)}">${esc(c.name)}</button>`,
-    )
-    .join('')}</div>`;
-}
-
-function _classChips(data) {
+function _classChips(data, camId) {
   if ((data.total || 0) < MIN_RECORDS_FOR_CLASS_CHIPS) return '';
   const labels = data.labels || [];
   if (labels.length < 2) return '';
-  const sel = netzState.archiveFilter.label;
+  const sel = archiveFilterFor(camId).label;
   return (
     `<div class="netz-pills">` +
     `<button type="button" class="netz-pill${sel ? '' : ' is-active'}" data-arc-label="">` +
@@ -68,9 +54,9 @@ function _classChips(data) {
   );
 }
 
-function _openToggle(data) {
+function _openToggle(data, camId) {
   if (!data.unjudged) return '';
-  const on = netzState.archiveFilter.open;
+  const on = archiveFilterFor(camId).open;
   return (
     `<button type="button" class="netz-toggle${on ? ' is-on' : ''}" data-arc-open>` +
     `Nur offen <span class="netz-toggle-n">${data.unjudged}</span></button>`
@@ -98,7 +84,6 @@ function _rowHtml(row) {
     // A camera-wide change carries no class — its field name takes the
     // chip's place so the row still says WHAT moved at a glance.
     `<span class="netz-arc-l1">${classChip(row.label) || settingChip(row.field_de)}` +
-    `<span class="netz-arc-cam">${esc(row.cam_name || '')}</span>` +
     `<span class="netz-arc-time">${esc(fmtDateTime(row.ts))}${esc(score)}</span></span>` +
     `<span class="netz-arc-l2"><span class="netz-badge" data-state="${esc(row.state)}">` +
     `${esc(row.badge)}</span>${esc(verdictWord(row))}</span>` +
@@ -113,49 +98,41 @@ function _emptyHtml() {
   return (
     `<div class="netz-empty">` +
     `<div class="netz-empty-title">Noch nichts gefragt.</div>` +
-    `<div class="netz-empty-sub">Sobald eine Kamera etwas Unsicheres sieht, fragt ` +
+    `<div class="netz-empty-sub">Sobald diese Kamera etwas Unsicheres sieht, fragt ` +
     `Squirreling per Telegram nach — und der Moment landet hier.</div></div>`
   );
 }
 
-export function renderArchiveList(host, data, handlers) {
+export function renderArchiveList(host, data, camId, handlers) {
   if (!data || !data.items?.length) {
-    const noFilter =
-      !netzState.archiveFilter.cam &&
-      !netzState.archiveFilter.label &&
-      !netzState.archiveFilter.open;
+    const filter = archiveFilterFor(camId);
+    const noFilter = !filter.label && !filter.open;
     host.innerHTML = noFilter
       ? _emptyHtml()
-      : `${_camChips(data || {})}${_classChips(data || {})}` +
+      : `${_classChips(data || {}, camId)}` +
         `<div class="netz-empty"><div class="netz-empty-sub">Keine Einträge in dieser ` +
         `Auswahl.</div></div>`;
-    _bind(host, handlers);
+    _bind(host, camId, handlers);
     return;
   }
   host.innerHTML =
     _headHtml(data) +
-    _camChips(data) +
-    _classChips(data) +
-    _openToggle(data) +
+    _classChips(data, camId) +
+    _openToggle(data, camId) +
     `<div class="netz-arc-rows">${data.items.map(_rowHtml).join('')}</div>`;
-  _bind(host, handlers);
+  _bind(host, camId, handlers);
 }
 
-function _bind(host, handlers) {
-  host.querySelectorAll('[data-arc-cam]').forEach((b) =>
-    b.addEventListener('click', () => {
-      netzState.archiveFilter.cam = b.dataset.arcCam || null;
-      handlers.reload();
-    }),
-  );
+function _bind(host, camId, handlers) {
   host.querySelectorAll('[data-arc-label]').forEach((b) =>
     b.addEventListener('click', () => {
-      netzState.archiveFilter.label = b.dataset.arcLabel || null;
+      archiveFilterFor(camId).label = b.dataset.arcLabel || null;
       handlers.reload();
     }),
   );
   host.querySelector('[data-arc-open]')?.addEventListener('click', () => {
-    netzState.archiveFilter.open = !netzState.archiveFilter.open;
+    const filter = archiveFilterFor(camId);
+    filter.open = !filter.open;
     handlers.reload();
   });
   host

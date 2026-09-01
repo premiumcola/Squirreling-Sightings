@@ -274,16 +274,14 @@ body.sidebar-locked {
 
 /* ── Dashboard / live-card mobile sizing ──────────────────────────────── */
 @media (max-width: 768px) {
-  /* Multi-cam layouts (.cam-grid-2/-4/-n) collapse to one column at 900 px.
+  /* The camera grid collapses to one column at 900 px (03-dashboard.css).
      The previous 21/9 letterbox flattened the frames and read as broken
      proportions on iPhone — sticking to 16/9 (the actual security-cam
      ratio) keeps the geometry honest at the cost of a bit more vertical
      scrolling. object-fit:cover on .cv-img still centres the
-     surveillance-relevant region. Single-cam (.cam-grid-1) is also
-     16/9 — multi-cam matches it now. */
-  .cam-grid-2 .cv-frame,
-  .cam-grid-4 .cv-frame,
-  .cam-grid-n .cv-frame {
+     surveillance-relevant region. Applies to every tile now (there is no
+     longer a separate single-camera layout to exempt). */
+  .cv-frame {
     aspect-ratio: 16/9;
   }
 

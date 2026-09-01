@@ -19,20 +19,6 @@
   --netz-poly-line: rgba(120, 200, 255, 0.85);
 }
 
-#netz .netz-block {
-  /* Top padding trimmed 14 → 8: the section already carries its own
-     padding, so the two stacked and the title floated. */
-  padding: 8px 12px calc(14px + env(safe-area-inset-bottom));
-  border-radius: 14px;
-}
-
-.netz-head {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
-}
-
 /* ── camera / filter pills ──────────────────────────────────────────── */
 
 .netz-pills {
@@ -289,42 +275,6 @@
   color: #94a3b8;
 }
 
-.netz-frozen {
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 12px;
-}
-
-.netz-frozen summary {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  color: #cbd5e1;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.netz-frozen ul {
-  margin: 6px 0 2px;
-  padding-left: 0;
-  list-style: none;
-}
-
-.netz-frozen li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 3px 0;
-  color: #94a3b8;
-}
-
-.netz-frozen code {
-  color: #cbd5e1;
-  font-size: 11px;
-}
-
 /* ── drag pill ──────────────────────────────────────────────────────── */
 
 .netz-drag-pill {
@@ -519,72 +469,12 @@
   color: #94a3b8;
 }
 
-/* ── Erklärung-Overlay ("i" button + modal) ──────────────────────────── */
-
-/* Three slots, one grid — NOT `margin-left: auto` on an inline-flex child,
-   which is the documented root cause of the Live-Pill layout bugs on iOS.
-   Phone: title left, Verlauf button right, camera chips on their own
-   full-width strip underneath (three names plus a 44 px button cannot
-   share a 375 px line). Desktop: chips move up onto the title row and sit
-   right, beside the button — what the operator asked for, "auf jeden Fall
-   aufm PC". */
-.netz-head-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas: 'title btns' 'cams cams';
-  align-items: center;
-  gap: 8px;
-}
-
-.netz-head-row > .ws-title {
-  grid-area: title;
-  min-width: 0;
-}
-
-.netz-head-row > .netz-view-btn {
-  grid-area: btns;
-}
-/* Two header buttons share one grid area, so they flow side by side
-   without a wrapper element. */
-.netz-head-row > #netzFrozenBtn {
-  justify-self: end;
-  margin-right: 44px;
-}
-.netz-head-row > #netzViewBtn {
-  justify-self: end;
-}
-
-.netz-head-row > .netz-cams {
-  grid-area: cams;
-  margin-bottom: 0;
-  min-width: 0;
-}
-
-/* Before hydration — and in the Verlauf view — the slot holds nothing.
-   An empty grid area would still claim its 8 px gap. */
-.netz-cams:empty {
-  display: none;
-}
-
-/* The chips are the one control here the operator taps on a phone. */
-.netz-cams .netz-pill {
-  min-height: 44px;
-}
-
-@media (min-width: 760px) {
-  .netz-head-row {
-    grid-template-columns: auto 1fr auto;
-    grid-template-areas: 'title cams btns';
-  }
-
-  .netz-head-row > .netz-cams {
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-  }
-}
-
-/* ── Erkennungsprofil · one card per camera, side by side ─────────────── */
+/* ── Erkennungsprofil · one panel per camera ───────────────────────────
+   The page-level header/chip-switcher (.netz-head-row, .netz-cams, the
+   .netz-cards horizontal scroll strip) is gone — every camera gets its
+   own permanent panel beside its own Live-Feed tile now (dashboard.js's
+   .cam-net-slot), so there is no single view to switch between and
+   nothing left to pick a camera FOR. */
 
 .netz-view-btn {
   width: 44px;
@@ -599,22 +489,9 @@
   cursor: pointer;
 }
 
-.netz-view-btn[data-view='verlauf'] {
+.netz-view-btn[aria-pressed='true'] {
   background: rgba(34, 197, 94, 0.24);
   color: #eaf7ee;
-}
-
-/* Cards scroll INSIDE their own container rather than widening the page —
-   three 440-unit radars cannot fit a 375 px phone, and a body that scrolls
-   sideways is the failure mode the layout rules forbid. */
-.netz-cards {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(320px, 1fr);
-  gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  padding-bottom: 4px;
 }
 
 .netz-card {
@@ -654,23 +531,10 @@
   color: #94a3b8;
 }
 
-/* Verlauf for THIS camera. Same 44 px round button as #netzViewBtn, so
-   the two "history" affordances are visibly the same control at two
-   scopes. `flex: 0 0 auto` and not `margin-left: auto`: the auto-margin
-   on an inline-flex child is the documented iOS layout hazard, and the
-   role span already eats the slack. */
-.netz-card-hist {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-  cursor: pointer;
-}
+/* The Verlauf toggle and the frozen-info button (both .netz-view-btn,
+   `flex-shrink: 0`) follow directly after — not `margin-left: auto`, the
+   documented iOS inline-flex layout hazard; the h4's `flex: 1 1 auto`
+   already eats the slack. */
 
 .netz-card-chart {
   position: relative;
@@ -882,8 +746,7 @@
 }
 
 @media (hover: hover) {
-  .netz-view-btn:hover,
-  .netz-card-hist:hover {
+  .netz-view-btn:hover {
     background: rgba(255, 255, 255, 0.12);
   }
 
@@ -947,9 +810,20 @@
   height: 18px;
 }
 
-/* "Werte, die fest bleiben" — header-toggled, so it needs its own
-   `[hidden]` opt-out or the `display` below would silently defeat the
-   attribute (the cascade trap swept in test_weather_zoom_panel_css.py). */
+/* "Werte, die fest bleiben" and "Was zusammen wirkt" are both
+   header-toggled, so each needs its own `[hidden]` opt-out or the
+   `display` below would silently defeat the attribute (the cascade trap
+   swept in test_weather_zoom_panel_css.py). */
 .netz-frozen-box[hidden] {
   display: none;
+}
+
+/* Page-level "Was zusammen wirkt" info box — one header button
+   (#netzCombosBtn in dashboard.html) for the whole Live-Feed section,
+   see netz/_panel.js's initCombosInfo. */
+.netz-combos[hidden] {
+  display: none;
+}
+#netzCombosBox {
+  margin: 0 0 12px;
 }

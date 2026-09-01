@@ -46,8 +46,6 @@ def _axes(*labels):
 _SETUP = f"""
   const cards = await import(JS + '/netz/_cards.js');
   const S = await import(JS + '/netz/_state.js');
-  const host = {{ innerHTML: '' }};
-  S.netzState.view = 'netz';
   S.netzState.cameras = [
     {{ id: 'cam_a', name: 'Werkstatt' }},
     {{ id: 'cam_b', name: 'Squirrel Town' }},
@@ -58,6 +56,11 @@ _SETUP = f"""
     cam_b: {{ cam_id: 'cam_b', cam_name: 'Squirrel Town', role: 'wildlife', frozen: [],
              axes: {_axes('person', 'cat', 'dog', 'bird', 'squirrel')}, tuning: {_TUNING} }},
   }};
+  // One panel per camera now (netz/_panel.js) — netBodyHtml(cam) is the
+  // per-camera piece that used to be renderCards(host)'s per-card loop
+  // body. Concatenating both cameras' output stands in for the old
+  // multi-card host.innerHTML for the "one net per camera" count below.
+  const renderAll = () => S.netzState.cameras.map((c) => cards.netBodyHtml(c)).join('');
 """
 
 
@@ -68,8 +71,7 @@ def test_each_card_carries_its_own_class_axes_on_one_net():
     out = _js(
         f"""
         {_SETUP}
-        cards.renderCards(host);
-        const html = String(host.innerHTML);
+        const html = renderAll();
         console.log(JSON.stringify({{
           a: (S.netzState.tuneAxes.cam_a || []).map((x) => x.key),
           b: (S.netzState.tuneAxes.cam_b || []).map((x) => x.key),
@@ -91,7 +93,7 @@ def test_the_class_axes_are_appended_so_each_colour_group_stays_one_arc():
     out = _js(
         f"""
         {_SETUP}
-        cards.renderCards(host);
+        renderAll();
         const groups = (S.netzState.tuneAxes.cam_b || []).map((x) => x.group);
         const runs = groups.filter((g, i) => g !== groups[i - 1]);
         console.log(JSON.stringify({{ runs, unique: [...new Set(groups)].length }}));
@@ -118,7 +120,7 @@ def test_a_class_drag_resolves_against_its_own_camera():
     out = _js(
         f"""
         {_SETUP}
-        cards.renderCards(host);
+        renderAll();
         console.log(JSON.stringify({{
           bHasSquirrel: !!S.axisFor('cam_b', 'cls:squirrel'),
           aHasSquirrel: !!S.axisFor('cam_a', 'cls:squirrel'),
@@ -139,7 +141,7 @@ def test_a_class_axis_never_joins_the_staging_bar():
         f"""
         {_SETUP}
         S.stageValue('cam_a', 'roi_mode', '2x2');
-        cards.renderCards(host);
+        renderAll();
         console.log(JSON.stringify({{
           staged: Object.keys(S.stagedFor('cam_a')),
         }}));

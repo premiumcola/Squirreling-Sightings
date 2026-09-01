@@ -17,6 +17,8 @@ Two distinct hazards live here.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
@@ -24,17 +26,22 @@ from ._node_js import run_js as _js
 
 pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 
+_JS = Path(__file__).resolve().parents[1] / "web" / "static" / "js"
+_PANEL = (_JS / "netz" / "_panel.js").read_text(encoding="utf-8")
+
 _TUNING = """{
   frame_interval_ms: 500, motion_sensitivity: 0.5, post_motion_tail_s: 0,
   track_miss_grace_seconds: 0, track_iou_match_threshold: 0,
   roi_mode: 'off', wildlife_motion_sensitivity: 0, roi_min_net_disp_frac: 0,
 }"""
 
-# renderCards only ever assigns host.innerHTML; a plain sink is enough.
+# One panel per camera now (netz/_panel.js), not one shared renderCards(host)
+# call — netBodyHtml(cam) is the per-camera piece that populates the drag
+# lookup, and it is a pure function (string in, netzState.tuneAxes side
+# effect out): no DOM/host needed to exercise it.
 _SETUP = f"""
   const cards = await import(JS + '/netz/_cards.js');
   const S = await import(JS + '/netz/_state.js');
-  const host = {{ innerHTML: '' }};
   S.netzState.cameras = [
     {{ id: 'cam_a', name: 'Werkstatt' }},
     {{ id: 'cam_b', name: 'Garten' }},
@@ -45,15 +52,16 @@ _SETUP = f"""
     cam_b: {{ cam_id: 'cam_b', cam_name: 'Garten', role: 'garden',
              axes: [], frozen: [], tuning: {_TUNING} }},
   }};
+  const renderAll = () => S.netzState.cameras.forEach((c) => cards.netBodyHtml(c));
 """
 
 
-def test_rendering_the_cards_populates_the_drag_lookup_per_camera():
+def test_rendering_the_panels_populates_the_drag_lookup_per_camera():
     """THE regression test — an unpopulated lookup makes the drag inert."""
     out = _js(
         f"""
         {_SETUP}
-        cards.renderCards(host);
+        renderAll();
         console.log(JSON.stringify({{
           a: (S.netzState.tuneAxes.cam_a || []).length,
           b: (S.netzState.tuneAxes.cam_b || []).length,
@@ -71,7 +79,7 @@ def test_the_lookup_the_drag_actually_performs_resolves():
     out = _js(
         f"""
         {_SETUP}
-        cards.renderCards(host);
+        renderAll();
         const ax = S.axisFor('cam_b', 'motion_sensitivity');
         console.log(JSON.stringify({{ ok: !!ax, e: ax ? ax.E : null }}));
         """
@@ -88,7 +96,7 @@ def test_a_staged_drag_on_one_camera_does_not_touch_the_other():
         f"""
         {_SETUP}
         S.stageValue('cam_b', 'roi_mode', '3x3');
-        cards.renderCards(host);
+        renderAll();
         const b = S.axisFor('cam_b', 'roi_mode');
         const a = S.axisFor('cam_a', 'roi_mode');
         console.log(JSON.stringify({{
@@ -119,20 +127,11 @@ def test_discarding_one_camera_leaves_the_others_staged():
     assert out["b"] == 1, "discarding one camera wiped another camera's staged edits"
 
 
-def test_each_card_carries_its_camera_id_in_the_dom():
+def test_every_panel_stamps_its_own_camera_id_on_the_root():
     """The write paths read `card.dataset.cam` instead of a module-level
-    "current camera". If the attribute stops being emitted, every write
-    silently loses its target."""
-    out = _js(
-        f"""
-        {_SETUP}
-        cards.renderCards(host);
-        const html = String(host.innerHTML);
-        console.log(JSON.stringify({{
-          a: html.includes('data-cam="cam_a"'),
-          b: html.includes('data-cam="cam_b"'),
-        }}));
-        """
-    )
-    assert out["a"] is True
-    assert out["b"] is True
+    "current camera" (netz/_cards.js's bindNetBody). If the panel root
+    stopped carrying `data-cam`, every write would silently lose its
+    target. The attribute now lives on netz/_panel.js's shell — one
+    template, parameterised by camId, so it is correct for every camera
+    by construction rather than copy-pasted per camera."""
+    assert 'data-cam="${esc(camId)}"' in _PANEL

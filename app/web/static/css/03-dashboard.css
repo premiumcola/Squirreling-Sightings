@@ -1,30 +1,31 @@
 /* ── Camera video-grid ──────────────────────────────────────────────────────── */
+/* One ROW per camera: its Live-Feed tile (.cv-card) in column 1, its
+   Erkennungsprofil panel (netz/_panel.js, mounted into the sibling
+   .cam-net-slot dashboard.js renders right after each tile) in column 2.
+   Both are direct children of #cameraCards, tile-then-slot per camera, so
+   plain grid auto-flow pairs them — row by row, tallest cell wins the row
+   height — without a wrapper element or any per-camera inline placement.
+   minmax(0, 1fr) — without it Safari treats grid-child min-width as auto
+   (= content intrinsic size), and a freshly-loaded camera <img> pushes
+   the column past viewport width. That was the root cause of the "page
+   jumps to desktop layout once streams load" regression.
+   ≤900 px (the breakpoint this grid already used for its old multi-column
+   collapse) drops to one column: auto-flow then stacks tile, panel, next
+   tile, next panel — each camera's panel directly below its own tile,
+   matching the page's existing scroll flow on a phone. */
 .camera-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
 }
-/* minmax(0, 1fr) — without it Safari treats grid-child min-width as
-   auto (= content intrinsic size), and a freshly-loaded camera <img>
-   pushes the column past viewport width. That was the root cause of
-   the "page jumps to desktop layout once streams load" regression. */
-.cam-grid-1 {
-  grid-template-columns: minmax(0, 1fr);
-}
-.cam-grid-2 {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-.cam-grid-4 {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-.cam-grid-n {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
 @media (max-width: 900px) {
-  .cam-grid-2,
-  .cam-grid-4,
-  .cam-grid-n {
+  .camera-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+.cam-net-slot {
+  min-width: 0;
 }
 
 /* Card = just the video frame. --cv-overlay-inset (8 px) is the

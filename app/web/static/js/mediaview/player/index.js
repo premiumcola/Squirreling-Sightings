@@ -82,11 +82,22 @@ function _watchHandoffSurfaces(video, { transport, transportControls, autoHide }
 /**
  * Mount the player chrome onto a MediaView stage.
  *
- * The media element is #lightboxVideo, not a parameter: recorded-mode.js
+ * The media element DEFAULTS to #lightboxVideo because recorded-mode.js
  * REPARENTS the legacy #lightboxMediaWrap into the stage rather than
  * building a fresh player (its header comment says why — the painter,
  * the zone overlay and the scrubber are all bound to those ids at module
  * load). Resolved per call so the lookup survives the reparenting.
+ *
+ * A caller that owns its own <video> passes `getVideo` instead, which is
+ * the whole point of the parameter: the transport discs, idle auto-hide,
+ * frame-step, speed, loop, snapshot, native handoff and PiP are a large
+ * and well-tested body of behaviour, and a second player that could not
+ * reach them would have to reimplement all of it.
+ *
+ * NOTE for such a caller: _native.js still resolves the overlay host it
+ * flags during a native handoff by #lightboxMediaWrap, so a video
+ * mounted outside that wrap gets the legacy element. A caller with its
+ * own overlay layers therefore has to suspend them itself.
  *
  * @param {HTMLElement} stage         the shell's [data-slot="stage"] node
  * @param {HTMLElement} [controlsHost]  the shell's [data-slot="controls"]
@@ -94,11 +105,14 @@ function _watchHandoffSurfaces(video, { transport, transportControls, autoHide }
  *   loop / detection-nav / snapshot). Optional so a caller with no such
  *   slot still gets the core transport; renderTransportControls itself
  *   no-ops on a missing host.
+ * @param {object} [opts]
+ * @param {() => (HTMLVideoElement|null)} [opts.getVideo]  resolver for the
+ *   media element, called per use. Defaults to the #lightboxVideo lookup.
  * @returns {{ sync(): void, teardown(): void }|null}
  */
-export function mountPlayerChrome(stage, controlsHost) {
+export function mountPlayerChrome(stage, controlsHost, opts = {}) {
   if (!stage) return null;
-  const getVideo = () => byId('lightboxVideo');
+  const getVideo = opts.getVideo || (() => byId('lightboxVideo'));
   const video = getVideo();
 
   const host = document.createElement('div');

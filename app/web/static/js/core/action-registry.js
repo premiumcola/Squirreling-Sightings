@@ -20,6 +20,8 @@
 // `false` calls preventDefault automatically — matches the `return
 // navFn(event)` idiom the inline strings used.
 
+import { showToast } from './toast.js';
+
 const _ACTIONS = new Map();
 
 export function registerAction(name, fn) {
@@ -44,8 +46,32 @@ function _handle(eventType, ev) {
   if (!action) return;
   const fn = _ACTIONS.get(action);
   if (!fn) return;
-  const result = fn(target, ev);
-  if (result === false) ev.preventDefault();
+  let result;
+  try {
+    result = fn(target, ev);
+  } catch (err) {
+    _reportActionFailure(action, err);
+    return;
+  }
+  if (result === false) {
+    ev.preventDefault();
+    return;
+  }
+  // Most handlers wired through here are async writes whose success
+  // toast sits AFTER their `await` — a rejected POST therefore fires no
+  // toast at all, and this dispatcher used to drop the returned promise
+  // on the floor. With no `unhandledrejection` handler anywhere in this
+  // frontend, that made a failed save indistinguishable from a dead
+  // control: the checkbox stayed flipped, nothing said otherwise. Every
+  // data-action passes through here, so one catch covers all of them.
+  if (result && typeof result.then === 'function') {
+    result.catch((err) => _reportActionFailure(action, err));
+  }
+}
+
+function _reportActionFailure(action, err) {
+  console.error('[action] %s failed:', action, err);
+  showToast(`Aktion fehlgeschlagen: ${err?.message || err}`, 'error');
 }
 
 function _wire() {
@@ -86,7 +112,6 @@ registerAction('toggleMediaSelectMode', _shim('toggleMediaSelectMode'));
 registerAction('closeMediaDrilldown', _shim('closeMediaDrilldown'));
 registerAction('resetLibraryView', _shim('resetLibraryView'));
 registerAction('bulkDeleteSelectedMedia', _shim('bulkDeleteSelectedMedia'));
-registerAction('toggleSetSection', _shim('toggleSetSection', 'section'));
 // cam-edit Verbindung tab
 registerAction('togglePwField', (el) => {
   if (typeof window.togglePwField === 'function') {

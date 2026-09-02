@@ -128,8 +128,8 @@ function _chartSizeOf(chart) {
  *  size yet (a hidden section) — the render then falls back to 560 x 300
  *  and the resize observer below repaints it the moment the box gets a
  *  size. */
-function _measureChart(body) {
-  body.innerHTML = netProbeHtml();
+function _measureChart(body, camId) {
+  body.innerHTML = netProbeHtml(camId);
   return _chartSizeOf(body.querySelector('.netz-card-chart'));
 }
 
@@ -150,7 +150,7 @@ export function renderPanel(camId) {
   if (viewFor(camId) === 'verlauf') {
     _renderArchiveInto(body, camId);
   } else {
-    body.innerHTML = netBodyHtml(cam, _measureChart(body));
+    body.innerHTML = netBodyHtml(cam, _measureChart(body, camId));
     bindNetBody(article, () => renderPanel(camId));
     bindTuneDrag(body, () => renderPanel(camId));
   }

@@ -156,10 +156,7 @@ def test_the_preset_only_field_is_still_a_real_backend_field():
 
 # ── 4 · the ghost toggle is a header icon button, not a row ──────────
 
-_GHOST_TITLE = (
-    "Ghost-Spuren ausblenden – Spuren, die ihr Objekt verloren haben "
-    "und nur noch aus der Gnadenfrist bestehen"
-)
+_GHOST_SENTENCE = "Ghost: Spur ohne Objekt — läuft nur noch in der Gnadenfrist weiter, "
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
@@ -175,8 +172,9 @@ def test_the_ghost_toggle_is_a_header_icon_button_not_a_row():
           hasGhost: btn.includes('data-tune-ghost'),
           isIconBtn: btn.includes('netz-view-btn'),
           pressed: btn.includes('aria-pressed="true"'),
-          label: btn.includes('aria-label="{_GHOST_TITLE}"'),
-          tip: btn.includes('title="{_GHOST_TITLE}"'),
+          label: btn.includes('aria-label="Ghost-Spuren ausblenden'),
+          tip: btn.includes('title="Ghost-Spuren ausblenden'),
+          explains: btn.includes('Gnadenfrist'),
           bodyHasGhost: body.includes('data-tune-ghost'),
           bodyHasControls: body.includes('netz-card-controls'),
         }}));
@@ -187,8 +185,44 @@ def test_the_ghost_toggle_is_a_header_icon_button_not_a_row():
     assert out["pressed"] is True, "the toggle does not report its state to assistive tech"
     assert out["label"] is True, "an icon-only button needs its explanation as aria-label"
     assert out["tip"] is True
+    assert out["explains"] is True
     assert out["bodyHasGhost"] is False, "the ghost toggle is still in the net body"
     assert out["bodyHasControls"] is False, "the controls row is still reserving height"
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_the_key_row_says_what_a_ghost_is_without_a_hover():
+    """„Ich weiß immer noch nicht, was das bedeutet." A `title` is a thing
+    no phone ever shows, so the sentence stands in the key row under the
+    net — and it names the switch's CURRENT state, not just the concept."""
+    out = _js(
+        f"""
+        {_SETUP}
+        const key = await import(JS + '/netz/_key.js');
+        const cam = {{ id: 'cam_a', name: 'Werkstatt' }};
+        const onRow = cards.netBodyHtml(cam, {{ width: 700, height: 340 }});
+        S.netzState.states.cam_a.tuning.track_filter_ghosts = false;
+        const offRow = cards.netBodyHtml(cam, {{ width: 700, height: 340 }});
+        console.log(JSON.stringify({{
+          inBody: onRow.includes('{_GHOST_SENTENCE}'),
+          hidden: onRow.includes('{_GHOST_SENTENCE}wird ausgeblendet'),
+          shown: offRow.includes('{_GHOST_SENTENCE}wird angezeigt'),
+          ownLine: onRow.includes('netz-key-ghost'),
+          sameGlyph: cards.ghostToggleHtml('cam_a').includes(
+            key.ghostIconSvg(18).slice(key.ghostIconSvg(18).indexOf('<path'))),
+        }}));
+        """
+    )
+    assert out["inBody"] is True, "the explanation is still tooltip-only"
+    assert out["hidden"] is True
+    assert out["shown"] is True, "the key must follow the switch, not describe one fixed state"
+    assert out["ownLine"] is True
+    assert out["sameGlyph"] is True, "the key and the button must show the same ghost"
+
+
+def test_the_ghost_line_never_pushes_a_colour_chip_around():
+    seg = _CSS[_CSS.index(".netz-key-ghost {") :]
+    assert "flex-basis: 100%" in seg[: seg.index("}")]
 
 
 def test_the_controls_row_and_the_chip_style_are_gone():
@@ -356,7 +390,7 @@ def test_the_measured_box_is_the_one_the_legend_left_over():
     assert "netz-key" not in _PANEL, "the probe must not rebuild the legend markup itself"
     fn_start = _PANEL.index("function _measureChart(")
     fn_end = _PANEL.index("\n}", fn_start)
-    assert "netProbeHtml()" in _PANEL[fn_start:fn_end]
+    assert "netProbeHtml(camId)" in _PANEL[fn_start:fn_end]
 
 
 # ── 9 · the header is ONE row: identity + two icon buttons ───────────
@@ -532,7 +566,7 @@ def test_the_panel_measures_the_box_before_drawing_into_it():
     the body, read its px size, then render the radar for that size."""
     assert "function _measureChart(" in _PANEL
     assert "getBoundingClientRect()" in _PANEL
-    assert "netBodyHtml(cam, _measureChart(body))" in _PANEL
+    assert "netBodyHtml(cam, _measureChart(body, camId))" in _PANEL
 
 
 def test_the_panel_repaints_when_its_box_changes_size():

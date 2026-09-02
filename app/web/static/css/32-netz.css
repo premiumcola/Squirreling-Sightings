@@ -696,6 +696,22 @@
   border-radius: 50%;
 }
 
+/* The one item that is a sentence, not a chip: what a ghost track is, and
+   what the header switch is currently doing with them. „Ich weiß immer
+   noch nicht, was das bedeutet" — a tooltip cannot answer that on a
+   phone, so it stands here in words, on a line of its own so it never
+   pushes a colour chip onto a second row. */
+.netz-key-ghost {
+  flex-basis: 100%;
+  align-items: flex-start;
+  color: #7f8ea3;
+}
+
+.netz-key-ghost svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .netz-combos {
   margin-top: 12px;
   padding: 10px 12px;

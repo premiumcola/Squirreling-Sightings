@@ -21,6 +21,7 @@
 
 import { esc } from '../core/dom.js';
 import { TUNE_GROUPS } from './_settings_axes.js';
+import { effectiveTuning } from './_state.js';
 
 // A short line/dot glyph for each of the three shape meanings on the
 // chart — "was ist die gestrichelte Linie, was die feste?" gets answered
@@ -42,13 +43,38 @@ function _dotSwatch() {
   );
 }
 
+/** The ghost glyph, shared with the header switch (ghostToggleHtml in
+ *  _cards.js) so the icon in the key and the icon on the button cannot
+ *  drift apart — the key only means anything if it shows the same shape. */
+export function ghostIconSvg(px) {
+  return (
+    `<svg viewBox="0 0 24 24" width="${px}" height="${px}" aria-hidden="true" fill="none" ` +
+    `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="M12 3a7 7 0 0 0-7 7v11l2.5-2 2.5 2 2-2 2 2 2.5-2 2.5 2V10a7 7 0 0 0-7-7Z"/>` +
+    `<path d="M9.5 10.5h.01M14.5 10.5h.01"/></svg>`
+  );
+}
+
+/** What a ghost track IS, in words, plus what the switch is currently
+ *  doing with them. „Ich weiß immer noch nicht, was das bedeutet" — the
+ *  header button carries the same sentence as its tooltip, and a tooltip
+ *  on a phone is a sentence nobody ever sees. */
+export function ghostKeyText(camId) {
+  const hidden = effectiveTuning(camId).track_filter_ghosts !== false;
+  return (
+    'Ghost: Spur ohne Objekt — läuft nur noch in der Gnadenfrist weiter, ' +
+    (hidden ? 'wird ausgeblendet' : 'wird angezeigt')
+  );
+}
+
 function _item(swatch, text) {
   return `<span class="netz-key-i">${swatch}${esc(text)}</span>`;
 }
 
-/** The whole key as one wrapping row: the five group colours, then the
- *  three line/dot meanings. */
-export function netKeyHtml() {
+/** The whole key as one wrapping row: the five group colours, the three
+ *  line/dot meanings, and — on its own line, because it is a sentence
+ *  rather than a chip — what the ghost switch above is doing. */
+export function netKeyHtml(camId) {
   return (
     `<div class="netz-key" aria-label="Zeichenerklärung">` +
     Object.values(TUNE_GROUPS)
@@ -57,6 +83,8 @@ export function netKeyHtml() {
     _item(_lineSwatch(false), 'Aktuelles Profil') +
     _item(_lineSwatch(true), 'Werkseinstellung') +
     _item(_dotSwatch(), 'Geändert') +
+    `<span class="netz-key-i netz-key-ghost">${ghostIconSvg(13)}` +
+    `${esc(ghostKeyText(camId))}</span>` +
     `</div>`
   );
 }

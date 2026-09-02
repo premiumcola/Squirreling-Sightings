@@ -19,7 +19,7 @@
 import { esc, qsa } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
-import { netKeyHtml } from './_key.js';
+import { ghostIconSvg, ghostKeyText, netKeyHtml } from './_key.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
 import { renderTuneRadar } from './_tune_radar.js';
 import { buildClassAxes, classAxisHint, classAxisSpec } from './_class_rows.js';
@@ -52,22 +52,21 @@ function _stagingHtml(camId) {
 // cost the net exactly its own height on every panel ("da ist ja viel
 // Freiraum … macht das Netz einfach viel größer"). Now it is an icon-only
 // button in the panel header (netz/_panel.js composes it beside the
-// Verlauf toggle), same 44 px target, state through aria-pressed, and the
-// tooltip says what a ghost track IS — the name alone never did.
-const _GHOST_TITLE =
-  'Ghost-Spuren ausblenden – Spuren, die ihr Objekt verloren haben und nur noch ' +
-  'aus der Gnadenfrist bestehen';
+// Verlauf toggle), same 44 px target, state through aria-pressed.
+//
+// What a ghost track IS is a tooltip here AND a visible sentence in the
+// key row under the net (netz/_key.js) — "ich weiß immer noch nicht, was
+// das bedeutet", and a `title` is a thing no phone ever shows. Both read
+// the same source, so the button and the sentence cannot disagree.
+const _GHOST_TITLE = 'Ghost-Spuren ausblenden – ';
 
 export function ghostToggleHtml(camId) {
   const on = effectiveTuning(camId).track_filter_ghosts !== false;
+  const title = esc(_GHOST_TITLE + ghostKeyText(camId));
   return (
     `<button type="button" class="netz-view-btn" data-tune-ghost ` +
-    `aria-pressed="${on ? 'true' : 'false'}" aria-label="${_GHOST_TITLE}" ` +
-    `title="${_GHOST_TITLE}">` +
-    `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" ` +
-    `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-    `<path d="M12 3a7 7 0 0 0-7 7v11l2.5-2 2.5 2 2-2 2 2 2.5-2 2.5 2V10a7 7 0 0 0-7-7Z"/>` +
-    `<path d="M9.5 10.5h.01M14.5 10.5h.01"/></svg></button>`
+    `aria-pressed="${on ? 'true' : 'false'}" aria-label="${title}" title="${title}">` +
+    `${ghostIconSvg(18)}</button>`
   );
 }
 
@@ -101,16 +100,18 @@ export function netBodyHtml(cam, size = null) {
   return (
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true, size })}` +
     `${_stagingHtml(cam.id)}</div>` +
-    netKeyHtml()
+    netKeyHtml(cam.id)
   );
 }
 
-/** The same body MINUS the radar: an empty chart box and the real legend
+/** The same body MINUS the radar: an empty chart box and the real key
  *  row. netz/_panel.js lays this out to measure the box the radar is
  *  about to be drawn into. Built here, beside netBodyHtml, so the two can
- *  never drift into measuring one structure and rendering another. */
-export function netProbeHtml() {
-  return `<div class="netz-card-chart"></div>` + netKeyHtml();
+ *  never drift into measuring one structure and rendering another — the
+ *  key's ghost sentence wraps to a second line on a phone, and that line
+ *  is height the net does not get. */
+export function netProbeHtml(camId) {
+  return `<div class="netz-card-chart"></div>` + netKeyHtml(camId);
 }
 
 /** "Was zusammen wirkt" — cross-axis interaction notes. Camera-independent

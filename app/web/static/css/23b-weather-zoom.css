@@ -132,14 +132,18 @@
   }
 }
 /* "mehrere möglich" — the only hint that the chips are not radio
-   buttons. Inline with the row label, deliberately quiet. */
+   buttons. Inline with the row label, deliberately quiet.
+   Alpha is .85, not the .75 it carried before: at .75 the effective
+   colour over this panel (#222628) is rgb(104,140,161) = 4.25:1, under
+   the 4.5:1 floor for an 11px label. .85 lands at 5.04:1 and still
+   reads a full step quieter than the .ws-zsave-label next to it. */
 .ws-zsave-hint {
   margin-left: 6px;
   font-size: 11px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
-  color: rgba(127, 174, 201, 0.75);
+  color: rgba(127, 174, 201, 0.85);
 }
 
 /* Curve checkboxes — one per Wetterdaten-chart line, dot colour matches

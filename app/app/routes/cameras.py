@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 
 from .. import app_state
 from ..camera_runtime import CameraRuntime
+from ..schema import CAMERA_SCHEMA, REQUIRED
 from ._camera_helpers import (
     _CONN_FIELDS,
     _auto_detect_device_info,
@@ -30,6 +31,40 @@ from ._secrets import (
 )
 
 bp = Blueprint("cameras", __name__)
+
+# Held back from the /api/cameras row on purpose. The endpoint is polled
+# every 3 s over unauthenticated plain HTTP, so the password ships as the
+# boolean `password_set`; the two URLs are projected above with the
+# `:password` stripped out of the userinfo, and must not be re-added raw
+# underneath. Everything else CAMERA_SCHEMA can store comes back out —
+# see _backfill_stored_fields.
+_ROW_WITHHELD = frozenset({"password", "rtsp_url", "snapshot_url"})
+
+
+def _backfill_stored_fields(row: dict, cam: dict) -> None:
+    """Add every stored camera field the explicit projection above missed.
+
+    The projection used to be a pure positive list, and it came up short
+    four times: `color`, `outdoor`, the `track_*` overrides, and then the
+    Netz maps. The last one was not merely invisible — cam-edit's save
+    collector resolves its "keep the stored value" fallbacks out of
+    `state.cameras`, which is this response, so an omitted field is read
+    as absent and written back as its zero value. `label_thresholds` and
+    `confirmation_window` are nested dicts, which `upsert_camera` replaces
+    wholesale, so a save from an unrelated tab wiped them outright.
+
+    Additive by design: `setdefault` never overwrites a runtime status
+    field or one of the explicit lines above, so `status` / `enabled` /
+    `armed` keep describing what the runtime is doing rather than what
+    settings.json wishes it were doing.
+    """
+    for key, (_typ, default) in CAMERA_SCHEMA.items():
+        if key in _ROW_WITHHELD or default is REQUIRED:
+            # `id` / `name` are the REQUIRED pair; both branches of the
+            # status block above always set them, so there is nothing to
+            # fill in and the sentinel must never reach the response.
+            continue
+        row.setdefault(key, cam.get(key, default))
 
 
 @bp.get('/api/cameras')
@@ -145,6 +180,10 @@ def api_cameras():
                 if 0 <= age <= 10.0:
                     recent.append({"label": lbl, "age_s": round(age, 2)})
         s["recent_detections"] = recent
+        # Everything CAMERA_SCHEMA can store that the explicit lines above
+        # did not name. Keeps the row a superset of the stored record, so
+        # the next schema field reaches cam-edit without a fifth repair.
+        _backfill_stored_fields(s, cam)
         cams.append(s)
     return jsonify({"cameras": cams})
 

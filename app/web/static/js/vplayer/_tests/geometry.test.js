@@ -9,7 +9,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { boxCenter, normalizeBox, overlayRectFor, pointInBox } from '../_geometry.js';
+import {
+  boxCenter,
+  maskProbePoint,
+  normalizeBox,
+  overlayRectFor,
+  pointInAnyMask,
+  pointInBox,
+} from '../_geometry.js';
+
+/** A 0..50 square, in the shape settings.json stores masks in. */
+const SQUARE = [
+  { x: 0, y: 0 },
+  { x: 50, y: 0 },
+  { x: 50, y: 50 },
+  { x: 0, y: 50 },
+];
 
 test('both schemas describe the same box identically', () => {
   // tracks.json (recorded) stores corners; the live endpoint reports
@@ -73,6 +88,33 @@ test('overlayRectFor returns null for an unmeasured destination box', () => {
 test('boxCenter is the middle of the box, in the box own space', () => {
   assert.deepEqual(boxCenter(normalizeBox([10, 20, 40, 30])), { x: 30, y: 35 });
   assert.equal(boxCenter(null), null);
+});
+
+test('the mask probe point is the bottom centre — where the feet are', () => {
+  // A mask marks ground the operator does not care about, so what
+  // decides exclusion is where the subject stands, not its centroid.
+  const box = normalizeBox([10, 20, 40, 30]);
+  assert.deepEqual(maskProbePoint(box), { x: 30, y: 50 });
+  assert.equal(maskProbePoint(null), null);
+});
+
+test('a point inside a mask polygon is masked, outside is not', () => {
+  assert.equal(pointInAnyMask(25, 25, 100, 100, [{ points: SQUARE }]), true);
+  assert.equal(pointInAnyMask(75, 75, 100, 100, [{ points: SQUARE }]), false);
+});
+
+test('no masks, empty masks and short polygons all mean "not masked"', () => {
+  assert.equal(pointInAnyMask(25, 25, 100, 100, null), false);
+  assert.equal(pointInAnyMask(25, 25, 100, 100, []), false);
+  assert.equal(pointInAnyMask(25, 25, 100, 100, [{ points: SQUARE.slice(0, 2) }]), false);
+});
+
+test('a mask drawn at a different resolution is scaled, not shifted', () => {
+  // The polygon was outlined against a 200x200 source; the clip is
+  // 100x100. Its 0..50 square therefore covers 0..25 of this frame.
+  const mask = [{ points: SQUARE, source_w: 200, source_h: 200 }];
+  assert.equal(pointInAnyMask(12, 12, 100, 100, mask), true);
+  assert.equal(pointInAnyMask(40, 40, 100, 100, mask), false, 'without the scale this would hit');
 });
 
 test('pointInBox is half-open so neighbours cannot share a pixel', () => {

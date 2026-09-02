@@ -15,6 +15,7 @@
 // written once.
 
 import { containRect } from '../core/video-fit.js';
+import { _pointInPoly, _polyPoints } from '../shape-editor/geometry.js';
 
 /**
  * Fold either bbox schema into {x, y, w, h} in source pixels.
@@ -96,4 +97,43 @@ export function boxCenter(box) {
 export function pointInBox(box, px, py) {
   if (!box) return false;
   return px >= box.x && px < box.x + box.w && py >= box.y && py < box.y + box.h;
+}
+
+/**
+ * Is this source-pixel point inside any exclusion mask?
+ *
+ * The polygon test itself is shape-editor/geometry.js's _pointInPoly —
+ * the same one the mask editor uses to decide what it drew, so what the
+ * operator outlined and what the pipeline excludes cannot diverge.
+ *
+ * A mask may have been drawn against a DIFFERENT source resolution than
+ * the clip being tested (the camera's main stream changed, or the mask
+ * came from the sub stream), so each polygon carries its own source_w /
+ * source_h and the point is scaled into that polygon's space before the
+ * test. Dropping that scale silently shifts every mask on any camera
+ * whose resolution ever changed.
+ */
+export function pointInAnyMask(px, py, srcW, srcH, masks) {
+  if (!masks || !masks.length) return false;
+  for (const m of masks) {
+    const points = _polyPoints(m);
+    if (points.length < 3) continue;
+    const msrcW = (m && typeof m === 'object' && m.source_w) || srcW;
+    const msrcH = (m && typeof m === 'object' && m.source_h) || srcH;
+    const sx = msrcW > 0 && srcW > 0 ? msrcW / srcW : 1;
+    const sy = msrcH > 0 && srcH > 0 ? msrcH / srcH : 1;
+    if (_pointInPoly({ x: px * sx, y: py * sy }, points)) return true;
+  }
+  return false;
+}
+
+/**
+ * The point a mask test uses for a box: the centre of its BOTTOM edge,
+ * not its centroid. A mask marks ground the operator does not care
+ * about — a pavement, a neighbour's drive — and what decides whether a
+ * subject is standing there is where its feet are.
+ */
+export function maskProbePoint(box) {
+  if (!box) return null;
+  return { x: box.x + box.w / 2, y: box.y + box.h };
 }

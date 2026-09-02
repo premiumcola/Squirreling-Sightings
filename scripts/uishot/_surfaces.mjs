@@ -20,6 +20,7 @@ import {
   CLIP_ONLY_ITEM,
   WEATHER_SAMPLES,
   WEATHER_RANGE,
+  WEATHER_HISTORY,
 } from './_fixtures.mjs';
 
 /** Put a fixture on window so the in-page mounts can read it. */
@@ -28,7 +29,16 @@ export async function seedFixtures(page) {
     (fx) => {
       window.__fx = fx;
     },
-    { CAMERA, NETZ_STATE, MEDIA, CLIP_ITEM, CLIP_ONLY_ITEM, WEATHER_SAMPLES, WEATHER_RANGE },
+    {
+      CAMERA,
+      NETZ_STATE,
+      MEDIA,
+      CLIP_ITEM,
+      CLIP_ONLY_ITEM,
+      WEATHER_SAMPLES,
+      WEATHER_RANGE,
+      WEATHER_HISTORY,
+    },
   );
 }
 
@@ -86,6 +96,34 @@ async function mountWeatherSave(page) {
   });
   await page.waitForSelector('#weatherZoomSavePanel:not([hidden])', { timeout: 8000 });
   await page.waitForTimeout(500);
+}
+
+/**
+ * The Wetterdaten panel — range pills, the multi-line chart, the legend.
+ *
+ * Mounted through renderWeatherStats() rather than the chart renderer
+ * alone, because the panel the operator photographed is all three: the
+ * pills decide the window, and the auto-hide of flat fields inside
+ * renderWeatherStats decides how many curves the chart even has.
+ *
+ * The block ships inside the Mediathek's Wetter tab, so its ancestors
+ * carry display:none until that tab is opened. renderStatsChartInto
+ * measures the wrapper and bails on a zero box, so the shot would be an
+ * empty rectangle without this — same reason mountMediathek unhides
+ * #mediaDrilldown.
+ */
+async function mountWeatherChart(page) {
+  await page.evaluate(async () => {
+    const base = '/static/js';
+    for (let el = document.getElementById('weatherStatsBlock'); el; el = el.parentElement) {
+      if (getComputedStyle(el).display === 'none') el.style.display = 'block';
+      el.hidden = false;
+    }
+    const stats = await import(`${base}/weather/stats.js`);
+    await stats.loadWeatherStats();
+  });
+  await page.waitForSelector('#weatherStatsChartWrap svg', { timeout: 8000 });
+  await page.waitForTimeout(400);
 }
 
 /** The dashboard camera tile plus its Erkennungsnetz panel row. */
@@ -191,6 +229,13 @@ export const SURFACES = [
     mount: mountWeatherSave,
     clip: '#weatherZoomSavePanel',
     scope: '#weatherZoomSavePanel',
+  },
+  {
+    id: 'weather-chart',
+    title: 'Wetterdaten panel · range pills + verlauf chart',
+    mount: mountWeatherChart,
+    clip: '#weatherStatsBlock',
+    scope: '#weatherStatsBlock',
   },
   {
     id: 'dashboard-tile',

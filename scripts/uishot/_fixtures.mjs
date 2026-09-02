@@ -333,3 +333,71 @@ export const DETECTION_CLOUD = {
   ),
   coverage: { events: 21, sidecars: 19, samples: 21 },
 };
+
+/**
+ * A full day of history, shaped the way the recorder actually writes it.
+ *
+ * Deliberately NOT a smooth synthetic curve. `_lifecycle.py` polls every
+ * `poll_interval` (300 s) and reads Open-Meteo's `minutely_15` "latest
+ * slot", so every 15-minute measurement is appended to the ring buffer
+ * THREE times — 24 h is 288 samples carrying 96 distinct values. That
+ * triplication is the whole reason the curve reads as a staircase, and a
+ * fixture that interpolated its own smooth series would photograph a
+ * chart the operator never sees.
+ *
+ * Values come from _consts.py's HISTORY_FIELDS; snowfall stays flat at 0
+ * on purpose, because stats.js auto-hides a field that never moved and
+ * the real panel is therefore six lines, not seven.
+ */
+const _WX_SLOTS = 96; // 24 h ÷ 15 min
+function _wxSlot(i) {
+  const h = (i * 15) / 60; // hour of day, 0…24
+  const storm = Math.exp(-((h - 16.5) ** 2) / 2.2); // afternoon cell
+  return {
+    precipitation: +(storm * 11).toFixed(2),
+    snowfall: 0,
+    lightning_potential: Math.round(30 + storm * 1900),
+    visibility: Math.round(24000 - storm * 21500),
+    wind_gusts_10m: +(14 + Math.sin(h / 2.4) * 6 + storm * 34).toFixed(1),
+    cloud_cover: Math.min(100, Math.round(28 + Math.sin(h / 3.1) * 22 + storm * 60)),
+    sun_altitude: +(Math.sin(((h - 6) / 12) * Math.PI) * 52).toFixed(1),
+  };
+}
+export const WEATHER_HISTORY = {
+  hours: 24,
+  samples: Array.from({ length: _WX_SLOTS * 3 }, (_, n) => {
+    const d = new Date(Date.UTC(2026, 7, 29) + n * 5 * 60_000);
+    return { ts: d.toISOString().slice(0, 19), values: _wxSlot(Math.floor(n / 3)) };
+  }),
+  bucket_size: 1,
+  units: {
+    precipitation: 'mm/h',
+    snowfall: 'cm/h',
+    lightning_potential: 'J/kg',
+    visibility: 'm',
+    wind_gusts_10m: 'km/h',
+    cloud_cover: '%',
+    sun_altitude: '°',
+  },
+  thresholds: { precipitation: 6, lightning_potential: 1000, wind_gusts_10m: 60, visibility: 3000 },
+  events_enabled: { precipitation: true, lightning_potential: true, wind_gusts_10m: false },
+  labels_de: {
+    precipitation: 'Niederschlag',
+    snowfall: 'Schneefall',
+    lightning_potential: 'Blitzpotenzial',
+    visibility: 'Sichtweite',
+    wind_gusts_10m: 'Windböen',
+    cloud_cover: 'Bewölkung',
+    sun_altitude: 'Sonnenstand',
+  },
+  fields: [
+    'precipitation',
+    'snowfall',
+    'lightning_potential',
+    'visibility',
+    'wind_gusts_10m',
+    'cloud_cover',
+    'sun_altitude',
+  ],
+  poll_interval_s: 300,
+};

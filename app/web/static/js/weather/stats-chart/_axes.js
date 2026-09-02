@@ -2,7 +2,15 @@
 // Axis + gridline SVG builders. Take laid-out geometry, return strings.
 
 import { WEATHER_STATS_PALETTE } from '../stats.js';
-import { fmtTick, fmtTimeTick, pickTimeStep, anchorTickStart, niceAxisTicks } from './_ticks.js';
+import {
+  fmtTick,
+  fmtTimeTick,
+  pickTimeStep,
+  anchorTickStart,
+  niceAxisTicks,
+  fmtAxisValue,
+} from './_ticks.js';
+import { clampTickLabelX } from './_pad.js';
 
 const GRID_STROKE = 'rgba(255,255,255,.07)';
 const AXIS_TEXT = 'rgba(255,255,255,.55)';
@@ -26,13 +34,18 @@ export function buildXTicks({ samples, pad, cw, ch, vbH, hours }) {
   // a "12:00" that needs ~33 px, i.e. touching. One tick per ~90 px keeps
   // desktop denser and mobile legible from the same rule.
   const target = Math.max(3, Math.min(8, Math.round(cw / 90)));
+  const vbW = pad.l + cw + pad.r;
   let svg = '';
   if (Number.isFinite(tFirst) && Number.isFinite(tLast) && tSpan > 0) {
     const stepMs = pickTimeStep(tSpan, target);
     for (let t = anchorTickStart(tFirst, stepMs); t <= tLast; t += stepMs) {
       const x = pad.l + ((t - tFirst) / tSpan) * cw;
+      const label = fmtTimeTick(t, stepMs);
+      // The tick MARK keeps the true x; only the label is nudged, and
+      // only when it would otherwise cross the viewBox edge.
+      const lx = clampTickLabelX(x, label, 11, vbW);
       svg += `<line x1="${x.toFixed(1)}" y1="${(pad.t + ch).toFixed(1)}" x2="${x.toFixed(1)}" y2="${(pad.t + ch + 5).toFixed(1)}" stroke="rgba(255,255,255,.12)" stroke-width="1"/>`;
-      svg += `<text x="${x.toFixed(1)}" y="${baseY}" text-anchor="middle" font-size="11" fill="${AXIS_TEXT}">${fmtTimeTick(t, stepMs)}</text>`;
+      svg += `<text x="${lx.toFixed(1)}" y="${baseY}" text-anchor="middle" font-size="11" fill="${AXIS_TEXT}">${label}</text>`;
     }
     return svg;
   }
@@ -73,14 +86,13 @@ export function buildXTicks({ samples, pad, cw, ch, vbH, hours }) {
 export function buildValueAxis({ lo, hi, unit, colour, pad, cw, ch }) {
   const { ticks } = niceAxisTicks(lo, hi, 4);
   const span = hi - lo || 1;
-  const fmt = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 1 : 0));
   let svg = '';
   for (const v of ticks) {
     // Skip ticks outside the data range (niceNum can over-shoot).
     if (v < lo - span * 0.05 || v > hi + span * 0.05) continue;
     const y = pad.t + ch - ((v - lo) / span) * ch;
     svg += gridLine(pad, cw, y);
-    svg += `<text x="${pad.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="${colour}" opacity="0.75">${fmt(v)}${unit ? ' ' + unit : ''}</text>`;
+    svg += `<text x="${pad.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="${colour}" opacity="0.75">${fmtAxisValue(v)}${unit ? ' ' + unit : ''}</text>`;
   }
   return svg;
 }

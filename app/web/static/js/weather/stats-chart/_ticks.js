@@ -49,6 +49,15 @@ function niceNum(value, round) {
 // Generate ~`target` evenly-spaced "nice" tick values across [lo, hi].
 // Returns the tick array plus the snapped lo/hi so the caller can use
 // the rounded bounds as the Y-axis baseline.
+// How buildValueAxis prints one tick. Exported because stats-chart/
+// _pad.js has to MEASURE the exact strings the axis is about to draw in
+// order to size the left rail around them — a second formatter there
+// would drift from this one and size the rail for a label that never
+// renders.
+export function fmtAxisValue(v) {
+  return Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 1 : 0);
+}
+
 export function niceAxisTicks(lo, hi, target) {
   if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi - lo < 1e-9) {
     return { ticks: [lo], step: 1, niceLo: lo, niceHi: hi };

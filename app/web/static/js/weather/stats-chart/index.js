@@ -16,9 +16,16 @@ import {
   onWeatherChartRangeSelect,
 } from '../stats.js';
 import { isZoomActive, zoomedSamples } from '../_zoom.js';
-import { _buildThresholdSvg } from '../stats-thresholds.js';
-import { buildLinePath } from './_paths.js';
+import { _buildThresholdSvg, thresholdLabelTexts } from '../stats-thresholds.js';
+import { buildLinePath, fieldValueRange } from './_paths.js';
 import { buildXTicks, buildYAxis } from './_axes.js';
+import {
+  statsChartPad,
+  axisTickLabels,
+  padToAttr,
+  padFromAttr,
+  PAD_FALLBACK,
+} from './_pad.js';
 import { bindChartHover } from './_hover.js';
 import {
   buildAnnotationMarkersSvg,
@@ -27,13 +34,34 @@ import {
   isMarkModeActive,
 } from '../_chart-annotations.js';
 
-const PAD = { l: 42, r: 72, t: 12, b: 26 };
+// Padding is measured per render (stats-chart/_pad.js) rather than
+// frozen: the rails are sized to the labels this particular chart is
+// about to draw, at this particular width.
+//
+// It is therefore no longer a constant a consumer can import. Anyone
+// mapping their own timestamps onto a rendered plot — the storm detail
+// view paints a footage band across it, on pointerenter, long after the
+// render returned — asks the SVG what it used, via statsChartPadOf.
+function _padFor(width, samples, isolated, fields, data) {
+  const range = isolated ? fieldValueRange(samples, isolated) : null;
+  const unit = (data?.units || {})[isolated] || '';
+  return statsChartPad({
+    width,
+    yLabels: range ? axisTickLabels(range.lo, range.hi, unit) : [],
+    edgeLabels: thresholdLabelTexts({ isolated, data, fields }),
+  });
+}
 
-// Exported so a consumer can map its own timestamps onto a rendered
-// chart's plot area (the storm detail view paints a footage band across
-// it). Re-deriving these four numbers at the callsite would be a second
-// copy of the geometry, which is exactly what drifts.
-export const STATS_CHART_PAD = PAD;
+/**
+ * The pad a rendered chart actually used, read back off its <svg>.
+ *
+ * Takes the wrapper or the svg itself. Falls back to PAD_FALLBACK for
+ * anything unrendered or unstamped, so a caller never has to branch.
+ */
+export function statsChartPadOf(el) {
+  const svg = el?.tagName === 'svg' ? el : el?.querySelector?.('svg');
+  return padFromAttr(svg?.getAttribute('data-pad')) || PAD_FALLBACK;
+}
 
 // The viewBox is authored at the wrapper's own CSS-pixel size, so one
 // user unit is one CSS pixel and the scale is exactly 1:1.
@@ -122,14 +150,14 @@ function _markersSvg(markers, samples, pad, cw, ch) {
 // remains competes for attention by how much it actually moved in this
 // window, via wsLineEmphasis — UNLESS exactly one field is on screen,
 // where there is nothing to compete with and it always reads clearly.
-function _buildLinesSvg(samples, fields, isolated, cw, ch) {
+function _buildLinesSvg(samples, fields, isolated, pad, cw, ch) {
   const xValues = samples.map((s) => new Date(s.ts).getTime());
   const xLo = xValues[0];
   const xHi = xValues[xValues.length - 1];
   let linesSvg = '';
   const lineMetas = {};
   for (const key of fields) {
-    const meta = buildLinePath(samples, key, PAD.l, PAD.t, cw, ch, { xValues, xLo, xHi });
+    const meta = buildLinePath(samples, key, pad.l, pad.t, cw, ch, { xValues, xLo, xHi });
     if (!meta) continue;
     lineMetas[key] = meta;
     const colour = WEATHER_STATS_PALETTE[key] || '#94a3b8';
@@ -146,10 +174,10 @@ function _buildLinesSvg(samples, fields, isolated, cw, ch) {
 // (buildXTicks, _hover.js's _context) — computed once here rather than
 // threading it in from the caller, since only this function's SVG-build
 // path (and the live chart's own hover-bind, separately) ever need it.
-function _annotationsGeo(samples, fields, cw, ch) {
+function _annotationsGeo(samples, fields, pad, cw, ch) {
   const tFirst = new Date(samples[0]?.ts).getTime();
   const tLast = new Date(samples[samples.length - 1]?.ts).getTime();
-  return { samples, fields, pad: PAD, cw, ch, tFirst, tSpan: tLast - tFirst };
+  return { samples, fields, pad, cw, ch, tFirst, tSpan: tLast - tFirst };
 }
 
 // Body of the chart: axes + lines + threshold overlay, as one SVG
@@ -166,17 +194,17 @@ function _buildChartSvg({
   annotations,
   annotationsInteractive,
 }) {
-  const { VB_W, VB_H, cw, ch } = geo;
-  const tickSvg = buildXTicks({ samples, pad: PAD, cw, ch, vbH: VB_H, hours });
-  const { linesSvg, lineMetas } = _buildLinesSvg(samples, fields, isolated, cw, ch);
-  const yAxisSvg = buildYAxis({ isolated, lineMetas, data, pad: PAD, cw, ch });
+  const { VB_W, VB_H, pad, cw, ch } = geo;
+  const tickSvg = buildXTicks({ samples, pad, cw, ch, vbH: VB_H, hours });
+  const { linesSvg, lineMetas } = _buildLinesSvg(samples, fields, isolated, pad, cw, ch);
+  const yAxisSvg = buildYAxis({ isolated, lineMetas, data, pad, cw, ch });
   // Threshold overlay — delegated to stats-thresholds.js so this file
   // stays focused on geometry.
   const { thresholdSvg, noThresholdHint } = _buildThresholdSvg({
     isolated,
     data,
     lineMetas,
-    pad: PAD,
+    pad,
     cw,
     ch,
   });
@@ -187,24 +215,24 @@ function _buildChartSvg({
   // annotationsInteractive, regardless of the LIVE chart's own mark
   // mode elsewhere on the page).
   const annotSvg = annotations?.length
-    ? buildAnnotationMarkersSvg(annotations, _annotationsGeo(samples, fields, cw, ch), {
+    ? buildAnnotationMarkersSvg(annotations, _annotationsGeo(samples, fields, pad, cw, ch), {
         interactive: !!annotationsInteractive,
         palette: WEATHER_STATS_PALETTE,
       })
     : '';
   const svg = `
-    <svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none" role="img" aria-label="Wetterverlauf">
+    <svg viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none" role="img" aria-label="Wetterverlauf" data-pad="${padToAttr(pad)}">
       ${yAxisSvg}
       ${tickSvg}
       ${linesSvg}
       ${thresholdSvg}
-      ${markers && markers.length ? _markersSvg(markers, samples, PAD, cw, ch) : ''}
+      ${markers && markers.length ? _markersSvg(markers, samples, pad, cw, ch) : ''}
       ${annotSvg}
-      <line class="ws-chart-guide" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
-      <rect class="ws-chart-brush" x="0" y="${PAD.t}" width="0" height="${ch}" fill="rgba(127,174,201,.22)" style="display:none;pointer-events:none"/>
-      <line class="ws-chart-drag-start" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
-      <line class="ws-chart-drag-end" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
-      <rect class="ws-chart-hover-area" x="${PAD.l}" y="${PAD.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
+      <line class="ws-chart-guide" x1="0" y1="${pad.t}" x2="0" y2="${pad.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
+      <rect class="ws-chart-brush" x="0" y="${pad.t}" width="0" height="${ch}" fill="rgba(127,174,201,.22)" style="display:none;pointer-events:none"/>
+      <line class="ws-chart-drag-start" x1="0" y1="${pad.t}" x2="0" y2="${pad.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
+      <line class="ws-chart-drag-end" x1="0" y1="${pad.t}" x2="0" y2="${pad.t + ch}" stroke="rgba(127,174,201,.9)" stroke-width="1.5" stroke-dasharray="2 2" style="display:none;pointer-events:none"/>
+      <rect class="ws-chart-hover-area" x="${pad.l}" y="${pad.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
     </svg>`;
   return svg + noThresholdHint + '<div class="ws-chart-tooltip" hidden></div>';
 }
@@ -237,18 +265,20 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
   // soon as the panel has a size.
   const size = _sizeOf(wrap);
   if (!size) return;
-  const geo = {
-    VB_W: size.w,
-    VB_H: size.h,
-    cw: size.w - PAD.l - PAD.r,
-    ch: size.h - PAD.t - PAD.b,
-  };
-  if (geo.cw <= 0 || geo.ch <= 0) return;
   const isolated = opts.isolated || null;
   // `opts.fields` lets a caller (the Wetter panel) draw a hand-picked
   // subset; storms/_detail.js never passes it, so it keeps its original
   // "isolated one field, else every field" behaviour unchanged.
   const fields = opts.fields || (isolated ? [isolated] : _WS_FIELD_ORDER);
+  const pad = _padFor(size.w, samples, isolated, fields, data);
+  const geo = {
+    VB_W: size.w,
+    VB_H: size.h,
+    pad,
+    cw: size.w - pad.l - pad.r,
+    ch: size.h - pad.t - pad.b,
+  };
+  if (geo.cw <= 0 || geo.ch <= 0) return;
   const annotationsInteractive = !!opts.hover?.markMode;
   wrap.innerHTML = _buildChartSvg({
     samples,
@@ -264,7 +294,7 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
   // `ch` rides along inside the hover opts (not a new positional
   // parameter) — only markMode's own y-math (stats-chart/_hover.js)
   // ever reads it; every other caller/branch ignores it.
-  bindChartHover(wrap, samples, fields, PAD, geo.cw, geo.VB_W, data, {
+  bindChartHover(wrap, samples, fields, pad, geo.cw, geo.VB_W, data, {
     ...opts.hover,
     ch: geo.ch,
   });

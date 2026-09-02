@@ -16,6 +16,41 @@ import { WEATHER_STATS_PALETTE, _WS_FIELD_ORDER } from './stats.js';
 //    the event's enabled flag — events_enabled[k]==false dims the
 //    tick/label to 0.4 opacity. Out-of-range thresholds clamp to
 //    the top/bottom edge with ▲/▼ glyphs.
+// One threshold label, formatted once. Both the SVG builder below and
+// the padding pass (stats-chart/_pad.js, via thresholdLabelTexts) go
+// through this, so the right rail is measured against the string that
+// actually lands in the SVG.
+function _thrLabel(thr, unit, glyph) {
+  const n =
+    typeof thr === 'number' && !Number.isInteger(thr) && Math.abs(thr) < 100
+      ? thr.toFixed(2)
+      : Math.round(thr);
+  return `${glyph}${n}${unit ? ' ' + unit : ''}`;
+}
+
+/**
+ * Every label this overlay would draw to the right of the plot, for the
+ * padding pass to size that rail against.
+ *
+ * The all-lines branch assumes the clamp glyph is present on every
+ * label. Whether it really is depends on each line's {lo, hi}, which is
+ * not known until the lines are built — and the lines cannot be built
+ * until the pad exists. Assuming the wider string breaks that circle in
+ * the safe direction: a rail ~11 px wider than strictly needed, never a
+ * clipped "▲ 60 km/h".
+ */
+export function thresholdLabelTexts({ isolated, data, fields }) {
+  const thresholds = data?.thresholds || {};
+  const units = data?.units || {};
+  if (isolated) {
+    const thr = thresholds[isolated];
+    return thr == null ? [] : [_thrLabel(thr, units[isolated] || '', '')];
+  }
+  return (fields || _WS_FIELD_ORDER)
+    .filter((k) => thresholds[k] != null)
+    .map((k) => _thrLabel(thresholds[k], units[k] || '', '▲ '));
+}
+
 export function _buildThresholdSvg({ isolated, data, lineMetas, pad, cw, ch }) {
   let thresholdSvg = '';
   let noThresholdHint = '';
@@ -89,11 +124,7 @@ export function _buildThresholdSvg({ isolated, data, lineMetas, pad, cw, ch }) {
       }
       placedYs.push(labelY);
       const u = (data?.units || {})[key] || '';
-      const thrFmt =
-        typeof thr === 'number' && !Number.isInteger(thr) && Math.abs(thr) < 100
-          ? thr.toFixed(2)
-          : Math.round(thr);
-      const labelText = `${glyph}${thrFmt}${u ? ' ' + u : ''}`;
+      const labelText = _thrLabel(thr, u, glyph);
       const aria = `Schwelle ${thr}${u ? ' ' + u : ''}${clampNote}`;
       thresholdSvg += `
         <line x1="${tickX1.toFixed(1)}" y1="${tickY.toFixed(1)}" x2="${tickX2.toFixed(1)}" y2="${tickY.toFixed(1)}"

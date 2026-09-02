@@ -38,16 +38,10 @@
 
 import { buildLinePath } from './_paths.js';
 import { buildValueAxis } from './_axes.js';
+import { statsChartPad, axisTickLabels } from './_pad.js';
 import { buildRelTicks, fmtRelMinute } from './_ticks.js';
 import { bindChartHover } from './_hover.js';
 import { isWorse } from '../metric-direction.js';
-
-// Default padding matches the Wetterstatistik chart. Below 600 px the
-// right lane shrinks: `r: 72` exists to park seven threshold labels on
-// the right edge, and compare draws exactly one neutral threshold — so
-// 44 px is ample and buys 28 px of plot back on a 375 px iPhone.
-const PAD_WIDE = { l: 42, r: 72, t: 12, b: 26 };
-const PAD_NARROW = { l: 40, r: 44, t: 12, b: 26 };
 
 // Synthetic timestamps let bindChartHover's wall-clock lookup serve the
 // relative-minute axis unchanged — the mapping minMin…maxMin →
@@ -314,10 +308,6 @@ export function renderEpisodeChart(wrap, series, opts = {}) {
   }
   const size = _sizeOf(wrap);
   if (!size) return;
-  const pad = size.w < 600 ? PAD_NARROW : PAD_WIDE;
-  const cw = size.w - pad.l - pad.r;
-  const ch = size.h - pad.t - pad.b;
-  if (cw <= 0 || ch <= 0) return;
   // `> 0`, not just finite: a metric with no configured threshold
   // arrives as 0 from a `Number(null)` somewhere upstream, and a
   // "Schwelle" line along the axis floor is worse than no line.
@@ -326,6 +316,18 @@ export function renderEpisodeChart(wrap, series, opts = {}) {
   );
   const dom = _domain(list, thresholds);
   if (!dom) return;
+  // Same measured-rail rule as the Wetterstatistik chart, from the same
+  // helper — this used to carry its own {l:42,r:72} / {l:40,r:44} pair
+  // keyed on a 600 px breakpoint, which was a second copy of a geometry
+  // that had already drifted once.
+  const pad = statsChartPad({
+    width: size.w,
+    yLabels: axisTickLabels(dom.lo, dom.hi, opts.unit || ''),
+    edgeLabels: thresholds.map((t) => t.label),
+  });
+  const cw = size.w - pad.l - pad.r;
+  const ch = size.h - pad.t - pad.b;
+  if (cw <= 0 || ch <= 0) return;
   const fmtValue = opts.fmtValue || ((v) => String(v));
   wrap.innerHTML = `
     <svg viewBox="0 0 ${size.w} ${size.h}" preserveAspectRatio="none" role="img" aria-label="${opts.aria || 'Gewitter-Vergleich'}">

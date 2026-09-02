@@ -17,6 +17,7 @@ import {
   TIMELINE_MONTH,
   TIMELINE_DAY,
   DETECTION_CLOUD,
+  WEATHER_HISTORY,
 } from './_fixtures.mjs';
 
 /** A neutral picture stand-in, so tiles show a frame and not a placeholder. */
@@ -68,6 +69,12 @@ function apiBody(url) {
     return Number(url.searchParams.get('hours')) > 24 ? TIMELINE_MONTH : TIMELINE_DAY;
   }
   if (pathname.startsWith('/api/detection_cloud')) return DETECTION_CLOUD;
+  // The Wetterdaten panel re-fetches this on a 60 s timer AND on its
+  // IntersectionObserver, so seeding _wsStatsState by hand is not enough
+  // — the first refresh would overwrite the fixture with `{}` and the
+  // shot would catch an empty chart. Answering here also means the
+  // surface exercises the real loadWeatherStats path.
+  if (pathname.startsWith('/api/weather/history')) return WEATHER_HISTORY;
   return {};
 }
 

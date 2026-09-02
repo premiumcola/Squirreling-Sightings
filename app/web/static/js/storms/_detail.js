@@ -10,7 +10,7 @@
 // the chart.
 
 import { esc } from '../core/dom.js';
-import { renderStatsChartInto, STATS_CHART_PAD } from '../weather/stats-chart/index.js';
+import { renderStatsChartInto, statsChartPadOf } from '../weather/stats-chart/index.js';
 import { WEATHER_FIELD_LABEL_DE, WEATHER_FIELD_UNIT_DE } from '../weather/stats.js';
 import {
   stormsState,
@@ -181,15 +181,20 @@ function _paintChartBand(ep, startIso, endIso) {
   const vb = svg.viewBox?.baseVal;
   const vbW = vb?.width || wrap.clientWidth;
   const vbH = vb?.height || wrap.clientHeight;
-  const cw = vbW - STATS_CHART_PAD.l - STATS_CHART_PAD.r;
-  const ch = vbH - STATS_CHART_PAD.t - STATS_CHART_PAD.b;
+  // The pad is measured per render now (stats-chart/_pad.js), so ask
+  // THIS svg what it used rather than importing a constant — this runs
+  // on pointerenter, long after the render that produced it, and a
+  // narrow phone's rails are not a desktop's.
+  const pad = statsChartPadOf(svg);
+  const cw = vbW - pad.l - pad.r;
+  const ch = vbH - pad.t - pad.b;
   const clamp = (t) => Math.max(t0, Math.min(t1, t));
-  const x1 = STATS_CHART_PAD.l + ((clamp(a) - t0) / (t1 - t0)) * cw;
-  const x2 = STATS_CHART_PAD.l + ((clamp(b) - t0) / (t1 - t0)) * cw;
+  const x1 = pad.l + ((clamp(a) - t0) / (t1 - t0)) * cw;
+  const x2 = pad.l + ((clamp(b) - t0) / (t1 - t0)) * cw;
   const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   rect.setAttribute('class', 'st-band');
   rect.setAttribute('x', x1.toFixed(1));
-  rect.setAttribute('y', String(STATS_CHART_PAD.t));
+  rect.setAttribute('y', String(pad.t));
   rect.setAttribute('width', Math.max(2, x2 - x1).toFixed(1));
   rect.setAttribute('height', String(ch));
   rect.setAttribute('fill', 'rgba(127,174,201,.18)');

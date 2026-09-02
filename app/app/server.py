@@ -529,10 +529,18 @@ rebuild_runtimes()
 _tracking_cfg_getter = lambda: (
     settings.export_effective_config(base_cfg).get("processing", {}).get("detection", {})
 )
+# The second stage lives in a different block of the same config, and
+# the clip replay needs it to put a NAME on the birds it finds. Read
+# per call for the same reason as the detection block above: a settings
+# reload must swap the model without restarting the worker thread.
+_tracking_bird_cfg_getter = lambda: (
+    settings.export_effective_config(base_cfg).get("processing", {}).get("bird_species", {})
+)
 build_tracking_worker(
     storage_root=storage_root,
     detection_cfg_getter=_tracking_cfg_getter,
     cam_cfg_getter=lambda cam_id: settings.get_camera(cam_id) or {},
+    bird_cfg_getter=_tracking_bird_cfg_getter,
 )
 logging.getLogger("app.app.boot").info("[boot] ── inventory complete ──")
 

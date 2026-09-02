@@ -28,19 +28,32 @@ instead of the flattering one.
 
 ON SPECIES
 ----------
-The replay does NOT classify species — `replay/_run.py` runs detector →
-tracker → clean → payload, and `_diff.py::track_to_detection` collapses
-a track to `{label, score, bbox}`. There is no species in a replay
-result and this module must not pretend otherwise. What it can report
-is `species_nameable`: the replay sees birds in a clip that carries no
-`bird_species` yet, i.e. a clip the EXISTING "Vogelarten nachträglich
-bestimmen" sweep (bird_species_backfill.py) could now put a name on.
-That is a pointer to work, not a claim that a name was won.
+The replay now DOES classify. `replay/_species.py` runs the same
+second-stage classifier the live loop runs, over every sampled frame of
+the clip, and `replay/_report.py::species_diff` compares what it named
+against the names the event already carried. So the two counts below
+are real findings rather than pointers to work:
+
+  * `species_named_events` — clips where the replay produced a species
+    name the event did NOT already have. This is a name won.
+  * `species_names` — which names, and in how many clips each. The
+    operator's actual question ("welche Vögel sind das?") is answered
+    by this list, not by a count.
+
+Two honesty limits are structural and are reported rather than papered
+over. A name is only ever a name the models can produce TODAY: the
+second stage suppresses any species whose Latin binomial has no German
+mapping (detectors/_label_loader.py::_pretty_bird_label — deliberate,
+see commit 639c2d6), so a clip can hold a bird that is correctly
+recognised and still gain no name. And `classified_events` counts the
+clips that actually ran the classifier, so a run made with
+classification switched off reports zero names WITHOUT that reading as
+"no species were found".
 """
 
 from __future__ import annotations
 
-from ._consts import BIRD_LABELS, MAX_DETAIL_ROWS, MAX_MOVERS
+from ._consts import BIRD_LABELS, MAX_DETAIL_ROWS, MAX_MOVERS, MAX_SPECIES_ROWS
 
 
 def count_birds(items) -> int:
@@ -97,6 +110,8 @@ def summarise_event(camera_id: str, event_id: str, event: dict, comparison: dict
     before_birds, basis = _before_birds(comparison)
     after_birds = count_birds((comparison.get("after") or {}).get("detections"))
     species = (event.get("bird_species") or "").strip() or None
+    sp = comparison.get("species") or {}
+    gained = list(sp.get("gained") or [])
     return {
         "camera_id": camera_id,
         "event_id": event_id,
@@ -110,8 +125,16 @@ def summarise_event(camera_id: str, event_id: str, event: dict, comparison: dict
         "disappeared": int(counts.get("disappeared") or 0),
         "alert_changed": bool(comparison.get("alert_changed")),
         "species_before": species,
-        # "the replay sees a bird here and the event has no name for it"
-        "species_nameable": bool(after_birds and not species),
+        # Did the second stage actually run for this clip? Separates
+        # "no name found" from "no attempt made".
+        "classified": bool(comparison.get("classified")),
+        # Names the replay produced, and the subset the event lacked.
+        "species_after": list(sp.get("after") or []),
+        "species_gained": gained,
+        "species_named": bool(gained),
+        # The replay reached a name the event already carried — a
+        # confirmation, not a new finding, and counted apart from one.
+        "species_confirmed": list(sp.get("kept") or []),
         "top_move": _biggest_move(det_diff),
     }
 
@@ -136,6 +159,23 @@ def movers_from(camera_id: str, event_id: str, comparison: dict) -> list[dict]:
     return out
 
 
+def species_ranking(rows: list[dict]) -> list[dict]:
+    """Which species were newly named, and in how many clips each.
+
+    Ranked by clip count, then alphabetically so a tie is stable
+    between runs. This is the list that answers the operator's
+    question in words rather than in counters — "3 × Amsel, 1 ×
+    Blaumeise" is what "würden wir diese Vögel jetzt genauer erkennen?"
+    was actually asking for.
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        for name in row.get("species_gained") or []:
+            counts[name] = counts.get(name, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{"species": name, "events": n} for name, n in ranked[:MAX_SPECIES_ROWS]]
+
+
 def fold(rows: list[dict], movers: list[dict], *, errors: int = 0) -> dict:
     """The aggregate the dashboard shows. Pure.
 
@@ -157,7 +197,15 @@ def fold(rows: list[dict], movers: list[dict], *, errors: int = 0) -> dict:
         "birds_lost_events": sum(1 for r in rows if r["birds_lost"] > 0),
         "lost_events": sum(1 for r in rows if r["disappeared"] > 0),
         "alert_changed_events": sum(1 for r in rows if r["alert_changed"]),
-        "species_nameable_events": sum(1 for r in rows if r["species_nameable"]),
+        # Clips that gained a name they did not have. The headline the
+        # placeholder `species_nameable_events` could only gesture at.
+        "species_named_events": sum(1 for r in rows if r["species_named"]),
+        "species_confirmed_events": sum(1 for r in rows if r["species_confirmed"]),
+        # Denominator for both: a clip whose classifier never ran can
+        # neither gain nor confirm a name, and must not be read as a
+        # clip where the species search came up empty.
+        "classified_events": sum(1 for r in rows if r["classified"]),
+        "species_names": species_ranking(rows),
         "tracks_comparable_events": sum(1 for r in rows if r["basis"] == "tracks"),
         "movers": ranked,
         "detail": rows[:MAX_DETAIL_ROWS],

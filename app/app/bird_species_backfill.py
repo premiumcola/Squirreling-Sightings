@@ -104,9 +104,16 @@ def _needs_backfill(event: dict) -> bool:
     return any(d.get("label") == "bird" and not d.get("species") for d in dets)
 
 
-def _crop_bbox(frame: np.ndarray, bbox: dict) -> np.ndarray | None:
+def crop_bbox(frame: np.ndarray, bbox: dict) -> np.ndarray | None:
     """Crop `bbox` (an event JSON detection's x1/y1/x2/y2 dict) out of
     `frame`.
+
+    Public because two archive-facing paths crop the same way: this
+    module's backfill sweep and `replay/_species.py`, which classifies
+    bird boxes while walking a stored clip. The live loop deliberately
+    does NOT come through here — it slices the working frame it already
+    holds (camera_runtime/_motion.py::_crop) and has no resolution
+    mismatch to guard against.
 
     Detection bboxes are stamped in the ORIGINAL capture-resolution
     pixel space — detectors/_types.py::Detection.to_dict emits the raw
@@ -158,7 +165,7 @@ def load_frame_for_event(storage_root: Path, event: dict) -> np.ndarray | None:
     """Best available frame for re-cropping: the recorded video's first
     frame when there is one (native resolution, matches bbox space
     exactly), else the archived snapshot JPEG (may be downscaled —
-    `_crop_bbox` refuses a bbox that no longer fits)."""
+    `crop_bbox` refuses a bbox that no longer fits)."""
     video_rel = event.get("video_relpath")
     if video_rel:
         vid_path = Path(storage_root) / video_rel
@@ -220,7 +227,7 @@ def backfill_event_species(
 
     stamped_any = False
     for d in bird_dets:
-        crop = _crop_bbox(frame, d.get("bbox") or {})
+        crop = crop_bbox(frame, d.get("bbox") or {})
         if crop is None:
             log.warning(
                 "[det] bird backfill: bbox unusable for event=%s (empty crop or "

@@ -261,7 +261,7 @@ def test_backfill_degrades_when_the_classifier_raises():
 def test_backfill_refuses_a_bbox_that_overshoots_the_loaded_frame():
     """The snapshot-downscale mismatch guard: a bbox in native-resolution
     space against a smaller loaded frame must not silently crop the
-    wrong patch — see _crop_bbox's docstring."""
+    wrong patch — see crop_bbox's docstring."""
     event = _bird_event(bbox={"x1": 0, "y1": 0, "x2": 5000, "y2": 5000})
     clf = _FakeClassifier()
     changed = backfill_event_species(event, clf, lambda ev: _frame())

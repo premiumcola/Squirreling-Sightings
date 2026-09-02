@@ -76,6 +76,33 @@ def precision_for(cam_cfg_getter, camera_id: str) -> str:
     return "standard"
 
 
+def _read_at(cap, frame_idx: int):
+    """Seek to ``frame_idx`` and read that frame. ``(ok, frame)``.
+
+    Also the only place in the sampling loop that needs cv2, which is
+    why the import sits here rather than at the top of the walk.
+    """
+    import cv2
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    return cap.read()
+
+
+def _close_open_tracks(state, frame_w: int, frame_h: int) -> None:
+    """End-of-clip flush: move tracks still active into ``closed``.
+
+    The whole post-pass — stitch → static-FP → ghost prune → serialise
+    — reads one list, so a track that was still alive when the footage
+    ran out has to be moved rather than dropped. ``close()`` also
+    populates the per-track end_reason + last_* fields the lightbox's
+    × tooltip renders.
+    """
+    for tr in state.active:
+        tr.close("ended_at_clip", frame_w, frame_h)
+    state.closed.extend(state.active)
+    state.active = []
+
+
 def sample_clip(
     cap,
     meta: dict,
@@ -87,6 +114,7 @@ def sample_clip(
     iou_threshold,
     block_contain=SPAWN_BLOCK_CONTAIN,
     max_samples: int | None = None,
+    sample_hook=None,
 ):
     """Walk the clip at ``meta["sample_interval"]`` and return the
     populated :class:`TrackerState`.
@@ -104,9 +132,18 @@ def sample_clip(
     background thread where a long clip only costs time. The replay
     endpoint runs synchronously on a request thread and passes a cap,
     then reports how many of the available samples it got through.
-    """
-    import cv2
 
+    ``sample_hook(frame, dets)``, when given, is called once per
+    successfully decoded sample with the frame's pixels and the
+    detections just filtered out of it, BEFORE they are associated into
+    tracks. It exists for the second stage a bare detector pass cannot
+    do: the replay hands in a hook that classifies bird crops
+    (replay/_species.py), which needs the pixels while they are still
+    in hand. The hook may mutate the detections — that is how a species
+    lands on one — but must not add or remove entries, since the list
+    it is handed is the one association is about to consume. None, the
+    default, leaves the queued sidecar jobs walking exactly as before.
+    """
     state = TrackerState()
     sample_interval = meta["sample_interval"]
     frame_count = meta["frame_count"]
@@ -120,13 +157,14 @@ def sample_clip(
         if max_samples is not None and attempts >= max_samples:
             break
         attempts += 1
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ok, frame = cap.read()
+        ok, frame = _read_at(cap, frame_idx)
         if not ok or frame is None:
             frame_idx += sample_interval
             continue
         t_s = frame_idx / fps
         dets = detect_and_filter(detector, frame, allowed, floor_score=floor_score)
+        if sample_hook is not None:
+            sample_hook(frame, dets)
         associate_detections(
             state,
             dets,
@@ -140,12 +178,5 @@ def sample_clip(
         )
         frame_idx += sample_interval
 
-    # Flush any tracks still active at end-of-clip into closed so the
-    # payload's serialisation comprehension picks them up. close()
-    # populates the per-track end_reason + last_* fields so the
-    # lightbox × tooltip has something to render.
-    for tr in state.active:
-        tr.close("ended_at_clip", frame_w, frame_h)
-    state.closed.extend(state.active)
-    state.active = []
+    _close_open_tracks(state, frame_w, frame_h)
     return state

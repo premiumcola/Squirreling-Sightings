@@ -16,8 +16,55 @@ import numpy as np
 from ._edgetpu import make_delegate_interpreter
 from ._label_loader import _load_bird_latin_to_de, _pretty_bird_label, load_label_map
 from ._timing import InferenceTimingMixin
+from ._types import STAGE_BIRD
 
 log = logging.getLogger(__name__)
+
+#: The detector label that earns a second-stage species pass. COCO has
+#: exactly one bird class, so both callers of `stamp_species` test
+#: against this rather than spelling the literal twice.
+BIRD_LABEL = "bird"
+
+
+def stamp_species(classifier, crop, det):
+    """Classify one bird crop and stamp the result onto ``det``.
+
+    THE one place a second-stage result becomes a detection's species.
+    Both callers go through here — the live loop
+    (``camera_runtime/_main_loop.py``) and the clip replay
+    (``replay/_species.py``) — so "what a classified bird looks like
+    afterwards" is defined once instead of drifting between the path
+    that runs at capture time and the path that runs over the archive.
+
+    Each caller keeps its OWN crop step and passes the pixels in. That
+    split is deliberate rather than an oversight: the live loop slices
+    the working frame it is already holding, while the archive-facing
+    paths go through ``bird_species_backfill.crop_bbox``, which refuses
+    a box that overshoots the frame handed to it (a downscaled snapshot
+    against native-resolution coordinates). Sharing the stamping
+    without sharing the cropping keeps the live pixel path bit-for-bit
+    what it has always been.
+
+    Returns the ``(display, latin, score)`` triple on a hit and None
+    otherwise. None covers three different silences that the caller
+    cannot tell apart and does not need to: an unavailable model, a
+    crop that scored below ``min_score``, and a species whose Latin
+    binomial carries no German name — the deliberate suppression
+    documented in ``_label_loader._pretty_bird_label`` and introduced
+    with evidence in commit 639c2d6. The replay uses the return value
+    to tally species across a whole clip; the live loop ignores it and
+    reads the detection it just mutated.
+    """
+    if classifier is None or not getattr(classifier, "available", False):
+        return None
+    species, species_latin, species_score = classifier.classify_crop(crop)
+    if not species:
+        return None
+    det.species = species
+    det.species_latin = species_latin
+    det.species_score = float(species_score) if species_score is not None else None
+    det.model = STAGE_BIRD
+    return species, species_latin, det.species_score
 
 
 class BirdSpeciesClassifier(InferenceTimingMixin):

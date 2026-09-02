@@ -404,10 +404,11 @@
   reports the aggregate. Its own panel rather than a button in Mediathek-Verwaltung above: those two
   are index-repair actions that finish in seconds, while this one is minutes-to-hours of inference
   and owns a progress line, a cancel button and a persisted report. The run itself is POST/GET
-  /api/replay/batch (app/app/replay_batch/); it borrows the tracking worker's CPU-pinned detector,
-  so it never competes with the live cameras for the Edge TPU. #} {% call maintenance_panel(
-  panel_id='set-replay-batch', accent='166,180,140', title='Vogel-Nachanalyse', hint='Prüft
-  archivierte Vogel-Clips noch einmal mit der heutigen Erkennung.' ) %}
+  /api/replay/batch (app/app/replay_batch/); it borrows the tracking worker's CPU-pinned detector
+  AND its CPU-pinned bird classifier, so neither the detection nor the species pass competes with
+  the live cameras for the Edge TPU. #} {% call maintenance_panel( panel_id='set-replay-batch',
+  accent='166,180,140', title='Vogel-Nachanalyse', hint='Prüft archivierte Vogel-Clips noch einmal
+  mit der heutigen Erkennung — und bestimmt dabei die Art.' ) %}
   <button type="button" id="replayBatchBtn" class="btn btn-action action-green rb-btn">
     <svg
       viewBox="0 0 16 16"

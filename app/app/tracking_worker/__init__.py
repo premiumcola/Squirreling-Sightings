@@ -54,6 +54,7 @@ from pathlib import Path
 
 from ..tracker_core import resolve_track_thresholds
 from ._achievement import update_event_achievement
+from ._classifier import build_cpu_classifier, classifier_signature
 from ._clean import clean_tracks
 from ._consts import RECENT_FAILURES_CAP, SLOW_JOB_RATIO, TRACKS_SCHEMA
 from ._detect import resolve_object_filter
@@ -84,6 +85,7 @@ class TrackingWorker(threading.Thread):
         storage_root: Path,
         detection_cfg_getter: Callable[[], dict] | None = None,
         cam_cfg_getter: Callable[[str], dict] | None = None,
+        bird_cfg_getter: Callable[[], dict] | None = None,
     ):
         super().__init__(name="tracking-worker", daemon=True)
         self._q: queue.Queue[TrackingJob | None] = queue.Queue()
@@ -94,8 +96,16 @@ class TrackingWorker(threading.Thread):
         # Used to pull each job's object_filter so the worker mirrors the
         # camera_runtime/_main_loop label filter exactly.
         self._cam_cfg_getter = cam_cfg_getter or (lambda _cam_id: {})
+        # Second-stage bird classifier config (processing.bird_species).
+        # Separate from _cfg_getter, which server.py points at
+        # processing.detection only — the two live in different blocks
+        # of the effective config and move independently.
+        self._bird_cfg_getter = bird_cfg_getter or (lambda: {})
         self._detector = None  # built lazily on first job
         self._detector_cfg_id = None  # signature of cfg dict — rebuild on swap
+        self._bird_classifier = None  # built lazily on first classified replay
+        self._bird_cfg_id = None
+        self._bird_lock = threading.Lock()
         # Construction guard. Since the clip-replay endpoint borrows this
         # detector from a request thread, two threads can reach
         # _ensure_detector at once; without the lock both would load the
@@ -253,6 +263,38 @@ class TrackingWorker(threading.Thread):
         """
         return self._ensure_detector()
 
+    def bird_classifier(self):
+        """The worker's CPU-pinned bird-species classifier, built on
+        first use. None when the operator has bird classification off.
+
+        The counterpart to `detector()` above, public for the same
+        caller: the clip replay classifies bird crops while it walks a
+        stored clip (replay/_species.py) and must not build a
+        classifier of its own. Borrowing this one keeps the second
+        stage off the Edge TPU no matter what
+        `processing.bird_species.prefer_cpu` says for LIVE detection —
+        see _classifier.py for why that forcing is not redundant with
+        the class's own default.
+
+        Cached on the same content-signature rule as the detector, so a
+        batch walking hundreds of clips loads the model once rather
+        than once per clip.
+        """
+        cfg = self._bird_cfg()
+        sig = classifier_signature(cfg)
+        with self._bird_lock:
+            if self._bird_classifier is None or sig != self._bird_cfg_id:
+                self._bird_classifier = build_cpu_classifier(cfg)
+                self._bird_cfg_id = sig
+            return self._bird_classifier
+
+    def _bird_cfg(self) -> dict:
+        """The effective `processing.bird_species` block, or ``{}``."""
+        try:
+            return self._bird_cfg_getter() or {}
+        except Exception:
+            return {}
+
     @staticmethod
     def _detector_signature(cfg: dict) -> tuple:
         """Tuple of the cfg fields that materially affect detection
@@ -403,6 +445,7 @@ def build_worker(
     storage_root: Path,
     detection_cfg_getter: Callable[[], dict] | None = None,
     cam_cfg_getter: Callable[[str], dict] | None = None,
+    bird_cfg_getter: Callable[[], dict] | None = None,
 ) -> TrackingWorker:
     """Construct and start the singleton. Idempotent — second call
     returns the existing instance even if different getters are provided
@@ -415,6 +458,7 @@ def build_worker(
             storage_root=storage_root,
             detection_cfg_getter=detection_cfg_getter,
             cam_cfg_getter=cam_cfg_getter,
+            bird_cfg_getter=bird_cfg_getter,
         )
         _worker.start()
         return _worker

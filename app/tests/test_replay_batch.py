@@ -3,10 +3,14 @@
 Everything here is the pure half — no Flask, no detector, no video. The
 endpoint itself is covered by test_replay_batch_route.py.
 
-The guarantee this file exists to hold: the aggregate never claims a
-species was won. A replay does not classify species (replay/_run.py runs
-detector → tracker → clean → payload), so `species_nameable` must only
-ever mean "this clip has birds and no name yet".
+The guarantee this file exists to hold: every species number the
+aggregate publishes is one the replay actually earned. The replay now
+DOES classify (replay/_species.py runs the live loop's own second stage
+over every sampled frame), so `species_named_events` means "the replay
+put a name on this clip that the event did not have" — and a clip whose
+classifier never ran must never be counted as one where the search came
+up empty. That last distinction is what `classified_events` exists for
+and what the tests below pin.
 """
 
 from __future__ import annotations
@@ -53,10 +57,27 @@ def _track_diff(before_tracks, *, gone=()):
     }
 
 
+def _species_block(gained=(), kept=(), before=()):
+    """The species block `build_comparison` publishes, in miniature."""
+    return {
+        "before": list(before),
+        "after": list(gained) + list(kept),
+        "gained": list(gained),
+        "kept": list(kept),
+        "detail": [{"species": n, "species_latin": None, "best_score": 0.9, "frames": 1}
+                   for n in list(gained) + list(kept)],
+    }
+
+
 def _comparison(*, before_dets=(), after_dets=(), before_tracks=None, changed=True, **kw):
     diff = kw.pop("diff", None) or {"counts": {}}
     gone = kw.pop("gone", ())
+    gained = kw.pop("species_gained", ())
+    kept = kw.pop("species_kept", ())
+    classified = kw.pop("classified", True)
     return {
+        "species": _species_block(gained, kept),
+        "classified": classified,
         "before": {
             "detections": list(before_dets),
             "detection_count": len(before_dets),
@@ -216,20 +237,36 @@ class TestSummariseEvent:
         assert row["birds_before"] == 1
         assert row["birds_lost"] == 1
 
-    def test_a_named_event_is_not_flagged_nameable(self):
-        comp = _comparison(after_dets=[_bird()])
+    def test_a_gained_name_is_reported_with_the_name_itself(self):
+        """The whole point of classifying during replay: not "a name is
+        now possible" but which name was actually produced."""
+        comp = _comparison(after_dets=[_bird()], species_gained=["Amsel"])
+        row = summarise_event(CAM, "e", _event("e"), comp)
+        assert row["species_named"] is True
+        assert row["species_gained"] == ["Amsel"]
+
+    def test_a_name_the_event_already_had_is_a_confirmation_not_a_gain(self):
+        """Re-reaching a stored name is evidence the stored name was
+        right. Counting it as a gain would inflate the headline with
+        clips where nothing was learned."""
+        comp = _comparison(after_dets=[_bird()], species_kept=["Blaumeise"])
         ev = _event("e", bird_species="Blaumeise")
         row = summarise_event(CAM, "e", ev, comp)
         assert row["species_before"] == "Blaumeise"
-        assert row["species_nameable"] is False
+        assert row["species_named"] is False
+        assert row["species_confirmed"] == ["Blaumeise"]
 
-    def test_an_unnamed_clip_with_birds_is_flagged_nameable(self):
-        row = summarise_event(CAM, "e", _event("e"), _comparison(after_dets=[_bird()]))
-        assert row["species_nameable"] is True
-
-    def test_no_birds_found_is_never_nameable(self):
-        row = summarise_event(CAM, "e", _event("e"), _comparison(after_dets=[]))
-        assert row["species_nameable"] is False
+    def test_finding_no_species_is_not_the_same_as_not_looking(self):
+        """A detector-only run reports zero names; so does a classified
+        run that found none. `classified` is the only field that tells
+        them apart, and the report leans on it."""
+        looked = summarise_event(CAM, "e", _event("e"), _comparison(after_dets=[_bird()]))
+        did_not = summarise_event(
+            CAM, "e", _event("e"), _comparison(after_dets=[_bird()], classified=False)
+        )
+        assert looked["species_gained"] == [] and did_not["species_gained"] == []
+        assert looked["classified"] is True
+        assert did_not["classified"] is False
 
     def test_the_biggest_score_move_is_reported(self):
         diff = {
@@ -300,8 +337,35 @@ class TestFold:
         assert agg["birds_gained_events"] == 2
         assert agg["birds_gained_strict"] == 1
 
-    def test_nameable_clips_are_counted(self):
-        assert fold(self._rows(), [])["species_nameable_events"] == 2
+    def test_named_clips_are_counted_and_the_names_ranked(self):
+        """The aggregate answers "which species" in words, not just
+        "how many clips". Amsel appears in two clips, Blaumeise in one,
+        so the ranking leads with Amsel."""
+        rows = [
+            summarise_event(CAM, "a", _event("a"), _comparison(species_gained=["Amsel"])),
+            summarise_event(
+                CAM, "b", _event("b"), _comparison(species_gained=["Amsel", "Blaumeise"])
+            ),
+            summarise_event(CAM, "c", _event("c"), _comparison(changed=False)),
+        ]
+        agg = fold(rows, [])
+        assert agg["species_named_events"] == 2
+        assert agg["species_names"] == [
+            {"species": "Amsel", "events": 2},
+            {"species": "Blaumeise", "events": 1},
+        ]
+
+    def test_clips_that_never_ran_the_classifier_are_counted_apart(self):
+        """`classified_events` is the denominator for every species
+        number — without it, a run made with classification off reads
+        as a run that found nothing."""
+        rows = [
+            summarise_event(CAM, "a", _event("a"), _comparison(species_gained=["Amsel"])),
+            summarise_event(CAM, "b", _event("b"), _comparison(classified=False)),
+        ]
+        agg = fold(rows, [])
+        assert agg["classified_events"] == 1
+        assert agg["species_named_events"] == 1
 
     def test_movers_are_ranked_by_absolute_delta(self):
         movers = [

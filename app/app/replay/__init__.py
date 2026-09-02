@@ -18,10 +18,10 @@ Public re-exports only.
 from __future__ import annotations
 
 from ._alarm import alert_preview
-from ._consts import REPLAY_HISTORY_CAP, REPLAY_MAX_SAMPLES, REPLAY_SCHEMA
+from ._consts import REPLAY_HISTORY_CAP, REPLAY_MAX_CROPS, REPLAY_MAX_SAMPLES, REPLAY_SCHEMA
 from ._diff import bbox_tuple, diff_detections, iou, normalise_detection, track_to_detection
 from ._persist import append_replay, build_entry
-from ._report import build_comparison, original_side
+from ._report import build_comparison, event_species, original_side, species_diff
 from ._revisions import (
     REVISION_CURRENT,
     REVISION_FACTORY,
@@ -31,21 +31,26 @@ from ._revisions import (
 )
 from ._run import replay_clip
 from ._settings import project_settings, resolve_replay_settings, settings_hash
+from ._species import SpeciesTally, make_sample_hook
 
 __all__ = [
     "REPLAY_HISTORY_CAP",
+    "REPLAY_MAX_CROPS",
     "REPLAY_MAX_SAMPLES",
     "REPLAY_SCHEMA",
     "REVISION_CURRENT",
     "REVISION_FACTORY",
+    "SpeciesTally",
     "alert_preview",
     "append_replay",
     "bbox_tuple",
     "build_comparison",
     "build_entry",
     "diff_detections",
+    "event_species",
     "iou",
     "list_revisions",
+    "make_sample_hook",
     "normalise_detection",
     "original_side",
     "project_settings",
@@ -54,5 +59,6 @@ __all__ = [
     "revision_overrides",
     "settings_hash",
     "simulation_cfg",
+    "species_diff",
     "track_to_detection",
 ]

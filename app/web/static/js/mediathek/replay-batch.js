@@ -18,6 +18,12 @@
 // recording start, where finding more is expected. Both are shown, the
 // strict one first, because a batch that flatters itself is worse than
 // no batch.
+//
+// On the species block: the run now classifies as well as detects, so
+// this reports names actually won rather than clips where a name might
+// be possible. "Mit Artbestimmung" is shown beside the win count on
+// purpose — it is the denominator, and without it a run made with
+// classification off would read as a run that found nothing.
 import { byId, esc } from '../core/dom.js';
 import { apiGet, apiPost } from '../core/api.js';
 import { showToast } from '../core/toast.js';
@@ -76,14 +82,32 @@ function _headline(report) {
     </section>`;
 }
 
+function _speciesRow(s) {
+  const n = Number(s.events) || 0;
+  return `<li>
+      <code>${esc(s.species)}</code>
+      <span class="mi-detail">${n} Clip${n === 1 ? '' : 's'}</span>
+    </li>`;
+}
+
 function _species(report) {
-  const n = Number(report.species_nameable_events) || 0;
+  const named = Number(report.species_named_events) || 0;
+  const confirmed = Number(report.species_confirmed_events) || 0;
+  const looked = Number(report.classified_events) || 0;
+  const names = report.species_names || [];
+  const list = names.length ? `<ul class="mi-entries">${names.map(_speciesRow).join('')}</ul>` : '';
   return `<section class="mi-cam">
-      <h4 class="mi-cam-name">Noch ohne Artnamen</h4>
-      <p class="mi-hint">Die Nachanalyse bestimmt selbst KEINE Arten — sie erkennt nur Vögel.
-        Diese Clips zeigen Vögel, tragen aber keinen Artnamen; „Vogelarten nachträglich
-        bestimmen“ kann ihnen jetzt einen geben.</p>
-      <div class="mi-counters">${_chip('Clips', n, n ? 'warn' : 'ok')}</div>
+      <h4 class="mi-cam-name">Neu bestimmte Arten</h4>
+      <p class="mi-hint">Die Nachanalyse bestimmt die Art jetzt selbst — dasselbe Modell wie live,
+        aber über den ganzen Clip statt über das eine Bild vom Aufnahmestart. Gezählt werden Clips,
+        die dadurch einen Artnamen bekommen, den sie vorher nicht hatten. Arten ohne deutschen
+        Namen in der Artenliste bleiben bewusst „Vogel“.</p>
+      <div class="mi-counters">
+        ${_chip('Neu benannt', named, named ? 'ok' : null)}
+        ${_chip('Bestätigt', confirmed)}
+        ${_chip('Mit Artbestimmung geprüft', looked)}
+      </div>
+      ${list}
     </section>`;
 }
 

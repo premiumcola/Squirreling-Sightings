@@ -38,13 +38,14 @@ from ._wildlife_rules import (
 
 # R02.3 finished the carve-out — every detector class now lives in
 # its own module and `_legacy_classes.py` is gone.
-from .bird_species import BirdSpeciesClassifier
+from .bird_species import BIRD_LABEL, BirdSpeciesClassifier, stamp_species
 from .coral_object import CoralObjectDetector
 from .discovery import discover_wildlife_paths
 from .draw import draw_detections
 from .wildlife import WildlifeClassifier
 
 __all__ = [
+    "BIRD_LABEL",
     "BirdSpeciesClassifier",
     "CoralObjectDetector",
     "Detection",
@@ -66,4 +67,5 @@ __all__ = [
     "discover_wildlife_paths",
     "draw_detections",
     "load_label_map",
+    "stamp_species",
 ]

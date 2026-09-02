@@ -141,11 +141,18 @@ def api_event_replay(event_id):
     """Replay the clip and return the comparison.
 
     Body: ``{"settings": "stored" | "current" | "factory" |
-    {"tuning": {...}} | {"revision": <archive id>}}``. Defaults to
-    ``"stored"`` — the case the feature exists for.
+    {"tuning": {...}} | {"revision": <archive id>}, "classify": bool}``.
+    ``settings`` defaults to ``"stored"`` — the case the feature exists
+    for.
+
+    ``classify`` defaults to True: the replay names the bird species it
+    finds. Pass False for a cheap detector-only run — a threshold sweep
+    over one clip, where every pass would reach the same species and
+    the second stage is pure cost.
     """
     body = request.get_json(silent=True) or {}
     spec = body.get("settings", "stored")
+    classify = bool(body.get("classify", True))
     if not isinstance(spec, dict) and spec not in ("stored", "current", "factory"):
         return jsonify(
             {"ok": False, "error": "settings muss stored, current, factory oder ein Objekt sein"}
@@ -175,6 +182,7 @@ def api_event_replay(event_id):
             video_path=vid,
             storage_root=app_state.storage_root,
             cfg=settings["cfg"],
+            classify=classify,
         )
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 422

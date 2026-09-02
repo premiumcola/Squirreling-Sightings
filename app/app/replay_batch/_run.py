@@ -14,9 +14,13 @@ video file — which is the only way the batch path could be covered by
 this repo's stub-based suite.
 
 Live detection is never starved: `replay_clip` borrows
-`TrackingWorker.detector()`, the CPU-pinned instance, so the Edge TPU the
-camera runtimes own is never contended for. The batch adds no new
-concurrency on top of that — it is one thread walking clips in sequence.
+`TrackingWorker.detector()` and `TrackingWorker.bird_classifier()`, both
+CPU-pinned instances, so the Edge TPU the camera runtimes own is never
+contended for — not by the detector and not by the species classifier,
+which is pinned independently of what `prefer_cpu` says for live
+detection. The batch adds no new concurrency on top of that: it is one
+thread walking clips in sequence, and both models are built once for
+the whole run rather than once per clip.
 """
 
 from __future__ import annotations
@@ -118,11 +122,14 @@ def run_batch(ctx: dict, scope: dict) -> dict:
     }
     save_report(ctx["storage_root"], report)
     log.info(
-        "[tracking] batch replay done: examined=%d/%d changed=%d more-birds=%d errors=%d%s",
+        "[tracking] batch replay done: examined=%d/%d changed=%d more-birds=%d "
+        "named=%d/%d errors=%d%s",
         report["examined"],
         total,
         report["changed"],
         report["birds_gained_strict"],
+        report["species_named_events"],
+        report["classified_events"],
         errors,
         " (abgebrochen)" if cancelled else "",
     )

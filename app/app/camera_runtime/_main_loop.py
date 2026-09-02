@@ -23,7 +23,7 @@ import requests
 from ..detect_setup import apply_bottom_crop, apply_object_filter, make_spawn_for
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
-    STAGE_BIRD,
+    BIRD_LABEL,
     STAGE_CAT_REID,
     STAGE_PERSON_REID,
     BirdSpeciesClassifier,
@@ -31,6 +31,7 @@ from ..detectors import (
     Detection,
     WildlifeClassifier,
     draw_detections,
+    stamp_species,
 )
 from ..event_logic import (
     choose_alarm_level,
@@ -343,18 +344,14 @@ class MainLoopMixin:
                 labels = effective_motion + [d.label for d in detections]
                 if self.bird_classifier.available:
                     for d in detections:
-                        if d.label == "bird":
-                            crop = self._crop(proc_frame, d.bbox)
-                            species, species_latin, species_score = (
-                                self.bird_classifier.classify_crop(crop)
+                        if d.label == BIRD_LABEL:
+                            # Crop here, stamp in detectors.stamp_species —
+                            # the clip replay runs the same second stage over
+                            # archived footage and must produce a detection
+                            # shaped identically to this one.
+                            stamp_species(
+                                self.bird_classifier, self._crop(proc_frame, d.bbox), d
                             )
-                            if species:
-                                d.species = species
-                                d.species_latin = species_latin
-                                d.species_score = (
-                                    float(species_score) if species_score is not None else None
-                                )
-                                d.model = STAGE_BIRD
                 # Wildlife second-stage (fox / squirrel / hedgehog — none of
                 # which exist as a COCO class). Lives in _wildlife_stage.py;
                 # it classifies a CROP around the motion box rather than the

@@ -43,6 +43,16 @@ def build_entry(*, settings: dict, replay: dict, comparison: dict) -> dict:
         "truncated": replay.get("truncated"),
         "duration_ms": replay.get("duration_ms"),
         "detector": replay.get("detector"),
+        # The second stage, stored beside the detector for the same
+        # reason: a species list read a month later is only meaningful
+        # next to what produced it and on which device.
+        "classifier": replay.get("classifier"),
+        "classified": replay.get("classified"),
+        "frames_classified": replay.get("frames_classified"),
+        "crops_classified": replay.get("crops_classified"),
+        "classify_truncated": replay.get("classify_truncated"),
+        "species": replay.get("species") or [],
+        "species_gained": comparison.get("species", {}).get("gained") or [],
         "gates": replay.get("gates"),
         "detections": replay.get("detections") or [],
         "tracks": replay.get("tracks") or [],

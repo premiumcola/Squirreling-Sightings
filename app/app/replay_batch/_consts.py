@@ -13,7 +13,7 @@ from __future__ import annotations
 #: such rather than silently mis-read — mirrors replay/_consts.py::
 #: REPLAY_SCHEMA, which exists for the same reason on the per-event
 #: `replays` entries.
-BATCH_SCHEMA = 1
+BATCH_SCHEMA = 2
 
 #: Filename under the storage root. One slot, overwritten by each run:
 #: the operator's question is "what does today's detection make of the
@@ -30,6 +30,12 @@ MAX_DETAIL_ROWS = 200
 #: How many "biggest confidence mover" rows the report carries. The
 #: operator wants the headline movers, not a ranked list of everything.
 MAX_MOVERS = 20
+
+#: How many newly-named species the report ranks. The German name map
+#: the classifier gates on carries ~80 binomials, so a full archive
+#: sweep cannot produce many more distinct names than this; the cap is
+#: a guard against a pathological run, not a routine truncation.
+MAX_SPECIES_ROWS = 25
 
 #: Labels that count as a bird for selection purposes. A single-element
 #: tuple today; kept as a tuple because the detector's label set is data

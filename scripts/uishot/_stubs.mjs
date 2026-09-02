@@ -10,7 +10,14 @@
 // fetched: the harness must not depend on the internet, and neither
 // library draws any of the four surfaces.
 
-import { TRACKS, CLIP_ONLY_TRACKS, CAMERA } from './_fixtures.mjs';
+import {
+  TRACKS,
+  CLIP_ONLY_TRACKS,
+  CAMERA,
+  TIMELINE_MONTH,
+  TIMELINE_DAY,
+  DETECTION_CLOUD,
+} from './_fixtures.mjs';
 
 /** A neutral picture stand-in, so tiles show a frame and not a placeholder. */
 const SNAPSHOT_SVG =
@@ -24,7 +31,8 @@ const SNAPSHOT_SVG =
   `</svg>`;
 
 /** Static JSON answers, longest prefix wins. */
-function apiBody(pathname) {
+function apiBody(url) {
+  const pathname = url.pathname;
   // The clip-basis surface's event, whose indexer confirmed nothing —
   // keyed on its own file so the sidecar-basis surface keeps its tracks.
   if (pathname.endsWith('e7.tracks.json')) return CLIP_ONLY_TRACKS;
@@ -52,7 +60,14 @@ function apiBody(pathname) {
   if (pathname.startsWith('/api/library/facets')) {
     return { cameras: {}, labels: {}, categories: {}, kinds: {}, total: 0 };
   }
-  if (pathname.startsWith('/api/timeline')) return { buckets: [], events: [] };
+  // The Statistik panel asks twice with different windows and draws a
+  // different chart from each — the month feeds the donut and the period
+  // pills, the rolling 24 h feeds the heatmap. Answering both with one
+  // body would photograph the heatmap's empty state.
+  if (pathname.startsWith('/api/timeline')) {
+    return Number(url.searchParams.get('hours')) > 24 ? TIMELINE_MONTH : TIMELINE_DAY;
+  }
+  if (pathname.startsWith('/api/detection_cloud')) return DETECTION_CLOUD;
   return {};
 }
 
@@ -94,7 +109,7 @@ export async function installStubs(page) {
     if (p.startsWith('/api/') || (p.startsWith('/media/') && !p.endsWith('.mp4'))) {
       return route.fulfill({
         contentType: 'application/json',
-        body: JSON.stringify(apiBody(p)),
+        body: JSON.stringify(apiBody(url)),
       });
     }
     return route.continue();

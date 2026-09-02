@@ -230,3 +230,100 @@ export const WEATHER_SAMPLES = Array.from({ length: 24 }, (_, i) => ({
 }));
 
 export const WEATHER_RANGE = { start: '2026-08-29T14:00:00', end: '2026-08-29T19:00:00' };
+
+/* ── Statistik ────────────────────────────────────────────────────────────
+ *
+ * A camera the timeline names but /api/cameras does NOT return. That is
+ * the precondition for the raw-id leak this surface exists to watch:
+ * statistics.js unions the configured cameras with the ids the timeline
+ * mentions, and an id with no camera record behind it has no friendly
+ * name to print. A fixture with only configured cameras in it would
+ * photograph the happy path and see nothing.
+ */
+const GHOST_CAM = 'reolink_cx810_gartendachterrasse_181';
+
+/** `YYYY-MM-DD HH:MM:SS`, local — the format storage.py writes. */
+function stamp(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  );
+}
+
+/**
+ * Timeline payloads, as GET /api/timeline returns them.
+ *
+ * Generated at import time instead of written out as literals, because
+ * the panel buckets everything against `Date.now()`: the heatmap draws
+ * only for points inside the last 24 h, and the period pills count
+ * "Heute" / "Diese Woche" off the wall clock. Frozen timestamps would
+ * photograph two empty states instead of the two charts.
+ */
+function timelinePayloads() {
+  const now = Date.now();
+  const H = 3600000;
+  // 43 events over the month, split 24 / 19 between the two cameras —
+  // a two-slice donut and the "43 DIESER MONAT" pill the defect clipped.
+  const spread = [0.4, 3, 9, 26, 51, 74, 99, 122, 150, 173, 197, 220, 244, 268];
+  const mk = (cam, n, step) =>
+    Array.from({ length: n }, (_, i) => ({
+      time: stamp(new Date(now - (2 + i * step) * H)),
+      camera_id: cam,
+    }));
+  const monthTracks = [
+    { camera_id: CAMERA.id, points: mk(CAMERA.id, 24, 29) },
+    { camera_id: GHOST_CAM, points: mk(GHOST_CAM, 19, 37) },
+  ];
+  // Every event carries motion; the classifier labels ride on a subset,
+  // so "Top Erkennungen" has three rows with distinct percentages.
+  const merged = monthTracks
+    .flatMap((t) => t.points)
+    .map((p, i) => ({
+      ...p,
+      labels: ['motion'].concat(i % 3 === 0 ? ['bird'] : [], i % 7 === 0 ? ['person'] : []),
+    }));
+  const dayTracks = [
+    {
+      camera_id: CAMERA.id,
+      points: spread.map((h) => ({ time: stamp(new Date(now - h * H)), camera_id: CAMERA.id })),
+    },
+    {
+      camera_id: GHOST_CAM,
+      points: spread
+        .filter((_, i) => i % 2 === 0)
+        .map((h) => ({ time: stamp(new Date(now - (h + 1) * H)), camera_id: GHOST_CAM })),
+    },
+  ];
+  return {
+    month: { tracks: monthTracks, merged },
+    day: { tracks: dayTracks, merged: dayTracks.flatMap((t) => t.points) },
+  };
+}
+
+const TIMELINE = timelinePayloads();
+
+/** GET /api/timeline?hours=720 — the month the donut and the pills read. */
+export const TIMELINE_MONTH = TIMELINE.month;
+
+/** GET /api/timeline?hours=24 — the rolling window the heatmap reads. */
+export const TIMELINE_DAY = TIMELINE.day;
+
+/**
+ * GET /api/detection_cloud — one point per confirmed sample.
+ * Populated so the Erkennungswolke draws a scatter and its Zeitraum
+ * slider sits under a real chart rather than an empty-state line.
+ */
+export const DETECTION_CLOUD = {
+  points: TIMELINE.day.tracks.flatMap((t, ti) =>
+    t.points.map((p, i) => ({
+      sample_key: `${t.camera_id}:${i}`,
+      camera_id: t.camera_id,
+      label: ['bird', 'cat', 'person', 'squirrel'][(i + ti) % 4],
+      score: 0.35 + ((i * 7) % 60) / 100,
+      time: p.time,
+      event_id: `evt_dc_${ti}_${i}`,
+    })),
+  ),
+  coverage: { events: 21, sidecars: 19, samples: 21 },
+};

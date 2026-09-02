@@ -134,6 +134,36 @@ async function mountMediathek(page) {
 }
 
 /**
+ * The whole Statistik section: period pills, donut, top detections,
+ * timeline, Erkennungswolke and the 24 h heatmap.
+ *
+ * Mounted through the panel's real entries — the Aktualisieren button
+ * (its only non-observer path, `statistics.js`) plus the two renderers
+ * the observer would otherwise call. `state.cameras` is seeded FIRST on
+ * purpose: the panel hydrates on an IntersectionObserver that can beat
+ * `/api/cameras` home, and letting that race decide would make the shot
+ * non-deterministic. Seeded, the fixture still poses the interesting
+ * half of it — one configured camera, one the timeline names and the
+ * camera list does not.
+ */
+async function mountStatistik(page) {
+  await page.evaluate(async () => {
+    const base = '/static/js';
+    const { state } = await import(`${base}/core/state.js`);
+    state.cameras = [window.__fx.CAMERA];
+    await import(`${base}/statistics.js`);
+    const tl = await import(`${base}/timeline.js`);
+    const dc = await import(`${base}/detection-cloud.js`);
+    document.getElementById('statRefreshBtn')?.click();
+    tl.renderTimeline();
+    dc.initDetectionCloud();
+  });
+  await page.waitForSelector('#statContent .stat-period-pill', { timeout: 8000 });
+  await page.waitForSelector('#statHeatmapBlock .stat-hm-row', { timeout: 8000 });
+  await page.waitForTimeout(700);
+}
+
+/**
  * The surfaces, in the order the brief ranks them.
  *
  * `clip` is the element the PNG is cropped to; null means full page.
@@ -175,5 +205,12 @@ export const SURFACES = [
     mount: mountMediathek,
     clip: '#mediaDrilldown',
     scope: '#mediaGrid',
+  },
+  {
+    id: 'statistik-page',
+    title: 'Statistik · pills, donut, top detections, Erkennungswolke, heatmap',
+    mount: mountStatistik,
+    clip: '#statistik',
+    scope: '#statistik',
   },
 ];

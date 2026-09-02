@@ -22,12 +22,19 @@ from app.camera_runtime._motion import MotionMixin
 
 
 class _Det:
-    def __init__(self, label, score):
+    def __init__(self, label, score, species=None, species_latin=None):
         self.label = label
         self.score = score
+        self.species = species
+        self.species_latin = species_latin
 
     def to_dict(self):
-        return {"label": self.label, "score": self.score}
+        return {
+            "label": self.label,
+            "score": self.score,
+            "species": self.species,
+            "species_latin": self.species_latin,
+        }
 
 
 class _Cam(MotionMixin):
@@ -44,6 +51,10 @@ class _Cam(MotionMixin):
             "alarm_level": "info",
             "severity": "off",
             "notify": False,
+            # _build_event_meta always stamps this key; the stub models
+            # the common case where recording opened on motion alone and
+            # no bird had been classified yet.
+            "bird_species": None,
         }
 
 
@@ -139,6 +150,65 @@ def test_after_hours_is_read_from_the_key_that_exists():
 def test_empty_labels_are_ignored(labels):
     cam = _Cam()
     assert cam._upgrade_event_meta(labels, []) is False
+
+
+# ── the bird headline must follow the detections it is derived from ───
+#
+# `_build_event_meta` derives `bird_species` from the detections of the
+# ONE frame where recording started. `_upgrade_event_meta` then replaces
+# `meta["detections"]` wholesale with a later frame's — and used to leave
+# the derived aggregate untouched, so the two could no longer agree.
+#
+# This is the common path, not a corner: motion confirms in ~0.7 s and a
+# class in ~1.05 s (see this module's own docstring), so a bird event
+# almost always opens as `labels=["motion"]` with no bird detection yet,
+# and the bird arrives on the upgrade. The species was written to the
+# detection and dropped from the headline.
+#
+# Nothing else repaired it either: bird_species_backfill.py::
+# _needs_backfill only selects events where a bird detection is missing
+# `species`, so an event whose detection HAS a species but whose headline
+# is empty was invisible to the retroactive sweep.
+
+
+def test_a_bird_confirming_late_brings_its_species_to_the_headline():
+    cam = _Cam()
+    cam._upgrade_event_meta(
+        ["bird"], [_Det("bird", 0.8, species="Blaumeise", species_latin="Cyanistes caeruleus")]
+    )
+    assert cam._rec_event_meta["bird_species"] == "Blaumeise"
+
+
+def test_a_later_frames_species_supersedes_the_one_on_record():
+    """The headline must name a bird the stored detections actually
+    contain — those detections were just replaced."""
+    cam = _Cam()
+    cam._rec_event_meta["bird_species"] = "Amsel"
+    cam._upgrade_event_meta(
+        ["bird", "person"],
+        [
+            _Det("bird", 0.8, species="Blaumeise", species_latin="Cyanistes caeruleus"),
+            _Det("person", 0.9),
+        ],
+    )
+    assert cam._rec_event_meta["bird_species"] == "Blaumeise"
+
+
+def test_an_existing_species_survives_a_later_birdless_frame():
+    """A name already won must never be blanked by an upgrade that
+    carries no bird — that would lose information the event had."""
+    cam = _Cam()
+    cam._rec_event_meta["bird_species"] = "Amsel"
+    cam._upgrade_event_meta(["person"], [_Det("person", 0.9)])
+    assert cam._rec_event_meta["bird_species"] == "Amsel"
+
+
+def test_an_unclassified_bird_leaves_the_headline_empty():
+    """A bird box with no species is not a name. The headline stays
+    None so bird_species_backfill.py still selects the event."""
+    cam = _Cam()
+    cam._upgrade_event_meta(["bird"], [_Det("bird", 0.8)])
+    assert cam._rec_event_meta["bird_species"] is None
 
 
 def test_main_loop_calls_the_upgrade_while_recording():

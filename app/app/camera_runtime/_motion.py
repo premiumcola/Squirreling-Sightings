@@ -81,6 +81,36 @@ def _resolve_bird_species(detections: list) -> str | None:
     return pick_headline_species(candidates, lookup)
 
 
+def _refresh_bird_species(meta: dict, detections: list) -> None:
+    """Re-derive `meta["bird_species"]` after `_upgrade_event_meta` has
+    replaced the detections it was originally computed from.
+
+    `_build_event_meta` derives the headline from the ONE frame where
+    recording started. The upgrade then swaps `meta["detections"]` for a
+    later frame's, and without this the derived aggregate kept pointing
+    at the old list — so an event could name a bird its own stored
+    detections no longer contained or, far more often, carry no name at
+    all while the species sat right there in the detection.
+
+    That second case is the common path, not a corner: motion confirms in
+    ~0.7 s and a class in ~1.05 s, so a bird event usually opens as
+    `labels=["motion"]` with no bird detection yet, and the bird arrives
+    on the upgrade. Nothing repaired it later either —
+    bird_species_backfill.py::_needs_backfill only selects events whose
+    bird detection is MISSING `species`, so an event with a classified
+    detection and an empty headline was invisible to that sweep.
+
+    Only overwrites when the new detections actually yield a species: a
+    later birdless frame must not blank a name the event already won.
+
+    Module-level rather than a mixin method because it needs no `self`,
+    which also keeps `_upgrade_event_meta` under the 80-line ceiling.
+    """
+    species = _resolve_bird_species(detections)
+    if species:
+        meta["bird_species"] = species
+
+
 class MotionMixin:
     """Background-subtractor motion detection + event metadata builder.
 
@@ -273,6 +303,7 @@ class MotionMixin:
             if top is not None:
                 meta["top_label"] = top.label
                 meta["detections"] = [d.to_dict() for d in detections]
+                _refresh_bird_species(meta, detections)
         elif merged:
             meta["top_label"] = merged[0]
 

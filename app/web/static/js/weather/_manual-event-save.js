@@ -169,9 +169,8 @@ function _formHTML(activeCategories, checkedFields) {
       <div class="ws-zsave-curves" id="wsZsaveCurves">${_curveCheckboxesHTML(checkedFields)}</div>
     </div>
     <div class="ws-zsave-row">
-      <span class="ws-zsave-label">Kurven markieren <span class="ws-zsave-hint">optional</span></span>
-      <div id="wsZsaveMarkRow">${_markToggleHTML()}</div>
-      <p class="ws-zsave-mark-hint">Antippen, um eine Kurve im gezeigten Zeitraum an einem Punkt zu markieren und die Phase (Aufbau / Kern / Abbau) zuzuordnen.</p>
+      ${_markToggleHTML()}
+      <p class="ws-zsave-mark-hint">Optional — antippen, um eine Kurve im gezeigten Zeitraum an einem Punkt zu markieren und die Phase (Aufbau / Kern / Abbau) zuzuordnen.</p>
     </div>
     <div class="ws-zsave-row">
       <label class="ws-zsave-label" for="wsZsaveNote">Charakteristik</label>

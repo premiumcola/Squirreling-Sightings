@@ -184,6 +184,23 @@
 .ws-zsave-actions .btn-action {
   min-height: 44px;
 }
+/* "Abbrechen" is a bare .btn, whose global surface is `var(--surface)`
+   = #222222. This panel's own background is rgba(127,174,201,.08) over
+   the #1a1a1a section panel — ≈#22262a. The button therefore sat within
+   one step of its own container (≈1.03:1) and was the only control in
+   the form NOT using the rgba(255,255,255,.06) lift the inputs, chips
+   and the mark toggle all share: a dark-on-dark button, which this
+   project does not ship. Same lift, one notch stronger so it still
+   reads as an action next to the green primary. */
+.ws-zsave-actions .btn:not(.btn-action) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+@media (hover: hover) {
+  .ws-zsave-actions .btn:not(.btn-action):hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
 
 /* ── "Kurven markieren" toggle + inline phase picker ──────────────────────
    weather/_chart-annotations.js's data-anchored chart markers — click a
@@ -191,6 +208,10 @@
 .ws-zsave-mark-toggle {
   display: inline-flex;
   align-items: center;
+  /* The toggle is a direct grid item of .ws-zsave-row now (its wrapper
+     div was dead markup with an id nothing read) — without this it
+     would stretch the full row width and read as a primary action. */
+  justify-self: start;
   gap: 8px;
   min-height: 44px;
   padding: 8px 16px;
@@ -432,10 +453,10 @@
   }
 }
 
+/* The 2-column .ws-zsave-curves rule that used to sit here restated the
+   base rule verbatim — the 3-column widening only applies from 640 px
+   up, so below 480 px the base value was already in force. */
 @media (max-width: 480px) {
-  .ws-zsave-curves {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .ws-zsave-actions {
     flex-direction: column-reverse;
   }

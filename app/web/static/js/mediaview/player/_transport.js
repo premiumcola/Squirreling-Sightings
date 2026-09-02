@@ -20,6 +20,7 @@
 // duration badge and wrong for a running clock, where it would make the
 // readout jump a second early.
 
+import { showToast } from '../../core/toast.js';
 import { NATIVE_WARNING } from './_native.js';
 import { isInPictureInPicture } from './_pip.js';
 // Imported AND re-exported: this file uses both locally (the elapsed /
@@ -134,9 +135,21 @@ function _makeClickHandler(host, opts, getVideo, sync) {
     if (btn.dataset.skip) {
       _seekBy(v, Number(btn.dataset.skip));
     } else if (btn.dataset.act === 'play') {
-      if (!v) return;
-      if (v.paused || v.ended) v.play().catch(() => {});
-      else v.pause();
+      // A play() that rejects used to be swallowed whole, so a clip that
+      // could not start looked exactly like a dead button — the operator's
+      // report was "der Playknopf läuft nicht", with nothing on screen to
+      // say why. A rejection here is always worth a word: it means no
+      // source, an unsupported codec, or a gesture the browser refused.
+      if (!v) {
+        showToast('Kein Video geladen — die Aufnahme fehlt oder ist noch nicht bereit.', 'error');
+        return;
+      }
+      if (v.paused || v.ended) {
+        v.play().catch((err) => {
+          const why = (err && (err.name || err.message)) || 'unbekannt';
+          showToast(`Wiedergabe nicht möglich (${why}).`, 'error');
+        });
+      } else v.pause();
     } else if (btn.dataset.act === 'native' && typeof opts.onNative === 'function') {
       opts.onNative();
     } else if (btn.dataset.act === 'pip' && typeof opts.onPip === 'function') {

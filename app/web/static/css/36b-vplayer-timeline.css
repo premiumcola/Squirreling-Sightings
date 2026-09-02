@@ -173,6 +173,18 @@
   color: var(--text, #edf4fb);
 }
 
+/* The clock, under the rail. The transport's own strip is suppressed in
+   this shell (mediaview/player/_transport.js's `timebar` option) — two
+   readouts printed through each other at both ends of the rail. */
+.vp-tl-clock {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #8291a0);
+}
+
 /* ── The rail ──────────────────────────────────────────────────────────── */
 .vp-tl-track {
   position: relative;

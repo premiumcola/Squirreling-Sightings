@@ -248,23 +248,36 @@
 .vp-seg {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  /* Sized so all four German labels fit inside 375 px rather than
+     relying on the row's horizontal scroll, which on a phone reads as a
+     pill chopped in half at the right edge. */
+  gap: 5px;
   min-height: var(--vp-tap);
-  padding: 0 12px;
+  padding: 0 9px;
   border: 0;
   border-radius: var(--vp-radius-sm);
   background: transparent;
   /* Never dark-on-dark: an inactive segment still reads against the
      bar it sits in. */
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
   cursor: pointer;
 }
 
+/* Active reads as a TINT plus an underline, not a saturated block. Four
+   full-strength accent pills side by side were the loudest thing on the
+   screen — "modern, refined, flat, clean, no colourful chaos" — and
+   white on that accent measures 3.68:1, under the 4.5:1 floor. The tint
+   carries the app's own text colour instead, well clear of it. */
 .vp-seg[aria-pressed='true'] {
-  background: var(--accent);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.vp-seg[aria-pressed='true'] svg {
+  color: var(--accent);
 }
 
 @media (hover: hover) {
@@ -304,29 +317,14 @@
   }
 }
 
-/* Portrait phone: give the leftover height to the PICTURE, not to an
-   empty panel. A 16:9 frame across a 375 px screen is only ~211 px tall,
-   so a clip with one object and a closed fold left most of the screen as
-   a blank coloured block below the content — "unten ist viel Platz".
-   The stage may now grow into that space and the panel sizes to its
-   content; `min-height: 0` keeps a long panel able to shrink the stage
-   back rather than overflowing, and the picture stays `object-fit:
-   contain` so a non-16:9 source is still never cropped. */
-@media (orientation: portrait) {
-  .vp-stage {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .vp-frame {
-    max-height: 100%;
-  }
-  .vp-panel {
-    flex: 0 0 auto;
-  }
-}
+/* NOT DONE, on purpose: letting the stage grow into the leftover height
+   on a portrait phone. It was tried, and the screenshot harness showed
+   why it is wrong — a 16:9 picture cannot fill a portrait viewport, so
+   the stage grew and the extra space became BLACK BARS above and below
+   the picture instead of an empty panel below it. That is worse: the
+   panel at least holds content and grows with it. The honest reduction
+   of "unten ist viel Platz" is having less chrome to begin with, which
+   is what dropping the below-stage control row did. */
 
 @media (prefers-reduced-motion: reduce) {
   .vp-root * {

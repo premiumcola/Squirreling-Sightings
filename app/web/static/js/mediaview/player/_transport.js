@@ -70,7 +70,7 @@ function _seekBy(video, delta) {
   video.currentTime = dur > 0 ? Math.min(dur, next) : next;
 }
 
-function _markup(nativeAvailable, pipAvailable) {
+function _markup(nativeAvailable, pipAvailable, timebar = true) {
   const nativeBtn = nativeAvailable
     ? `<button type="button" class="mv-player-native" data-act="native" ` +
       `title="Im Systemplayer öffnen — ${NATIVE_WARNING}" ` +
@@ -98,13 +98,20 @@ function _markup(nativeAvailable, pipAvailable) {
     `<button type="button" class="mv-player-btn mv-player-skip" data-skip="10" ` +
     `aria-label="10 Sekunden vor" title="10 s vor">${_skipSvg(false)}</button>` +
     `</div>` +
-    `<div class="mv-player-timebar">` +
-    `<span class="mv-player-t mv-player-elapsed">0:00</span>` +
-    `<span class="mv-player-spacer"></span>` +
-    `<span class="mv-player-t mv-player-remain">−0:00</span>` +
-    nativeBtn +
-    pipBtn +
-    `</div>`
+    // The strip is suppressed whole when the host already owns a clock:
+    // it is centred ON the picture, so where a caller renders its own
+    // time axis below the stage the two print through each other. With
+    // no readouts left there is also nothing for the two handoff pills
+    // to sit beside, so they go with it.
+    (timebar
+      ? `<div class="mv-player-timebar">` +
+        `<span class="mv-player-t mv-player-elapsed">0:00</span>` +
+        `<span class="mv-player-spacer"></span>` +
+        `<span class="mv-player-t mv-player-remain">−0:00</span>` +
+        nativeBtn +
+        pipBtn +
+        `</div>`
+      : '')
   );
 }
 
@@ -177,7 +184,7 @@ export function renderTransport(host, opts = {}) {
   const getVideo = opts.getVideo;
   if (!host || typeof getVideo !== 'function') return null;
   host.className = 'mv-player';
-  host.innerHTML = _markup(!!opts.nativeAvailable, !!opts.pipAvailable);
+  host.innerHTML = _markup(!!opts.nativeAvailable, !!opts.pipAvailable, opts.timebar !== false);
   const playBtn = host.querySelector('.mv-player-play');
   const elapsedEl = host.querySelector('.mv-player-elapsed');
   const remainEl = host.querySelector('.mv-player-remain');

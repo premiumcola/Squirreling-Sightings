@@ -48,8 +48,12 @@ export function mountTransport(stageEl, controlsHost, cfg, stage) {
   // second time inside the time strip showed the same action twice and,
   // on a phone, overlapped the elapsed / remaining readouts it shares
   // that row with. Picture-in-Picture goes with it for the same reason.
+  // No time strip either: the timeline below the picture now carries the
+  // clock. Two readouts printed through each other — "Vorlauf 3 s" over
+  // "0:00" at both ends of the rail, at every width including desktop.
   return mountPlayerChrome(stageEl, null, {
     getVideo: () => stage.video,
     handoffPills: false,
+    timebar: false,
   });
 }

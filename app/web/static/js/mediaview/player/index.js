@@ -130,6 +130,7 @@ export function mountPlayerChrome(stage, controlsHost, opts = {}) {
   const autoHide = installChromeAutoHide(stage, getVideo);
   const transport = renderTransport(host, {
     getVideo,
+    timebar: opts.timebar !== false,
     nativeAvailable: pills && canNativeFullscreen(video),
     onInteract: () => autoHide?.reveal(),
     onNative: () => handoffToNativePlayer(getVideo()),

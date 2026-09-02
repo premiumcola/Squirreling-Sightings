@@ -12,6 +12,7 @@
 // read that variable, so one write paints them in lockstep and they
 // cannot drift apart mid-drag.
 
+import { clockLabel, remainingLabel } from '../../core/clock-format.js';
 import { pctOf } from './_model.js';
 
 const _pct = (v) => `${(v * 100).toFixed(3)}%`;
@@ -50,6 +51,21 @@ export function railCaptionsHtml(model) {
 }
 
 /**
+ * The clock, under the rail — elapsed on the left, −remaining on the
+ * right. It lives HERE and not in the transport overlay because there is
+ * only room for one of them: the overlay's own strip is centred on the
+ * picture and printed straight through these captions, "Vorlauf 3 s"
+ * over "0:00", at every width including desktop. One readout, in the
+ * row that already owns the time axis.
+ */
+export function railClockHtml() {
+  return (
+    `<div class="vp-tl-clock mono" aria-hidden="true">` +
+    `<span data-tl-elapsed>0:00</span><span data-tl-remain>−0:00</span></div>`
+  );
+}
+
+/**
  * Render the rail's static furniture for a model. The playhead is NOT
  * included: it moves every frame and is written through the custom
  * property instead of being re-rendered.
@@ -77,7 +93,8 @@ export function railHtml(model) {
     `<div class="vp-tl-fill"></div><div class="vp-tl-head"></div></div>` +
     // The drag surface. Transparent, full width, and tall enough to
     // meet the 44 px touch minimum around a 6 px rail — see 36b.
-    `<div class="vp-tl-hit" role="slider" aria-label="Wiedergabeposition" tabindex="0"></div>`
+    `<div class="vp-tl-hit" role="slider" aria-label="Wiedergabeposition" tabindex="0"></div>` +
+    railClockHtml()
   );
 }
 
@@ -88,4 +105,16 @@ export function railHtml(model) {
 export function setPlayhead(root, t, duration) {
   if (!root) return;
   root.style.setProperty('--vp-play-pct', pctOf(t, duration).toFixed(5));
+  // Guarded writes: `tick` runs every animation frame, and re-assigning
+  // identical text would still dirty the layout four times a second.
+  const el = root.querySelector?.('[data-tl-elapsed]');
+  const rem = root.querySelector?.('[data-tl-remain]');
+  if (el) {
+    const s = clockLabel(t);
+    if (el.textContent !== s) el.textContent = s;
+  }
+  if (rem) {
+    const s = remainingLabel(t, duration);
+    if (rem.textContent !== s) rem.textContent = s;
+  }
 }

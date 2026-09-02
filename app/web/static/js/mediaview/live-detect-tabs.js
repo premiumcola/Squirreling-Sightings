@@ -49,6 +49,36 @@ if (typeof onTabChange === 'function') {
   });
 }
 
+// The SCHWELLEN row. Extracted from _renderDiagPanel both to keep that
+// function from growing further and because the row needs a comment
+// longer than the row itself.
+//
+// `thresholds.global` is detection_min_score, and it is REPORTED here,
+// never applied — the two-tier tracker replaced it as the live cutoff
+// (detect_setup.py::DetectionSetup.min_score says so; _sim_debug.py
+// stamps it "Reported, never applied"; a grep of app/ finds no gate
+// that consults it, and test_sim_production_parity.py asserts none
+// may). What actually decides is `floor` (everything below it never
+// leaves the detector) and `spawn` (the bar a track must clear to be
+// promoted), so those lead the row.
+//
+// Printing the inert number alone under a heading that says SCHWELLEN
+// is precisely the bug this repo has already been bitten by: a 0.52
+// detection read as "unter Schwelle 55%" in the panel while alerting
+// in production. Naming it as ineffective is the honest half of the
+// fix; wiring it in would change detection for every camera and is a
+// decision for the operator, not a side effect of a display fix.
+function _thresholdsStr(thresholds, perClassStr) {
+  const floor = Number(thresholds.floor || 0).toFixed(2);
+  const spawn = Number(thresholds.spawn || 0).toFixed(2);
+  const global = Number(thresholds.global || 0).toFixed(2);
+  return {
+    active: `floor ${floor} · spawn ${spawn}`,
+    inert: `global ${global} (ohne Wirkung)`,
+    legacy: `floor=${floor} · spawn=${spawn} · global=${global} (ohne Wirkung) · ${perClassStr}`,
+  };
+}
+
 // C3 · in-modal diagnostic panel. Reads the structured ``diag`` block
 // the test-detection endpoint now returns (see coral.py — diag.gates,
 // diag.top_raw, diag.thresholds, …) and renders a compact key/value
@@ -99,10 +129,10 @@ export function _renderDiagPanel(diag) {
   // SIMU-04c · PIPELINE-DURCHLAUF section. Two-column key/value grid
   // in matrix-mono palette: keys 10 px #82c79a, values 9 px #b6d4be.
   // GATES is special — three inline badges (raw/pass/u.S.) so the
-  // primary signal reads at a glance. SCHWELLEN is split into a
-  // global row + a per-class sub-row when per-class overrides exist.
+  // primary signal reads at a glance. SCHWELLEN leads with the gates
+  // that actually decide and marks the inert one — see _thresholdsStr.
   const sourceStr = `${esc(diag.frame_src || '?')} · ${fs.w}×${fs.h} · age ${Math.round(Number(diag.frame_age_ms) || 0)} ms`;
-  const globalThresh = Number(thresholds.global || 0).toFixed(2);
+  const thresh = _thresholdsStr(thresholds, perClassStr);
   const headerHtml = `
     <div class="mv-ld-pipeline">
       <div class="mv-ld-pipeline-head">PIPELINE-DURCHLAUF (LIVE)</div>
@@ -122,7 +152,7 @@ export function _renderDiagPanel(diag) {
         <div class="mv-ld-pipeline-k">FILTER</div>
         <div class="mv-ld-pipeline-v">${objFilterStr}</div>
         <div class="mv-ld-pipeline-k">SCHWELLEN</div>
-        <div class="mv-ld-pipeline-v">global ${globalThresh}${Object.keys(perClass).length ? `<div class="mv-ld-pipeline-sub">${perClassStr}</div>` : ''}</div>
+        <div class="mv-ld-pipeline-v">${thresh.active}<div class="mv-ld-pipeline-sub">${thresh.inert}</div>${Object.keys(perClass).length ? `<div class="mv-ld-pipeline-sub">${perClassStr}</div>` : ''}</div>
       </div>
     </div>
     <div class="mv-ld-diag-body mv-ld-diag-legacy" hidden>
@@ -136,7 +166,7 @@ export function _renderDiagPanel(diag) {
       </div>
       <div class="mv-ld-diag-row">
         <span class="mv-ld-diag-key">Schwellen</span>
-        <span class="mv-ld-diag-val">global=${Number(thresholds.global || 0).toFixed(2)} · ${perClassStr}</span>
+        <span class="mv-ld-diag-val">${thresh.legacy}</span>
       </div>
     </div>`;
   fold.setHeader?.(headerHtml);

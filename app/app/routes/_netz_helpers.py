@@ -166,7 +166,16 @@ def net_state(cam_id: str) -> dict | None:
 #: „Werte, die fest bleiben" fold. One line each, no controls.
 FROZEN_KEYS = [
     {"key": "confirmation_window", "de": "Bestätigungs-Fenster je Klasse (N von M Sekunden)"},
-    {"key": "detection_min_score", "de": "Allgemeine Konfidenz-Schwelle der Kamera"},
+    # Not merely "not written by the net" like its neighbours — this one
+    # is applied by NOTHING. It stopped being the live cutoff when the
+    # two-tier tracker landed (detect_setup.py::DetectionSetup.min_score)
+    # and no other path picked it up; the camera-edit collector pins
+    # saves to 0.0 (camedit/discovery.js). Listing it as a threshold that
+    # merely "stays fixed" would imply it still does something.
+    {
+        "key": "detection_min_score",
+        "de": "Allgemeine Konfidenz-Schwelle — ohne Wirkung, nur gespeichert",
+    },
     {"key": "processing.detection.min_score", "de": "Globale Detektor-Schwelle"},
     {"key": "processing.bird_species.min_score", "de": "Vogelarten-Klassifikator"},
     {"key": "wildlife.min_score", "de": "Wildtier-Kaskade"},

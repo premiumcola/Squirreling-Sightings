@@ -59,10 +59,6 @@ RECENT_FAILURES_CAP = 32
 DEFAULT_CONFIRM_N = 3
 DEFAULT_CONFIRM_SECONDS = 5.0
 
-# Global fallback for the per-label spawn threshold when neither the
-# camera's label_thresholds nor its detection_min_score is set.
-DEFAULT_MIN_SCORE = 0.55
-
 # K1 · gates for the static-false-positive sweep. A tracklet is
 # DROPPED at payload build when ALL of these hold:
 #   * has at least STATIC_FP_MIN_DETECTS detect samples (so the

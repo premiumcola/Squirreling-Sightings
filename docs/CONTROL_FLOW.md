@@ -617,15 +617,30 @@ Behebung: `_main_loop.py:452` auf
 `cw_cfg.get(d.label) or cw_cfg.get("global") or {}` erweitern — eine
 Zeile, und der Regler tut, was er verspricht.
 
-**(c) `detection_min_score`.** Der Live-Pfad ignoriert das Feld
-bewusst (`_main_loop.py:250-252`). Gelesen wird es trotzdem von
-`routes/coral_test_detection.py:440` (der Simulationsknopf) und
-`tracking_worker/__init__.py:563` (Ghost-Pruning) — beide mit dem
-Rückfall `processing.detection.min_score` (0.55). Der Schieberegler in
-der Oberfläche steuert also, was die Simulation als „belowthresh"
-einfärbt und welche Spuren im Sidecar überleben, aber nicht, was live
-erkannt wird. Behebung siehe F-9; der Regler gehört entweder verdrahtet
-oder aus der Oberfläche entfernt.
+**(c) `detection_min_score` — inzwischen NIRGENDS angewendet.** Der
+Live-Pfad ignoriert das Feld bewusst (`_main_loop.py`, `detect_frame_raw`
+bekommt `setup.floor`). Die beiden Leser, die hier früher standen, sind
+seit dem Threshold-Umbau weg: `routes/coral_test_detection.py` liest
+`min_score` überhaupt nicht mehr, und der Ghost-Pruner geht über
+`thresholds.resolve_effective(...).spawn` (`_ghosts.py`). Ein `grep` über
+`app/` findet heute kein Gate, das den Wert konsultiert —
+`test_sim_production_parity.py::test_the_global_min_score_is_carried_but_never_a_gate`
+hält das als Vertrag fest („no gate may consult min_score").
+
+Der Schieberegler ist ebenfalls verschwunden: der Kamera-Editor pinnt
+den Wert beim Speichern auf `0.0` (`camedit/discovery.js`). Übrig sind
+drei reine Anzeigen — die Netz-Liste „Werte, die fest bleiben"
+(`routes/_netz_helpers.py`), die SCHWELLEN-Zeile im Simulieren-Panel
+(`mediaview/live-detect-tabs.js`) und die archivierten
+`conf_thresh_general`-Werte in der Mediathek.
+
+Entscheidung (2026-09): **markieren statt verdrahten.** Verdrahten würde
+den obigen Vertragstest brechen, die Erkennung für JEDE Kamera
+verändern und über `replay/_settings.py` auch archivierte Werte in
+Nachsimulationen scharf schalten — drei Verhaltensänderungen als
+Nebenwirkung einer Anzeige-Korrektur. Die beiden nicht-archivierten
+Anzeigen sagen jetzt „ohne Wirkung"; die archivierten Werte bleiben, was
+sie sind: ein historischer Eintrag.
 
 ---
 
@@ -638,8 +653,15 @@ Simulation: `routes/coral_test_detection.py:440-445`. Nachlauf-Tracker:
 | Pfad | Auflösungsreihenfolge für „ab wann zählt eine Erkennung" |
 |---|---|
 | Live | `label_thresholds[label]` → `track_spawn_min_score` → **0.50** |
-| Simulation („Erkennung jetzt simulieren") | `label_thresholds[label]` → `detection_min_score` → **0.55** |
-| Ghost-Pruner (Sidecar) | `max(label_thresholds[label] → detection_min_score → 0.55, track_spawn_min_score)` |
+| Simulation („Erkennung jetzt simulieren") | `setup.floor` — dieselbe Auflösung wie live (`_sim_pipeline.py`) |
+| Ghost-Pruner (Sidecar) | `thresholds.resolve_effective(...).spawn` — dieselbe Leiter wie live |
+
+**Stand 2026-09: die drei Antworten sind inzwischen EINE.** Die Tabelle
+oben beschreibt den Zustand nach dem Threshold-Umbau; die frühere
+Divergenz (Simulation 0.55 gegen Live 0.50 über `detection_min_score`)
+existiert nicht mehr, weil kein Pfad den Wert noch liest. Der Abschnitt
+bleibt als Beleg stehen, warum `detection_min_score` heute nur noch
+angezeigt und nicht angewendet wird — siehe F-8c.
 
 Für ein Label ohne eigenen Eintrag — `dog`, `car`, `fox`, `hedgehog` —
 liegen Live (0.50) und Simulation (0.55) auseinander. Eine

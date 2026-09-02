@@ -34,6 +34,8 @@ import {
 } from './_overflow-menu.js';
 import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
 import { mountTimeline } from './timeline/index.js';
+import { renderContextPanel } from './panels/index.js';
+import { subscribeLive } from './_data/live.js';
 
 /** The single open player, or null. One at a time, by construction. */
 let _open = null;
@@ -45,6 +47,21 @@ function _onMenuPick(id, cfg, stage) {
     return;
   }
   if (id === VP_MENU_NATIVE) handoffToNativePlayer(stage.video);
+}
+
+/**
+ * Feed a live surface. The frames come from the EXISTING poll loop —
+ * this only maps and paints. See _data/live.js for why owning any of
+ * that loop's logic here would be the migration's worst regression.
+ */
+function _wireLive(cfg, panel, timeline) {
+  if (!cfg.flags.live) return null;
+  return subscribeLive((frame) => {
+    panel?.update(frame, null);
+    // The rolling window is right-anchored on now, so every tick moves
+    // it whether or not a detection landed.
+    timeline?.render(frame.tracks || [], { now: Date.now() / 1000, item: cfg.item });
+  });
 }
 
 /** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
@@ -75,7 +92,10 @@ function _mountAll(cfg) {
     onResume: () => stage.video.play().catch(() => {}),
   });
 
-  return { cfg, shell, stage, topbar, menu, overlayRow, transport, timeline };
+  const panel = renderContextPanel(shell.slot('panel'), cfg);
+  const live = _wireLive(cfg, panel, timeline);
+
+  return { cfg, shell, stage, topbar, menu, overlayRow, transport, timeline, panel, live };
 }
 
 /**
@@ -104,6 +124,10 @@ export function closeVideoPlayer() {
   _open = null;
   // Reverse mount order — every listener released before the DOM it is
   // bound to goes away.
+  // The live subscription goes first: a frame arriving mid-teardown
+  // would paint into a panel that is already gone.
+  p.live?.teardown();
+  p.panel?.teardown();
   p.timeline?.teardown();
   p.transport?.teardown();
   p.overlayRow?.teardown();

@@ -26,3 +26,211 @@
   --vp-pnl-chip-bg: rgba(59, 130, 246, 0.16);
   --vp-pnl-chip-fg: #bfdbfe;
 }
+
+/* ── Panel body ────────────────────────────────────────────────────────────
+   The last thing on the page, so it carries the home-indicator inset —
+   without it the final row sits under the bar on an iPhone and the
+   last object in the list is the one you cannot tap. */
+.vp-panel {
+  padding: 8px 10px calc(10px + var(--vp-safe-bottom));
+}
+
+.vp-pnl-empty {
+  padding: 12px 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vp-pnl-subhead {
+  padding: 10px 2px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Rows ──────────────────────────────────────────────────────────────────
+   A row is a touch target. Depth comes from the ground/row colour
+   difference, never from a hairline border. */
+.vp-pnl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--vp-pnl-row-h);
+  padding: 0 10px;
+  margin-bottom: 4px;
+  border-radius: var(--vp-radius-sm);
+  background: var(--vp-pnl-row);
+  font-size: 14px;
+}
+
+/* A discarded detection is the pipeline WORKING, not an error — so it
+   is de-emphasised, not coloured like a failure. */
+.vp-pnl-row[data-discarded='1'] {
+  opacity: 0.72;
+}
+
+.vp-pnl-num {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-pnl-cls {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vp-pnl-score {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The reason a detection was dropped. On a 375 px screen it cannot
+   share the row with the class and the score, so it wraps underneath. */
+.vp-pnl-reason {
+  flex: 1 0 100%;
+  padding-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ── Chips ─────────────────────────────────────────────────────────────── */
+.vp-pnl-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--vp-radius-sm);
+  background: var(--vp-pnl-chip-bg);
+  color: var(--vp-pnl-chip-fg);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.vp-pnl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* ── Folds ─────────────────────────────────────────────────────────────── */
+.vp-fold-root {
+  margin-top: 8px;
+  border-radius: var(--vp-radius-sm);
+  background: var(--vp-pnl-fold-bg);
+  overflow: hidden;
+}
+
+.vp-fold-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--vp-tap);
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vp-fold-chevron {
+  display: inline-flex;
+  transition: transform 0.15s ease;
+}
+
+.vp-fold-root[data-open='1'] .vp-fold-chevron {
+  transform: rotate(180deg);
+}
+
+.vp-fold-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vp-fold-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.vp-fold-body {
+  padding: 4px 10px 10px;
+}
+
+@media (hover: hover) {
+  .vp-fold-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.vp-pnl-debug-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vp-pnl-btn {
+  flex: 1 1 auto;
+  min-height: var(--vp-tap);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.vp-pnl-btn[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .vp-pnl-btn:not([disabled]):hover {
+    background: #2e2e2e;
+  }
+}
+
+/* ── Trace log ─────────────────────────────────────────────────────────────
+   Monospace on a darker ground; scrolls inside itself so a long trace
+   cannot stretch the page. */
+.vp-pnl-trace {
+  max-height: 34dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border-radius: var(--vp-radius-sm);
+  background: #050810;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.vp-pnl-trace-line[data-kind='pass'] {
+  color: var(--good);
+}
+
+.vp-pnl-trace-line[data-kind='reject'] {
+  color: var(--warn);
+}
+
+.vp-pnl-trace-line[data-kind='no-detection'] {
+  color: var(--danger);
+}
+
+.vp-pnl-trace-line[data-kind='info'] {
+  color: var(--muted);
+}

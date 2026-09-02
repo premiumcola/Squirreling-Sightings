@@ -40,6 +40,36 @@ def _strip_comments(css: str) -> str:
     return re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
 
 
+def _tokens() -> dict:
+    """Every --vp-* custom property declared across the three partials."""
+    out = {}
+    for path in _ALL:
+        for name, value in re.findall(r"(--vp-[a-z-]+)\s*:\s*([^;]+);", _read(path)):
+            out[name] = value.strip()
+    return out
+
+
+def _expand(value: str) -> str:
+    """Resolve var() indirection so a check can look at the real value.
+
+    The stylesheets deliberately go through tokens — `min-height:
+    var(--vp-pnl-row-h)` where that token is `var(--vp-tap)` which is
+    `44px`. Asserting on the literal would punish exactly the layering
+    these files are supposed to have.
+    """
+    tokens = _tokens()
+    for _ in range(4):
+        expanded = re.sub(
+            r"var\((--vp-[a-z-]+)(?:\s*,[^)]*)?\)",
+            lambda m: tokens.get(m.group(1), m.group(0)),
+            value,
+        )
+        if expanded == value:
+            break
+        value = expanded
+    return value
+
+
 def test_every_partial_exists_and_is_registered_in_the_load_order():
     builder = (Path(__file__).resolve().parents[1] / "app" / "css_builder.py").read_text(
         encoding="utf-8"
@@ -181,6 +211,35 @@ def test_the_lane_list_cannot_push_the_picture_off_screen():
     css = _strip_comments(_read(_TIMELINE))
     block = re.search(r"\.vp-tl-lanes\s*\{([^}]*)\}", css)
     assert block, ".vp-tl-lanes has no rule block"
+    body = block.group(1)
+    assert "overflow-y: auto" in body
+    assert "dvh" in body, "the cap must track the visual viewport, not vh"
+
+
+def test_the_panel_clears_the_home_indicator():
+    """The panel is the last thing on the page. Without the inset its
+    final row sits under the home bar — so the last object in the list
+    is the one you cannot tap."""
+    css = _strip_comments(_read(_PANELS))
+    block = re.search(r"\.vp-panel\s*\{([^}]*)\}", css)
+    assert block, ".vp-panel has no rule block in 36c"
+    assert "env(safe-area-inset-bottom" in _expand(block.group(1))
+
+
+def test_panel_rows_and_fold_headers_are_touch_targets():
+    css = _strip_comments(_read(_PANELS))
+    for selector in (r"\.vp-pnl-row", r"\.vp-fold-header", r"\.vp-pnl-btn"):
+        block = re.search(selector + r"\s*\{([^}]*)\}", css)
+        assert block, f"{selector} has no rule block"
+        body = _expand(block.group(1))
+        assert "44px" in body, f"{selector} is under the 44 px touch minimum"
+
+
+def test_long_panel_content_scrolls_inside_itself():
+    """A long trace must not stretch the page out from under the video."""
+    css = _strip_comments(_read(_PANELS))
+    block = re.search(r"\.vp-pnl-trace\s*\{([^}]*)\}", css)
+    assert block, ".vp-pnl-trace has no rule block"
     body = block.group(1)
     assert "overflow-y: auto" in body
     assert "dvh" in body, "the cap must track the visual viewport, not vh"

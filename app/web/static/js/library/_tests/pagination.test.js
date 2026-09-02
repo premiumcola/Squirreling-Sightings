@@ -9,7 +9,43 @@
 import './_setup.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLibraryCursorStack, renderLibraryPagination } from '../index.js';
+import { createLibraryCursorStack, libraryPageItems, renderLibraryPagination } from '../index.js';
+
+// ── libraryPageItems ─────────────────────────────────────────────────────
+// `applyPage` was null-safe from the start; the items read that runs one
+// line before it in `page.js::_loadPage` was not. `apiGet` resolves to
+// `null` (it does NOT throw) for any non-JSON content-type — a proxy
+// error page, a Flask HTML error handler — so `page.items` threw, the
+// catch wrote a console line, and the grid kept its stale items while
+// the cursor stack kept a stale `nextCursor`: ‹/› stayed enabled and did
+// nothing.
+
+test('libraryPageItems reads the item list off a normal page response', () => {
+  assert.deepEqual(libraryPageItems({ items: [{ id: 'a' }], next_cursor: 'c1' }), [{ id: 'a' }]);
+});
+
+test('a null response (apiGet on a non-JSON body) yields an empty list, not a throw', () => {
+  assert.doesNotThrow(() => libraryPageItems(null));
+  assert.deepEqual(libraryPageItems(null), []);
+});
+
+test('a page response carrying no items key yields an empty list', () => {
+  assert.deepEqual(libraryPageItems({ next_cursor: null }), []);
+});
+
+test('a page whose items is not an array yields an empty list', () => {
+  assert.deepEqual(libraryPageItems({ items: null }), []);
+  assert.deepEqual(libraryPageItems({ items: 'nope' }), []);
+});
+
+test('libraryPageItems and applyPage tolerate the same broken response', () => {
+  const stack = createLibraryCursorStack();
+  assert.doesNotThrow(() => {
+    libraryPageItems(null);
+    stack.applyPage(null);
+  });
+  assert.equal(stack.canGoNext, false);
+});
 
 // ── createLibraryCursorStack ─────────────────────────────────────────────
 

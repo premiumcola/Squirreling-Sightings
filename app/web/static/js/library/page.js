@@ -9,7 +9,12 @@ import { byId } from '../core/dom.js';
 import { apiGet } from '../core/api.js';
 import { state } from '../core/state.js';
 import { renderLibraryGrid } from './_grid.js';
-import { createLibraryCursorStack, renderLibraryPagination } from './_pagination.js';
+import {
+  createLibraryCursorStack,
+  libraryPageItems,
+  renderLibraryPagination,
+} from './_pagination.js';
+import { showToast } from '../core/toast.js';
 import { calcLibraryPageSize } from './_page-size.js';
 import {
   createLibraryFilterState,
@@ -87,11 +92,16 @@ async function _loadPage(reset, cursor) {
     params.set('limit', String(calcLibraryPageSize()));
     if (before) params.set('before', before);
     const page = await apiGet(`/api/library?${params.toString()}`);
-    _items = page.items || [];
+    _items = libraryPageItems(page);
     _cursorStack.applyPage(page);
     _paint();
   } catch (e) {
+    // A failed page load used to be console-only: the grid kept its
+    // stale items, the cursor stack kept a stale `nextCursor`, and ‹/›
+    // stayed enabled — a control that looks alive and does nothing. Say
+    // so on screen.
     console.error('[library] page load failed:', e);
+    showToast('Mediathek konnte nicht geladen werden.', 'error');
   } finally {
     _loading = false;
   }

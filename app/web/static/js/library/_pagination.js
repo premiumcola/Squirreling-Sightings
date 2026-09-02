@@ -24,7 +24,7 @@
 // approximate count — a stale `total` can only make the page LABEL
 // read "3 von 5" when it's actually the last page, never make ‹/›
 // jump to a page that does not exist.
-export { createLibraryCursorStack } from './_cursor-stack.js';
+export { createLibraryCursorStack, libraryPageItems } from './_cursor-stack.js';
 
 /**
  * Paint the "Seite N von M" widget + wire ‹/› — hidden entirely (empty

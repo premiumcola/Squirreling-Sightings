@@ -32,4 +32,4 @@
 //                                                  widget for that stack
 export { libraryCardHTML } from './_dispatch.js';
 export { renderLibraryGrid } from './_grid.js';
-export { createLibraryCursorStack, renderLibraryPagination } from './_pagination.js';
+export { createLibraryCursorStack, libraryPageItems, renderLibraryPagination } from './_pagination.js';

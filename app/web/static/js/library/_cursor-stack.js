@@ -17,6 +17,26 @@
 // A cursor value of `null` is a MEANINGFUL, valid result ("fetch page 1,
 // no `before` param"), so "cannot advance/go back" is signalled with
 // `undefined` instead — the two are deliberately never conflated.
+/**
+ * The item list out of a raw `/api/library` response — `applyPage`'s
+ * sibling reader, kept in the same file so ONE module owns "what shape
+ * does /api/library come back in", rather than each caller re-deriving
+ * it.
+ *
+ * `applyPage` has always been null-safe; the items read next to it was
+ * not, and that asymmetry was the bug: `core/api.js::apiGet` resolves to
+ * `null` rather than throwing whenever the response content-type is not
+ * JSON (a proxy error page, a Flask HTML error handler), so `page.items`
+ * threw a TypeError one line BEFORE the null-safe `applyPage` could run.
+ * `page.js` caught it and wrote a console line — leaving the grid on its
+ * stale items and the cursor stack on a stale `nextCursor`, so the ‹/›
+ * buttons stayed enabled and did nothing. A dead-looking control.
+ */
+export function libraryPageItems(pageResult) {
+  const items = pageResult?.items;
+  return Array.isArray(items) ? items : [];
+}
+
 export function createLibraryCursorStack() {
   let stack = []; // cursors that fetched every page BEHIND the current one
   let current = null; // the `before` param that fetched the CURRENT page

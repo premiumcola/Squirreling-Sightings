@@ -16,6 +16,9 @@ came from the *unconfirmed* detections, so events read
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
+import numpy as np
 import pytest
 
 from app.camera_runtime._motion import MotionMixin
@@ -211,23 +214,127 @@ def test_an_unclassified_bird_leaves_the_headline_empty():
     assert cam._rec_event_meta["bird_species"] is None
 
 
-def test_main_loop_calls_the_upgrade_while_recording():
-    """The recording state machine moved to ``_recording_step`` when
-    ``_main_loop`` was split back under the 500-line ceiling. The
-    invariant is unchanged: the ``elif self._recording:`` arm — the only
-    window in which a late class confirmation can still be caught — must
-    reach the upgrade, and must reach it BEFORE the clip can be closed.
+class _Store:
+    def __init__(self):
+        self.events: dict = {}
+
+    def get_event(self, _cam, eid):
+        return dict(self.events.get(eid) or {})
+
+    def update_event(self, _cam, eid, ev):
+        self.events[eid] = dict(ev)
+
+
+def _recording_cam():
+    """A camera wired up far enough to run ``_rtsp_recording_step``."""
+    from app.camera_runtime._recording_step import RecordingStepMixin
+
+    class _StepCam(RecordingStepMixin, MotionMixin):
+        def __init__(self):
+            self.camera_id = "acme_cam_garden_113"
+            self.cfg = {
+                "armed": True,
+                "alarm_profile": "soft",
+                "class_severity": {"person": "alarm", "motion": "off"},
+            }
+            self.global_cfg = {"processing": {"clip_max_duration_s": 120}}
+            self.store = _Store()
+            self.person_registry = None
+            self.recent_detections = []
+            self.last_event_at = datetime(2025, 1, 1, 0, 0, 0)
+            self.event_counter_today = 0
+            self._recording = False
+            self._clip_tally = None
+            self._rec_event_meta = None
+            self._rec_start_time = None
+            self._last_motion_ts = None
+            self._rec_frames = []
+            self._rec_corrupt_frames = 0
+            self._ffmpeg_proc = None
+            self._pre_buffer = []
+            self.motion_preroll = None
+
+    return _StepCam()
+
+
+def _tick(cam, monkeypatch, *, dets, labels, has_motion, at):
+    import app.camera_runtime._recording_step as step_mod
+
+    monkeypatch.setattr(step_mod, "_FFMPEG_AVAILABLE", False)
+    cam._rtsp_recording_step(
+        proc_frame=np.zeros((8, 8, 3), dtype=np.uint8),
+        now_dt=at,
+        has_motion=has_motion,
+        labels=labels,
+        detections=dets,
+        drawn=None,
+        effective_bbox=None,
+        cooldown=0,
+    )
+
+
+def test_a_person_confirming_mid_clip_reaches_the_in_flight_event(monkeypatch):
+    """The whole point of F-2, driven through the real state machine.
+
+    This replaces a source-text assertion that pinned the upgrade to the
+    ``elif self._recording:`` arm. That arm runs only when
+    ``has_motion`` is False, and all three trigger-mode branches in
+    ``_main_loop`` assign ``labels = ... if has_motion else []``. So the
+    guard there (``if labels and self._upgrade_event_meta(...)``) could
+    never be true, and the feature never ran in production while the
+    text assertion kept passing.
+
+    The window in which a late class confirmation is actually visible is
+    the one this test drives: still recording, motion still present, and
+    a class that has now cleared its confirmation count.
     """
-    from pathlib import Path
+    cam = _recording_cam()
+    t0 = datetime(2025, 6, 1, 12, 0, 0)
 
-    src = (
-        Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_recording_step.py"
-    ).read_text(encoding="utf-8")
-    branch = src[src.index("elif self._recording:") :][:400]
-    assert "self._advance_clip(" in branch
+    # Tick 1 — motion wins the confirmation race and opens the clip.
+    _tick(cam, monkeypatch, dets=[], labels=["motion"], has_motion=True, at=t0)
+    assert cam._recording, "the clip never opened"
+    assert cam._rec_event_meta["labels"] == ["motion"]
+    assert cam._rec_event_meta["notify"] is False
 
-    advance = src[src.index("def _advance_clip(") :]
-    assert "_upgrade_event_meta(" in advance
-    assert advance.index("_upgrade_event_meta(") < advance.index(
-        "self._stop_ffmpeg_and_queue_reencode()"
-    ), "a label confirmed on the closing frame must still land in the event"
+    # Tick 2 — a person clears its 3-hits-in-5-s gate, still mid-clip.
+    _tick(
+        cam,
+        monkeypatch,
+        dets=[_Det("person", 0.71)],
+        labels=["motion", "person"],
+        has_motion=True,
+        at=t0 + timedelta(seconds=1),
+    )
+
+    meta = cam._rec_event_meta
+    assert meta["labels"] == ["person"], f"the event is still filed as {meta['labels']}"
+    assert meta["top_label"] == "person"
+    assert meta["severity"] == "alarm"
+    assert meta["notify"] is True, "the alert for a confirmed person is still suppressed"
+
+
+def test_the_upgrade_is_written_through_to_the_stored_event(monkeypatch):
+    """An upgrade that stays in memory is the failure this project has
+    already paid for once — the corrected event must reach the store."""
+    cam = _recording_cam()
+    t0 = datetime(2025, 6, 1, 12, 0, 0)
+
+    _tick(cam, monkeypatch, dets=[], labels=["motion"], has_motion=True, at=t0)
+    eid = cam._rec_event_meta["event_id"]
+    cam.store.events.setdefault(eid, {"event_id": eid, "labels": ["motion"]})
+
+    _tick(
+        cam,
+        monkeypatch,
+        dets=[_Det("person", 0.71)],
+        labels=["motion", "person"],
+        has_motion=True,
+        at=t0 + timedelta(seconds=1),
+    )
+
+    stored = cam.store.events.get(eid) or {}
+    assert stored.get("labels") == [
+        "person"
+    ], f"the stored event still reads {stored.get('labels')}"
+    assert stored.get("severity") == "alarm"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import threading
 import time
 
@@ -69,13 +68,57 @@ class RecordingStepMixin:
                 return True
             if self._recording:
                 self._absorb_clip_frame(detections, now_dt)
+                self._fold_late_labels(labels, detections)
             # Append frames only in OpenCV mode — ffmpeg records itself.
             if self._recording and self._ffmpeg_proc is None:
                 self._rec_frames.append(proc_frame.copy())
         elif self._recording:
             self._absorb_clip_frame(detections, now_dt)  # before the close
-            self._advance_clip(proc_frame, now_dt, labels, detections, _post_tail, _clip_max)
+            self._advance_clip(proc_frame, now_dt, _post_tail, _clip_max)
         return False
+
+    def _fold_late_labels(self, labels: list, detections: list) -> None:
+        """F-2 · fold a class that confirmed AFTER the clip opened into
+        the in-flight event, and write the correction through to disk.
+
+        Motion needs 2 of 3 frames (~0.7 s at the 350 ms cadence); a
+        person needs 3 hits in 5 s (~1.05 s). Motion wins that race
+        almost every time, so a clip that plainly shows a person opens as
+        ``labels=["motion"]`` — which is ``off`` in the severity matrix,
+        so the alert is dropped.
+
+        This belongs in the WITH-motion arm. It used to sit in
+        ``_advance_clip``, which runs only when ``has_motion`` is False —
+        and all three trigger-mode branches in ``_main_loop`` assign
+        ``labels = ... if has_motion else []``. The guard there could
+        never be true, so the upgrade never ran on a live camera.
+        ``_upgrade_event_meta`` returns False unless a genuinely new
+        non-motion label turned up, so calling it every tick is cheap.
+        """
+        if not labels or not self._upgrade_event_meta(labels, detections):
+            return
+        meta = self._rec_event_meta or {}
+        eid = meta.get("event_id")
+        if not eid:
+            return
+        try:
+            ev = self.store.get_event(self.camera_id, eid) or {}
+            ev["labels"] = meta["labels"]
+            ev["top_label"] = meta["top_label"]
+            ev["alarm_level"] = meta["alarm_level"]
+            ev["severity"] = meta["severity"]
+            self.store.update_event(self.camera_id, eid, ev)
+        except Exception as e:
+            # Not suppressed silently: the in-memory event is now ahead
+            # of the stored one, which is exactly the divergence that
+            # makes an alert look like it fired when the JSON says
+            # otherwise.
+            log.warning(
+                "[cam:%s] event %s upgraded in memory but the store write failed: %s",
+                self.camera_id,
+                eid,
+                e,
+            )
 
     def _absorb_clip_frame(self, detections: list, now_dt) -> None:
         """Fold one analysis tick into the in-flight clip's aggregate.
@@ -183,27 +226,15 @@ class RecordingStepMixin:
                 )
         return False
 
-    def _advance_clip(
-        self, proc_frame, now_dt, labels: list, detections: list, post_tail: float, clip_max: int
-    ) -> None:
-        """A frame with no motion while a clip is running: fold in late
-        confirmations, accumulate the tail, and close the clip once the
-        post-motion tail or the maximum duration is reached."""
-        # F-2 · fold labels that confirmed AFTER the clip
-        # started into the in-flight event. Motion wins the
-        # confirmation race almost every time, so without
-        # this the event stays "motion" and every downstream
-        # gate reads that instead of "person".
-        if labels and self._upgrade_event_meta(labels, detections):
-            with contextlib.suppress(Exception):
-                _eid = (self._rec_event_meta or {}).get("event_id")
-                if _eid:
-                    _ev = self.store.get_event(self.camera_id, _eid) or {}
-                    _ev["labels"] = self._rec_event_meta["labels"]
-                    _ev["top_label"] = self._rec_event_meta["top_label"]
-                    _ev["alarm_level"] = self._rec_event_meta["alarm_level"]
-                    _ev["severity"] = self._rec_event_meta["severity"]
-                    self.store.update_event(self.camera_id, _eid, _ev)
+    def _advance_clip(self, proc_frame, now_dt, post_tail: float, clip_max: int) -> None:
+        """A frame with no motion while a clip is running: accumulate the
+        tail and close the clip once the post-motion tail or the maximum
+        duration is reached.
+
+        No label folding here — this arm runs only when ``has_motion`` is
+        False, and ``_main_loop`` hands us an empty label list in exactly
+        that case. See :meth:`_fold_late_labels`.
+        """
         since_last = (
             (now_dt - self._last_motion_ts).total_seconds() if self._last_motion_ts else 999
         )

@@ -234,3 +234,78 @@
 .vp-pnl-trace-line[data-kind='info'] {
   color: var(--muted);
 }
+
+/* ── Detected-object rows ──────────────────────────────────────────────────
+   The row wraps: identity and score on the first line, the span and the
+   model underneath. At 375 px they cannot share one line, and the model
+   name is the part that would have been truncated away — which is the
+   half that decides whether a label is worth arguing with. */
+.vp-pnl-obj {
+  flex-wrap: wrap;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  /* A left edge in the object's own colour ties the row to its lane on
+     the timeline and its box on the picture. Depth by colour, not by a
+     hairline border. */
+  box-shadow: inset 3px 0 0 0 var(--vp-lane-colour, transparent);
+}
+
+/* Icon buttons paint at 32 px and carry the 44 px target as a
+   transparent ::before, the same trick the top bar uses — four full-size
+   discs in a row would leave no width for the label they act on. */
+.vp-pnl-iconbtn {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.vp-pnl-iconbtn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--vp-tap);
+  height: var(--vp-tap);
+  transform: translate(-50%, -50%);
+}
+
+@media (hover: hover) {
+  .vp-pnl-iconbtn:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* ── Key/value rows in the details fold ────────────────────────────────── */
+.vp-pnl-kv {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+.vp-pnl-k {
+  flex: 0 0 40%;
+  color: var(--muted);
+}
+
+.vp-pnl-v {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.vp-pnl-v.is-ok {
+  color: var(--good);
+}

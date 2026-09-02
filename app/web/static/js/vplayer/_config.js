@@ -142,6 +142,11 @@ export function buildPlayerConfig(raw) {
     item: _normalizeItem(raw),
     overlays: _normalizeOverlays(raw.overlays, flags),
     actions: _normalizeActions(raw.actions),
+    // Opaque callback bag for the panels (the shared api helper, the
+    // re-index trigger, the correction save). Passed through verbatim:
+    // unlike `actions`, whose keys the shell itself wires to chrome,
+    // these belong to whichever panel the mode selects.
+    deps: raw.deps && typeof raw.deps === 'object' ? { ...raw.deps } : {},
     flags: { ...flags, overlayToggles: [...flags.overlayToggles] },
     windowMs: flags.live ? LIVE_WINDOW_MS : 0,
   };

@@ -16,6 +16,7 @@
 // _config.js. Nothing here branches on the mode itself.
 
 import { renderLiveTracks } from './_live-tracks.js';
+import { renderRecordedPanel } from './_recorded.js';
 
 /**
  * Render the context panel.
@@ -25,11 +26,8 @@ import { renderLiveTracks } from './_live-tracks.js';
  * @param {object} [data]     latest mapped frame (live) or event data
  * @returns {{update: (d: object) => void, teardown: () => void}|null}
  */
-export function renderContextPanel(host, cfg, data = null) {
+export function renderContextPanel(host, cfg, data = null, deps = {}) {
   if (!host || !cfg.flags.showPanel) return null;
   if (cfg.flags.panel === 'live') return renderLiveTracks(host, cfg, data);
-  // The recorded content lands with the recorded data adapter; until
-  // then the panel simply stays empty rather than rendering a shell
-  // around nothing. The slot collapses via :empty.
-  return null;
+  return renderRecordedPanel(host, cfg, deps);
 }

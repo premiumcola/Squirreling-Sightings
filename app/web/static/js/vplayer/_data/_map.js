@@ -77,3 +77,46 @@ export function mapFrame(data) {
     raw: d,
   };
 }
+
+/**
+ * PURE: the detected-object rows for an item, newest schema first.
+ *
+ * Prefers the tracks.json sidecar, because it carries per-track
+ * timing (from–to) and the stable per-clip numbering the timeline and
+ * the boxes are coloured by. Falls back to the event's own
+ * `detections`, which every clip has but which is a single-frame
+ * snapshot with no duration — hence the null span rather than a
+ * fabricated one.
+ */
+export function objectRowsFor(item, tracks) {
+  const list = tracks && Array.isArray(tracks.tracks) ? tracks.tracks : null;
+  if (list && list.length) {
+    return list.map((tr) => {
+      const samples = tr.samples || [];
+      return {
+        key: `track:${tr._num}`,
+        num: tr._num == null ? null : tr._num,
+        label: tr.label || '',
+        colour: tr.color || null,
+        score: tr.best_score == null ? tr.score : tr.best_score,
+        // Per-detection model attribution is a cascade STAGE token and
+        // is recorded per TRACK, not per sample.
+        model: tr.model || null,
+        t0: samples.length ? samples[0].t : null,
+        t1: samples.length ? samples[samples.length - 1].t : null,
+      };
+    });
+  }
+  const dets = (item && item.detections) || [];
+  return dets.map((d, i) => ({
+    key: `det:${i}`,
+    num: null,
+    label: d.label || '',
+    colour: null,
+    score: d.score,
+    model: d.model || null,
+    // A raw detection is one frame. Saying so beats inventing a span.
+    t0: null,
+    t1: null,
+  }));
+}

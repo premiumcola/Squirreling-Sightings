@@ -35,6 +35,7 @@ import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
 import { renderBoxLayer } from './_overlay-svg.js';
 import { subscribeLive } from './_data/live.js';
+import { loadRecorded } from './_data/recorded.js';
 
 /** The single open player, or null. One at a time, by construction. */
 let _open = null;
@@ -82,6 +83,39 @@ function _wireLive(cfg, stage, panel, timeline) {
   });
 }
 
+/**
+ * Load a recorded clip's data and paint the panel and the timeline
+ * with it. Fire-and-forget: the shell is already up, so the picture
+ * plays while the sidecar is still in flight.
+ */
+function _wireRecorded(cfg, stage, panel, timeline) {
+  if (cfg.flags.live) return;
+  loadRecorded(cfg.item)
+    .then((data) => {
+      panel?.update(data);
+      const p = data.provenance || {};
+      const rs = cfg.item.recording_settings || {};
+      const timing = p.timing || {};
+      const render = () =>
+        timeline?.render(data.tracks?.tracks || [], {
+          duration: stage.video.duration,
+          preRoll: timing.pre_roll_s ?? rs.pre_motion_seconds,
+          postRoll: timing.post_roll_s ?? rs.post_motion_seconds,
+          threshold: p.effective?.spawn_default ?? rs.conf_thresh_general,
+          item: cfg.item,
+          tracks: data.tracks,
+        });
+      render();
+      // Duration arrives with the metadata, which on first open lands
+      // after this render — without the second pass every lane would be
+      // laid out against a duration of 0.
+      stage.video.addEventListener('loadedmetadata', render);
+    })
+    .catch(() => {
+      /* the clip still plays; the panel simply stays empty */
+    });
+}
+
 /** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
 function _mountAll(cfg) {
   const shell = mountShell(cfg, { onKey: (key) => key === 'Escape' && closeVideoPlayer() });
@@ -114,8 +148,10 @@ function _mountAll(cfg) {
   // so the picture is continuous rather than a 1 Hz snapshot loop.
   if (cfg.flags.live && cfg.source?.url) stage.img.src = cfg.source.url;
 
-  const panel = renderContextPanel(shell.slot('panel'), cfg);
+  const panel = renderContextPanel(shell.slot('panel'), cfg, null, cfg.deps || {});
   const live = _wireLive(cfg, stage, panel, timeline);
+  if (!cfg.flags.live && cfg.source?.url) stage.video.src = cfg.source.url;
+  _wireRecorded(cfg, stage, panel, timeline);
 
   return { cfg, shell, stage, topbar, menu, overlayRow, transport, timeline, panel, live };
 }

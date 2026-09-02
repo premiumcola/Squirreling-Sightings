@@ -763,13 +763,23 @@ body.sidebar-locked {
     touch-action: pinch-zoom;
   }
 
-  /* Native range inputs are tiny on iOS — give them a bigger thumb. */
+  /* Native range inputs are tiny on iOS — give them a bigger thumb.
+
+     The visible track belongs to ::-webkit-slider-runnable-track /
+     ::-moz-range-track (01-base.css), NOT to this element. A fill here
+     paints the element's whole box instead of a 4 px line — and the touch
+     rule in 13-statistics.css stretches that box to 44 px for a decent hit
+     area, so the fill became a full-width grey slab under the
+     Erkennungswolke's Zeitraum slider. The Timeline's slider escaped only
+     because #tlRangeSlider carries an id-specificity `background:
+     transparent` (04-coral-1.css), added the last time this same bug was
+     reported. That is why the small sliders looked right and the big one
+     did not. Fixed once here for every slider rather than a third time per
+     component. border-radius goes with it: it only rounded that fill. */
   input[type='range'] {
     height: 6px;
     -webkit-appearance: none;
     appearance: none;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 3px;
     outline: none;
   }
   input[type='range']::-webkit-slider-thumb {

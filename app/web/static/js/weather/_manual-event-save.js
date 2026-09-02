@@ -32,7 +32,7 @@ import {
   wsLineEmphasis,
   renderWeatherStatsChart,
 } from './stats.js';
-import { buildLinePath } from './stats-chart/_paths.js';
+import { buildLinePath, fieldDataExtent } from './stats-chart/_paths.js';
 import { createManualEvent, loadWeatherManualEvents } from './_manual-events.js';
 import { MANUAL_CATEGORIES_MAX } from './_manual-event-cats.js';
 import {
@@ -53,17 +53,45 @@ const _FIELD_TO_CATEGORY = {
   visibility: 'fog',
 };
 
+// How far a curve must actually move before it may pre-select a
+// category — in PHYSICAL units, deliberately not in the normalised
+// emphasis score. Normalisation is right for "which line should be
+// drawn boldest" and wrong for "did anything happen": a 0.02 cm/h trace
+// of snow looks respectable against a 1 cm/h reference span, and is
+// nothing in the sky. Snow is the rarest thing this garden sees, so
+// guessing it from a trace is the most conspicuous version of the
+// mistake — but the floor gates every field, not just that one.
+const _MIN_SWING_FOR_GUESS = {
+  precipitation: 0.5, // mm/h — light rain, not a stray drop
+  snowfall: 0.5, // cm/h — real snowfall, not a dusting
+  lightning_potential: 0.3, // J/kg, on the corrected LPI trigger scale
+  visibility: 1500, // m — a drop deep enough to read as fog forming
+};
+
 // The curve that moved the MOST relative to its own reference span
 // (wsLineEmphasis — the same "how interesting is this line" score the
 // chart itself uses to draw bolder curves) wins the default category
-// guess. `null` when nothing in the mapped set moved at all — the
-// category picker then opens with nothing pre-selected.
+// guess, among those that cleared their floor above. `null` when
+// nothing in the mapped set moved enough — the category picker then
+// opens with nothing pre-selected.
+//
+// That null used to be unreachable in practice: wsLineEmphasis never
+// returns a width below 1.4, so ANY mapped field carrying data beat the
+// -1 the search started from. A flat, dry window therefore always got a
+// guess — whichever field the loop reached first — and a trace of snow
+// beat an empty sky.
 export function _deriveDefaultCategory(samples) {
   let best = null;
   let bestScore = -1;
   for (const [field, category] of Object.entries(_FIELD_TO_CATEGORY)) {
     const meta = buildLinePath(samples, field, 0, 0, 1, 1);
     if (!meta) continue;
+    // The RAW extent, not meta.lo/hi — those carry the flat-line
+    // padding the chart needs to draw a straight line mid-band.
+    const extent = fieldDataExtent(samples, field);
+    if (!extent) continue;
+    const swing = Math.abs(extent.hi - extent.lo);
+    if (swing < (_MIN_SWING_FOR_GUESS[field] ?? 0)) continue;
     const { width } = wsLineEmphasis(field, meta.lo, meta.hi);
     if (width > bestScore) {
       bestScore = width;

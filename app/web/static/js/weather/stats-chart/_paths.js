@@ -71,15 +71,31 @@ function _runsToPath(runs) {
 // rather than a second, potentially-drifting copy of the "flat line pins
 // to mid-band" rule. `optLo`/`optHi` mirror buildLinePath's own lo/hi
 // override.
-export function fieldValueRange(samples, key, optLo, optHi) {
-  const def = [];
+// The field's TRUE extent in this window — the raw min/max, with none of
+// the drawing rules applied. Anyone asking "how far did this actually
+// move" must use this and not fieldValueRange: the latter pins a flat
+// line to a ±0.5 band so it can be drawn mid-chart, and that band reads
+// as a 1.0 swing that never happened. A dead-flat Schneefall curve
+// looked like real snowfall to exactly that mistake.
+export function fieldDataExtent(samples, key) {
+  let lo = Infinity;
+  let hi = -Infinity;
+  let n = 0;
   for (const s of samples) {
     const v = (s.values || {})[key];
-    if (typeof v === 'number' && isFinite(v)) def.push(v);
+    if (typeof v !== 'number' || !isFinite(v)) continue;
+    n += 1;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
   }
-  if (def.length < 2) return null;
-  let lo = Number.isFinite(optLo) ? optLo : Math.min(...def);
-  let hi = Number.isFinite(optHi) ? optHi : Math.max(...def);
+  return n < 2 ? null : { lo, hi };
+}
+
+export function fieldValueRange(samples, key, optLo, optHi) {
+  const extent = fieldDataExtent(samples, key);
+  if (!extent) return null;
+  let lo = Number.isFinite(optLo) ? optLo : extent.lo;
+  let hi = Number.isFinite(optHi) ? optHi : extent.hi;
   if (hi - lo < 1e-9) {
     lo -= 0.5;
     hi += 0.5;

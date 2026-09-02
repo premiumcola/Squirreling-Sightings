@@ -103,6 +103,56 @@ def test_only_unmapped_fields_moving_yields_no_default():
     assert out["category"] is None
 
 
+def test_a_trace_of_snow_does_not_preselect_the_rarest_category():
+    """Snow is the rarest thing this garden sees, and it was being
+    pre-selected off a 0.02 cm/h trace — because the emphasis score a
+    field earns never drops below its floor, so ANY field carrying data
+    outscored the -1 the search started from. Normalised against a
+    1 cm/h reference span a trace looks respectable; in the sky it is
+    nothing."""
+    out = _js(
+        _SAMPLE.format(
+            body="""
+        const mod = await import(JS + '/weather/_manual-event-save.js');
+        const samples = [sample({ snowfall: 0 }), sample({ snowfall: 0.02 })];
+        console.log(JSON.stringify({ category: mod._deriveDefaultCategory(samples) }));
+        """
+        )
+    )
+    assert out["category"] is None
+
+
+def test_a_dry_flat_window_yields_no_default():
+    """Every mapped field present and pinned flat — the window says
+    nothing happened, so the picker must open with nothing lit rather
+    than crowning whichever field the loop happened to reach first."""
+    out = _js(
+        _SAMPLE.format(
+            body="""
+        const mod = await import(JS + '/weather/_manual-event-save.js');
+        const flat = { precipitation: 0, snowfall: 0, lightning_potential: 0, visibility: 9000 };
+        const samples = [sample(flat), sample(flat)];
+        console.log(JSON.stringify({ category: mod._deriveDefaultCategory(samples) }));
+        """
+        )
+    )
+    assert out["category"] is None
+
+
+def test_real_snowfall_still_wins():
+    """The floor must gate a trace, not the category itself."""
+    out = _js(
+        _SAMPLE.format(
+            body="""
+        const mod = await import(JS + '/weather/_manual-event-save.js');
+        const samples = [sample({ snowfall: 0 }), sample({ snowfall: 3 })];
+        console.log(JSON.stringify({ category: mod._deriveDefaultCategory(samples) }));
+        """
+        )
+    )
+    assert out["category"] == "snow"
+
+
 def test_an_empty_range_yields_no_default():
     out = _js(
         """

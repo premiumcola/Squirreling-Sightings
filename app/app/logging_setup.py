@@ -31,6 +31,8 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 
 # ── In-memory ring buffer for the web-UI Logs tab ──────────────────────────
@@ -288,13 +290,66 @@ def _resolve_window_s() -> float:
 
 
 _DONE = False
+# The burst filter, kept so a handler attached later (the log file, once
+# the storage root is known) shares the SAME suppression state as the
+# console and the buffer.
+_RATE_FILTER: BurstRateLimitFilter | None = None
+_FILE_HANDLER: RotatingFileHandler | None = None
+
+LOG_DIR = "logs"
+LOG_FILE = "app.log"
+# 5 MB × (1 + 3 backups): weeks of INFO on a quiet box, a day or two
+# under a reconnect storm — either way far beyond the 3000 lines the
+# debug bundle takes.
+LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
+LOG_FILE_BACKUPS = 3
+
+
+def log_file_path(storage_root) -> Path:
+    return Path(storage_root) / LOG_DIR / LOG_FILE
+
+
+def attach_file_handler(storage_root) -> Path | None:
+    """Add a rotating file under ``<storage>/logs/`` next to the console.
+
+    Additive: stdout logging is untouched — ``docker logs`` keeps
+    working — the file only exists so a debug bundle can carry more
+    than the 400-line memory buffer. Called once the storage root is
+    resolved; idempotent; never fatal (a read-only storage mount costs
+    the file, not the boot).
+    """
+    global _FILE_HANDLER
+    if _FILE_HANDLER is not None:
+        return Path(_FILE_HANDLER.baseFilename)
+    path = log_file_path(storage_root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            path, maxBytes=LOG_FILE_MAX_BYTES, backupCount=LOG_FILE_BACKUPS, encoding="utf-8"
+        )
+    except OSError as exc:
+        logging.getLogger(__name__).warning("[boot] log file unavailable at %s: %s", path, exc)
+        return None
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s.%(msecs)03d %(levelname)-5s %(name)-22s %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+    handler.setLevel(_resolve_level())
+    if _RATE_FILTER is not None:
+        handler.addFilter(_RATE_FILTER)
+        _RATE_FILTER.attach_handlers([*_RATE_FILTER._summary_targets, handler])
+    logging.getLogger().addHandler(handler)
+    _FILE_HANDLER = handler
+    return path
 
 
 def setup_logging():
     """Idempotent. Installs a single console handler + the in-memory buffer
     on the root logger and silences known-noisy library loggers. Subsequent
     calls return without duplicating handlers."""
-    global _DONE
+    global _DONE, _RATE_FILTER
     if _DONE:
         return
     _DONE = True
@@ -326,6 +381,7 @@ def setup_logging():
     console.addFilter(rate_filter)
     log_buffer.addFilter(rate_filter)
     rate_filter.attach_handlers([console, log_buffer])
+    _RATE_FILTER = rate_filter
     # Silence libraries that flood at INFO/DEBUG. apscheduler is added
     # because its job-fired/job-completed pair every 60 s is far below
     # the noise floor we care about.

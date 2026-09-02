@@ -12,7 +12,7 @@ from flask import Flask
 # Centralised logging setup — installs the explicit StreamHandler with a
 # parseable format, the in-memory buffer for the web UI, and the WARNING+
 # rate-limit filter. Must run before any subsystem imports that emit logs.
-from .logging_setup import setup_logging
+from .logging_setup import attach_file_handler, setup_logging
 
 setup_logging()
 
@@ -57,6 +57,12 @@ storage_root = Path(base_cfg["storage"]["root"])
 # the duration of the migration; both names point at the same object.
 app_state.base_cfg = base_cfg
 app_state.storage_root = storage_root
+# Rotating file under storage/logs/, ADDITIVE to the console — docker
+# logs keeps working. Attached here rather than in setup_logging()
+# because the storage root is only known once the config is loaded. The
+# debug bundle reads its tail; the 400-line memory buffer cannot cover a
+# reconnect storm that started an hour ago.
+attach_file_handler(storage_root)
 web_root = Path(__file__).resolve().parent.parent / "web"
 
 # Concatenate CSS partials into web/static/app.css before Flask boots.

@@ -70,6 +70,7 @@ def register_blueprints(app) -> None:
         cameras,
         coral,
         coral_test_detection,
+        debug_bundle,
         detection_cloud,
         events,
         library,
@@ -124,6 +125,10 @@ def register_blueprints(app) -> None:
     # SIMU run log — store / list / fetch one "Debug kopieren" run. Own
     # module because coral_test_detection.py is already past the ceiling.
     app.register_blueprint(simu_log.bp)
+    # Debug-Bundle — the whole diagnostic state as one redacted ZIP.
+    # Separate module because both places it could have gone
+    # (bootstrap, coral_test_detection) are past the file ceiling.
+    app.register_blueprint(debug_bundle.bp)
     app.register_blueprint(weather.bp)
     # Storm-episode archive — its own module because routes/weather.py
     # is already past the file ceiling.

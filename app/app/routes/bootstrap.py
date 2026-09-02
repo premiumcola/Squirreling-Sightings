@@ -574,24 +574,32 @@ def api_discover_test_credentials():
     )
 
 
-@bp.get('/api/status')
-def api_status():
+def status_payload() -> dict:
+    """The body of ``/api/status``, as a plain dict.
+
+    Split out of the route so the debug bundle can snapshot the same
+    state the dashboard polls, rather than growing a second, drifting
+    idea of what "status" means.
+    """
     settings = app_state.settings
     runtimes = app_state.runtimes
-    return jsonify(
-        {
-            "cameras": [
-                runtimes[c["id"]].status()
-                if c["id"] in runtimes
-                else {"id": c["id"], "status": "disabled", "name": c.get("name", c["id"])}
-                for c in app_state.get_effective_config().get("cameras", [])
-            ],
-            "cat_profiles": app_state.cat_registry.list_profiles(),
-            "person_profiles": app_state.person_registry.list_profiles(),
-            "telegram_actions": settings.data.get("telegram_actions", [])[:12],
-            "tpu": fleet_tpu_utilisation(runtimes),
-        }
-    )
+    return {
+        "cameras": [
+            runtimes[c["id"]].status()
+            if c["id"] in runtimes
+            else {"id": c["id"], "status": "disabled", "name": c.get("name", c["id"])}
+            for c in app_state.get_effective_config().get("cameras", [])
+        ],
+        "cat_profiles": app_state.cat_registry.list_profiles(),
+        "person_profiles": app_state.person_registry.list_profiles(),
+        "telegram_actions": settings.data.get("telegram_actions", [])[:12],
+        "tpu": fleet_tpu_utilisation(runtimes),
+    }
+
+
+@bp.get('/api/status')
+def api_status():
+    return jsonify(status_payload())
 
 
 @bp.get('/api/system')

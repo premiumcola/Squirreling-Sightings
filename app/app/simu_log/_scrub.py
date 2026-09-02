@@ -36,6 +36,19 @@ SECRET_KEYS = (
     "chat_ids",
 )
 
+#: Matched as a SUBSTRING of the key name, case-insensitively, so
+#: ``mqtt_password``, ``alert_chat_ids`` or next year's ``api_secret``
+#: are covered without anyone having to remember to extend the tuple
+#: above. The exact list stays as documentation of the known shapes.
+SECRET_KEY_PARTS = (
+    "password",
+    "passphrase",
+    "token",
+    "secret",
+    "api_key",
+    "chat_id",
+)
+
 #: Any embedded-credential URL — ``rtsp://admin:hunter2@cam/x``. Same
 #: expression the Markdown snapshot's log scrubber uses.
 _URL_RE = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s\"']*@[^\s\"']*")
@@ -69,12 +82,26 @@ def scrub_text(text: str) -> str:
     return _LAN_IP_RE.sub(LAN_IP_MASK, out)
 
 
+def is_secret_key(key) -> bool:
+    """Does this key name a value that must not leave the box?
+
+    ``<key>_set`` is excluded: it is this module's OWN output — a
+    boolean marker — and re-redacting it would turn ``password_set``
+    into ``password_set_set`` on every pass over an already-scrubbed
+    document.
+    """
+    name = str(key).lower()
+    if name.endswith("_set"):
+        return False
+    return any(part in name for part in SECRET_KEY_PARTS)
+
+
 def scrub(value):
     """Recursively scrub a JSON-shaped payload. Returns a new value."""
     if isinstance(value, dict):
         # redact_secrets drops each named key and leaves <key>_set behind,
         # so a scrubbed dict still answers "is one configured?".
-        present = tuple(k for k in SECRET_KEYS if k in value)
+        present = tuple(k for k in value if is_secret_key(k))
         out = redact_secrets(value, present) if present else dict(value)
         return {scrub_text(str(k)): scrub(v) for k, v in out.items()}
     if isinstance(value, (list, tuple)):

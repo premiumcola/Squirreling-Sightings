@@ -28,7 +28,7 @@ import logging
 from ._consts import MAX_AGE_DAYS, MAX_FRONTEND_BYTES, MAX_RUNS_PER_CAMERA, RUN_NAME_RE
 from ._io import list_runs, read_run, save_run
 from ._retention import enforce, select_evictable
-from ._scrub import scrub, scrub_text
+from ._scrub import is_secret_key, scrub, scrub_text
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ __all__ = [
     "RUN_NAME_RE",
     "clamp_frontend",
     "enforce",
+    "is_secret_key",
     "list_runs",
     "read_run",
     "scrub",

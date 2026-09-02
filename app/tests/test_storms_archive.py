@@ -75,6 +75,15 @@ def test_every_storms_file_is_under_the_js_ceiling():
         assert n <= 400, f"{name} is {n} lines — split before crossing 400"
 
 
+def test_every_chart_file_is_under_the_js_ceiling():
+    """Same 400-line ceiling over stats-chart/. The function-span budget
+    below already walked this directory; the FILE budget did not, which
+    is how _hover.js reached 404 lines with every test green."""
+    for path in sorted(_CHART.glob("*.js")):
+        n = len(_read(path).splitlines())
+        assert n <= 400, f"{path.name} is {n} lines — split before crossing 400"
+
+
 def _function_spans(src: str):
     """Yield (name, line_count) for each top-level function declaration.
     Brace-counting, not a real parser — adequate here because these files
@@ -161,7 +170,39 @@ def test_bind_chart_hover_formatters_are_optional():
     assert m, "bindChartHover signature not found"
     assert "opts = {}" in m.group(1), "the hover options bag must be optional"
     # …and the default paths must still exist for the Wetter panel.
-    assert "_defaultRows" in src and "_defaultHead" in src
+    # _hover.js was 404 lines (over the 400 ceiling) and is now the
+    # composition root over _hover_tip.js + _hover_drag.js, so the two
+    # default formatters live next door. Assert they are DEFINED, not
+    # merely mentioned — a bare `in src` would have passed on nothing
+    # but the import line after the split.
+    tip = _read(_CHART / "_hover_tip.js")
+    for fn in ("_defaultRows", "_defaultHead"):
+        assert f"export function {fn}(" in tip, f"{fn} is no longer defined in _hover_tip.js"
+    # The fallback wiring is the actual contract: with no opts.head /
+    # opts.rows the tooltip must still reach the defaults.
+    paint = tip[tip.index("export function _paintAt") :]
+    assert "_defaultHead(" in paint and "_defaultRows(" in paint, (
+        "_paintAt no longer falls back to the default head/rows — the "
+        "Wetter panel passes neither opts.head nor opts.rows"
+    )
+
+
+def _import_targets(src: str) -> set[str]:
+    """The module specifiers a file actually imports. Comments mention
+    sibling filenames freely, so a raw substring check would be noise —
+    this reads the `from '...'` clauses only."""
+    return set(re.findall(r"""(?:^|\n)\s*import[^;]*?from\s+['"]([^'"]+)['"]""", src))
+
+
+def test_the_hover_package_layers_in_one_direction():
+    """_hover_drag.js may import from _hover_tip.js; the reverse would be
+    an import cycle. The naive split (lift the drag block out of
+    _hover.js) produces exactly that, because _onDown calls the
+    tooltip's _onMove and _onUp calls its _paintAt."""
+    tip = _import_targets(_read(_CHART / "_hover_tip.js"))
+    assert not {t for t in tip if "_hover" in t}, f"_hover_tip.js must sit at the bottom: {tip}"
+    drag = _import_targets(_read(_CHART / "_hover_drag.js"))
+    assert "./_hover.js" not in drag, "_hover_drag.js imports the composition root — cycle"
 
 
 def test_weather_stats_chart_still_has_its_zero_argument_entrypoint():

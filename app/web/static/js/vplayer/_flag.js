@@ -35,7 +35,7 @@ export const VPLAYER_SURFACES = ['recorded', 'live', 'sim'];
 // its own one-line commit after the flag-gated call site has proven it.
 const DEFAULTS = {
   recorded: false,
-  live: false,
+  live: true,
   sim: true,
 };
 

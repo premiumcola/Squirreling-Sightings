@@ -242,6 +242,13 @@ class ClipTally:
             row["model"] = getattr(det, "model", None) or row["model"]
         if getattr(det, "identity", None) and not row.get("identity"):
             row["identity"] = det.identity
+            # `Detection.model` is "the stage that produced the label OR
+            # IDENTITY this detection carries", and the re-id stage
+            # stamps STAGE_CAT_REID / STAGE_PERSON_REID onto the very
+            # detection it names (`_main_loop.py`). Taking the identity
+            # while leaving the attribution behind would file a named
+            # cat as having been decided by the plain detector.
+            row["model"] = getattr(det, "model", None) or row["model"]
 
     def _add_species(self, det) -> None:
         """Fold an already-classified bird into the species tally.

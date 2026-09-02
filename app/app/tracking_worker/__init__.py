@@ -54,13 +54,11 @@ from pathlib import Path
 
 from ..tracker_core import resolve_track_thresholds
 from ._achievement import update_event_achievement
+from ._clean import clean_tracks
 from ._consts import RECENT_FAILURES_CAP, SLOW_JOB_RATIO, TRACKS_SCHEMA
 from ._detect import resolve_object_filter
-from ._ghosts import prune_ghost_tracks
 from ._job import TrackingJob, tracks_path_for
 from ._payload import build_payload, write_payload_atomic
-from ._static_fp import filter_static_false_positives
-from ._stitch import stitch_tracklets_offline
 from ._video import open_video, precision_for, sample_clip
 
 __all__ = [
@@ -98,6 +96,11 @@ class TrackingWorker(threading.Thread):
         self._cam_cfg_getter = cam_cfg_getter or (lambda _cam_id: {})
         self._detector = None  # built lazily on first job
         self._detector_cfg_id = None  # signature of cfg dict — rebuild on swap
+        # Construction guard. Since the clip-replay endpoint borrows this
+        # detector from a request thread, two threads can reach
+        # _ensure_detector at once; without the lock both would load the
+        # model and one instance would be silently discarded mid-use.
+        self._detector_lock = threading.Lock()
         self._jobs_done = 0
         self._jobs_failed = 0
         # Bounded ring of recent per-event failures so the UI can tell
@@ -219,21 +222,36 @@ class TrackingWorker(threading.Thread):
         well within the time budget on CPU."""
         cfg = self._detection_cfg()
         sig = self._detector_signature(cfg)
-        if self._detector is None or sig != self._detector_cfg_id:
-            from ..detectors import CoralObjectDetector
+        with self._detector_lock:
+            if self._detector is None or sig != self._detector_cfg_id:
+                from ..detectors import CoralObjectDetector
 
-            # Keep this worker off the TPU. Nulling `device` alone does
-            # NOT do that any more: the EdgeTPU delegate (detectors tier
-            # 1b) takes the default device when given no device option,
-            # so with an `*_edgetpu.tflite` model_path this worker was
-            # silently acquiring the TPU it is documented to avoid.
-            # prefer_cpu skips both TPU tiers outright.
-            worker_cfg = dict(cfg)
-            worker_cfg["device"] = None
-            worker_cfg["prefer_cpu"] = True
-            self._detector = CoralObjectDetector(worker_cfg)
-            self._detector_cfg_id = sig
-        return self._detector
+                # Keep this worker off the TPU. Nulling `device` alone does
+                # NOT do that any more: the EdgeTPU delegate (detectors tier
+                # 1b) takes the default device when given no device option,
+                # so with an `*_edgetpu.tflite` model_path this worker was
+                # silently acquiring the TPU it is documented to avoid.
+                # prefer_cpu skips both TPU tiers outright.
+                worker_cfg = dict(cfg)
+                worker_cfg["device"] = None
+                worker_cfg["prefer_cpu"] = True
+                self._detector = CoralObjectDetector(worker_cfg)
+                self._detector_cfg_id = sig
+            return self._detector
+
+    def detector(self):
+        """The worker's CPU-pinned detector, built on first use.
+
+        Public because the clip-replay endpoint runs on a request
+        thread and must NOT build a detector of its own: a second
+        instance would either double the model memory or, worse, pick
+        up the TPU that the live camera runtimes own. Borrowing this
+        one inherits the prefer_cpu pinning above, and
+        `CoralObjectDetector` serialises its own invokes on a per-
+        instance lock, so a replay and a queued sidecar job interleave
+        safely instead of corrupting each other's tensors.
+        """
+        return self._ensure_detector()
 
     @staticmethod
     def _detector_signature(cfg: dict) -> tuple:
@@ -299,7 +317,12 @@ class TrackingWorker(threading.Thread):
                 block_contain=thr.block_contain,
             )
             cam_cfg = self._cam_cfg(job.camera_id)
-            self._clean_tracks(state, job, cam_cfg, spawn_score)
+            clean_tracks(
+                state,
+                camera_id=job.camera_id,
+                cam_cfg=cam_cfg,
+                spawn_score=spawn_score,
+            )
 
             # gates.min_confidence reflects the LIVE spawn threshold so
             # the timeline panel's "<spawn>% Spuren bestätigt" copy
@@ -324,35 +347,6 @@ class TrackingWorker(threading.Thread):
             self._merge_achievement(job, payload, cam_cfg)
         finally:
             cap.release()
-
-    def _clean_tracks(self, state, job: TrackingJob, cam_cfg: dict, spawn_score: float) -> None:
-        """The three post-association sweeps, in the order they must run.
-
-        Stitching goes FIRST so a real person re-assembled from
-        fragments presents her combined motion to the static-FP gate
-        and survives it. The ghost prune goes last because it is the
-        only sweep a camera can switch off
-        (``cam_cfg.track_filter_ghosts=False``; default on, so existing
-        cameras pick the cleanup up on their next save)."""
-        n_stitched = stitch_tracklets_offline(state)
-        if n_stitched:
-            log.info("[tracking] stitched %d tracklet(s) (offline)", n_stitched)
-
-        filter_static_false_positives(state, spawn_score)
-
-        if cam_cfg.get("track_filter_ghosts") is False:
-            return
-        n_ghosts = prune_ghost_tracks(
-            state,
-            cam_cfg=cam_cfg,
-            camera_id=job.camera_id,
-        )
-        if n_ghosts:
-            log.info(
-                "[tracking] cam=%s pruned %d ghost track(s) from sidecar",
-                job.camera_id,
-                n_ghosts,
-            )
 
     def _report_done(self, job: TrackingJob, payload: dict, state, elapsed: float, clip_s: float):
         """One INFO line per finished job, plus a WARN when processing

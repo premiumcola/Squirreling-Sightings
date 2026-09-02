@@ -51,6 +51,13 @@ _EXTRA_TUNING_KEYS = (
     "net_auto",
 )
 
+# Every camera-level key a snapshot captures, in one name. The replay
+# feature projects the stored set, the current profile and any operator
+# overrides onto exactly this list before comparing them — if it drifted
+# from what `_tuning` writes, "replay with the stored settings" would
+# silently run with a different constellation than the one on record.
+PROVENANCE_TUNING_KEYS = tuple(TUNING_LABELS_DE) + _EXTRA_TUNING_KEYS
+
 
 def _short_sig(polys) -> str | None:
     if not polys:

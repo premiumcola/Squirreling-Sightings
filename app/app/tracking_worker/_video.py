@@ -86,6 +86,7 @@ def sample_clip(
     spawn_score,
     iou_threshold,
     block_contain=SPAWN_BLOCK_CONTAIN,
+    max_samples: int | None = None,
 ):
     """Walk the clip at ``meta["sample_interval"]`` and return the
     populated :class:`TrackerState`.
@@ -95,6 +96,14 @@ def sample_clip(
     Tracks still active at end-of-clip are closed and moved into
     ``state.closed`` so the whole post-pass (stitch → static-FP →
     ghost prune → serialise) sees one list.
+
+    ``max_samples`` stops the walk after that many DECODE ATTEMPTS
+    (not successful reads — a clip whose tail is unreadable must not
+    be able to spin past the cap). None, the default the queued
+    sidecar jobs use, means walk the whole clip: they run on a
+    background thread where a long clip only costs time. The replay
+    endpoint runs synchronously on a request thread and passes a cap,
+    then reports how many of the available samples it got through.
     """
     import cv2
 
@@ -106,7 +115,11 @@ def sample_clip(
     frame_h = meta.get("frame_h", 0)
 
     frame_idx = 0
+    attempts = 0
     while frame_idx < frame_count:
+        if max_samples is not None and attempts >= max_samples:
+            break
+        attempts += 1
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ok, frame = cap.read()
         if not ok or frame is None:

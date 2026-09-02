@@ -121,10 +121,36 @@ def test_dossier_panel_has_no_close_button():
 # ── locked species shows a hint, never a fabricated tier/count ──────────
 
 
-def test_locked_species_gets_a_hint_not_a_tier_badge():
-    body = _slice_function(_DOSSIER_PANEL_JS, "_tierBadgeOrLockedHint")
-    assert "sd-locked-hint" in body
-    assert "'locked'" in body or '"locked"' in body
+def test_locked_species_renders_no_badge_row_at_all():
+    """2026-09: the "Noch nicht in deinem Garten gesichtet" hint is gone.
+    The tile that opened this panel is greyed out and carries the lock —
+    saying it again one line below was the same information twice."""
+    src = _read(_DOSSIER_PANEL_JS)
+    assert "sd-locked-hint" not in src
+    assert "Noch nicht in deinem Garten" not in src
+    body = _slice_function(_DOSSIER_PANEL_JS, "_metaHtml")
+    assert re.search(r"tier\s*===\s*['\"]locked['\"]", body), (
+        "_metaHtml must return nothing for a locked species rather than "
+        "inventing a badge or a hint line for it."
+    )
+
+
+def test_the_art_dossier_eyebrow_and_latin_line_are_gone():
+    """Both were struck through in the operator's screenshot. The eyebrow
+    said what the panel visibly is; the latin name moved into the photo
+    caption (see _hero-overlay.js) — leaving it here too would be the
+    duplication CLAUDE.md forbids."""
+    src = _read(_DOSSIER_PANEL_JS)
+    assert "sd-eyebrow" not in src
+    assert "Art-Dossier" not in src
+    assert "sd-latin" not in src
+    css = _read(_BIRDS_CSS)
+    # Rule selectors, not prose — the surviving comments explain where
+    # these three lines went, which is worth keeping.
+    for dead in (".sd-eyebrow {", ".sd-latin {", ".sd-locked-hint {"):
+        assert dead not in css, f"{dead} is dead CSS — its markup is gone"
+    hero = _read(_HERO_OVERLAY_JS)
+    assert "sd-hero-latin" in hero, "the latin name must live in the photo caption now"
 
 
 def test_meta_html_only_shows_the_sighting_count_when_positive():

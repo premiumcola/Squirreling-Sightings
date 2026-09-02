@@ -159,32 +159,24 @@ function _renderStateMessage(germanName, kind) {
       : `<div class="sd-state sd-state--missing">🕓 Für <strong>${name}</strong> ist noch kein Dossier vorbereitet — bitte später erneut versuchen.</div>`;
 }
 
-function _tierBadgeOrLockedHint(count) {
-  const tier = _achTier(count);
-  if (tier === 'locked') {
-    // No lock icon here (2026-09) — the tile above already shows the
-    // locked state (see _achievements.js's medal-lock-overlay), so a
-    // second lock glyph right below it duplicated the same information.
-    return '<span class="sd-locked-hint">Noch nicht in deinem Garten gesichtet</span>';
-  }
-  return `<span class="sd-tier-badge ${tier}">${_TIER_LABEL[tier]}</span>`;
-}
-
+// Everything that identifies the species now lives burned into the hero
+// photo (name + latin, see _hero-overlay.js::heroHtml), so what is left
+// under it is only what the photo can't carry: the medal earned and how
+// often the species was seen.
+//
+// Three lines were removed here in 2026-09, all for the same reason —
+// they repeated something already on screen:
+//   * the "ART-DOSSIER" eyebrow — the panel visibly IS the dossier,
+//   * the latin name line — now the photo's own second caption line,
+//   * the not-yet-sighted hint — the tile that opened this panel is
+//     greyed out and carries the lock; a locked species therefore
+//     renders NO badge row at all rather than a hint repeating it.
 function _metaHtml(d) {
   const count = d.sighting_count || 0;
-  // Small eyebrow label — the only remaining trace of the old standalone
-  // "Vogel-Dossiers" section heading, now living inside the panel itself
-  // instead of a persistent header outside it (nothing to duplicate:
-  // this panel IS the dossier, there's no second copy of the label
-  // elsewhere on the page). No icon in front of it (2026-09) — the panel
-  // itself IS visibly a dossier, an icon on the label added nothing. The
-  // common (German) name itself now lives burned into the hero photo
-  // (see _hero-overlay.js::heroHtml) — not repeated here, that would be
-  // the exact duplication CLAUDE.md forbids.
-  return `<div class="sd-eyebrow">Art-Dossier</div>
-    <div class="sd-latin">${esc(d.latin)}</div>
-    <div class="sd-badges">
-      ${_tierBadgeOrLockedHint(count)}
+  const tier = _achTier(count);
+  if (tier === 'locked') return '';
+  return `<div class="sd-badges">
+      <span class="sd-tier-badge ${tier}">${_TIER_LABEL[tier]}</span>
       ${count > 0 ? `<span class="sd-count">${count}× gesehen</span>` : ''}
     </div>`;
 }

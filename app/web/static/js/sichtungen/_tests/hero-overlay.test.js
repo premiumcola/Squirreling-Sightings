@@ -64,6 +64,28 @@ test('heroHtml drops the hero entirely and names the species when no photo exist
   assert.match(html, /Rotkehlchen/);
 });
 
+test('heroHtml burns the latin name under the german one', () => {
+  const html = heroHtml({ ..._BASE, wikipedia_thumb_url: 'https://x.invalid/a.jpg' });
+  const caption = html.split('class="sd-hero-caption"')[1] || '';
+  assert.match(caption, /sd-hero-name">Rotkehlchen</);
+  assert.match(caption, /sd-hero-latin">Erithacus rubecula</);
+  // The German name has to come FIRST in the caption block.
+  assert.ok(caption.indexOf('sd-hero-name') < caption.indexOf('sd-hero-latin'));
+});
+
+// A species with no German name already falls back to the latin one for
+// the main line — repeating it underneath would be the exact duplication
+// folding the name into the photo was meant to remove.
+test('heroHtml does not repeat the latin name when it IS the main name', () => {
+  const html = heroHtml({
+    latin: 'Erithacus rubecula',
+    common_name_de: '',
+    wikipedia_thumb_url: 'https://x.invalid/a.jpg',
+  });
+  assert.doesNotMatch(html, /sd-hero-latin/);
+  assert.equal((html.match(/Erithacus rubecula/g) || []).length, 1);
+});
+
 test('photoUrlsOf skips blank and whitespace-only urls', () => {
   assert.deepEqual(photoUrlsOf({ wikipedia_thumb_url: '   ', wikipedia_thumb_url_2: null }), []);
   assert.deepEqual(photoUrlsOf({ wikipedia_thumb_url: 'https://x.invalid/a.jpg' }), [

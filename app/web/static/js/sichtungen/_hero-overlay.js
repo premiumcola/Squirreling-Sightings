@@ -65,7 +65,16 @@ export function photoUrlsOf(d) {
 export function heroHtml(d) {
   const photos = photoUrlsOf(d);
   const name = esc(d.common_name_de || d.latin);
-  if (!photos.length) return `<div class="sd-name-line">${name}</div>`;
+  // The latin name rides along under the German one INSIDE the scrim
+  // rather than as its own line below the photo — same reason the
+  // German name moved in: one identity block, not two stacked ones.
+  // Suppressed when it would just repeat the line above (a species with
+  // no German name falls back to the latin one for `name`).
+  const latin = esc(d.latin || '');
+  const latinLine = latin && latin !== name ? `<div class="sd-hero-latin">${latin}</div>` : '';
+  if (!photos.length) {
+    return `<div class="sd-name-line">${name}${latinLine ? `<span class="sd-name-latin">${latin}</span>` : ''}</div>`;
+  }
   const hasAudio = _recordingsOf(d).length > 0;
   const playBtn = hasAudio
     ? `<button type="button" class="sd-hero-play" id="sdHeroPlay" aria-pressed="false" aria-label="Vogelstimme abspielen">
@@ -77,7 +86,7 @@ export function heroHtml(d) {
     .map((src, i) => {
       const overlay =
         i === 0
-          ? `<div class="sd-hero-scrim"></div><div class="sd-hero-name">${name}</div>${playBtn}`
+          ? `<div class="sd-hero-scrim"></div><div class="sd-hero-caption"><div class="sd-hero-name">${name}</div>${latinLine}</div>${playBtn}`
           : '';
       return `<div class="sd-hero-photo"><img src="${esc(src)}" alt="" loading="lazy"/>${overlay}</div>`;
     })

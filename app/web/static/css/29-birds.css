@@ -155,15 +155,37 @@
   background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, transparent 55%);
   pointer-events: none;
 }
-.sd-hero-name {
+/* German name + latin name as ONE block on the scrim. The latin name
+   used to be a .sd-latin text line below the photo; keeping the two
+   halves of the same identity apart made the panel read as two separate
+   headings. Positioned as a block so the caption grows upward and the
+   German name never shifts. */
+.sd-hero-caption {
   position: absolute;
   left: 14px;
   right: 14px;
   bottom: 10px;
+}
+.sd-hero-name {
   font-size: 17px;
   font-weight: 800;
   color: #fff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+.sd-hero-latin {
+  font-size: 12.5px;
+  font-style: italic;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  margin-top: 1px;
+}
+.sd-name-latin {
+  display: block;
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
 }
 /* Prominent centred play/chirp button — only rendered when a
    recording actually exists (heroHtml() in _hero-overlay.js), so a

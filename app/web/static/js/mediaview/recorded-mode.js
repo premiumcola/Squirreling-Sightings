@@ -36,7 +36,7 @@ import {
 import { _isFullscreenVideoItem, _teardownVideoChrome, _lbShowError } from '../lightbox.js';
 import { unmountZoneOverlayForLightbox } from './canvas/zone-overlay-mount.js';
 import { _LB_TRASH_HTML, _updateLbConfirmBtn, _lbResetToPhoto } from './panels/lb-helpers.js';
-import { _renderLbLabels } from './panels/labels.js';
+import { _renderLbLabels, applyLabelSaveResult } from './panels/labels.js';
 import { mountMediaView } from './shell.js';
 import {
   _videoSrcOf,
@@ -232,6 +232,14 @@ function _openRecordedInVPlayer(item) {
       // helper. It throws on any non-2xx, so the fold's error branch
       // is genuinely gated on a failure rather than on a falsy body.
       request: j,
+      // The correction sheet has already repainted the panel from the
+      // reply by the time this runs; what is left is everything OUTSIDE
+      // the player that still holds the old verdict — lbState.item, the
+      // two grid caches, the card's bubble row and the timeline counts.
+      // panels/labels.js owns that fan-out and the legacy bubble editor
+      // calls the same function, so one save updates one set of caches
+      // whichever editor made it.
+      onSaved: applyLabelSaveResult,
       onError: (msg) => window.showToast?.(msg, 'error'),
     },
   });

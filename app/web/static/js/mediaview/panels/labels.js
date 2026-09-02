@@ -17,6 +17,7 @@ import { state } from '../../core/state.js';
 import { j } from '../../core/api.js';
 import { showToast } from '../../core/toast.js';
 import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from '../../core/icons.js';
+import { applyLabelPatch } from '../../core/label-patch.js';
 import { lbState } from '../../mediathek/state.js';
 import { refreshTimelineAndStats } from '../../chrome/storage-stats.js';
 
@@ -43,34 +44,40 @@ function _buildLabelBubblesHtml(item) {
   return TL_LABELS.map((l) => _labelBubbleHtml(l, active, species, birdColor)).join('');
 }
 
-// Sync the just-saved labels into every place that caches a copy of the
-// event, re-render the bubbles, and nudge the thumbnail + timeline/stats
-// so nothing downstream still shows the disproven label.
-function _applyLabelSaveResult(res, host) {
-  const applyRes = (target) => {
-    target.labels = res.labels;
-    if (res.top_label !== undefined) target.top_label = res.top_label;
-    if ('cat_name' in res) target.cat_name = res.cat_name;
-    if ('bird_species' in res) target.bird_species = res.bird_species;
-  };
-  applyRes(lbState.item);
-  const idx = (state.media || []).findIndex((x) => x.event_id === lbState.item.event_id);
-  if (idx >= 0) applyRes(state.media[idx]);
-  const aIdx = (state._allMedia || []).findIndex((x) => x.event_id === lbState.item.event_id);
-  if (aIdx >= 0) applyRes(state._allMedia[aIdx]);
-  _renderLbLabels(host);
-  // sync thumbnail in media grid
-  const thumbCard = byId('mediaGrid')?.querySelector(
-    `[data-event-id="${CSS.escape(lbState.item.event_id)}"]`,
-  );
-  if (thumbCard) {
-    const bubblesEl = thumbCard.querySelector('.media-label-bubbles');
-    if (bubblesEl)
-      bubblesEl.innerHTML = res.labels
-        .slice(0, 3)
-        .map((l) => objBubble(l, 26))
-        .join('');
-  }
+// Repaint the grid card's bubble row for an event that was just retagged,
+// so the thumbnail behind the open player stops showing the old verdict.
+function _syncGridBubbles(eventId, labels) {
+  const thumbCard = byId('mediaGrid')?.querySelector(`[data-event-id="${CSS.escape(eventId)}"]`);
+  const bubblesEl = thumbCard?.querySelector('.media-label-bubbles');
+  if (!bubblesEl || !Array.isArray(labels)) return;
+  bubblesEl.innerHTML = labels
+    .slice(0, 3)
+    .map((l) => objBubble(l, 26))
+    .join('');
+}
+
+/**
+ * Sync a label-save reply into every place that caches a copy of the
+ * event, then nudge the thumbnail + timeline/stats so nothing downstream
+ * still shows the disproven label.
+ *
+ * EXPORTED because it is surface-independent: it is the whole aftermath
+ * of a save MINUS the redraw of whatever editor did it. The bubble row
+ * redraws itself below; the unified player's correction sheet redraws
+ * its own panel and then calls this, so one save updates one set of
+ * caches whichever editor made it.
+ *
+ * @param {object} res  the endpoint's `{ok, labels, top_label, …}` reply
+ */
+export function applyLabelSaveResult(res) {
+  const item = lbState.item;
+  if (!item || !res) return;
+  applyLabelPatch(item, res);
+  const idx = (state.media || []).findIndex((x) => x.event_id === item.event_id);
+  if (idx >= 0) applyLabelPatch(state.media[idx], res);
+  const aIdx = (state._allMedia || []).findIndex((x) => x.event_id === item.event_id);
+  if (aIdx >= 0) applyLabelPatch(state._allMedia[aIdx], res);
+  _syncGridBubbles(item.event_id, res.labels);
   // Re-pull timeline + storage stats so badges and dots reflect the retag.
   refreshTimelineAndStats();
 }
@@ -90,7 +97,10 @@ async function _toggleLabel(lbl, host) {
         body: JSON.stringify({ labels: [...cur] }),
       },
     );
-    if (res.ok) _applyLabelSaveResult(res, host);
+    if (res.ok) {
+      applyLabelSaveResult(res);
+      _renderLbLabels(host);
+    }
   } catch (_err) {
     showToast('Label-Änderung fehlgeschlagen', 'error');
   }

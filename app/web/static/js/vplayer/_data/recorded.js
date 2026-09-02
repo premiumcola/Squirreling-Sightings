@@ -23,11 +23,6 @@
 // case.
 
 import { _fetchTracks } from '../../mediathek/bbox-overlay/fetcher.js';
-// The row mapping is pure and lives with the other pure mappings, so
-// it is provable under a bare `node --test` — this file cannot be,
-// because the fetcher's module graph publishes a window bridge.
-import { objectRowsFor, objectsNote } from './_map.js';
-export { objectRowsFor, objectsNote } from './_map.js';
 
 /**
  * Fetch the provenance block for an event.
@@ -50,12 +45,16 @@ export async function fetchProvenance(eventId) {
 /**
  * Load everything the recorded panel needs for one item.
  *
+ * The object ROWS are deliberately not built here. The panel re-derives
+ * them from the item on every paint, because a correction changes the
+ * item and the rows have to follow it — a list computed once at load
+ * would be a snapshot the panel could never honestly refresh.
+ *
  * @param {object} item  the mediathek event item
- * @returns {Promise<{item, tracks, provenance, rows, note}>}
+ * @returns {Promise<{item, tracks, provenance}>}
  */
 export async function loadRecorded(item) {
   const tracks = await _fetchTracks(item);
   const provenance = item?.provenance || (await fetchProvenance(item?.event_id));
-  const rows = objectRowsFor(item, tracks);
-  return { item, tracks, provenance, rows, note: objectsNote(rows, item) };
+  return { item, tracks, provenance };
 }

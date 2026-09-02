@@ -108,12 +108,20 @@ function _watchHandoffSurfaces(video, { transport, transportControls, autoHide }
  * @param {object} [opts]
  * @param {() => (HTMLVideoElement|null)} [opts.getVideo]  resolver for the
  *   media element, called per use. Defaults to the #lightboxVideo lookup.
+ * @param {boolean} [opts.handoffPills]  render the system-player and
+ *   Picture-in-Picture pills inside the time strip. Defaults to true —
+ *   the legacy shell's own look. A caller that offers the same handoff
+ *   from its overflow menu passes false: the same action twice on one
+ *   surface is exactly the duplication the design rules forbid, and on a
+ *   375 px screen those two pills share a row with the elapsed and
+ *   remaining readouts and collide with them.
  * @returns {{ sync(): void, teardown(): void }|null}
  */
 export function mountPlayerChrome(stage, controlsHost, opts = {}) {
   if (!stage) return null;
   const getVideo = opts.getVideo || (() => byId('lightboxVideo'));
   const video = getVideo();
+  const pills = opts.handoffPills !== false;
 
   const host = document.createElement('div');
   host.className = 'mv-player';
@@ -122,10 +130,10 @@ export function mountPlayerChrome(stage, controlsHost, opts = {}) {
   const autoHide = installChromeAutoHide(stage, getVideo);
   const transport = renderTransport(host, {
     getVideo,
-    nativeAvailable: canNativeFullscreen(video),
+    nativeAvailable: pills && canNativeFullscreen(video),
     onInteract: () => autoHide?.reveal(),
     onNative: () => handoffToNativePlayer(getVideo()),
-    pipAvailable: canPictureInPicture(video),
+    pipAvailable: pills && canPictureInPicture(video),
     onPip: () => togglePictureInPicture(getVideo()),
   });
   const transportControls = renderTransportControls(controlsHost, { getVideo });

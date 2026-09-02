@@ -16,6 +16,39 @@ import { pctOf } from './_model.js';
 
 const _pct = (v) => `${(v * 100).toFixed(3)}%`;
 
+// German decimal comma, and no decimals at all on a whole number — a
+// pre-roll reads "4 s", not "4.0 s".
+function _secs(v) {
+  const n = Math.round(v * 10) / 10;
+  return `${Number.isInteger(n) ? n : String(n).replace('.', ',')} s`;
+}
+
+/**
+ * The words under the rail. Without them the bands are three shades of
+ * the same stripe and the operator's own verdict was "der Vorlauf ist
+ * nicht ersichtlich" — the hatching was on screen and said nothing.
+ *
+ * Each caption appears only when it has something to report, so a clip
+ * recorded before the pre-roll buffer existed shows no empty label. The
+ * row is `aria-hidden`: the rail's own slider already carries the
+ * position for a screen reader, and repeating it here would read the
+ * same thing twice.
+ */
+export function railCaptionsHtml(model) {
+  const parts = [];
+  if (model.preRoll > 0) {
+    parts.push(`<span class="vp-tl-cap vp-tl-cap--pre">Vorlauf ${_secs(model.preRoll)}</span>`);
+  }
+  if (model.firstEventT != null && model.preRoll > 0) {
+    parts.push('<span class="vp-tl-cap vp-tl-cap--first">▼ erstes Ereignis</span>');
+  }
+  if (model.postRoll > 0) {
+    parts.push(`<span class="vp-tl-cap vp-tl-cap--post">Nachlauf ${_secs(model.postRoll)}</span>`);
+  }
+  if (!parts.length) return '';
+  return `<div class="vp-tl-caps" aria-hidden="true">${parts.join('')}</div>`;
+}
+
 /**
  * Render the rail's static furniture for a model. The playhead is NOT
  * included: it moves every frame and is written through the custom
@@ -39,6 +72,7 @@ export function railHtml(model) {
         ` title="Erste Erkennung"></div>`
       : '';
   return (
+    railCaptionsHtml(model) +
     `<div class="vp-tl-track">${bands}${marker}` +
     `<div class="vp-tl-fill"></div><div class="vp-tl-head"></div></div>` +
     // The drag surface. Transparent, full width, and tall enough to

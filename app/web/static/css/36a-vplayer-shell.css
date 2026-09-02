@@ -304,6 +304,30 @@
   }
 }
 
+/* Portrait phone: give the leftover height to the PICTURE, not to an
+   empty panel. A 16:9 frame across a 375 px screen is only ~211 px tall,
+   so a clip with one object and a closed fold left most of the screen as
+   a blank coloured block below the content — "unten ist viel Platz".
+   The stage may now grow into that space and the panel sizes to its
+   content; `min-height: 0` keeps a long panel able to shrink the stage
+   back rather than overflowing, and the picture stays `object-fit:
+   contain` so a non-16:9 source is still never cropped. */
+@media (orientation: portrait) {
+  .vp-stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .vp-frame {
+    max-height: 100%;
+  }
+  .vp-panel {
+    flex: 0 0 auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vp-root * {
     transition: none !important;

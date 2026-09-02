@@ -34,5 +34,22 @@ import { mountPlayerChrome } from '../mediaview/player/index.js';
  */
 export function mountTransport(stageEl, controlsHost, cfg, stage) {
   if (!stageEl || !stage || cfg.flags.live) return null;
-  return mountPlayerChrome(stageEl, controlsHost, { getVideo: () => stage.video });
+  // Two deliberate omissions, both straight from the approved design.
+  //
+  // No below-stage row. `controlsHost` is passed as null, so the toolkit's
+  // speed / frame-step / loop / detection-nav / snapshot bar never mounts.
+  // Every one of those was struck from the design — "Geschwindigkeit
+  // brauch ich nicht … Screenshot brauche ich auch nicht" — and shipping
+  // it anyway put a second control row under a 375 px screen that already
+  // had one, pushing the objects list below the fold.
+  //
+  // No handoff pills. "Im Systemplayer öffnen" lives in the ⋯ menu
+  // (_overflow-menu.js), which is where the design put it; rendering it a
+  // second time inside the time strip showed the same action twice and,
+  // on a phone, overlapped the elapsed / remaining readouts it shares
+  // that row with. Picture-in-Picture goes with it for the same reason.
+  return mountPlayerChrome(stageEl, null, {
+    getVideo: () => stage.video,
+    handoffPills: false,
+  });
 }

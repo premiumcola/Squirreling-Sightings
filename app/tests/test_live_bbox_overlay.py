@@ -187,19 +187,34 @@ def test_plate_is_taller_than_its_text():
 
 def test_label_carries_track_class_and_confidence():
     """The box must name the same thing the Detections panel row does —
-    "#1 Person · 82 %" — otherwise the picture and the panel can't be
-    matched up by eye."""
-    src = _read(_SHAPES)
-    body = src[src.index("export function _bboxLabelText") :]
+    "#1 · Person · 82 %" — otherwise the picture and the panel can't be
+    matched up by eye.
+
+    Built by core/box-model.js::plateText now, shared with the recorded
+    painter, which used to omit the class name entirely."""
+    src = _read(_CORE_BOX)
+    body = src[src.index("export function plateText") :]
     body = body[: body.index("\n}")]
     assert "track_num" in body, "track number missing from the box label"
     assert "OBJ_LABEL" in body, "class name missing from the box label"
-    assert "d.score" in body, "confidence missing from the box label"
+    assert "det.score" in body, "confidence missing from the box label"
 
 
 def test_box_line_style_comes_from_the_shared_legend_table():
     """Dash + alpha are read from status-legend.js' MV_STATUS_STYLE so a
     painted box and the swatch that explains it cannot drift apart."""
-    src = _read(_SHAPES)
+    src = _read(_CORE_BOX)
     assert "MV_STATUS_STYLE" in src
     assert "mvStatusCategory" in src
+
+
+def test_both_painters_resolve_through_the_one_box_model():
+    """The point of the shared model: neither painter may keep a
+    private status table, plate design or masked grey of its own."""
+    live = _read(_SHAPES)
+    assert "resolveBox" in live, "the live painter must use the shared resolver"
+    assert "_MASKED_COLOR" not in live, "no private masked grey"
+    assert "_bboxLabelText" not in live, "no private plate-text builder"
+    recorded = _read(_JS.parent / "mediathek" / "bbox-overlay" / "_box-style.js")
+    assert "resolveBox" in recorded, "the recorded painter must use the shared resolver"
+    assert "MASKED_STROKE = " not in recorded, "no private masked grey"

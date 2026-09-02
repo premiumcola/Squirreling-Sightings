@@ -45,14 +45,21 @@ _CLASSFILTER = (_JS_DIR / "mediathek" / "bbox-overlay" / "_classfilter.js").read
     encoding="utf-8"
 )
 _SVG_BOXES = (_JS_DIR / "mediathek" / "bbox-overlay" / "svg-boxes.js").read_text(encoding="utf-8")
+# The status table is read by the shared resolver now; _box-style.js is
+# a thin adapter onto it, so BOTH painters answer from one table.
+_CORE_BOX = (_JS_DIR / "core" / "box-model.js").read_text(encoding="utf-8")
 
 
 # ── 1 · the status-legend fold ──────────────────────────────────────────
 
 
 def test_box_style_reads_the_shared_legend_table():
-    assert "MV_STATUS_STYLE" in _BOX_STYLE
-    assert "mvStatusCategory" in _BOX_STYLE
+    assert "MV_STATUS_STYLE" in _CORE_BOX
+    assert "mvStatusCategory" in _CORE_BOX
+    # And the recorded adapter must go through it rather than keeping a
+    # second opinion of its own.
+    assert "resolveBox" in _BOX_STYLE
+    assert "MV_STATUS_STYLE" not in _BOX_STYLE, "no private status table"
 
 
 def test_renderer_no_longer_keeps_a_private_status_style_duplicate():
@@ -65,18 +72,56 @@ def test_renderer_no_longer_keeps_a_private_status_style_duplicate():
 def test_status_style_marker_and_pill_text_agree_on_spacing():
     """MV_STATUS_STYLE's marker carries NO trailing space (status-legend.js
     adds it at use time) — the pill-text builder must do the same, not
-    assume the marker bakes it in like the old private duplicate did."""
+    assume the marker bakes it in like the old private duplicate did.
+
+    The plate now also NAMES THE CLASS and spaces the percent sign the
+    German way, because recorded and live had grown two conventions for
+    the same string and the shared box model keeps one. A box the
+    operator is looking at should not require looking somewhere else to
+    learn what it is.
+    """
     out = _js(
         """
         const mod = await import(JS + '/mediathek/bbox-overlay/_box-style.js');
+        const s = (score, label, status, masked, num) =>
+          mod.resolveBoxStyle({ score, label }, '#22c55e', status, masked, num).text;
         console.log(JSON.stringify({
-          weak: mod.resolveBoxStyle({ score: 0.82 }, '#22c55e', 'weak', false, 3).text,
-          ghost: mod.resolveBoxStyle({ score: 0.3 }, '#22c55e', 'ghost', false, 2).text,
-          confirmed: mod.resolveBoxStyle({ score: 0.9 }, '#22c55e', 'confirmed', false, 1).text,
+          weak: s(0.82, 'person', 'weak', false, 3),
+          ghost: s(0.3, 'cat', 'ghost', false, 2),
+          confirmed: s(0.9, 'person', 'confirmed', false, 1),
+          masked: s(0.87, 'cat', 'confirmed', true, 2),
+          untracked: s(0.5, 'bird', 'confirmed', false, null),
         }));
         """
     )
-    assert out == {"weak": "↓ #3 · 82%", "ghost": "≈ #2 · 30%", "confirmed": "#1 · 90%"}
+    assert out == {
+        "weak": "↓ #3 · Person · 82 %",
+        "ghost": "≈ #2 · Katze · 30 %",
+        "confirmed": "#1 · Person · 90 %",
+        # A masked box says so in words as well as in colour — the grey
+        # alone has been read as "low confidence" before.
+        "masked": "⊘ #2 · Katze · 87 % · gefiltert",
+        # No track number yet: the part is dropped, not printed empty.
+        "untracked": "Vogel · 50 %",
+    }
+
+
+def test_the_masked_stroke_matches_the_legend_swatch():
+    """Recorded used to stroke #94a3b8 while status-legend.js painted
+    its own '⊘ Maskiert' swatch #64748b — so the box and the row
+    explaining it never matched. One grey now, the legend's."""
+    out = _js(
+        """
+        const box = await import(JS + '/core/box-model.js');
+        const legend = await import(JS + '/mediaview/status-legend.js');
+        console.log(JSON.stringify({
+          stroke: box.MASKED_STROKE,
+          swatch: legend.mvStatusSwatch('masked'),
+        }));
+        """
+    )
+    assert out["stroke"] == "#64748b"
+    assert out["stroke"] in out["swatch"], "the painted stroke must be the swatch colour"
 
 
 # ── 2 · the triggering-class filter ─────────────────────────────────────
@@ -149,9 +194,9 @@ def test_svg_box_layer_does_not_collide_with_the_zone_overlay_z_index():
 
 def test_svg_box_group_has_a_rect_and_a_label_plate():
     """One track, one <g> with a stroked <rect> (the box) plus a filled
-    <rect> + <text> (the pill) — mirrors live-detect-bbox-shapes.js's
-    _buildBboxGroup output shape, just with recorded's own pill text
-    convention (marker + #num + pct, no class name)."""
+    <rect> + <text> (the pill) — the same output shape as
+    live-detect-bbox-shapes.js's _buildBboxGroup, and since both now
+    resolve through core/box-model.js, the same pill convention too."""
     out = _js(
         """
         const mod = await import(JS + '/mediathek/bbox-overlay/svg-boxes.js');
@@ -168,7 +213,8 @@ def test_svg_box_group_has_a_rect_and_a_label_plate():
         document.createElementNS = () => { created = fakeEl(); created.innerHTML = ''; return created; };
         document.getElementById = (id) => (id === 'lightboxBboxSvg' ? created : null);
 
-        const sample = { bbox: { x1: 100, y1: 100, x2: 300, y2: 400 }, score: 0.82 };
+        const sample = { bbox: { x1: 100, y1: 100, x2: 300, y2: 400 }, score: 0.82,
+                         label: 'person' };
         mod.drawTrackBoxesSvg(media, wrap, 800, 600, [
           { sample, trackColor: '#22c55e', status: 'weak', masked: false, trackNum: 3 },
         ]);
@@ -185,7 +231,7 @@ def test_svg_box_group_has_a_rect_and_a_label_plate():
     assert out["hasTextEl"] is True
     assert out["hasDash"] is True, "weak status must paint a dashed stroke"
     assert out["hasNonScaling"] is True, "stroke must not thicken when the viewBox scales"
-    assert out["labelText"] == "↓ #3 · 82%"
+    assert out["labelText"] == "↓ #3 · Person · 82 %"
 
 
 def test_svg_positioned_via_the_letterboxed_media_rect():

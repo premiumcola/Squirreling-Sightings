@@ -15,13 +15,7 @@
 // painted box and the legend swatch that explains it can never drift.
 
 import { esc } from '../core/dom.js';
-import { OBJ_LABEL } from '../core/icons.js';
-import { liveTrackColor } from '../core/track-color.js';
-import { MV_STATUS_STYLE, mvStatusCategory } from './status-legend.js';
-
-// Neutral slate for a class the object-filter excludes — same hue the
-// legend's "⊘ Maskiert" swatch uses.
-const _MASKED_COLOR = '#64748b';
+import { normalizeBox, resolveBox } from '../core/box-model.js';
 // On-screen sizes in CSS px (scaled into viewBox units via k).
 const _FONT_PX = 12;
 const _PLATE_H_PX = 18;
@@ -41,20 +35,10 @@ export function _overlayScale(frameW, screenW) {
   return frameW / screenW;
 }
 
-/**
- * The one identity string a box carries: status marker · #track ·
- * class · confidence. Mirrors the Detections panel row ("#1 Person
- * PASS 82 %") so the picture and the panel name the same thing.
- */
-export function _bboxLabelText(d) {
-  const cat = mvStatusCategory(d.verdict);
-  const marker = MV_STATUS_STYLE[cat]?.marker || '';
-  const num = Number.isFinite(d.track_num) && d.track_num > 0 ? `#${d.track_num} ` : '';
-  const cls = OBJ_LABEL[d.label] || d.label;
-  const pct = `${Math.round((d.score || 0) * 100)} %`;
-  const tail = cat === 'masked' ? `${pct} · gefiltert` : pct;
-  return `${marker ? `${marker} ` : ''}${num}${cls} · ${tail}`;
-}
+// The identity string a box carries is core/box-model.js::plateText —
+// one convention for every surface. It used to be built here, in a
+// second version that differed from the recorded painter's in three
+// ways nobody could see without opening both at once.
 
 // Identity plate — dark slab + coloured text. A filled plate beats a
 // stroked text halo here: it stays readable over bright sky AND over a
@@ -80,21 +64,19 @@ function _plateSvg(text, colour, x, y, k, frameW) {
  */
 export function _buildBboxGroup(d, opts = {}) {
   const k = opts.k || 1;
-  const cat = mvStatusCategory(d.verdict);
-  const style = MV_STATUS_STYLE[cat] || MV_STATUS_STYLE.confirmed;
   // J2 · colour encodes the TRACK number (class is read from the plate
   // text, the lane icon and the detail panels — never the hue). Status
   // is the line STYLE: solid = bestätigt, dashed = schwach, slate =
-  // maskiert.
-  const colour = cat === 'masked' ? _MASKED_COLOR : liveTrackColor(d.track_num);
-  const op = style.alpha * (opts.holdMul == null ? 1 : opts.holdMul);
-  const [x, y, bw, bh] = d.bbox;
+  // maskiert. All of it now resolved by the shared box model, so this
+  // painter and the recorded one cannot drift apart again.
+  const style = resolveBox(d, { selected: opts.selected, holdMul: opts.holdMul });
+  const box = normalizeBox(d.bbox);
+  if (!box) return '';
   const dash = style.dash.length ? ` stroke-dasharray="${style.dash.join(' ')}"` : '';
-  const width = opts.selected ? 5 : 3;
   return (
-    `<g opacity="${op.toFixed(2)}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">` +
-    `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="${colour}" stroke-width="${width}" vector-effect="non-scaling-stroke"${dash}/>` +
-    _plateSvg(_bboxLabelText(d), colour, x, y, k, opts.frameW || 0) +
+    `<g opacity="${style.alpha.toFixed(2)}" data-label="${esc(d.label)}" style="pointer-events:auto;cursor:pointer">` +
+    `<rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="none" stroke="${style.stroke}" stroke-width="${style.width}" vector-effect="non-scaling-stroke"${dash}/>` +
+    _plateSvg(style.plateText, style.plateFg, box.x, box.y, k, opts.frameW || 0) +
     `</g>`
   );
 }

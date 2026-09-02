@@ -13,13 +13,21 @@
 // in this mode by 30h for the same reason — the centre disc is the one
 // play/pause now.
 //
-// The time formatter is local on purpose: orchestration.js's card-badge
-// `fmtDur` ROUNDS seconds (a 5.6 s clip reads "0:06"), which is right for
-// a duration badge and wrong for a running clock, where it would make the
+// The time formatters live in core/clock-format.js and are re-exported
+// here, where every existing caller and test already looks for them.
+// They are FLOORED, unlike mediathek/_cards.js's card-badge `_fmtDur`,
+// which rounds: a 5.6 s clip reads "0:06" there, which is right for a
+// duration badge and wrong for a running clock, where it would make the
 // readout jump a second early.
 
 import { NATIVE_WARNING } from './_native.js';
 import { isInPictureInPicture } from './_pip.js';
+// Imported AND re-exported: this file uses both locally (the elapsed /
+// −remaining strip below), and a re-export alone would not put them in
+// its own scope — the repeat regression CLAUDE.md's refactor section
+// documents.
+import { clockLabel, remainingLabel } from '../../core/clock-format.js';
+export { clockLabel, remainingLabel } from '../../core/clock-format.js';
 
 const _PLAY_SVG =
   '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><path d="M7 5l13 7-13 7z"/></svg>';
@@ -52,19 +60,6 @@ const _EXPAND_SVG =
 // player switch: hand the clip to a different presentation surface.
 const _PIP_SVG =
   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor" stroke="none"/></svg>';
-
-/** Seconds → `m:ss`, floored (a running clock, not a rounded duration). */
-export function clockLabel(seconds) {
-  const s = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-/** Time left, rendered the way the native player does — U+2212 prefix. */
-export function remainingLabel(current, duration) {
-  const dur = Number.isFinite(duration) && duration > 0 ? duration : 0;
-  const cur = Number.isFinite(current) && current > 0 ? current : 0;
-  return `−${clockLabel(Math.max(0, dur - cur))}`;
-}
 
 function _seekBy(video, delta) {
   if (!video) return;

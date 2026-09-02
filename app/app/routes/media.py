@@ -361,6 +361,33 @@ def api_camera_media(cam_id):
     return jsonify({"items": items, "total_count": total_count})
 
 
+# Every key GET /api/event/<id> answers with. Named here rather than
+# inline so a test can pin the set — this projection has now lost a key
+# the list route carried TWICE (provenance, then whole_clip), each time
+# silently, because a hand-built dict has no way to say what it left out.
+#
+# THE RULE, from the provenance repair: /api/camera/<cam>/media hands the
+# whole event JSON through, so any key a frontend surface renders must be
+# here too, or this route becomes the one reader that loses it.
+#
+# `detections` is knowingly NOT here. It is the trigger FRAME — one tick
+# of one clip — and it is the last of the three fallbacks the player's
+# object list walks (whole_clip → tracks.json sidecar → detections).
+# Nothing reaches it through this route today, and it is the one key
+# whose size grows with the clip. Left out on purpose, said out loud so
+# the next reader can weigh it instead of rediscovering the omission.
+EVENT_LOOKUP_KEYS = (
+    "event_id",
+    "camera_id",
+    "top_label",
+    "time",
+    "video_relpath",
+    "snapshot_relpath",
+    "provenance",
+    "whole_clip",
+)
+
+
 @bp.get('/api/event/<event_id>')
 def api_event_get(event_id: str):
     """Cross-camera event lookup for Telegram deep-links. Returns enough
@@ -370,17 +397,8 @@ def api_event_get(event_id: str):
     payload = store.find_event_anywhere(event_id) if store else None
     if not payload:
         return jsonify({"error": "not found"}), 404
-    return jsonify(
-        {
-            "event_id": payload.get("event_id"),
-            "camera_id": payload.get("camera_id"),
-            "top_label": payload.get("top_label") or payload.get("primary_label"),
-            "time": payload.get("time"),
-            "video_relpath": payload.get("video_relpath"),
-            "snapshot_relpath": payload.get("snapshot_relpath"),
-            # The settings snapshot the event was produced under — the
-            # list route hands the whole JSON through, this one must not
-            # be the only reader that loses it.
-            "provenance": payload.get("provenance"),
-        }
-    )
+    out = {key: payload.get(key) for key in EVENT_LOOKUP_KEYS}
+    # The oldest events carry the class under `primary_label`; the router
+    # filters the media list on this, so an empty one loses the event.
+    out["top_label"] = payload.get("top_label") or payload.get("primary_label")
+    return jsonify(out)

@@ -14,29 +14,36 @@
 // (lbRenderTrackTimeline, _lbDrawDetections, _renderConfidenceMeter).
 // This player renders its own.
 //
-// PROVENANCE HAS TWO SOURCES and they are not the same shape. The media
+// THE ITEM HAS TWO SOURCES and they are not the same shape. The media
 // list route hands the whole event JSON through, so an item opened from
-// the grid usually carries `provenance` already. A deep link resolves
-// through /api/event/<id>, which is a NARROW projection — it carries
-// provenance but not detections. Preferring the item and falling back
-// to the endpoint covers both without a second request in the common
-// case.
+// the grid carries everything. /api/event/<id> is a NARROW projection —
+// a named key set (routes/media.py::EVENT_LOOKUP_KEYS), and a key it
+// does not name is one this player would silently lose. Preferring the
+// item and falling back to the endpoint covers both without a second
+// request in the common case.
+//
+// ONE REQUEST, TWO KEYS. The fallback fires on the same trigger it
+// always has — an item with no `provenance` — and now keeps
+// `whole_clip` off that same response as well. The two travel together:
+// an item narrow enough to have lost one lost the other with it, so
+// widening the TRIGGER would only spend a request per pre-aggregate clip
+// to be told again that it has no aggregate.
 
 import { _fetchTracks } from '../../mediathek/bbox-overlay/fetcher.js';
 
 /**
- * Fetch the provenance block for an event.
+ * Fetch the narrow cross-camera projection of an event.
  *
  * @returns {Promise<object|null>} null on any failure — a panel that
  *   cannot say how a clip was made still has to render the clip.
  */
-export async function fetchProvenance(eventId) {
+export async function fetchEventLookup(eventId) {
   if (!eventId) return null;
   try {
     const r = await fetch(`/api/event/${encodeURIComponent(eventId)}`, { cache: 'no-store' });
     if (!r.ok) return null;
     const data = await r.json();
-    return data && data.provenance ? data.provenance : null;
+    return data && typeof data === 'object' ? data : null;
   } catch {
     return null;
   }
@@ -50,11 +57,19 @@ export async function fetchProvenance(eventId) {
  * item and the rows have to follow it — a list computed once at load
  * would be a snapshot the panel could never honestly refresh.
  *
+ * The item comes back POSSIBLY WIDENED: whatever the lookup recovered is
+ * folded into a copy, so every reader downstream — the panel, the rows,
+ * the correction sheet — sees one item rather than having to know which
+ * route theirs arrived on. The copy is skipped when nothing was
+ * recovered, which is the common case.
+ *
  * @param {object} item  the mediathek event item
  * @returns {Promise<{item, tracks, provenance}>}
  */
 export async function loadRecorded(item) {
   const tracks = await _fetchTracks(item);
-  const provenance = item?.provenance || (await fetchProvenance(item?.event_id));
-  return { item, tracks, provenance };
+  const looked = item?.provenance ? null : await fetchEventLookup(item?.event_id);
+  const provenance = item?.provenance || looked?.provenance || null;
+  const wholeClip = item?.whole_clip ? null : looked?.whole_clip || null;
+  return { item: wholeClip ? { ...item, whole_clip: wholeClip } : item, tracks, provenance };
 }

@@ -47,7 +47,12 @@ def test_the_backend_still_declares_the_gates_it_does_not_run():
 def test_the_parity_block_has_a_consumer():
     """The bug this file exists for: a value written every tick and read
     by nobody, inside the diagnostics the operator trusts."""
-    poll = (JS / "mediaview" / "live-detect-poll.js").read_text(encoding="utf-8")
+    # The "what one response turns into" half of the poll loop lives in
+    # _live-detect-frame.js since the 60-line-function split; the poll file
+    # keeps the loop. Read both, so this pins the DATA PATH and not which
+    # file currently holds it.
+    frame = (JS / "mediaview" / "_live-detect-frame.js").read_text(encoding="utf-8")
+    poll = (JS / "mediaview" / "live-detect-poll.js").read_text(encoding="utf-8") + frame
     panels = (JS / "mediaview" / "live-detect-panels.js").read_text(encoding="utf-8")
     trace = (JS / "mediaview" / "live-trace.js").read_text(encoding="utf-8")
 

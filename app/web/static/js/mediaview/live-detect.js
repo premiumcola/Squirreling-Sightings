@@ -28,11 +28,12 @@ import { byId } from '../core/dom.js';
 import { S } from './live-detect-state.js';
 import { _tick } from './live-detect-poll.js';
 import { _setupLiveChrome, _mountPanels } from './live-detect-chrome.js';
-import { _startHoldRefresh, _hideStallBanner } from './live-detect-stall.js';
+import { _startHoldRefresh } from './live-detect-stall.js';
 import { _renderDiagStrip } from './live-detect-diag.js';
-import { unmountLdSkeleton } from './live-detect-skeleton.js';
-import { stopSnapshotPrefetch } from './live-detect-debug/index.js';
 import { state } from '../core/state.js';
+// Imported for real, not re-exported: _tearDownForOpen calls it below.
+import { closeLiveDetect } from './_live-detect-teardown.js';
+export { closeLiveDetect } from './_live-detect-teardown.js';
 
 // The four modes routes/cameras.py's _TUNING_ENUM_FIELDS accepts. A
 // value outside this set means the stored config drifted from the
@@ -59,60 +60,25 @@ export {
   _HOLD_MS_FLOOR,
 } from './_live-detect-cadence.js';
 
-// C84 · dynamic bbox hold-time scaffolding. The cycle EMA is
-// populated by _scheduleNext on every cycle, then S.holdMsActive
-// is derived from it (clamp(2*EMA, 800, 1500)). Both stay valid
-// at module level so the CADENCE row from C73 can read them
-// without late-binding gymnastics.
-// 60 s sliding window for the swimlane. Detections older than this
-// age out of the visible strip.
-export const _LIVE_WINDOW_MS = 60_000;
-export const _TRACE_CAP = 80;
-// Q2-3 · the Trace tab groups the raw decision-trace BY TICK (one
-// backend response = one block, newest on top). Keep the last 20 ticks
-// — enough scroll-back to compare a few cycles without unbounded growth.
-export const _TRACE_TICK_CAP = 20;
-// Refresh interval for the hold-time fade. SIMU-02d removed the
-// persistent "empty state" video banner — the absence of detections
-// is now expressed via the empty Detections tab (SIMU-04+) instead
-// of an overlay element that covered ~30% of the video.
-// Fires at ~24 Hz; the actual bbox repaints are cheap (innerHTML
-// of an SVG with < 10 elements) and only run while live-detect is
-// mounted, so the cost is negligible vs. the smoothness gain.
-export const _HOLD_REFRESH_MS = 250;
-
-// Q2-5 · stall detection. The background is now the per-tick inference
-// snapshot (Q2-4), so "no new frame for a while" == "no successful tick
-// for a while". The threshold is ADAPTIVE: a healthy camera ticks fast
-// but a slow twilight camera can legitimately take many seconds per
-// cycle (the user's "Nut Bar" cam runs ~7.8 s avg), so a fixed 4-5 s
-// would false-fire constantly there. We flag a stall only when the gap
-// since the last frame exceeds max(5 s floor, 2.2 × the camera's own
-// recent cadence) — responsive on fast cams, quiet on slow ones.
-export const _STALL_FLOOR_MS = 5000;
-export const _STALL_FACTOR = 2.2;
-// Floor for the PACE notice ("Analyse läuft noch — 3×3 kostet 10
-// Inferenzen je Bild"), which is informational and never aborts. It is
-// deliberately NOT scaled by the mode's inference count: multiplying a
-// 5 s floor by ten handed 3×3 a 50 s budget, so the notice written FOR
-// the expensive modes could not appear in any of them. The steady state
-// is still governed by `_STALL_FACTOR × cadence`, so a camera that
-// genuinely ticks every 4 s does not sit under a permanent notice — this
-// floor only decides how soon after a mode switch (which resets the
-// cadence EMA) the operator is told why the picture is holding still.
-export const _PACE_FLOOR_MS = 2500;
-// Auto-retry backoff while stalled: 1 s → 2 s → 4 s → 8 s (capped).
-export const _STALL_BACKOFF_START = 1000;
-export const _STALL_BACKOFF_MAX = 8000;
-// A request younger than this is never aborted, however stalled the view
-// looks. Flask cannot cancel a request — the handler runs all its
-// inferences to completion regardless — so an abort-and-retry does not
-// free the server, it doubles its load. See live-detect-stall.js.
-export const _INFLIGHT_ABORT_CEILING_MS = 30_000;
-// How long a tick that found a request already in flight waits before
-// looking again. The request is NOT aborted (see above) and no second
-// one is issued, so this is a poll on someone else's work, not a retry.
-export const _TICK_RETRY_WHILE_INFLIGHT_MS = 500;
+// Shared tunables live in a leaf module so a sibling can read a
+// threshold without importing this file (which touches `window` at
+// load). Re-exported here: every existing importer keeps working.
+// A re-export does NOT bind the name locally, so anything used inside
+// this file is imported for real as well — see _STALL_BACKOFF_START.
+import { _STALL_BACKOFF_START } from './_live-detect-consts.js';
+export {
+  _LIVE_WINDOW_MS,
+  _TRACE_CAP,
+  _TRACE_TICK_CAP,
+  _HOLD_REFRESH_MS,
+  _STALL_FLOOR_MS,
+  _STALL_FACTOR,
+  _PACE_FLOOR_MS,
+  _STALL_BACKOFF_START,
+  _STALL_BACKOFF_MAX,
+  _INFLIGHT_ABORT_CEILING_MS,
+  _TICK_RETRY_WHILE_INFLIGHT_MS,
+} from './_live-detect-consts.js';
 
 // Q2-5 · stall watchdog state. `active` flips on when the frame gap
 // crosses the adaptive threshold; `nextRetryAt` paces the backoff.
@@ -122,16 +88,16 @@ export const _TICK_RETRY_WHILE_INFLIGHT_MS = 500;
 // mount (_setupLiveChrome) and the bar's onChange keeps it in sync.
 // The SVG render code reads ONLY these booleans, never the pill DOM.
 
-export function openLiveDetect({ camId, cameraName }) {
-  if (!camId) return;
-  // B12 · capture whether a prior session was mounted BEFORE
-  // closeLiveDetect nulls it. Surfaced on the MOUNT row as
-  // torn_down_prev so a back-to-back cam switch is visible.
+// B12 · capture whether a prior session was mounted BEFORE closeLiveDetect
+// nulls it. Surfaced on the MOUNT row as torn_down_prev so a back-to-back
+// cam switch is visible.
+//
+// Defensive: the shared #lightboxModal may be mid-weather or mid-recorded
+// (one container for all modes) — tear those down + restore their borrowed
+// DOM so two modes never coexist on one modal.
+function _tearDownForOpen() {
   const tornDownPrev = !!S.session;
   closeLiveDetect();
-  // Defensive: the shared #lightboxModal may be mid-weather or mid-recorded
-  // (one container for all modes) — tear those down + restore their borrowed
-  // DOM so two modes never coexist on one modal.
   try {
     window.closeWeatherMode?.();
   } catch {
@@ -143,6 +109,13 @@ export function openLiveDetect({ camId, cameraName }) {
     /* ignore */
   }
   byId('lightboxModal')?.classList.remove('lb-weather', 'lb-recorded', 'lb-fs-video');
+  return tornDownPrev;
+}
+
+// A fresh session plus every per-open counter reset. Nothing here touches
+// the DOM — that is _mountChrome's job, and it must run after this so the
+// renderers find a session to read.
+function _seedSession(camId, cameraName, tornDownPrev) {
   S.session = {
     camId,
     cameraName,
@@ -201,11 +174,14 @@ export function openLiveDetect({ camId, cameraName }) {
   // doesn't inherit the previous camera's cadence as the seed EMA.
   S.cycleEmaMs = NaN;
   S.holdMsActive = NaN;
-  // B12' · always-on MOUNT row. Tracks every step of the mount path
-  // so a screenshot tells us at a glance whether chrome rendered,
-  // whether _tick() threw, and whether a first-tick setTimeout was
-  // actually scheduled. Healthy mounts paint muted; any error flips
-  // the row red and persists until the next successful mount.
+}
+
+// B12' · always-on MOUNT row. Tracks every step of the mount path
+// so a screenshot tells us at a glance whether chrome rendered,
+// whether _tick() threw, and whether a first-tick setTimeout was
+// actually scheduled. Healthy mounts paint muted; any error flips
+// the row red and persists until the next successful mount.
+function _mountChrome(camId, cameraName, tornDownPrev) {
   const mountRecord = {
     started_at: new Date(S.tickState.startedAt).toISOString(),
     started_with_camId: camId,
@@ -240,14 +216,17 @@ export function openLiveDetect({ camId, cameraName }) {
   S.diagState.mount = { ...mountRecord, _err: !!mountErr };
   _renderDiagStrip();
   _startHoldRefresh();
-  // SIMU-FIX-01c · lock both <html> and <body> overflow + height
+}
+
+// SIMU-FIX-01c · lock both <html> and <body> overflow + height
   // for the lifetime of the live-detect session so the viewport
   // itself never scrolls — only zone-detail does. Previous values
   // are saved on S.session so closeLiveDetect can restore them
   // verbatim (a recorded-clip lightbox might rely on body overflow:
   // scroll, for example). Explicit height:100dvh on both belt-and-
-  // suspenders against iOS Safari's address-bar-collapse viewport
-  // changes leaving body taller than the new viewport.
+// suspenders against iOS Safari's address-bar-collapse viewport
+// changes leaving body taller than the new viewport.
+function _lockViewport() {
   S.session.prevBodyOverflow = document.body.style.overflow;
   S.session.prevHtmlOverflow = document.documentElement.style.overflow;
   S.session.prevBodyHeight = document.body.style.height;
@@ -256,10 +235,13 @@ export function openLiveDetect({ camId, cameraName }) {
   document.documentElement.style.overflow = 'hidden';
   document.body.style.height = '100dvh';
   document.documentElement.style.height = '100dvh';
-  // B12' · 250 ms watchdog. ONE-SHOT — fires once, then cleared.
-  // Two outcomes: tickHandle present → mark first_tick_scheduled
-  // true (success path); tickHandle still null → promote MOUNT row
-  // to error with "no first-tick scheduled within 250ms".
+}
+
+// B12' · 250 ms watchdog. ONE-SHOT — fires once, then cleared.
+// Two outcomes: tickHandle present → mark first_tick_scheduled
+// true (success path); tickHandle still null → promote MOUNT row
+// to error with "no first-tick scheduled within 250ms".
+function _armFirstTickWatchdog() {
   const expectedSessionStart = S.tickState.startedAt;
   setTimeout(() => {
     // Different session by now → leave its own MOUNT row alone.
@@ -276,103 +258,15 @@ export function openLiveDetect({ camId, cameraName }) {
   }, 250);
 }
 
-export function closeLiveDetect() {
-  const session = S.session;
-  S.session = null;
-  S.traceLines = [];
-  S.traceTicks = [];
-  S.detBuffer = [];
-  S.selectedLabel = null;
-  // Q2-4 · the snapshot <img> holds a per-tick data: URL — drop it so
-  // the decoded frame is released when the session closes. (No HLS /
-  // MJPEG stream to tear down anymore — the view is snapshot-only.)
-  const imgEl = byId('lightboxImg');
-  if (imgEl) imgEl.removeAttribute('src');
-  if (!session) return;
-  try {
-    session.abort?.abort();
-  } catch {
-    /* ignore */
-  }
-  if (session.tickHandle) clearTimeout(session.tickHandle);
-  if (session.holdHandle) clearInterval(session.holdHandle);
-  // SIMU-FIX-01c · restore the pre-mount overflow + height values
-  // on body and <html> so a subsequent recorded-clip open behaves
-  // normally. Empty string clears the inline style, letting the
-  // page stylesheet take over.
-  if (typeof session.prevBodyOverflow === 'string') {
-    document.body.style.overflow = session.prevBodyOverflow;
-  }
-  if (typeof session.prevHtmlOverflow === 'string') {
-    document.documentElement.style.overflow = session.prevHtmlOverflow;
-  }
-  if (typeof session.prevBodyHeight === 'string') {
-    document.body.style.height = session.prevBodyHeight;
-  }
-  if (typeof session.prevHtmlHeight === 'string') {
-    document.documentElement.style.height = session.prevHtmlHeight;
-  }
-  const modal = byId('lightboxModal');
-  if (modal) modal.classList.remove('lb-live-detect');
-  // Restore prev/next chevrons so a subsequent recorded-clip open
-  // gets its navigation arrows back. Confirm + Delete are restored
-  // by lightbox.js's own teardown when openLightbox() runs.
-  const prevBtn = byId('lightboxPrev');
-  if (prevBtn) prevBtn.style.display = '';
-  const nextBtn = byId('lightboxNext');
-  if (nextBtn) nextBtn.style.display = '';
-  const overlay = byId('lightboxLiveOverlay');
-  if (overlay) overlay.remove();
-  const trails = byId('lightboxLiveTrails');
-  if (trails) trails.remove();
-  // L1 · tear down the shared overlay-toggle bar (its document
-  // touch-dismiss listener) before removing the row node.
-  try {
-    session.overlayToggles?.teardown?.();
-  } catch {
-    /* ignore */
-  }
-  try {
-    session.modeCost?.teardown?.();
-  } catch {
-    /* ignore */
-  }
-  const toggleRow = byId('mvLiveToggles');
-  if (toggleRow) toggleRow.remove();
-  const simControls = byId('mvSimControls');
-  if (simControls) simControls.remove();
-  const diagStrip = byId('mvSimDiagStrip');
-  if (diagStrip) diagStrip.remove();
-  const livePill = byId('mvLiveScrubPill');
-  if (livePill) livePill.remove();
-  // Q2-5 · drop the stall banner if a teardown happens while stalled.
-  _hideStallBanner();
-  // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it
-  // doesn't keep hitting the closed session's camId.
-  stopSnapshotPrefetch();
-  // SIMU-01 · tear down the skeleton/tab system so #lightboxSettings +
-  // #lightboxBottomStack are re-parented back to #lightboxInner before the
-  // shell is removed (shell mode) or the 5-zone container goes (legacy).
-  unmountLdSkeleton();
-  // F · restore the reparented media wrap to its DOM home, THEN drop the
-  // shell — the wrap (with the snapshot <img>) must leave the shell before
-  // the shell root is removed, or it'd be detached with it.
-  if (session.wrapHome) {
-    const wrap = byId('lightboxMediaWrap');
-    if (wrap) {
-      try {
-        session.wrapHome.parent?.insertBefore(wrap, session.wrapHome.next || null);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-  try {
-    session.shell?.teardown();
-  } catch {
-    /* ignore */
-  }
+export function openLiveDetect({ camId, cameraName }) {
+  if (!camId) return;
+  const tornDownPrev = _tearDownForOpen();
+  _seedSession(camId, cameraName, tornDownPrev);
+  _mountChrome(camId, cameraName, tornDownPrev);
+  _lockViewport();
+  _armFirstTickWatchdog();
 }
+
 
 // gp384 — bbox hold + empty-banner refresh. Drives the per-frame
 // opacity fade-out for held detections and the show/hide of the

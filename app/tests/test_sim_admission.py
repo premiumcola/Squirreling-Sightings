@@ -228,10 +228,19 @@ def test_a_tick_that_finds_one_in_flight_waits_instead_of_racing():
     body = body[: body.index("\n}")]
     assert "_INFLIGHT_ABORT_CEILING_MS" in body
     assert "_TICK_RETRY_WHILE_INFLIGHT_MS" in body, "the waiting tick must re-arm itself"
+    # The abort itself sits in _beginTick now, so the ordering is asserted
+    # across the two: _tick must clear the guard before it calls _beginTick,
+    # and _beginTick is where the abort lives. Pinning the ORDER, not the
+    # file layout — the loop was split for the 60-line ceiling, and the
+    # contract is unchanged.
     tick = poll[poll.index("export async function _tick") :]
-    assert "_deferWhileInflight(session)" in tick[: tick.index("abort?.abort()")], (
-        "the guard has to run BEFORE the abort, or _tick is back to aborting " "whatever it finds"
-    )
+    tick = tick[: tick.index("\n}")]
+    assert tick.index("_deferWhileInflight(session)") < tick.index(
+        "_beginTick(session)"
+    ), "the guard has to run BEFORE the abort, or _tick is back to aborting whatever it finds"
+    begin = poll[poll.index("function _beginTick") :]
+    begin = begin[: begin.index("\n}")]
+    assert "abort?.abort()" in begin, "the abort belongs to the step _tick guards"
     chrome = _read("live-detect-chrome.js")
     forced = chrome[chrome.index("export function _forceImmediateTick") :]
     forced = forced[: forced.index("\n}")]
@@ -249,8 +258,11 @@ def test_the_pace_notice_can_fire_in_the_mode_it_was_written_for():
     assert "_STALL_FLOOR_MS" not in body, "the pace budget must not scale with the mode"
     assert "_PACE_FLOOR_MS" in body and "_STALL_FACTOR" in body
     assert "invokes" not in body, "the mode's cost belongs in the message, not the threshold"
-    live = _read("live-detect.js")
-    floor = int(re.search(r"_PACE_FLOOR_MS = (\d+)", live).group(1))
+    # The tunables moved to _live-detect-consts.js (a leaf, so siblings can
+    # read a threshold without importing live-detect.js). Pin the VALUE,
+    # wherever the cluster declares it.
+    consts = _read("_live-detect-consts.js")
+    floor = int(re.search(r"_PACE_FLOOR_MS = (\d+)", consts).group(1))
     # The budget is mode-independent now, so the worst case IS the floor.
     # 10 s of frozen picture with no explanation is the failure being
     # fixed; anything under ~6 s reaches the operator while they are still

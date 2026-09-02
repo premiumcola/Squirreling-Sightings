@@ -373,6 +373,28 @@ def evaluate_quests(
             }
             continue
 
+        # The stored entry may still describe a window that has since
+        # closed — the monthly quests share one id per year, so April's
+        # pass would otherwise write straight over March's result and
+        # the archiver, which runs immediately after us, would never see
+        # a closed window to move out. Leave the stale entry exactly as
+        # it is; the archiver files it, and the next pass (hourly job,
+        # rollover timer, or the inline post-event hook) starts the new
+        # window clean. Progress is always recomputed from the event
+        # index, so deferring one pass loses nothing.
+        stored_from_str = (existing.get("window") or {}).get("from")
+        try:
+            stored_from = datetime.fromisoformat(stored_from_str) if stored_from_str else None
+        except ValueError:
+            stored_from = None
+        # Only for an unfinished entry. archive_closed_quests skips
+        # anything with completed_at, so deferring a completed one would
+        # freeze it on its old window forever instead of moving it on.
+        stored_end = _window_logical_end(window_name, stored_from)
+        if stored_end is not None and now > stored_end and not existing.get("completed_at"):
+            quests[qid] = existing
+            continue
+
         criteria = quest_def["criteria"]
         progress = 0
 

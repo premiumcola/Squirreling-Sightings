@@ -1,0 +1,34 @@
+/* ── vplayer · in-stage timeline ───────────────────────────────────────────
+   The scrubber, and the per-object lanes above it, mounted INSIDE the
+   video stage rather than in a strip below it. Companion to
+   36a-vplayer-shell.css; see that file's header for the prefix and the
+   iOS rules this family holds itself to.
+
+   The rail is thin because it is a rail; the thing the finger drags is
+   a transparent band around it, which is how a 6 px line still meets
+   the 44 px touch minimum. */
+
+:root {
+  /* Painted thickness of the rail itself. */
+  --vp-tl-rail-h: 6px;
+
+  /* Height of the transparent drag band centred on the rail. Not a
+     visual dimension — the hit area, and the reason a hairline
+     scrubber is usable with a thumb. */
+  --vp-tl-band: var(--vp-tap);
+
+  /* One per-object lane row: the first-detection dot and the bar that
+     runs for as long as the track was held. */
+  --vp-tl-lane-h: 14px;
+
+  /* Pre-roll and post-roll bands — the seconds recorded either side of
+     the motion that triggered the clip. A repeating-linear-gradient
+     hatch, never an image: an image is a second request that fails
+     silently offline. */
+  --vp-tl-hatch: rgba(237, 244, 251, 0.14);
+
+  /* The white line at the first detection. The one moment on the rail
+     the operator is usually looking for, so it is the one mark allowed
+     to be pure white. */
+  --vp-tl-marker: #ffffff;
+}

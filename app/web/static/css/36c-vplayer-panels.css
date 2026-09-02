@@ -1,0 +1,28 @@
+/* ── vplayer · context panel ───────────────────────────────────────────────
+   The panel below the stage: detected objects and recording details for
+   a recorded clip, active tracks and raw detections for live and
+   simulation. One panel, two contents. Companion to
+   36a-vplayer-shell.css; see that file's header for the prefix and the
+   iOS rules this family holds itself to.
+
+   Depth here comes from colour contrast between the panel ground and
+   its rows, never from a border line — a hairline border is the thing
+   CLAUDE.md's design rules single out. */
+
+:root {
+  /* Panel ground and the rows sitting on it. Two steps of the same
+     neutral ramp the rest of the app uses. */
+  --vp-pnl-bg: var(--panel);
+  --vp-pnl-row: var(--surface);
+
+  /* A row is a touch target: it opens the object it names. */
+  --vp-pnl-row-h: var(--vp-tap);
+
+  /* Folds (Aufnahme-Details, Rohe Erkennungen, Debug-Log) sit a step
+     deeper than the rows so an open one reads as inside the panel. */
+  --vp-pnl-fold-bg: #141414;
+
+  /* Chips: the mode indicator, the ROI marker, the model label. */
+  --vp-pnl-chip-bg: rgba(59, 130, 246, 0.16);
+  --vp-pnl-chip-fg: #bfdbfe;
+}

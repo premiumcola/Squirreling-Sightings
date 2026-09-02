@@ -1,0 +1,49 @@
+/* ── vplayer · shell, top bar, overlay row, stage ──────────────────────────
+   The unified video player (app/web/static/js/vplayer/). One shell for
+   recorded clips, the live view and the detection simulation.
+
+   WHY A NEW PREFIX. `.vp-`. Four different `.mv*` families already mean
+   four different things in this tree (.mv-player, .mv-ld-, .mv-fafold-,
+   .mv-recorded-), and the player they describe is being replaced rather
+   than extended. A distinct prefix means a rule here can never win or
+   lose a cascade fight with the shell it replaces while both are on
+   disk during the rollout, and it makes the final sweep a grep.
+
+   WHY THREE FILES. 30f-live-detect-skeleton.css reached 2297 lines
+   because it was never split. This one is split before it has content:
+   36a shell, 36b timeline, 36c panels.
+
+   Loaded after every other partial, so these rules can only ADD to the
+   cascade — including after 25-mobile.css, whose overrides therefore
+   still decide anything they touch.
+
+   iOS rules this file holds itself to, all of them regressions this
+   codebase has actually shipped: dvh and never bare vh for full-height
+   layouts, >= 44 x 44 px touch targets, every :hover behind
+   @media (hover: hover), safe-area insets on both ends, and inputs at
+   >= 16px so focus does not auto-zoom the page. */
+
+:root {
+  /* The stage ground behind a letterboxed picture. Black rather than
+     --bg so the video's own edge is the only edge the eye finds. */
+  --vp-ground: #000000;
+
+  /* Chrome that floats ON the picture: translucent so the frame stays
+     readable underneath, opaque enough for white text at a glance. */
+  --vp-chrome: rgba(17, 17, 17, 0.92);
+
+  /* Corner radii. CLAUDE.md's floor is 8px; the shell itself carries
+     the larger one and controls inside it the smaller. */
+  --vp-radius: 14px;
+  --vp-radius-sm: 8px;
+
+  /* The iOS minimum touch target. Controls that must LOOK smaller than
+     this carry it as a transparent ::before hitbox instead of as their
+     own painted size. */
+  --vp-tap: 44px;
+
+  /* Notch and home-indicator insets, resolved at use. Every fixed edge
+     of the shell adds the matching one. */
+  --vp-safe-top: env(safe-area-inset-top, 0px);
+  --vp-safe-bottom: env(safe-area-inset-bottom, 0px);
+}

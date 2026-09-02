@@ -122,6 +122,15 @@ LOAD_ORDER = [
     # --z-modal-action token from 00-elevation-tokens.css, already
     # loaded first.
     "35-mediaview-shortcut-help.css",
+    # The unified video player (js/vplayer/) — recorded clips, live view
+    # and the detection simulation in one shell. Split into shell /
+    # timeline / panels up front rather than after the fact, the way
+    # 30f-live-detect-skeleton.css was not. Last in the order, so during
+    # the rollout these rules can only ADD to the cascade and cannot
+    # disturb the player they replace while both are on disk.
+    "36a-vplayer-shell.css",
+    "36b-vplayer-timeline.css",
+    "36c-vplayer-panels.css",
 ]
 
 _BANNER = (

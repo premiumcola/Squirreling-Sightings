@@ -35,7 +35,9 @@ ROUTES = Path(__file__).resolve().parents[1] / "app" / "routes"
 
 
 def test_the_backend_still_declares_the_gates_it_does_not_run():
-    src = (ROUTES / "coral_test_detection.py").read_text(encoding="utf-8")
+    # The diag payload moved to _sim_debug when the orchestrator hit
+    # its file ceiling; the declaration is what this pins, not the file.
+    src = (ROUTES / "_sim_debug.py").read_text(encoding="utf-8")
     block = src[src.index('"not_simulated"') :][:600]
 
     for gate in ("motion_gate", "confirmation_window", "wildlife_cascade", "frame_validator"):

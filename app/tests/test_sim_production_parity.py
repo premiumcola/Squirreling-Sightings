@@ -435,7 +435,7 @@ def test_the_reported_invoke_count_is_the_one_actually_spent(mode, motion_box, e
     frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
     setup = build_detection_setup(CAM, {})
 
-    _dets, diag, reported = _sim_pipeline.detect(detector, frame, setup, mode, motion_box)
+    _dets, diag, reported, _scan = _sim_pipeline.detect(detector, frame, setup, mode, motion_box)
 
     assert detector.invokes == expected
     assert reported == expected
@@ -449,7 +449,7 @@ def test_off_mode_still_reports_the_full_tiling_diag():
     frame = np.zeros((1440, 2560, 3), dtype=np.uint8)
     setup = build_detection_setup(CAM, {})
 
-    _dets, diag, _n = _sim_pipeline.detect(detector, frame, setup, "off", None)
+    _dets, diag, _n, _scan = _sim_pipeline.detect(detector, frame, setup, "off", None)
 
     for key in ("mode", "tiles", "raw", "merged", "tile_hits", "magnification", "crop_px"):
         assert key in diag, key
@@ -501,7 +501,8 @@ def test_every_unsimulated_gate_is_declared():
     """Anything that legitimately differs has to be visible, or the
     operator is again reading a number that describes a configuration
     nobody runs."""
-    src = (APP / "routes" / "coral_test_detection.py").read_text(encoding="utf-8")
+    # Lives in _sim_debug since the orchestrator hit its file ceiling.
+    src = (APP / "routes" / "_sim_debug.py").read_text(encoding="utf-8")
     block = src[src.index('"not_simulated"') :][:600]
     for gate in ("motion_gate", "confirmation_window", "wildlife_cascade", "frame_validator"):
         assert gate in block

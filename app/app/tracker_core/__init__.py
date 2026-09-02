@@ -160,6 +160,7 @@ class Track:
         "last_bbox_frac_h",
         "last_bbox_frac_area",
         "model",
+        "last_iou",
     )
 
     def __init__(self, track_id: str, label: str, frame_idx: int):
@@ -185,6 +186,12 @@ class Track:
         # Cascade stage that produced the most recent detect sample —
         # a ``detectors.STAGE_*`` constant, None until the first one.
         self.model: str | None = None
+        # Overlap with the PREDICTED bbox that won this track its most
+        # recent match. In-memory only — deliberately not in to_dict(),
+        # which is the tracks.json contract. None means the last match
+        # came from the newborn distance gate (no velocity to predict
+        # from yet), which is a different answer from "0.0 overlap".
+        self.last_iou: float | None = None
 
     def add_sample(
         self,
@@ -516,9 +523,9 @@ def associate_detections(
 
     def _pair_pass(pool, scorer):
         """Greedy best-first pairing for one tier; returns
-        [(di, ti), …] and the set of di's that matched. ``scorer``
-        returns a comparable strength in [0, 1] or None for "no
-        match" — highest strength claims its track first."""
+        [(di, ti, strength), …] and the set of di's that matched.
+        ``scorer`` returns a comparable strength in [0, 1] or None for
+        "no match" — highest strength claims its track first."""
         candidates: list[tuple[int, int, float]] = []
         for di, d in pool:
             for ti, tr in enumerate(state.active):
@@ -532,18 +539,22 @@ def associate_detections(
         candidates.sort(key=lambda p: p[2], reverse=True)
         taken_dets_local: set[int] = set()
         out = []
-        for di, ti, _iou_v in candidates:
+        for di, ti, strength in candidates:
             if di in taken_dets_local or ti in taken_tracks:
                 continue
             taken_dets_local.add(di)
             taken_tracks.add(ti)
-            out.append((di, ti))
+            out.append((di, ti, strength))
         return out, taken_dets_local
 
-    def _record_match(di_ti_pairs, pool_by_di):
-        for di, ti in di_ti_pairs:
+    def _record_match(di_ti_pairs, pool_by_di, *, overlap: bool):
+        """``overlap`` says whether the strength IS an IoU — the newborn
+        distance gate produces a comparable number that is not one, and
+        recording it as an overlap would misreport why a track lived."""
+        for di, ti, strength in di_ti_pairs:
             d = pool_by_di[di]
             tr = state.active[ti]
+            tr.last_iou = float(strength) if overlap else None
             bbox_dict = {
                 "x1": int(d.bbox[0]),
                 "y1": int(d.bbox[1]),
@@ -566,12 +577,12 @@ def associate_detections(
     # Phase 1 — confirmed dets fight for tracks first.
     confirmed_by_di = {di: d for di, d in confirmed}
     pairs1, taken_confirmed = _pair_pass(confirmed, _iou_score)
-    _record_match(pairs1, confirmed_by_di)
+    _record_match(pairs1, confirmed_by_di, overlap=True)
 
     # Phase 2 — tentative dets extend whatever's still unmatched.
     tentative_by_di = {di: d for di, d in tentative}
     pairs2, taken_tentative = _pair_pass(tentative, _iou_score)
-    _record_match(pairs2, tentative_by_di)
+    _record_match(pairs2, tentative_by_di, overlap=True)
 
     # Phase 2b (T1) — same two tiers again, but for newborn tracks the
     # prediction can't help yet: with one observed sample there is no
@@ -581,12 +592,12 @@ def associate_detections(
     pairs3, taken3 = _pair_pass(
         [(di, d) for di, d in confirmed if di not in taken_confirmed], _gate_score
     )
-    _record_match(pairs3, confirmed_by_di)
+    _record_match(pairs3, confirmed_by_di, overlap=False)
     taken_confirmed = taken_confirmed | taken3
     pairs4, _taken4 = _pair_pass(
         [(di, d) for di, d in tentative if di not in taken_tentative], _gate_score
     )
-    _record_match(pairs4, tentative_by_di)
+    _record_match(pairs4, tentative_by_di, overlap=False)
 
     # Snapshot the pre-spawn track count so the age-out loop below
     # can skip tracks that are about to be created on this same

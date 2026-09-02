@@ -94,6 +94,10 @@ class SimPass:
 
     rows: list = field(default_factory=list)
     gate_lines: list = field(default_factory=list)
+    #: The full-frame pass exactly as the detector returned it, before
+    #: any gate. In debug mode that reaches under the tracker floor.
+    #: Reporting only — ``rows`` is what the pipeline acted on.
+    full_scan: list = field(default_factory=list)
     raw_count: int = 0
     invokes: int = 1
     inference_ms: int = 0
@@ -207,8 +211,20 @@ def sim_motion_box(cam_id: str, frame):
         return None
 
 
-def detect(detector, frame, setup: DetectionSetup, det_mode: str, motion_box):
+def detect(
+    detector,
+    frame,
+    setup: DetectionSetup,
+    det_mode: str,
+    motion_box,
+    raw_threshold: float | None = None,
+):
     """Full-frame pass at the tracker floor, plus tiles when a mode is on.
+
+    Returns ``(merged, diag, invokes, full_scan)``. ``full_scan`` is the
+    full-frame pass as the detector returned it; it reaches below the
+    tracker floor only when ``raw_threshold`` asked it to — see the note
+    at the score cut below.
 
     The parity fix here is the THRESHOLD: the panel used a hard-coded 0.20
     where the loop uses the tracker's continuation floor — identical only
@@ -241,7 +257,17 @@ def detect(detector, frame, setup: DetectionSetup, det_mode: str, motion_box):
     admission gate in ``routes/_sim_guard`` prices, and why it must keep
     pricing the resolved mode rather than the requested one.
     """
-    full = list(detector.detect_frame_raw(frame, threshold=setup.floor))
+    floor = float(setup.floor)
+    # ``raw_threshold`` lowers the score cut on the ONE full-frame pass
+    # this tick already pays for — pycoral applies it after inference, so
+    # a lower cut adds boxes and can never remove one. Everything at or
+    # above the floor is then exactly the list production would have
+    # seen: the extra boxes are split off here and never reach the
+    # gates, the tracker or ``merged``. Zero extra invokes, and the flag
+    # cannot change what the pipeline decides. See ``routes/_sim_debug``.
+    cut = floor if raw_threshold is None else min(floor, float(raw_threshold))
+    scanned = list(detector.detect_frame_raw(frame, threshold=cut))
+    full = [d for d in scanned if float(d.score) >= floor] if cut < floor else scanned
     # ``off`` still goes through tiled_detect: it returns the full ``_diag``
     # (raw / merged / tile_hits / magnification / crop_px), and a
     # hand-rolled ``{"mode": "off", "tiles": 0}`` silently dropped every
@@ -251,11 +277,11 @@ def detect(detector, frame, setup: DetectionSetup, det_mode: str, motion_box):
         detector,
         frame,
         det_mode,
-        threshold=setup.floor,
+        threshold=floor,
         motion_box=motion_box,
         full_dets=full,
     )
-    return merged, diag, 1 + int(diag.get("tiles") or 0)
+    return merged, diag, 1 + int(diag.get("tiles") or 0), scanned
 
 
 def sim_mask_zones(cam_id: str) -> mask_zones.MaskZoneCache:
@@ -416,12 +442,18 @@ def build_rows(survivors, drops, num_by_det, no_track, setup: DetectionSetup) ->
     return rows
 
 
-def _row(d, verdict: str, reason: str, track_num) -> dict:
+def bbox_xywh(d) -> list:
+    """``[x, y, w, h]`` in frame pixels — the one bbox shape every
+    payload out of this panel uses, overlay rows and debug rows alike."""
     x1, y1, x2, y2 = d.bbox
+    return [int(x1), int(y1), int(max(0, x2 - x1)), int(max(0, y2 - y1))]
+
+
+def _row(d, verdict: str, reason: str, track_num) -> dict:
     return {
         "label": d.label,
         "score": round(float(d.score), 4),
-        "bbox": [int(x1), int(y1), int(max(0, x2 - x1)), int(max(0, y2 - y1))],
+        "bbox": bbox_xywh(d),
         "verdict": verdict,
         "reason": reason,
         "track_num": track_num,

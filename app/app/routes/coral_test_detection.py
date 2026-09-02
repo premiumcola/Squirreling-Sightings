@@ -39,7 +39,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import app_state
 from ..detect_setup import apply_bottom_crop, build_detection_setup
-from . import _sim_evidence, _sim_frame, _sim_pipeline, _sim_routing, _sim_trace
+from . import _sim_debug, _sim_evidence, _sim_frame, _sim_pipeline, _sim_routing, _sim_trace
 from ._sim_guard import affordability, busy_payload, record_cost, refusal_payload, sim_slot
 from ._sim_tiling import VALID_MODES
 
@@ -69,6 +69,16 @@ def _requested_stream() -> tuple[str, bool]:
     if pref not in ("main", "sub"):
         pref = "main"
     return pref, pref != "main"
+
+
+def _debug_requested() -> bool:
+    """``?debug=1`` — add the raw boxes and the tracker's state.
+
+    Off by default and off for every existing caller: with the flag
+    absent the tick runs the same inference at the same score cut and
+    decides the same thing. See ``routes/_sim_debug``.
+    """
+    return (request.args.get("debug") or "").strip().lower() in ("1", "true", "yes")
 
 
 @bp.post('/api/cameras/<cam_id>/test-detection')
@@ -142,8 +152,9 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     mode_override = det_mode != setup.det_mode
     entry = _sim_pipeline.get_test_tracker(cam_id, setup)
     entry["last_call_ts"] = _time.monotonic()
+    debug = _debug_requested()
     try:
-        sim = _run_pass(rt, cam_cfg, cam_id, setup, pick.frame, det_mode, entry)
+        sim = _run_pass(rt, cam_cfg, cam_id, setup, pick.frame, det_mode, entry, debug)
     except Exception as e:  # noqa: BLE001 — a diagnostic must not 500
         log.warning("[test-detection] %s inference failed: %s", cam_id, e)
         return jsonify({"error": f"Inference fehlgeschlagen: {e}"}), 500
@@ -151,6 +162,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     return _respond(
         rt=rt,
         cam=cam,
+        cam_cfg=cam_cfg,
         cam_id=cam_id,
         setup=setup,
         sim=sim,
@@ -160,17 +172,25 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
         mode_override=mode_override,
         stream_pref=stream_pref,
         stream_override=stream_override,
+        debug=debug,
     )
 
 
-def _run_pass(rt, cam_cfg, cam_id, setup, frame, det_mode, entry) -> _sim_pipeline.SimPass:
+def _run_pass(
+    rt, cam_cfg, cam_id, setup, frame, det_mode, entry, debug: bool = False
+) -> _sim_pipeline.SimPass:
     """Production's sequence, with every dropped box kept and labelled."""
     proc_frame = apply_bottom_crop(frame, setup.bottom_crop_px)
     h_px, w_px = proc_frame.shape[:2]
     motion_box = _sim_pipeline.sim_motion_box(cam_id, proc_frame) if det_mode == "roi" else None
     t0 = _time.monotonic()
-    raw, sahi_diag, invokes = _sim_pipeline.detect(
-        rt.detector, proc_frame, setup, det_mode, motion_box
+    raw, sahi_diag, invokes, full_scan = _sim_pipeline.detect(
+        rt.detector,
+        proc_frame,
+        setup,
+        det_mode,
+        motion_box,
+        raw_threshold=(_sim_debug.DEBUG_RAW_FLOOR if debug else None),
     )
     inference_ms = int(round((_time.monotonic() - t0) * 1000))
     # The camera CONFIG goes into the gates, not the runtime object: the
@@ -186,6 +206,7 @@ def _run_pass(rt, cam_cfg, cam_id, setup, frame, det_mode, entry) -> _sim_pipeli
         entry["class_log"].append((wall_now, r["label"], r["verdict"]))
     return _sim_pipeline.SimPass(
         rows=rows,
+        full_scan=full_scan,
         raw_count=len(raw),
         invokes=invokes,
         inference_ms=inference_ms,
@@ -200,6 +221,7 @@ def _respond(
     *,
     rt,
     cam,
+    cam_cfg,
     cam_id,
     setup,
     sim,
@@ -209,6 +231,7 @@ def _respond(
     mode_override,
     stream_pref,
     stream_override,
+    debug=False,
 ):
     """Trace, snapshot, diag, log line, JSON body."""
     eff_cfg = app_state.get_effective_config()
@@ -228,7 +251,7 @@ def _respond(
         apply_bottom_crop(pick.frame, setup.bottom_crop_px), sim.rows, skip_snapshot
     )
     ema_ms = float(getattr(rt, "_frame_interval_ema_ms", 0.0) or 0.0)
-    diag = _build_diag(
+    diag = _sim_debug.build_diag(
         setup=setup,
         sim=sim,
         pick=pick,
@@ -251,25 +274,30 @@ def _respond(
         "diag": diag,
         "cluster_evidence": evidence,
     }
-    return jsonify(
-        {
-            "ok": True,
-            "snapshot": snapshot,
-            "frame_size": {"w": int(snap_w), "h": int(snap_h)},
-            "frame_age_ms": pick.age_ms,
-            "detections": sim.rows,
-            "decision_trace": trace,
-            "diag": diag,
-            "frame_interval_avg_ms": int(round(ema_ms)) if ema_ms > 0 else 0,
-            # A decoder draining a buffered burst reports an EMA well
-            # below the camera's configured interval; 0.4× keeps a
-            # slightly-fast normal stream from false-positiving.
-            "decoder_backlog_suspected": bool(
-                ema_ms > 0 and interval_ms > 0 and ema_ms < 0.4 * interval_ms
-            ),
-            "cluster_evidence": evidence,
-        }
-    )
+    body = {
+        "ok": True,
+        "snapshot": snapshot,
+        "frame_size": {"w": int(snap_w), "h": int(snap_h)},
+        "frame_age_ms": pick.age_ms,
+        "detections": sim.rows,
+        "decision_trace": trace,
+        "diag": diag,
+        "frame_interval_avg_ms": int(round(ema_ms)) if ema_ms > 0 else 0,
+        # A decoder draining a buffered burst reports an EMA well
+        # below the camera's configured interval; 0.4× keeps a
+        # slightly-fast normal stream from false-positiving.
+        "decoder_backlog_suspected": bool(
+            ema_ms > 0 and interval_ms > 0 and ema_ms < 0.4 * interval_ms
+        ),
+        "cluster_evidence": evidence,
+        # Which device ran it, for which job, in which framing. Three
+        # lines that answer the first three questions anyone asks
+        # about a surprising result — see routes/_sim_debug.
+        "modes": _sim_debug.modes_block(rt=rt, cam_cfg=cam_cfg, setup=setup, det_mode=det_mode),
+    }
+    if debug:
+        body["debug"] = _sim_debug.build_debug(entry=entry, sim=sim, setup=setup)
+    return jsonify(body)
 
 
 def _build_trace(
@@ -305,80 +333,6 @@ def _build_trace(
         notifier=getattr(app_state, "telegram_service", None),
     )
     return trace + routing
-
-
-def _build_diag(
-    *, setup, sim, pick, rt, det_mode, mode_override, stream_pref, stream_override, snap
-):
-    """Structured payload for the in-modal Diagnose panel.
-
-    ``parity`` is new and is the point of this change: the panel now
-    declares, in machine-readable form, which of its controls are NOT
-    the camera's configuration, so the UI can mark them rather than
-    letting the operator read an experiment as production.
-    """
-    snap_w, snap_h, snap_scale = snap
-    lag_s = _sim_frame.capture_lag_s(rt)
-    return {
-        "frame_src": pick.src or "main",
-        "stream_pref": stream_pref,
-        "det_mode": det_mode,
-        "sahi": sim.sahi_diag,
-        "parity": {
-            "config_mode": setup.det_mode,
-            "mode_override": bool(mode_override),
-            "stream_override": bool(stream_override),
-            "sim_tick_fps": round(sim.tick_fps, 2),
-            # Gates production runs that this endpoint does not — the UI
-            # renders them as "nicht geprüft" instead of implying a pass.
-            "not_simulated": [
-                "motion_gate",
-                "confirmation_window",
-                "wildlife_cascade",
-                "bird_species",
-                "identity",
-                "event_cooldown",
-                "recording_schedule",
-                "frame_validator",
-            ],
-        },
-        "sub_stream_available": bool(getattr(rt, "_preview_frame", None) is not None),
-        "frame_size": {"w": int(sim.frame_w), "h": int(sim.frame_h)},
-        "frame_age_ms": int(pick.age_ms),
-        "capture_lag_ms": (None if lag_s is None else int(lag_s * 1000)),
-        "coral_available": True,
-        "inference_ms": int(sim.inference_ms),
-        # What this tick ACTUALLY cost. The full-frame pass is now reused
-        # by the tiling stage exactly as production's rescue reuses it,
-        # so this is the number production would pay too.
-        "mode_invokes": int(sim.invokes),
-        "gates": {
-            "raw": int(sim.raw_count),
-            "pass": len(sim.pass_rows),
-            "tentative": sim.count(_sim_pipeline.VERDICT_TENTATIVE),
-            # Back-compat key for the existing frontend counters.
-            "belowthresh": sim.count(_sim_pipeline.VERDICT_TENTATIVE),
-            "no_track": sim.count(_sim_pipeline.VERDICT_NO_TRACK),
-            "filtered": sim.count(_sim_pipeline.VERDICT_FILTERED),
-            "masked": sim.count(_sim_pipeline.VERDICT_MASKED),
-            "outside_zone": sim.count(_sim_pipeline.VERDICT_OUTSIDE_ZONE),
-        },
-        "top_raw": [{"label": r["label"], "score": r["score"]} for r in sim.rows[:3]],
-        "thresholds": {
-            "floor": round(setup.floor, 3),
-            "spawn": round(setup.spawn_default, 3),
-            # Reported, never applied — see DetectionSetup.min_score.
-            "global": round(setup.min_score, 3),
-            "per_class": dict(setup.label_thresholds),
-        },
-        "object_filter": sorted(setup.object_filter),
-        "excluded_classes": sorted(setup.excluded_classes),
-        "validator_profile": (pick.profile.name if pick.profile else None),
-        "validator_reason": pick.validator_reason or None,
-        "source_frame_size": {"w": int(sim.frame_w), "h": int(sim.frame_h)},
-        "snapshot_frame_size": {"w": int(snap_w), "h": int(snap_h)},
-        "bbox_space": "source" if snap_scale == 1.0 else "snapshot",
-    }
 
 
 def _log_tick(*, cam_id, sim, pick, setup) -> None:

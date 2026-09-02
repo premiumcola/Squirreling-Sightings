@@ -160,11 +160,13 @@ export function provenanceRows(item) {
   const models = (p && p.models) || {};
 
   return [
-    // Known-MISSING today: nothing records which revision of a tuning
-    // profile an event was recorded under. The alarm profile NAME is
-    // all there is, so the row says the name and nothing more rather
-    // than implying a version it cannot show.
     _row('Profil', valueOr(p?.camera?.alarm_profile)),
+    // WHICH revision of that profile, as the fingerprint of the tuning
+    // snapshot this clip was recorded under. Two clips sharing it were
+    // recorded under the same settings; a differing one is the answer
+    // to "did anything change between these two". Clips recorded before
+    // the fingerprint shipped have none and say so.
+    _row('Profil-Version', valueOr(p?.tuning_hash)),
     _row('Rolle', valueOr(p?.camera?.role)),
     _row(
       'Rechenwerk',

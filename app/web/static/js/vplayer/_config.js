@@ -37,6 +37,7 @@ const MODE_FLAGS = {
     canDelete: true,
     canConfirm: true,
     canRecordNow: false,
+    canPickRevision: false,
     live: false,
   },
   sim: {
@@ -50,6 +51,12 @@ const MODE_FLAGS = {
     canDelete: false,
     canConfirm: false,
     canRecordNow: true,
+    // Only the simulation may be pointed at another profile revision.
+    // This is the flag that keeps the live view honest: it is the same
+    // controller and the same panel code, and without a per-mode flag
+    // "the live view always shows the running profile" would rest on
+    // nobody happening to render the chip.
+    canPickRevision: true,
     live: true,
   },
   live: {
@@ -65,6 +72,7 @@ const MODE_FLAGS = {
     canDelete: false,
     canConfirm: false,
     canRecordNow: true,
+    canPickRevision: false,
     live: true,
   },
 };

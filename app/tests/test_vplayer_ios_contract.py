@@ -139,6 +139,38 @@ def test_every_interactive_control_meets_the_touch_minimum():
     assert "var(--vp-tap)" in before.group(1), "the ::before hitbox must be 44 px"
 
 
+def test_the_revision_picker_is_a_full_touch_target_at_sixteen_pixels():
+    """The simulation's profile-revision <select>.
+
+    Its class name contains no bare ``select``, so the generic input
+    sweep below cannot see it — and it is the one control in the panels
+    file a finger actually drives. Both numbers are pinned here: 44 px
+    or iOS gives it a target smaller than a fingertip, 16 px or iOS
+    zooms the whole page the moment it takes focus.
+    """
+    css = _strip_comments(_read(_PANELS))
+    block = re.search(r"\.vp-pnl-rev-sel\s*\{([^}]*)\}", css)
+    assert block, ".vp-pnl-rev-sel has no rule block"
+    body = block.group(1)
+    assert "min-height: var(--vp-tap)" in body or "min-height: 44px" in body
+    assert re.search(r"font-size:\s*(\d+)px", body), "the picker must state its font-size"
+    assert int(re.search(r"font-size:\s*(\d+)px", body).group(1)) >= 16
+
+
+def test_the_revision_picker_wraps_rather_than_clipping():
+    """German revision labels are long — "30.08. 12:00 · Netz-Änderung ·
+    person" — and the row also carries its key. At 375 px they cannot
+    share a line, so the row wraps and the control has no fixed width."""
+    css = _strip_comments(_read(_PANELS))
+    row = re.search(r"\.vp-pnl-rev\s*\{([^}]*)\}", css)
+    assert row and "flex-wrap: wrap" in row.group(1), "the picker row must wrap"
+    sel = re.search(r"\.vp-pnl-rev-sel\s*\{([^}]*)\}", css).group(1)
+    assert "min-width: 0" in sel, "a flex child needs min-width:0 to be allowed to shrink"
+    # A plain `width:` only — `min-width` is a hyphen away and must not
+    # be caught by the guard against a fixed width.
+    assert not re.search(r"(?<![-\w])width:\s*\d", sel), "a fixed width would clip the label"
+
+
 def test_hidden_attribute_beats_the_display_rules():
     """A [hidden] node inside a display-assigning tree stays hidden."""
     css = _strip_comments(_read(_SHELL))

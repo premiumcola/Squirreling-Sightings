@@ -32,6 +32,7 @@ import {
 const FULL_EVENT = {
   provenance: {
     schema: 1,
+    tuning_hash: 'a1b2c3d4e5f6',
     build: { commit: 'abc1234', date: '2026-08-30', count: 811 },
     camera: { id: 'cam-1', name: 'Garten', role: 'wildlife', alarm_profile: 'standard' },
     effective: { roi_mode: '2x2', min_score: 0.4, spawn_default: 0.5 },
@@ -108,12 +109,27 @@ test('provenanceRows survives null, undefined and a bare object', () => {
   }
 });
 
-test('KNOWN MISSING: nothing records the profile REVISION an event used', () => {
-  // The alarm profile NAME is all the backend stores; there is no
-  // profile_version / factory-vs-history marker anywhere. When one
-  // lands, this assertion should fail and the row should grow.
-  const keys = provenanceRows(FULL_EVENT).map((r) => r.key);
-  assert.equal(keys.includes('Profil-Version'), false);
+test('an event names the profile REVISION it was recorded under', () => {
+  // WAS KNOWN-MISSING: the alarm profile NAME was all the backend
+  // stored, so two clips recorded either side of a threshold change
+  // were indistinguishable in this fold. provenance.tuning_hash is the
+  // fingerprint of the tuning snapshot and is that missing id.
+  const by = Object.fromEntries(provenanceRows(FULL_EVENT).map((r) => [r.key, r.value]));
+  assert.equal(by['Profil'], 'standard', 'the NAME is still its own row');
+  assert.equal(by['Profil-Version'], 'a1b2c3d4e5f6');
+});
+
+test('a clip older than the revision fingerprint still renders the row', () => {
+  // Every clip recorded before tuning_hash shipped has no fingerprint.
+  // The row stays — a disappearing row is how a fold starts lying about
+  // which facts exist — and degrades like every other.
+  const by = Object.fromEntries(
+    provenanceRows({ provenance: { camera: { alarm_profile: 'standard' } } }).map((r) => [
+      r.key,
+      r.value,
+    ]),
+  );
+  assert.equal(by['Profil-Version'], PLACEHOLDER);
 });
 
 test('modelLabel names the cascade stage, and the file when it can', () => {

@@ -133,6 +133,57 @@
   margin-bottom: 8px;
 }
 
+/* The tick ran on a profile that is NOT the camera's own. Warm rather
+   than alarming: it is a deliberate diagnostic state, not a fault —
+   but it must never read as the ordinary case, because every number
+   below it describes a profile the camera is not running. */
+.vp-pnl-chip.is-revision {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+}
+
+/* ── Profile-revision picker (simulation only) ─────────────────────────────
+   A native <select>: already a 44 px target on iOS, already scrolls a
+   long list inside the viewport, already announced to VoiceOver. The
+   16 px font is not a style choice — below it, iOS zooms the whole page
+   on focus and the operator lands in a scrolled-off layout. */
+.vp-pnl-rev {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: var(--vp-tap);
+  margin-bottom: 8px;
+}
+
+.vp-pnl-rev-k {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vp-pnl-rev-sel {
+  /* Grows to the row, wraps to its own line when the German label and
+     the key cannot share 375 px. Never a fixed width. */
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: var(--vp-tap);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: var(--vp-pnl-row);
+  color: var(--text);
+  font-size: 16px;
+}
+
+@media (hover: hover) {
+  .vp-pnl-rev-sel:hover {
+    background: var(--surface-2, var(--vp-pnl-row));
+  }
+}
+
 /* ── Folds ─────────────────────────────────────────────────────────────── */
 .vp-fold-root {
   margin-top: 8px;

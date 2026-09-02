@@ -12,11 +12,18 @@ rate, and which build of the app did all that.
 ``build_provenance`` is pure — it takes plain values and returns a dict —
 so it is tested without a camera thread. ``ProvenanceMixin`` is the one
 method that gathers those values off the runtime.
+
+``project_settings`` and ``settings_hash`` live here rather than in
+``replay/`` because they are defined entirely in terms of
+``PROVENANCE_TUNING_KEYS``, which this module owns. The replay package
+re-exports them; putting them the other way round would make the
+snapshot import the replay and the replay import the snapshot.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import asdict
 from datetime import datetime
 
@@ -57,6 +64,35 @@ _EXTRA_TUNING_KEYS = (
 # from what `_tuning` writes, "replay with the stored settings" would
 # silently run with a different constellation than the one on record.
 PROVENANCE_TUNING_KEYS = tuple(TUNING_LABELS_DE) + _EXTRA_TUNING_KEYS
+
+
+def project_settings(cfg: dict | None) -> dict:
+    """Keep only the keys a replay can meaningfully vary, dropping the
+    ones that are absent. Absent and explicitly-null mean the same thing
+    to every consumer (they all use ``.get`` with a fallback), so
+    dropping nulls keeps the hash stable across snapshots that recorded
+    an unset key and ones that omitted it."""
+    src = cfg or {}
+    out = {}
+    for key in PROVENANCE_TUNING_KEYS:
+        if key in src and src[key] is not None:
+            out[key] = src[key]
+    return out
+
+
+def settings_hash(cfg: dict) -> str:
+    """Short, stable fingerprint of one settings set.
+
+    Twelve hex chars, matching the polygon signatures below. Sorted keys
+    and ``default=str`` so a set carrying a stray non-JSON value still
+    hashes instead of exploding mid-replay.
+
+    This doubles as a profile REVISION id: two events whose tuning
+    hashes match were recorded under the same profile, and one that
+    differs is the answer to "did anything change between these clips".
+    """
+    blob = json.dumps(cfg, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:12]
 
 
 def _short_sig(polys) -> str | None:
@@ -135,6 +171,10 @@ def build_provenance(
             "resolution": cam_cfg.get("resolution"),
         },
         "tuning": tuning,
+        # The revision this clip was recorded under, as an id. The whole
+        # tuning block says WHAT the profile was; this says WHICH one it
+        # was, so two clips can be compared without diffing thirty keys.
+        "tuning_hash": settings_hash(project_settings(tuning)),
         "effective": _effective(setup, roi_mode, cam_cfg),
         "zones": _polygons(cam_cfg, "zones"),
         "masks": _polygons(cam_cfg, "masks"),

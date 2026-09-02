@@ -22,6 +22,13 @@ from ._consts import REPLAY_HISTORY_CAP, REPLAY_MAX_SAMPLES, REPLAY_SCHEMA
 from ._diff import bbox_tuple, diff_detections, iou, normalise_detection, track_to_detection
 from ._persist import append_replay, build_entry
 from ._report import build_comparison, original_side
+from ._revisions import (
+    REVISION_CURRENT,
+    REVISION_FACTORY,
+    list_revisions,
+    revision_overrides,
+    simulation_cfg,
+)
 from ._run import replay_clip
 from ._settings import project_settings, resolve_replay_settings, settings_hash
 
@@ -29,6 +36,8 @@ __all__ = [
     "REPLAY_HISTORY_CAP",
     "REPLAY_MAX_SAMPLES",
     "REPLAY_SCHEMA",
+    "REVISION_CURRENT",
+    "REVISION_FACTORY",
     "alert_preview",
     "append_replay",
     "bbox_tuple",
@@ -36,11 +45,14 @@ __all__ = [
     "build_entry",
     "diff_detections",
     "iou",
+    "list_revisions",
     "normalise_detection",
     "original_side",
     "project_settings",
     "replay_clip",
     "resolve_replay_settings",
+    "revision_overrides",
     "settings_hash",
+    "simulation_cfg",
     "track_to_detection",
 ]

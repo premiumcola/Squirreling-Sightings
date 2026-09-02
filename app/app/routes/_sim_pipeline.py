@@ -105,6 +105,10 @@ class SimPass:
     tick_fps: float = 1.0
     frame_w: int = 0
     frame_h: int = 0
+    #: Which profile revision this tick ran under, as the settings
+    #: descriptor ``resolve_replay_settings`` returns — None for the
+    #: camera's own live profile, which is what the live view always is.
+    revision: dict | None = None
 
     @property
     def pass_rows(self) -> list:

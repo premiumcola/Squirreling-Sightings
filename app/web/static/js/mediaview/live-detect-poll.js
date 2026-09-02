@@ -130,6 +130,8 @@ export async function _tick() {
     const _params = new URLSearchParams({
       stream: session.stream || 'main',
       mode: session.detMode || 'off',
+      // Sim only; unset on live, which always runs the real profile.
+      ...(session.revision ? { revision: session.revision } : {}),
     });
     const r = await fetch(
       `/api/cameras/${encodeURIComponent(session.camId)}/test-detection?${_params}`,

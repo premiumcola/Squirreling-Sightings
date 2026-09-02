@@ -30,8 +30,10 @@ from ..replay import (
     append_replay,
     build_comparison,
     build_entry,
+    list_revisions,
     replay_clip,
     resolve_replay_settings,
+    revision_overrides,
 )
 from ..tracking_worker import singleton, tracks_path_for
 from .tracking import _resolve_event_video
@@ -88,6 +90,26 @@ def _descriptor(settings: dict) -> dict:
     return {k: v for k, v in settings.items() if k != "cfg"}
 
 
+@bp.get('/api/camera/<cam_id>/profile-revisions')
+def api_profile_revisions(cam_id):
+    """The profile revisions this camera can be SIMULATED against.
+
+    Listing only. Choosing one changes what a simulation shows and
+    nothing else — the camera keeps running its own profile, and the
+    only path that writes an archived net back onto a camera is the
+    Erkennungsnetz's own restore endpoint.
+    """
+    if app_state.get_camera_cfg(cam_id) is None:
+        return jsonify({"ok": False, "error": "Kamera nicht gefunden"}), 404
+    return jsonify(
+        {
+            "ok": True,
+            "camera_id": cam_id,
+            "revisions": list_revisions(app_state.storage_root, cam_id),
+        }
+    )
+
+
 @bp.get('/api/event/<event_id>/replay')
 def api_event_replay_preflight(event_id):
     """What a replay WOULD run with, without running it.
@@ -118,14 +140,15 @@ def api_event_replay_preflight(event_id):
 def api_event_replay(event_id):
     """Replay the clip and return the comparison.
 
-    Body: ``{"settings": "stored" | "current" | {"tuning": {...}}}``.
-    Defaults to ``"stored"`` — the case the feature exists for.
+    Body: ``{"settings": "stored" | "current" | "factory" |
+    {"tuning": {...}} | {"revision": <archive id>}}``. Defaults to
+    ``"stored"`` — the case the feature exists for.
     """
     body = request.get_json(silent=True) or {}
     spec = body.get("settings", "stored")
-    if not isinstance(spec, dict) and spec not in ("stored", "current"):
+    if not isinstance(spec, dict) and spec not in ("stored", "current", "factory"):
         return jsonify(
-            {"ok": False, "error": "settings muss stored, current oder ein Objekt sein"}
+            {"ok": False, "error": "settings muss stored, current, factory oder ein Objekt sein"}
         ), 400
 
     cam_id, vid, event, err = _load_event(event_id)
@@ -136,7 +159,15 @@ def api_event_replay(event_id):
         return jsonify({"ok": False, "error": "Tracking-Worker nicht aktiv"}), 503
 
     cam_cfg = app_state.get_camera_cfg(cam_id) or {}
-    settings = resolve_replay_settings(event, cam_cfg, spec)
+    try:
+        settings = resolve_replay_settings(
+            event,
+            cam_cfg,
+            spec,
+            revisions=lambda rid: revision_overrides(app_state.storage_root, cam_id, rid, cam_cfg),
+        )
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     try:
         result = replay_clip(
             worker=worker,

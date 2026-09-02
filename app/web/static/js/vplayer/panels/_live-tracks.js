@@ -17,6 +17,7 @@ import { liveTrackColor } from '../../core/track-color.js';
 import { PLACEHOLDER } from '../_helpers.js';
 import { renderDebugLog } from './_debug-log.js';
 import { renderRawDetections } from './_raw-detections.js';
+import { renderRevisionChip } from './_revision-chip.js';
 import { computeChip, tpuBusyLabel, tpuFor, trackRow } from './_helpers.js';
 
 /** German for the tracker's own state vocabulary. */
@@ -35,8 +36,26 @@ function _chipsHtml(cfg, frame, status) {
     `<span class="vp-pnl-chip">${esc(computeChip(modes))}</span>` +
     `<span class="vp-pnl-chip">ROI ${esc(roi || PLACEHOLDER)}</span>` +
     `<span class="vp-pnl-chip">TPU ${esc(busy)}</span>` +
+    _revisionChipHtml(frame) +
     `</div>`
   );
+}
+
+/**
+ * The revision chip proper — what the LAST tick actually ran under, out
+ * of that tick's own payload.
+ *
+ * Deliberately not read from the picker: the picker says what was
+ * asked for, the payload says what was answered, and the whole point of
+ * naming the profile is that those two can differ for a tick after a
+ * change. No chip at all means the camera's own live profile, which is
+ * the live view's only possible answer and needs no badge.
+ */
+function _revisionChipHtml(frame) {
+  const rev = frame?.raw?.revision;
+  if (!rev) return '';
+  const name = rev.source === 'factory' ? 'Werkseinstellung' : 'Stand aus dem Verlauf';
+  return `<span class="vp-pnl-chip is-revision">${esc(name)}</span>`;
 }
 
 function _trackHtml(t, models) {
@@ -82,12 +101,16 @@ export function renderLiveTracks(host, cfg, frame = null) {
   if (!host) return null;
   host.innerHTML =
     `<div class="vp-pnl-head"></div>` +
+    `<div class="vp-pnl-revpick"></div>` +
     `<div class="vp-pnl-tracks"></div>` +
     `<div class="vp-pnl-raw"></div>` +
     `<div class="vp-pnl-debug"></div>`;
 
   const head = host.querySelector('.vp-pnl-head');
   const tracks = host.querySelector('.vp-pnl-tracks');
+  // Simulation only — renderRevisionChip returns null for every other
+  // surface, so the live view cannot grow one by accident.
+  const revision = renderRevisionChip(host.querySelector('.vp-pnl-revpick'), cfg);
   const raw = renderRawDetections(host.querySelector('.vp-pnl-raw'), cfg);
   const log = renderDebugLog(host.querySelector('.vp-pnl-debug'), cfg);
 
@@ -102,6 +125,7 @@ export function renderLiveTracks(host, cfg, frame = null) {
   return {
     update,
     teardown: () => {
+      revision?.teardown();
       raw?.teardown();
       log?.teardown();
       host.innerHTML = '';

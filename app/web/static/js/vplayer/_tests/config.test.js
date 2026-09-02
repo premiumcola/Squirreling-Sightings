@@ -17,7 +17,7 @@ test('every advertised mode builds', () => {
   }
 });
 
-test('live and sim differ only by the hidden panel and overlays', () => {
+test('live and sim differ only by the panel, the overlays and the revision picker', () => {
   const sim = buildPlayerConfig({ mode: 'sim' }).flags;
   const live = buildPlayerConfig({ mode: 'live' }).flags;
 
@@ -27,10 +27,30 @@ test('live and sim differ only by the hidden panel and overlays', () => {
   assert.equal(live.showOverlays, false);
   assert.deepEqual(live.overlayToggles, []);
 
+  // The third difference, and the only one that changes what the
+  // BACKEND is asked for: a simulation may be pointed at another
+  // profile revision, the live view never may. It is a flag rather
+  // than a mode check so this property is provable right here.
+  assert.equal(sim.canPickRevision, true);
+  assert.equal(live.canPickRevision, false);
+
   // Everything else is identical — same transport, same window, same
   // panel family, same absence of recorded-item semantics.
-  const rest = (f) => ({ ...f, showPanel: 0, showOverlays: 0, overlayToggles: 0 });
+  const rest = (f) => ({
+    ...f,
+    showPanel: 0,
+    showOverlays: 0,
+    overlayToggles: 0,
+    canPickRevision: 0,
+  });
   assert.deepEqual(rest(live), rest(sim));
+});
+
+test('no surface but the simulation may choose a profile revision', () => {
+  for (const mode of ['recorded', 'live']) {
+    assert.equal(buildPlayerConfig({ mode }).flags.canPickRevision, false, mode);
+  }
+  assert.equal(buildPlayerConfig({ mode: 'sim' }).flags.canPickRevision, true);
 });
 
 test('recorded scrubs a known duration; live and sim roll a window', () => {

@@ -39,6 +39,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import app_state
 from ..detect_setup import apply_bottom_crop, build_detection_setup
+from ..replay import simulation_cfg
 from . import _sim_debug, _sim_evidence, _sim_frame, _sim_pipeline, _sim_routing, _sim_trace
 from ._sim_guard import affordability, busy_payload, record_cost, refusal_payload, sim_slot
 from ._sim_tiling import VALID_MODES
@@ -140,6 +141,15 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     # the thresholds and the mask/zone polygons can never come from two
     # different readings of the camera.
     cam_cfg = getattr(rt, "cfg", None) or cam
+    # …unless the operator pointed the SIMULATION at another profile
+    # revision. That yields a throwaway dict for this tick only; the
+    # camera keeps running its own profile, and nothing here writes.
+    try:
+        cam_cfg, revision = simulation_cfg(
+            app_state.storage_root, cam_id, cam_cfg, request.args.get("revision")
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     setup = build_detection_setup(
         cam_id,
         cam_cfg,
@@ -158,6 +168,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     except Exception as e:  # noqa: BLE001 — a diagnostic must not 500
         log.warning("[test-detection] %s inference failed: %s", cam_id, e)
         return jsonify({"error": f"Inference fehlgeschlagen: {e}"}), 500
+    sim.revision = revision
     record_cost(cam_id, det_mode, sim.inference_ms, sim.invokes)
     return _respond(
         rt=rt,
@@ -246,10 +257,7 @@ def _respond(
         mode_override=mode_override,
         stream_override=stream_override,
     )
-    skip_snapshot = (request.args.get("no_snapshot") or "").strip() in ("1", "true", "yes")
-    snapshot, snap_w, snap_h, snap_scale = _sim_frame.encode_snapshot(
-        apply_bottom_crop(pick.frame, setup.bottom_crop_px), sim.rows, skip_snapshot
-    )
+    snapshot, snap_w, snap_h, snap_scale = _encode_snapshot(pick, setup, sim)
     ema_ms = float(getattr(rt, "_frame_interval_ema_ms", 0.0) or 0.0)
     diag = _sim_debug.build_diag(
         setup=setup,
@@ -292,10 +300,23 @@ def _respond(
         # carries only its stage token; this is what turns that token
         # into the name of the model that actually produced the label.
         "models": _sim_debug.models_block(rt),
+        # Which profile revision produced everything above. None means
+        # the camera's own live profile — the live view's only answer.
+        "revision": sim.revision,
     }
     if debug:
         body["debug"] = _sim_debug.build_debug(entry=entry, sim=sim, setup=setup)
     return jsonify(body)
+
+
+def _encode_snapshot(pick, setup, sim):
+    """The overlay JPEG for this tick, cropped exactly as the pipeline
+    saw the frame. ``?no_snapshot=1`` is the live view's caller, which
+    already has the picture and wants only the boxes."""
+    skip = (request.args.get("no_snapshot") or "").strip() in ("1", "true", "yes")
+    return _sim_frame.encode_snapshot(
+        apply_bottom_crop(pick.frame, setup.bottom_crop_px), sim.rows, skip
+    )
 
 
 def _remember_tick(entry: dict, *, sim, trace, snap, pick, diag, evidence) -> None:

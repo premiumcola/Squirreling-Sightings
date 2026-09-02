@@ -1,25 +1,34 @@
 // ─── mediaview/live-detect-poll.js ─────────────────────────────────────────
 // The 1 Hz test-detection poll loop: _tick fetches a frame, _scheduleNext paces
 // the adaptive cadence + hold EMA, _renderFrame fans the result out to every
-// overlay/panel renderer. Plus the Debug-tab render bridge, the onTabChange
-// hook, the SAHI diag-fold, and the black-screen one-shot diagnostic. State via S.
-import { byId, esc } from '../core/dom.js';
+// overlay/panel renderer and to the frame observers. Plus the black-screen
+// one-shot diagnostic. State via S.
+//
+// The pure parts were lifted into siblings so they can be unit-tested with no
+// DOM, session or socket — this file keeps every decision, they keep the
+// arithmetic behind it:
+//   _live-detect-cadence.js          cadence floors, delay, cycle EMA, hold
+//   _live-detect-tick-status.js      in-flight age/pending + ok=false verdicts
+//   _live-detect-frame-observers.js  the onLiveFrame registry
+import { byId } from '../core/dom.js';
 import { S } from './live-detect-state.js';
 import { _renderBboxOverlay } from './live-detect-bbox.js';
 import { _renderTrailsOverlay } from './live-detect-overlays.js';
-import { _renderDetectionsPanel, _renderLiveSwimlane, _appendTrace, _renderTraceTab } from './live-detect-panels.js';
+import { _renderDetectionsPanel, _renderLiveSwimlane, _appendTrace } from './live-detect-panels.js';
 import { _refreshCadenceRow } from './live-detect-diag.js';
 import { _renderDebugTab, _renderDiagPanel } from './live-detect-tabs.js';
 import { _showModeRefusedBanner, _showBusyNotice } from './live-detect-stall.js';
 import { mvModeInvokes } from './mode-indicator.js';
+import { _cadenceForCycle, _nextCycleEma, _holdMsFromEma } from './_live-detect-cadence.js';
 import {
-  _HOLD_MS_CEILING,
-  _HOLD_MS_FLOOR,
+  _inflightAgeMs,
+  _isInflightPending,
+  _classifyTickFailure,
+} from './_live-detect-tick-status.js';
+import { _notifyFrameObservers } from './_live-detect-frame-observers.js';
+export { onLiveFrame } from './_live-detect-frame-observers.js';
+import {
   _LIVE_WINDOW_MS,
-  _TICK_FLOOR_SUB_MS,
-  _TICK_FLOOR_MAIN_MS,
-  _TICK_MAX_MS,
-  _TICK_FACTOR,
   _INFLIGHT_ABORT_CEILING_MS,
   _TICK_RETRY_WHILE_INFLIGHT_MS,
 } from './live-detect.js';
@@ -66,31 +75,26 @@ export function _logSimDiag() {
 // the stall watchdog. `_tick` used to abort at its head unconditionally,
 // which made the documented "a request younger than 30 s is never
 // aborted" false for the path the operator uses most: _forceImmediateTick
-// (mode or stream change) calls straight in here. Flask cannot cancel a
-// request — the handler runs all ten of its inferences to completion
-// whatever we do to the socket — so aborting hides the cost from the UI
-// without removing it from the box, and the backend's single slot then
-// answers the replacement with 429 busy anyway. Wait instead, and say so
-// on screen (the busy notice) rather than racing.
+// (mode or stream change) calls straight in here. The threshold itself is
+// _isInflightPending — see _live-detect-tick-status.js for why waiting
+// beats racing. Here we only act on its verdict: say so on screen (the
+// busy notice) and re-arm.
 //
 // Returns true when the caller must stand down; it has re-armed itself.
 function _deferWhileInflight(session) {
-  const inflightMs = session.inflightSince ? Date.now() - session.inflightSince : 0;
-  if (inflightMs <= 0 || inflightMs >= _INFLIGHT_ABORT_CEILING_MS) return false;
+  const inflightMs = _inflightAgeMs(session.inflightSince, Date.now());
+  if (!_isInflightPending(inflightMs, _INFLIGHT_ABORT_CEILING_MS)) return false;
   if (session.tickHandle) clearTimeout(session.tickHandle);
   session.tickHandle = setTimeout(_tick, _TICK_RETRY_WHILE_INFLIGHT_MS);
   return true;
 }
 
 // B23' · an ok=false response. Stash the code+message for the fold's
-// "Letzter Tick" banner (status first so screenshots are greppable), and
-// let the two 429 codes paint their own explanation — leaving either of
-// them wordless is what let the stall watchdog's guess stand in for the
-// real reason.
+// "Letzter Tick" banner, and let the two 429 codes paint their own
+// explanation — leaving either of them wordless is what let the stall
+// watchdog's guess stand in for the real reason.
 function _handleTickFailure(status, data) {
-  const code = data?.code || status || '?';
-  const msg = data?.error || data?.message || '';
-  const text = msg ? `${code} · ${msg}` : String(code);
+  const { msg, text } = _classifyTickFailure(status, data);
   S.tickState.lastTickError = text;
   S.session?.fold?.setLastError?.(text);
   if (data?.code === 'mode_too_expensive') {
@@ -193,36 +197,21 @@ export async function _tick() {
 
 export function _scheduleNext(session, lastCycleMs) {
   if (S.session !== session) return;
-  // C73 · floor depends on which stream the LAST tick used. Sub-
-  // stream ticks cost less, so 500 ms is the floor on that path.
-  // The fallback floor of 1 s keeps the unhealthy-camera case from
-  // getting hammered. Unknown (first tick) defaults to the safer
-  // 1 s floor — the second tick will tighten if sub came back.
-  const src = session.lastFrameSrc || 'unknown';
-  const floor = src === 'sub' ? _TICK_FLOOR_SUB_MS : _TICK_FLOOR_MAIN_MS;
-  const cycleMs = Number.isFinite(lastCycleMs) ? lastCycleMs : floor;
-  const projected = Math.round(cycleMs * _TICK_FACTOR);
-  // P5 · the between-tick ceiling scales with what a tick costs. Clamping
-  // a 10 s 3×3 cycle to a 4 s ceiling asks the camera for a new frame
-  // before the previous answer is even back.
-  const maxDelay = _TICK_MAX_MS * mvModeInvokes(session.detMode || 'off');
-  const delay = Math.min(maxDelay, Math.max(floor, projected));
+  // The floor/delay arithmetic (C73's per-stream floor, P5's mode-scaled
+  // ceiling) and the C84 cycle EMA + hold clamp live in
+  // _live-detect-cadence.js. Order of the writes below is load-bearing for
+  // the CADENCE diag row, which reads all four together.
+  const { floor, cycleMs, delay } = _cadenceForCycle(
+    lastCycleMs,
+    session.lastFrameSrc || 'unknown',
+    mvModeInvokes(session.detMode || 'off'),
+  );
   S.tickState.nextTickAt = Date.now() + delay;
   S.tickState.lastCycleMs = cycleMs;
   S.tickState.lastFloorMs = floor;
   S.tickState.lastDelayMs = delay;
-  // C84 · EMA over recent cycle wall-times. First observation seeds
-  // the EMA so the hold isn't 0-initialised on the very first tick;
-  // subsequent ticks pull the average toward the new cycle at factor
-  // 0.4 (a 5-tick effective window). Hold = clamp(2 * EMA, 800,
-  // 1500): two cycles of slack absorbs one missed tick at the
-  // current cadence without lingering across multiple.
-  if (!Number.isFinite(S.cycleEmaMs)) {
-    S.cycleEmaMs = cycleMs;
-  } else {
-    S.cycleEmaMs = 0.4 * cycleMs + 0.6 * S.cycleEmaMs;
-  }
-  S.holdMsActive = Math.min(_HOLD_MS_CEILING, Math.max(_HOLD_MS_FLOOR, 2 * S.cycleEmaMs));
+  S.cycleEmaMs = _nextCycleEma(S.cycleEmaMs, cycleMs);
+  S.holdMsActive = _holdMsFromEma(S.cycleEmaMs);
   session.tickHandle = setTimeout(_tick, delay);
   _refreshCadenceRow();
 }
@@ -240,43 +229,6 @@ function _fallbackToOff() {
     S.session.tickHandle = null;
   }
   _tick();
-}
-
-// Frame observers. This loop's fan-out below is bound to one player's
-// renderers by direct import, which is fine for that player and leaves
-// no way for a second surface to see a frame without either forking the
-// loop or being wired into this list of calls. Neither is acceptable:
-// the in-flight/no-abort contract, the adaptive cadence and cycle EMA,
-// the CONTACT-vs-PACE watchdog split and the three 429/503 branches are
-// all fixes for reproduced regressions, and a second copy would have to
-// reproduce every one of them.
-//
-// So: an observer list. With nothing subscribed this is a no-op, and
-// every observer is called inside its own try/catch — a throwing
-// consumer must never take down the poll loop, which is the thing
-// keeping the live view alive.
-const _frameObservers = new Set();
-
-/**
- * Subscribe to every frame this loop renders.
- *
- * @param {(data: object) => void} fn
- * @returns {() => void} unsubscribe
- */
-export function onLiveFrame(fn) {
-  if (typeof fn !== 'function') return () => {};
-  _frameObservers.add(fn);
-  return () => _frameObservers.delete(fn);
-}
-
-function _notifyFrameObservers(data) {
-  for (const fn of _frameObservers) {
-    try {
-      fn(data);
-    } catch (err) {
-      console.warn('[sim-frame] observer threw', err);
-    }
-  }
 }
 
 export function _renderFrame(data) {
@@ -398,12 +350,3 @@ export function _renderFrame(data) {
   _renderDebugTab(data);
   _notifyFrameObservers(data);
 }
-
-// SIMU-05 · Debug tab content. Composes the live-status header
-// (SIMU-05a) + five problem-clusters. SIMU-FIX-05b · skip rendering
-// when the Debug tab isn't visible — the panel sits inside zone-
-// detail which is display:none for inactive tabs, so the user
-// can't see it anyway. Bailing here saves the per-tick cost of
-// renderDebugPanel (header + 5 clusters via 5 outerHTML swaps).
-// Subscribed to onTabChange so a switch INTO Debug fires a render
-// immediately with the latest tick data.

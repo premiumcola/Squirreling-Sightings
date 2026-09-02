@@ -47,20 +47,17 @@ function _configuredRoiMode(camId) {
   return _ROI_MODES.includes(mode) ? mode : 'off';
 }
 
-// C73 · cadence floors. The original 1 Hz floor was set against the
-// main-stream cost budget (2560×1440 frame copy + JPEG encode +
-// inference ~600-1500 ms). With C41's sub-stream path the per-tick
-// cost drops to ~250 ms, so 500 ms is a safe floor on that path.
-// _scheduleNext picks the right floor based on the most recent
-// diag.frame_src; the main_fallback path keeps the 1 Hz floor so an
-// unhealthy / sub-disabled camera doesn't get hammered.
-export const _TICK_FLOOR_SUB_MS = 500;
-export const _TICK_FLOOR_MAIN_MS = 1000;
-// Ceiling on the pause BETWEEN ticks. Scaled by the mode's inference
-// count at the callsite (_scheduleNext): a 4 s ceiling is meaningless
-// when one tick legitimately takes 10 s.
-export const _TICK_MAX_MS = 4000;
-export const _TICK_FACTOR = 1.2;
+// The cadence constants moved to _live-detect-cadence.js, next to the
+// arithmetic written against them (and unit-tested there). Re-exported
+// here so every existing importer keeps its `from './live-detect.js'`.
+export {
+  _TICK_FLOOR_SUB_MS,
+  _TICK_FLOOR_MAIN_MS,
+  _TICK_MAX_MS,
+  _TICK_FACTOR,
+  _HOLD_MS_CEILING,
+  _HOLD_MS_FLOOR,
+} from './_live-detect-cadence.js';
 
 // C84 · dynamic bbox hold-time scaffolding. The cycle EMA is
 // populated by _scheduleNext on every cycle, then S.holdMsActive
@@ -75,21 +72,6 @@ export const _TRACE_CAP = 80;
 // backend response = one block, newest on top). Keep the last 20 ticks
 // — enough scroll-back to compare a few cycles without unbounded growth.
 export const _TRACE_TICK_CAP = 20;
-// gp384 — hold-time for bbox fade-out after the live tick goes
-// empty. Each live bbox lingers for this long after its last sight,
-// fading from full opacity down to zero. Without hold-time the
-// bboxes vanish the instant the 1 Hz detector misses a frame —
-// which on a fluttering bird or jittery score → "blinky" UX and
-// the user assumes the renderer is broken.
-// C84 · upper bound for the dynamic bbox hold-time. The hold is
-// derived per-cycle from the EMA of recent tick wall-times:
-//   hold_ms = clamp(2 * EMA, 800, _HOLD_MS_CEILING)
-// so on a healthy sub-stream path (~500-700 ms ticks) the hold
-// converges around ~1000-1400 ms — long enough to bridge a single
-// missed tick, short enough that a moving subject's box doesn't
-// ghost behind it.
-export const _HOLD_MS_CEILING = 1500;
-export const _HOLD_MS_FLOOR = 800;
 // Refresh interval for the hold-time fade. SIMU-02d removed the
 // persistent "empty state" video banner — the absence of detections
 // is now expressed via the empty Detections tab (SIMU-04+) instead

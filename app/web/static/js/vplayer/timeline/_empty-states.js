@@ -9,9 +9,12 @@
 //                the answer is an action: run the detection now.
 //   done         a sidecar exists (it carries built_at or schema) and
 //                its track list is empty. The indexer ran and confirmed
-//                nothing. Says so, with the confidence gate that
-//                filtered the short sightings out.
+//                nothing.
 //   unindexed    no sidecar at all. Nothing has ever looked.
+//
+// Only `timelapse` renders anything, and only its button. The other two
+// had nothing but a sentence to offer, and this block paints ON the
+// picture — see emptyStateHtml.
 //
 // THE RESCAN. The timelapse button posts to /api/events/<id>/rescan.
 // Worth knowing, because it reads as a second endpoint next to
@@ -23,7 +26,6 @@
 // exponential retry. Collapsing them would lose one of those two.
 
 import { esc } from '../../core/dom.js';
-import { pctLabel } from '../_helpers.js';
 
 /** Which empty state applies. PURE — the branch is the tested part. */
 export function emptyStateFor(item, tracks) {
@@ -39,39 +41,34 @@ const _RESCAN_SVG =
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>';
 
-/** The markup for one empty state. */
-export function emptyStateHtml(state, { item, tracks } = {}) {
+/** The markup for one empty state.
+ *
+ *  NOTHING here may be prose. This block renders inside the timeline,
+ *  which is an overlay ON the picture — two lines of explanation printed
+ *  straight across the video ("Indexierung fertig · keine Spuren
+ *  bestätigt / kurze Sichtungen unter 50 % werden gefiltert") and the
+ *  verdict was "der Text im Video muss raus da". A sentence about why a
+ *  lane is missing is worth exactly nothing painted over the thing the
+ *  operator opened the player to watch.
+ *
+ *  So: the two states that only had something to SAY now render nothing
+ *  at all — the panel below already lists what was found, which is the
+ *  same answer without covering the picture. The timelapse state keeps
+ *  its BUTTON, because that is the only route to a re-detection for a
+ *  timelapse clip and losing it would take away a capability, not a
+ *  sentence. The button's text is its accessible name only.
+ */
+export function emptyStateHtml(state, { item } = {}) {
   if (state === 'timelapse') {
     return (
       `<div class="vp-tl-empty" data-state-kind="timelapse" ` +
       `data-event-id="${esc(String(item?.event_id || ''))}" ` +
       `data-camera-id="${esc(String(item?.camera_id || ''))}">` +
-      `<span class="vp-tl-empty-text">Noch keine Track-Daten</span>` +
-      `<button type="button" class="vp-tl-rescan">${_RESCAN_SVG}` +
-      `<span>Nach-Erkennung starten</span></button></div>`
+      `<button type="button" class="vp-tl-rescan" title="Nach-Erkennung starten" ` +
+      `aria-label="Nach-Erkennung starten">${_RESCAN_SVG}</button></div>`
     );
   }
-  if (state === 'done') {
-    const min = tracks?.gates?.min_confidence;
-    const sub =
-      typeof min === 'number'
-        ? `<span class="vp-tl-empty-sub">kurze Sichtungen unter ${esc(pctLabel(min))} ` +
-          `werden gefiltert</span>`
-        : '';
-    return (
-      `<div class="vp-tl-empty" data-state-kind="done">` +
-      `<span class="vp-tl-empty-text">Indexierung fertig · keine Spuren bestätigt</span>` +
-      `${sub}</div>`
-    );
-  }
-  return (
-    `<div class="vp-tl-empty" data-state-kind="unindexed">` +
-    `<span class="vp-tl-empty-text">Noch nicht indexiert</span>` +
-    // The pill this points at is labelled "Neu erkennen". The old copy
-    // still said "Neu indexieren", which the pill has not been called
-    // for some time — an instruction naming a button that is not there.
-    `<span class="vp-tl-empty-sub">über »Neu erkennen« erzeugen</span></div>`
-  );
+  return '';
 }
 
 /**
@@ -90,10 +87,15 @@ export function wireRescan(host, deps = {}) {
   if (!btn || typeof deps.post !== 'function') return null;
 
   const box = btn.closest('.vp-tl-empty');
-  const label = btn.querySelector('span:last-child');
+  // The button is icon-only (no prose over the picture), so its progress
+  // and any error go to the accessible name and the tooltip, with
+  // `data-state` on the box for the visual treatment. A span that no
+  // longer exists would have swallowed the error message silently.
   const setState = (state, text) => {
     if (box) box.dataset.state = state;
-    if (label && text) label.textContent = text;
+    if (!text) return;
+    btn.setAttribute('title', text);
+    btn.setAttribute('aria-label', text);
   };
 
   const onClick = async (ev) => {

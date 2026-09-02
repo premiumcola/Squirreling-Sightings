@@ -145,6 +145,21 @@ function _mountAll(cfg) {
     onResume: () => stage.video.play().catch(() => {}),
   });
 
+  // Drive the playhead from the video. The timeline exposed `tick` from
+  // the first commit and NOTHING ever called it, so the head sat at zero
+  // and the clock read "0:00 / −0:00" for the whole clip however long it
+  // played — "Laufzeit-Knopf bewegt sich nicht, es steht auch keine
+  // Abspielzeit an". `timeupdate` fires ~4×/s while playing; `seeked`
+  // and `loadedmetadata` cover the two moments it does not (a scrub while
+  // paused, and the duration arriving after the first paint).
+  if (!cfg.flags.live && timeline) {
+    const sync = () => timeline.tick(stage.video.currentTime || 0);
+    for (const ev of ['timeupdate', 'seeked', 'loadedmetadata', 'play', 'pause']) {
+      stage.video.addEventListener(ev, sync);
+    }
+    sync();
+  }
+
   // A live surface with a stream URL points its <img> straight at it,
   // so the picture is continuous rather than a 1 Hz snapshot loop.
   if (cfg.flags.live && cfg.source?.url) stage.img.src = cfg.source.url;

@@ -36,11 +36,9 @@
       </svg>
     </button>
   </div>
-  {# The group colour key — Tempo/Bewegung/Kleintier/Verfolgung/Meldung,
-  plus what the solid/dashed lines and the ringed dot mean — used to be
-  repeated identically inside every camera's panel body. One render here
-  instead (netz/_panel.js's initGroupLegend). #}
-  <div id="netzGroupLegend"></div>
+  {# The group colour key belongs UNDER the net it explains, not above the
+  first camera tile — it is one compact row at the bottom of every panel
+  now (netz/_legend.js). #}
   <div class="netz-combos" id="netzCombosBox" hidden></div>
   <div id="cameraCards" class="camera-grid"></div>
 </section>

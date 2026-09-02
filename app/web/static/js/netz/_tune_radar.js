@@ -28,7 +28,6 @@
 // share it with the renderer.
 
 import { esc } from '../core/dom.js';
-import { TUNE_GROUPS } from './_settings_axes.js';
 import { radarGeometry, tunePolar } from './_tune_geometry.js';
 import { labelsSvg } from './_tune_labels.js';
 
@@ -204,46 +203,5 @@ export function renderTuneRadar({ axes, interactive = true, size = null }) {
     // the complaint the redesign started from.
     labelsSvg(ends, geo, interactive) +
     `</svg>`
-  );
-}
-
-// A short line/dot glyph for each of the three shape meanings on the
-// chart — "was ist die gestrichelte Linie, was die feste?" gets answered
-// on the chart itself instead of only once in chat.
-function _lineSwatch(dashed) {
-  const stroke = dashed ? '#ffffff' : 'rgba(120,200,255,.85)';
-  const dash = dashed ? ' stroke-dasharray="3 3" stroke-opacity=".65"' : '';
-  return (
-    `<svg width="18" height="10" viewBox="0 0 18 10" aria-hidden="true">` +
-    `<line x1="1" y1="5" x2="17" y2="5" stroke="${stroke}" stroke-width="2"${dash}/></svg>`
-  );
-}
-
-function _dotSwatch() {
-  return (
-    `<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">` +
-    `<circle cx="7" cy="7" r="4.5" fill="#7ac8ff" stroke="rgba(255,255,255,.85)" ` +
-    `stroke-width="1.5"/></svg>`
-  );
-}
-
-/** The group names as coloured chips, plus the three line/dot meanings on
- *  the chart itself (solid polygon, dashed Werk outline, moved-vertex
- *  ring) — shown ONCE for the whole Live-Feed section (netz/_panel.js's
- *  initGroupLegend) rather than repeated identically on every panel. */
-export function tuneGroupLegendHtml() {
-  return (
-    `<div class="netz-tgroups">` +
-    Object.values(TUNE_GROUPS)
-      .map(
-        (g) =>
-          `<span class="netz-tgroup"><i style="background:${esc(g.color)}"></i>` +
-          `${esc(g.label)}</span>`,
-      )
-      .join('') +
-    `<span class="netz-tgroup">${_lineSwatch(false)}Aktuelles Profil</span>` +
-    `<span class="netz-tgroup">${_lineSwatch(true)}Werkseinstellung</span>` +
-    `<span class="netz-tgroup">${_dotSwatch()}Geändert</span>` +
-    `</div>`
   );
 }

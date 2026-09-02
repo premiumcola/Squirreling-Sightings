@@ -662,24 +662,35 @@
   cursor: grab;
 }
 
-/* ── group key + combination notes ───────────────────────────────────── */
+/* ── the key under the net + combination notes ───────────────────────────
+   ONE wrapping row at the BOTTOM of each panel, under the net it explains
+   — it used to sit page-level above the first camera tile, where it
+   explained a chart that was nowhere near it. Every px here is a px the
+   net loses (the panel's height is the Live-Feed tile's), so: 11 px, tight
+   leading, no margins of its own, and it wraps to a second row on a phone
+   rather than forcing the panel taller. */
 
-.netz-tgroups {
+.netz-key {
+  /* Never squeezed by the flex column it shares with the chart on desktop
+     — the chart is the one that gives (`flex: 1 1 auto` below). */
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 2px 10px;
+  padding-top: 4px;
   font-size: 11px;
+  line-height: 1.25;
   color: #94a3b8;
 }
 
-.netz-tgroup {
+.netz-key-i {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.netz-tgroup i {
+.netz-key-i i {
   width: 9px;
   height: 9px;
   border-radius: 50%;

@@ -27,8 +27,9 @@ import {
   frozenSectionHtml,
   ghostToggleHtml,
   netBodyHtml,
+  netProbeHtml,
 } from './_cards.js';
-import { svgGeometry, tuneGroupLegendHtml } from './_tune_radar.js';
+import { svgGeometry } from './_tune_radar.js';
 import { bindTuneDrag, isTuneDragging } from './_tune_drag.js';
 import { renderArchiveDetail } from './_archive_detail.js';
 import { renderArchiveList } from './_archive_list.js';
@@ -107,13 +108,15 @@ function _chartSizeOf(chart) {
   return r.width > 0 && r.height > 0 ? { width: r.width, height: r.height } : null;
 }
 
-/** Measure the box the net body is about to get, by laying out an empty
- *  one in its place. Null when the panel has no size yet (a hidden
- *  section) — the render then falls back to 560 x 300 and the resize
- *  observer below repaints it the moment the box gets a size. */
+/** Measure the box the net body is about to get, by laying out the real
+ *  body MINUS the radar (netProbeHtml: empty chart plus the legend row
+ *  that shares the panel's height with it). Null when the panel has no
+ *  size yet (a hidden section) — the render then falls back to 560 x 300
+ *  and the resize observer below repaints it the moment the box gets a
+ *  size. */
 function _measureChart(body) {
-  body.innerHTML = '<div class="netz-card-chart"></div>';
-  return _chartSizeOf(body.firstElementChild);
+  body.innerHTML = netProbeHtml();
+  return _chartSizeOf(body.querySelector('.netz-card-chart'));
 }
 
 // ── render ────────────────────────────────────────────────────────────
@@ -133,9 +136,6 @@ export function renderPanel(camId) {
   if (viewFor(camId) === 'verlauf') {
     _renderArchiveInto(body, camId);
   } else {
-    // The group legend used to be prepended here, once per panel —
-    // camera-independent reference text, so it now has ONE page-level
-    // home (initGroupLegend below) instead of repeating on every panel.
     body.innerHTML = netBodyHtml(cam, _measureChart(body));
     bindNetBody(article, () => renderPanel(camId));
     bindTuneDrag(body, () => renderPanel(camId));
@@ -283,16 +283,4 @@ export function initCombosInfo() {
     box.toggleAttribute('hidden', !open);
     btn.setAttribute('aria-expanded', String(open));
   });
-}
-
-// ── page-level group legend ──────────────────────────────────────────────
-// tuneGroupLegendHtml() used to be prepended into every panel's body — the
-// same colour key, byte-for-byte, on every one of N cards. One static
-// render into a fixed slot under the section header instead.
-
-export function initGroupLegend() {
-  const box = byId('netzGroupLegend');
-  if (!box || box.dataset.wired) return;
-  box.dataset.wired = '1';
-  box.innerHTML = tuneGroupLegendHtml();
 }

@@ -106,8 +106,8 @@ def test_the_class_axes_are_appended_so_each_colour_group_stays_one_arc():
 def test_the_meldung_group_reaches_the_legend():
     out = _js(
         """
-        const radar = await import(JS + '/netz/_tune_radar.js');
-        const html = radar.tuneGroupLegendHtml();
+        const key = await import(JS + '/netz/_key.js');
+        const html = key.netKeyHtml();
         console.log(JSON.stringify({ hasMeldung: html.includes('Meldung') }));
         """
     )

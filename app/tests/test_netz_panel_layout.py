@@ -276,39 +276,59 @@ def test_every_write_path_takes_its_camera_from_the_dom():
     assert "netzState.camId" not in _CARDS
 
 
-# ── 8 · the group/line/dot legend is page-level too ───────────────────
+# ── 8 · the legend sits under the net it explains ─────────────────────
 
 
-def test_the_group_legend_is_not_rendered_per_panel():
-    """tuneGroupLegendHtml() used to be prepended into every renderPanel
-    call — the same colour key, byte-for-byte, on every one of N cards."""
-    fn_start = _PANEL.index("export function renderPanel(")
-    fn_end = _PANEL.index("\n}", fn_start)
-    assert "tuneGroupLegendHtml()" not in _PANEL[fn_start:fn_end]
-
-
-def test_the_group_legend_has_one_page_level_home():
-    assert "export function initGroupLegend" in _PANEL
-    assert "netzGroupLegend" in _PANEL
+def test_the_legend_has_no_page_level_home_any_more():
+    """It sat above the FIRST camera tile, explaining a chart nowhere near
+    it — "die Legende steht ganz oben über der ersten Videokachel, dort
+    ergibt sie keinen Sinn"."""
+    assert "initGroupLegend" not in _PANEL
+    assert "netzGroupLegend" not in _PANEL
     tpl = (_REPO / "app" / "web" / "templates" / "partials" / "dashboard.html").read_text(
         encoding="utf-8"
     )
-    assert tpl.count('id="netzGroupLegend"') == 1
+    assert "netzGroupLegend" not in tpl
+    # The separate "Was zusammen wirkt" / "Werte, die fest bleiben" box
+    # stays page-level — it is reference text, not a key to a chart.
+    assert tpl.count('id="netzCombosBox"') == 1
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_every_panel_ends_with_the_legend_row():
+    out = _js(
+        f"""
+        {_SETUP}
+        const html = cards.netBodyHtml({{ id: 'cam_a', name: 'Werkstatt' }},
+                                       {{ width: 700, height: 340 }});
+        console.log(JSON.stringify({{
+          hasRow: html.includes('netz-key'),
+          once: html.split('netz-key"').length - 1,
+          afterChart: html.indexOf('netz-key') > html.indexOf('netz-tune-svg'),
+          block: html.includes('netz-tgroups'),
+        }}));
+        """
+    )
+    assert out["hasRow"] is True
+    assert out["once"] == 1, "the key is one row, not one per group"
+    assert out["afterChart"] is True, "the key belongs under the net, not above it"
+    assert out["block"] is False, "the old multi-line block is still being rendered"
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 def test_the_legend_explains_the_dashed_and_solid_lines():
     """„Erklär mir, was ist die gestrichelte Linie und was die feste?"
-    — answered on the chart itself now, not only once in chat."""
+    — answered under the chart itself now, not only once in chat."""
     out = _js(
         """
-        const radar = await import(JS + '/netz/_tune_radar.js');
-        const html = radar.tuneGroupLegendHtml();
+        const key = await import(JS + '/netz/_key.js');
+        const html = key.netKeyHtml();
         console.log(JSON.stringify({
           current: html.includes('Aktuelles Profil'),
           werk: html.includes('Werkseinstellung'),
           changed: html.includes('Geändert'),
           dashed: html.includes('stroke-dasharray'),
+          groups: html.includes('Tempo') && html.includes('Meldung'),
         }));
         """
     )
@@ -316,6 +336,27 @@ def test_the_legend_explains_the_dashed_and_solid_lines():
     assert out["werk"] is True
     assert out["changed"] is True
     assert out["dashed"] is True, "the Werk swatch must actually look dashed, not just be labelled"
+    assert out["groups"] is True, "the group colour key moved with the rest of the legend"
+
+
+def test_the_legend_row_wraps_and_carries_no_margin_of_its_own():
+    """It shares the panel's height with the net, so it may wrap on a
+    phone but must never push the net smaller than it has to."""
+    seg = _CSS[_CSS.index(".netz-key {") :]
+    rule = seg[: seg.index("}")]
+    assert "flex-wrap: wrap" in rule
+    assert "font-size: 11px" in rule
+    assert "margin" not in rule
+
+
+def test_the_measured_box_is_the_one_the_legend_left_over():
+    """The probe lays out the REAL body minus the radar — chart box plus
+    legend row — so the radar is drawn for the space actually left."""
+    assert "export function netProbeHtml" in _CARDS
+    assert "netz-key" not in _PANEL, "the probe must not rebuild the legend markup itself"
+    fn_start = _PANEL.index("function _measureChart(")
+    fn_end = _PANEL.index("\n}", fn_start)
+    assert "netProbeHtml()" in _PANEL[fn_start:fn_end]
 
 
 # ── 9 · the header is ONE row: identity + two icon buttons ───────────

@@ -21,13 +21,7 @@
 import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { fetchArchive, fetchState } from './_api.js';
-import {
-  ensurePanelsMounted,
-  initCombosInfo,
-  initGroupLegend,
-  redrawOnResize,
-  renderPanel,
-} from './_panel.js';
+import { ensurePanelsMounted, initCombosInfo, redrawOnResize, renderPanel } from './_panel.js';
 import { archiveFilterFor, netzState, setView } from './_state.js';
 
 /** Fetch net state for any camera netzState doesn't already have a cached
@@ -59,7 +53,6 @@ export async function initNetPanels() {
   await _fetchMissingStates(cams);
   ensurePanelsMounted();
   initCombosInfo();
-  initGroupLegend();
   if (_bootDeepLinkArmed) {
     _bootDeepLinkArmed = false;
     _openQuestionsDeepLink();

@@ -19,6 +19,7 @@
 import { esc, qsa } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
+import { netKeyHtml } from './_key.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
 import { renderTuneRadar } from './_tune_radar.js';
 import { buildClassAxes, classAxisHint, classAxisSpec } from './_class_rows.js';
@@ -80,7 +81,11 @@ export function ghostToggleHtml(camId) {
  *  box is the only thing that decides how big the net is. The staging
  *  bar rides INSIDE the box as an overlay: it exists only while values
  *  are staged, and a bar that came and went below the chart would make
- *  the net jump by its own height every time. */
+ *  the net jump by its own height every time.
+ *
+ *  The legend row below the chart is part of the body, so it is part of
+ *  what the chart box has to share its height with — netProbeHtml keeps
+ *  the measured box honest about that. */
 export function netBodyHtml(cam, size = null) {
   const st = camState(cam.id);
   if (!st) {
@@ -95,8 +100,17 @@ export function netBodyHtml(cam, size = null) {
   netzState.tuneAxes[cam.id] = axes;
   return (
     `<div class="netz-card-chart">${renderTuneRadar({ axes, interactive: true, size })}` +
-    `${_stagingHtml(cam.id)}</div>`
+    `${_stagingHtml(cam.id)}</div>` +
+    netKeyHtml()
   );
+}
+
+/** The same body MINUS the radar: an empty chart box and the real legend
+ *  row. netz/_panel.js lays this out to measure the box the radar is
+ *  about to be drawn into. Built here, beside netBodyHtml, so the two can
+ *  never drift into measuring one structure and rendering another. */
+export function netProbeHtml() {
+  return `<div class="netz-card-chart"></div>` + netKeyHtml();
 }
 
 /** "Was zusammen wirkt" — cross-axis interaction notes. Camera-independent

@@ -41,7 +41,8 @@ from pathlib import Path
 
 # Re-export from the shared helper so the single internal callers
 # (this module and any future ones) all land on one implementation.
-from .bird_dossiers_fetch import fetch_second_photo as _fetch_second_photo
+from .bird_dossiers_fetch import PHOTO_TARGET
+from .bird_dossiers_fetch import fetch_photos as _fetch_photos
 from .bird_dossiers_fetch import fetch_wikipedia as _fetch_wikipedia
 from .bird_dossiers_fetch import fetch_xeno_canto as _fetch_xeno_canto
 from .io_utils import atomic_write_json as _atomic_write_json  # noqa: F401
@@ -65,6 +66,16 @@ log = logging.getLogger("app.bird_dossiers")
 #: larger vocabulary from blocking one sweep for an unreasonable time),
 #: just not one the current vocabulary ever bumps into.
 DOSSIER_PREBUILD_BUDGET = 200
+
+#: Per-call budget for `BirdDossierService.sweep_photo_backfill` — how
+#: many ALREADY-CACHED dossiers get their photo set re-fetched per
+#: maintenance tick. Smaller than the prebuild budget above on purpose:
+#: these are refreshes of dossiers that already show something, so they
+#: are never urgent, and each one costs two rate-limited requests (the
+#: summary plus at least one media list). A few dozen per tick drains
+#: the whole vocabulary within a handful of daily runs without ever
+#: competing with a real first sighting's fetch for the rate lock.
+DOSSIER_PHOTO_BACKFILL_BUDGET = 40
 
 
 # ── Service ────────────────────────────────────────────────────────────────
@@ -136,10 +147,15 @@ class BirdDossierService:
             "wikipedia_summary": None,
             "wikipedia_url": None,
             "wikipedia_thumb_url": None,
-            # A second, distinct reference photo (see fetch_second_photo)
-            # so the dossier can show two views of the species side by
-            # side — one photo alone doesn't let the operator compare
-            # against what their own camera caught.
+            # Every reference photo we could find, best first (see
+            # fetch_photos) — the dossier shows them side by side so the
+            # operator can compare their own camera frame against more
+            # than one view. A list rather than numbered fields: how many
+            # a species yields varies, and the panel renders exactly as
+            # many boxes as there are real photos. The two scalar fields
+            # around it mirror photo_urls[0] and [1] for backward compat
+            # with any consumer written before this was a list.
+            "photo_urls": [],
             "wikipedia_thumb_url_2": None,
             "wikipedia_fetched_at": None,
             # Multi-clip xeno-canto store. Each entry carries id /
@@ -248,6 +264,46 @@ class BirdDossierService:
                 created += 1
         return {"examined": examined, "created": created}
 
+    def photo_backfill_candidates(self) -> list[str]:
+        """Latin names of dossiers whose reference photos are still short
+        of `PHOTO_TARGET`, oldest-fetched first.
+
+        Pure read — no I/O, no side effects — so `sweep_photo_backfill`
+        below stays a thin bounded loop and the selection rule itself is
+        unit testable. A dossier that was never fetched at all is NOT a
+        candidate: `wikipedia_fetched_at is None` already means "the
+        normal fetch path still owes this one a try", and re-spawning it
+        here would just double up on that."""
+        with self._lock:
+            items = list(self.data["dossiers"].values())
+        pending = [
+            d
+            for d in items
+            if d.get("wikipedia_fetched_at") and len(d.get("photo_urls") or []) < PHOTO_TARGET
+        ]
+        pending.sort(key=lambda d: d.get("wikipedia_fetched_at") or "")
+        return [d["latin"] for d in pending if d.get("latin")]
+
+    def sweep_photo_backfill(self, *, budget: int = DOSSIER_PHOTO_BACKFILL_BUDGET) -> dict:
+        """Bounded catch-up pass that re-fetches dossiers cached BEFORE
+        `photo_urls` existed (or that simply came back with fewer photos
+        than the panel can show).
+
+        `sweep_prebuild` deliberately only creates dossiers that don't
+        exist yet, so on its own it would never revisit the hundreds
+        already on disk with a single photo — this is the path that grows
+        them. Oldest fetch first, so the staleset drains in a predictable
+        order across ticks instead of re-rolling the same few names.
+
+        A species Wikipedia genuinely only illustrates once stays at one
+        photo and simply comes up again on a later tick: cheap (one
+        rate-limited request), never a placeholder, and it self-heals the
+        day the article gains a second image."""
+        candidates = self.photo_backfill_candidates()[: max(0, budget)]
+        for latin in candidates:
+            self._spawn_fetch(latin)
+        return {"pending": len(candidates)}
+
     def increment_sighting(self, latin: str) -> None:
         """Bump the counter without going through the new-species path.
         Use when you already know the dossier exists."""
@@ -300,10 +356,10 @@ class BirdDossierService:
 
     def _fetch_and_apply(self, latin: str) -> None:
         wiki = _fetch_wikipedia(latin)
-        # A second reference photo — same rate-limited GET path, so it
-        # naturally serialises 1 s after the summary fetch above rather
-        # than racing it. None on a wiki miss (nothing to query against).
-        second_photo = _fetch_second_photo(wiki)
+        # Further reference photos — same rate-limited GET path, so they
+        # naturally serialise behind the summary fetch above rather than
+        # racing it. Empty on a wiki miss (nothing to query against).
+        photos = _fetch_photos(wiki, latin)
         # Cache check: if recordings are already populated, skip the
         # xeno-canto round-trip. The frontend's "open dossier" path
         # ends up here whenever a fresh species is detected; for known
@@ -317,36 +373,42 @@ class BirdDossierService:
             d = self.data["dossiers"].get(latin)
             if d is None:
                 return
-            self._apply_wikipedia(d, wiki, second_photo, now_iso)
+            self._apply_wikipedia(d, wiki, photos, now_iso)
             if not already_have_audio:
                 self._apply_xeno_canto(d, recordings, now_iso)
             self._save_locked()
         log.info(
             "[dossiers] fetched %s — wiki=%s xc=%s",
             latin,
-            "ok" if wiki else "miss",
+            f"ok {len(photos)} photos" if wiki else "miss",
             f"{len(recordings)} clips"
             if recordings
             else ("cached" if already_have_audio else "miss"),
         )
 
     @staticmethod
-    def _apply_wikipedia(
-        dossier: dict, wiki: dict | None, second_photo: str | None, now_iso: str
-    ) -> None:
+    def _apply_wikipedia(dossier: dict, wiki: dict | None, photos: list, now_iso: str) -> None:
         """Merge a successful Wikipedia summary into the dossier dict.
 
         On miss: leave wikipedia_fetched_at NULL so a future trigger
         retries (the spec's "Indikator dass der Fetch noch aussteht").
+
+        A fetch that came back with FEWER photos than the dossier
+        already has keeps the stored set — a transient media-list miss
+        must not shrink a dossier that was already complete.
         """
         if not wiki:
             return
-        thumb = (wiki.get("thumbnail") or {}).get("source")
         page_url = ((wiki.get("content_urls") or {}).get("desktop") or {}).get("page")
         dossier["wikipedia_summary"] = wiki.get("extract") or None
         dossier["wikipedia_url"] = page_url or None
-        dossier["wikipedia_thumb_url"] = thumb or None
-        dossier["wikipedia_thumb_url_2"] = second_photo or None
+        photos = [p for p in (photos or []) if p]
+        if len(photos) >= len(dossier.get("photo_urls") or []):
+            dossier["photo_urls"] = photos
+        stored = dossier.get("photo_urls") or []
+        # Legacy mirrors — same pattern as the audio fields below.
+        dossier["wikipedia_thumb_url"] = stored[0] if stored else None
+        dossier["wikipedia_thumb_url_2"] = stored[1] if len(stored) > 1 else None
         dossier["wikipedia_fetched_at"] = now_iso
         # Title is normally the German common name when the DE wiki hit;
         # use it to backfill common_name_de if the classifier didn't

@@ -230,6 +230,13 @@ def _sweep_bird_dossier_prebuild(log) -> None:
             result["created"],
             result["examined"],
         )
+    # sweep_prebuild only ever CREATES missing dossiers, so on its own it
+    # would never revisit the ones already on disk — including every
+    # dossier cached before a species carried more than one reference
+    # photo. This is the path that grows those.
+    photos = svc.sweep_photo_backfill()
+    if photos["pending"]:
+        log.info("[dossiers] photo backfill: %d dossiers re-fetched", photos["pending"])
 
 
 def _run_daily_cleanup():

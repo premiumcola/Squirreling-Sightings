@@ -162,12 +162,15 @@ def test_prebuilt_species_actually_fetches_reference_content(tmp_path, monkeypat
             }
         ]
 
-    def _fake_second_photo(wiki):
-        return "https://example.invalid/robin-side-view.jpg"
+    def _fake_photos(wiki, latin, want=3):
+        return [
+            "https://example.invalid/robin.jpg",
+            "https://example.invalid/robin-side-view.jpg",
+        ]
 
     monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", _fake_wiki)
     monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", _fake_xc)
-    monkeypatch.setattr("app.bird_dossiers._fetch_second_photo", _fake_second_photo)
+    monkeypatch.setattr("app.bird_dossiers._fetch_photos", _fake_photos)
 
     created = svc._create_placeholder("Erithacus rubecula", "Rotkehlchen")
     assert created is True
@@ -186,8 +189,8 @@ def test_prebuilt_species_actually_fetches_reference_content(tmp_path, monkeypat
     assert d["audio_attribution"] == "Test Recordist"
 
 
-def test_second_photo_fetch_receives_the_wikipedia_result(tmp_path, monkeypatch):
-    """fetch_second_photo must be called with the wiki summary dict (it
+def test_photo_fetch_receives_the_wikipedia_result(tmp_path, monkeypatch):
+    """fetch_photos must be called with the wiki summary dict (it
     needs the page title + host to query the media list) — never blind,
     and never at all when the summary fetch itself missed."""
     svc = _service(tmp_path, monkeypatch)  # spawn_noop=True — one deterministic manual call below
@@ -199,7 +202,7 @@ def test_second_photo_fetch_receives_the_wikipedia_result(tmp_path, monkeypatch)
     monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", _fake_wiki)
     monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", lambda latin, max_recordings=3: [])
     monkeypatch.setattr(
-        "app.bird_dossiers._fetch_second_photo", lambda wiki: seen.append(wiki) or None
+        "app.bird_dossiers._fetch_photos", lambda wiki, latin, want=3: seen.append(wiki) or []
     )
 
     svc._create_placeholder("Turdus merula", "Amsel")

@@ -110,59 +110,137 @@ def fetch_wikipedia(latin: str) -> dict | None:
     return None
 
 
-# Filenames that mark a media-list item as unsuitable for the second
-# dossier photo — a distribution map, a UI icon, or a Commons/Wikimedia
-# housekeeping graphic, none of which show the actual animal.
-_SECOND_PHOTO_SKIP_WORDS = (
+# How many reference photos a dossier shows at most. Two lets the
+# operator compare their own camera frame against a second view; a third
+# helps for species with a strong male/female or summer/winter
+# difference. More than three doesn't fit the panel.
+PHOTO_TARGET = 3
+
+# Words in a filename that mark a media-list item as NOT a photograph of
+# the animal: distribution maps, UI icons, Wikimedia housekeeping
+# graphics, and — the subtle one — xeno-canto style spectrogram images,
+# which are ordinary PNGs and would otherwise sail through as "a photo".
+_PHOTO_SKIP_WORDS = (
     "icon",
     "map",
+    "karte",
     "verbreitung",
     "distribution",
     "range",
     "logo",
     "commons",
+    "spectrogram",
+    "sonogram",
+    "spektrogramm",
+    "signature",
+    "skelett",
+    "skeleton",
+    "egg",
+    "ei_",
 )
 
+# Only real raster photo formats. An allowlist rather than an .svg
+# blacklist: media lists also carry .tif, .gif, .webm poster frames and
+# .ogv thumbnails, none of which belong in the hero.
+_PHOTO_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
-def fetch_second_photo(wiki: dict | None) -> str | None:
-    """Given a successful `fetch_wikipedia` result, pull the page's media
-    list and return a second, distinct photo URL — so the dossier can show
-    two reference views of the species side by side. Skips maps/icons/SVGs
-    and the primary thumbnail itself. None on any failure, an unsuitable
-    list, or when `wiki` itself is falsy (no point querying a page that
-    doesn't exist)."""
-    if not wiki:
+
+def _photo_url_of(item: dict) -> str | None:
+    """Best available source URL for one media-list item, protocol-fixed.
+    None when the item carries no usable source."""
+    srcset = item.get("srcset") or []
+    original = (item.get("original") or {}).get("source") or (
+        srcset[-1].get("src") if srcset else None
+    )
+    if not original:
         return None
-    page_url = ((wiki.get("content_urls") or {}).get("desktop") or {}).get("page")
-    title = wiki.get("title")
-    if not page_url or not title:
-        return None
-    host = urlparse(page_url).netloc
-    if not host:
-        return None
-    primary_name = ((wiki.get("thumbnail") or {}).get("source") or "").rsplit("/", 1)[-1].lower()
-    url = f"https://{host}/api/rest_v1/page/media-list/{quote(title)}"
-    data = _rate_limited_get(url)
-    if not data:
-        return None
-    for item in data.get("items") or []:
+    return "https:" + original if original.startswith("//") else original
+
+
+def select_photo_urls(items: list, skip_names: set[str], want: int) -> list[str]:
+    """Pick up to `want` distinct photo URLs out of a REST media-list's
+    `items` array. Pure — no I/O — so the filtering rules are unit
+    testable without touching the network.
+
+    Rejects anything that isn't an image item, isn't a raster photo
+    format, matches a `_PHOTO_SKIP_WORDS` marker, or whose filename is
+    already in `skip_names` (the primary thumbnail, plus everything an
+    earlier article already contributed). `skip_names` is MUTATED as
+    picks are made, so a caller can thread one set through several
+    media lists and never get the same file twice."""
+    out: list[str] = []
+    for item in items or []:
+        if len(out) >= want:
+            break
         if item.get("type") != "image":
             continue
-        srcset = item.get("srcset") or []
-        original = (item.get("original") or {}).get("source") or (
-            srcset[-1].get("src") if srcset else None
-        )
-        if not original:
+        url = _photo_url_of(item)
+        if not url:
             continue
-        if original.startswith("//"):
-            original = "https:" + original
-        name = original.rsplit("/", 1)[-1].lower()
-        if name.endswith(".svg") or name == primary_name:
+        name = url.rsplit("/", 1)[-1].lower()
+        if not name.endswith(_PHOTO_EXTS):
             continue
-        if any(w in name for w in _SECOND_PHOTO_SKIP_WORDS):
+        if name in skip_names:
             continue
-        return original
-    return None
+        if any(w in name for w in _PHOTO_SKIP_WORDS):
+            continue
+        skip_names.add(name)
+        out.append(url)
+    return out
+
+
+def _media_list_photos(page_url: str, title: str, skip_names: set[str], want: int) -> list[str]:
+    """Fetch one article's media list and select photos from it. Empty
+    list on any failure — the caller just moves on to the next source."""
+    host = urlparse(page_url or "").netloc
+    if not host or not title or want <= 0:
+        return []
+    data = _rate_limited_get(f"https://{host}/api/rest_v1/page/media-list/{quote(title)}")
+    if not data:
+        return []
+    return select_photo_urls(data.get("items") or [], skip_names, want)
+
+
+def fetch_photos(wiki: dict | None, latin: str, want: int = PHOTO_TARGET) -> list[str]:
+    """Up to `want` reference photos of the species, best first.
+
+    Starts from the summary's own thumbnail, then walks the article's
+    media list for further views. If that article alone can't fill the
+    quota — common for a short DE stub — the EN article for the same
+    latin name is tried as a second source, since the two wikis rarely
+    illustrate a species with the same picture set.
+
+    Returns [] when `wiki` is falsy. A species that genuinely yields
+    only one usable image simply gets a one-entry list; the caller
+    stores exactly that and a later fetch can still grow it (see
+    BirdDossierService.sweep_photo_backfill) — a placeholder is never
+    substituted for a missing photo."""
+    if not wiki:
+        return []
+    seen: set[str] = set()
+    photos: list[str] = []
+    primary = (wiki.get("thumbnail") or {}).get("source") or ""
+    if primary:
+        seen.add(primary.rsplit("/", 1)[-1].lower())
+        photos.append(primary)
+    page_url = ((wiki.get("content_urls") or {}).get("desktop") or {}).get("page") or ""
+    photos += _media_list_photos(page_url, wiki.get("title") or "", seen, want - len(photos))
+    if len(photos) >= want:
+        return photos[:want]
+    # Second source: the EN article for the same taxon. The latin name is
+    # the reliable cross-wiki key — the DE title is not.
+    en = _rate_limited_get(_WIKI_SUMMARY_URL_EN.format(latin=quote(_strip_subspecies(latin))))
+    if not en or en.get("type") == "disambiguation":
+        return photos
+    en_page = ((en.get("content_urls") or {}).get("desktop") or {}).get("page") or ""
+    if en_page and en_page == page_url:
+        return photos  # same article we already walked
+    en_thumb = (en.get("thumbnail") or {}).get("source") or ""
+    if en_thumb and en_thumb.rsplit("/", 1)[-1].lower() not in seen and len(photos) < want:
+        seen.add(en_thumb.rsplit("/", 1)[-1].lower())
+        photos.append(en_thumb)
+    photos += _media_list_photos(en_page, en.get("title") or "", seen, want - len(photos))
+    return photos[:want]
 
 
 # Map xeno-canto English call-type strings to a short German caption.

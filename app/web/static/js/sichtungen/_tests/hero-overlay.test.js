@@ -32,6 +32,30 @@ test('heroHtml renders one box for one photo, never a placeholder', () => {
   assert.doesNotMatch(html, /🐦/u);
 });
 
+test('heroHtml renders three boxes for three photos', () => {
+  const html = heroHtml({
+    ..._BASE,
+    photo_urls: ['https://x.invalid/a.jpg', 'https://x.invalid/b.jpg', 'https://x.invalid/c.jpg'],
+  });
+  assert.equal((html.match(/class="sd-hero-photo"/g) || []).length, 3);
+  assert.match(html, /sd-hero--3/);
+});
+
+test('photoUrlsOf prefers photo_urls over the legacy mirror fields', () => {
+  const d = {
+    photo_urls: ['https://x.invalid/new1.jpg', 'https://x.invalid/new2.jpg'],
+    wikipedia_thumb_url: 'https://x.invalid/legacy.jpg',
+    wikipedia_thumb_url_2: null,
+  };
+  assert.deepEqual(photoUrlsOf(d), ['https://x.invalid/new1.jpg', 'https://x.invalid/new2.jpg']);
+});
+
+// A dossier cached before photo_urls existed still has to render.
+test('photoUrlsOf falls back to the legacy fields for an un-refetched dossier', () => {
+  const d = { wikipedia_thumb_url: 'https://x.invalid/a.jpg', wikipedia_thumb_url_2: '' };
+  assert.deepEqual(photoUrlsOf(d), ['https://x.invalid/a.jpg']);
+});
+
 test('heroHtml drops the hero entirely and names the species when no photo exists', () => {
   const html = heroHtml({ ..._BASE, wikipedia_thumb_url: '', wikipedia_thumb_url_2: '' });
   assert.doesNotMatch(html, /sd-hero-placeholder/);

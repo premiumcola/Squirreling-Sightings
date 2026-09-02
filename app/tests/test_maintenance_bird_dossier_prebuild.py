@@ -25,10 +25,15 @@ from app import app_state, maintenance  # noqa: E402
 class _FakeDossierService:
     def __init__(self):
         self.calls = []
+        self.backfills = 0
 
     def sweep_prebuild(self, vocabulary, *, budget):
         self.calls.append((dict(vocabulary), budget))
         return {"examined": len(vocabulary), "created": len(vocabulary)}
+
+    def sweep_photo_backfill(self):
+        self.backfills += 1
+        return {"pending": 0}
 
 
 def test_prebuild_sweep_passes_the_full_vocabulary_and_documented_budget(monkeypatch):
@@ -45,6 +50,21 @@ def test_prebuild_sweep_passes_the_full_vocabulary_and_documented_budget(monkeyp
     vocabulary, budget = svc.calls[0]
     assert vocabulary == {"Erithacus rubecula": "Rotkehlchen", "Turdus merula": "Amsel"}
     assert budget == DOSSIER_PREBUILD_BUDGET
+
+
+def test_the_same_tick_also_backfills_photos_of_cached_dossiers(monkeypatch):
+    """sweep_prebuild only ever CREATES missing dossiers, so on its own it
+    would never revisit the hundreds already on disk that were cached
+    with a single reference photo. The photo backfill has to ride the
+    same daily tick or those never grow."""
+    svc = _FakeDossierService()
+    monkeypatch.setattr(app_state, "bird_dossiers", svc, raising=False)
+    monkeypatch.setattr(
+        "app.detectors._label_loader._load_bird_latin_to_de",
+        lambda path: {"Erithacus rubecula": "Rotkehlchen"},
+    )
+    maintenance._sweep_bird_dossier_prebuild(logging.getLogger("test"))
+    assert svc.backfills == 1
 
 
 def test_prebuild_sweep_noop_without_a_dossier_service(monkeypatch):

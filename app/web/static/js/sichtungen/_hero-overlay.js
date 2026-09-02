@@ -37,9 +37,15 @@ function _recordingsOf(d) {
  * keinen Sinn"). A species Wikipedia only has one usable image for now
  * shows exactly one box and picks the second up on a later fetch. */
 export function photoUrlsOf(d) {
-  return [d.wikipedia_thumb_url, d.wikipedia_thumb_url_2]
-    .map((u) => (typeof u === 'string' ? u.trim() : ''))
-    .filter(Boolean);
+  // `photo_urls` is the real store (bird_dossiers.py); the two scalar
+  // fields are its backward-compat mirror and are all a dossier cached
+  // before the list existed has — until the photo backfill sweep grows
+  // it. Reading both keeps an un-refetched dossier rendering.
+  const list =
+    Array.isArray(d.photo_urls) && d.photo_urls.length
+      ? d.photo_urls
+      : [d.wikipedia_thumb_url, d.wikipedia_thumb_url_2];
+  return list.map((u) => (typeof u === 'string' ? u.trim() : '')).filter(Boolean);
 }
 
 // Hero: every available reference photo side by side (so the operator
@@ -121,13 +127,18 @@ export function wireHeroAudio(root) {
   const audioAt = (idx) => audios.find((a) => Number(a.dataset.audioIdx) === idx);
   const setActiveRow = (idx) => {
     activeIdx = idx;
-    rows.forEach((r) => r.classList.toggle('sd-audio-row--active', Number(r.dataset.audioIdx) === idx));
+    rows.forEach((r) =>
+      r.classList.toggle('sd-audio-row--active', Number(r.dataset.audioIdx) === idx),
+    );
   };
   const setPlayingUI = (isPlaying) => {
     if (!heroBtn) return;
     heroBtn.classList.toggle('sd-hero-play--playing', isPlaying);
     heroBtn.setAttribute('aria-pressed', String(isPlaying));
-    heroBtn.setAttribute('aria-label', isPlaying ? 'Vogelstimme pausieren' : 'Vogelstimme abspielen');
+    heroBtn.setAttribute(
+      'aria-label',
+      isPlaying ? 'Vogelstimme pausieren' : 'Vogelstimme abspielen',
+    );
   };
   const toggle = (idx) => {
     const audio = audioAt(idx);

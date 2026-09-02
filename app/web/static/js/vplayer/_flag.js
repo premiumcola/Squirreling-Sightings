@@ -36,7 +36,7 @@ export const VPLAYER_SURFACES = ['recorded', 'live', 'sim'];
 const DEFAULTS = {
   recorded: false,
   live: false,
-  sim: false,
+  sim: true,
 };
 
 /** Read the override token from the URL, or '' when absent/unreadable. */

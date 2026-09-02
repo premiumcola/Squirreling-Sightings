@@ -118,6 +118,45 @@ def _pretty_bird_label(
     keeps the generic COCO "bird" label and does not invent a fake species
     line. The caller can use a None display name as a signal to fall back
     to the next top-k candidate.
+
+    WHY THE UNMAPPED CASE IS DROPPED RATHER THAN SHOWN
+    -------------------------------------------------
+    This is a deliberate region filter, not an oversight, and it has
+    been re-litigated once already — the evidence is recorded here so it
+    is not re-opened a third time.
+
+    The iNat model classifies ~960 species worldwide; the map carries 80
+    binomials (73 distinct German names) sourced from a Bavarian
+    garden-bird survey ("LBV Stunde der Gartenvögel", see the `_source`
+    key in config/inat_to_german.json). Everything outside those 80 is
+    suppressed. That ratio looks alarming until you see what it is FOR:
+    iNat's top-1 for a European garden bird is regularly a
+    North-American congener, so the classifier walks its top 3 and takes
+    the first candidate the map can name (bird_species.py). The map is
+    therefore doing double duty as a plausibility filter — "which birds
+    can actually appear in this garden" — and dropping the unmapped tail
+    is how an exotic top-1 loses to the European cousin at #2.
+
+    Introduced with a measurement, in commit 639c2d6: on a 60-image
+    batch it scored 50/60 (83%) correct German species and — the number
+    the decision turned on — ZERO wrong-species hits. Two earlier
+    spellings were tried and rejected: the raw iNat string (which reads
+    "Garrulus glandarius (Eurasian Jay)" as the primary UI label) and a
+    generic "Vogel" (which invents a species line that says nothing).
+
+    A second, structural reason not to loosen this casually: the same
+    map is the app's species VOCABULARY, not just a translation table.
+    maintenance.py::_sweep_bird_dossier_prebuild feeds it to the dossier
+    service to pre-build one reference dossier per entry, and the
+    achievement/trophy set is built on the same Top-20 list. A species
+    let through here would surface with no dossier, no icon and no
+    rarity pill — a half-rendered row.
+
+    The cost is real and is accepted: a bird correctly recognised as a
+    species outside the map stays a generic "bird". If that trade is
+    ever revisited, the honest fix is to EXTEND the map (and the dossier
+    /achievement data behind it), not to let unmapped binomials through
+    the gate.
     """
     if not raw:
         return raw, None

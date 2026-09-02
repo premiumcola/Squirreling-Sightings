@@ -16,6 +16,7 @@ import { PLACEHOLDER } from '../../_helpers.js';
 import {
   MODEL_STAGE_DE,
   computeChip,
+  kvRowsHtml,
   modelLabel,
   provenanceRows,
   tpuBusyLabel,
@@ -202,4 +203,39 @@ test('a bare track row degrades every field independently', () => {
 
 test('zero misses is a real value, not a missing one', () => {
   assert.equal(trackRow({ misses: 0 }).misses, '0');
+});
+
+// ── the shared row markup ──────────────────────────────────────────────
+// Both row producers in _helpers.js render through kvRowsHtml, so the
+// provenance list and the replay summary cannot drift into looking like
+// two different kinds of thing inside one fold.
+
+test('a row renders its key and value into the kv markup', () => {
+  const html = kvRowsHtml([{ key: 'Profil', value: 'hard', tone: null }]);
+  assert.match(html, /class="vp-pnl-kv"/);
+  assert.match(html, /class="vp-pnl-k">Profil</);
+  assert.match(html, /class="vp-pnl-v">hard</);
+});
+
+test('a tone becomes an is- class, and no tone adds no class', () => {
+  assert.match(kvRowsHtml([{ key: 'k', value: 'v', tone: 'warn' }]), /vp-pnl-v is-warn/);
+  assert.match(kvRowsHtml([{ key: 'k', value: 'v', tone: null }]), /class="vp-pnl-v">/);
+});
+
+test('both halves of a row are escaped', () => {
+  // A label can reach these rows from an event JSON, so neither half is
+  // trusted markup.
+  const html = kvRowsHtml([{ key: '<b>k</b>', value: '<img onerror=x>', tone: null }]);
+  assert.ok(!html.includes('<b>'), html);
+  assert.ok(!html.includes('<img'), html);
+});
+
+test('several rows concatenate, and nothing renders as nothing', () => {
+  const html = kvRowsHtml([
+    { key: 'a', value: '1', tone: null },
+    { key: 'b', value: '2', tone: null },
+  ]);
+  assert.equal(html.match(/vp-pnl-kv/g).length, 2);
+  assert.equal(kvRowsHtml([]), '');
+  assert.equal(kvRowsHtml(null), '');
 });

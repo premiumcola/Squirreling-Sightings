@@ -44,7 +44,6 @@ import {
   wireRecordedShellPostMount,
 } from './recorded-shell-compose.js';
 import { j } from '../core/api.js';
-import { triggerManualReindex } from '../mediathek/bbox-overlay/reindex.js';
 import { vplayerEnabled } from '../vplayer/_flag.js';
 import { openVideoPlayer } from '../vplayer/index.js';
 
@@ -229,9 +228,10 @@ function _openRecordedInVPlayer(item) {
       onDelete: () => byId('lightboxDelete')?.click(),
     },
     deps: {
+      // The details fold's replay buttons post through this same
+      // helper. It throws on any non-2xx, so the fold's error branch
+      // is genuinely gated on a failure rather than on a falsy body.
       request: j,
-      onReindex: () => triggerManualReindex(),
-      onSimulate: () => window._cvOpenSim?.(item.camera_id),
       onError: (msg) => window.showToast?.(msg, 'error'),
     },
   });

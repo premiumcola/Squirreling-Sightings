@@ -12,8 +12,8 @@ import { openReclassify } from './_reclassify.js';
  *
  * @param {HTMLElement} host
  * @param {object} cfg   normalised config from _config.js
- * @param {object} deps  { request, tier, onReindex, onSimulate,
- *   onDeleteObject, onSaved, onError }
+ * @param {object} deps  { request, tier, onDeleteObject, onSaved,
+ *   onError }
  * @returns {{update, teardown}|null}
  */
 export function renderRecordedPanel(host, cfg, deps = {}) {
@@ -38,8 +38,8 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
 
   const details = renderProvenance(host.querySelector('.vp-pnl-details'), {
     tier: deps.tier,
-    onReindex: deps.onReindex,
-    onSimulate: deps.onSimulate,
+    request: deps.request,
+    onError: deps.onError,
   });
 
   return {

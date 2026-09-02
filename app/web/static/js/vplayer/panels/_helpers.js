@@ -11,7 +11,26 @@
 // never as a thrown error that takes the whole fold with it. Two of the
 // fields below are known-missing today and are marked as such.
 
+import { esc } from '../../core/dom.js';
 import { PLACEHOLDER, ageLabel, pctLabel, valueOr } from '../_helpers.js';
+
+/**
+ * The shared markup for a `{key, value, tone}` row list.
+ *
+ * Both row producers in this file — provenanceRows and
+ * replaySummaryRows — render through here, so the two lists cannot
+ * drift into looking like different kinds of thing inside one fold.
+ * `tone` is presentational only and becomes an `is-<tone>` class.
+ */
+export function kvRowsHtml(rows) {
+  return (rows || [])
+    .map(
+      (r) =>
+        `<div class="vp-pnl-kv"><span class="vp-pnl-k">${esc(r.key)}</span>` +
+        `<span class="vp-pnl-v${r.tone ? ` is-${r.tone}` : ''}">${esc(r.value)}</span></div>`,
+    )
+    .join('');
+}
 
 /**
  * The cascade STAGE a detection's label came from.
@@ -172,4 +191,128 @@ export function provenanceRows(item) {
     _row('Analyse-Takt', valueOr(timing.analysis_interval_ms, 'ms')),
     _row('Build', valueOr(p?.build?.commit)),
   ];
+}
+
+// ─── Nachsimulation ────────────────────────────────────────────────────────
+// The replay endpoint's answer, in rows. Same shape as provenanceRows so
+// the fold renders both through one function, and the same degradation
+// rule: a field the backend did not send becomes a placeholder, never
+// "undefined" and never a throw that takes the fold with it.
+
+/** Which settings set a run used, in the operator's words. */
+export const REPLAY_SOURCE_DE = {
+  stored: 'gespeicherte Settings',
+  current: 'aktuelles Profil',
+  custom: 'angepasste Settings',
+};
+
+/** Labels of a diff bucket, comma-joined, or the placeholder. */
+function _labelsOf(list) {
+  const names = (list || []).map((d) => d?.label).filter(Boolean);
+  return names.length ? names.join(', ') : PLACEHOLDER;
+}
+
+/** "bird → squirrel" per pair. */
+function _classPairs(list) {
+  const pairs = (list || [])
+    .filter((p) => p?.before?.label && p?.after?.label)
+    .map((p) => `${p.before.label} → ${p.after.label}`);
+  return pairs.length ? pairs.join(', ') : PLACEHOLDER;
+}
+
+/** "person 90 % → 45 %" per pair — the label once, both confidences. */
+function _scorePairs(list) {
+  const pairs = (list || [])
+    .filter((p) => p?.after?.label)
+    .map((p) => `${p.after.label} ${pctLabel(p.before?.score)} → ${pctLabel(p.after.score)}`);
+  return pairs.length ? pairs.join(', ') : PLACEHOLDER;
+}
+
+/** "2 → 3", with a tone when the two sides differ. */
+function _countRow(key, before, after) {
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return _row(key, PLACEHOLDER);
+  const same = before === after;
+  return _row(key, `${before} → ${after}`, same ? null : 'warn');
+}
+
+/**
+ * Would this clip still have raised an alert?
+ *
+ * The level matters as much as the yes/no: a drop from alarm to info
+ * still notifies, and calling that "unverändert" would hide exactly the
+ * regression someone lowering a threshold needs to see.
+ */
+function _alertRow(cmp) {
+  const before = cmp.before?.alert;
+  const after = cmp.after?.alert;
+  if (!before || !after) return _row('Alarm', PLACEHOLDER);
+  const verdict = after.notify ? `${after.level} · würde melden` : `${after.level} · keine Meldung`;
+  if (!cmp.alert_changed) return _row('Alarm', `${verdict} (unverändert)`, 'ok');
+  return _row('Alarm', `${before.level} → ${verdict}`, 'warn');
+}
+
+/**
+ * The replay result, in display order.
+ *
+ * @param {object} res  the /api/event/<id>/replay response
+ * @returns {Array<{key: string, value: string, tone: string|null}>}
+ */
+export function replaySummaryRows(res) {
+  const r = res || {};
+  const cmp = r.comparison || {};
+  const d = cmp.diff?.detections?.counts || {};
+  const rows = [
+    _countRow('Objekte', cmp.before?.detection_count, cmp.after?.detection_count),
+    _row('Neu', _labelsOf(cmp.diff?.detections?.appeared), d.appeared ? 'warn' : null),
+    _row(
+      'Weggefallen',
+      _labelsOf(cmp.diff?.detections?.disappeared),
+      d.disappeared ? 'warn' : null,
+    ),
+    _row('Klasse geändert', _classPairs(cmp.diff?.detections?.class_changed)),
+    _row('Konfidenz', _scorePairs(cmp.diff?.detections?.score_changed)),
+    cmp.tracks_comparable
+      ? _countRow('Spuren', cmp.before?.track_count, cmp.after?.track_count)
+      : _row('Spuren', 'kein Vergleich — Clip war nie indexiert'),
+    _alertRow(cmp),
+    _row('Analysiert', _framesLabel(r), r.truncated ? 'warn' : null),
+    _row('Settings', _settingsLabel(r.settings)),
+  ];
+  if (r.settings?.note) rows.push(_row('Hinweis', r.settings.note, 'warn'));
+  return rows;
+}
+
+/** "240 von 1000 Frames", or the placeholder when the run said nothing. */
+function _framesLabel(r) {
+  const done = r.frames_analysed;
+  const total = r.frames_available;
+  if (!Number.isFinite(done) || !Number.isFinite(total)) return PLACEHOLDER;
+  return total === done ? `${done} Frames (ganzer Clip)` : `${done} von ${total} Frames`;
+}
+
+/** "gespeicherte Settings · a1b2c3d4e5f6". */
+function _settingsLabel(s) {
+  if (!s) return PLACEHOLDER;
+  const name = REPLAY_SOURCE_DE[s.source] || valueOr(s.source);
+  return s.hash ? `${name} · ${s.hash}` : name;
+}
+
+/**
+ * One-line headline above the rows. Says whether anything moved at all,
+ * so the common "nothing changed" answer needs no reading.
+ *
+ * @returns {{text: string, tone: string}}
+ */
+export function replayVerdict(res) {
+  const cmp = res?.comparison;
+  if (!cmp) return { text: PLACEHOLDER, tone: 'muted' };
+  if (!cmp.changed) return { text: 'Ergebnis identisch', tone: 'ok' };
+  const c = cmp.diff?.detections?.counts || {};
+  const parts = [];
+  if (c.appeared) parts.push(`${c.appeared} neu`);
+  if (c.disappeared) parts.push(`${c.disappeared} weggefallen`);
+  if (c.class_changed) parts.push(`${c.class_changed} andere Klasse`);
+  if (c.score_changed) parts.push(`${c.score_changed} andere Konfidenz`);
+  if (cmp.alert_changed) parts.push('Alarm anders');
+  return { text: parts.length ? parts.join(' · ') : 'Ergebnis weicht ab', tone: 'warn' };
 }

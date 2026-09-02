@@ -14,52 +14,28 @@
 // owns that fallback chain — including the older, narrower
 // recording_settings — and is the only place a field name appears.
 
-import { esc } from '../../core/dom.js';
 import { renderFold } from '../../core/fold.js';
-import { provenanceRows } from './_helpers.js';
+import { kvRowsHtml, provenanceRows } from './_helpers.js';
+import { renderReplay } from './_replay.js';
 
 /** Its own key, so this fold opens independently of the other two. */
 const FOLD_KEY = 'tamspy.vplayer.fold.details';
 
-function _rowsHtml(item) {
-  return provenanceRows(item)
-    .map(
-      (r) =>
-        `<div class="vp-pnl-kv"><span class="vp-pnl-k">${esc(r.key)}</span>` +
-        `<span class="vp-pnl-v${r.tone ? ` is-${r.tone}` : ''}">${esc(r.value)}</span></div>`,
-    )
-    .join('');
-}
-
-/**
- * The two actions that re-run detection.
- *
- * "Neu erkennen" re-indexes THIS recording: the tracking worker reads
- * the clip again and rewrites its tracks.json sidecar, so the timeline,
- * the boxes and the object list all change. That is the one that
- * answers "the settings are better now, redo this clip".
- *
- * "Kamera simulieren" opens the live simulation for the camera this
- * clip came from, which is how you check the CURRENT settings against a
- * live frame before deciding whether re-detecting the archive is even
- * worth it. It runs against live frames, not against this recording —
- * the backend has no endpoint that replays a stored clip through the
- * pipeline, so this is deliberately the camera, not the event.
- */
-function _actionsHtml() {
-  return (
-    `<div class="vp-pnl-debug-bar">` +
-    `<button type="button" class="vp-pnl-btn" data-action="vp-reindex">Neu erkennen</button>` +
-    `<button type="button" class="vp-pnl-btn" data-action="vp-sim">Kamera simulieren</button>` +
-    `</div>`
-  );
-}
-
 /**
  * Render the 'Aufnahme-Details' fold.
  *
+ * The rows say what this clip was recorded WITH; the replay block below
+ * them (panels/_replay.js) is what turns that record into something you
+ * can act on — re-running this very clip under the settings on record
+ * or under the camera's current profile, and showing the difference
+ * inline.
+ *
+ * The two halves get their own hosts because they repaint on different
+ * clocks: the rows are rewritten on every `update`, while the replay
+ * block owns a request in flight and must survive one.
+ *
  * @param {HTMLElement} host
- * @param {object} deps  { tier, onReindex, onSimulate }
+ * @param {object} deps  { tier, request, onError }
  * @returns {{update: (item) => void, teardown: () => void}|null}
  */
 export function renderProvenance(host, deps = {}) {
@@ -73,19 +49,24 @@ export function renderProvenance(host, deps = {}) {
   });
   if (!fold) return null;
 
+  fold.body.innerHTML = `<div class="vp-pnl-prov-rows"></div><div class="vp-pnl-prov-replay"></div>`;
+  const rowsHost = fold.body.querySelector('.vp-pnl-prov-rows');
+  const replay = renderReplay(fold.body.querySelector('.vp-pnl-prov-replay'), {
+    request: deps.request,
+    onError: deps.onError,
+  });
+
   const paint = (item) => {
-    fold.body.innerHTML = _rowsHtml(item) + _actionsHtml();
-    const on = (sel, fn) => {
-      const btn = fold.body.querySelector(sel);
-      if (btn && typeof fn === 'function') btn.addEventListener('click', fn);
-    };
-    on('[data-action="vp-reindex"]', () => deps.onReindex?.(item));
-    on('[data-action="vp-sim"]', () => deps.onSimulate?.(item));
+    rowsHost.innerHTML = kvRowsHtml(provenanceRows(item));
+    replay?.update(item);
   };
 
   paint(null);
   return {
     update: paint,
-    teardown: () => fold.teardown(),
+    teardown: () => {
+      replay?.teardown();
+      fold.teardown();
+    },
   };
 }

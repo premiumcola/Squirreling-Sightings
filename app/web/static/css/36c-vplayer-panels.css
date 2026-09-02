@@ -204,6 +204,55 @@
   }
 }
 
+/* ── Nachsimulieren ────────────────────────────────────────────────────────
+   The two replay actions carry full German sentences, which do not fit
+   side by side at 375 px. One per row at every width — the debug bar's
+   wrap would give an unpredictable half-and-half at the in-between
+   sizes, and a button whose label wraps differently per viewport is
+   harder to aim at than one that is simply always full width.
+
+   `height: auto` with vertical padding, because a wrapped label inside
+   a fixed 44 px box clips its second line. min-height keeps the tap
+   target at 44 px for the labels that do fit on one line. */
+.vp-pnl-replay-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vp-pnl-replay-bar .vp-pnl-btn {
+  flex: 0 0 auto;
+  height: auto;
+  padding: 10px 12px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.vp-pnl-replay-busy {
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vp-pnl-replay-verdict {
+  padding: 6px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vp-pnl-replay-verdict.is-ok {
+  color: var(--good);
+}
+
+.vp-pnl-replay-verdict.is-warn {
+  color: var(--warn);
+}
+
+.vp-pnl-replay-verdict.is-muted {
+  color: var(--muted);
+}
+
 /* ── Trace log ─────────────────────────────────────────────────────────────
    Monospace on a darker ground; scrolls inside itself so a long trace
    cannot stretch the page. */
@@ -308,4 +357,10 @@
 
 .vp-pnl-v.is-ok {
   color: var(--good);
+}
+
+/* The replay summary marks every row that MOVED, so the eye lands on
+   the difference rather than reading nine rows to find it. */
+.vp-pnl-v.is-warn {
+  color: var(--warn);
 }

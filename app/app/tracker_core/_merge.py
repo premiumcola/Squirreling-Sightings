@@ -121,9 +121,18 @@ def merge_active_duplicates(state) -> None:
                 absorbed.add(j)
             _absorb(winner, loser)
             # Refresh winner's tail cache so subsequent comparisons in
-            # this same pass see the post-merge state. If the winner was
-            # j, the outer loop skips i anyway — it is in `absorbed`.
+            # this same pass see the post-merge state.
             tails[active.index(winner)] = last_n_detect_bboxes(winner, MERGE_SUSTAIN)
+            if i in absorbed:
+                # `i` just LOST. It is inactive and on its way to
+                # state.closed, so it must stop being the reference for
+                # the rest of this inner loop — otherwise a third
+                # duplicate could still be absorbed INTO it on quality
+                # and its samples would be closed away with it instead
+                # of reaching the survivor. The outer loop picks the
+                # winner up as its own `i` on the next turn and folds
+                # any remaining duplicate into it there.
+                break
     if not absorbed:
         return
     # Move absorbed tracks to closed.

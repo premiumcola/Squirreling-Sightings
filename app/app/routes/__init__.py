@@ -78,6 +78,7 @@ def register_blueprints(app) -> None:
         netz,
         retention_panel,
         replay,
+        replay_batch,
         sichtungen,
         simu_log,
         streams,
@@ -97,6 +98,7 @@ def register_blueprints(app) -> None:
 
     app.register_blueprint(tracking.bp)
     app.register_blueprint(replay.bp)
+    app.register_blueprint(replay_batch.bp)
     app.register_blueprint(sichtungen.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(bootstrap.bp)

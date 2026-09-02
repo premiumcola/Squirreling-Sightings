@@ -46,7 +46,7 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
     update: (data) => {
       item = data?.item || item;
       models = data?.provenance?.models || null;
-      objects?.update(data?.rows || [], models);
+      objects?.update(data?.rows || [], models, data?.note || null);
       details?.update(item);
     },
     teardown: () => {

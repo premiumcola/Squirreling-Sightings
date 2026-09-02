@@ -365,6 +365,23 @@
   box-shadow: inset 3px 0 0 0 var(--vp-lane-colour, transparent);
 }
 
+/* One quiet line under the list saying what the rows are drawn from and
+   whether a cap cut them short. It renders only for the whole-clip
+   basis, so a clip recorded before that block existed shows nothing
+   here at all.
+
+   `overflow-wrap: anywhere` for the same reason .vp-pnl-reason has it:
+   the line can end in a run of German species names (Rotkehlchen,
+   Buntspecht) that must wrap at 375 px rather than push the panel into
+   a horizontal scroll. No border — the muted colour is the separation. */
+.vp-pnl-note {
+  padding: 8px 10px 2px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* Icon buttons paint at 32 px and carry the 44 px target as a
    transparent ::before, the same trick the top bar uses — four full-size
    discs in a row would leave no width for the label they act on. */

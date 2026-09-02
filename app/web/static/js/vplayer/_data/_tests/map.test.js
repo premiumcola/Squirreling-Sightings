@@ -9,7 +9,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DISCARD_REASON_DE, mapDetection, mapFrame, objectRowsFor } from '../_map.js';
+import {
+  DISCARD_REASON_DE,
+  mapDetection,
+  mapFrame,
+  objectRowsFor,
+  objectsNote,
+} from '../_map.js';
 
 const PASS = { label: 'person', score: 0.9, bbox: [10, 20, 40, 30], verdict: 'pass', track_num: 1 };
 const FILTERED = {
@@ -155,4 +161,122 @@ test('every row carries a stable unique key for the DOM', () => {
   const tracks = { tracks: [{ _num: 1, samples: [{ t: 1 }] }, { _num: 2, samples: [{ t: 2 }] }] };
   const keys = objectRowsFor({}, tracks).map((r) => r.key);
   assert.equal(new Set(keys).size, keys.length);
+});
+
+// ── the whole-clip aggregate ───────────────────────────────────────────
+//
+// `whole_clip` is one row per subject across the WHOLE recording. The
+// two older sources answer narrower questions — the sidecar re-walks the
+// video at the raw floor, `detections` is the trigger frame alone — so
+// the aggregate wins where it exists, and the list is never built from
+// more than one of them at a time.
+
+const TWO_BIRDS = {
+  whole_clip: {
+    detections: [
+      { label: 'bird', score: 0.88, species: 'Grünfink', model: 'bird_classifier', first_s: 1.5, last_s: 4.25 }, // prettier-ignore
+      { label: 'bird', score: 0.71, species: 'Blaumeise', model: 'bird_classifier', first_s: 6, last_s: 9 }, // prettier-ignore
+    ],
+    species: [
+      { species: 'Grünfink', best_score: 0.88 },
+      { species: 'Blaumeise', best_score: 0.71 },
+    ],
+    frames: 40,
+    truncated: false,
+  },
+};
+
+test('the whole-clip block wins over the sidecar and the trigger frame', () => {
+  // The operator's complaint: a clip holding two different birds files
+  // one species. Only this source has both of them.
+  const tracks = { tracks: [{ _num: 1, label: 'bird', samples: [{ t: 1 }] }] };
+  const item = { ...TWO_BIRDS, detections: [{ label: 'bird', score: 0.5 }] };
+  const rows = objectRowsFor(item, tracks);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(
+    rows.map((r) => r.species),
+    ['Grünfink', 'Blaumeise'],
+  );
+});
+
+test('a whole-clip row reports the span it was actually present for', () => {
+  const rows = objectRowsFor(TWO_BIRDS, null);
+  assert.equal(rows[0].t0, 1.5);
+  assert.equal(rows[0].t1, 4.25);
+});
+
+test('every row says which source it came from, and one list has only one', () => {
+  // Mixing them would put spawn-gated rows (what the live pipeline
+  // acted on) next to raw-floor rows (what a re-walk saw at lower
+  // confidence) with nothing to tell them apart.
+  const tracks = { tracks: [{ _num: 1, label: 'cat', samples: [{ t: 1 }] }] };
+  const bases = (item, t) => new Set(objectRowsFor(item, t).map((r) => r.basis));
+  assert.deepEqual(bases(TWO_BIRDS, tracks), new Set(['clip']));
+  assert.deepEqual(bases({ detections: [{ label: 'cat' }] }, tracks), new Set(['sidecar']));
+  assert.deepEqual(bases({ detections: [{ label: 'cat' }] }, null), new Set(['frame']));
+});
+
+test('a whole-clip row carries no number and no lane colour', () => {
+  // #N and the lane colour are the SIDECAR's numbering, which the
+  // timeline and the boxes also read. This block comes from a
+  // different tracker run, so a number here would point at a lane
+  // showing something else.
+  const rows = objectRowsFor(TWO_BIRDS, null);
+  assert.equal(rows[0].num, null);
+  assert.equal(rows[0].colour, null);
+});
+
+test('an empty whole-clip block falls back rather than showing nothing', () => {
+  // A stub written before the first analysis tick has the key with an
+  // empty list. That is not an answer, so the older sources still get
+  // their turn.
+  const empty = { whole_clip: { detections: [], species: [], frames: 0, truncated: false } };
+  const tracks = { tracks: [{ _num: 1, label: 'cat', samples: [{ t: 2 }] }] };
+  assert.equal(objectRowsFor(empty, tracks)[0].basis, 'sidecar');
+  assert.equal(objectRowsFor({ ...empty, detections: [{ label: 'cat' }] }, null)[0].basis, 'frame');
+});
+
+test('a malformed whole_clip is stepped over, not thrown on', () => {
+  const tracks = { tracks: [{ _num: 1, label: 'cat', samples: [{ t: 2 }] }] };
+  assert.equal(objectRowsFor({ whole_clip: null }, tracks)[0].basis, 'sidecar');
+  assert.equal(objectRowsFor({ whole_clip: { detections: 'no' } }, tracks)[0].basis, 'sidecar');
+  assert.deepEqual(objectRowsFor({ whole_clip: {} }, null), []);
+});
+
+// ── the list's footnote ────────────────────────────────────────────────
+
+test('an event with no whole_clip has no footnote at all', () => {
+  // Byte-identical rendering for every clip recorded before the
+  // aggregate existed depends on this being null.
+  const tracks = { tracks: [{ _num: 1, label: 'cat', samples: [{ t: 1 }] }] };
+  assert.equal(objectsNote(objectRowsFor({}, tracks), {}), null);
+  assert.equal(objectsNote(objectRowsFor({ detections: [{ label: 'cat' }] }, null), {}), null);
+  assert.equal(objectsNote([], TWO_BIRDS), null);
+});
+
+test('the footnote says the rows cover the whole clip', () => {
+  assert.equal(objectsNote(objectRowsFor(TWO_BIRDS, null), TWO_BIRDS), 'Ganzer Clip');
+});
+
+test('a truncated list says so rather than reading as complete', () => {
+  const item = { whole_clip: { ...TWO_BIRDS.whole_clip, truncated: true } };
+  assert.equal(objectsNote(objectRowsFor(item, null), item), 'Ganzer Clip · Liste gekürzt');
+});
+
+test('a species no visible row names is still reported', () => {
+  // Reachable when the row caps refused a subject whose species had
+  // already entered the species tally — precisely the case where a
+  // silent list would hide the answer the operator came for.
+  const item = {
+    whole_clip: {
+      detections: [{ label: 'bird', score: 0.9, species: 'Grünfink', first_s: 0, last_s: 2 }],
+      species: [{ species: 'Grünfink' }, { species: 'Kohlmeise' }],
+      frames: 9,
+      truncated: true,
+    },
+  };
+  assert.equal(
+    objectsNote(objectRowsFor(item, null), item),
+    'Ganzer Clip · Liste gekürzt · auch: Kohlmeise',
+  );
 });

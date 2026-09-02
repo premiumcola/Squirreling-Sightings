@@ -17,8 +17,8 @@
 // label out of four is the actual job; a single verdict on the whole
 // clip is what the corpus already has too much of.
 
+import { subjectLabel } from '../../core/clip-species.js';
 import { esc } from '../../core/dom.js';
-import { OBJ_LABEL } from '../../core/icons.js';
 import { liveTrackColor } from '../../core/track-color.js';
 import { PLACEHOLDER, pctLabel, spanLabel } from '../_helpers.js';
 import { modelLabel } from './_helpers.js';
@@ -39,7 +39,10 @@ export function rowDetail(row, models) {
 }
 
 function _rowHtml(row, models) {
-  const cls = row.label ? OBJ_LABEL[row.label] || row.label : 'Unbekannt';
+  // A named bird is called by its species, so two birds in one clip
+  // read as two birds. Same rule as the Mediathek card's badge —
+  // core/clip-species.js owns it, this does not restate it.
+  const cls = subjectLabel(row.label, row.species) || 'Unbekannt';
   const colour = row.colour || (row.num == null ? 'var(--muted)' : liveTrackColor(row.num));
   const num = row.num == null ? '' : `<span class="vp-pnl-num">#${esc(String(row.num))}</span>`;
   return (
@@ -58,6 +61,11 @@ function _rowHtml(row, models) {
 
 /**
  * Render the detected-object list.
+ *
+ * `update`'s third argument is the list's footnote (which basis the
+ * rows came from, and whether a cap truncated them). It is null for
+ * every event that predates the whole-clip aggregate, and the empty
+ * string it then renders keeps that markup byte-identical to before.
  *
  * @param {HTMLElement} host
  * @param {object} deps  { onEdit(row), onDelete(row) }
@@ -79,11 +87,12 @@ export function renderObjectsList(host, deps = {}) {
   host.addEventListener('click', onClick);
 
   return {
-    update: (nextRows, models) => {
+    update: (nextRows, models, note) => {
       rows = Array.isArray(nextRows) ? nextRows : [];
-      host.innerHTML = rows.length
+      const body = rows.length
         ? rows.map((r) => _rowHtml(r, models)).join('')
         : `<div class="vp-pnl-empty">Keine Objekte in dieser Aufnahme</div>`;
+      host.innerHTML = body + (note ? `<div class="vp-pnl-note">${esc(note)}</div>` : '');
     },
     teardown: () => {
       host.removeEventListener('click', onClick);

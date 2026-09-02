@@ -225,16 +225,18 @@
 }
 
 /* ── Overlay row ───────────────────────────────────────────────────────── */
+/* WRAPS, it does not scroll. The row holds the segmented control plus a
+   ROI chip; at 375 px the chip fell off the right edge and, because the
+   row scrolled instead of wrapping, it was simply invisible — an
+   operator has no way to know a control is parked off-screen. Wrapping
+   costs one line only when there is something to put on it. */
 .vp-toggles {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px;
   background: var(--panel);
-  /* The segmented control can outgrow 375 px once four labels are in
-     it; it scrolls inside its own row rather than widening the page. */
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .vp-segbar {

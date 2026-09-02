@@ -189,13 +189,21 @@ def test_any_input_is_at_least_sixteen_pixels():
 
 
 def test_wide_content_scrolls_inside_its_own_row():
-    """At 375 px the segmented control outgrows the screen."""
+    """At 375 px the overlay row outgrows the screen, and it must deal
+    with that itself rather than widening the page.
+
+    It WRAPS rather than scrolls. Scrolling satisfied the letter of the
+    rule and failed its point: the ROI chip sat past the right edge, and
+    a control parked off-screen in a row with no scrollbar is a control
+    the operator cannot know exists. The screenshot harness measured it
+    at 499 px in a 375 px viewport. Wrapping costs one line, and only
+    when there is something to put on it."""
     css = _strip_comments(_read(_SHELL))
     block = re.search(r"\.vp-toggles[^{]*\{([^}]*)\}", css)
     assert block, ".vp-toggles has no rule block"
-    assert "overflow-x: auto" in block.group(
-        1
-    ), "the overlay row must scroll itself rather than widen the page"
+    body = block.group(1)
+    assert "flex-wrap: wrap" in body, "the overlay row must wrap rather than widen the page"
+    assert "overflow-x" not in body, "a wrapping row must not also hide content behind a scroll"
 
 
 # ── 36b · the timeline ────────────────────────────────────────────────────

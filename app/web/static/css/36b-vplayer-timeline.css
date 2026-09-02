@@ -129,12 +129,20 @@
   background: var(--vp-lane-colour, var(--accent));
 }
 
+/* Pinned to the right of the lane, which is where the bar ends whenever
+   the subject was on screen to the end of the clip — so the label sat ON
+   its own bar and both became unreadable. It cannot move: any fixed
+   position collides with some bar, because a bar's position is the
+   subject's timing and it may be anywhere. So the label carries its own
+   ground instead, the same trick the picture's timestamp OSD uses. */
 .vp-tl-lane-label {
   position: absolute;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  padding-left: 6px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(11, 15, 20, 0.82);
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;

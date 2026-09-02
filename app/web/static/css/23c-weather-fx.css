@@ -1,0 +1,172 @@
+/* ── Save-panel weather backdrop ──────────────────────────────────────────
+   The ambient layer behind the manual-event save form (23b-weather-zoom
+   .css), driven by weather/save-panel-fx/ from the category chips the
+   operator lit. Everything in this file is decoration: it is
+   pointer-events:none end to end, it paints below the form's own rows,
+   and the whole thing is switched off under prefers-reduced-motion at
+   the bottom of this file.
+
+   Kept out of 23b on purpose — the containment rules the panel needs
+   exist ONLY because of this layer, so deleting this one file removes
+   the feature without leaving orphaned properties behind. */
+
+/* Containment: the layer positions against the panel, the panel's own
+   rows paint above it, and nothing spills past the rounded corners. */
+.ws-zoom-save {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.ws-zoom-save > .ws-zsave-row,
+.ws-zoom-save > .ws-zsave-actions {
+  position: relative;
+  z-index: 1;
+}
+
+/* Absolutely positioned, so it is out of the panel's grid flow and
+   takes no row of its own. */
+.ws-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+/* Each sub-layer is off until its category is lit — the JS toggles the
+   has-* classes on the wrapper, never the elements' own display. */
+.ws-fx-fog,
+.ws-fx-canvas,
+.ws-fx-flash {
+  display: none;
+  position: absolute;
+}
+.ws-fx.has-fog .ws-fx-fog,
+.ws-fx.has-particles .ws-fx-canvas,
+.ws-fx.has-lightning .ws-fx-flash {
+  display: block;
+}
+
+/* ── Nebel ────────────────────────────────────────────────────────────────
+   Two oversized gradient bands sliding past each other. Transform-only
+   animation on long, mismatched, alternating durations: it never loops
+   visibly, never repaints, and costs one compositor layer each.
+
+   The alphas look timid on paper and are deliberate. Unlike the flash,
+   fog is on CONTINUOUSLY, so its worst case is not a 50 ms transient —
+   it is the contrast this panel reads at for as long as the chip is
+   lit. Where both bands peak together they composite to ≈0.12, which
+   leaves the 12 px uppercase row labels (--muted, the weakest text
+   here) at ≈4.7:1 and the body text at ≈10.8:1 — both above AA. On a
+   near-black panel a drifting veil that shallow is still plainly
+   visible, because the eye tracks the moving luminance edge. */
+.ws-fx-fog {
+  inset: 0;
+}
+/* Sized so that even at full drift the band still covers the panel, and
+   no larger — this can be an 800 px-tall panel on a phone, and every
+   extra percent is compositor texture. No `will-change`: a running
+   transform animation is promoted anyway, and the hint would hold the
+   layer allocated for as long as the chip is lit. */
+.ws-fx-band {
+  position: absolute;
+  top: -25%;
+  left: -40%;
+  width: 180%;
+  height: 130%;
+  background: radial-gradient(
+    58% 46% at 40% 45%,
+    rgba(158, 176, 194, 0.07),
+    rgba(158, 176, 194, 0.03) 52%,
+    transparent 76%
+  );
+  animation: ws-fx-drift 47s ease-in-out infinite alternate;
+}
+.ws-fx-band + .ws-fx-band {
+  top: -12%;
+  background: radial-gradient(
+    64% 40% at 62% 55%,
+    rgba(176, 192, 208, 0.055),
+    rgba(176, 192, 208, 0.022) 55%,
+    transparent 78%
+  );
+  animation-duration: 73s;
+  animation-direction: alternate-reverse;
+}
+@keyframes ws-fx-drift {
+  from {
+    transform: translate3d(-9%, -3%, 0);
+  }
+  to {
+    transform: translate3d(9%, 3%, 0);
+  }
+}
+
+/* ── Regen / Schnee ───────────────────────────────────────────────────────
+   One canvas for both; sizing (incl. the device-pixel backing store) is
+   set from JS, so only placement lives here. */
+.ws-fx-canvas {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Blitz ────────────────────────────────────────────────────────────────
+   A cold bloom hung off the panel's top edge, brightest above the first
+   row and gone by three quarters down — the shape of light entering a
+   window, not a strobe over the form.
+
+   The keyframe has exactly ONE luminance peak, and the scheduler
+   (save-panel-fx/_helpers.js) keeps strikes at least 3.2 s apart: 0.31
+   flashes per second, an order of magnitude below the 3 Hz
+   photosensitivity threshold.
+
+   Peak alpha is capped at 0.28, and the hot spot is hung above the top
+   edge so what the panel actually receives is ≈0.23 across its top
+   quarter and under 0.02 below the midline. At the brightest instant of
+   the flash — ~50 ms, under 2 % of a strike cycle — the body text is
+   still ≈7.5:1 against its background and the 12 px uppercase labels
+   ≈3.3:1; the textarea and the buttons in the lower half see no
+   measurable change at all. The flat second layer is what lets the
+   WHOLE panel register the strike without paying for it in contrast. */
+.ws-fx-flash {
+  inset: 0;
+  opacity: 0;
+  background:
+    radial-gradient(
+      124% 82% at 50% -12%,
+      rgba(198, 220, 245, 1),
+      rgba(198, 220, 245, 0.32) 46%,
+      transparent 76%
+    ),
+    linear-gradient(rgba(198, 220, 245, 0.04), rgba(198, 220, 245, 0.04));
+}
+.ws-fx-flash.is-strike {
+  animation: ws-fx-strike 620ms ease-out 1;
+}
+@keyframes ws-fx-strike {
+  0% {
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── The opt-out ──────────────────────────────────────────────────────────
+   Belt and braces: save-panel-fx/index.js never builds the layer when
+   the preference is set (and tears it down if it flips mid-session), and
+   this block makes sure that even a layer left standing by a future bug
+   neither drifts, falls, nor — above all — flashes. */
+@media (prefers-reduced-motion: reduce) {
+  .ws-fx {
+    display: none;
+  }
+  .ws-fx-band,
+  .ws-fx-flash.is-strike {
+    animation: none;
+  }
+}

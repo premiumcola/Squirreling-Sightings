@@ -72,6 +72,12 @@ LOAD_ORDER = [
     # existing 06a-06f / 24b family — an additive companion to
     # 23-weather-3.css, not a rewrite of it.
     "23b-weather-zoom.css",
+    # Ambient weather behind that same save panel (rain / snow / fog /
+    # lightning, driven by the category chips). Loads AFTER 23b because
+    # it adds the containment the backdrop needs to the panel rule 23b
+    # owns — keeping it here means deleting one file removes the whole
+    # feature.
+    "23c-weather-fx.css",
     "24-cam-edit-4.css",
     # Gewitter-Archiv — sits before 25-mobile.css so every mobile
     # override there still wins the cascade. Letter suffix matches the

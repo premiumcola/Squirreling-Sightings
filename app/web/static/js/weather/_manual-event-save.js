@@ -185,8 +185,10 @@ function _formHTML(activeCategories, checkedFields) {
 
 // DOM-walk, not a cached JS Set — the panel's markup is the single
 // source of truth for what is currently ticked (CLAUDE.md's collector
-// rule), so a chip toggled by any path is picked up.
-function _selectedCategories(panel) {
+// rule), so a chip toggled by any path is picked up. Exported because
+// weather/save-panel-fx/ needs the SAME answer to pick its backdrop —
+// one reader, so the payload and the animation can never disagree.
+export function _selectedCategories(panel) {
   return [...panel.querySelectorAll('.ws-zsave-cat.is-active')].map((el) => el.dataset.category);
 }
 

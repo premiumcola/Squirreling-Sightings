@@ -64,6 +64,7 @@ import './weather/sightings.js'; // stage 24 B
 import './weather/settings.js'; // stage 24 C
 import './weather/maintenance.js'; // rescan + thumb regen
 import './weather/_manual-event-save.js'; // drag-zoom "als Ereignis speichern" form
+import './weather/save-panel-fx/index.js'; // that form's ambient weather backdrop
 import './library/page.js'; // stage 6 — merged Mediathek + Wetter-Ereignisse grid
 import './storms/index.js'; // Gewitter-Archiv (storm episodes)
 import './netz/index.js'; // Erkennungsnetz + Verlaufs-Archiv

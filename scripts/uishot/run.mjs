@@ -68,13 +68,25 @@ async function shoot(browser, baseUrl, surface, width, auditSrc) {
     await page.waitForTimeout(400);
     await seedFixtures(page);
     await surface.mount(page, width);
-    const target = await page.$(surface.clip);
-    if (target) await target.screenshot({ path: png });
-    else await page.screenshot({ path: png, fullPage: false });
+    // Audit BEFORE the screenshot, not after.
+    //
+    // Playwright photographs an element taller than the viewport by
+    // capturing beyond it, and that resets Chromium's device emulation:
+    // `(pointer: coarse)` and `(hover: none)` flip to false the moment the
+    // shot is taken and never come back. Auditing afterwards therefore
+    // measured a desktop that was never photographed — every rule keyed to
+    // touch was wrong on exactly the tall surfaces where it matters.
+    // Measured on the Statistik surface (1778 px tall at 375 px): the
+    // Zeitraum slider is 44 px high before the shot and 6 px after it,
+    // because the 44 px touch rule in 13-statistics.css stops applying.
+    // addScriptTag only appends an inert <script>, so nothing here moves.
     await page.addScriptTag({ content: auditSrc });
     const res = await page.evaluate((s) => window.__uiaudit(s), surface.scope);
     shotRec.findings = res.findings || [];
     shotRec.scopeError = res.error || null;
+    const target = await page.$(surface.clip);
+    if (target) await target.screenshot({ path: png });
+    else await page.screenshot({ path: png, fullPage: false });
   } catch (err) {
     shotRec.error = String(err).split('\n')[0];
     await page.screenshot({ path: png, fullPage: false }).catch(() => {});

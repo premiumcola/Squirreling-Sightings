@@ -156,11 +156,34 @@
     }
   }
 
+  /**
+   * Is this element's width contained by a horizontal scroller?
+   *
+   * CLAUDE.md's rule is that wide content scrolls inside its own
+   * `overflow-x: auto` container and the body never scrolls sideways, so
+   * content that honours it is not a defect — the 24 hour-columns of the
+   * Statistik heatmap alone produced two dozen findings per width, all
+   * working as designed, which is how a real one goes unnoticed. The
+   * scroller itself is still measured: it has no scrolling ancestor.
+   *
+   * `hidden` deliberately does NOT count. That clips content without
+   * offering any way to reach it, which is a defect worth reporting.
+   */
+  function scrollsInside(el) {
+    var n = el.parentElement;
+    while (n && n.nodeType === 1) {
+      var ox = getComputedStyle(n).overflowX;
+      if (ox === 'auto' || ox === 'scroll') return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+
   function checkOverflow(root, out, vw) {
     var els = root.querySelectorAll('*');
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
-      if (!visible(el)) continue;
+      if (!visible(el) || scrollsInside(el)) continue;
       var r = el.getBoundingClientRect();
       if (r.width > vw + 1 || r.right > vw + 1) {
         out.push({

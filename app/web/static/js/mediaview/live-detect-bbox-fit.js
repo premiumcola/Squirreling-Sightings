@@ -16,7 +16,7 @@
 // nothing else; keep it that way.
 
 import { byId } from '../core/dom.js';
-import { fittedRect } from '../core/video-fit.js';
+import { containRect, fittedRect } from '../core/video-fit.js';
 import { zoneEl } from './live-detect-skeleton.js';
 import { S } from './live-detect-state.js';
 
@@ -68,19 +68,17 @@ function _pickLiveMediaEl() {
 // camera doesn't get pinned to the top-left corner.
 function _aspectFallback(hostBox) {
   const fs = S.session?.lastFrameSize;
-  if (fs && fs.w > 0 && fs.h > 0) {
-    const scale = Math.min(hostBox.width / fs.w, hostBox.height / fs.h);
-    const w = fs.w * scale;
-    const h = fs.h * scale;
-    return {
-      dx: (hostBox.width - w) / 2,
-      dy: (hostBox.height - h) / 2,
-      w,
-      h,
-      branch: 'wrap-fallback-aspect',
-    };
-  }
-  return { dx: 0, dy: 0, w: hostBox.width, h: hostBox.height, branch: 'wrap-fallback-full' };
+  const known = !!(fs && fs.w > 0 && fs.h > 0);
+  // containRect's own degenerate branch IS the "full host box" answer,
+  // so both cases are one call; only the debug label differs.
+  const r = containRect(known ? fs.w : 0, known ? fs.h : 0, hostBox.width, hostBox.height);
+  return {
+    dx: r.x,
+    dy: r.y,
+    w: r.w,
+    h: r.h,
+    branch: known ? 'wrap-fallback-aspect' : 'wrap-fallback-full',
+  };
 }
 
 /**

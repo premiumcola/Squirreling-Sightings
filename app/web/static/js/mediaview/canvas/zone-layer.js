@@ -25,6 +25,7 @@
 // adding info).
 
 import { ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL, LINE_W } from '../../core/zone-tokens.js';
+import { containRect } from '../../core/video-fit.js';
 
 /**
  * Compute the source-to-canvas-coord mapping for a single polygon.
@@ -187,14 +188,14 @@ export function renderZoneLayerForMediaEl(canvas, mediaEl, polygons, opts = {}) 
   // Letterbox math in WRAP coordinates — matches the bbox renderer.
   let fit;
   if (srcW > 0 && srcH > 0 && mediaRect.width > 0 && mediaRect.height > 0) {
-    const scale = Math.min(mediaRect.width / srcW, mediaRect.height / srcH);
-    const renderedW = srcW * scale;
-    const renderedH = srcH * scale;
+    // Same contain solve as every other overlay, then shifted from
+    // media-box into wrap coordinates.
+    const r = containRect(srcW, srcH, mediaRect.width, mediaRect.height);
     fit = {
-      x: (mediaRect.width - renderedW) / 2 + (mediaRect.left - wrapRect.left),
-      y: (mediaRect.height - renderedH) / 2 + (mediaRect.top - wrapRect.top),
-      w: renderedW,
-      h: renderedH,
+      x: r.x + (mediaRect.left - wrapRect.left),
+      y: r.y + (mediaRect.top - wrapRect.top),
+      w: r.w,
+      h: r.h,
     };
   } else {
     // Source dimensions not yet known — fall back to filling the

@@ -34,7 +34,7 @@ export const VPLAYER_SURFACES = ['recorded', 'live', 'sim'];
 // The defaults. Every surface ships OFF; each gets flipped to true in
 // its own one-line commit after the flag-gated call site has proven it.
 const DEFAULTS = {
-  recorded: false,
+  recorded: true,
   live: true,
   sim: true,
 };

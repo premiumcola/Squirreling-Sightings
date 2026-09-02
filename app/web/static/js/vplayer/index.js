@@ -13,10 +13,11 @@
 // makes this package mountable with zero consumers, unit-testable
 // without a browser, and removable in a single revert.
 //
-// Rollout state: SIMULATION runs on this player by default. Live and
-// recorded are still behind vplayer/_flag.js and still open their old
-// implementations, which remain on disk for the whole soak — one URL
-// parameter (?vplayer=off) is the operator's way back.
+// Rollout state: ALL THREE surfaces — recorded clips, the live view and
+// the simulation — run on this player by default. Every old
+// implementation is still on disk and still one URL parameter away:
+// ?vplayer=off forces all three back. The flag and the old code go in a
+// later sweep, once this has soaked.
 
 import { buildPlayerConfig } from './_config.js';
 import { mountShell } from './_shell.js';

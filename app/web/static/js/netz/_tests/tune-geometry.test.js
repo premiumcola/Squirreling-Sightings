@@ -1,22 +1,23 @@
 // ─── netz/_tests/tune-geometry.test.js ──────────────────────────────────
 // The settings radar is drawn at its chart box's own px size — these pin
-// that the ring actually grows with the box, and that it never grows into
-// the label rails or off the edge. Pure module, no DOM: the size the
+// that the ring actually grows with the box, that it never grows into the
+// label rails or off the edge, and that the rail keeps giving ground back
+// to the ring as the box shrinks (the phone case, where the old flat
+// 112 px reservation left an rx of 65). Pure module, no DOM: the size the
 // panel measures is just two numbers here.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   eFromEllipse,
-  LABEL_OFF_X,
-  LABEL_W,
+  labelWidthFor,
   PAD_Y,
   radarGeometry,
+  RING_GAP,
+  ringHalfWidthAt,
   TUNE_H,
   TUNE_W,
   tunePolar,
 } from '../_tune_geometry.js';
-
-const RAIL = LABEL_W + LABEL_OFF_X;
 
 // ── fallback ─────────────────────────────────────────────────────────
 
@@ -51,11 +52,8 @@ test('the viewBox is the measured size, 1 unit = 1 px, rounded to whole px', () 
 
 test('the ring reaches the label rail on both sides and the pad top and bottom', () => {
   const geo = radarGeometry({ width: 700, height: 340 });
-  // Left edge of the ring sits exactly one rail + gap in from the box
-  // edge, and mirrors on the right.
-  const gap = geo.cx - geo.rx - RAIL;
-  assert.ok(gap > 0 && gap <= 8, `ring-to-rail gap ${gap}`);
-  assert.equal(geo.cx + geo.rx + RAIL + gap, geo.w);
+  assert.equal(geo.cx - geo.rx, geo.labelW + RING_GAP);
+  assert.equal(geo.cx + geo.rx + geo.labelW + RING_GAP, geo.w);
   assert.equal(geo.cy - geo.ry, PAD_Y);
   assert.equal(geo.cy + geo.ry, geo.h - PAD_Y);
 });
@@ -65,13 +63,17 @@ test('a bigger box means a bigger ring — nothing is letterboxed away', () => {
   const big = radarGeometry({ width: 840, height: 420 });
   assert.ok(big.rx > small.rx);
   assert.ok(big.ry > small.ry);
-  // The whole gain in width goes to the ring: the rails are fixed-width.
-  assert.equal(big.rx - small.rx, (840 - 560) / 2);
+  // Height goes to the ring one-for-one; width too, once the rail has hit
+  // its cap and stops taking a share of the extra.
   assert.equal(big.ry - small.ry, (420 - 300) / 2);
+  assert.equal(big.rx - small.rx, (840 - 560) / 2);
 });
 
-test('the vertical pad clears the 44 px hit disc of a top or bottom vertex at E 100', () => {
-  assert.ok(PAD_Y >= 22, `PAD_Y ${PAD_Y} < hit-disc radius 22`);
+test('the vertical pad is exactly the 44 px hit disc of a top or bottom vertex', () => {
+  assert.equal(PAD_Y, 22, 'the disc must stay whole, and not one px more may be spent');
+  const geo = radarGeometry({ width: 700, height: 340 });
+  const top = tunePolar(0, 12, 1, geo);
+  assert.ok(top.y - 22 >= 0, 'the top vertex hit disc is clipped by the viewBox');
 });
 
 test('a box narrower than its two rails still yields a drawable ring', () => {
@@ -80,21 +82,55 @@ test('a box narrower than its two rails still yields a drawable ring', () => {
   assert.ok(geo.ry > 0);
 });
 
+// ── the rail gives ground back on a small box ─────────────────────────
+
+test('the label rail scales with the box, between the two text-derived bounds', () => {
+  assert.equal(labelWidthFor(355), 78); // a 375 px phone panel
+  assert.equal(labelWidthFor(200), 68); // floor
+  assert.equal(labelWidthFor(1200), 92); // cap
+  assert.ok(labelWidthFor(500) > labelWidthFor(355));
+});
+
+test('the phone-sized ring is far bigger than the flat 112 px rail allowed', () => {
+  // 375 px screen: the panel is ~355 px wide, the chart clamp 320 px tall.
+  const geo = radarGeometry({ width: 355, height: 320 });
+  const before = { rx: 355 / 2 - 112, ry: 260 / 2 - 24 };
+  assert.ok(geo.rx > before.rx * 1.3, `rx ${geo.rx} vs ${before.rx}`);
+  assert.ok(geo.ry > before.ry * 1.25, `ry ${geo.ry} vs ${before.ry}`);
+});
+
 // ── the label rails stay inside the box ───────────────────────────────
 
 test('the right rail box ends inside the viewBox at every size', () => {
   [
-    { width: 331, height: 260 },
+    { width: 355, height: 320 },
+    { width: 373, height: 330 },
     { width: 560, height: 300 },
     { width: 700, height: 340 },
     { width: 1100, height: 520 },
   ].forEach((size) => {
     const geo = radarGeometry(size);
-    const right = geo.cx + geo.rx + LABEL_OFF_X + LABEL_W;
-    const left = geo.cx - geo.rx - LABEL_OFF_X - LABEL_W;
+    const right = geo.cx + geo.rx + RING_GAP + geo.labelW;
+    const left = geo.cx - geo.rx - RING_GAP - geo.labelW;
     assert.ok(right <= geo.w, `${JSON.stringify(size)}: right rail ends at ${right} > ${geo.w}`);
     assert.ok(left >= 0, `${JSON.stringify(size)}: left rail starts at ${left} < 0`);
   });
+});
+
+// ── the ring's own width at a given height ───────────────────────────
+
+test('ringHalfWidthAt is rx on the centre line and 0 at the poles', () => {
+  const geo = radarGeometry({ width: 700, height: 340 });
+  assert.equal(ringHalfWidthAt(geo, geo.cy), geo.rx);
+  assert.equal(ringHalfWidthAt(geo, geo.cy - geo.ry), 0);
+  assert.equal(ringHalfWidthAt(geo, geo.cy + geo.ry), 0);
+  assert.equal(ringHalfWidthAt(geo, 0), 0, 'above the ring is not a negative width');
+});
+
+test('a row nearer the top clears the ring sooner than one at the centre', () => {
+  const geo = radarGeometry({ width: 700, height: 340 });
+  const near = ringHalfWidthAt(geo, geo.cy - geo.ry * 0.8);
+  assert.ok(near < geo.rx * 0.62, `label at 80 % height still needs ${near} of ${geo.rx}`);
 });
 
 // ── polar + inverse agree on whichever ring they are given ───────────

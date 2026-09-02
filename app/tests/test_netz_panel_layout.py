@@ -484,10 +484,12 @@ def test_the_chart_box_fills_the_flexed_card_on_desktop():
 
 def test_the_chart_box_has_a_real_height_on_a_phone():
     """No tile height to inherit in the single-column layout — a clamp()
-    whose 260 px floor wins on a 375/393 px screen (60vw = 225–236 px)."""
+    whose 320 px floor wins on a 375 px screen (84vw = 315 px) and whose
+    84vw wins on a 393 px one. A fixed height is also what makes the key
+    row free on a phone: it makes the panel taller, not the net smaller."""
     chart = _CSS[_CSS.index(".netz-card-chart {") :]
     rule = chart[: chart.index("}")]
-    assert "height: clamp(260px, 60vw, 380px)" in rule
+    assert "height: clamp(320px, 84vw, 460px)" in rule
     assert "position: relative" in rule
     assert "vh" not in rule
 
@@ -525,6 +527,47 @@ def test_the_net_body_draws_the_radar_at_the_measured_size():
     assert out["bigBox"] is True
     assert out["fallback"] is True
     assert out["chartWrapsSvg"] is True
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_the_ring_grew_where_the_operator_said_it_was_too_small():
+    """„Hol so viel Radius heraus wie irgend möglich." The rail used to
+    take a flat 96 + 12 + 4 px per side whatever the box was, which on a
+    phone left the ring less than a fifth of the panel's width."""
+    out = _js(
+        """
+        const G = await import(JS + '/netz/_tune_geometry.js');
+        const at = (w, h) => { const g = G.radarGeometry({ width: w, height: h });
+                               return { rx: g.rx, ry: g.ry, labelW: g.labelW }; };
+        console.log(JSON.stringify({
+          phone375: at(355, 320),
+          phone393: at(373, 330),
+          desktop: at(698, 308),
+        }));
+        """
+    )
+    # What the same three boxes used to yield: rx = w/2 - 112 on the box
+    # sizes the old padding and the old 260 px mobile clamp produced.
+    old = {"phone375": 65.5, "phone393": 74.5, "desktop": 233.0}
+    for box, was in old.items():
+        assert out[box]["rx"] > was, f"{box}: rx {out[box]['rx']} did not beat the old {was}"
+    # The rail may shrink, but never past what the longest axis name needs
+    # in one line at 11 px — readability is not the currency here.
+    for box in out.values():
+        assert 68 <= box["labelW"] <= 92
+
+
+def test_the_axis_labels_keep_a_real_font_and_stack_their_value():
+    """The narrower rail is paid for by WRAPPING, never by smaller type:
+    11 px, the value on its own line under the name, and a name too long
+    for the row is elided with an ellipsis rather than sliced."""
+    lbl = _CSS[_CSS.index(".netz-tlbl {") :]
+    rule = lbl[: lbl.index("}")]
+    assert "font-size: 11px" in rule
+    assert "flex-direction: column" in rule
+    assert "overflow-wrap: break-word" in rule
+    name = _CSS[_CSS.index(".netz-tlbl-n {") :]
+    assert "-webkit-line-clamp: 2" in name[: name.index("}")]
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)

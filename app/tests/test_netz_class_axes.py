@@ -172,8 +172,14 @@ _RAIL = """
   };
 """
 
-# The fallback, a 375 px phone's box (260 px floor), a desktop box.
-_SIZES = ["{}", "{ width: 331, height: 260 }", "{ width: 690, height: 336 }"]
+# The fallback, both phone widths (375 and 393 px, chart clamp floor
+# 320 px), and a desktop box.
+_SIZES = [
+    "{}",
+    "{ width: 355, height: 320 }",
+    "{ width: 373, height: 330 }",
+    "{ width: 690, height: 300 }",
+]
 
 
 @pytest.mark.parametrize("size", _SIZES)
@@ -208,7 +214,7 @@ def test_every_label_box_stays_inside_the_viewbox(n, size):
           boxes: boxes({n}, {size}),
           h: geo.h,
           w: geo.w,
-          labelW: G.LABEL_W,
+          labelW: geo.labelW,
         }}));
         """
     )
@@ -217,6 +223,39 @@ def test_every_label_box_stays_inside_the_viewbox(n, size):
         assert b["bot"] <= out["h"] + 0.01, b
         assert b["x"] >= 0, b
         assert b["x"] + out["labelW"] <= out["w"], b
+
+
+@pytest.mark.parametrize("size", _SIZES)
+@pytest.mark.parametrize("n", [10, 15, 21])
+def test_no_label_box_overlaps_the_ring_it_labels(n, size):
+    """Each box is placed against the ring AT ITS OWN HEIGHT now, so the
+    ones near the top and bottom follow the ellipse inwards — closer to
+    their spoke ends, and still never on top of the net."""
+    out = _js(
+        f"""
+        {_RAIL}
+        const geo = geoFor({size});
+        const rows = boxes({n}, {size});
+        console.log(JSON.stringify({{
+          rows: rows.map((r) => ({{
+            ...r,
+            ring: Math.max(
+              G.ringHalfWidthAt(geo, Math.max(r.top, Math.min(geo.cy, r.bot))), 0),
+          }})),
+          cx: geo.cx,
+          rx: geo.rx,
+          labelW: geo.labelW,
+        }}));
+        """
+    )
+    pulled_in = 0
+    for r in out["rows"]:
+        edge = r["x"] if r["side"] == "r" else r["x"] + out["labelW"]
+        clear = abs(edge - out["cx"]) - r["ring"]
+        assert clear >= -0.01, f"label sits on the ring: {r}"
+        if r["ring"] < out["rx"] - 1:
+            pulled_in += 1
+    assert pulled_in, "no label followed the ellipse inwards — they are all on one column"
 
 
 def test_the_rail_sides_split_the_axes_evenly():

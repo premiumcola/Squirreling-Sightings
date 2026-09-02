@@ -23,6 +23,7 @@ from ..cat_identity import IdentityRegistry
 from ..storage import _atomic_write_text
 
 bp = Blueprint("sichtungen", __name__)
+log = logging.getLogger(__name__)
 
 
 # ── Cat / person identity ────────────────────────────────────────────────
@@ -109,27 +110,51 @@ def _ach_path():
     return app_state.storage_root / "achievements.json"
 
 
+class AchievementsUnreadable(RuntimeError):
+    """achievements.json is on disk but does not parse.
+
+    Distinct from "no file yet" on purpose. Both used to collapse into an
+    empty dict, and every writer then took that empty dict for a fresh
+    install and replaced the ledger with it — species, `quests` and
+    `quests_archive` in one go.
+    """
+
+
 def _load_achievements() -> dict:
+    """The stored ledger. A missing file is an empty one; a damaged file
+    is an error, because the callers below write back what they are
+    handed and `{}` would mean deleting everything."""
+    p = _ach_path()
+    if not p.exists():
+        return {}
     try:
-        p = _ach_path()
-        if p.exists():
-            return _json_mod.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        pass
-    return {}
+        return _json_mod.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("[storage] achievements.json unreadable — refusing to overwrite: %s", e)
+        raise AchievementsUnreadable(str(e)) from e
 
 
-def _save_achievements(data: dict):
+def _save_achievements(data: dict) -> bool:
+    """Write the ledger. Returns whether it actually landed — the callers
+    used to report success on a write that never happened."""
     try:
         _atomic_write_text(_ach_path(), _json_mod.dumps(data, ensure_ascii=False, indent=2))
+        return True
     except Exception as e:
-        logging.getLogger(__name__).warning("achievements save: %s", e)
+        log.warning("[storage] achievements save failed: %s", e)
+        return False
 
 
 @bp.get('/api/achievements')
 def api_achievements_get():
     with _ach_lock:
-        data = _load_achievements()
+        try:
+            data = _load_achievements()
+        except AchievementsUnreadable:
+            # Display path: an empty board beats a 500 on the Sichtungen
+            # page. The write paths below refuse instead, so nothing
+            # persists this empty view back over the damaged file.
+            data = {}
     # Surface every quest-related block alongside the species map so the
     # frontend gets active + archive + upcoming-preview in one roundtrip.
     # Existing clients ignore unknown keys — purely additive.
@@ -152,7 +177,19 @@ def api_achievements_quests_reevaluate():
     background and after every motion event."""
     from ..quests import reevaluate_and_save
 
-    result = reevaluate_and_save()
+    try:
+        result = reevaluate_and_save()
+    except AchievementsUnreadable as e:
+        # The evaluator writes the ledger back wholesale, so a damaged
+        # file has to stop it here rather than be re-created from an
+        # empty dict. The hourly timer takes the same refusal via its
+        # own except-and-retry in maintenance._run_hourly_quest_eval.
+        return jsonify(
+            {
+                "ok": False,
+                "error": f"achievements.json ist beschädigt — nicht überschrieben ({e})",
+            }
+        ), 500
     return jsonify(result)
 
 
@@ -163,7 +200,15 @@ def api_achievements_unlock():
     if not species_id:
         return jsonify({"ok": False, "error": "id fehlt"}), 400
     with _ach_lock:
-        data = _load_achievements()
+        try:
+            data = _load_achievements()
+        except AchievementsUnreadable as e:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": f"achievements.json ist beschädigt — nicht überschrieben ({e})",
+                }
+            ), 500
         already = species_id in data
         if not already:
             data[species_id] = {
@@ -174,7 +219,11 @@ def api_achievements_unlock():
             }
         else:
             data[species_id]["count"] = data[species_id].get("count", 1) + 1
-        _save_achievements(data)
+        saved = _save_achievements(data)
+    if not saved:
+        return jsonify(
+            {"ok": False, "error": "achievements.json konnte nicht geschrieben werden"}
+        ), 500
     return jsonify({"ok": True, "already_had": already, "achievements": data})
 
 

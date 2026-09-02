@@ -5,7 +5,7 @@
 // why those fall back to source-level regression pins).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { heroHtml, audioListHtml } from '../_hero-overlay.js';
+import { heroHtml, audioListHtml, photoUrlsOf } from '../_hero-overlay.js';
 
 const _BASE = { common_name_de: 'Rotkehlchen', latin: 'Erithacus rubecula' };
 
@@ -16,13 +16,35 @@ test('heroHtml renders two photo boxes', () => {
     wikipedia_thumb_url_2: 'https://x.invalid/robin-side.jpg',
   });
   assert.equal((html.match(/class="sd-hero-photo"/g) || []).length, 2);
+  assert.match(html, /sd-hero--2/);
   assert.match(html, /src="https:\/\/x\.invalid\/robin-front\.jpg"/);
   assert.match(html, /src="https:\/\/x\.invalid\/robin-side\.jpg"/);
 });
 
-test('heroHtml falls back to the placeholder per missing photo', () => {
+// The whole point of the 2026-09 fix: a slot shows a real photograph or
+// it does not exist. The old placeholder put the app's generic bird
+// glyph next to a real photo, where it read as a picture OF the species.
+test('heroHtml renders one box for one photo, never a placeholder', () => {
+  const html = heroHtml({ ..._BASE, wikipedia_thumb_url: 'https://x.invalid/only.jpg' });
+  assert.equal((html.match(/class="sd-hero-photo"/g) || []).length, 1);
+  assert.match(html, /sd-hero--1/);
+  assert.doesNotMatch(html, /sd-hero-placeholder/);
+  assert.doesNotMatch(html, /🐦/u);
+});
+
+test('heroHtml drops the hero entirely and names the species when no photo exists', () => {
   const html = heroHtml({ ..._BASE, wikipedia_thumb_url: '', wikipedia_thumb_url_2: '' });
-  assert.equal((html.match(/sd-hero-placeholder/g) || []).length, 2);
+  assert.doesNotMatch(html, /sd-hero-placeholder/);
+  assert.doesNotMatch(html, /class="sd-hero /);
+  assert.match(html, /sd-name-line/);
+  assert.match(html, /Rotkehlchen/);
+});
+
+test('photoUrlsOf skips blank and whitespace-only urls', () => {
+  assert.deepEqual(photoUrlsOf({ wikipedia_thumb_url: '   ', wikipedia_thumb_url_2: null }), []);
+  assert.deepEqual(photoUrlsOf({ wikipedia_thumb_url: 'https://x.invalid/a.jpg' }), [
+    'https://x.invalid/a.jpg',
+  ]);
 });
 
 test('heroHtml only burns the name and play button into the first photo', () => {

@@ -85,27 +85,46 @@
    padding, so the hero fills the FULL card width while visually
    breaking out above and to the left of the card's content — "links
    überlappend, ein bisschen größer" — without ever exceeding the
-   column's own box (zero horizontal-scroll risk). The 2/1 aspect ratio
-   is also exactly what turns two side-by-side EQUAL-width photo boxes
-   into two clean 1:1 squares — no extra math needed per box. */
+   column's own box (zero horizontal-scroll risk).
+
+   The frame's SHAPE follows how many real photos there are (the
+   .sd-hero--N modifier heroHtml() sets — there is no placeholder box
+   any more, so the count is never padded out to a fixed two):
+     1 → one wide 3/2 frame,
+     2 → two 1:1 squares side by side (the 2/1 ratio does that math),
+     3 → the primary photo across the top, two comparison views under
+         it, so a third view doesn't squeeze all three into slivers. */
 .sd-hero {
   position: relative;
-  display: flex;
+  display: grid;
   gap: 2px;
   margin: -20px -18px 14px;
   border-radius: 18px;
   overflow: hidden;
   background: #000;
-  aspect-ratio: 2/1;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 }
-/* Two reference photos (2026-09: was one, object-fit:cover, that cropped
-   the animal — a Hausrotschwanz's head was cut clean off). `contain` on
-   a dark surface always shows the whole animal, letterboxed if the
-   source photo isn't itself square, never cropped. */
+.sd-hero--1 {
+  grid-template-columns: 1fr;
+  aspect-ratio: 3/2;
+}
+.sd-hero--2 {
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 2/1;
+}
+.sd-hero--3 {
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 2/1.75;
+}
+.sd-hero--3 .sd-hero-photo:first-child {
+  grid-column: 1 / -1;
+}
+/* Reference photos are `contain`ed on a dark surface (2026-09: was
+   object-fit:cover, which cropped the animal — a Hausrotschwanz's head
+   was cut clean off). Letterboxed when the source isn't the box's own
+   ratio, never cropped. */
 .sd-hero-photo {
   position: relative;
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   background: #0c0c0c;
@@ -116,14 +135,15 @@
   object-fit: contain;
   display: block;
 }
-.sd-hero-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 34px;
-  opacity: 0.5;
+/* Fallback for a dossier with no photo at all — the name still has to
+   appear exactly once, and with no hero there is nothing to burn it
+   into. Never rendered alongside .sd-hero-name (heroHtml returns one or
+   the other), so this is not a second copy of the same information. */
+.sd-name-line {
+  font-size: 19px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 8px;
 }
 /* Bottom scrim + name burned into the photo — replaces the old
    standalone .sd-name line below the hero (CLAUDE.md: no info shown

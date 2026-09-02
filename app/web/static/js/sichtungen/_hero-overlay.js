@@ -27,24 +27,39 @@ function _recordingsOf(d) {
   return [];
 }
 
-function _photoHtml(src) {
-  return src
-    ? `<img src="${esc(src)}" alt="" loading="lazy"/>`
-    : '<div class="sd-hero-placeholder">🐦</div>';
+/** Every REAL reference photo this dossier has, in display order.
+ *
+ * A photo box exists only for a URL that actually resolves to a
+ * photograph — there is deliberately no placeholder any more. The old
+ * "🐦" fallback rendered the app's generic bird glyph inside the frame,
+ * and next to a real photograph it read as a picture OF the species
+ * rather than as an empty slot ("irgend 'n random roter Vogel, macht
+ * keinen Sinn"). A species Wikipedia only has one usable image for now
+ * shows exactly one box and picks the second up on a later fetch. */
+export function photoUrlsOf(d) {
+  return [d.wikipedia_thumb_url, d.wikipedia_thumb_url_2]
+    .map((u) => (typeof u === 'string' ? u.trim() : ''))
+    .filter(Boolean);
 }
 
-// Hero: two reference photos side by side (so the operator can compare
-// their own recording against more than one view), each contained —
-// never cropped — inside its own 1:1 box (the two boxes together make
-// up the wide .sd-hero frame, see 29-birds.css). Only the first photo
-// carries the bottom gradient scrim with the species name burned in
-// (replaces the old plain-text .sd-name line — CLAUDE.md forbids
-// showing the same info twice) and, only when a recording actually
-// exists, a prominent centred play/pause button. No audio → no button
-// at all (never a tappable-looking dead end). A missing second photo
-// falls back to the same placeholder as a missing first one, so the
-// two-box layout never collapses to a single lopsided frame.
+// Hero: every available reference photo side by side (so the operator
+// can compare their own recording against more than one view), each
+// contained — never cropped — inside its own box. The box COUNT drives
+// the frame's shape via a --n modifier (see 29-birds.css): one photo
+// gets a single wide frame, two split it into 1:1 squares, three put
+// the primary photo across the top with the two comparison views
+// beneath. Only the first photo carries the bottom gradient scrim with
+// the species name burned in (replaces the old plain-text .sd-name line
+// — CLAUDE.md forbids showing the same info twice) and, only when a
+// recording actually exists, a prominent centred play/pause button. No
+// audio → no button at all (never a tappable-looking dead end).
+//
+// With no photos at all there is no hero: the name falls back to a
+// plain heading line, so it is still shown exactly once.
 export function heroHtml(d) {
+  const photos = photoUrlsOf(d);
+  const name = esc(d.common_name_de || d.latin);
+  if (!photos.length) return `<div class="sd-name-line">${name}</div>`;
   const hasAudio = _recordingsOf(d).length > 0;
   const playBtn = hasAudio
     ? `<button type="button" class="sd-hero-play" id="sdHeroPlay" aria-pressed="false" aria-label="Vogelstimme abspielen">
@@ -52,18 +67,16 @@ export function heroHtml(d) {
         <svg class="sd-hero-play-icon sd-hero-play-icon--pause" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
       </button>`
     : '';
-  const name = esc(d.common_name_de || d.latin);
-  return `<div class="sd-hero">
-    <div class="sd-hero-photo">
-      ${_photoHtml(d.wikipedia_thumb_url)}
-      <div class="sd-hero-scrim"></div>
-      <div class="sd-hero-name">${name}</div>
-      ${playBtn}
-    </div>
-    <div class="sd-hero-photo">
-      ${_photoHtml(d.wikipedia_thumb_url_2)}
-    </div>
-  </div>`;
+  const boxes = photos
+    .map((src, i) => {
+      const overlay =
+        i === 0
+          ? `<div class="sd-hero-scrim"></div><div class="sd-hero-name">${name}</div>${playBtn}`
+          : '';
+      return `<div class="sd-hero-photo"><img src="${esc(src)}" alt="" loading="lazy"/>${overlay}</div>`;
+    })
+    .join('');
+  return `<div class="sd-hero sd-hero--${photos.length}">${boxes}</div>`;
 }
 
 function _audioItemHtml(r, idx) {

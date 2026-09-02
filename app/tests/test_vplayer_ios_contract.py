@@ -134,3 +134,63 @@ def test_wide_content_scrolls_inside_its_own_row():
     assert "overflow-x: auto" in block.group(
         1
     ), "the overlay row must scroll itself rather than widen the page"
+
+
+# ── 36b · the timeline ────────────────────────────────────────────────────
+
+
+def test_the_scrub_band_meets_the_touch_minimum():
+    """A 6 px rail is not a touch target; the band around it is."""
+    css = _strip_comments(_read(_TIMELINE))
+    block = re.search(r"\.vp-tl-hit\s*\{([^}]*)\}", css)
+    assert block, ".vp-tl-hit has no rule block"
+    body = block.group(1)
+    assert "min-height: 44px" in body, "the drag band must be at least 44 px tall"
+
+
+def test_the_roll_bands_hatch_with_a_gradient_not_an_image():
+    """An image is a second request that fails silently offline, leaving
+    the pre/post-roll bands invisible with no error anywhere."""
+    css = _strip_comments(_read(_TIMELINE))
+    block = re.search(r"\.vp-tl-band\s*\{([^}]*)\}", css)
+    assert block, ".vp-tl-band has no rule block"
+    body = block.group(1)
+    assert "repeating-linear-gradient" in body
+    assert "url(" not in body, "no image may be used for the hatch"
+
+
+def test_no_hatch_anywhere_in_the_timeline_uses_an_image():
+    css = _strip_comments(_read(_TIMELINE))
+    assert "url(" not in css, "the timeline must not depend on any fetched asset"
+
+
+def test_lane_rows_let_a_vertical_swipe_through():
+    """A finger starting on a lane must still scroll the page; only the
+    rail itself claims the gesture."""
+    css = _strip_comments(_read(_TIMELINE))
+    lane = re.search(r"\.vp-tl-lane\s*\{([^}]*)\}", css)
+    assert lane, ".vp-tl-lane has no rule block"
+    assert "touch-action: pan-y" in lane.group(1)
+    hit = re.search(r"\.vp-tl-hit\s*\{([^}]*)\}", css)
+    assert "touch-action: none" in hit.group(1), "the rail owns its own drag"
+
+
+def test_the_lane_list_cannot_push_the_picture_off_screen():
+    """Many objects at 375 px would otherwise grow the strip without
+    limit and bury the video under its own timeline."""
+    css = _strip_comments(_read(_TIMELINE))
+    block = re.search(r"\.vp-tl-lanes\s*\{([^}]*)\}", css)
+    assert block, ".vp-tl-lanes has no rule block"
+    body = block.group(1)
+    assert "overflow-y: auto" in body
+    assert "dvh" in body, "the cap must track the visual viewport, not vh"
+
+
+def test_the_playhead_is_driven_by_one_custom_property():
+    """Fill and head read the same variable, so one write paints both
+    and they cannot drift apart mid-drag."""
+    css = _strip_comments(_read(_TIMELINE))
+    for selector in (r"\.vp-tl-fill", r"\.vp-tl-head"):
+        block = re.search(selector + r"\s*\{([^}]*)\}", css)
+        assert block, f"{selector} has no rule block"
+        assert "--vp-play-pct" in block.group(1)

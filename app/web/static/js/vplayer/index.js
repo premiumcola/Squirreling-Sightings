@@ -33,6 +33,7 @@ import {
   VP_MENU_NATIVE,
 } from './_overflow-menu.js';
 import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
+import { mountTimeline } from './timeline/index.js';
 
 /** The single open player, or null. One at a time, by construction. */
 let _open = null;
@@ -65,8 +66,16 @@ function _mountAll(cfg) {
     ? mountOverlayRow(shell.slot('toggles'), cfg, { roi: cfg.item.roi_label })
     : null;
   const transport = mountTransport(shell.slot('stage'), shell.slot('controls'), cfg, stage);
+  const timeline = mountTimeline(shell.slot('timeline'), cfg, {
+    onSeek: (t) => {
+      stage.video.currentTime = t;
+    },
+    isPlaying: () => !stage.video.paused && !stage.video.ended,
+    onPause: () => stage.video.pause(),
+    onResume: () => stage.video.play().catch(() => {}),
+  });
 
-  return { cfg, shell, stage, topbar, menu, overlayRow, transport };
+  return { cfg, shell, stage, topbar, menu, overlayRow, transport, timeline };
 }
 
 /**
@@ -95,6 +104,7 @@ export function closeVideoPlayer() {
   _open = null;
   // Reverse mount order — every listener released before the DOM it is
   // bound to goes away.
+  p.timeline?.teardown();
   p.transport?.teardown();
   p.overlayRow?.teardown();
   p.menu?.teardown();

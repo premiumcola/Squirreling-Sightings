@@ -31,4 +31,309 @@
      the operator is usually looking for, so it is the one mark allowed
      to be pure white. */
   --vp-tl-marker: #ffffff;
+
+  /* Playhead position, 0..1. Written once per frame by _rail.js; the
+     fill and the head both read it, so they cannot drift apart. */
+  --vp-play-pct: 0;
+}
+
+/* ── The strip, mounted INSIDE the stage ───────────────────────────────────
+   Over the bottom of the picture rather than in a band below it. The
+   scrim is what keeps a white marker readable over an overexposed sky
+   without painting a solid bar across the video. */
+.vp-timeline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 8px 10px calc(6px + var(--vp-safe-bottom));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+  /* Vertical page scroll must still work when a finger starts here;
+     only horizontal gestures belong to the rail. */
+  touch-action: pan-y;
+}
+
+.vp-timeline:empty {
+  display: none;
+}
+
+/* ── Lanes ─────────────────────────────────────────────────────────────── */
+.vp-tl-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
+  /* Many objects must not push the picture out of view; the lane list
+     scrolls itself. */
+  max-height: 30dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vp-tl-lane {
+  position: relative;
+  height: var(--vp-tl-lane-h);
+  touch-action: pan-y;
+}
+
+.vp-tl-bar {
+  position: absolute;
+  top: 50%;
+  height: 6px;
+  min-width: 2px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: var(--vp-lane-colour, var(--accent));
+}
+
+/* Status is the TEXTURE, never the hue — the hue is the object's
+   identity. Each run paints its own overlay so a dashed stretch says
+   which kind of uncertainty it is. */
+.vp-tl-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+}
+
+.vp-tl-seg[data-status='weak'] {
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.45) 0 3px,
+    rgba(0, 0, 0, 0) 3px 6px
+  );
+}
+
+.vp-tl-seg[data-status='predicted'] {
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.6) 0 2px,
+    rgba(0, 0, 0, 0) 2px 6px
+  );
+}
+
+.vp-tl-seg[data-status='masked'] {
+  background: var(--vp-tl-hatch);
+}
+
+/* The first-detection dot. Painted after the bar so a single-sample
+   track — whose bar has no width — still shows something. */
+.vp-tl-dot {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: var(--vp-lane-colour, var(--accent));
+}
+
+.vp-tl-lane-label {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .vp-tl-lane:hover .vp-tl-lane-label {
+    color: var(--text);
+  }
+}
+
+/* ── The rail ──────────────────────────────────────────────────────────── */
+.vp-tl-track {
+  position: relative;
+  height: var(--vp-tl-rail-h);
+  border-radius: calc(var(--vp-tl-rail-h) / 2);
+  background: rgba(237, 244, 251, 0.22);
+}
+
+/* Pre- and post-roll: the seconds recorded either side of the motion
+   that triggered the clip. A repeating-linear-gradient, never a
+   background-image — an image is a second request that fails silently
+   offline and leaves the band invisible. */
+.vp-tl-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--vp-tl-hatch) 0 3px,
+    rgba(0, 0, 0, 0) 3px 6px
+  );
+}
+
+.vp-tl-band--pre {
+  left: 0;
+  border-radius: calc(var(--vp-tl-rail-h) / 2) 0 0 calc(var(--vp-tl-rail-h) / 2);
+}
+
+.vp-tl-band--post {
+  border-radius: 0 calc(var(--vp-tl-rail-h) / 2) calc(var(--vp-tl-rail-h) / 2) 0;
+}
+
+.vp-tl-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--vp-tl-marker);
+}
+
+.vp-tl-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--vp-play-pct) * 100%);
+  border-radius: calc(var(--vp-tl-rail-h) / 2);
+  background: var(--accent);
+}
+
+.vp-tl-head {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--vp-play-pct) * 100%);
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+/* The drag surface. A 6 px rail is not a touch target; this transparent
+   band centred on it is, and it is what the pointer-capture drag binds
+   to. Sized from the same token as every other control. */
+.vp-tl-hit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--vp-tl-band);
+  min-height: 44px;
+  touch-action: none;
+  cursor: pointer;
+}
+
+/* ── The filtered fold (live) ──────────────────────────────────────────── */
+.vp-tl-filtered {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--vp-tap);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .vp-tl-filtered:hover {
+    color: var(--text);
+  }
+}
+
+/* ── Empty states ──────────────────────────────────────────────────────────
+   Three different answers to "no tracks", because they need opposite
+   reactions: run the detection, accept that nothing was found, or
+   index the clip for the first time. */
+.vp-tl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vp-tl-empty-sub {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.vp-tl-empty[data-state='err'] .vp-tl-empty-text {
+  color: var(--danger);
+}
+
+.vp-tl-rescan {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--vp-tap);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  /* Never dark-on-dark — this is the one action on an otherwise empty
+     strip and it has to read as pressable. */
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.vp-tl-rescan[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .vp-tl-rescan:not([disabled]):hover {
+    background: #2f6fd0;
+  }
+}
+
+/* ── The lost-track popover ────────────────────────────────────────────────
+   The only place in the app that answers "why did the box stop
+   following it". Positioned by JS; sized and coloured here. */
+.vp-tl-tip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border-radius: var(--vp-radius-sm);
+  background: #0b0f16;
+  color: var(--text);
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.vp-tl-tip-title {
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.vp-tl-tip-row {
+  display: flex;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.vp-tl-tip-key {
+  color: var(--muted);
+}
+
+.vp-tl-tip-val.is-ok {
+  color: var(--good);
+}
+
+.vp-tl-tip-val.is-bad {
+  color: var(--warn);
+}
+
+.vp-tl-tip-summary {
+  margin-top: 6px;
+  color: var(--muted);
 }

@@ -131,6 +131,10 @@ LOAD_ORDER = [
     "36a-vplayer-shell.css",
     "36b-vplayer-timeline.css",
     "36c-vplayer-panels.css",
+    # "Vogel-Nachanalyse" maintenance panel. Late in the order because
+    # it only adds — the report body reuses 20-mediathek-2.css's .mi-*
+    # rules and this partial holds nothing that needs to win a cascade.
+    "37-replay-batch.css",
 ]
 
 _BANNER = (

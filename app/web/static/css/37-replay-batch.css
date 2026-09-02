@@ -1,0 +1,103 @@
+/* "Vogel-Nachanalyse" panel — the batch replay's progress line and its
+   two extra buttons. The report itself reuses the .mi-* classes from
+   20-mediathek-2.css; only what integrity.js has no equivalent for
+   lives here (a progress bar, a cancel button, a delta chip).
+
+   Depth is background contrast, never a hairline border, and every
+   radius is >= 8px, per CLAUDE.md. */
+
+/* The shared .btn/.btn-action min-height is 38px, below the 44px iOS
+   touch minimum. Raised for this panel's own buttons rather than
+   globally — a global change would move every button in the app. */
+.rb-btn {
+  min-height: 44px;
+}
+
+.rb-cancel {
+  background: rgba(255, 176, 46, 0.14);
+  color: #ffc266;
+}
+
+/* Both the cancel button and the status line are toggled by JS through
+   the `hidden` attribute. Without these opt-outs the `display` on
+   `.btn-action` / `.rb-status` silently wins: the UA stylesheet's
+   `[hidden] { display: none }` loses to ANY author rule that sets
+   `display`, regardless of specificity, because author origin outranks
+   user-agent origin. See test_weather_zoom_panel_css.py, which sweeps
+   the repo for exactly this. */
+.btn-action[hidden],
+.rb-status[hidden] {
+  display: none;
+}
+
+/* Hover-only styling stays behind the capability query so a touch
+   device never latches the hover state after a tap. */
+@media (hover: hover) {
+  .rb-cancel:hover {
+    background: rgba(255, 176, 46, 0.22);
+    color: #ffd28a;
+  }
+}
+
+/* Claims a full row inside .media-special-actions-row (flex, wrap) so
+   it sits under the buttons instead of squeezing between them. */
+.rb-status {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.rb-phase {
+  font-weight: 700;
+}
+
+.rb-counts {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rb-bar {
+  flex: 1 1 120px;
+  height: 6px;
+  min-width: 120px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.rb-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 8px;
+  background: #4ade80;
+  transition: width 0.3s ease;
+}
+
+.rb-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rb-delta-ok {
+  color: #7fd98c;
+}
+
+.rb-delta-warn {
+  color: #ffc266;
+}
+
+/* iPhone SE (375px) and iPhone 14 (393px): the status line's bar would
+   otherwise share a row with the counts and collapse to a sliver. */
+@media (max-width: 420px) {
+  .rb-bar {
+    flex: 1 1 100%;
+  }
+}

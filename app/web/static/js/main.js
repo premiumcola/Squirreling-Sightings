@@ -57,6 +57,7 @@ import './mediathek/orchestration.js'; // stage 23 A
 import './mediathek/qa-pill.js'; // timelapse QA pill + modal
 import './mediathek/trash-modal.js'; // S05 — Papierkorb UI
 import './mediathek/integrity.js'; // read-only "Integrität prüfen" report
+import './mediathek/replay-batch.js'; // "Vogel-Nachanalyse" batch replay
 import './maintenance/index.js'; // Mediathek-Verwaltung — every Aufbewahrungsfrist
 import './weather/stats.js'; // stage 24 A
 import './weather/sightings.js'; // stage 24 B

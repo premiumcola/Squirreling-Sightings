@@ -1095,3 +1095,43 @@
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
   }
 }
+
+/* ── Touch targets ───────────────────────────────────────────────────────
+   CLAUDE.md's 44x44 floor, applied to every control on this page that the
+   screenshot harness measured under it. Two shapes, and the choice is not
+   cosmetic:
+
+   · A control the finger lands ON gets a real 44 px box. Rows and buttons
+     already span the card's width, so raising their height costs a few px
+     of list and nothing else.
+   · A control whose PAINT must stay thin — the two range sliders, whose
+     tracks are 4 px by design — keeps its paint and gains the target as an
+     invisible box. That is the pattern .vp-top-btn::before and the map
+     pin's hit box already use in this codebase, rather than fattening a
+     rail until it looks like a scrollbar.
+
+   The rows are `cursor: pointer` and drill into a filtered view: a 24 px
+   tap strip for a destination that changes the whole page is exactly the
+   miss the floor exists to prevent. */
+#statRefreshBtn,
+.stat-dc-view-btn,
+.stat-dc-live {
+  min-height: 44px;
+}
+
+.stat-donut-row.stat-drillable,
+.tl-cam-head.stat-drillable,
+.stat-hm-cam.stat-drillable {
+  min-height: 44px;
+}
+
+/* The sliders keep their thin rail and grow an invisible hit box around
+   it. `position: relative` on the input itself would clip the pseudo to
+   the 4 px track, so the box hangs off the wrapper the markup already
+   provides and is centred on the rail. */
+#tlRangeSlider,
+#dcHours {
+  position: relative;
+  min-height: 44px;
+  background: transparent;
+}

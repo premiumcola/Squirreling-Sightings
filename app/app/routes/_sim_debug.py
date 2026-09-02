@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import time as _time
 
-from ..detectors._describe import describe_backend
+from ..detectors._describe import describe_backend, describe_models
 from ..thresholds._apply import camera_role
 from ._sim_frame import capture_lag_s
 from ._sim_pipeline import (
@@ -138,6 +138,22 @@ def modes_block(*, rt, cam_cfg: dict, setup, det_mode: str) -> dict:
         "roi_mode": setup.det_mode,
         "roi_mode_active": det_mode,
     }
+
+
+def models_block(rt) -> dict:
+    """The stage → model file/sha table this tick's boxes join against.
+
+    The same table ``event["provenance"]["models"]`` carries, from the
+    same builder, so the live surface and a recorded clip name one model
+    identically. Without it a live row could only ever say which STAGE
+    labelled a box, never which model file did — the file names live on
+    the runtime's interpreters, not on the boxes.
+    """
+    return describe_models(
+        getattr(rt, "detector", None),
+        getattr(rt, "bird_classifier", None),
+        getattr(rt, "wildlife_classifier", None),
+    )
 
 
 def _det_row(d, floor: float) -> dict:

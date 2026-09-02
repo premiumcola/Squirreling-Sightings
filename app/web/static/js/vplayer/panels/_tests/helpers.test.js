@@ -5,14 +5,18 @@
 // missing model versions, thresholds or provenance entirely still
 // renders every row, throws nothing, and never prints "undefined".
 //
-// Two fields are known-missing on purpose and are asserted as such, so
+// Fields that are known-missing on purpose are asserted as such, so
 // that when the backend grows them this file fails and someone updates
-// the mapping instead of quietly rendering a placeholder forever.
+// the mapping instead of quietly rendering a placeholder forever. Model
+// identity on the live surface WAS one of them and has since landed —
+// its tests below now pin the join rather than its absence, and the
+// degradation cases stay exactly as strict as they were.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PLACEHOLDER } from '../../_helpers.js';
+import { mapFrame } from '../../_data/_map.js';
 import {
   MODEL_STAGE_DE,
   computeChip,
@@ -115,17 +119,56 @@ test('KNOWN MISSING: nothing records the profile REVISION an event used', () => 
 test('modelLabel names the cascade stage, and the file when it can', () => {
   const models = FULL_EVENT.provenance.models;
   assert.equal(modelLabel('detector', models), `${MODEL_STAGE_DE.detector} · ${models.detector.file}`);
-  // No provenance to join against — the live rows' case.
+  // No table to join against — a clip recorded before the table
+  // existed. The stage is still a fact and is still named.
   assert.equal(modelLabel('bird_classifier'), MODEL_STAGE_DE.bird_classifier);
 });
 
+test('a live frame joins its stage against the payload models table', () => {
+  // WAS KNOWN-MISSING: the live/simulation payload carried no stage on
+  // its rows and no model table at all, so a live row could never say
+  // which model produced a label. Both now ship — the table under the
+  // frame's `models` key, in the same shape provenance.models uses, so
+  // this is the SAME join the recorded surface does.
+  const frame = mapFrame({
+    detections: [{ label: 'bird', score: 0.8, model: 'bird_classifier' }],
+    models: {
+      detector: { file: 'coco_ssd_mobilenet_v2_edgetpu.tflite', sha256: 'deadbeef0123' },
+      bird_classifier: { file: 'inat_bird_quant_edgetpu.tflite', sha256: 'cafebabe4567' },
+    },
+  });
+  assert.equal(frame.detections[0].model, 'bird_classifier', 'the stage survives the mapping');
+  assert.equal(
+    modelLabel(frame.detections[0].model, frame.models),
+    `${MODEL_STAGE_DE.bird_classifier} · inat_bird_quant_edgetpu.tflite`,
+  );
+  // And a track row of that same frame resolves through the same table.
+  assert.equal(
+    trackRow({ id: 1, model: 'detector' }, frame.models).model,
+    `${MODEL_STAGE_DE.detector} · coco_ssd_mobilenet_v2_edgetpu.tflite`,
+  );
+});
+
+test('a payload from before the models table still names every stage', () => {
+  // The back-compat half: an old event JSON, or any frame whose payload
+  // carries no table, must keep rendering. The stage alone, never a
+  // blank and never an invented file name.
+  const frame = mapFrame({ detections: [{ label: 'bird', score: 0.8, model: 'bird_classifier' }] });
+  assert.equal(frame.models, null);
+  assert.equal(modelLabel(frame.detections[0].model, frame.models), MODEL_STAGE_DE.bird_classifier);
+  assert.equal(trackRow({ id: 1, model: 'detector' }, null).model, MODEL_STAGE_DE.detector);
+});
+
 test('modelLabel degrades rather than inventing a model name', () => {
-  // KNOWN MISSING: the live endpoint's normal detection rows carry no
-  // stage at all, so they cannot say which model produced the label.
+  // A row with no stage at all — a legacy sidecar, or a detection built
+  // outside the cascade — must not be given one.
   assert.equal(modelLabel(null), PLACEHOLDER);
   assert.equal(modelLabel(undefined), PLACEHOLDER);
   // An unknown stage token is shown raw rather than swallowed.
   assert.equal(modelLabel('future_stage'), 'future_stage');
+  // A table that does not cover this stage falls back to the stage.
+  assert.equal(modelLabel('detector', { bird_classifier: { file: 'x' } }), MODEL_STAGE_DE.detector);
+  assert.equal(modelLabel('detector', { detector: {} }), MODEL_STAGE_DE.detector);
 });
 
 test('the TPU busy ratio renders as a percent of a 0..1 fraction', () => {

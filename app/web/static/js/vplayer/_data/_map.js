@@ -50,6 +50,10 @@ export function mapDetection(d) {
     label: det.label || '',
     score: det.score,
     trackNum: det.track_num == null ? null : det.track_num,
+    // The cascade stage that produced the label. Joined against the
+    // frame's `models` table to name the actual model file; on its own
+    // it still names the stage, which is what a pre-table payload has.
+    model: det.model || null,
     verdict: det.verdict || null,
     // The backend's own reason wins; the table is the fallback for a
     // verdict it did not explain.
@@ -73,6 +77,12 @@ export function mapFrame(data) {
     kept: detections.filter((x) => !x.discarded),
     discarded: detections.filter((x) => x.discarded),
     diag: d.diag || null,
+    // Stage → {file, sha256}, sent once per payload rather than on every
+    // box. The SAME shape as an event's provenance.models, so one
+    // modelLabel() join serves the live surface and a recorded clip.
+    // A payload from before this table existed simply has none, and
+    // every row then names its stage without a file.
+    models: d.models || null,
     trace: Array.isArray(d.decision_trace) ? d.decision_trace : [],
     raw: d,
   };

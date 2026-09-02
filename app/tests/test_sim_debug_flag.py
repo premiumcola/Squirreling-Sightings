@@ -28,7 +28,7 @@ import numpy as np
 import pytest
 
 from app.detect_setup import build_detection_setup
-from app.detectors._types import STAGE_DETECTOR, Detection
+from app.detectors._types import STAGE_BIRD, STAGE_DETECTOR, Detection
 from app.routes import _sim_debug, _sim_pipeline
 from app.tracker_core import Track
 
@@ -38,6 +38,17 @@ CAM = "reolink_cx810_hof_198"
 
 def _det(label, score, bbox, model=STAGE_DETECTOR):
     return Detection(label=label, score=score, bbox=bbox, model=model)
+
+
+class _Holder:
+    """The attributes ``describe_model`` reads off an interpreter."""
+
+    mode = "coral"
+    _cpu_mode = False
+    reason = "ok"
+
+    def __init__(self, path):
+        self.active_model_path = path
 
 
 class _ScriptedDetector:
@@ -152,6 +163,54 @@ def test_every_raw_box_carries_class_score_bbox_and_stage():
     assert rows[1]["above_floor"] is False
     assert block["raw_below_floor"] == 1
     assert block["track_floor"] == pytest.approx(setup.floor)
+
+
+def test_every_overlay_row_carries_the_stage_that_labelled_it():
+    """The overlay rows are the live/simulation surface's detections.
+    They used to carry no stage at all, so a live box could not say which
+    model produced its label while a recorded one could — the same
+    pipeline, two different answers."""
+    setup = _setup()
+    entry = _entry("cam_overlay_stage", setup)
+    dets = [_det("person", 0.9, (10, 20, 70, 220))]
+    num_by_det, no_track = _sim_pipeline.run_tracker(entry, dets, setup, 1280, 720, 1.0)
+
+    rows = _sim_pipeline.build_rows(dets, [], num_by_det, no_track, setup)
+
+    assert [r["model"] for r in rows] == [STAGE_DETECTOR]
+
+
+def test_a_dropped_boxs_row_keeps_its_stage_too():
+    """A row that a gate removed still names the model that labelled it —
+    'the bird classifier called this, and a mask dropped it' is one
+    finding, and losing half of it loses the diagnosis."""
+    setup = _setup()
+    dropped = _det("cat", 0.8, (0, 0, 10, 10), model=STAGE_BIRD)
+
+    rows = _sim_pipeline.build_rows(
+        [], [(dropped, _sim_pipeline.VERDICT_MASKED, "von einer Maske abgedeckt")], {}, [], setup
+    )
+
+    assert rows[0]["verdict"] == _sim_pipeline.VERDICT_MASKED
+    assert rows[0]["model"] == STAGE_BIRD
+
+
+def test_the_payload_table_names_the_file_behind_each_stage(tmp_path):
+    """The compact half of the wire format: rows carry a stage token,
+    and ONE table per payload turns those tokens into file names."""
+    model = tmp_path / "coco_ssd_edgetpu.tflite"
+    model.write_bytes(b"bytes")
+
+    class _Rt:
+        detector = _Holder(str(model))
+        bird_classifier = None
+        wildlife_classifier = None
+
+    table = _sim_debug.models_block(_Rt())
+
+    assert table[STAGE_DETECTOR]["file"] == "coco_ssd_edgetpu.tflite"
+    assert table[STAGE_DETECTOR]["sha256"]
+    assert table["tpu_active"] is True
 
 
 def test_a_live_track_reports_the_state_that_kept_it_alive():

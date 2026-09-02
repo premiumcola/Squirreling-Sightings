@@ -54,6 +54,11 @@
    difference, never from a hairline border. */
 .vp-pnl-row {
   display: flex;
+  /* Every row kind here carries a reason line, and every reason line is
+     flex-basis 100%. Without the wrap that line has nowhere to go but
+     sideways, which at 375 px is a clipped row rather than a second
+     line — see .vp-pnl-reason. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-height: var(--vp-pnl-row-h);
@@ -90,10 +95,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The reason a detection was dropped. On a 375 px screen it cannot
-   share the row with the class and the score, so it wraps underneath. */
+/* The reason a detection was dropped, and — on a live or simulation
+   track row — which model produced the label. On a 375 px screen it
+   cannot share the row with the class and the score, so it wraps
+   underneath.
+
+   `overflow-wrap: anywhere` is load-bearing, not belt-and-braces: a
+   model file name is one unbroken 50-character token
+   (coco_ssd_mobilenet_v2_quant_postprocess_edgetpu.tflite) with no
+   space to break at, so without it the line sets wider than the
+   viewport and takes the whole panel into a horizontal scroll. */
 .vp-pnl-reason {
   flex: 1 0 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding-bottom: 6px;
   color: var(--muted);
   font-size: 12px;

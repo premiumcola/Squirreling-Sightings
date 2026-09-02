@@ -39,8 +39,8 @@ function _chipsHtml(cfg, frame, status) {
   );
 }
 
-function _trackHtml(t) {
-  const r = trackRow(t);
+function _trackHtml(t, models) {
+  const r = trackRow(t, models);
   const cls = r.label ? OBJ_LABEL[r.label] || r.label : '—';
   const colour = r.num == null ? 'var(--muted)' : liveTrackColor(r.num);
   return (
@@ -64,7 +64,10 @@ function _tracksHtml(frame) {
     return `<div class="vp-pnl-empty">Spur-Details brauchen den Debug-Modus</div>`;
   }
   if (!tracks.length) return `<div class="vp-pnl-empty">Keine aktiven Spuren</div>`;
-  return tracks.map(_trackHtml).join('');
+  // The stage → model table rides the frame, not the row, so every row
+  // resolves its stage against the one table this tick carried.
+  const models = frame?.models || null;
+  return tracks.map((t) => _trackHtml(t, models)).join('');
 }
 
 /**

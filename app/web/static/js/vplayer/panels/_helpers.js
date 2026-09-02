@@ -35,11 +35,13 @@ export function kvRowsHtml(rows) {
 /**
  * The cascade STAGE a detection's label came from.
  *
- * This is what the backend actually reports per detection — a stage
- * token, not a model file. The file name (coco_ssd vs efficientdet) is
- * only recorded per EVENT, in provenance.models[stage].file, so naming
- * the actual model needs the join in modelLabel() below and is simply
- * unavailable on the live surface.
+ * This is what the backend reports per detection — a stage token, not a
+ * model file, because the file name would otherwise be repeated on
+ * every box. The name (coco_ssd vs efficientdet) comes from the table
+ * its payload carries once: `provenance.models` for a recorded clip,
+ * the top-level `models` block for a live or simulation frame. Both are
+ * the same shape from the same builder, so the join in modelLabel()
+ * below serves either.
  */
 export const MODEL_STAGE_DE = {
   detector: 'Objekt-Detektor',
@@ -53,11 +55,11 @@ export const MODEL_STAGE_DE = {
  * Which model produced this label.
  *
  * @param {string|null} stage        detection.model — a stage token
- * @param {object} [models]          provenance.models, when available
+ * @param {object} [models]          the payload's stage → model table
  * @returns {string} the stage in German, with the model FILE appended
- *   when the event's provenance can supply it. A pre-provenance clip,
- *   or the live view (whose rows carry no stage at all), degrades to
- *   the placeholder rather than to a guess.
+ *   when the payload carried a table to join against. A clip recorded
+ *   before that table existed, or a row with no stage at all, degrades
+ *   to the stage name or the placeholder rather than to a guess.
  */
 export function modelLabel(stage, models) {
   if (!stage) return PLACEHOLDER;
@@ -100,8 +102,14 @@ export function computeChip(modes) {
   return PLACEHOLDER;
 }
 
-/** One track row's display fields, all of them degrading independently. */
-export function trackRow(t) {
+/**
+ * One track row's display fields, all of them degrading independently.
+ *
+ * @param {object} t         one row of frame.raw.debug.tracks
+ * @param {object} [models]  the frame's stage → model table, when the
+ *   payload carried one. Without it the row still names the stage.
+ */
+export function trackRow(t, models) {
   const track = t || {};
   return {
     num: track.id == null ? null : track.id,
@@ -115,7 +123,7 @@ export function trackRow(t) {
     // opposite of what happened.
     iou: typeof track.last_iou === 'number' ? pctLabel(track.last_iou) : PLACEHOLDER,
     score: track.score == null ? PLACEHOLDER : pctLabel(track.score),
-    model: modelLabel(track.model),
+    model: modelLabel(track.model, models),
   };
 }
 

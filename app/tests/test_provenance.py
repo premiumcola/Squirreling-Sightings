@@ -20,8 +20,12 @@ from app.camera_runtime._recording._provenance import (  # noqa: E402
     build_provenance,
 )
 from app.detect_setup import build_detection_setup  # noqa: E402
-from app.detectors import STAGE_BIRD, STAGE_DETECTOR, Detection  # noqa: E402
-from app.detectors._describe import describe_backend, model_fingerprint  # noqa: E402
+from app.detectors import STAGE_BIRD, STAGE_DETECTOR, STAGE_WILDLIFE, Detection  # noqa: E402
+from app.detectors._describe import (  # noqa: E402
+    describe_backend,
+    describe_models,
+    model_fingerprint,
+)
 from app.detectors._postprocess import ssd_snapshot, to_detections  # noqa: E402
 from app.net_archive._tuning import TUNING_LABELS_DE  # noqa: E402
 from app.tracker_core import Track  # noqa: E402
@@ -284,3 +288,35 @@ def test_track_remembers_the_stage_of_its_last_detect_sample():
     tr.add_sample(1, 0.2, box, 0.8, "detect", "bird", STAGE_BIRD)
     tr.add_sample(2, 0.4, box, None, "predicted")
     assert tr.to_dict()["model"] == STAGE_BIRD
+
+
+# ── the stage → model table both surfaces join against ────────────────────
+
+
+def test_the_models_table_is_keyed_by_the_stage_tokens_detections_carry(tmp_path):
+    """The join only works if the table's keys are the very tokens a
+    detection's ``model`` field holds — otherwise a live row names a
+    stage the table cannot answer for."""
+    model = tmp_path / "coco_edgetpu.tflite"
+    model.write_bytes(b"model-bytes")
+    table = describe_models(_Stage("coral", True, "ok", str(model)))
+
+    assert table[STAGE_DETECTOR]["file"] == "coco_edgetpu.tflite"
+    assert table[STAGE_DETECTOR]["sha256"] == model_fingerprint(str(model))
+    assert set(table) == {STAGE_DETECTOR, STAGE_BIRD, STAGE_WILDLIFE, "tpu_active"}
+    assert table["tpu_active"] is True
+    # A stage the camera does not run is present but empty, never absent:
+    # "no bird classifier" and "a bird classifier we cannot name" are
+    # different answers and the table must not collapse them.
+    assert table[STAGE_BIRD]["file"] is None
+
+
+def test_an_event_and_a_live_tick_name_one_model_identically(tmp_path):
+    """``provenance.models`` and the live payload's ``models`` come from
+    the same builder, so a clip and the tick that produced it cannot
+    disagree about which file did the labelling."""
+    p = _build(tmp_path)
+    det = _Stage("coral", True, "ok", str(tmp_path / "coco_edgetpu.tflite"))
+    bird = _Stage("cpu", True, "cpu_requested", None)
+
+    assert p["models"] == describe_models(det, bird, None)

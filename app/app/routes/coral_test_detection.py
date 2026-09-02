@@ -265,15 +265,9 @@ def _respond(
     _log_tick(cam_id=cam_id, sim=sim, pick=pick, setup=setup)
     evidence = _sim_evidence.build_cluster_evidence(entry, cam, setup.object_filter, ema_ms)
     interval_ms = int(cam.get("frame_interval_ms", 350) or 350)
-    entry["last_tick"] = {
-        "ts": _time.time(),
-        "detections": sim.rows,
-        "trace": trace,
-        "frame_size": {"w": int(snap_w), "h": int(snap_h)},
-        "frame_age_ms": pick.age_ms,
-        "diag": diag,
-        "cluster_evidence": evidence,
-    }
+    _remember_tick(
+        entry, sim=sim, trace=trace, snap=(snap_w, snap_h), pick=pick, diag=diag, evidence=evidence
+    )
     body = {
         "ok": True,
         "snapshot": snapshot,
@@ -294,10 +288,33 @@ def _respond(
         # lines that answer the first three questions anyone asks
         # about a surprising result — see routes/_sim_debug.
         "modes": _sim_debug.modes_block(rt=rt, cam_cfg=cam_cfg, setup=setup, det_mode=det_mode),
+        # Stage → model file/sha, ONCE per payload. Every row above
+        # carries only its stage token; this is what turns that token
+        # into the name of the model that actually produced the label.
+        "models": _sim_debug.models_block(rt),
     }
     if debug:
         body["debug"] = _sim_debug.build_debug(entry=entry, sim=sim, setup=setup)
     return jsonify(body)
+
+
+def _remember_tick(entry: dict, *, sim, trace, snap, pick, diag, evidence) -> None:
+    """Park this tick on the tracker entry for the debug-snapshot route.
+
+    Bookkeeping, not an answer: ``routes/_debug_snapshot`` reads
+    ``last_tick`` long after the response went out, so it is written even
+    when nobody asked for the debug block.
+    """
+    snap_w, snap_h = snap
+    entry["last_tick"] = {
+        "ts": _time.time(),
+        "detections": sim.rows,
+        "trace": trace,
+        "frame_size": {"w": int(snap_w), "h": int(snap_h)},
+        "frame_age_ms": pick.age_ms,
+        "diag": diag,
+        "cluster_evidence": evidence,
+    }
 
 
 def _build_trace(

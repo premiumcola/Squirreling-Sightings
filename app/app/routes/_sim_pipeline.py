@@ -457,4 +457,8 @@ def _row(d, verdict: str, reason: str, track_num) -> dict:
         "verdict": verdict,
         "reason": reason,
         "track_num": track_num,
+        # The cascade stage that produced this label — the join key into
+        # the payload's ``models`` table, which names the actual file.
+        # Carried per box because a verdict row outlives its detection.
+        "model": getattr(d, "model", None),
     }

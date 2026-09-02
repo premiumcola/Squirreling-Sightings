@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from ._types import STAGE_BIRD, STAGE_DETECTOR, STAGE_WILDLIFE
+
 
 def describe_backend(obj) -> dict:
     """``{"device", "api", "mode", "reason"}`` for one interpreter holder.
@@ -64,6 +66,29 @@ def describe_model(obj, path_attr: str = "active_model_path") -> dict:
     out = describe_backend(obj)
     out["file"] = Path(str(path)).name if path else None
     out["sha256"] = model_fingerprint(path)
+    return out
+
+
+def describe_models(detector=None, bird=None, wildlife=None) -> dict:
+    """The stage → model table a payload carries ONCE.
+
+    Keyed by the ``detectors.STAGE_*`` tokens that a detection's ``model``
+    field holds, so a reader joins a box to the model file that labelled
+    it through that token instead of the file name being repeated on
+    every box. ``event["provenance"]["models"]`` and the live /
+    simulation payload are the same table built by the same function —
+    two surfaces naming one model the same way is the whole point.
+    """
+    out = {
+        STAGE_DETECTOR: describe_model(detector),
+        STAGE_BIRD: describe_model(bird),
+        STAGE_WILDLIFE: describe_model(wildlife),
+    }
+    if getattr(wildlife, "_inat_interpreter", None) is not None:
+        inat = describe_model(wildlife, "active_inat_model_path")
+        inat.update(inat_backend(wildlife))
+        out["wildlife_inat"] = inat
+    out["tpu_active"] = any(m.get("device") == "tpu" for m in out.values())
     return out
 
 

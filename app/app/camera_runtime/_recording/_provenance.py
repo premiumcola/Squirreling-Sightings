@@ -20,7 +20,7 @@ import hashlib
 from dataclasses import asdict
 from datetime import datetime
 
-from ...detectors._describe import describe_model, inat_backend
+from ...detectors._describe import describe_models
 from ...mask_zones import signature as _poly_signature
 from ...net_archive._tuning import TUNING_LABELS_DE
 from ...thresholds._apply import camera_role
@@ -93,20 +93,6 @@ def _effective(setup, roi_mode: str, cam_cfg: dict) -> dict:
     return out
 
 
-def _models(detector, bird, wildlife) -> dict:
-    out = {
-        "detector": describe_model(detector),
-        "bird_classifier": describe_model(bird),
-        "wildlife_classifier": describe_model(wildlife),
-    }
-    if getattr(wildlife, "_inat_interpreter", None) is not None:
-        inat = describe_model(wildlife, "active_inat_model_path")
-        inat.update(inat_backend(wildlife))
-        out["wildlife_inat"] = inat
-    out["tpu_active"] = any(m.get("device") == "tpu" for m in out.values())
-    return out
-
-
 def build_provenance(
     *,
     cam_id: str,
@@ -152,7 +138,7 @@ def build_provenance(
         "effective": _effective(setup, roi_mode, cam_cfg),
         "zones": _polygons(cam_cfg, "zones"),
         "masks": _polygons(cam_cfg, "masks"),
-        "models": _models(detector, bird, wildlife),
+        "models": describe_models(detector, bird, wildlife),
         "timing": {
             "pre_roll_s": resolve_pre_motion_seconds(cam_cfg, global_cfg),
             "post_roll_s": float(

@@ -243,6 +243,18 @@ def _strip_comments(src: str) -> str:
     return "\n".join(line for line in src.splitlines() if not line.lstrip().startswith("//"))
 
 
+def _bootstrap_src() -> str:
+    """Every line of the bootstrap route package, concatenated.
+
+    Was a single ``routes/bootstrap.py`` until the module outgrew the
+    file ceiling and became a package. Reading the whole package keeps
+    the assertions below pinned to the behaviour rather than to which
+    concern module happens to host the line today.
+    """
+    pkg = Path(_pkg_root) / "app" / "routes" / "bootstrap"
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(pkg.rglob("*.py")))
+
+
 def test_camera_form_never_sends_a_raw_empty_password():
     """`password: f['rtsp_pass'].value || ''` plus a server that reads ''
     as "clear" is the three-cameras-offline bug: the field is empty on
@@ -308,7 +320,7 @@ def test_connection_save_does_not_echo_the_message_format():
     # The format radios keep their own save button, which is the only
     # place the key may be written.
     assert "{ telegram: { format: fmt } }" in src
-    bootstrap = (Path(_pkg_root) / "app" / "routes" / "bootstrap.py").read_text(encoding="utf-8")
+    bootstrap = _bootstrap_src()
     assert '"format": c.get("telegram", {}).get("format", "photo")' in bootstrap
 
 
@@ -316,7 +328,7 @@ def test_the_config_endpoint_redacts_its_camera_list():
     """The leak this whole module exists for, at its widest point:
     /api/config is unauthenticated, polled by live-update.js on every
     dashboard tick, and used to return the full camera list."""
-    src = (Path(_pkg_root) / "app" / "routes" / "bootstrap.py").read_text(encoding="utf-8")
+    src = _bootstrap_src()
     assert '"cameras": [redact_camera(cam) for cam in c.get("cameras", [])]' in src
     assert '"cameras": c.get("cameras", [])' not in src
 

@@ -19,6 +19,7 @@
 // fittedRect() keeps recorded's package free of live-detect's state.
 import { byId } from '../../core/dom.js';
 import { fittedRect } from '../../core/video-fit.js';
+import { normalizeBox } from '../../core/box-model.js';
 import { _overlayScale } from '../../mediaview/live-detect-bbox-shapes.js';
 import { resolveBoxStyle } from './_box-style.js';
 
@@ -86,12 +87,12 @@ function _plateMarkup(style, x, y, k, frameW) {
 }
 
 function _boxMarkup(sample, style, k, frameW) {
-  const b = sample.bbox;
-  const x = b.x1,
-    y = b.y1,
-    w = b.x2 - b.x1,
-    h = b.y2 - b.y1;
-  if (w <= 0 || h <= 0) return '';
+  // One box shape for every surface. tracks.json stores corners, the
+  // live endpoint stores origin+size; normalizeBox folds both and
+  // carries the zero-area guard that used to live inline here.
+  const box = normalizeBox(sample.bbox);
+  if (!box) return '';
+  const { x, y, w, h } = box;
   const dash = style.dash.length ? ` stroke-dasharray="${style.dash.join(' ')}"` : '';
   const rect =
     `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" ` +

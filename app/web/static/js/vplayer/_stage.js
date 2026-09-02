@@ -18,31 +18,12 @@
 // layout and would otherwise leave every layer sized to the fallback.
 
 import { containRect } from '../core/video-fit.js';
+// One positioner for every layer in the app, carrying the `inset` ban
+// with it. See core/box-model.js::placeOverlayBox.
+import { placeOverlay } from '../core/box-model.js';
 
 /** The layers, in paint order. Zones sit under the boxes drawn on them. */
 export const VP_LAYERS = ['zones', 'trails', 'boxes'];
-
-/**
- * Pin an absolutely positioned layer to an explicit rect.
- *
- * CRITICAL · writes the four longhands and NEVER the `inset`
- * shorthand. `inset` expands to top/right/bottom/left, so assigning it
- * after the longhands silently resets left and top to `auto`; the layer
- * then falls to its static position, below the picture, and is clipped
- * away by the stage's overflow:hidden. That is the documented "no
- * bboxes in the simulation view" bug, and live-detect-bbox-fit.js
- * carries the same warning for the same reason.
- */
-export function placeLayer(el, rect) {
-  if (!el) return;
-  const s = el.style;
-  s.left = `${rect.x}px`;
-  s.top = `${rect.y}px`;
-  s.right = 'auto';
-  s.bottom = 'auto';
-  s.width = `${rect.w}px`;
-  s.height = `${rect.h}px`;
-}
 
 /** Source dimensions of whichever element currently carries pixels. */
 function _sourceSize(media) {
@@ -148,7 +129,7 @@ export function mountStage(frame, cfg) {
     const box = frame.getBoundingClientRect();
     const src = _sourceSize(media);
     rect = containRect(src.w, src.h, box.width, box.height);
-    for (const name of VP_LAYERS) placeLayer(layers[name], rect);
+    for (const name of VP_LAYERS) placeOverlay(layers[name], rect);
     listeners.forEach((fn) => fn(rect));
   };
 

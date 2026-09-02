@@ -21,6 +21,10 @@ import { esc } from '../core/dom.js';
 import { buildTrailSvg } from '../mediaview/canvas/trail-layer.js';
 import { resolveBox } from './_box-model.js';
 import { normalizeBox } from './_geometry.js';
+// The layer positioner and its `inset` ban now live in core, shared
+// with both existing painters. Re-exported so package code and the
+// overlay-svg test keep one import path.
+export { placeOverlay } from '../core/box-model.js';
 
 // On-screen sizes in CSS px, scaled into viewBox units via k.
 const _FONT_PX = 12;
@@ -41,29 +45,6 @@ const _GLYPH_W = 0.58;
 export function overlayScale(frameW, screenW) {
   if (!(frameW > 0) || !(screenW > 0)) return 1;
   return frameW / screenW;
-}
-
-/**
- * Pin an absolutely positioned overlay to an explicit rect.
- *
- * CRITICAL · writes left / top / right / bottom as LONGHANDS and never
- * the `inset` shorthand. `inset` expands to all four, so assigning it
- * after the longhands resets left and top to `auto`; the overlay then
- * falls to its static position below the picture and is clipped away by
- * the host's overflow:hidden. That is the documented "no bboxes in the
- * simulation view" bug — it has been written twice and is still live in
- * one place. Encoding the ban as a tested unit is how it stops
- * recurring.
- */
-export function placeOverlay(el, rect) {
-  if (!el || !rect) return;
-  const s = el.style;
-  s.left = `${rect.x}px`;
-  s.top = `${rect.y}px`;
-  s.right = 'auto';
-  s.bottom = 'auto';
-  s.width = `${rect.w}px`;
-  s.height = `${rect.h}px`;
 }
 
 /**

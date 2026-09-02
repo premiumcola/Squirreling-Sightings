@@ -17,9 +17,12 @@
 
 import { clockLabel } from '../core/clock-format.js';
 export { clockLabel, remainingLabel } from '../core/clock-format.js';
-
-/** What every formatter here prints instead of "undefined" or "NaN". */
-export const PLACEHOLDER = '—';
+// PLACEHOLDER and pctLabel moved to core/format.js when core/box-model.js
+// came to need them — a shared module must not reach up into a feature
+// package. Imported AND re-exported: this file's own formatters use
+// PLACEHOLDER, and a re-export alone would not put it in local scope.
+import { PLACEHOLDER } from '../core/format.js';
+export { PLACEHOLDER, pctLabel } from '../core/format.js';
 
 /**
  * A detection's time span within the clip, as `0:03–0:11`.
@@ -40,30 +43,6 @@ export function spanLabel(t0, t1) {
   if (!Number.isFinite(t0)) return PLACEHOLDER;
   const from = clockLabel(a);
   return hasEnd ? `${from}–${clockLabel(t1)}` : from;
-}
-
-/**
- * A model score as a percent: `0.87` → `87 %`.
- *
- * One convention for the whole player, with a space before the sign —
- * the German typographic form this codebase's chrome already uses
- * (mediaview/detail-pill.js, the live bbox pill, the QA pills). The
- * competing spaceless `87%` form that the recorded bbox plate uses is
- * the divergence the shared box model collapses.
- *
- * Accepts either a 0..1 fraction or an already-scaled percent, because
- * both shapes reach the UI: tracks.json stores fractions, some status
- * payloads report whole percents. Anything above 1 is taken as already
- * scaled.
- *
- * @param {number} v
- * @returns {string}
- */
-export function pctLabel(v) {
-  const n = typeof v === 'string' ? parseFloat(v) : v;
-  if (!Number.isFinite(n)) return PLACEHOLDER;
-  const scaled = n > 1 ? n : n * 100;
-  return `${Math.round(scaled)} %`;
 }
 
 /**

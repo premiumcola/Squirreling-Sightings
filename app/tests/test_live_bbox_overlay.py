@@ -34,6 +34,10 @@ from pathlib import Path
 
 _JS = Path(__file__).resolve().parents[2] / "app" / "web" / "static" / "js" / "mediaview"
 _FIT = _JS / "live-detect-bbox-fit.js"
+# The layer positioner moved to core/box-model.js when the recorded
+# painter and the unified player adopted it — three positioners had
+# independently rediscovered the same `inset` trap.
+_CORE_BOX = _JS.parent / "core" / "box-model.js"
 _SHAPES = _JS / "live-detect-bbox-shapes.js"
 _OVERLAYS = _JS / "live-detect-overlays.js"
 
@@ -74,11 +78,25 @@ def test_place_overlay_writes_all_four_offsets():
     """A rect is only unambiguous when both the anchored and the
     released edges are stated — otherwise a leftover `right`/`bottom`
     from a previous layout over-constrains the box."""
-    src = _read(_FIT)
-    body = src[src.index("export function _placeOverlay") :]
+    src = _read(_CORE_BOX)
+    body = src[src.index("export function placeOverlayBox") :]
     body = body[: body.index("\n}")]
     for prop in ("s.left", "s.top", "s.right", "s.bottom", "s.width", "s.height"):
-        assert prop in body, f"_placeOverlay must set {prop}"
+        assert prop in body, f"placeOverlayBox must set {prop}"
+    assert "s.inset" not in body, "never the shorthand — it resets left/top to auto"
+
+
+def test_the_live_painter_still_reaches_the_shared_positioner():
+    """A re-export alone would not put `_placeOverlay` back into this
+    module's own scope, and it calls it twice — the exact regression
+    CLAUDE.md's refactor section documents."""
+    src = _read(_FIT)
+    assert (
+        "import { placeOverlayBox as _placeOverlay }" in src
+    ), "the local import is mandatory, not just the re-export"
+    assert (
+        "export { placeOverlayBox as _placeOverlay }" in src
+    ), "svg-boxes.js and the overlays module import it from here"
 
 
 # ── 2 · the letterbox fallback (object-fit: contain, centred) ─────────

@@ -16,41 +16,12 @@
 
 import { containRect } from '../core/video-fit.js';
 import { _pointInPoly, _polyPoints } from '../shape-editor/geometry.js';
-
-/**
- * Fold either bbox schema into {x, y, w, h} in source pixels.
- *
- * @param {{x1:number,y1:number,x2:number,y2:number}|number[]} bbox
- * @returns {{x:number,y:number,w:number,h:number}|null} null when the
- *   box is absent, malformed or has no area. A zero-area box is not
- *   drawable and every caller would otherwise need its own guard —
- *   which is precisely how a 0×0 rect ends up painted as a dot.
- */
-export function normalizeBox(bbox) {
-  if (!bbox) return null;
-  let x;
-  let y;
-  let w;
-  let h;
-  if (Array.isArray(bbox)) {
-    if (bbox.length < 4) return null;
-    [x, y, w, h] = bbox;
-  } else if (typeof bbox === 'object') {
-    // The corner form. Normalise the winding too: a box stored with
-    // its corners the other way round is still a box.
-    const { x1, y1, x2, y2 } = bbox;
-    if (![x1, y1, x2, y2].every((v) => Number.isFinite(v))) return null;
-    x = Math.min(x1, x2);
-    y = Math.min(y1, y2);
-    w = Math.abs(x2 - x1);
-    h = Math.abs(y2 - y1);
-  } else {
-    return null;
-  }
-  if (![x, y, w, h].every((v) => Number.isFinite(v))) return null;
-  if (w <= 0 || h <= 0) return null;
-  return { x, y, w, h };
-}
+// normalizeBox moved to core/box-model.js when the two existing
+// painters adopted it — neither may import from this package. Nothing
+// in this file calls it (overlayRectFor takes an already-normalised
+// box), so a plain re-export is correct here; a caller that DID use it
+// locally would need the import statement as well.
+export { normalizeBox } from '../core/box-model.js';
 
 /**
  * Map a source-pixel box onto the letterboxed picture.

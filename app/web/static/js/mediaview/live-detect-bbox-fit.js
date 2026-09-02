@@ -20,20 +20,19 @@ import { containRect, fittedRect } from '../core/video-fit.js';
 import { zoneEl } from './live-detect-skeleton.js';
 import { S } from './live-detect-state.js';
 
-function _px(v) {
-  return typeof v === 'number' ? `${v}px` : v;
-}
-
-/** Pin an absolutely-positioned overlay to an explicit rect. */
-export function _placeOverlay(el, left, top, width, height) {
-  const s = el.style;
-  s.left = _px(left);
-  s.top = _px(top);
-  s.right = 'auto';
-  s.bottom = 'auto';
-  s.width = _px(width);
-  s.height = _px(height);
-}
+/**
+ * Pin an absolutely-positioned overlay to an explicit rect.
+ *
+ * The implementation — and the `inset` ban this file's header
+ * documents — now lives in core/box-model.js, shared with the recorded
+ * painter and the unified player. Three positioners had independently
+ * rediscovered the same trap; there is one now.
+ */
+// Imported AND re-exported: _positionSvgOverImage below calls it, and
+// a re-export alone would not put it in this module's own scope — the
+// repeat regression CLAUDE.md's refactor section documents.
+import { placeOverlayBox as _placeOverlay } from '../core/box-model.js';
+export { placeOverlayBox as _placeOverlay } from '../core/box-model.js';
 
 // B19' · which media element currently carries pixels. Video counts
 // only when it is displayed AND has decoded a frame (readyState ≥ 2 =

@@ -46,14 +46,17 @@ class RecapsMixin:
         return self._sightings_dir() / "recaps"
 
     @staticmethod
-    def _last_sunday_of(year: int, month: int) -> date:
-        """Last Sunday on or before the last day of <month>."""
-        # Find the last day of the month by stepping into the next month
-        # and back one day. No relativedelta dependency needed.
+    def _last_day_of(year: int, month: int) -> date:
+        """Last calendar day of <month>. Step into the next month and back
+        one day — no relativedelta dependency needed."""
         if month == 12:
-            d = date(year + 1, 1, 1) - timedelta(days=1)
-        else:
-            d = date(year, month + 1, 1) - timedelta(days=1)
+            return date(year + 1, 1, 1) - timedelta(days=1)
+        return date(year, month + 1, 1) - timedelta(days=1)
+
+    @classmethod
+    def _last_sunday_of(cls, year: int, month: int) -> date:
+        """Last Sunday on or before the last day of <month>."""
+        d = cls._last_day_of(year, month)
         while d.weekday() != 6:  # 0=Mon, 6=Sun
             d -= timedelta(days=1)
         return d
@@ -71,8 +74,14 @@ class RecapsMixin:
                     "period_label": f"Q{q} {year}",
                     "run_at": datetime(run_d.year, run_d.month, run_d.day, 16, 0),
                     "period_start": date(year, (q - 1) * 3 + 1, 1),
-                    "period_end": date(year, end_month, 28)
-                    + timedelta(days=4),  # last day of month, sloppy
+                    # Was `date(year, end_month, 28) + timedelta(days=4)`
+                    # with a trim pass below meant to walk that back to a
+                    # month end. It walked back to the end of the WRONG
+                    # month: 28 Mar + 4 d is 1 April, so Q1 ended on
+                    # 30 April and overlapped a month of Q2. The value
+                    # ships in the recap manifest and bounds the
+                    # mediathek feed window, so the overlap was visible.
+                    "period_end": self._last_day_of(year, end_month),
                 }
             )
         # Q4 + Jahres-Recap: 02. Januar des FOLGEJAHRES um 16:00.
@@ -97,15 +106,6 @@ class RecapsMixin:
                 "period_end": date(year, 12, 31),
             }
         )
-        # Trim period_end to actual last day of month for quarterly periods.
-        for r in out:
-            if r["period_id"].startswith("q") and not r["period_id"].startswith("q4"):
-                # Re-derive precisely: last day of period_end month
-                pe = r["period_end"]
-                if pe.month == 12:
-                    r["period_end"] = date(pe.year + 1, 1, 1) - timedelta(days=1)
-                else:
-                    r["period_end"] = date(pe.year, pe.month + 1, 1) - timedelta(days=1)
         return out
 
     def _register_recap_jobs(self):

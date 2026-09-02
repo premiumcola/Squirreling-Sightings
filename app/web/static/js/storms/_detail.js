@@ -95,7 +95,7 @@ function _shellHtml(ep, metric) {
         <div class="st-dchart">
           ${_metricPills(ep, metric)}
           <div class="ws-stats-chart-wrap st-chart-wrap" id="stormsDetailChart"></div>
-          <div class="st-axis-hint">Beginn, Höhepunkt und Ende sind im Verlauf markiert · Messpunkt alle 5 min</div>
+          <div class="st-axis-hint">Beginn, Höhepunkt und Ende sind im Verlauf markiert · Messpunkt alle 15 min</div>
           ${_statsHtml(ep)}
           <button type="button" class="btn btn-action st-cmp-from-detail" data-act="compare-with">Mit anderem Gewitter vergleichen</button>
         </div>

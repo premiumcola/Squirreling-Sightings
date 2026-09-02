@@ -335,15 +335,16 @@ export const DETECTION_CLOUD = {
 };
 
 /**
- * A full day of history, shaped the way the recorder actually writes it.
+ * A full day of history, shaped the way the recorder actually writes it:
+ * ONE row per Open-Meteo `minutely_15` slot, so 24 h is 96 samples.
  *
- * Deliberately NOT a smooth synthetic curve. `_lifecycle.py` polls every
- * `poll_interval` (300 s) and reads Open-Meteo's `minutely_15` "latest
- * slot", so every 15-minute measurement is appended to the ring buffer
- * THREE times — 24 h is 288 samples carrying 96 distinct values. That
- * triplication is the whole reason the curve reads as a staircase, and a
- * fixture that interpolated its own smooth series would photograph a
- * chart the operator never sees.
+ * It used to be 288 — `_lifecycle.py` polls every `poll_interval`
+ * (300 s) and reads the slot covering now, so each measurement was
+ * appended three times. That triplication is what drew a ~2.5 px stair
+ * tread under every curve on a phone; `_history.py::_record_sample` now
+ * skips a slot it has already recorded. Keep this fixture at one row per
+ * slot: at three it photographs a staircase the recorder no longer
+ * produces.
  *
  * Values come from _consts.py's HISTORY_FIELDS; snowfall stays flat at 0
  * on purpose, because stats.js auto-hides a field that never moved and
@@ -365,9 +366,9 @@ function _wxSlot(i) {
 }
 export const WEATHER_HISTORY = {
   hours: 24,
-  samples: Array.from({ length: _WX_SLOTS * 3 }, (_, n) => {
-    const d = new Date(Date.UTC(2026, 7, 29) + n * 5 * 60_000);
-    return { ts: d.toISOString().slice(0, 19), values: _wxSlot(Math.floor(n / 3)) };
+  samples: Array.from({ length: _WX_SLOTS }, (_, n) => {
+    const d = new Date(Date.UTC(2026, 7, 29) + n * 15 * 60_000);
+    return { ts: d.toISOString().slice(0, 19), values: _wxSlot(n) };
   }),
   bucket_size: 1,
   units: {

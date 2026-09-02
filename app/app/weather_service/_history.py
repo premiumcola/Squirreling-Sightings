@@ -37,6 +37,13 @@ from ._consts import (
 
 # The buffer's own span in hours, at the default 5-minute poll. Derived
 # so the API clamp and the buffer can never disagree again.
+#
+# Since _record_sample writes at most one row per 15-minute Open-Meteo
+# slot, the deque actually spans about three times this. The derivation
+# is left at the poll interval on purpose: it now UNDER-states the span,
+# which makes the `hours` clamp conservative — it can refuse a window
+# wider than the buffer is guaranteed to hold, never truncate one it
+# already has.
 _DEFAULT_POLL_S = 300
 _MAX_HISTORY_HOURS = max(1, HISTORY_MAXLEN * _DEFAULT_POLL_S // 3600)
 
@@ -104,9 +111,29 @@ class HistoryMixin:
 
     def _record_sample(self, latest: dict, sun: dict):
         """Append the latest poll's numeric values to the ring buffer.
+
         Called from _poll_once after a successful API response. Stores
         `None` for any field the API didn't return so the chart can show a
-        gap instead of pretending to have data."""
+        gap instead of pretending to have data.
+
+        Appends at most ONE row per Open-Meteo 15-minute slot. The poll
+        runs every ``poll_interval`` (300 s) but `_latest_slice` anchors on
+        the `minutely_15` slot covering now, so three consecutive polls
+        read the same slot and used to write the same measurement three
+        times. That is not extra resolution — it is one measurement in
+        triplicate, and drawing it as three points is what put a visible
+        staircase in the Wetterstatistik chart: 68 % of consecutive
+        samples were exact repeats, laying a ~2.5 px tread under every
+        curve on a phone. No interpolation can smooth that out, because
+        the steps are already at the pixel scale.
+
+        The skip is deliberately narrow: `current_values` still refreshes
+        on every poll, and `_sweep_episodes` still runs on every poll, so
+        the live panel and storm detection keep the full 5-minute cadence.
+        Only the history row is suppressed. A slot with no time (an empty
+        `minutely_15`, `_detection._latest_slice` returning {}) always
+        records, so a run of empty payloads can never wedge the buffer.
+        """
         values = {}
         for key in HISTORY_FIELDS:
             if key == "sun_altitude":
@@ -114,14 +141,20 @@ class HistoryMixin:
             else:
                 v = latest.get(key) if isinstance(latest, dict) else None
                 values[key] = float(v) if isinstance(v, (int, float)) else None
+        # Update the live status snapshot so /api/weather/status carries the
+        # last polled slice without a separate fetch. Unconditional: this is
+        # what the panel reads, and it is fresh every poll.
+        with self._lock:
+            self._status["current_values"] = dict(values)
+        slot = latest.get("time") if isinstance(latest, dict) else None
+        if slot and slot == self._last_slot_time:
+            self._sweep_episodes()
+            return
+        self._last_slot_time = slot or None
         ts_iso = datetime.now().isoformat(timespec="seconds")
         sample = {"ts": ts_iso, "values": values}
         with self._history_lock:
             self._history.append(sample)
-        # Update the live status snapshot so /api/weather/status carries the
-        # last polled slice without a separate fetch.
-        with self._lock:
-            self._status["current_values"] = dict(values)
         self._append_history(sample)
         self._sweep_episodes()
 

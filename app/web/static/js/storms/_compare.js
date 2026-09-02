@@ -144,7 +144,7 @@ function _shellHtml(episodes, metric) {
       ${_legendHtml(episodes)}
       ${_pillsHtml(episodes, metric)}
       <div class="ws-stats-chart-wrap st-chart-wrap" id="stormsCompareChart"></div>
-      <div class="st-axis-hint">Zeitachse relativ zum Höhepunkt · Messpunkt alle 5 min</div>
+      <div class="st-axis-hint">Zeitachse relativ zum Höhepunkt · Messpunkt alle 15 min</div>
       ${compareTableHtml(episodes, (id) => slotOf(id))}
     </div>`;
 }

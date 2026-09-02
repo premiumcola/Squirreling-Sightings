@@ -4,12 +4,17 @@
 // Catmull-Rom-to-Bezier converter. Returns an SVG path string for the
 // run of points, smoothed via cubic Beziers whose control points come
 // from the slope between each point's neighbours (uniform Catmull-Rom,
-// scaled by `tension` to dampen overshoots — 0.5 keeps the curve close
-// to the data without introducing wild bumps). Endpoints duplicate
+// scaled by `tension` to dampen overshoots). Endpoints duplicate
 // themselves as virtual "p0/p3" so the first and last segments don't
 // flatten or kink. The caller is responsible for ensuring points come
 // from a contiguous run (no nulls) — gaps must be split into separate
 // runs by the caller.
+//
+// `tension` is a fraction of a true uniform Catmull-Rom, whose control
+// points sit at (p2 - p0) / 6: 1.0 is the textbook curve, and the 0.3
+// below is 30 % of it. Raising it is NOT the answer to a curve that
+// looks stepped, and this is the second time that has been proposed —
+// see the note over _runsToPath.
 export function catmullRomPath(pts, tension) {
   if (!pts || pts.length < 2) return '';
   const k = tension / 6;
@@ -48,6 +53,26 @@ function _xMapper(opts, x0, w, N) {
 // Render contiguous runs of [x, y] points into one path string. Runs of
 // <6 points fall back to straight L-segments because a 3- or 4-point
 // spline tends to overshoot wildly on sparse data.
+//
+// "Kurven pixelig, bitte flüssig" has now been reported twice. The first
+// time it was non-uniform viewBox scaling (see index.js), which is fixed.
+// The second time it was the DATA, and the tension below is not the
+// remedy:
+//
+//   _lifecycle.py polled every 300 s but read Open-Meteo's `minutely_15`
+//   slot covering now, so each measurement was written three times. 68 %
+//   of consecutive samples were exact repeats — a 24 h window was 288
+//   points carrying 96 measurements, drawn into ~243 px on a phone. That
+//   is a ~2.5 px stair tread, and Catmull-Rom cannot round it: its
+//   control points are a fraction of the neighbour spacing, so at 0.85 px
+//   per sample they are sub-pixel at ANY tension. Measured, and
+//   photographed at tension 1.0 through scripts/uishot: the steps
+//   survive, and the only thing bought is 2.6 px of overshoot past the
+//   data's own band.
+//
+// The fix therefore went where the duplication was — _history.py's
+// _record_sample now writes one row per 15-minute slot. Leave this at
+// 0.3; it is smoothing genuine, distinct measurements now.
 function _runsToPath(runs) {
   let d = '';
   for (const run of runs) {

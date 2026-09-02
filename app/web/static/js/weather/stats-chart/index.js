@@ -256,7 +256,7 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
   const samples = data?.samples || [];
   if (samples.length < 2) {
     wrap.innerHTML =
-      '<div class="ws-stats-empty">Noch zu wenige Messpunkte — der Verlauf füllt sich alle 5 min.</div>';
+      '<div class="ws-stats-empty">Noch zu wenige Messpunkte — der Verlauf füllt sich alle 15 min.</div>';
     return;
   }
   // Unmeasurable wrapper (display:none, not laid out yet). Drawing into

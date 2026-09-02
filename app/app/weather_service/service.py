@@ -106,6 +106,12 @@ class WeatherService(
         # restart. Survives reload() — it's diagnostic data, not config.
         self._history_lock = threading.Lock()
         self._history: deque = deque(maxlen=HISTORY_MAXLEN)
+        # Open-Meteo `minutely_15` slot the last recorded row came from.
+        # The poll runs faster than that grid, so this is what stops the
+        # same measurement being written several times — see
+        # _history._record_sample. Not persisted: one duplicate row after
+        # a restart is harmless.
+        self._last_slot_time: str | None = None
         # Storm episode currently being recorded (not yet archivable —
         # see weather_episodes._segment). Refreshed by every sweep.
         self._episode_pending: dict | None = None

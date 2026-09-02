@@ -17,13 +17,31 @@ ist genau die Sorte, die man nachts nicht bemerkt.
 # Cron erbt kein Login-Profil: PATH muss stehen, sonst findet es `claude` nicht.
 PATH=/usr/local/bin:/usr/bin:/bin:/home/roman/.local/bin
 
-# Mo / Mi / Fr um 02:13 — nach dem nächtlichen Zurücksetzen des
+# Mo / Mi / Fr um 01:33 — nach dem nächtlichen Zurücksetzen des
 # Nutzungslimits, und auf einer krummen Minute, damit der Lauf nicht mit
-# allem anderen zur vollen Stunde zusammenfällt.
-13 2 * * 1,3,5 /home/roman/projects/Squirreling-Sightings/scripts/maintenance/run.sh
+# allem anderen zur halben Stunde zusammenfällt.
+33 1 * * 1,3,5 /home/roman/projects/Squirreling-Sightings/scripts/maintenance/run.sh
 ```
 
 Prüfen, ob der Eintrag steht: `crontab -l`.
+
+Der Lauf verbraucht das normale Claude-Nutzungsvolumen des Betreibers —
+`claude -p` ist dieselbe Anmeldung wie im Terminal, kein zweiter Dienst und
+kein API-Schlüssel. Eine laufende Sitzung oder ein tmux braucht es nicht:
+Cron startet den Aufruf, er arbeitet, er beendet sich.
+
+## Bericht
+
+Nach jedem Lauf geht eine kurze Nachricht per Telegram an den Betreiber —
+über den Kanal, den die App ohnehin benutzt, also ohne neue Zugangsdaten
+(`scripts/maintenance/report.py`). Auch ein FEHLGESCHLAGENER Lauf meldet
+sich: ein Wartungslauf, der still ausfällt, ist schlimmer als keiner, weil
+man ihn für erledigt hält.
+
+Die Nachricht trägt den Schluss des Protokolls, gestutzt auf Telegrams
+Längengrenze. Das vollständige Protokoll bleibt unter
+`storage/logs/maintenance/`. Ist kein Telegram eingerichtet, ist das kein
+Fehler — der Lauf vermerkt es im Protokoll und läuft weiter.
 
 ## Von Hand starten
 

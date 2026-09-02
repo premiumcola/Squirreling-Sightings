@@ -63,5 +63,26 @@ STATUS=$?
   echo "[maint] Ende $(date --iso-8601=seconds), exit=$STATUS"
 } >>"$LOG"
 
+# Bericht per Telegram. Nur der Schluss des Protokolls: dort steht die
+# Zusammenfassung, und die Nachricht muss unter Telegrams Längengrenze
+# bleiben. Das vollständige Protokoll liegt auf der Platte.
+#
+# Ein gescheiterter Lauf MUSS gemeldet werden, nicht nur ein gelungener —
+# ein Wartungslauf, der still ausfällt, ist schlimmer als keiner, weil man
+# ihn für erledigt hält. Deshalb wird auch bei exit != 0 gesendet.
+if [ "$STATUS" -eq 0 ]; then
+  TITLE="Wartungslauf $STAMP"
+else
+  TITLE="Wartungslauf $STAMP FEHLGESCHLAGEN (exit $STATUS)"
+fi
+
+tail -c 3000 "$LOG" | python3 "$REPO/scripts/maintenance/report.py" --title "$TITLE"
+REPORT_STATUS=$?
+case "$REPORT_STATUS" in
+  0) : ;;
+  2) echo "[maint] kein Telegram eingerichtet — Bericht nur im Protokoll" >>"$LOG" ;;
+  *) echo "[maint] Telegram-Versand fehlgeschlagen (exit $REPORT_STATUS)" >>"$LOG" ;;
+esac
+
 echo "[maint] Protokoll: $LOG"
 exit "$STATUS"

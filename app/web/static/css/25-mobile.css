@@ -705,8 +705,15 @@ body.sidebar-locked {
     gap: 4px 6px;
     margin-top: 8px;
   }
+  /* TWO per row, not four. Four fitted the seven series into two rows
+     and cost every one of them its name: at ~90 px a chip holds a dot, a
+     number and a unit, so "Blitz-Potential" ellipsised to "Bl…",
+     "Sichtweite" to "S…" and "Böen" to "W..". A legend whose labels are
+     gone is not a compact legend, it is a decorative one — "Legenden
+     lesbar gestalten!". Two per row gives ~180 px, which fits the
+     longest label this set has. */
   .ws-stats-chip {
-    flex: 0 0 calc(25% - 4.5px);
+    flex: 0 0 calc(50% - 3px);
     padding: 2px 4px;
     font-size: 11.5px;
   }

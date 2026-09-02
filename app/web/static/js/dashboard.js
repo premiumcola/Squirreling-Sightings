@@ -640,11 +640,32 @@ window._cvToggleFullscreen = _cvToggleFullscreen;
 // Prev/next nav + confirm/delete/download actions are nulled — live
 // mode has no recorded-item navigation surface.
 import { openMediaView } from './mediaview/index.js';
+import { vplayerEnabled } from './vplayer/_flag.js';
+import { openVideoPlayer } from './vplayer/index.js';
 
 export function _cvOpenSim(camId) {
   const cam = (state.cameras || []).find((c) => c.id === camId);
   if (!cam) return;
   try {
+    // Simulation is the first surface onto the unified player: one
+    // entry point, no prev/next, no delete or confirm semantics, no
+    // deep links, and it already owns the snapshot transport — so
+    // nothing new has to be plumbed to try it. With the flag off the
+    // call below runs exactly as it always has.
+    if (vplayerEnabled('sim')) {
+      openVideoPlayer({
+        mode: 'sim',
+        camId,
+        cameraName: cam.name || camId,
+        source: {
+          type: 'mjpeg',
+          url: `/api/camera/${encodeURIComponent(camId)}/stream_hd.mjpg`,
+          frameSize:
+            cam.main_w && cam.main_h ? { w: cam.main_w, h: cam.main_h } : { w: 1920, h: 1080 },
+        },
+      });
+      return;
+    }
     openMediaView({
       mode: 'live-detect',
       source: {

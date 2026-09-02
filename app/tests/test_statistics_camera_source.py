@@ -74,6 +74,50 @@ def test_a_camera_is_never_listed_twice():
     assert out == ["cam_a"]
 
 
+def test_the_payloads_name_is_used_when_the_camera_list_is_late():
+    """The reported defect: raw ids in the donut legend and the heatmap.
+
+    `state.cameras` is three serial requests away, the panel renders on an
+    IntersectionObserver long before they land, and it never re-renders.
+    /api/timeline now ships `camera_name`, which is the only name this
+    panel can rely on having.
+    """
+    out = _js(
+        _SETUP
+        + """
+        state.cameras = [];
+        const month = { tracks: [
+          { camera_id: 'reolink_cx810_gartendachterrasse_181',
+            camera_name: "Garten 'Dach Terrasse'", points: [{}] },
+        ] };
+        console.log(JSON.stringify(mod._camerasFromData(month).map((c) => c.name)));
+        """
+    )
+    assert out == ["Garten 'Dach Terrasse'"]
+
+
+def test_a_nameless_camera_is_shortened_not_printed_whole():
+    """The operator's fallback: a short form, with the icon carrying the rest.
+
+    A raw id is ~36 characters of one unbreakable token. Printed whole it
+    inflated the card's grid track to 462 px inside a 351 px section and
+    took the percentage column off the right of a 375 px screen.
+    """
+    out = _js(
+        """
+        const { camLabel } = await import(JS + '/core/icons.js');
+        console.log(JSON.stringify([
+          camLabel({ id: 'reolink_cx810_gartendachterrasse_181',
+                     name: 'reolink_cx810_gartendachterrasse_181' }),
+          camLabel({ id: 'reolink_rlc810a_garten_51', name: 'Garten Nord' }),
+          camLabel({ id: 'cam_a', name: 'cam_a' }),
+          camLabel({}),
+        ]));
+        """
+    )
+    assert out == ["Gartendachterrasse", "Garten Nord", "cam_a", ""]
+
+
 def test_a_missing_or_malformed_payload_does_not_throw():
     out = _js(
         _SETUP

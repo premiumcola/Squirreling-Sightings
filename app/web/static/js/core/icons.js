@@ -173,6 +173,30 @@ export function getCameraColor(nameOrCamera) {
   return _CAM_ICON_TONES[_resolveCamIconKey(nameOrCamera)] || '#a8a8a8';
 }
 
+// A camera with no operator-typed name falls back to its id, and a camera
+// id is `<manufacturer>_<model>_<name>_<octet>` (camera_id.py). Printed
+// whole that is ~36 characters of ONE unbreakable token: a flex row holding
+// it reports a min-content wide enough to inflate its grid track and push
+// the whole page sideways on a phone. The third segment is the name the
+// operator actually typed (sanitised to [a-z0-9]) and is the part worth
+// showing — the tinted icon beside it carries the rest of the identity.
+const _CAM_ID_RE = /^[a-z0-9]+_[a-z0-9]+_(.+)_[a-z0-9]+$/;
+
+/**
+ * The label to print for a camera record.
+ *
+ * @param {{id?: string, name?: string}} cam
+ * @returns {string} the operator's name, else a short form of the id
+ */
+export function camLabel(cam) {
+  const id = (cam && cam.id) || '';
+  const name = (cam && cam.name) || '';
+  if (name && name !== id) return name;
+  const m = _CAM_ID_RE.exec(id);
+  if (!m) return name || id;
+  return m[1].charAt(0).toUpperCase() + m[1].slice(1);
+}
+
 // ── P32 · Dashboard chrome SVGs ────────────────────────────────────────────
 // Moved out of dashboard.js so the inline-SVG count there stays grep-able
 // and so other modules can mount the same chrome icons without

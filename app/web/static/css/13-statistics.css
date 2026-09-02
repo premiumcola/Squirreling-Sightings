@@ -67,8 +67,19 @@
 .stat-card:last-child {
   margin-bottom: 0;
 }
+/* A grid item defaults to `min-width: auto`, which sizes its track to the
+   item's MIN-CONTENT. One long unbreakable token inside the card — a raw
+   camera id in the donut legend was the reported case — therefore inflated
+   the 1fr track to 462 px inside a 351 px section, pushing the page
+   sideways and taking the "Top Erkennungen" percentage column off-screen
+   with it. The labels are fixed at the source, but the page must not be
+   one long word away from scrolling sideways again: CLAUDE.md's rule is
+   that wide content scrolls inside its own container, never the body. Every
+   label in these cards already carries text-overflow: ellipsis, which only
+   engages once the box is allowed to shrink. */
 .stat-split .stat-card {
   margin-bottom: 0;
+  min-width: 0;
 }
 .stat-card-title {
   display: flex;

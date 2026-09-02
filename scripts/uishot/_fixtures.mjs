@@ -271,9 +271,13 @@ function timelinePayloads() {
       time: stamp(new Date(now - (2 + i * step) * H)),
       camera_id: cam,
     }));
+  // `camera_name` is what timeline_stats.py sends. The ghost camera's is
+  // its own id, exactly as the route falls back when the settings record
+  // carries no name — so this fixture exercises the short-form path, not
+  // just the happy one.
   const monthTracks = [
-    { camera_id: CAMERA.id, points: mk(CAMERA.id, 24, 29) },
-    { camera_id: GHOST_CAM, points: mk(GHOST_CAM, 19, 37) },
+    { camera_id: CAMERA.id, camera_name: CAMERA.name, points: mk(CAMERA.id, 24, 29) },
+    { camera_id: GHOST_CAM, camera_name: GHOST_CAM, points: mk(GHOST_CAM, 19, 37) },
   ];
   // Every event carries motion; the classifier labels ride on a subset,
   // so "Top Erkennungen" has three rows with distinct percentages.
@@ -286,10 +290,12 @@ function timelinePayloads() {
   const dayTracks = [
     {
       camera_id: CAMERA.id,
+      camera_name: CAMERA.name,
       points: spread.map((h) => ({ time: stamp(new Date(now - h * H)), camera_id: CAMERA.id })),
     },
     {
       camera_id: GHOST_CAM,
+      camera_name: GHOST_CAM,
       points: spread
         .filter((_, i) => i % 2 === 0)
         .map((h) => ({ time: stamp(new Date(now - (h + 1) * H)), camera_id: GHOST_CAM })),

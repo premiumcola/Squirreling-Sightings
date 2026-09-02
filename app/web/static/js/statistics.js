@@ -15,6 +15,7 @@ import {
   objIconSvg,
   getCameraIcon,
   getCameraColor,
+  camLabel,
 } from './core/icons.js';
 // Was a separate hex map that drifted from every other module's palette
 // (person was #ff6b6b here, #facc15 in timeline / icons). Now consumes
@@ -91,7 +92,11 @@ export function _camerasFromData(...payloads) {
       const id = t && t.camera_id;
       if (id && !seen.has(id)) {
         seen.add(id);
-        out.push({ id, name: id });
+        // `camera_name` comes from /api/timeline (routes/timeline_stats.py).
+        // It is what keeps a raw id off the page when this panel renders
+        // before `state.cameras` lands — which it routinely does, and it
+        // never re-renders afterwards.
+        out.push({ id, name: t.camera_name || id });
       }
     }
   }
@@ -202,7 +207,7 @@ function _renderStatistik(monthData, dayData) {
         const rowClick = STAT_MEDIA_DRILLDOWN
           ? `onclick="_statOpenMedia('${esc(x.c.id)}','')"`
           : '';
-        const nm = x.c.name || x.c.id;
+        const nm = camLabel(x.c);
         return `<div class="${rowCls}" ${rowClick}>
         <span class="stat-donut-sw" style="background:${color}"></span>
         <span class="stat-donut-icon" style="color:${color}">${getCameraIcon(nm)}</span>
@@ -279,8 +284,9 @@ function _renderStatistik(monthData, dayData) {
               })
               .join('');
             const _camColor = getCameraColor(c);
+            const _camNm = camLabel(c);
             return `<div class="stat-hm-row">
-            <div class="${hmCamCls}" title="${esc(c.name || c.id)}" ${hmCamClick}><span class="stat-hm-cam-icon" style="color:${_camColor}">${getCameraIcon(c.name || c.id)}</span>${esc(c.name || c.id)}</div>
+            <div class="${hmCamCls}" title="${esc(_camNm)}" ${hmCamClick}><span class="stat-hm-cam-icon" style="color:${_camColor}">${getCameraIcon(_camNm)}</span>${esc(_camNm)}</div>
             <div class="stat-hm-cells">${cells}</div>
           </div>`;
           })
@@ -311,13 +317,17 @@ function _renderStatistik(monthData, dayData) {
       probe.font = '600 12px Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif';
       let widest = 0;
       for (const c of cameras) {
-        // Same content the row renders: icon + nbsp + name. Icon is one
-        // emoji wide (~16px); pad 12px for the cell's right padding.
-        const txt = `${getCameraIcon(c.name || c.id)} ${c.name || c.id}`;
-        const w = probe.measureText(txt).width;
+        // Measure the NAME only. This used to interpolate
+        // getCameraIcon(...) into the measured string — but that returns
+        // SVG *markup*, several hundred characters of it, so every camera
+        // measured wider than the 180 px ceiling and the column was
+        // pinned to its maximum whatever the names were.
+        const w = probe.measureText(camLabel(c)).width;
         if (w > widest) widest = w;
       }
-      const labelW = Math.max(80, Math.min(180, Math.ceil(widest) + 24));
+      // + icon (16) + its margin-right (6) + the cell's padding-right (10),
+      // matching .stat-hm-cam / .stat-hm-cam .cam-ico in 13-statistics.css.
+      const labelW = Math.max(80, Math.min(180, Math.ceil(widest) + 32));
       grid.style.setProperty('--hm-label-w', labelW + 'px');
     }
   }

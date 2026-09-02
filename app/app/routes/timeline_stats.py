@@ -40,7 +40,15 @@ def api_timeline():
         period = request.args.get('period', 'week')
         hours = {'day': 24, 'week': 168, 'month': 720}.get(period, 168)
         start = (now - timedelta(hours=hours)).isoformat(timespec='seconds')
-    cameras = [cam_id] if cam_id else [c["id"] for c in settings.data.get("cameras", [])]
+    # Ship the display name next to the id. This response is the only
+    # camera source the Statistik panel is guaranteed to have: it hydrates
+    # on its own IntersectionObserver, which fires long before the three
+    # serial requests behind `state.cameras` land, and it never re-renders.
+    # Without a name here the panel printed the raw id — a ~36-character
+    # unbreakable token — into the donut legend, the timeline headings and
+    # the heatmap label column.
+    configured = {c["id"]: c.get("name") for c in settings.data.get("cameras", [])}
+    cameras = [cam_id] if cam_id else list(configured)
     tracks = []
     merged = []
     for idx, cid in enumerate(cameras):
@@ -81,6 +89,12 @@ def api_timeline():
                 }
             )
             merged.append({"camera_id": cid, **pts[-1]})
-        tracks.append({"camera_id": cid, "points": pts})
+        tracks.append(
+            {
+                "camera_id": cid,
+                "camera_name": configured.get(cid) or cid,
+                "points": pts,
+            }
+        )
     merged.sort(key=lambda x: x["time"])
     return jsonify({"period": period, "start": start, "tracks": tracks, "merged": merged})

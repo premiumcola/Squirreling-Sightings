@@ -12,7 +12,14 @@
 import { state, STAT_MEDIA_DRILLDOWN } from './core/state.js';
 import { byId, esc } from './core/dom.js';
 import { j } from './core/api.js';
-import { colors, OBJ_LABEL, OBJ_SVG, getCameraIcon, getCameraColor } from './core/icons.js';
+import {
+  colors,
+  OBJ_LABEL,
+  OBJ_SVG,
+  getCameraIcon,
+  getCameraColor,
+  camLabel,
+} from './core/icons.js';
 import { CLASS_COLORS } from './core/class-colors.js';
 
 // Re-export of the canonical class colours plus the timeline-only
@@ -121,7 +128,12 @@ export function renderTimeline() {
   let html = '';
   camLaneGroups.forEach(({ tr, lanes }, ti) => {
     const cam = (state.config?.cameras || []).find((c) => c.id === tr.camera_id) || {};
-    const camName = cam.name || tr.camera_id;
+    // `state.config` is filled by a different request than the one that
+    // produced these tracks, so on a cold paint the find() misses and the
+    // heading printed the raw camera id. The response carries the name
+    // itself (routes/timeline_stats.py); camLabel shortens an id when even
+    // that is absent.
+    const camName = camLabel({ id: tr.camera_id, name: cam.name || tr.camera_name });
     const camIcon = getCameraIcon(camName);
     // tx412 — per-camera identity colour. --cam-color sits on the
     // sidebox so the icon (fill="currentColor") + the camera-name

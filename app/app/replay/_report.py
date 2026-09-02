@@ -131,10 +131,19 @@ def build_comparison(
     this replay exists to produce.
     """
     before = original_side(event, sidecar_tracks)
-    after = {
-        "detections": replay.get("detections") or [],
-        "tracks": replay.get("tracks") or [],
-    }
+    # Both keys hold ONE entry per replayed track, and both sides of a
+    # diff have to be in the same shape. `original_side` puts the
+    # sidecar's tracks through `track_to_detection` (label + score +
+    # bbox), and `replay["detections"]` is that exact collapse of the
+    # replay's own tracks — so it is what the track axis compares
+    # against. `replay["tracks"]` is the COMPACT form built for the
+    # event JSON (`_run._COMPACT_TRACK_KEYS`): no `score`, no `bbox`.
+    # Handing that to the diff made `normalise_detection` read every
+    # replayed track as score 0.0 with no box, so the track axis of
+    # every replay of an indexed clip reported a full-score drop and
+    # `changed` could never come back False.
+    replayed = replay.get("detections") or []
+    after = {"detections": replayed, "tracks": replayed}
     det_diff = diff_detections(before["detections"], after["detections"])
     tracks_comparable = before["tracks"] is not None
     trk_diff = diff_detections(before["tracks"], after["tracks"]) if tracks_comparable else None

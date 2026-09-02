@@ -374,8 +374,23 @@ def test_the_header_has_no_role_badge():
     assert "netz-card-role" not in _CSS
 
 
+def test_the_header_names_the_panel_not_the_camera_again():
+    """„Links steht die Kachel mit Werkstatt, rechts das Panel mit
+    Werkstatt — doppelt." The camera's own tile sits directly beside this
+    header and already carries the name; the icon (camera colour, camera
+    glyph) is the assignment, so the words name the thing instead."""
+    hd = _header_src()
+    assert "<h4>${_PANEL_TITLE}</h4>" in hd
+    assert "const _PANEL_TITLE = 'Erkennungsnetz'" in _PANEL
+    assert "esc(cam.name)" not in hd.split("<h4>")[0].split("netz-card-ic")[0]
+    assert "<h4>${esc(cam.name)}</h4>" not in hd
+    # …but the name is still the icon's accessible name: a screen reader
+    # must be able to tell one panel's net from the next.
+    assert 'aria-label="${esc(cam.name)}"' in hd
+
+
 def test_the_header_is_icon_name_and_exactly_two_icon_buttons():
-    """Camera icon + name on the left, Verlauf and ghost on the right —
+    """Camera icon + title on the left, Verlauf and ghost on the right —
     nothing else, so the row is one 44 px button tall and every other
     px of the panel goes to the net."""
     hd = _header_src()

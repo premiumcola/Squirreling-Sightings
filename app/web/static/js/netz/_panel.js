@@ -50,17 +50,27 @@ function _slotFor(camId) {
 
 // ── panel shell ─────────────────────────────────────────────────────────
 
-// ONE compact row: camera icon + name on the left, two icon-only buttons
-// on the right — Verlauf and the ghost switch. The header and a separate
-// controls row under the chart used to cost the net two rows of its own
-// height beside a tile that never grows ("der Name … da kann eben oben
-// eine Ecke sein … sonst nehmt's raus und macht das Netz einfach viel
-// größer"). The history glyph once read as "Aktualisieren" and got a
-// text label for it; the tooltip now carries that explanation instead,
-// which is what keeps the row one button-height tall. No role badge
-// (redundant with the camera's own identity), no per-panel frozen-values
-// button (folded into the page-level "Was zusammen wirkt" box — see
+// ONE compact row: the camera's own icon, in the camera's own colour,
+// then what this panel IS — and on the right two icon-only buttons,
+// Verlauf and the ghost switch.
+//
+// The row used to repeat the camera name, which the Live-Feed tile
+// immediately to its left already carries in the same colour: "links
+// steht die Kachel mit Werkstatt, rechts das Panel mit Werkstatt —
+// doppelt". The icon alone is the assignment (colour + glyph are the
+// camera's, from core/icons.js), so the words can say the thing nobody
+// else on the row says.
+//
+// The header and a separate controls row under the chart used to cost
+// the net two rows of its own height beside a tile that never grows
+// ("da kann eben oben eine Ecke sein … sonst nehmt's raus und macht das
+// Netz einfach viel größer"). The history glyph once read as
+// "Aktualisieren" and got a text label for it; the tooltip now carries
+// that explanation instead, which is what keeps the row one
+// button-height tall. No role badge, no per-panel frozen-values button
+// (folded into the page-level "Was zusammen wirkt" box — see
 // frozenSectionHtml in _cards.js).
+const _PANEL_TITLE = 'Erkennungsnetz';
 const _HISTORY_ICON =
   `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ` +
   `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
@@ -72,11 +82,15 @@ const _BACK_TITLE = 'Zurück zum Netz';
 function _headerHtml(cam, camId) {
   const inVerlauf = viewFor(camId) === 'verlauf';
   const title = inVerlauf ? _BACK_TITLE : _VERLAUF_TITLE;
+  // The icon keeps the camera name as its accessible name — the panel is
+  // still "the Erkennungsnetz OF Werkstatt" to a screen reader, it just
+  // does not print the word twice on a 44 px row.
   return (
     `<header class="netz-card-hd">` +
-    `<span class="netz-card-ic" style="color:${getCameraColor(cam)}" aria-hidden="true">` +
+    `<span class="netz-card-ic" style="color:${getCameraColor(cam)}" ` +
+    `title="${esc(cam.name)}" aria-label="${esc(cam.name)}" role="img">` +
     `${getCameraIcon(cam.name || camId)}</span>` +
-    `<h4>${esc(cam.name)}</h4>` +
+    `<h4>${_PANEL_TITLE}</h4>` +
     `<button type="button" class="netz-view-btn" data-netz-toggle-verlauf ` +
     `aria-pressed="${inVerlauf ? 'true' : 'false'}" aria-label="${title}" title="${title}">` +
     `${_HISTORY_ICON}</button>` +

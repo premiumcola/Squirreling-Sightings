@@ -841,9 +841,12 @@
   align-items: center;
   gap: 6px;
 }
+/* In a panel header the icon is the ONLY thing saying which camera this
+   net belongs to — the header text names the panel now, not the camera —
+   so it gets a little more room than the inline pill version. */
 .netz-card-hd > .netz-card-ic svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
 
 /* Page-level "Was zusammen wirkt" + "Werte, die fest bleiben" info box —

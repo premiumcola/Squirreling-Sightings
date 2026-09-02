@@ -4,21 +4,22 @@
 // name, sighting count and an X close button — "so eine hässliche Box
 // mit X" per the operator). This panel is inline content that is simply
 // THERE once any species has dossier data, never a popup: no X, no
-// backdrop. Left column is the dossier itself — a hero photo that
-// bleeds past its own card's padding (the "überlappend, ein bisschen
-// größer" ask) with the species name + a play/chirp button burned
-// straight into the photo (see _hero-overlay.js), the latin name/tier,
-// the Wikipedia extract, and a compact list of Xeno-canto recordings
-// with mandatory attribution. Right column is the operator's own
-// camera clips of that species. There is no species switcher any
-// more (2026-09 redesign) — a grid tile IS the species picker now, a
-// second one inside the panel was redundant.
+// backdrop. Left column is the dossier itself — up to three reference
+// photos that bleed past the card's padding (the "überlappend, ein
+// bisschen größer" ask), with the species name, its latin name and a
+// play/chirp button burned straight into the first one (see
+// _hero-overlay.js), then the medal earned, the Wikipedia extract, and a
+// compact list of Xeno-canto recordings with mandatory attribution.
+// Right column is a gallery of the operator's own camera clips of that
+// species (_clips-gallery.js), as tall as this card. There is no species
+// switcher any more (2026-09 redesign) — a grid tile IS the species
+// picker now, a second one inside the panel was redundant.
 //
 // Data flow is the one the deleted mediathek/species-dossier.js already
 // worked out (git show 97b0dff): /api/bird-dossiers for the list, GET
-// /api/library?labels=<name>&kinds=motion for the clips grid via
-// library/_grid.js + library/_bind.js — no new media-fetch path, no new
-// card renderer.
+// /api/library?labels=<name>&kinds=motion for the clips — no new
+// media-fetch path, and no new card renderer either: _clips-gallery.js
+// re-hosts mediathek/_cards.js's own markup rather than drawing its own.
 //
 // Selection instead of open/close chrome: a bird achievement tile
 // (locked OR unlocked, see _achievements.js) calls
@@ -32,8 +33,8 @@
 // in the list).
 import { byId, esc } from '../core/dom.js';
 import { apiGet, j } from '../core/api.js';
-import { renderLibraryGrid } from '../library/_grid.js';
-import { bindLibraryGrid } from '../library/_bind.js';
+import { renderClipsGallery } from './_clips-gallery.js';
+import { clipsMessageHtml } from './_clips-helpers.js';
 import { _achTier } from './_ach-defs.js';
 import { heroHtml, audioListHtml, wireHeroAudio } from './_hero-overlay.js';
 
@@ -208,11 +209,12 @@ async function _loadClips(d) {
   if (title) title.textContent = `Eigene Aufnahmen — ${esc(d.common_name_de || d.latin)}`;
   if (!grid) return;
   if (!name) {
-    grid.innerHTML =
-      '<div class="sd-clips-empty">Kein deutscher Artname hinterlegt — keine Zuordnung zur Mediathek möglich.</div>';
+    grid.innerHTML = clipsMessageHtml(
+      'Kein deutscher Artname hinterlegt — keine Zuordnung zur Mediathek möglich.',
+    );
     return;
   }
-  grid.innerHTML = '<div class="sd-clips-empty">Lade Aufnahmen…</div>';
+  grid.innerHTML = clipsMessageHtml('Lade Aufnahmen…');
   let items = [];
   try {
     const r = await apiGet(
@@ -226,12 +228,7 @@ async function _loadClips(d) {
   // flight — a stale response painting over the now-current selection
   // would look like the wrong species' clips.
   if (_selectedLatin !== d.latin) return;
-  if (!items.length) {
-    grid.innerHTML = '<div class="sd-clips-empty">Noch keine eigenen Aufnahmen dieser Art.</div>';
-    return;
-  }
-  renderLibraryGrid(grid, items);
-  bindLibraryGrid(grid, items);
+  renderClipsGallery(grid, items);
 }
 
 function _renderPanel(d) {

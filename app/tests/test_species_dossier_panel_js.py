@@ -20,9 +20,17 @@ this situation: source-level regression pins via `_slice_function`.
 
 Covers:
   * no modal/backdrop/X-close chrome anywhere in the redesigned panel
-    (the operator's core complaint: "hässliche Box mit X").
-  * a locked (sighting_count 0) species renders a locked hint, never a
-    tier badge or a fabricated "× gesehen" count.
+    (the operator's core complaint: "hässliche Box mit X"); a second tap
+    on the open species' own tile is the dismiss affordance instead.
+  * a locked (sighting_count 0) species renders NO badge row — never a
+    tier badge, a fabricated "× gesehen" count, or a lock hint repeating
+    what the greyed-out tile above already says.
+  * the identity block lives burned into the hero photo — German name
+    plus latin name — and the "ART-DOSSIER" eyebrow, the standalone
+    latin line and the not-yet-sighted hint are all gone from below it.
+  * the own-recordings column is a gallery: one clip at a time, arrows
+    with 44 px targets, a position counter, and playback IN PAGE (the
+    card's inline lightbox onclick is stripped first).
   * the hero photo's overlap is the safe "negative margin cancels the
     card's own padding" technique — net column width is unchanged, so
     it can never cause horizontal scroll at any viewport (an actual
@@ -61,6 +69,7 @@ _TEMPLATES_ROOT = Path(__file__).resolve().parents[2] / "app" / "web" / "templat
 _DOSSIER_PANEL_JS = _JS_ROOT / "sichtungen" / "_dossier-panel.js"
 _ACHIEVEMENTS_JS = _JS_ROOT / "sichtungen" / "_achievements.js"
 _HERO_OVERLAY_JS = _JS_ROOT / "sichtungen" / "_hero-overlay.js"
+_CLIPS_GALLERY_JS = _JS_ROOT / "sichtungen" / "_clips-gallery.js"
 _SICHTUNGEN_HTML = _TEMPLATES_ROOT / "partials" / "sichtungen.html"
 _BIRDS_CSS = _CSS_ROOT / "29-birds.css"
 
@@ -95,6 +104,17 @@ def _slice_function(path: Path, name: str) -> str:
             if depth == 0:
                 return src[start : i + 1]
     raise AssertionError(f"unbalanced braces inside {name!r} in {path.name}")
+
+
+def _rule_block(css: str, selector: str) -> str:
+    """Body of the FIRST top-level ``selector { ... }`` rule. Matches the
+    selector only when it stands alone (or leads a comma list), so
+    ``.sd-grid`` never accidentally returns ``.sd-grid .sd-card``'s body."""
+    m = re.search(rf"(?m)^{re.escape(selector)}\s*[,{{]", css)
+    assert m, f"no rule for {selector!r} in the stylesheet"
+    start = css.index("{", m.start())
+    end = css.index("}", start)
+    return css[start : end + 1]
 
 
 # ── no modal / X chrome ──────────────────────────────────────────────────
@@ -267,6 +287,57 @@ def test_dossier_repaints_the_grid_without_importing_achievements():
     ), "index.js must bridge selectSpeciesDossierByName with renderAchievements as its repaint callback"
 
 
+def test_own_clips_play_in_page_and_never_open_the_lightbox():
+    """The operator's ask: "direkt abspielbar auf der Seite direkt, ohne
+    dass sich irgend 'n Extrafenster öffnet". mediathek/_cards.js embeds
+    `window._openMediaItem(...)` as an inline onclick on every card, so
+    the gallery MUST strip that attribute — otherwise the very tap that
+    should start in-page playback opens the modal over it."""
+    src = _read(_CLIPS_GALLERY_JS)
+    assert "removeAttribute('onclick')" in src, (
+        "the gallery must remove the card's inline lightbox onclick before "
+        "wiring its own in-place play handler."
+    )
+    assert "openLightbox" not in src
+    assert "createElement('video')" in src
+    # iOS refuses to play inline without this and takes the clip fullscreen.
+    assert "playsInline = true" in src
+
+
+def test_the_gallery_reuses_the_mediathek_card_markup():
+    """No second card renderer: species chip, date, duration, size and the
+    confirmed check must stay identical to every other grid."""
+    src = _read(_CLIPS_GALLERY_JS)
+    assert "mediaCardHTML" in src
+    assert "mmc-tl-badge" not in src, "badge markup must come from _cards.js, not be re-drawn here"
+
+
+def test_the_gallery_pages_with_real_buttons_and_shows_its_position():
+    src = _read(_CLIPS_GALLERY_JS)
+    assert "data-gal-nav" in src
+    assert "sd-gal-count" in src
+    for label in ("Vorherige Aufnahme", "Nächste Aufnahme"):
+        assert label in src, f"the {label!r} arrow needs an accessible label"
+    css = _read(_BIRDS_CSS)
+    nav = _rule_block(css, ".sd-gal-nav")
+    for dim in ("width: 44px", "height: 44px"):
+        assert dim in nav, f".sd-gal-nav must keep the 44px touch target ({dim})"
+
+
+def test_the_gallery_height_is_tied_to_the_dossier_card():
+    """ "Video ... in der Höhe wie das Vogeldossier ist" — the coupling is
+    the shared grid row: `align-items: stretch` makes both columns as tall
+    as the taller one, and the clip host claims that height with flex."""
+    css = _read(_BIRDS_CSS)
+    assert "align-items: stretch" in _rule_block(css, ".sd-grid")
+    right = _rule_block(css, ".sd-right")
+    assert "flex-direction: column" in right
+    host = _rule_block(css, ".sd-clips-grid")
+    assert (
+        "flex: 1 1 auto" in host
+    ), ".sd-clips-grid must grow into the row height the dossier card sets"
+
+
 def test_no_scroll_jump_anywhere_in_the_dossier_panel():
     """The operator's complaint: clicking any tile used to jump the page
     down via scrollIntoView. The dossier must render in place, wherever
@@ -304,9 +375,9 @@ def test_legend_removed_from_the_template():
         "from sichtungen.html's rendered markup, not merely hidden — it duplicated the "
         "icon-based legend."
     )
-    assert 'id="achievementsLegendSlot"' in html, (
-        "sichtungen.html must carry the header slot the icon-based legend renders into."
-    )
+    assert (
+        'id="achievementsLegendSlot"' in html
+    ), "sichtungen.html must carry the header slot the icon-based legend renders into."
     # Only ONE legend-shaped div in the header markup — the old below-grid
     # legend div must not have been left behind alongside the new slot.
     assert html.count('class="ach-legend"') == 1
@@ -472,9 +543,9 @@ def test_hero_play_button_is_wired_to_the_existing_audio_elements():
     recordings list renders (CC-BY attribution stays attached to a real
     player), not a separate playback path."""
     hero_src = _read(_HERO_OVERLAY_JS)
-    assert "sd-audio-el" in hero_src, (
-        "wireHeroAudio must target the .sd-audio-el elements audioListHtml() renders."
-    )
+    assert (
+        "sd-audio-el" in hero_src
+    ), "wireHeroAudio must target the .sd-audio-el elements audioListHtml() renders."
     wire_body = _slice_function(_HERO_OVERLAY_JS, "wireHeroAudio")
     assert "sdHeroPlay" in wire_body
     assert ".play()" in wire_body and ".pause" in wire_body

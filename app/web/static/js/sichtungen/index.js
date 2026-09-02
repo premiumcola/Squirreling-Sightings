@@ -37,8 +37,7 @@ window.loadMoreAchDrill = loadMoreAchDrill;
 // highlight follows the panel opening AND closing (tapping the open
 // species again closes it), without _dossier-panel.js importing
 // _achievements.js and closing an import cycle.
-window.selectSpeciesDossierByName = (name) =>
-  _selectSpeciesDossierImpl(name, renderAchievements);
+window.selectSpeciesDossierByName = (name) => _selectSpeciesDossierImpl(name, renderAchievements);
 // Legacy name kept so any lingering inline callers don't break.
 window.openAchievementDrilldown = (id, name) => window.toggleAchDrilldown(id, name);
 

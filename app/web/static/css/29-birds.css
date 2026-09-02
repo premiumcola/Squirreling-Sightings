@@ -47,11 +47,17 @@
 .sd-panel {
   margin-top: 22px;
 }
+/* `stretch` (was `start`) is what ties the clip gallery's height to the
+   dossier card's: both columns become as tall as the taller one, and
+   .sd-right below passes that height down to the clip stage. The card
+   drives it in practice — photos + text are taller than one clip — so
+   the gallery ends up exactly as tall as the dossier beside it instead
+   of leaving the lower two thirds of the column empty. */
 .sd-grid {
   display: grid;
   grid-template-columns: minmax(300px, 400px) 1fr;
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
 }
 @media (max-width: 860px) {
   .sd-grid {
@@ -381,17 +387,104 @@
   font-weight: 600;
   color: var(--muted);
 }
-/* library/_grid.js paints .media-card items into this host with no grid
-   of its own (03-dashboard.css's own .media-grid is a DIFFERENT element
-   this host never gets the class of) — without a grid here every card
-   just stacked as a full-width block, so a single clip filled the whole
-   column like a giant video. A wider min-width than the compact
-   Mediathek grid (192px): this column is a smaller, secondary area, so
-   its cards read better a bit larger, never edge-to-edge. */
+/* Right column as a flex column so the gallery below can claim every
+   pixel the dossier card's height gives this row (see .sd-grid's
+   align-items: stretch). */
+.sd-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* The gallery host: ONE clip filling the column, its arrows and its
+   position counter positioned against it. `min-height: 0` is what lets
+   a flex child actually shrink to the row height instead of being
+   floored by its content. */
 .sd-clips-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 240px;
+  display: flex;
+}
+.sd-gal-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+/* mediathek/_cards.js's card is built for a grid cell with a fixed
+   16/10 ratio. Here it is the whole column, so the ratio gives way to
+   the row's height — the poster and the <video> both `contain` inside
+   it, never cropped. */
+.sd-gal-stage .media-card {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  border-radius: 14px;
+}
+.sd-gal-stage .mmc-img-wrap {
+  flex: 1 1 auto;
+  aspect-ratio: auto;
+  min-height: 0;
+}
+.sd-gal-stage .mmc-img-wrap img {
+  object-fit: contain;
+}
+.sd-gal-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #000;
+}
+/* Paging arrows — 44 px targets (iOS checklist), vertically centred
+   over the clip, and simply absent at the ends rather than dead. */
+.sd-gal-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(3px);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease;
+}
+.sd-gal-nav--prev {
+  left: 8px;
+}
+.sd-gal-nav--next {
+  right: 8px;
+}
+@media (hover: hover) {
+  .sd-gal-nav:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.78);
+  }
+}
+.sd-gal-nav:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+.sd-gal-count {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 .sd-clips-empty {
   padding: 16px;
@@ -400,6 +493,18 @@
   color: var(--muted);
   font-size: 13px;
   text-align: center;
+}
+
+/* Single column: nothing to match heights with any more, so the clip
+   goes back to its natural 16/9 instead of stretching to a row height
+   that no longer exists. */
+@media (max-width: 860px) {
+  .sd-clips-grid {
+    min-height: 0;
+  }
+  .sd-gal-stage .mmc-img-wrap {
+    aspect-ratio: 16/9;
+  }
 }
 
 @media (max-width: 480px) {

@@ -190,7 +190,14 @@ def test_a_tap_in_mark_mode_resolves_the_nearest_sample_and_calls_on_mark():
     assert out["call"]["idx"] == 10
 
 
-def test_mark_mode_never_starts_a_drag_even_with_on_range_select_defined():
+def test_mark_mode_never_falls_through_to_a_zoom():
+    """Marking and drag-to-zoom stay mutually exclusive.
+
+    A drag inside mark mode is now a RANGE — the operator sweeps along a
+    curve to mark a stretch of it — where it used to be discarded as an
+    accidental pan. What must never happen either way is the drag
+    reaching the brush: marking may not zoom, and no brush chrome may
+    paint while it runs."""
     out = _js(
         _SETUP
         + _PAD_CH
@@ -213,7 +220,7 @@ def test_mark_mode_never_starts_a_drag_even_with_on_range_select_defined():
         """
     )
     assert out["rangeSelected"] is False, "marking must never fall through to a zoom"
-    assert out["marked"] is False, "a drag past the tap threshold places no marker either"
+    assert out["marked"] is True, "a drag along a curve marks the stretch it swept"
     assert out["brushTouched"] is False, "no brush chrome paints while marking"
 
 

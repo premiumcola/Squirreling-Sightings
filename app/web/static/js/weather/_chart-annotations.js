@@ -80,13 +80,22 @@ export function chartAnnotations() {
 // The exact shape the backend validates (routes/weather_manual_events.py
 // ::_validate_annotations) — curve/ts/phase, nothing else per record.
 export function annotationsPayload() {
-  return _state.markers.map((m) => ({ curve: m.curve, ts: m.ts, phase: m.phase }));
+  return _state.markers.map((m) => {
+    const out = { curve: m.curve, ts: m.ts, phase: m.phase };
+    // `ts_end` only when the marker really spans something. A point
+    // marker serialises to the exact three keys it always had, so a
+    // record written today and one written before ranges existed are
+    // the same data — the backend validator makes the same promise.
+    if (m.tsEnd && m.tsEnd !== m.ts) out.ts_end = m.tsEnd;
+    return out;
+  });
 }
 
-function _addMarker(curve, ts, phase) {
+function _addMarker(curve, ts, phase, tsEnd) {
+  const next = { curve, ts, phase, tsEnd: tsEnd || null };
   const i = _state.markers.findIndex((m) => m.curve === curve && m.ts === ts);
-  if (i >= 0) _state.markers[i] = { curve, ts, phase }; // re-marking replaces the phase
-  else _state.markers.push({ curve, ts, phase });
+  if (i >= 0) _state.markers[i] = next; // re-marking replaces the phase
+  else _state.markers.push(next);
 }
 
 export function removeAnnotation(curve, ts) {
@@ -161,7 +170,7 @@ function _findMarkerNear(geo, x, y) {
 // removes an existing marker under the tap (misclick recovery — "click
 // it again... to remove") or resolves the nearest curve at the snapped
 // sample and opens the phase picker to add a new one.
-export function handleChartTap(geo, idx, x, y, onChange) {
+export function handleChartTap(geo, idx, x, y, onChange, idxEnd) {
   const existing = _findMarkerNear(geo, x, y);
   if (existing) {
     removeAnnotation(existing.curve, existing.ts);
@@ -171,8 +180,12 @@ export function handleChartTap(geo, idx, x, y, onChange) {
   const curve = nearestCurveAt(geo.samples, geo.fields, idx, y, geo.pad, geo.ch);
   const sample = geo.samples[idx];
   if (!curve || !sample) return;
+  // A drag along the curve carries a second index — the far end of the
+  // stretch the operator swept. Snapped to a real sample like the first,
+  // so both ends of a band sit on data the chart actually drew.
+  const endSample = idxEnd == null ? null : geo.samples[idxEnd];
   _openPhasePicker(geo.wrap, x, y, (phase) => {
-    _addMarker(curve, sample.ts, phase);
+    _addMarker(curve, sample.ts, phase, endSample ? endSample.ts : null);
     onChange?.();
   });
 }
@@ -239,11 +252,42 @@ function _markerGlyphSvg(x, y, colour, glyph, interactive) {
 // here, so this module never needs a weather/stats.js import — that
 // would cycle back through stats-chart/index.js, which imports THIS
 // module.
+// A range's band: the stretch of chart the marker covers, hatched in the
+// curve's OWN colour so it reads as belonging to that line and not to
+// the chart at large ("dann werden das so wie schraffierte Bereiche in
+// der Farbe der Kurve"). A pattern per marker rather than one shared
+// definition — there are a handful of markers, and each needs its own
+// colour anyway.
+function _bandSvg(m, geo, colour, i) {
+  const endTs = m.tsEnd || m.ts_end;
+  if (!endTs || endTs === m.ts) return '';
+  const x0 = _tsToX(m.ts, geo);
+  const x1 = _tsToX(endTs, geo);
+  const left = Math.min(x0, x1);
+  const width = Math.abs(x1 - x0);
+  if (!Number.isFinite(left) || !Number.isFinite(width) || width <= 0) return '';
+  const id = `wsAnnotHatch${i}`;
+  return (
+    `<defs><pattern id="${id}" width="7" height="7" patternUnits="userSpaceOnUse" ` +
+    `patternTransform="rotate(45)">` +
+    `<line x1="0" y1="0" x2="0" y2="7" stroke="${colour}" stroke-width="2.4" ` +
+    `stroke-opacity=".55"/></pattern></defs>` +
+    `<rect class="ws-chart-annot-band" x="${left.toFixed(1)}" y="${geo.pad.t}" ` +
+    `width="${width.toFixed(1)}" height="${geo.ch}" fill="url(#${id})"/>` +
+    `<rect class="ws-chart-annot-band-tint" x="${left.toFixed(1)}" y="${geo.pad.t}" ` +
+    `width="${width.toFixed(1)}" height="${geo.ch}" fill="${colour}" fill-opacity=".08"/>`
+  );
+}
+
 export function buildAnnotationMarkersSvg(annotations, geo, opts = {}) {
   if (!annotations || !annotations.length) return '';
   const interactive = !!opts.interactive;
   const palette = opts.palette || {};
   let svg = '<g class="ws-chart-annot-layer">';
+  // Bands first, so no glyph is buried under a later marker's hatching.
+  annotations.forEach((m, i) => {
+    svg += _bandSvg(m, geo, palette[m.curve] || '#94a3b8', i);
+  });
   for (const m of annotations) {
     const pos = annotationScreenPos(m, geo);
     if (!pos) continue;

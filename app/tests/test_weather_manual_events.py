@@ -429,6 +429,56 @@ def test_create_accepts_an_annotation_ts_exactly_on_the_range_boundary(client):
     assert r.status_code == 201
 
 
+def test_create_accepts_a_range_annotation(client):
+    """A marker may span a stretch of the curve, not just one sample —
+    the operator drags along it instead of tapping. The second timestamp
+    is what turns a point into a band."""
+    annotations = [
+        _annotation(ts="2026-08-29T15:00:00", ts_end="2026-08-29T16:30:00"),
+    ]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 201
+    assert r.get_json()["item"]["annotations"] == annotations
+
+
+def test_a_point_annotation_gains_no_end_key(client):
+    """Backward compatibility runs in both directions: a point marker
+    must still serialise to exactly the three keys it always had, or
+    every record written before ranges existed would read as different
+    data than an identical one written today."""
+    r = client.post("/api/weather/manual-events", json=_body(annotations=[_annotation()]))
+    assert r.status_code == 201
+    stored = r.get_json()["item"]["annotations"][0]
+    assert set(stored) == {"curve", "ts", "phase"}
+
+
+def test_create_rejects_a_range_that_ends_before_it_starts(client):
+    annotations = [_annotation(ts="2026-08-29T16:00:00", ts_end="2026-08-29T15:00:00")]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 400
+
+
+def test_create_rejects_a_range_that_leaves_the_saved_window(client):
+    annotations = [_annotation(ts="2026-08-29T17:00:00", ts_end="2026-08-29T19:00:00")]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 400
+
+
+def test_create_rejects_a_non_iso_range_end(client):
+    annotations = [_annotation(ts_end="gestern")]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 400
+
+
+def test_a_zero_length_range_is_accepted(client):
+    """Dragging and releasing on the same sample is a legitimate way to
+    end up with a band of no width; rejecting it would make a gesture
+    fail for being too precise."""
+    annotations = [_annotation(ts="2026-08-29T16:00:00", ts_end="2026-08-29T16:00:00")]
+    r = client.post("/api/weather/manual-events", json=_body(annotations=annotations))
+    assert r.status_code == 201
+
+
 def test_create_rejects_annotations_that_are_not_a_list(client):
     r = client.post("/api/weather/manual-events", json=_body(annotations="oops"))
     assert r.status_code == 400

@@ -280,3 +280,64 @@ test('buildAnnotationMarkersSvg returns an empty string for an empty list', () =
 test('the phase vocabulary is exactly aufbau/kern/abbau, in that order', () => {
   assert.deepEqual(ANNOTATION_PHASES, ['aufbau', 'kern', 'abbau']);
 });
+
+// ── ranges ──────────────────────────────────────────────────────────────
+// A drag along a curve marks a STRETCH of it, not one sample. The gesture
+// used to be discarded outright as an accidental pan, which is why the
+// thing the operator reached for did nothing at all.
+
+test('a drag marks a range and the payload carries its end', () => {
+  const samples = twoSamples();
+  const wrap = fakeWrapWithPicker();
+  const geo = geoFor(samples, ['precipitation'], { wrap });
+  handleChartTap(geo, 0, 80, 95, () => {}, 1);
+  wrap.querySelector('.ws-chart-annot-picker')._fire('click', { target: fakePickButton('kern') });
+  const [only] = annotationsPayload();
+  assert.equal(only.ts, samples[0].ts);
+  assert.equal(only.ts_end, samples[1].ts);
+});
+
+test('a tap still produces exactly the three keys it always had', () => {
+  const samples = twoSamples();
+  const wrap = fakeWrapWithPicker();
+  const geo = geoFor(samples, ['precipitation'], { wrap });
+  handleChartTap(geo, 0, 80, 95, () => {});
+  wrap.querySelector('.ws-chart-annot-picker')._fire('click', { target: fakePickButton('kern') });
+  const [only] = annotationsPayload();
+  assert.deepEqual(Object.keys(only).sort(), ['curve', 'phase', 'ts']);
+});
+
+test('a range renders a hatched band in its own curve colour', () => {
+  const samples = twoSamples();
+  const geo = geoFor(samples, ['precipitation']);
+  const svg = buildAnnotationMarkersSvg(
+    [{ curve: 'precipitation', ts: samples[0].ts, tsEnd: samples[1].ts, phase: 'kern' }],
+    geo,
+    { palette: { precipitation: '#38bdf8' } },
+  );
+  assert.match(svg, /<pattern/, 'a band is hatched, not a flat block');
+  assert.match(svg, /stroke="#38bdf8"/, 'the hatching takes the curve colour');
+  assert.match(svg, /class="ws-chart-annot-band"/);
+});
+
+test('a zero-width range draws no band, only its glyph', () => {
+  const samples = twoSamples();
+  const geo = geoFor(samples, ['precipitation']);
+  const svg = buildAnnotationMarkersSvg(
+    [{ curve: 'precipitation', ts: samples[0].ts, tsEnd: samples[0].ts, phase: 'kern' }],
+    geo,
+    { palette: { precipitation: '#38bdf8' } },
+  );
+  assert.doesNotMatch(svg, /<pattern/);
+});
+
+test('a stored record using the wire key ts_end still renders its band', () => {
+  const samples = twoSamples();
+  const geo = geoFor(samples, ['precipitation']);
+  const svg = buildAnnotationMarkersSvg(
+    [{ curve: 'precipitation', ts: samples[0].ts, ts_end: samples[1].ts, phase: 'kern' }],
+    geo,
+    { palette: { precipitation: '#38bdf8' } },
+  );
+  assert.match(svg, /class="ws-chart-annot-band"/);
+});

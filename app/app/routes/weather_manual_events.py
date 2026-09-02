@@ -108,7 +108,23 @@ def _validate_annotations(body: dict, range_start: str, range_end: str):
         phase = entry.get("phase")
         if phase not in MANUAL_EVENT_PHASES:
             return None, f"annotation phase must be one of {list(MANUAL_EVENT_PHASES)}"
-        clean.append({"curve": curve, "ts": ts, "phase": phase})
+        entry_out = {"curve": curve, "ts": ts, "phase": phase}
+        # A RANGE carries a second timestamp: the operator dragged along
+        # the curve instead of tapping one sample ("die Kurven so einzeln
+        # anklicken und dann die Bereiche markieren"). Optional, so a
+        # point marker — and every record written before ranges existed —
+        # keeps exactly the three keys it always had.
+        raw_end = entry.get("ts_end")
+        if raw_end is not None:
+            ts_end = _parse_iso(raw_end)
+            if not ts_end:
+                return None, "annotation ts_end must be an ISO timestamp"
+            if not (lo <= datetime.fromisoformat(ts_end) <= hi):
+                return None, "annotation ts_end must fall within the saved range"
+            if datetime.fromisoformat(ts_end) < datetime.fromisoformat(ts):
+                return None, "annotation ts_end must not precede ts"
+            entry_out["ts_end"] = ts_end
+        clean.append(entry_out)
     return clean, None
 
 

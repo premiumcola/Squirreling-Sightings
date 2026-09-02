@@ -315,21 +315,30 @@ function _onDragMove(c, ev) {
   _paintDragTooltip(c, x, ev);
 }
 
-// markMode's own tap-vs-drag resolution — same BRUSH_MIN_PX threshold
-// the brush below uses, but a tap here means "place or remove a
-// marker", never a range. A drag past the threshold reads as an
-// accidental pan and produces no marker at all — marking never zooms.
+// markMode's own tap-vs-drag resolution, sharing the brush's own
+// BRUSH_MIN_PX threshold. A TAP marks one sample. A DRAG along the curve
+// marks the stretch between where it started and where it ended — "die
+// Kurven so einzeln anklicken und dann die Bereiche markieren". A drag
+// used to be discarded outright as an accidental pan, which is why the
+// gesture the operator reached for did nothing at all. Marking still
+// never zooms: the brush is not armed in this mode.
 function _onMarkUp(c, ev) {
   const x = _localXOf(c, ev);
   const startX = c.markStart;
   c.markStart = null;
   _hide(c); // the value tooltip from _onDown's _onMove must not fight the phase picker
   if (x === null || startX === null) return;
-  if (Math.abs(x - startX) >= BRUSH_MIN_PX) return;
   if (x < c.pad.l || x > c.pad.l + c.cw) return;
   const y = _localYOf(c, ev);
   if (y === null || typeof c.opts.onMark !== 'function') return;
-  const idx = _nearestIdx(c.samples, _xToTs(c, x));
+  const dragged = Math.abs(x - startX) >= BRUSH_MIN_PX;
+  // Snap both ends to real samples, the same contract a point marker
+  // has always had, and order them so a right-to-left drag is the same
+  // range as a left-to-right one.
+  const idxA = _nearestIdx(c.samples, _xToTs(c, dragged ? startX : x));
+  const idxB = dragged ? _nearestIdx(c.samples, _xToTs(c, x)) : null;
+  const lo = idxB == null ? idxA : Math.min(idxA, idxB);
+  const hi = idxB == null ? null : Math.max(idxA, idxB);
   const geo = {
     samples: c.samples,
     fields: c.fields,
@@ -341,7 +350,9 @@ function _onMarkUp(c, ev) {
     wrap: c.wrap,
     svg: c.svg,
   };
-  c.opts.onMark(geo, idx, x, y);
+  // The picker opens where the finger LEFT the curve, which for a drag
+  // is the end the operator is still looking at.
+  c.opts.onMark(geo, lo, x, y, hi);
 }
 
 function _onUp(c, ev) {

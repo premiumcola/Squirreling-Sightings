@@ -275,8 +275,8 @@ export function renderStatsChartInto(wrap, data, opts = {}) {
 // change is visible immediately. Kept as its own function (rather than
 // an inline arrow in the opts literal below) only so it has a name in a
 // stack trace.
-function _onWeatherChartMark(geo, idx, x, y) {
-  handleChartTap(geo, idx, x, y, renderWeatherStatsChart);
+function _onWeatherChartMark(geo, idx, x, y, idxEnd) {
+  handleChartTap(geo, idx, x, y, renderWeatherStatsChart, idxEnd);
 }
 
 // A custom drag-zoom (weather/_zoom.js) is a client-side slice of the

@@ -77,7 +77,13 @@ export function syncStageBar(card, onRepaint) {
 // key row under the net (netz/_key.js) — "ich weiß immer noch nicht, was
 // das bedeutet", and a `title` is a thing no phone ever shows. Both read
 // the same source, so the button and the sentence cannot disagree.
-const _GHOST_TITLE = 'Ghost-Spuren ausblenden – ';
+// The definition lives HERE now, on the button, and only here. The key
+// row under the net used to repeat it in full; once it had been read the
+// row was just text taking height away from the chart ("Nehme die
+// Erklärung raus, ich weiß es jetzt"), so the row kept the state and the
+// button kept the meaning.
+const _GHOST_TITLE =
+  'Ghost-Spuren ausblenden – Spur ohne Objekt, l\u00e4uft nur noch in der Gnadenfrist weiter. ';
 
 export function ghostToggleHtml(camId) {
   const on = effectiveTuning(camId).track_filter_ghosts !== false;

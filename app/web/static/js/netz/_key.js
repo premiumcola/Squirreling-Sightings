@@ -55,33 +55,40 @@ export function ghostIconSvg(px) {
   );
 }
 
-/** What a ghost track IS, in words, plus what the switch is currently
- *  doing with them. „Ich weiß immer noch nicht, was das bedeutet" — the
- *  header button carries the same sentence as its tooltip, and a tooltip
- *  on a phone is a sentence nobody ever sees. */
+/** What the ghost switch is currently doing — the STATE, not the lesson.
+ *
+ *  It used to carry the full definition ("Spur ohne Objekt — läuft nur
+ *  noch in der Gnadenfrist weiter…") because the operator had asked twice
+ *  what a ghost was and a tooltip on a phone is a sentence nobody sees.
+ *  That sentence has now done its job: „Nehme die Erklärung raus, ich weiß
+ *  es jetzt." An explanation earns its space until it is understood, and
+ *  then it is just text. The definition survives where it belongs — on the
+ *  header button's tooltip and aria-label, for whoever needs it next. */
 export function ghostKeyText(camId) {
   const hidden = effectiveTuning(camId).track_filter_ghosts !== false;
-  return (
-    'Ghost: Spur ohne Objekt — läuft nur noch in der Gnadenfrist weiter, ' +
-    (hidden ? 'wird ausgeblendet' : 'wird angezeigt')
-  );
+  return hidden ? 'Ghost aus' : 'Ghost an';
 }
 
 function _item(swatch, text) {
   return `<span class="netz-key-i">${swatch}${esc(text)}</span>`;
 }
 
-/** The whole key as one wrapping row: the five group colours, the three
- *  line/dot meanings, and — on its own line, because it is a sentence
- *  rather than a chip — what the ghost switch above is doing. */
+/** The whole key as one wrapping row of chips: the five group colours,
+ *  the three line/dot meanings, and the ghost switch's current state.
+ *
+ *  Every entry is a chip now — no sentence on its own line. The row had
+ *  grown to three lines under a chart whose height it takes directly from,
+ *  and the verdict was "Legende verringern, das ist zu viel Text". Short
+ *  labels: what a solid line and a dashed line mean is the kind of thing
+ *  you learn once. */
 export function netKeyHtml(camId) {
   return (
     `<div class="netz-key" aria-label="Zeichenerklärung">` +
     Object.values(TUNE_GROUPS)
       .map((g) => _item(`<i style="background:${esc(g.color)}"></i>`, g.label))
       .join('') +
-    _item(_lineSwatch(false), 'Aktuelles Profil') +
-    _item(_lineSwatch(true), 'Werkseinstellung') +
+    _item(_lineSwatch(false), 'Profil') +
+    _item(_lineSwatch(true), 'Werk') +
     _item(_dotSwatch(), 'Geändert') +
     `<span class="netz-key-i netz-key-ghost">${ghostIconSvg(13)}` +
     `${esc(ghostKeyText(camId))}</span>` +

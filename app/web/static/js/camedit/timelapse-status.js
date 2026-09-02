@@ -113,7 +113,7 @@ function renderTlStatusBar() {
     <div class="tl-sb-panel hidden" id="${panelId}">
       ${activeCams.map(_tlCamBlock).join('')}
       <div class="tl-sb-footer small muted">
-        Belegung der noch nicht kodierten Frames · Stand: ${esc(s.today || '—')}
+        Noch nicht kodierte Frames · Stand: ${esc(s.today || '—')}
       </div>
     </div>`;
 }

@@ -102,8 +102,18 @@ function _updateTlActiveTags(cameras) {
     wrap.innerHTML = '';
     return;
   }
+  // Icon only. The row is a settings entry with a label and a chevron;
+  // spelling out every camera name pushed the last chip straight under
+  // that chevron on a phone — "eventuell nur Logos der Kameras ohne Text.
+  // Logos reichen aber, glaub ich." The name survives as the tooltip and
+  // as the accessible name, so nothing is lost for a screen reader or a
+  // pointer.
   wrap.innerHTML = active
-    .map((cam) => `<span class="tl-cam-tag">${getCameraIcon(cam.name)} ${esc(cam.name)}</span>`)
+    .map(
+      (cam) =>
+        `<span class="tl-cam-tag tl-cam-tag--ico" title="${esc(cam.name)}" ` +
+        `aria-label="${esc(cam.name)}">${getCameraIcon(cam.name)}</span>`,
+    )
     .join('');
 }
 window.loadTlSettings = async function () {

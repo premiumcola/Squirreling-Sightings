@@ -25,6 +25,32 @@
   color: #d8b4fe;
   white-space: nowrap;
 }
+/* Icon-only variant: a round badge, so three of them take the width one
+   spelled-out camera name used to and can never reach the row's
+   chevron. */
+.tl-cam-tag--ico {
+  gap: 0;
+  padding: 3px;
+  width: 22px;
+  height: 22px;
+  justify-content: center;
+}
+
+/* Separation by background contrast, not a hairline rule. The footnote
+   under the panel is one sentence — it must stay one LINE on a phone
+   rather than wrapping into a second and pushing the panel taller. */
+.tl-sb-footer {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 480px) {
+  .tl-sb-footer {
+    font-size: 11px;
+  }
+}
+
 .tl-settings-content {
   display: grid;
   gap: 8px;

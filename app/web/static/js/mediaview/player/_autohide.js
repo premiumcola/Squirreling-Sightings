@@ -12,15 +12,24 @@
 // motion drops the transition there — the hide itself stays, it is a
 // visibility behaviour, not an animation.
 
-const _IDLE_MS = 2600;
+const _IDLE_MS = 2000;
 
 /**
  * Should the chrome be allowed to disappear right now?
- * Only while the clip is actually running: no video, paused, or ended
- * all keep it on screen.
+ *
+ * It used to require the clip to be RUNNING, so a paused clip kept its
+ * transport for ever and the discs sat on the picture permanently —
+ * "die Play- und Forward-Buttons sollen nach kürzerer Zeit verschwinden
+ * und wieder auftauchen, wenn man draufdrückt". They now also fade while
+ * paused, with one exception that keeps the original rule's point: a clip
+ * that has never been started keeps its controls, because hiding the play
+ * button before it has ever been pressed leaves the operator tapping a
+ * black rectangle to find out where it went.
  */
 export function shouldHideChrome(video) {
-  return !!video && !video.paused && !video.ended;
+  if (!video) return false;
+  const started = !video.paused || video.currentTime > 0;
+  return started && !video.ended;
 }
 
 /**

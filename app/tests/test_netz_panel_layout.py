@@ -156,7 +156,12 @@ def test_the_preset_only_field_is_still_a_real_backend_field():
 
 # ── 4 · the ghost toggle is a header icon button, not a row ──────────
 
-_GHOST_SENTENCE = "Ghost: Spur ohne Objekt — läuft nur noch in der Gnadenfrist weiter, "
+# The key row carries the ghost switch's STATE, not the definition. The
+# definition lived here until the operator had learnt it — "Nehme die
+# Erklärung raus, ich weiß es jetzt" — and now survives on the header
+# button's tooltip and aria-label, for whoever meets it next.
+_GHOST_STATE_OFF = "Ghost aus"
+_GHOST_STATE_ON = "Ghost an"
 
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
@@ -192,9 +197,10 @@ def test_the_ghost_toggle_is_a_header_icon_button_not_a_row():
 
 @pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 def test_the_key_row_says_what_a_ghost_is_without_a_hover():
-    """„Ich weiß immer noch nicht, was das bedeutet." A `title` is a thing
-    no phone ever shows, so the sentence stands in the key row under the
-    net — and it names the switch's CURRENT state, not just the concept."""
+    """The key row follows the switch: it says whether ghosts are hidden
+    or shown right now. It no longer repeats the definition — that was
+    read, understood, and asked for by name to be removed, and the row it
+    sits in takes its height straight off the chart's."""
     out = _js(
         f"""
         {_SETUP}
@@ -204,16 +210,16 @@ def test_the_key_row_says_what_a_ghost_is_without_a_hover():
         S.netzState.states.cam_a.tuning.track_filter_ghosts = false;
         const offRow = cards.netBodyHtml(cam, {{ width: 700, height: 340 }});
         console.log(JSON.stringify({{
-          inBody: onRow.includes('{_GHOST_SENTENCE}'),
-          hidden: onRow.includes('{_GHOST_SENTENCE}wird ausgeblendet'),
-          shown: offRow.includes('{_GHOST_SENTENCE}wird angezeigt'),
+          inBody: onRow.includes('{_GHOST_STATE_OFF}'),
+          hidden: onRow.includes('{_GHOST_STATE_OFF}'),
+          shown: offRow.includes('{_GHOST_STATE_ON}'),
           ownLine: onRow.includes('netz-key-ghost'),
           sameGlyph: cards.ghostToggleHtml('cam_a').includes(
             key.ghostIconSvg(18).slice(key.ghostIconSvg(18).indexOf('<path'))),
         }}));
         """
     )
-    assert out["inBody"] is True, "the explanation is still tooltip-only"
+    assert out["inBody"] is True, "the key must name the switch state on screen"
     assert out["hidden"] is True
     assert out["shown"] is True, "the key must follow the switch, not describe one fixed state"
     assert out["ownLine"] is True
@@ -358,8 +364,8 @@ def test_the_legend_explains_the_dashed_and_solid_lines():
         const key = await import(JS + '/netz/_key.js');
         const html = key.netKeyHtml();
         console.log(JSON.stringify({
-          current: html.includes('Aktuelles Profil'),
-          werk: html.includes('Werkseinstellung'),
+          current: html.includes('Profil'),
+          werk: html.includes('Werk'),
           changed: html.includes('Geändert'),
           dashed: html.includes('stroke-dasharray'),
           groups: html.includes('Tempo') && html.includes('Meldung'),

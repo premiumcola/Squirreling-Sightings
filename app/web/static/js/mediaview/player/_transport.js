@@ -35,19 +35,27 @@ const _PLAY_SVG =
 const _PAUSE_SVG =
   '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
 
-// Ring-with-a-10 skip glyphs. Stroke-only ring + a filled numeral, which
-// is the project's thin-line chrome idiom (overlay-toggles.js) rather
-// than Apple's solid glyph.
+// The conventional replay-10 / forward-10 glyph, the one every player
+// ships: a full circular arrow whose tail ends in a solid arrowhead, with
+// the numeral inside it.
+//
+// The previous drawing was hand-rolled from a stroked arc plus a small
+// open chevron sitting OUTSIDE the ring at the top, and the numeral was
+// pushed low to clear it. At the 26 px this renders at, the chevron, the
+// arc end and the digits all landed within a couple of pixels of each
+// other and merged into a scribble — "die Logos für vorwärts und
+// rückwärts springen sehen ganz komisch aus, bitte nehmt die
+// Standardlogos". Filled, one closed path, arrowhead well clear of the
+// digits, which now sit centred.
 const _skipSvg = (back) => {
-  const ring = back
-    ? '<path d="M12 5a7 7 0 1 0 7 7"/><polyline points="12 2 8.4 5 12 8"/>'
-    : '<path d="M12 5a7 7 0 1 1-7 7"/><polyline points="12 2 15.6 5 12 8"/>';
+  const arrow = back
+    ? 'M12 5V2L7.5 6.5 12 11V8a5.5 5.5 0 1 1-5.5 5.5H4A8 8 0 1 0 12 5z'
+    : 'M12 5V2l4.5 4.5L12 11V8a5.5 5.5 0 1 0 5.5 5.5H20A8 8 0 1 1 12 5z';
   return (
-    '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" ' +
-    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    ring +
-    '<text x="12" y="16.4" text-anchor="middle" font-size="8.5" font-weight="700" ' +
-    'fill="currentColor" stroke="none" font-family="system-ui, sans-serif">10</text></svg>'
+    '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">' +
+    `<path d="${arrow}" fill="currentColor"/>` +
+    '<text x="12" y="17.4" text-anchor="middle" font-size="8" font-weight="700" ' +
+    'fill="currentColor" font-family="system-ui, sans-serif">10</text></svg>'
   );
 };
 

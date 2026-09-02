@@ -55,6 +55,12 @@ function _onMenuPick(id, cfg, stage) {
  */
 function _wireLive(cfg, stage, panel, timeline) {
   if (!cfg.flags.live) return null;
+  // Only the surfaces that SHOW something from the detection loop
+  // subscribe to it. The plain live view wants the continuous stream
+  // its <img> is already pointed at; letting the 1 Hz snapshot poll
+  // overwrite it would turn a live picture into a slideshow, which is
+  // worse than the tile the operator expanded from.
+  if (!cfg.flags.showPanel && !cfg.flags.showOverlays) return null;
   return subscribeLive((frame) => {
     // The picture. The backend hands back the exact frame inference ran
     // on, as a base64 JPEG in the SAME coordinate space as the boxes —
@@ -104,6 +110,10 @@ function _mountAll(cfg) {
     onResume: () => stage.video.play().catch(() => {}),
   });
 
+  // A live surface with a stream URL points its <img> straight at it,
+  // so the picture is continuous rather than a 1 Hz snapshot loop.
+  if (cfg.flags.live && cfg.source?.url) stage.img.src = cfg.source.url;
+
   const panel = renderContextPanel(shell.slot('panel'), cfg);
   const live = _wireLive(cfg, stage, panel, timeline);
 
@@ -127,6 +137,11 @@ export function openVideoPlayer(config) {
   closeVideoPlayer();
   _open = _mountAll(cfg);
   return _open;
+}
+
+/** Is a player currently mounted? Lets a toggle call site ask. */
+export function isVideoPlayerOpen() {
+  return _open !== null;
 }
 
 /** Close whatever the player currently has open. Safe to call twice. */

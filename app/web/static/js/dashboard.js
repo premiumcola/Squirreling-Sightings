@@ -603,12 +603,52 @@ window._cvEnterFullscreen = _cvEnterFullscreen;
 // jh742 — second click on the FS button must exit FS. The previous
 // wiring only ever called _cvEnterFullscreen, so the icon flipped to
 // the minimize-pattern (driven by .is-fs on the wrap) but clicking
+/**
+ * Expand a camera tile onto the unified player.
+ *
+ * Per the mockup, Live is Simulation with the detection panel and the
+ * overlays hidden — one controller, configured differently, rather than
+ * a second one. The picture is the same MJPEG stream the tile shows, so
+ * expanding is genuinely "the same thing, bigger".
+ *
+ * The iOS handoff is preserved and its silent failure is fixed on the
+ * way past: openLiveViewIosNative returns FALSE when the browser has no
+ * webkitEnterFullscreen, and the old call site ignored that return — so
+ * on such a browser the arrow did nothing at all, with no feedback.
+ * Here a false return falls through to our own player.
+ */
+function _cvOpenLive(camId) {
+  // The tile button is a toggle: a second tap closes what the first
+  // opened, the way the fullscreen path behaved.
+  if (isVideoPlayerOpen()) {
+    closeVideoPlayer();
+    return;
+  }
+  if (isIOS && openLiveViewIosNative(camId)) return;
+  const cam = (state.cameras || []).find((c) => c.id === camId);
+  openVideoPlayer({
+    mode: 'live',
+    camId,
+    cameraName: cam?.name || camId,
+    source: {
+      type: 'mjpeg',
+      url: `/api/camera/${encodeURIComponent(camId)}/stream_hd.mjpg`,
+      frameSize:
+        cam?.main_w && cam?.main_h ? { w: cam.main_w, h: cam.main_h } : { w: 1920, h: 1080 },
+    },
+  });
+}
+
 // it did nothing. _cvToggleFullscreen branches: if the wrap is in
 // real or fake fullscreen, exit; otherwise enter via the existing
 // helper. The fake-fullscreen exit path mirrors the dismiss/escape
 // handlers that _cvEnterFullscreen installs on iOS so HD drops and
 // classes are cleaned up the same way.
 function _cvToggleFullscreen(camId) {
+  if (vplayerEnabled('live')) {
+    _cvOpenLive(camId);
+    return;
+  }
   const card = byId('cameraCards')?.querySelector(`[data-camid="${CSS.escape(camId)}"]`);
   const wrap = card?.querySelector('.cv-img-wrap');
   if (!wrap) return;
@@ -641,7 +681,7 @@ window._cvToggleFullscreen = _cvToggleFullscreen;
 // mode has no recorded-item navigation surface.
 import { openMediaView } from './mediaview/index.js';
 import { vplayerEnabled } from './vplayer/_flag.js';
-import { openVideoPlayer } from './vplayer/index.js';
+import { closeVideoPlayer, isVideoPlayerOpen, openVideoPlayer } from './vplayer/index.js';
 
 export function _cvOpenSim(camId) {
   const cam = (state.cameras || []).find((c) => c.id === camId);

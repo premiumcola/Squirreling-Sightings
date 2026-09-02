@@ -1,6 +1,6 @@
 """Shared helpers for the camera-CRUD and bootstrap blueprints.
 
-Lives next to its callers (cameras.py, bootstrap.py) because every
+Lives next to its callers (cameras.py, bootstrap/_setup.py) because every
 helper here is referenced from at least two routes across those
 modules. Single-route helpers stay inline in their blueprint per the
 R01.x pattern."""

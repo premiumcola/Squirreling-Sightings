@@ -1,8 +1,9 @@
 """Debug-Bundle endpoints — build one, list the ones on disk.
 
-Own module for the same reason ``simu_log.py`` is one: the two modules
-this would otherwise belong to (``bootstrap.py``, ``coral_test_detection.py``)
-are both past the file ceiling.
+Own module for the same reason ``simu_log.py`` is one: the two blueprints
+this would otherwise belong to (``bootstrap/``, ``coral_test_detection.py``)
+were both past the file ceiling — bootstrap has since been split into a
+package for exactly that reason.
 
 The ZIP itself is served by the existing ``/media/<path>`` route — the
 bundle directory sits inside the storage root — so there is no second

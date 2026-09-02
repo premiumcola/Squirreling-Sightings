@@ -274,7 +274,7 @@ def _emit_boot_inventory(base_cfg: dict, storage_root: Path):
     # are we asking FFmpeg to use for every cv2.VideoCapture in this
     # process". Set in docker-compose.yml as
     # OPENCV_FFMPEG_CAPTURE_OPTIONS; the snapshot probe in
-    # routes/bootstrap.py and the camera runtime in
+    # routes/bootstrap/_probes.py and the camera runtime in
     # camera_runtime/_capture.py override per-handle when needed but
     # always to the same value. Anything other than "tcp" risks the
     # bottom-strip H.265 corruption seen in the night-test debugging.

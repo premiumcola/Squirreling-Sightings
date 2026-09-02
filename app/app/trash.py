@@ -243,7 +243,7 @@ def _thumb_url(ev_dir: Path, cam_id: str | None, event_id: str | None) -> str | 
     event's real snapshot, and may not even exist for most events.
 
     The result is served by the existing ``/media/<path:subpath>``
-    route (routes/bootstrap.py), which resolves under
+    route (routes/bootstrap/_shell.py), which resolves under
     ``app_state.storage_root`` — the very root ``.trash`` lives under —
     so this needs no new route and no path-traversal surface: the
     filename is always ``img.name``, never attacker- or caller-supplied

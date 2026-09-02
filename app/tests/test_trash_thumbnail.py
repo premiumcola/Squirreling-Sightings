@@ -6,7 +6,7 @@ snapshot that shipped with the event is already moved into
 `storage/.trash/<cam>/<event>/` by `move_to_trash`/`retire_to_trash` —
 nothing new gets written or moved for this, it's read-only exposure of
 a file that's already there, served through the existing
-`/media/<path:subpath>` route (routes/bootstrap.py) since `.trash`
+`/media/<path:subpath>` route (routes/bootstrap/_shell.py) since `.trash`
 lives directly under the same `storage_root` that route serves from.
 
 These tests pin: the canonical `<event_id>.jpg` wins when present, a

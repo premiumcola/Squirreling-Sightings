@@ -23,7 +23,7 @@ from .config_loader import load_config
 
 # Boot helpers — moved to lifecycle.py during the modular refactor.
 # Imported here for this file's own callers only; external consumers
-# (routes/bootstrap.py) now import them straight from lifecycle, since
+# (routes/bootstrap/_system.py) now import them straight from lifecycle, since
 # importing server.py by name re-runs this whole boot block (R01.6).
 from .lifecycle import (  # noqa: E402
     _emit_boot_inventory,

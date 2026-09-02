@@ -21,9 +21,9 @@ complete when Flask sends the page, and the save path
 only caller is a future refactor is the same dead surface as
 ``POST /api/media/cleanup``'s button that no template renders.
 
-Its own module rather than a few more lines in ``routes/bootstrap.py``
-(711 lines against a 500-line ceiling) or ``routes/weather.py`` (746, and
-an extraction in flight).
+Its own module rather than a few more lines in ``routes/bootstrap/``
+(which had itself outgrown the 500-line ceiling and is now a package) or
+``routes/weather.py`` (746, and an extraction in flight).
 """
 
 from __future__ import annotations

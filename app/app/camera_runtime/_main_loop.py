@@ -326,6 +326,13 @@ class MainLoopMixin:
                 # compute_miss_grace_samples already floors the resulting
                 # sample count at 1.
                 _eff_fps = self._tick_loop_cadence(interval)
+                # step() is step_matches() with the tracks dropped one
+                # line later — the association is computed either way.
+                # It is stamped onto each detection as `track_id` inside
+                # step_matches, which is what lets the clip aggregate
+                # key on the tracker's own identity instead of running a
+                # second association of its own. Same call, same cost,
+                # same returned order (step() unwraps identically).
                 detections = self._tracker.step(
                     detections,
                     t_s=time.monotonic(),

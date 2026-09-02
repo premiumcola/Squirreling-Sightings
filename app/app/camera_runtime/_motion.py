@@ -18,7 +18,6 @@ import cv2
 import numpy as np
 import requests
 
-from ..bird_species_rank import pick_headline_species
 from ..detection_confirmer import DetectionConfirmer
 from ..detectors import (
     BirdSpeciesClassifier,
@@ -33,6 +32,8 @@ from ..event_logic import (
     is_schedule_window_active,
     schedule_action_active,
 )
+from ._clip_tally import rank_headline_species
+from ._clip_tally import single_frame_summary as _first_frame_clip_block
 from ._consts import (
     _FFMPEG_AVAILABLE,
     _PROFILE_PERIOD_DEFAULTS,
@@ -51,39 +52,32 @@ from ._consts import (
 def _resolve_bird_species(detections: list) -> str | None:
     """Event-level `bird_species` aggregate for `_build_event_meta`:
     rarest-or-never-recorded-first among every bird detection's species
-    in this frame — see bird_species_rank.py::pick_headline_species for
+    in THIS frame — see bird_species_rank.py::pick_headline_species for
     the rule shared with the offline backfill sweep.
 
-    Looks up dossier counts via the live BirdDossierService the same
-    way _recording/_publish.py::_publish_dossiers already reads it —
-    a single in-memory dict lookup behind a lock, no network I/O and
-    no meaningful latency, so there's no timing/locking concern that
-    would keep this off the hot detection path (unlike the backfill
-    sweep, which only gets a lookup handed to it by its caller).
-    Degrades to the historic "first in stored order" fallback (via
-    pick_headline_species's own None-handling) when the service isn't
-    wired up yet or anything about reaching it fails — must never take
-    event creation down.
+    Frame-scoped by construction: this runs while a single frame's
+    detections are in hand and is what opens an event. The whole-clip
+    answer accumulates as the clip records and re-decides the same field
+    through the same ranking rule — see `_clip_tally.ClipTally` and
+    `_recording_step.RecordingStepMixin._absorb_clip_frame`.
     """
-    candidates = [
-        (d.species, d.species_latin) for d in detections if d.label == "bird" and d.species
-    ]
-    if not candidates:
-        return None
-    lookup = None
-    try:
-        from .. import app_state as _app_state
-
-        svc = getattr(_app_state, "bird_dossiers", None)
-        lookup = svc.get_dossier if svc is not None else None
-    except Exception:
-        lookup = None
-    return pick_headline_species(candidates, lookup)
+    return rank_headline_species(
+        [(d.species, d.species_latin) for d in detections if d.label == "bird" and d.species]
+    )
 
 
-def _refresh_bird_species(meta: dict, detections: list) -> None:
+def _refresh_bird_species(meta: dict, detections: list, tally=None) -> None:
     """Re-derive `meta["bird_species"]` after `_upgrade_event_meta` has
     replaced the detections it was originally computed from.
+
+    Prefers the clip's accumulated candidates when a `ClipTally` is in
+    flight, and falls back to the passed frame's when there is none (a
+    snapshot camera, or a direct unit-test call). Without that
+    preference this would be a REGRESSION rather than a refresh: the
+    upgrade runs on a single later frame, so re-ranking over that frame
+    alone would throw away the whole-clip evidence
+    `_recording_step._absorb_clip_frame` had already folded in and hand
+    the headline back to a one-frame decision.
 
     `_build_event_meta` derives the headline from the ONE frame where
     recording started. The upgrade then swaps `meta["detections"]` for a
@@ -106,7 +100,8 @@ def _refresh_bird_species(meta: dict, detections: list) -> None:
     Module-level rather than a mixin method because it needs no `self`,
     which also keeps `_upgrade_event_meta` under the 80-line ceiling.
     """
-    species = _resolve_bird_species(detections)
+    candidates = tally.headline_candidates() if tally is not None else None
+    species = rank_headline_species(candidates) if candidates else _resolve_bird_species(detections)
     if species:
         meta["bird_species"] = species
 
@@ -303,7 +298,7 @@ class MotionMixin:
             if top is not None:
                 meta["top_label"] = top.label
                 meta["detections"] = [d.to_dict() for d in detections]
-                _refresh_bird_species(meta, detections)
+                _refresh_bird_species(meta, detections, getattr(self, "_clip_tally", None))
         elif merged:
             meta["top_label"] = merged[0]
 
@@ -443,7 +438,21 @@ class MotionMixin:
             "time": ts,
             "labels": sorted(set(labels)),
             "top_label": top_det.label if top_det else labels[0],
+            # The TRIGGER frame — the one tick that opened this event.
+            # Deliberately still a single frame: every archived event
+            # holds exactly this, and the Mediathek overlay, the
+            # player's object-list fallback and the replay's "before"
+            # side all read it as one. `whole_clip` below is the
+            # accumulated answer; this is the moment of the decision.
             "detections": [d.to_dict() for d in detections],
+            # Everything the pipeline recognised across the WHOLE clip,
+            # accumulated per tracker track while the clip records — see
+            # `_clip_tally.ClipTally`. Opens as the trigger frame's own
+            # content so a clip that ends on its first tick still says
+            # something true, and is replaced by the running aggregate
+            # from the first `_absorb_clip_frame` onward. Snapshot events
+            # have no clip and keep exactly this.
+            "whole_clip": _first_frame_clip_block(detections),
             "bird_species": bird_species,
             "cat_name": cat_match,
             "person_name": person_match,

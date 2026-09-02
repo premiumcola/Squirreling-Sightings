@@ -94,6 +94,15 @@ class Detection:
     # label (or identity) this detection carries. None only for a
     # detection built outside the cascade (tests, legacy sidecars).
     model: str | None = None
+    # The tracker's id for the subject this detection was associated to,
+    # stamped by `tracker_core.LiveTracker.step_matches`. None until the
+    # tracker has stepped, and for detections synthesised after it did
+    # (the wildlife stage builds its own). Deliberately ABSENT from
+    # `to_dict()`: that dict is the event JSON's `detections` contract,
+    # which archived events must keep byte-for-byte. Consumers that want
+    # per-track identity read the whole-clip block or the tracks.json
+    # sidecar, both of which carry it explicitly.
+    track_id: str | None = None
 
     def to_dict(self):
         x1, y1, x2, y2 = self.bbox

@@ -27,6 +27,7 @@ from ..detectors import (
 from ..tracker_core import LiveTracker, resolve_track_thresholds
 from ._cadence import LoopCadenceMixin
 from ._capture import CaptureMixin
+from ._clip_tally import ClipTally
 from ._consts import log  # noqa: F401  (kept for parity with original module log binding)
 from ._lifecycle import LifecycleMixin
 from ._loop_stages import LoopStagesMixin
@@ -223,6 +224,11 @@ class CameraRuntime(
         self._rec_start_time: datetime | None = None
         self._last_motion_ts: datetime | None = None  # last frame with confirmed motion
         self._rec_event_meta: dict | None = None  # metadata captured at session start
+        # Whole-clip detection aggregate for the clip currently
+        # recording — created in _start_clip, fed every analysis tick,
+        # cleared when the clip closes. None while idle. See
+        # _clip_tally.ClipTally.
+        self._clip_tally: ClipTally | None = None
         self._rec_corrupt_frames: int = 0  # invalid frames rejected during current clip
         # ffmpeg stream-copy recording state (preferred path)
         self._ffmpeg_proc = None  # running Popen, or None

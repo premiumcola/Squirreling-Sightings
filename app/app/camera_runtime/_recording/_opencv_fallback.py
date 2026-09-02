@@ -268,6 +268,7 @@ class OpenCVFallbackMixin:
             "person_name": meta["person_name"],
             "whitelisted": meta["whitelisted"],
             "detections": meta["detections"],
+            "whole_clip": meta.get("whole_clip"),
             "snapshot_url": thumb_url,
             "snapshot_relpath": thumb_rel,
             "thumb_url": thumb_url,

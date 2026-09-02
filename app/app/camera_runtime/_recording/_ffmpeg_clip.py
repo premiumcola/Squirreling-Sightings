@@ -56,6 +56,7 @@ class FfmpegClipMixin:
             "person_name": meta["person_name"],
             "whitelisted": meta["whitelisted"],
             "detections": meta["detections"],
+            "whole_clip": meta.get("whole_clip"),
             "snapshot_url": None,
             "snapshot_relpath": None,
             "thumb_url": None,
@@ -248,6 +249,7 @@ class FfmpegClipMixin:
             thumb_rel=thumb_rel,
             encode_error=encode_error,
             achieved_pre_s=achieved_pre_s,
+            meta=meta,
         )
 
         # Tracking sidecar — enqueue once per finalized clip so the
@@ -433,14 +435,31 @@ class FfmpegClipMixin:
         thumb_rel: str | None,
         encode_error: str | None,
         achieved_pre_s: float,
+        meta: dict | None = None,
     ) -> dict:
         """Transition the event JSON from 'processing' → 'ready'/'error'.
         Returns the dict actually written (``{}`` on a store read/write
         failure) so the caller's publish step always has something to
-        pass on, even when this update itself could not be persisted."""
+        pass on, even when this update itself could not be persisted.
+
+        This is also where the finished whole-clip aggregate reaches
+        disk. The stub written at `_write_recording_event_stub` could
+        only carry the trigger frame — the clip had not happened yet —
+        and nothing between there and here rewrites it, so an event
+        would otherwise keep a `whole_clip` block describing one frame
+        of a clip that ran for a minute.
+        """
         ev: dict = {}
         try:
             ev = self.store.get_event(self.camera_id, event_id) or {}
+            if meta is not None:
+                if meta.get("whole_clip") is not None:
+                    ev["whole_clip"] = meta["whole_clip"]
+                # The headline the whole clip decided, which the stub
+                # predates in exactly the case that matters: a species
+                # only identifiable seconds into the clip.
+                if meta.get("bird_species"):
+                    ev["bird_species"] = meta["bird_species"]
             ev["video_url"] = video_url
             ev["video_relpath"] = video_relpath
             ev["duration_s"] = duration_s

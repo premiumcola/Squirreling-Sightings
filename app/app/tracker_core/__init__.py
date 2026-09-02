@@ -876,7 +876,7 @@ class LiveTracker:
         grace = compute_miss_grace_samples(self.grace_seconds, fps)
         if spawn_for is None:
             spawn_for = lambda _lbl: self.spawn_default  # noqa: E731
-        return associate_detections(
+        matches = associate_detections(
             self.state,
             list(detections),
             frame_idx=self._frame_idx,
@@ -889,6 +889,18 @@ class LiveTracker:
             frame_w=frame_w,
             frame_h=frame_h,
         )
+        # Stamp the association onto the detection so it survives the
+        # rest of the frame's pipeline. `step()` drops the tracks one
+        # line down and every stage after it (species, wildlife, re-id)
+        # speaks detections only — so without this the identity the
+        # tracker just computed is unreachable by the time an event is
+        # built from those same objects. Costs one attribute write per
+        # detection and changes nothing about what `step` returns.
+        for det, track in matches:
+            track_id = getattr(track, "track_id", None)
+            if track_id is not None:
+                det.track_id = track_id
+        return matches
 
     def step(
         self,

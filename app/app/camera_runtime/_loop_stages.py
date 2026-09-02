@@ -150,6 +150,12 @@ class LoopStagesMixin:
                 "person_name": ev_meta["person_name"],
                 "whitelisted": ev_meta["whitelisted"],
                 "detections": ev_meta["detections"],
+                # A snapshot camera has no clip — its one frame IS the
+                # whole answer, so this block is that frame's content
+                # and never grows. Present rather than omitted so a
+                # consumer never has to special-case which kind of
+                # event it is holding.
+                "whole_clip": ev_meta.get("whole_clip"),
                 "snapshot_url": snapshot_url,
                 "snapshot_relpath": rel.as_posix() if snapshot_url else None,
                 "video_url": None,

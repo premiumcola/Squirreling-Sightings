@@ -4,6 +4,7 @@ import contextlib
 import threading
 import time
 
+from ._clip_tally import ClipTally, rank_headline_species
 from ._consts import _FFMPEG_AVAILABLE, log
 
 
@@ -66,12 +67,52 @@ class RecordingStepMixin:
                 now_dt, labels, detections, drawn, effective_bbox, cooldown
             ):
                 return True
+            if self._recording:
+                self._absorb_clip_frame(detections, now_dt)
             # Append frames only in OpenCV mode — ffmpeg records itself.
             if self._recording and self._ffmpeg_proc is None:
                 self._rec_frames.append(proc_frame.copy())
         elif self._recording:
+            self._absorb_clip_frame(detections, now_dt)  # before the close
             self._advance_clip(proc_frame, now_dt, labels, detections, _post_tail, _clip_max)
         return False
+
+    def _absorb_clip_frame(self, detections: list, now_dt) -> None:
+        """Fold one analysis tick into the in-flight clip's aggregate.
+
+        Called from BOTH arms of the state machine above, and in the
+        no-motion arm it runs BEFORE `_advance_clip` — the method that
+        can close the clip. The last tick's detections belong to the
+        event just as much as the first tick's, and a subject that only
+        shows itself during the post-motion tail is precisely the case
+        the single-frame freeze used to lose.
+
+        Cheap by construction — no inference, no frame copy, no I/O. It
+        reads results the pipeline computed for this tick anyway and
+        merges them per tracker track (see `_clip_tally.ClipTally`).
+
+        The aggregate is kept live on `_rec_event_meta` rather than
+        computed at close, because the meta is what all three event
+        writers read and what the ffmpeg finalise thread carries off —
+        so an event is never a stale copy of the tally, and a clip
+        interrupted by a runtime death still has whatever it had seen.
+        """
+        tally = self._clip_tally
+        meta = self._rec_event_meta
+        if tally is None or meta is None:
+            return
+        started = self._rec_start_time
+        t_s = (now_dt - started).total_seconds() if started else 0.0
+        tally.add_frame(detections, max(0.0, t_s))
+        meta["whole_clip"] = tally.summary()
+        # Re-decide the headline over everything the clip has shown so
+        # far. Same rarest-first rule, more evidence — the species that
+        # only becomes identifiable three seconds in now reaches the
+        # event. Only overwrite when the clip actually yields a name: a
+        # later birdless stretch must not blank a name already won.
+        species = rank_headline_species(tally.headline_candidates())
+        if species:
+            meta["bird_species"] = species
 
     def _start_clip(
         self, now_dt, labels: list, detections: list, drawn, effective_bbox, cooldown: int
@@ -101,6 +142,14 @@ class RecordingStepMixin:
                 # next grab happens immediately. Signalled rather than
                 # performed, because this is a method now.
                 return True
+            # One tally per clip, opened before either backend starts so
+            # the trigger frame is inside the aggregate rather than a
+            # special case beside it. A fresh instance per clip is what
+            # scopes the aggregate to the EVENT — the live tracker's own
+            # tracks outlive the clip (they age out on the miss-grace
+            # window, not on the clip boundary), so reading its state at
+            # close would mix in subjects from before this event began.
+            self._clip_tally = ClipTally()
             started = False
             if _FFMPEG_AVAILABLE:
                 started = self._start_ffmpeg_recording(now_dt, rec_meta)
@@ -170,12 +219,17 @@ class RecordingStepMixin:
                     self._rec_corrupt_frames,
                 )
             if self._ffmpeg_proc is not None:
-                # ffmpeg mode: stop subprocess + queue re-encode
+                # ffmpeg mode: stop subprocess + queue re-encode.
+                # _stop_ffmpeg_and_queue_reencode snapshots
+                # _rec_event_meta — whole_clip and all — BEFORE the
+                # reset below clears it, so the finalise thread carries
+                # the completed aggregate off with it.
                 self._stop_ffmpeg_and_queue_reencode()
                 self._recording = False
                 self._rec_start_time = None
                 self._last_motion_ts = None
                 self._rec_event_meta = None
+                self._clip_tally = None
                 self._rec_corrupt_frames = 0
             else:
                 # OpenCV fallback: finalize from frame buffer
@@ -191,6 +245,7 @@ class RecordingStepMixin:
                 self._rec_start_time = None
                 self._last_motion_ts = None
                 self._rec_event_meta = None
+                self._clip_tally = None
                 self._rec_corrupt_frames = 0
                 if meta_snap and len(frames_snap) >= 3:
                     threading.Thread(

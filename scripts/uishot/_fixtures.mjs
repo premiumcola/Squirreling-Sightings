@@ -105,35 +105,115 @@ export const CLIP_ITEM = {
   },
 };
 
-/** tracks.json sidecar for that clip — two tracks, so lanes have colour. */
+/**
+ * tracks.json sidecar for that clip — two tracks, so lanes have colour.
+ *
+ * SHAPE IS tracker_core's, not an approximation of it. Every reader of a
+ * sidecar walks `track.samples` (`bbox-overlay/fetcher.js` sorts them by
+ * `f`; `vplayer/timeline/_model.js` classifies them by `t` / `source` /
+ * `score`), and this fixture used to carry `detections` with `box` and
+ * `first_ts` instead — keys nothing in the tree reads. So the sidecar
+ * produced tracks with no samples, every lane came back null, and the
+ * surface photographed an empty rail no matter what the renderer did.
+ * A fixture whose shape the code cannot read tests nothing.
+ */
 export const TRACKS = {
+  schema: 3,
+  built_at: '2026-08-30T14:33:10',
   tracks: [
     {
-      id: 1,
+      track_id: 'a1b2c3',
       label: 'bird',
-      score: 0.71,
-      first_ts: 1.2,
-      last_ts: 7.8,
-      detections: [
-        { t: 1.2, score: 0.63, box: [0.31, 0.42, 0.14, 0.19] },
-        { t: 3.6, score: 0.71, box: [0.38, 0.4, 0.15, 0.2] },
-        { t: 7.8, score: 0.66, box: [0.44, 0.39, 0.13, 0.18] },
+      best_score: 0.71,
+      samples: [
+        { f: 12, t: 1.2, bbox: { x1: 600, y1: 450, x2: 870, y2: 655 }, score: 0.63, source: 'detect' },
+        { f: 36, t: 3.6, bbox: { x1: 730, y1: 430, x2: 1018, y2: 646 }, score: 0.71, source: 'detect' },
+        { f: 60, t: 6.0, bbox: { x1: 800, y1: 425, x2: 1070, y2: 640 }, score: 0.31, source: 'detect' },
+        { f: 78, t: 7.8, bbox: { x1: 845, y1: 420, x2: 1094, y2: 615 }, score: 0.66, source: 'track' },
       ],
     },
     {
-      id: 2,
+      track_id: 'd4e5f6',
       label: 'cat',
-      score: 0.58,
-      first_ts: 5.1,
-      last_ts: 11.4,
-      detections: [
-        { t: 5.1, score: 0.52, box: [0.6, 0.55, 0.22, 0.24] },
-        { t: 11.4, score: 0.58, box: [0.66, 0.53, 0.21, 0.23] },
+      best_score: 0.58,
+      samples: [
+        { f: 51, t: 5.1, bbox: { x1: 1150, y1: 594, x2: 1574, y2: 853 }, score: 0.52, source: 'detect' },
+        { f: 114, t: 11.4, bbox: { x1: 1267, y1: 572, x2: 1670, y2: 821 }, score: 0.58, source: 'detect' },
       ],
     },
   ],
   frame_size: [1920, 1080],
 };
+
+/**
+ * The clip the operator photographed: a sidecar that ran and confirmed
+ * NOTHING, over an event whose whole-clip aggregate holds two subjects.
+ *
+ * This is the defect's exact state — the panel lists "Vogel 57 %" and the
+ * rail above it was a bare grey line, because the rail was fed the
+ * sidecar and only the sidecar. Its own surface rather than a change to
+ * CLIP_ITEM, so the sidecar-basis shot above keeps testing the sidecar.
+ */
+export const CLIP_ONLY_ITEM = {
+  ...mediaItem(7, {}),
+  camera_name: CAMERA.name,
+  roi_label: 'Beet Nord',
+  recording_settings: { pre_motion_seconds: 3, post_motion_seconds: 5, conf_thresh_general: 0.4 },
+  provenance: {
+    effective: { spawn_default: 0.42 },
+    timing: { pre_roll_s: 3, post_roll_s: 5 },
+    model: 'efficientdet_lite0_edgetpu',
+    profile: 'garden',
+  },
+  // Rows as camera_runtime/_clip_tally.py::ClipTally.rows() writes them:
+  // best-scoring first, one row per tracked subject, `track_id` from the
+  // LIVE tracker's run (which is why the rail must not number them).
+  whole_clip: {
+    detections: [
+      {
+        track_id: 4,
+        label: 'squirrel',
+        species: null,
+        score: 0.61,
+        model: 'wildlife_classifier',
+        frames: 1,
+        first_s: 9.4,
+        last_s: 9.4,
+      },
+      {
+        track_id: 2,
+        label: 'bird',
+        species: 'Grünfink',
+        species_latin: 'Chloris chloris',
+        score: 0.57,
+        model: 'bird_classifier',
+        frames: 26,
+        first_s: 1.6,
+        last_s: 8.2,
+      },
+      {
+        track_id: 9,
+        label: 'bird',
+        species: 'Blaumeise',
+        species_latin: 'Cyanistes caeruleus',
+        score: 0.33,
+        model: 'bird_classifier',
+        frames: 4,
+        first_s: 6.1,
+        last_s: 7.0,
+      },
+    ],
+    species: [
+      { species: 'Grünfink', species_latin: 'Chloris chloris', best_score: 0.57, frames: 26 },
+      { species: 'Blaumeise', species_latin: 'Cyanistes caeruleus', best_score: 0.33, frames: 4 },
+    ],
+    frames: 120,
+    truncated: false,
+  },
+};
+
+/** The indexer ran on that clip and confirmed no track at all. */
+export const CLIP_ONLY_TRACKS = { schema: 3, built_at: '2026-08-30T14:35:02', tracks: [] };
 
 /** Weather samples with a real precipitation swing, so a chip pre-lights. */
 export const WEATHER_SAMPLES = Array.from({ length: 24 }, (_, i) => ({

@@ -9,6 +9,7 @@
 // there is nothing to seek. Which one is decided by the mode's
 // `timeline` flag from _config.js — never by sniffing the data.
 
+import { TL_BASIS_LIVE, TL_BASIS_NONE } from './_basis.js';
 import { emptyStateFor, emptyStateHtml, wireRescan } from './_empty-states.js';
 import { lanesHtml } from './_lanes.js';
 import { railHtml, setPlayhead } from './_rail.js';
@@ -37,6 +38,12 @@ export function mountTimeline(host, cfg, deps = {}) {
   /** Repaint everything that only changes when the DATA changes. */
   const render = (tracks, opts = {}) => {
     model = buildTimelineModel(tracks, { ...opts, windowMs: rolling ? cfg.windowMs : 0 });
+    // WHICH population these lanes came from, on the element itself. The
+    // rail can be drawn from the sidecar or from the clip aggregate and
+    // the two are never mixed, so a later reader — a person in devtools,
+    // or a test — must be able to tell which one is on screen without
+    // guessing from the lane count.
+    host.dataset.basis = rolling ? TL_BASIS_LIVE : opts.basis || TL_BASIS_NONE;
     if (rolling) {
       renderRolling(host, model);
       return model;
@@ -69,6 +76,7 @@ export function mountTimeline(host, cfg, deps = {}) {
       rescan?.teardown();
       host.innerHTML = '';
       delete host.dataset.vpFp;
+      delete host.dataset.basis;
     },
   };
 }

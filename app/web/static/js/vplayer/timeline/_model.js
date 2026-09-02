@@ -109,6 +109,11 @@ function _laneFor(track, opts) {
   return {
     trackNum: track._num == null ? null : track._num,
     label: track.label || '',
+    // The identified species, when the basis carries one. Only the clip
+    // aggregate ever does — nothing in tracks.json holds a species — so
+    // this is null for every sidecar lane and the renderer's naming rule
+    // degrades to the plain class name it always used.
+    species: track.species || null,
     colour: track.color || null,
     // The dot marks the FIRST detection — the moment the object
     // entered. A single-sample track keeps its dot and gets a

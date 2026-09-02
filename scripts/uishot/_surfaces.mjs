@@ -12,7 +12,15 @@
 // real LOAD_ORDER, so containers, cascade order and media queries are
 // the ones that ship.
 
-import { CAMERA, NETZ_STATE, MEDIA, CLIP_ITEM, WEATHER_SAMPLES, WEATHER_RANGE } from './_fixtures.mjs';
+import {
+  CAMERA,
+  NETZ_STATE,
+  MEDIA,
+  CLIP_ITEM,
+  CLIP_ONLY_ITEM,
+  WEATHER_SAMPLES,
+  WEATHER_RANGE,
+} from './_fixtures.mjs';
 
 /** Put a fixture on window so the in-page mounts can read it. */
 export async function seedFixtures(page) {
@@ -20,18 +28,29 @@ export async function seedFixtures(page) {
     (fx) => {
       window.__fx = fx;
     },
-    { CAMERA, NETZ_STATE, MEDIA, CLIP_ITEM, WEATHER_SAMPLES, WEATHER_RANGE },
+    { CAMERA, NETZ_STATE, MEDIA, CLIP_ITEM, CLIP_ONLY_ITEM, WEATHER_SAMPLES, WEATHER_RANGE },
   );
 }
 
-/** The unified video player on a recorded clip. */
-async function mountVPlayer(page) {
-  await page.evaluate(async () => {
+/**
+ * The unified video player on a recorded clip.
+ *
+ * `fxKey` picks WHICH clip, and with it which population the timeline
+ * draws from — the two are photographed separately because they are
+ * never mixed into one rail (vplayer/timeline/_basis.js).
+ *
+ * No DEFAULT for it, deliberately: run.mjs calls `mount(page, width)`,
+ * so a second positional parameter here is handed the viewport width and
+ * a default would be silently shadowed by it. Both surfaces name their
+ * fixture through a wrapper that drops the width.
+ */
+async function mountVPlayer(page, fxKey) {
+  await page.evaluate(async (key) => {
     const vp = await import('/static/js/vplayer/index.js');
     vp.openVideoPlayer({
       mode: 'recorded',
       source: { url: '/static/uishot-clip.webm' },
-      item: window.__fx.CLIP_ITEM,
+      item: window.__fx[key],
       actions: {
         onPrev() {},
         onNext() {},
@@ -41,7 +60,7 @@ async function mountVPlayer(page) {
         onClose() {},
       },
     });
-  });
+  }, fxKey);
   // The timeline lays out against video.duration; without metadata every
   // lane collapses to zero width and the shot would flatter the layout.
   await page
@@ -124,8 +143,15 @@ async function mountMediathek(page) {
 export const SURFACES = [
   {
     id: 'vplayer-recorded',
-    title: 'Unified video player · recorded clip',
-    mount: mountVPlayer,
+    title: 'Unified video player · recorded clip (sidecar basis)',
+    mount: (page) => mountVPlayer(page, 'CLIP_ITEM'),
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-clip-basis',
+    title: 'Unified video player · lanes from the whole-clip aggregate',
+    mount: (page) => mountVPlayer(page, 'CLIP_ONLY_ITEM'),
     clip: '.vp-root',
     scope: '.vp-root',
   },

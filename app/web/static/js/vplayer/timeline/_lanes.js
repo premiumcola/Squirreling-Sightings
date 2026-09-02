@@ -2,21 +2,25 @@
 // One row per detected object, above the rail: a thick dot at the first
 // detection and a bar for as long as the track was held.
 //
-// COLOUR IS THE OBJECT, LINE STYLE IS THE STATUS. The hue comes from
-// core/track-color.js keyed on the track number, so the same subject is
-// the same colour in the lane, in its box and in the panel row. The
-// texture comes from the model's per-sample segments, so a dashed
-// stretch means something specific — weak, predicted or masked — rather
-// than "roughly uncertain".
+// COLOUR IS THE OBJECT, LINE STYLE IS THE STATUS. The hue is stamped by
+// whichever basis built the lane and only fallen back on here: a sidecar
+// lane is coloured by core/track-color.js keyed on the track number, so
+// the same subject is the same colour in the lane, in its box and in the
+// panel row; a clip-aggregate lane is coloured by CLASS instead
+// (_basis.js), because its track ids come from a different tracker run
+// and reusing the numbering palette would claim an identity it has not
+// got. The texture comes from the model's per-sample segments, so a
+// dashed stretch means something specific — weak, predicted or masked —
+// rather than "roughly uncertain".
 //
 // Each segment paints as its own overlay strip on top of the bar. That
 // is the only way a viewer learns WHY part of a track is dashed, and it
 // is the piece a rewrite drops most easily because nothing else
 // references it.
 
+import { subjectLabel } from '../../core/clip-species.js';
 import { esc } from '../../core/dom.js';
 import { liveTrackColor } from '../../core/track-color.js';
-import { OBJ_LABEL } from '../../core/icons.js';
 import { spanLabel } from '../_helpers.js';
 import { pctOf } from './_model.js';
 
@@ -40,9 +44,17 @@ function _segmentsHtml(lane, duration) {
     .join('');
 }
 
-/** The German name for a lane, falling back to the raw class. */
+/**
+ * The name for a lane, prefixed with its track number when it has one.
+ *
+ * A named bird is called by its species, so two birds in one clip read
+ * as two birds rather than as "Vogel" twice — the same rule the objects
+ * list and the Mediathek card badge follow. core/clip-species.js owns
+ * it; this does not restate it. A sidecar lane carries no species and
+ * comes back out with the plain German class name it always had.
+ */
 function _laneLabel(lane) {
-  const cls = lane.label ? OBJ_LABEL[lane.label] || lane.label : 'Objekt';
+  const cls = subjectLabel(lane.label, lane.species) || 'Objekt';
   return lane.trackNum == null ? cls : `#${lane.trackNum} ${cls}`;
 }
 

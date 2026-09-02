@@ -32,6 +32,7 @@ import {
   VP_MENU_NATIVE,
 } from './_overflow-menu.js';
 import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
+import { timelineBasis } from './timeline/_basis.js';
 import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
 import { renderBoxLayer } from './_overlay-svg.js';
@@ -97,13 +98,23 @@ function _wireRecorded(cfg, stage, panel, timeline) {
       const p = data.provenance || {};
       const rs = cfg.item.recording_settings || {};
       const timing = p.timing || {};
+      // The WIDENED item, not cfg.item: loadRecorded folds a `whole_clip`
+      // recovered from /api/event/<id> into its copy, and a clip opened
+      // from a narrow route would otherwise be told it has no aggregate
+      // by the very object that just fetched one.
+      const item = data.item || cfg.item;
+      // ONE basis per render, chosen once — the sidecar's tracks when it
+      // has any, else lanes synthesised from the clip aggregate. Never
+      // both: see timeline/_basis.js for why merging them would lie.
+      const { basis, tracks } = timelineBasis(item, data.tracks);
       const render = () =>
-        timeline?.render(data.tracks?.tracks || [], {
+        timeline?.render(tracks, {
           duration: stage.video.duration,
           preRoll: timing.pre_roll_s ?? rs.pre_motion_seconds,
           postRoll: timing.post_roll_s ?? rs.post_motion_seconds,
           threshold: p.effective?.spawn_default ?? rs.conf_thresh_general,
-          item: cfg.item,
+          basis,
+          item,
           tracks: data.tracks,
         });
       render();

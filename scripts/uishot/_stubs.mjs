@@ -10,7 +10,7 @@
 // fetched: the harness must not depend on the internet, and neither
 // library draws any of the four surfaces.
 
-import { TRACKS, CAMERA } from './_fixtures.mjs';
+import { TRACKS, CLIP_ONLY_TRACKS, CAMERA } from './_fixtures.mjs';
 
 /** A neutral picture stand-in, so tiles show a frame and not a placeholder. */
 const SNAPSHOT_SVG =
@@ -25,6 +25,9 @@ const SNAPSHOT_SVG =
 
 /** Static JSON answers, longest prefix wins. */
 function apiBody(pathname) {
+  // The clip-basis surface's event, whose indexer confirmed nothing —
+  // keyed on its own file so the sidecar-basis surface keeps its tracks.
+  if (pathname.endsWith('e7.tracks.json')) return CLIP_ONLY_TRACKS;
   if (pathname.endsWith('.tracks.json')) return TRACKS;
   if (pathname.startsWith('/api/cameras')) return { cameras: [CAMERA] };
   if (pathname.startsWith('/api/bootstrap')) {

@@ -97,6 +97,35 @@ test('a failed refresh keeps the previous facets rather than blanking', async ()
   assert.deepEqual(cache.current, ok);
 });
 
+// A refresh that RESOLVES is not automatically a refresh that resolved
+// to a usable facets shape. core/api.js::apiGet returns `null` — not a
+// rejection — whenever the response content-type is not JSON, which is
+// exactly what a proxy error page or a Flask HTML error handler sends.
+// Committing that null (or a partial dict from a half-built error
+// payload) hands `_paint` a `facets.cameras` of undefined, and the chip
+// builders then index into it. Treat a malformed payload the same way a
+// rejection is already treated: keep the previous render up.
+
+test('a non-JSON response (apiGet resolves null) is not committed as facets', async () => {
+  const cache = createFacetsCache();
+  const ok = { cameras: { cam1: 1 }, labels: {}, categories: {}, total: 1 };
+  await cache.refresh(() => Promise.resolve(ok));
+  await cache.refresh(() => Promise.resolve(null));
+  assert.deepEqual(cache.current, ok);
+});
+
+test('a response missing a dimension is not committed as facets', async () => {
+  const cache = createFacetsCache();
+  await cache.refresh(() => Promise.resolve({ total: 7 }));
+  assert.deepEqual(cache.current, emptyFacets());
+});
+
+test('a refresh returns a shape whose three dimensions are always present', async () => {
+  const cache = createFacetsCache();
+  const out = await cache.refresh(() => Promise.resolve(null));
+  assert.deepEqual(out, emptyFacets());
+});
+
 test('a slow, now-superseded refresh does not clobber a faster later result', async () => {
   const cache = createFacetsCache();
   let resolveSlow;

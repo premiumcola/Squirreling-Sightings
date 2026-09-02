@@ -34,6 +34,28 @@ export function fetchLibraryFacets(filter, kinds) {
   return apiGet(`/api/library/facets?${facetsQueryParams(filter, kinds).toString()}`);
 }
 
+const _isCountDict = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Does a resolved response actually carry all three count dictionaries?
+ * A fetch that RESOLVES is not automatically a fetch that resolved to
+ * something renderable: `core/api.js::apiGet` returns `null` rather than
+ * throwing whenever the response content-type is not JSON — a proxy
+ * error page or a Flask HTML error handler both land here — and a
+ * half-built error payload can arrive as JSON that simply has no
+ * `cameras` key. Either one reaches `_filter-bar.js::_paint` as a
+ * `facets.cameras` of undefined, which is what `emptyFacets()`'s own
+ * docstring promises can never happen. Check the promise here, at the
+ * one place every response passes through. */
+export function isFacetsShape(v) {
+  return (
+    !!v &&
+    typeof v === 'object' &&
+    _isCountDict(v.cameras) &&
+    _isCountDict(v.labels) &&
+    _isCountDict(v.categories)
+  );
+}
+
 /**
  * Fetch-with-keep-previous cache for the facets response — the same
  * catch-and-keep-previous non-blocking pattern `weather/stats.js::
@@ -58,7 +80,13 @@ export function createFacetsCache() {
       const mySeq = ++seq;
       try {
         const result = await fetchPromiseFactory();
-        if (mySeq === seq) current = result;
+        if (mySeq !== seq) return current;
+        // A malformed payload is treated exactly like a rejection: keep
+        // the previous render up. Committing it would push the missing
+        // key one layer down into the chip builders instead.
+        if (isFacetsShape(result)) current = result;
+        else
+          console.warn('[library] facets response has no count dicts — keeping previous', result);
       } catch {
         // Transient error — leave `current` (the previous successful
         // render's data) exactly as it was rather than blanking the bar.

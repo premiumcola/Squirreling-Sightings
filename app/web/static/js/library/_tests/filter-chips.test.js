@@ -109,3 +109,36 @@ test('a selected category with zero matches stays visible', () => {
   const html = categoryChipsHTML(filter, {});
   assert.match(html, /data-val="fog"/);
 });
+
+// ── a facets response that lost a dimension ───────────────────────────
+// `_filter-bar.js::_paint` hands each row `facets.cameras` /
+// `facets.labels` / `facets.categories` straight off the fetched
+// response. `emptyFacets()`'s own docstring promises those keys always
+// exist "rather than a render crashing on a missing key" — but that
+// promise only holds for the FRESH cache. `createFacetsCache().refresh`
+// commits whatever the server actually sent, so a response that is
+// missing a dimension (or `null` outright — core/api.js::apiGet returns
+// null for any non-JSON content-type, e.g. a proxy/Flask HTML error
+// page) reaches these builders with `counts === undefined`. The
+// `cameras`/`objectLabels` list argument is already `|| []`-guarded;
+// `counts` was not, so `counts[c.id]` threw and took the whole filter
+// bar's paint with it.
+
+test('a camera row survives a facets response that carries no cameras dict', () => {
+  const filter = createLibraryFilterState();
+  filter.cameraIds.add('cam1');
+  assert.doesNotThrow(() => cameraChipsHTML(_CAMERAS, filter, undefined));
+  assert.match(cameraChipsHTML(_CAMERAS, filter, undefined), /data-val="cam1"/);
+});
+
+test('a label row survives a facets response that carries no labels dict', () => {
+  const filter = createLibraryFilterState();
+  assert.doesNotThrow(() => labelChipsHTML(_LABELS, filter, undefined));
+  assert.equal(labelChipsHTML(_LABELS, filter, undefined), '');
+});
+
+test('a category row survives a facets response that carries no categories dict', () => {
+  const filter = createLibraryFilterState();
+  assert.doesNotThrow(() => categoryChipsHTML(filter, undefined));
+  assert.equal(categoryChipsHTML(filter, undefined), '');
+});

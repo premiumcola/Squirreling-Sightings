@@ -58,10 +58,11 @@ function _rowHTML(group, entries) {
 /** One chip per camera in `cameras`, badged from `counts` (facets'
  * `cameras` dict — `{cam_id: n}`). */
 export function cameraChipsHTML(cameras, filter, counts) {
+  const n = counts || {};
   const entries = (cameras || []).map((c) => ({
     val: c.id,
     active: filter.cameraIds.has(c.id),
-    count: counts[c.id] || 0,
+    count: n[c.id] || 0,
     iconHtml: getCameraIcon(c.name || c.id),
     label: c.name || c.id,
     color: getCameraColor(c),
@@ -73,10 +74,11 @@ export function cameraChipsHTML(cameras, filter, counts) {
  * this module's own header for why it isn't imported here), badged
  * from `counts` (facets' `labels` dict). */
 export function labelChipsHTML(objectLabels, filter, counts) {
+  const n = counts || {};
   const entries = (objectLabels || []).map((l) => ({
     val: l,
     active: filter.labels.has(l),
-    count: counts[l] || 0,
+    count: n[l] || 0,
     iconHtml: objIconSvg(l, 14),
     label: OBJ_LABEL[l] || l,
     color: CAT_COLORS[l] || '#94a3b8',
@@ -87,12 +89,13 @@ export function labelChipsHTML(objectLabels, filter, counts) {
 /** One chip per `WEATHER_TYPES` key, badged from `counts` (facets'
  * `categories` dict). */
 export function categoryChipsHTML(filter, counts) {
+  const n = counts || {};
   const entries = Object.keys(WEATHER_TYPES).map((k) => {
     const meta = WEATHER_TYPES[k];
     return {
       val: k,
       active: filter.categories.has(k),
-      count: counts[k] || 0,
+      count: n[k] || 0,
       iconHtml: meta.icon,
       label: meta.de,
       color: meta.color,

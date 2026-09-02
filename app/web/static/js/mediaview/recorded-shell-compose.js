@@ -40,7 +40,9 @@ function _itemHasWeather(item) {
   );
 }
 
-function _videoSrcOf(item) {
+// Exported: the unified player's branch in recorded-mode.js needs the
+// same derivation, and two copies of a fallback chain drift.
+export function _videoSrcOf(item) {
   return (
     (item.video_relpath ? `/media/${item.video_relpath}` : '') ||
     item.video_url ||

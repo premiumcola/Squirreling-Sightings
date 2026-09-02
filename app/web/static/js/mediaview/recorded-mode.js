@@ -38,7 +38,15 @@ import { unmountZoneOverlayForLightbox } from './canvas/zone-overlay-mount.js';
 import { _LB_TRASH_HTML, _updateLbConfirmBtn, _lbResetToPhoto } from './panels/lb-helpers.js';
 import { _renderLbLabels } from './panels/labels.js';
 import { mountMediaView } from './shell.js';
-import { buildRecordedShellConfig, wireRecordedShellPostMount } from './recorded-shell-compose.js';
+import {
+  _videoSrcOf,
+  buildRecordedShellConfig,
+  wireRecordedShellPostMount,
+} from './recorded-shell-compose.js';
+import { j } from '../core/api.js';
+import { triggerManualReindex } from '../mediathek/bbox-overlay/reindex.js';
+import { vplayerEnabled } from '../vplayer/_flag.js';
+import { openVideoPlayer } from '../vplayer/index.js';
 
 // Module-singleton recorded-shell state. Tracks the mounted shell + how
 // to restore the reparented media wrap and the relocated action buttons.
@@ -136,8 +144,24 @@ export function openRecorded(item) {
   lbState.deletePending = false;
 
   if (_isFullscreenVideoItem(lbState.item)) {
+    // The video half moves to the unified player, behind the flag.
+    // The branch sits HERE rather than in openLightbox on purpose:
+    // everything above this line is state the new player needs just as
+    // much as the old shell did — lbState.index resolved against the
+    // GLOBAL list so prev/next cross page boundaries, the grid's page
+    // jumped so the thumbnails behind the player match, and the
+    // two-step delete arming reset. Branching earlier would have
+    // skipped all three and broken navigation and pagination in
+    // exactly the ways that are hardest to notice.
+    if (vplayerEnabled('recorded')) {
+      _openRecordedInVPlayer(lbState.item);
+      return;
+    }
     _openRecordedVideoShell(lbState.item);
   } else {
+    // PHOTO — untouched. This is a live legacy path, not dead code:
+    // a centred modal with no shell, and the CSS it depends on is
+    // load-bearing.
     _openRecordedPhoto(lbState.item);
   }
 }
@@ -175,6 +199,42 @@ function _openRecordedPhoto(item) {
     lbState.index < (state._allMedia || []).length - 1 ? '1' : '0.2';
   byId('lightboxModal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+}
+
+// ── Video / timelapse branch — the unified player, behind the flag ───────
+//
+// Navigation deliberately walks state._allMedia, the GLOBAL list, not
+// the page slice: the pagination is a render optimisation, never a
+// navigation boundary, and prev/next have always crossed it. Both
+// handlers route back through window.openLightbox so the next item
+// re-enters this same function and re-seeds lbState — including the
+// grid page-jump — exactly as a click on a thumbnail would.
+function _openRecordedInVPlayer(item) {
+  const list = state._allMedia || [];
+  const hasPrev = lbState.index > 0;
+  const hasNext = lbState.index >= 0 && lbState.index < list.length - 1;
+  openVideoPlayer({
+    mode: 'recorded',
+    item,
+    source: { type: 'mp4', url: _videoSrcOf(item) },
+    actions: {
+      onPrev: hasPrev ? () => window.openLightbox?.(list[lbState.index - 1]) : null,
+      onNext: hasNext ? () => window.openLightbox?.(list[lbState.index + 1]) : null,
+      onClose: () => window.closeLightbox?.(),
+      // The delete keeps the legacy button's whole aftermath — the
+      // three branches, the grid re-pagination, the neighbour to open
+      // and the storage-stats refresh — by clicking it. Re-implementing
+      // that here would fork the ledger routing, which is decided
+      // entirely by which URL is hit.
+      onDelete: () => byId('lightboxDelete')?.click(),
+    },
+    deps: {
+      request: j,
+      onReindex: () => triggerManualReindex(),
+      onSimulate: () => window._cvOpenSim?.(item.camera_id),
+      onError: (msg) => window.showToast?.(msg, 'error'),
+    },
+  });
 }
 
 // ── Video / timelapse branch — the shared MediaView shell ────────────────

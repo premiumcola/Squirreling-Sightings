@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Lint + format tooling for the Squirreling · Sightings frontend. The runtime app loads JS modules directly via index.html — there's no bundler. This package only exists for the lint/format pipeline.",
   "scripts": {
+    "test": "node --test $(find app/web/static/js -path '*/_tests/*.test.js')",
     "lint": "eslint app/web/static/js",
     "lint:fix": "eslint app/web/static/js --fix",
     "format": "prettier --write 'app/web/static/**/*.{js,css,html}' 'app/web/templates/**/*.html'",

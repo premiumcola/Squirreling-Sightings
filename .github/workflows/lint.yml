@@ -116,3 +116,36 @@ jobs:
         # ~48 files at once. Prettier runs in pre-commit on edited files
         # and gets enabled in CI once the CSS-split prompt normalises
         # the style as part of its partials work.
+
+  javascript-tests:
+    # The frontend's unit tests live in `_tests/` folders next to the
+    # code they cover and run on node's own built-in test runner. Until
+    # this job existed they gated NOTHING: 25+ test files, green only on
+    # whichever machine last bothered to run them by hand. Every "proved
+    # by a node test" claim in a review was an unenforced local promise.
+    #
+    # No `npm install` step on purpose. These tests import node builtins
+    # (node:test, node:assert) plus relative paths into app/web/static/js
+    # and nothing else — there is no bundler and no test framework to
+    # install. Skipping the install keeps the job independent of the
+    # registry, and `npm ci` is not an option regardless: this repo
+    # tracks no package-lock.json.
+    #
+    # The file list comes from `find`, not from a glob passed to node.
+    # `node --test <dir>` searches a directory on node 20 but treats it
+    # as a module path on node 24, while glob expansion of the positional
+    # argument only arrived in node 22 — so no single positional form
+    # works across the versions developers and CI actually run. An
+    # explicit file list behaves identically on all of them.
+    name: JavaScript (node --test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: node --test
+        run: npm test

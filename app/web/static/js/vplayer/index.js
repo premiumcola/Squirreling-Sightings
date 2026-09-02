@@ -13,12 +13,10 @@
 // makes this package mountable with zero consumers, unit-testable
 // without a browser, and removable in a single revert.
 //
-// Rollout state: the shell, the stage, the top bar, the overlay row and
-// the transport mount. The timeline, the context panels and the data
-// adapters land in the following commits, into the slots that are
-// already here. NO CALL SITE CAN REACH ANY OF IT YET — each surface is
-// switched over separately behind vplayer/_flag.js, and until then this
-// module has no importer at all.
+// Rollout state: SIMULATION runs on this player by default. Live and
+// recorded are still behind vplayer/_flag.js and still open their old
+// implementations, which remain on disk for the whole soak — one URL
+// parameter (?vplayer=off) is the operator's way back.
 
 import { buildPlayerConfig } from './_config.js';
 import { mountShell } from './_shell.js';
@@ -35,6 +33,7 @@ import {
 import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
 import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
+import { renderBoxLayer } from './_overlay-svg.js';
 import { subscribeLive } from './_data/live.js';
 
 /** The single open player, or null. One at a time, by construction. */
@@ -54,9 +53,22 @@ function _onMenuPick(id, cfg, stage) {
  * this only maps and paints. See _data/live.js for why owning any of
  * that loop's logic here would be the migration's worst regression.
  */
-function _wireLive(cfg, panel, timeline) {
+function _wireLive(cfg, stage, panel, timeline) {
   if (!cfg.flags.live) return null;
   return subscribeLive((frame) => {
+    // The picture. The backend hands back the exact frame inference ran
+    // on, as a base64 JPEG in the SAME coordinate space as the boxes —
+    // which is why the boxes are painted against it rather than against
+    // a live stream that has moved on since.
+    if (frame.snapshot && stage.img.getAttribute('src') !== frame.snapshot) {
+      stage.img.src = frame.snapshot;
+    }
+    if (cfg.flags.showOverlays) {
+      renderBoxLayer(stage.layers.boxes, frame.detections, {
+        frameSize: frame.frameSize,
+        screenW: stage.rect().w,
+      });
+    }
     panel?.update(frame, null);
     // The rolling window is right-anchored on now, so every tick moves
     // it whether or not a detection landed.
@@ -93,7 +105,7 @@ function _mountAll(cfg) {
   });
 
   const panel = renderContextPanel(shell.slot('panel'), cfg);
-  const live = _wireLive(cfg, panel, timeline);
+  const live = _wireLive(cfg, stage, panel, timeline);
 
   return { cfg, shell, stage, topbar, menu, overlayRow, transport, timeline, panel, live };
 }

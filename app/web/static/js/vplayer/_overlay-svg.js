@@ -102,5 +102,52 @@ export function buildBoxSvg(det, opts = {}) {
  * @param {object} [opts]  { strokeWidth, scoreScale }
  */
 export function buildTrail(points, colour, opts = {}) {
-  return buildTrailSvg(points, colour, opts.strokeWidth || 3, opts.scoreScale == null ? 1 : opts.scoreScale);
+  return buildTrailSvg(
+    points,
+    colour,
+    opts.strokeWidth || 3,
+    opts.scoreScale == null ? 1 : opts.scoreScale,
+  );
+}
+
+/**
+ * Paint a set of detections into a layer host.
+ *
+ * The host owns one <svg> for the life of the layer; only its
+ * innerHTML changes per frame. Recreating the element every tick would
+ * throw away the browser's own paint state and, on a phone, shows as a
+ * flicker at 1 Hz.
+ *
+ * The viewBox is the SOURCE frame size, so everything inside is
+ * authored in source pixels and the browser does the scaling —
+ * the same contract both existing overlays use.
+ *
+ * @param {HTMLElement} host       a layer host from _stage.js
+ * @param {Array} detections       mapped detections (see _data/_map.js)
+ * @param {object} opts            { frameSize, screenW, selectedTrack }
+ */
+export function renderBoxLayer(host, detections, opts = {}) {
+  if (!host) return;
+  const fs = opts.frameSize;
+  if (!fs || !(fs.w > 0) || !(fs.h > 0)) {
+    host.innerHTML = '';
+    return;
+  }
+  let svg = host.firstElementChild;
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    host.appendChild(svg);
+  }
+  svg.setAttribute('viewBox', `0 0 ${fs.w} ${fs.h}`);
+  const k = overlayScale(fs.w, opts.screenW || fs.w);
+  svg.innerHTML = (detections || [])
+    .map((d) =>
+      buildBoxSvg(d.raw || d, {
+        k,
+        frameW: fs.w,
+        selected: opts.selectedTrack != null && opts.selectedTrack === d.trackNum,
+      }),
+    )
+    .join('');
 }

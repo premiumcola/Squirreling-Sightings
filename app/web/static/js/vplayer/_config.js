@@ -25,6 +25,11 @@ const MODE_FLAGS = {
   recorded: {
     timeline: 'scrub', // full known duration, drag-to-seek
     panel: 'recorded', // object list + provenance fold
+    // Overlay-toggle persistence scope. These are the EXISTING keys
+    // mediaview/overlay-toggles.js already stores under, deliberately
+    // reused: an operator who turned trails off in the Mediathek must
+    // find them off here too, and a new key would silently reset that.
+    contextKey: 'mediathek',
     showPanel: true,
     showOverlays: true,
     overlayToggles: ['bboxes', 'trails', 'zones', 'masks'],
@@ -37,6 +42,7 @@ const MODE_FLAGS = {
   sim: {
     timeline: 'rolling', // right-anchored last-60s window
     panel: 'live', // active tracks, raw detections, debug log
+    contextKey: 'live',
     showPanel: true,
     showOverlays: true,
     overlayToggles: ['bboxes', 'trails', 'zones', 'masks'],
@@ -51,6 +57,7 @@ const MODE_FLAGS = {
     // picture, not the pipeline: panel and overlays off.
     timeline: 'rolling',
     panel: 'live',
+    contextKey: 'live',
     showPanel: false,
     showOverlays: false,
     overlayToggles: [],

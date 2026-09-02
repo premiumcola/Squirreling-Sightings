@@ -46,7 +46,12 @@ const _LS_KEY = 'tamspy.overlayToggles.v1';
 // flagged ("I never asked for this"). The matching localStorage
 // migration further down (_pruneNonPersistedFromLS) strips any
 // zones/masks values that leaked into prior sessions.
-const _TOGGLES = {
+// Exported (like _TOGGLE_ICONS below) so a control rendered elsewhere
+// can label a layer the same way this bar does. The STATE is already
+// shared via getOverlayToggleState/setOverlayToggleState; sharing the
+// labels too means a second surface cannot call the same layer
+// something else.
+export const _TOGGLES = {
   bboxes: {
     label: 'Bboxes',
     default: true,

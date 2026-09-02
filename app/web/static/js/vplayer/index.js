@@ -13,27 +13,69 @@
 // makes this package mountable with zero consumers, unit-testable
 // without a browser, and removable in a single revert.
 //
-// Rollout state: the shell, the timeline, the overlays and the panels
-// land here first with no call site able to reach them. Each surface is
-// switched over separately behind vplayer/_flag.js.
+// Rollout state: the shell, the stage, the top bar, the overlay row and
+// the transport mount. The timeline, the context panels and the data
+// adapters land in the following commits, into the slots that are
+// already here. NO CALL SITE CAN REACH ANY OF IT YET — each surface is
+// switched over separately behind vplayer/_flag.js, and until then this
+// module has no importer at all.
 
 import { buildPlayerConfig } from './_config.js';
+import { mountShell } from './_shell.js';
+import { mountStage } from './_stage.js';
+import { mountTopbar } from './_topbar.js';
+import { mountTransport } from './_transport.js';
+import { mountOverlayRow } from './_overlay-row.js';
+import {
+  buildOverflowItems,
+  mountOverflowMenu,
+  VP_MENU_DELETE,
+  VP_MENU_NATIVE,
+} from './_overflow-menu.js';
+import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
 
-/**
- * Thrown while a mode's controller is still landing. Named so a call
- * site added ahead of its controller fails as an obvious, greppable
- * error rather than as an empty modal.
- */
-export class VPlayerNotImplementedError extends Error {
-  constructor(mode) {
-    super(`vplayer: the '${mode}' player is not mounted yet`);
-    this.name = 'VPlayerNotImplementedError';
-    this.mode = mode;
+/** The single open player, or null. One at a time, by construction. */
+let _open = null;
+
+/** Route an overflow-menu pick to the action it names. */
+function _onMenuPick(id, cfg, stage) {
+  if (id === VP_MENU_DELETE) {
+    cfg.actions.onDelete?.(cfg.item);
+    return;
   }
+  if (id === VP_MENU_NATIVE) handoffToNativePlayer(stage.video);
+}
+
+/** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
+function _mountAll(cfg) {
+  const shell = mountShell(cfg, { onKey: (key) => key === 'Escape' && closeVideoPlayer() });
+  const stage = mountStage(shell.slot('frame'), cfg);
+  const topbar = mountTopbar(shell.slot('topbar'), cfg, {
+    onClose: () => closeVideoPlayer(),
+    onPrev: cfg.actions.onPrev,
+    onNext: cfg.actions.onNext,
+  });
+  const items = buildOverflowItems(cfg, {
+    nativeAvailable: !cfg.flags.live && canNativeFullscreen(stage.video),
+  });
+  const menu = mountOverflowMenu(shell.slot('topbar'), topbar?.trigger, items, (id) =>
+    _onMenuPick(id, cfg, stage),
+  );
+  const overlayRow = cfg.flags.showOverlays
+    ? mountOverlayRow(shell.slot('toggles'), cfg, { roi: cfg.item.roi_label })
+    : null;
+  const transport = mountTransport(shell.slot('stage'), shell.slot('controls'), cfg, stage);
+
+  return { cfg, shell, stage, topbar, menu, overlayRow, transport };
 }
 
 /**
  * Open the player.
+ *
+ * Opening while one is already open closes that one first: two shells
+ * on document.body at once would each hold a scroll lock and a
+ * capture-phase key trap, and the second teardown would restore the
+ * first one's saved body style.
  *
  * @param {object} config  { mode: 'recorded'|'live'|'sim', source?,
  *   item?, camId?, cameraName?, overlays?, actions? }
@@ -41,12 +83,23 @@ export class VPlayerNotImplementedError extends Error {
  */
 export function openVideoPlayer(config) {
   const cfg = buildPlayerConfig(config);
-  throw new VPlayerNotImplementedError(cfg.mode);
+  closeVideoPlayer();
+  _open = _mountAll(cfg);
+  return _open;
 }
 
 /** Close whatever the player currently has open. Safe to call twice. */
 export function closeVideoPlayer() {
-  // No-op until a controller exists to tear down. Exported from the
-  // first commit so the public surface is fixed before any call site
-  // depends on it.
+  if (!_open) return;
+  const p = _open;
+  _open = null;
+  // Reverse mount order — every listener released before the DOM it is
+  // bound to goes away.
+  p.transport?.teardown();
+  p.overlayRow?.teardown();
+  p.menu?.teardown();
+  p.topbar?.teardown();
+  p.stage?.teardown();
+  p.shell?.teardown();
+  p.cfg.actions.onClose?.();
 }

@@ -47,3 +47,266 @@
   --vp-safe-top: env(safe-area-inset-top, 0px);
   --vp-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* ── Root ──────────────────────────────────────────────────────────────────
+   `position: fixed` sized in dvh, never vh. On iOS Safari `100vh` is the
+   viewport with the address bar COLLAPSED, so a bar-visible page is
+   taller than the screen and the bottom of the player sits below the
+   fold; `dvh` tracks the bar. The vh line is the fallback for the one
+   browser that has neither, and it is deliberately first so dvh wins
+   wherever it is understood. */
+.vp-root {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  background: var(--vp-ground);
+  color: var(--text);
+  /* The shell scrolls as one column when the panel is long; the stage
+     itself never does. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: var(--vp-safe-top);
+  padding-bottom: var(--vp-safe-bottom);
+}
+
+/* Any slot with nothing in it takes no space, so one skeleton serves
+   every mode without a conditional render. */
+.vp-root [data-slot]:empty {
+  display: none;
+}
+
+/* An element hidden via the `hidden` attribute must STAY hidden even
+   though the rules below give it its own `display`. Without this the
+   attribute silently loses to any display declaration. */
+.vp-root [hidden] {
+  display: none !important;
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────────── */
+.vp-topbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--vp-chrome);
+}
+
+.vp-top-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 36 px of paint, 44 px of target. The ::before is the touch area and
+   is deliberately larger than the button box — painting four 44 px
+   discs across a 375 px bar is what the smaller visual avoids. */
+.vp-top-btn {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.vp-top-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--vp-tap);
+  height: var(--vp-tap);
+  transform: translate(-50%, -50%);
+}
+
+/* Hover states only where a pointer can actually hover. On a touch
+   device an unguarded :hover sticks after the tap and the control
+   reads as permanently active. */
+@media (hover: hover) {
+  .vp-top-btn:hover {
+    background: #2e2e2e;
+  }
+}
+
+/* ── Overflow menu ─────────────────────────────────────────────────────── */
+.vp-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 8px;
+  z-index: var(--z-dropdown);
+  min-width: 208px;
+  padding: 6px;
+  border-radius: var(--vp-radius);
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+.vp-menu-item {
+  display: block;
+  width: 100%;
+  min-height: var(--vp-tap);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vp-menu-item--danger {
+  color: var(--danger);
+}
+
+@media (hover: hover) {
+  .vp-menu-item:hover {
+    background: var(--surface);
+  }
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────────── */
+.vp-stage {
+  position: relative;
+  flex: 0 0 auto;
+  background: var(--vp-ground);
+  overflow: hidden;
+}
+
+.vp-frame {
+  position: relative;
+  width: 100%;
+  /* A 16:9 box by default; the letterbox solver in _stage.js handles
+     any source that disagrees, so this only sets the box, never the
+     picture. */
+  aspect-ratio: 16 / 9;
+}
+
+.vp-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--vp-ground);
+}
+
+/* Overlay layers. Positioned entirely from JS with the four longhands
+   (left/top/right/bottom) — see _stage.js::placeLayer for why the
+   `inset` shorthand is banned there. No pointer events: the picture
+   underneath owns every gesture. */
+.vp-layer {
+  position: absolute;
+  pointer-events: none;
+}
+
+.vp-layer > svg,
+.vp-layer > canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ── Overlay row ───────────────────────────────────────────────────────── */
+.vp-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--panel);
+  /* The segmented control can outgrow 375 px once four labels are in
+     it; it scrolls inside its own row rather than widening the page. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.vp-segbar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: var(--vp-radius);
+  background: var(--surface);
+}
+
+.vp-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--vp-tap);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: transparent;
+  /* Never dark-on-dark: an inactive segment still reads against the
+     bar it sits in. */
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vp-seg[aria-pressed='true'] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+@media (hover: hover) {
+  .vp-seg:not([aria-pressed='true']):hover {
+    color: var(--text);
+  }
+}
+
+.vp-roi-chip {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: var(--vp-radius-sm);
+  background: var(--vp-chrome);
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* ── Controls + panel hosts ────────────────────────────────────────────── */
+.vp-controls {
+  display: flex;
+  justify-content: center;
+  padding: 4px 8px;
+}
+
+.vp-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--vp-pnl-bg, var(--panel));
+}
+
+/* On a landscape phone the picture must not eat the whole screen and
+   leave the panel unreachable below the fold. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .vp-frame {
+    max-height: 62dvh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-root * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

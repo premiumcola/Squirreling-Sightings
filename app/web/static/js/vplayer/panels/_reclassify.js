@@ -67,7 +67,12 @@ function _sheetHtml(active) {
       `<span class="vp-seg-label">${esc(OBJ_LABEL[c] || c)}</span></button>`,
   ).join('');
   return (
-    `<div class="vp-sheet-title">Erkennung korrigieren</div>` +
+    // The sheet edits the CLIP's label set, not the row it was opened
+    // from — POST …/events/<id>/labels has no per-detection form and the
+    // ledger is keyed by event. The title says so, because a sheet
+    // headed "Erkennung korrigieren" reads as a promise to change one
+    // row out of four and would quietly break it for the others.
+    `<div class="vp-sheet-title">Erkennungen dieser Aufnahme</div>` +
     `<div class="vp-segbar vp-segbar--wrap">${chips}</div>` +
     // Clearing every label is how an operator says "nothing was here".
     // The backend deliberately books NO correction for an emptied list,

@@ -47,8 +47,7 @@ function _paintPanel(objects, details, st) {
  *
  * @param {HTMLElement} host
  * @param {object} cfg   normalised config from _config.js
- * @param {object} deps  { request, tier, onDeleteObject, onSaved,
- *   onError }
+ * @param {object} deps  { request, tier, onSaved, onError }
  * @returns {{update, teardown}|null}
  */
 export function renderRecordedPanel(host, cfg, deps = {}) {
@@ -67,7 +66,6 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
         onError: deps.onError,
       });
     },
-    onDelete: (row) => deps.onDeleteObject?.(row, st.item),
   });
 
   const details = renderProvenance(host.querySelector('.vp-pnl-details'), {

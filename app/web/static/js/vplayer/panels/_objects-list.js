@@ -13,9 +13,40 @@
 //     worth arguing with;
 //   · WHEN — the span it was tracked for.
 //
-// Edit and delete are per row and 44 px, because correcting one wrong
-// label out of four is the actual job; a single verdict on the whole
-// clip is what the corpus already has too much of.
+// ONE CONTROL PER ROW, AND IT IS THE CORRECTION SHEET. A per-row DELETE
+// was rendered here and wired to nothing, and it stays gone. Three facts
+// decided that, in this order:
+//
+//   · NO BACKEND EXPRESSES IT. Every mutating route is whole-event
+//     (delete / labels / confirm) or whole-sidecar (DELETE
+//     /api/tracking/<id> removes the entire tracks.json). The only
+//     per-track pruning in the tree, tracking_worker/_ghosts.py::
+//     prune_ghost_tracks, runs at BUILD time and carries its own TODO
+//     saying the retroactive endpoint does not exist.
+//   · THE ROW HAS NO ADDRESS TO SEND. The three bases key differently
+//     and the list switches between them per event: `whole_clip` folds
+//     untracked detections into a `class:<label>` bucket with
+//     `track_id: null` (_clip_tally.py::_key_for), the sidecar numbers
+//     tracks from a DIFFERENT tracker run, and the trigger frame is a
+//     bare array index. "Delete row 2" means three different things.
+//   · THE LEDGER CANNOT RECORD IT. record_verdict is keyed by event_id
+//     alone and LedgerIndex joins last-write-wins per event, so a
+//     per-object verdict has nowhere to land — the corpus, which is the
+//     whole point of correcting, would learn nothing from the gesture.
+//
+// The one endpoint in reach, POST …/events/<id>/labels, edits the
+// EVENT's label set. A trash icon wired to it would strike a class
+// shared by other rows, leave this row on screen (the rows come from
+// the detection aggregate, which that endpoint never touches), and —
+// because a whole_clip row can carry a class that never entered
+// `labels` — could ADD one. A button called "remove" that sometimes
+// adds is worse than the inert one it replaced.
+//
+// Nothing was lost. Both verbs the operator asked for live one tap away
+// in the sheet this row opens: reclassify by tapping another class,
+// strike one wrong class by tapping it while active (the documented
+// "Falscherkennung" gesture — see mediaview/panels/labels.js), or call
+// the whole clip a false alarm with "alle entfernen".
 
 import { subjectLabel } from '../../core/clip-species.js';
 import { esc } from '../../core/dom.js';
@@ -27,11 +58,6 @@ const _EDIT_SVG =
   '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
   'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-const _DEL_SVG =
-  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
-  '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
-
 /** PURE: the one-line summary a row shows under its title. */
 export function rowDetail(row, models) {
   const span = row.t0 == null ? PLACEHOLDER : spanLabel(row.t0, row.t1);
@@ -51,9 +77,7 @@ function _rowHtml(row, models) {
     `${num}<span class="vp-pnl-cls">${esc(cls)}</span>` +
     `<span class="vp-pnl-score">${esc(pctLabel(row.score))}</span>` +
     `<button type="button" class="vp-pnl-iconbtn" data-act="edit" ` +
-    `aria-label="Erkennung korrigieren">${_EDIT_SVG}</button>` +
-    `<button type="button" class="vp-pnl-iconbtn" data-act="del" ` +
-    `aria-label="Erkennung entfernen">${_DEL_SVG}</button>` +
+    `aria-label="Erkennungen dieser Aufnahme korrigieren">${_EDIT_SVG}</button>` +
     `<span class="vp-pnl-reason">${esc(rowDetail(row, models))}</span>` +
     `</div>`
   );
@@ -68,7 +92,7 @@ function _rowHtml(row, models) {
  * string it then renders keeps that markup byte-identical to before.
  *
  * @param {HTMLElement} host
- * @param {object} deps  { onEdit(row), onDelete(row) }
+ * @param {object} deps  { onEdit(row, rowEl) }
  * @returns {{update, teardown}|null}
  */
 export function renderObjectsList(host, deps = {}) {
@@ -82,7 +106,6 @@ export function renderObjectsList(host, deps = {}) {
     const row = rows.find((r) => r.key === rowEl.dataset.key);
     if (!row) return;
     if (btn?.dataset.act === 'edit') deps.onEdit?.(row, rowEl);
-    else if (btn?.dataset.act === 'del') deps.onDelete?.(row, rowEl);
   };
   host.addEventListener('click', onClick);
 

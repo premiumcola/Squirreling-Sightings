@@ -9,8 +9,16 @@
 // is a claim about markup, not about a field.
 //
 // The frozen strings below were captured by running this exact renderer
-// against the tree as it stood at 6c71925 and diffing — not by reading
-// the template and writing down what it ought to produce.
+// and diffing — not by reading the template and writing down what it
+// ought to produce.
+//
+// They were re-frozen once, when the per-row delete button was removed
+// (it rendered a 44 px control that no backend could serve — see
+// _objects-list.js's header). That edit is DELIBERATELY not a
+// regression: it changes every basis identically, which is the shape a
+// chrome change is allowed to have here. What these strings still
+// forbid is a change that lands on ONE basis — an old event drifting
+// because a feature about new events touched the shared renderer.
 //
 // The renderer needs a host element. It only ever calls addEventListener
 // and assigns innerHTML, so a plain object is a complete stand-in and no
@@ -56,21 +64,19 @@ const OLD_SIDECAR_HTML =
   '<div class="vp-pnl-row vp-pnl-obj" data-key="track:1" style="--vp-lane-colour:#22c55e">' +
   '<span class="vp-pnl-num">#1</span><span class="vp-pnl-cls">Person</span>' +
   '<span class="vp-pnl-score">91 %</span>' +
-  '<button type="button" class="vp-pnl-iconbtn" data-act="edit" aria-label="Erkennung korrigieren"></button>' +
-  '<button type="button" class="vp-pnl-iconbtn" data-act="del" aria-label="Erkennung entfernen"></button>' +
+  '<button type="button" class="vp-pnl-iconbtn" data-act="edit" aria-label="Erkennungen dieser Aufnahme korrigieren"></button>' +
   '<span class="vp-pnl-reason">0:03–0:11 · Objekt-Detektor</span></div>' +
   '<div class="vp-pnl-row vp-pnl-obj" data-key="track:2" style="--vp-lane-colour:#f6b73c">' +
   '<span class="vp-pnl-num">#2</span><span class="vp-pnl-cls">Vogel</span>' +
   '<span class="vp-pnl-score">44 %</span>' +
-  '<button type="button" class="vp-pnl-iconbtn" data-act="edit" aria-label="Erkennung korrigieren"></button>' +
-  '<button type="button" class="vp-pnl-iconbtn" data-act="del" aria-label="Erkennung entfernen"></button>' +
+  '<button type="button" class="vp-pnl-iconbtn" data-act="edit" aria-label="Erkennungen dieser Aufnahme korrigieren"></button>' +
   '<span class="vp-pnl-reason">0:05 · Vogel-Klassifikator</span></div>';
 
-test('an event with only a sidecar renders exactly as it did before', () => {
+test('an event with only a sidecar still renders from the sidecar, frozen', () => {
   assert.equal(render({}, SIDECAR), OLD_SIDECAR_HTML);
 });
 
-test('an event with only a trigger frame renders exactly as it did before', () => {
+test('an event with only a trigger frame still renders from it, frozen', () => {
   // Note the species on the detection: `detections[]` has carried one
   // for a long time and the row has never shown it. Surfacing it here
   // would silently restyle the entire existing archive, so this branch
@@ -82,8 +88,7 @@ test('an event with only a trigger frame renders exactly as it did before', () =
     render(item, null),
     '<div class="vp-pnl-row vp-pnl-obj" data-key="det:0" style="--vp-lane-colour:var(--muted)">' +
       '<span class="vp-pnl-cls">Vogel</span><span class="vp-pnl-score">70 %</span>' +
-      '<button type="button" class="vp-pnl-iconbtn" data-act="edit" aria-label="Erkennung korrigieren"></button>' +
-      '<button type="button" class="vp-pnl-iconbtn" data-act="del" aria-label="Erkennung entfernen"></button>' +
+      '<button type="button" class="vp-pnl-iconbtn" data-act="edit" aria-label="Erkennungen dieser Aufnahme korrigieren"></button>' +
       '<span class="vp-pnl-reason">— · Vogel-Klassifikator</span></div>',
   );
 });

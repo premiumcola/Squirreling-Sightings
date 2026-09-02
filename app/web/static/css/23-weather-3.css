@@ -112,14 +112,21 @@
   font-size: 13px;
   padding: 20px;
 }
-.ws-stats-threshold-label {
+/* Isolated-mode threshold label. The selector is `ws-chart-` because
+   that is the class stats-thresholds.js actually emits: 5f88e0a renamed
+   it there and not here, so this rule matched nothing from that commit
+   until now and the label shipped as bare 10 px text.
+   No `fill` any more either — it used to pin #fb7185, and the same
+   commit deliberately moved the label onto the LINE's own colour, which
+   the JS sets as a presentation attribute. A `fill` here would beat that
+   attribute and repaint every threshold label uniform red. */
+.ws-chart-threshold-label {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
   font-weight: 700;
-  fill: #fb7185;
   letter-spacing: 0.04em;
   /* paint-order=stroke draws the dark stroke first, fill on top — so
-     each glyph gets a 3 px dark halo that keeps the red text legible
+     each glyph gets a 3 px dark halo that keeps the label legible
      even when it crosses a coloured data line beneath. */
   paint-order: stroke;
   stroke: rgba(15, 15, 18, 0.9);

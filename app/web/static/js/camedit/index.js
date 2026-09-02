@@ -25,6 +25,7 @@ import { loadAll } from '../live-update.js';
 import { reloadCamera } from '../dashboard.js';
 import { panelState, _restoreEditWrapper, _closeEditPanel } from './panel.js';
 import { hydrateMqttSettings } from './mqtt-settings.js';
+import { optionalList, catListHTML, personListHTML, auditListHTML } from './_profile-lists.js';
 // The cam-edit panel itself lives in edit-panel.js — index.js keeps the
 // shell, the camera list and the Settings-tab hydrator. Imported for
 // local use AND re-exported: a re-export alone does not bring the name
@@ -213,34 +214,22 @@ byId('deleteCameraBtn')?.addEventListener('click', () => {
   _deleteCameraWithConfirm(camId, cam?.name || camId);
 });
 
+// The three read-only side panels. Their builders and the shared
+// degrade-to-empty fetch helper live in _profile-lists.js — see that
+// file's own header for why a failure must stop there and not ride up
+// into loadAll's boot sequence.
 export async function renderProfiles() {
-  const cats = await j('/api/cats');
-  const persons = await j('/api/persons');
+  const cats = await optionalList('/api/cats', 'profiles');
+  const persons = await optionalList('/api/persons', 'profiles');
   const catEl = byId('catList');
   const perEl = byId('personList');
-  if (catEl)
-    catEl.innerHTML =
-      cats.profiles
-        .map((p) => `<div style="padding:3px 0;font-size:13px">${esc(p.name)}</div>`)
-        .join('') || '<span class="muted small">—</span>';
-  if (perEl)
-    perEl.innerHTML =
-      persons.profiles
-        .map(
-          (p) =>
-            `<div style="padding:3px 0;font-size:13px">${esc(p.name)}${p.whitelisted ? ' <span class="muted small">(Whitelist)</span>' : ''}</div>`,
-        )
-        .join('') || '<span class="muted small">—</span>';
+  if (catEl) catEl.innerHTML = catListHTML(cats);
+  if (perEl) perEl.innerHTML = personListHTML(persons);
 }
 export async function renderAudit() {
-  const actions = await j('/api/telegram/actions');
-  byId('auditPanel').innerHTML =
-    actions.items
-      .map(
-        (a) =>
-          `<div class="audit-item"><strong>${esc(a.action)}</strong><div class="small">${esc(a.time)}${a.camera_id ? ` · ${esc(a.camera_id)}` : ''}</div></div>`,
-      )
-      .join('') || '<div class="audit-item">Noch keine Telegram-Aktionen.</div>';
+  const items = await optionalList('/api/telegram/actions', 'items');
+  const el = byId('auditPanel');
+  if (el) el.innerHTML = auditListHTML(items);
 }
 
 async function toggleArm(camId, armed) {

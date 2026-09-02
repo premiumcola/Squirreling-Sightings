@@ -63,3 +63,49 @@ export function clipSpeciesNames(item) {
   }
   return out;
 }
+
+/**
+ * PURE: the species a surface has NOT already named.
+ *
+ * The headline is picked by `bird_species_rank.pick_headline_species`
+ * and stays one name — that ranking is deliberate and other things
+ * depend on it. This is what belongs BESIDE it, so nothing is said
+ * twice on one card.
+ *
+ * @param {object} item
+ * @param {string} shown  the name already on display
+ * @returns {string[]}
+ */
+export function secondarySpeciesNames(item, shown) {
+  const skip = typeof shown === 'string' ? shown.trim() : '';
+  return clipSpeciesNames(item).filter((name) => name !== skip);
+}
+
+/**
+ * PURE: the one quiet line of "and also these", or '' for nothing.
+ *
+ * A card is 160 px wide on an iPhone, so the list is bounded: at most
+ * `max` names, then `+N` for the rest. An event whose clip held ONE
+ * species returns '' and the caller renders no chip at all — the
+ * headline already said everything there is to say.
+ *
+ * TRUNCATION IS NOT HIDDEN. `whole_clip.truncated` means a cap refused
+ * something, so the names present are a partial answer and the line
+ * ends in an ellipsis rather than reading as the complete set. The
+ * block carries one merged flag for the row caps and the species cap
+ * together, so this errs toward saying "there may be more" — the
+ * direction that cannot mislead.
+ *
+ * @param {object} item
+ * @param {string} shown  the name already on display
+ * @param {number} max    names before the overflow count
+ * @returns {string}
+ */
+export function speciesChipText(item, shown, max = 2) {
+  const rest = secondarySpeciesNames(item, shown);
+  if (!rest.length) return '';
+  const head = rest.slice(0, Math.max(1, max));
+  const parts = rest.length > head.length ? [...head, `+${rest.length - head.length}`] : head;
+  const text = parts.join(' · ');
+  return item?.whole_clip?.truncated ? `${text} …` : text;
+}

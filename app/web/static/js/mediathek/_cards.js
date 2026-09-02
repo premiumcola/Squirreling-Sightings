@@ -15,7 +15,8 @@
 // handlers are in _actions.js, bridged from orchestration.js).
 import { esc, hexToRgba } from '../core/dom.js';
 import { state } from '../core/state.js';
-import { colors, OBJ_LABEL, objIconSvg, objBubble } from '../core/icons.js';
+import { speciesChipText, subjectLabel } from '../core/clip-species.js';
+import { colors, objIconSvg, objBubble } from '../core/icons.js';
 import { primaryLabel } from '../core/primary-label.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import { needsProcessingTile, processingTileHTML } from './_processing.js';
@@ -155,10 +156,16 @@ function _motionCtx(item) {
   const badgeColor = colors[badgeLabel] || colors.motion || '#93c5fd';
   // When the bird classifier has identified a species, show it instead of the
   // generic "Vogel" — keeps bird colour + icon but tells the user what kind.
-  const badgeText =
-    badgeLabel === 'bird' && item.bird_species
-      ? item.bird_species
-      : OBJ_LABEL[badgeLabel] || badgeLabel;
+  // The rule lives in core/clip-species.js because the player's object rows
+  // now ask the same question of the same data.
+  const badgeText = subjectLabel(badgeLabel, item.bird_species);
+  // The headline stays ONE species — that ranking is deliberate. A clip
+  // that held more than one says so underneath, quietly, and a clip that
+  // held exactly one grows nothing at all.
+  const moreSpecies = speciesChipText(item, badgeText);
+  const speciesChip = moreSpecies
+    ? `<span class="mmc-species-more">${esc(moreSpecies)}</span>`
+    : '';
   return {
     accent,
     subBadge: `${_SUB_BADGE_BASE};color:${accent}`,
@@ -168,7 +175,7 @@ function _motionCtx(item) {
     vidDur: _fmtDur(item.duration_s),
     vidSize: _fmtByt(item.file_size_bytes),
     // Inline overrides only border-color and text color; .mmc-tl-badge supplies dark bg + blur + shadow
-    motionBadge: `<div style="position:absolute;top:6px;left:6px;z-index:2"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}${esc(badgeText)}</span></div>`,
+    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}${esc(badgeText)}</span>${speciesChip}</div>`,
   };
 }
 

@@ -604,6 +604,51 @@ def test_the_staging_bar_is_an_overlay_not_a_row():
     assert "position: sticky" not in rule
 
 
+def test_the_staging_bar_is_translucent_over_a_blurred_net():
+    """„Leicht transparent über dem weichgezeichneten Netz." The chart it
+    covers stays visible — that is what says the bar is temporary — and
+    the buttons on top of it stay opaque, never dark-on-dark."""
+    rule = _CSS[_CSS.index(".netz-stage {") :]
+    rule = rule[: rule.index("}")]
+    assert "backdrop-filter: blur(" in rule
+    assert "-webkit-backdrop-filter: blur(" in rule, "iOS needs the prefixed property"
+    assert "box-shadow:" in rule
+    assert "rgba(15, 24, 37, 0.82)" in rule, "the no-backdrop-filter fallback must stay readable"
+    assert "@supports (backdrop-filter: blur(1px))" in _CSS
+    ghost = _CSS[_CSS.index(".netz-stage .netz-btn--ghost {") :]
+    assert "background: #" in ghost[: ghost.index("}")], "a see-through button on a blur"
+
+
+def test_the_bar_never_changes_the_size_of_the_box_it_rides():
+    """The radar is drawn for a box measured BEFORE the bar can exist, so
+    the bar must not be able to resize that box: absolutely positioned
+    inside .netz-card-chart, and never part of what the probe lays out."""
+    assert "netz-stage" not in _CARDS[_CARDS.index("export function netProbeHtml") :]
+    chart = _CSS[_CSS.index(".netz-card-chart {") :]
+    assert "position: relative" in chart[: chart.index("}")]
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_staging_a_value_swaps_the_bar_and_leaves_the_net_alone():
+    """Every drag release used to repaint the whole panel to add a bar
+    that is not even part of the chart — rings, spokes, polygon, every
+    vertex and label rebuilt, with the just-released vertex replaced by a
+    brand-new node. syncStageBar touches the overlay and nothing else."""
+    drag = (_JS / "netz" / "_tune_drag.js").read_text(encoding="utf-8")
+    fn = drag[drag.index("function _onUp(") : drag.index("async function _onLongPress(")]
+    assert "syncStageBar(card, onRepaint)" in fn
+    assert "onRepaint();" not in fn, "the staging path still rebuilds the net"
+    # …and the class-axis path still repaints, because its save really
+    # does change the stored profile the chart is drawn from.
+    assert "saveClassAxis(camId, key, raw, onRepaint)" in fn
+    assert "export function syncStageBar" in _CARDS
+    sync = _CARDS[_CARDS.index("export function syncStageBar") :]
+    sync = sync[: sync.index("\n}")]
+    assert "netz-tune-svg" not in sync
+    assert "netBodyHtml" not in sync
+    assert "renderTuneRadar" not in sync
+
+
 def test_the_panel_measures_the_box_before_drawing_into_it():
     """The empty-probe measurement: lay out an empty .netz-card-chart in
     the body, read its px size, then render the radar for that size."""

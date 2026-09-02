@@ -19,6 +19,7 @@
 
 import { showConfirm, showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
+import { syncStageBar } from './_cards.js';
 import { classAxisSpec, isClassAxisKey, resetClassAxis, saveClassAxis } from './_class_rows.js';
 import { TUNE_SPECS, tuneDisplay, tuneRawFromE } from './_settings_axes.js';
 import { eFromEllipse } from './_tune_geometry.js';
@@ -196,8 +197,14 @@ function _onUp(ev, onRepaint) {
     saveClassAxis(camId, key, raw, onRepaint);
     return;
   }
+  // Staging changes NOTHING on the chart: _schedulePaint already moved
+  // the vertex, the polygon and the label's value, and netzState.tuneAxes
+  // was mutated in place, so the net on screen is the net a repaint would
+  // draw. Rebuilding it here only threw the SVG away under the finger
+  // that just let go — the bar is an overlay, so it is the only thing
+  // that has to change.
   if (moved) stageValue(camId, key, raw);
-  onRepaint();
+  syncStageBar(card, onRepaint);
 }
 
 async function _onLongPress(card, camId, key, spec, onRepaint) {

@@ -47,6 +47,25 @@ function _stagingHtml(camId) {
   );
 }
 
+/** Bring ONE panel's staging bar in line with what is staged, WITHOUT
+ *  touching the radar.
+ *
+ *  Staging used to run through the panel's full repaint: every drag
+ *  release rebuilt the SVG — rings, spokes, polygon, every vertex and
+ *  every foreignObject label — to add or drop a bar that is not even part
+ *  of the chart. The net visibly flickered, and the vertex the finger had
+ *  just released was a brand-new node. The bar is an absolutely
+ *  positioned overlay inside the chart box, so it can come and go without
+ *  the chart's size or content changing at all; this swaps only the bar
+ *  and rewires its two buttons. */
+export function syncStageBar(card, onRepaint) {
+  const chart = card.querySelector('.netz-card-chart');
+  if (!chart) return;
+  chart.querySelector('.netz-stage')?.remove();
+  chart.insertAdjacentHTML('beforeend', _stagingHtml(card.dataset.cam));
+  _bindStageButtons(card, onRepaint);
+}
+
 // One switch does not need a row of its own. It has been a full 44 px
 // line, then a text chip in a controls row under the chart — a row that
 // cost the net exactly its own height on every panel ("da ist ja viel
@@ -188,10 +207,13 @@ function _bindAxisHints(card, camId) {
   );
 }
 
-/** Wire the interactive controls inside ONE panel's net body. `card` is
- *  the panel root — the camera id always comes from `card.dataset.cam`,
- *  never from a parameter the caller might mix up between panels. */
-export function bindNetBody(card, onRepaint) {
+/** The staging bar's own two buttons. Split out of bindNetBody because
+ *  the bar is swapped on its own (syncStageBar) whenever a drag stages a
+ *  value, while the labels around it keep the listeners they already
+ *  have. BOTH of these end in a real repaint, and should: Übernehmen
+ *  writes to the server and Verwerfen puts every vertex back where the
+ *  stored profile has it — the chart genuinely changes. */
+function _bindStageButtons(card, onRepaint) {
   const camId = card.dataset.cam;
 
   card.querySelector('[data-tune-apply]')?.addEventListener('click', async () => {
@@ -205,8 +227,14 @@ export function bindNetBody(card, onRepaint) {
     clearStagedFor(camId);
     onRepaint();
   });
+}
 
-  _bindAxisHints(card, camId);
+/** Wire the interactive controls inside ONE panel's net body. `card` is
+ *  the panel root — the camera id always comes from `card.dataset.cam`,
+ *  never from a parameter the caller might mix up between panels. */
+export function bindNetBody(card, onRepaint) {
+  _bindStageButtons(card, onRepaint);
+  _bindAxisHints(card, card.dataset.cam);
 }
 
 /** The ghost switch sits in the panel HEADER, which is rendered in both

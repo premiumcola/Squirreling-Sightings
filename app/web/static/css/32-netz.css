@@ -318,7 +318,17 @@
    its containing block), present only while values are staged — a bar in
    the flow would reserve its own height under the net on every panel, or
    make the net jump by that height each time a first drag brings it in.
-   Absolute, never fixed: it rides the box, not the viewport. */
+   Absolute, never fixed: it rides the box, not the viewport, and it can
+   never change the box's size, so the radar measured before it appeared
+   is still drawn at the right size while it is up.
+
+   Lightly transparent over a BLURRED net rather than opaque: the part of
+   the chart it covers stays visibly there (that is what tells the
+   operator the bar is temporary) without the polygon showing through the
+   words. backdrop-filter is progressive — where it is unsupported the
+   background alpha alone still carries the text, so the fallback is a
+   slightly more transparent bar, never unreadable. The two buttons stay
+   fully opaque on top of it. */
 
 .netz-stage {
   position: absolute;
@@ -326,24 +336,49 @@
   right: 6px;
   bottom: 6px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 6px 8px;
   padding: 6px 6px 6px 12px;
   border-radius: 12px;
-  background: rgba(15, 24, 37, 0.97);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: rgba(15, 24, 37, 0.82);
+  -webkit-backdrop-filter: blur(7px) saturate(120%);
+  backdrop-filter: blur(7px) saturate(120%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   font-size: 13px;
   font-weight: 600;
   color: #e2e8f0;
   z-index: 2;
 }
 
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .netz-stage {
+    background: rgba(15, 24, 37, 0.62);
+  }
+}
+
+/* The count keeps the whole first line to itself when the two buttons no
+   longer fit beside it — on a 375 px panel that is the difference between
+   a two-line bar and an ellipsised one. */
 .netz-stage span {
   flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Opaque on the blur, both of them: a see-through button over a
+   see-through bar is exactly the dark-on-dark the design rules ban — the
+   green Übernehmen is already solid, so only the ghost variant needs
+   lifting off its alpha. */
+.netz-stage .netz-btn {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.netz-stage .netz-btn--ghost {
+  background: #3b4a61;
 }
 
 .netz-btn {

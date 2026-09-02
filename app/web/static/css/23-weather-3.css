@@ -57,13 +57,29 @@
   padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
-  min-height: 32px;
+  /* 32 px was a desktop-era leftover (the storms scope already opted out
+     — see test_storms_archive.py). These are the panel's primary control
+     and are tapped on a phone. */
+  min-height: 44px;
   transition:
     background 0.15s,
     color 0.15s;
 }
-.ws-stats-pill:hover {
-  color: var(--text);
+/* Unguarded, iOS latches the hover colour on after a tap and the pill
+   reads as selected until something else is touched. */
+@media (hover: hover) {
+  .ws-stats-pill:not(:disabled):hover {
+    color: var(--text);
+  }
+}
+/* A window the archive cannot fill yet. Dimmed rather than hidden: the
+   ladder is a fixed set of five and a gap in it is harder to read than a
+   step that is visibly not available yet. Still well clear of the
+   background — a disabled control must be legible, not invisible. */
+.ws-stats-pill.is-unavailable {
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
 }
 .ws-stats-pill.is-active {
   background: rgba(127, 174, 201, 0.22);

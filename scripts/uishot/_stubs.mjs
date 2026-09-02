@@ -91,8 +91,14 @@ const CDN_SHIM =
 /**
  * Install request interception on one page.
  * Anything not matched falls through to the harness's static server.
+ *
+ * `overrides` is an optional { pathPrefix: body } from the surface, for
+ * the cases where the SAME endpoint has to answer differently than the
+ * default fixture — a sparse weather archive, say, which is a state the
+ * default payload cannot also be. Checked before apiBody, so a surface
+ * can shadow any answer without editing the shared table.
  */
-export async function installStubs(page) {
+export async function installStubs(page, overrides = null) {
   // The CDN <script> tags carry SRI hashes, so a stubbed BODY is rejected
   // by the integrity check and the globals never appear. Defining them
   // before any document script runs sidesteps that entirely, and the
@@ -114,9 +120,10 @@ export async function installStubs(page) {
     if (isImg) return route.fulfill({ contentType: 'image/svg+xml', body: SNAPSHOT_SVG });
 
     if (p.startsWith('/api/') || (p.startsWith('/media/') && !p.endsWith('.mp4'))) {
+      const over = Object.entries(overrides || {}).find(([prefix]) => p.startsWith(prefix));
       return route.fulfill({
         contentType: 'application/json',
-        body: JSON.stringify(apiBody(url)),
+        body: JSON.stringify(over ? over[1] : apiBody(url)),
       });
     }
     return route.continue();

@@ -20,6 +20,7 @@ import { apiGet } from '../core/api.js';
 import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
 import { withScrollAnchor } from '../core/scroll-anchor.js';
 import { resetChartAnnotations } from './_chart-annotations.js';
+import { applyRangePills } from './_range-pills.js';
 
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
@@ -63,6 +64,10 @@ export const _wsStatsState = {
   // otherwise re-enabling a flat field would just vanish again on the
   // next 60 s refresh.
   userAdjusted: false,
+  // The one-shot latch for _autoPickRange. `hours` above is only a
+  // starting guess until the first payload says how far the archive
+  // actually goes back; after that the operator owns it.
+  rangeAutoPicked: false,
   data: null, // last fetched payload
   inFlight: false,
 };
@@ -125,6 +130,24 @@ export async function loadWeatherStats() {
   } finally {
     _wsStatsState.inFlight = false;
   }
+  await _autoPickRange();
+}
+
+// First payload only: if the panel's window is wider than the archive
+// can fill, drop to the widest one that has data and fetch that instead.
+//
+// Runs AFTER the inFlight guard has cleared, because it re-enters
+// loadWeatherStats — doing it from inside renderWeatherStats (which runs
+// while inFlight is still true) would silently no-op. One shot, whatever
+// the outcome: the 60 s refresh must never drag the operator off a range
+// they picked themselves, and neither must a later extent update.
+async function _autoPickRange() {
+  if (_wsStatsState.rangeAutoPicked) return;
+  _wsStatsState.rangeAutoPicked = true;
+  const want = applyRangePills(_wsStatsState.data?.extent, _wsStatsState.hours);
+  if (!Number.isFinite(want) || want === _wsStatsState.hours) return;
+  _wsStatsState.hours = want;
+  await loadWeatherStats();
 }
 
 // Decimal places per history field. The single source for it: the
@@ -188,6 +211,10 @@ function _renderWeatherStatsPillState() {
       !zoomed && parseInt(b.dataset.hours, 10) === _wsStatsState.hours,
     );
   });
+  // Which steps the archive can actually fill — recomputed here rather
+  // than once at load, because the buffer grows under a panel that stays
+  // open and a step that was dark at boot should light up on its own.
+  applyRangePills(_wsStatsState.data?.extent, _wsStatsState.hours);
   const resetBtn = byId('weatherStatsZoomReset');
   if (resetBtn) resetBtn.hidden = !zoomed;
   const zoomActions = byId('weatherZoomActions');

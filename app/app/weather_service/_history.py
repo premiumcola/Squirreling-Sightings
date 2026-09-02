@@ -282,6 +282,20 @@ class HistoryMixin:
         cutoff = since_dt or (datetime.now() - timedelta(hours=hours))
         with self._history_lock:
             samples = list(self._history)
+        # What the archive actually holds, independent of this window.
+        #
+        # The range picker used to offer a fixed 1 h / 6 h / 24 h / 7 d /
+        # 30 d ladder whether or not the buffer could fill any of it, so a
+        # fresh install drew three hours of data stretched across a 30-day
+        # axis and called it a month. It cannot be inferred client-side
+        # from a fetched window either — asking for 30 d and getting 3 h
+        # back is indistinguishable from a service that only kept 3 h.
+        # The deque is oldest-first (guaranteed by _history_store.load).
+        extent = {
+            "oldest": (samples[0].get("ts") if samples else None),
+            "newest": (samples[-1].get("ts") if samples else None),
+            "count": len(samples),
+        }
         # Filter to time window. Tolerate parse failures by falling back to
         # "include the row" — a malformed timestamp shouldn't shrink the
         # visible window.
@@ -336,6 +350,7 @@ class HistoryMixin:
             "labels_de": dict(HISTORY_LABELS_DE),
             "fields": list(HISTORY_FIELDS),
             "poll_interval_s": poll_interval_s,
+            "extent": extent,
         }
 
     # ── Telegram push (Phase 3) ─────────────────────────────────────────────

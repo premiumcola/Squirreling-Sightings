@@ -59,7 +59,7 @@ async function shoot(browser, baseUrl, surface, width, auditSrc) {
   const consoleErrors = [];
   page.on('console', (m) => m.type() === 'error' && consoleErrors.push(m.text()));
   page.on('pageerror', (e) => consoleErrors.push(String(e)));
-  await installStubs(page);
+  await installStubs(page, surface.stubs);
 
   const png = join(OUT_DIR, `${surface.id}-${width}.png`);
   const shotRec = { surface: surface.id, width, png, findings: [], consoleErrors, error: null };

@@ -401,4 +401,28 @@ export const WEATHER_HISTORY = {
     'sun_altitude',
   ],
   poll_interval_s: 300,
+  extent: {
+    oldest: '2026-08-29T00:00:00',
+    newest: '2026-08-29T23:45:00',
+    count: _WX_SLOTS,
+  },
+};
+
+/**
+ * A day-old install: three hours in the buffer and nothing before that.
+ *
+ * The state the range picker was wrong about — it offered 7 d and 30 d
+ * regardless, so those windows drew three hours of data stretched across
+ * a month-wide axis. Its own surface, because the fully-populated
+ * archive above cannot also be a sparse one.
+ */
+export const WEATHER_HISTORY_SPARSE = {
+  ...WEATHER_HISTORY,
+  hours: 24,
+  samples: WEATHER_HISTORY.samples.slice(56, 69), // 3 h across the storm
+  extent: {
+    oldest: WEATHER_HISTORY.samples[56].ts,
+    newest: WEATHER_HISTORY.samples[68].ts,
+    count: 13,
+  },
 };

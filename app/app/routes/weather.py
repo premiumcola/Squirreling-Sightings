@@ -337,6 +337,7 @@ def api_weather_history():
                 "labels_de": {},
                 "fields": [],
                 "poll_interval_s": 300,
+                "extent": {"oldest": None, "newest": None, "count": 0},
             }
         )
     hours = request.args.get("hours", type=int, default=24) or 24

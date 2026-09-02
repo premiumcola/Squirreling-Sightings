@@ -21,6 +21,7 @@ import {
   WEATHER_SAMPLES,
   WEATHER_RANGE,
   WEATHER_HISTORY,
+  WEATHER_HISTORY_SPARSE,
 } from './_fixtures.mjs';
 
 /** Put a fixture on window so the in-page mounts can read it. */
@@ -234,6 +235,14 @@ export const SURFACES = [
     id: 'weather-chart',
     title: 'Wetterdaten panel · range pills + verlauf chart',
     mount: mountWeatherChart,
+    clip: '#weatherStatsBlock',
+    scope: '#weatherStatsBlock',
+  },
+  {
+    id: 'weather-chart-sparse',
+    title: 'Wetterdaten panel · three hours of archive, wider steps dark',
+    mount: mountWeatherChart,
+    stubs: { '/api/weather/history': WEATHER_HISTORY_SPARSE },
     clip: '#weatherStatsBlock',
     scope: '#weatherStatsBlock',
   },

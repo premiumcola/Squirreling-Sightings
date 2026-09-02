@@ -16,60 +16,20 @@
 // localStorage[FINE_FOLD_STORAGE_KEY] so the user's last choice
 // survives page reloads.
 
-import { TIER_FULL } from './device-tier.js';
+// The fold's chrome and its three-state open rule now live in
+// core/fold.js, because the player needs three INDEPENDENT folds and a
+// single-key implementation copied three times would have given all
+// three one shared open state. Imported AND re-exported: this module
+// uses neither locally any more, but resolveFoldOpen is part of its
+// published surface (its own unit test imports it from here), and a
+// re-export alone would not put a symbol in this file's scope if a
+// later edit did want to call it.
+import { renderFold } from '../core/fold.js';
+export { resolveFoldOpen } from '../core/fold.js';
 
 export const FINE_FOLD_STORAGE_KEY = 'tamspy.mediaview.fineFold';
 
 const _TERM_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
-const _CHEVRON_SVG = `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>`;
-
-/**
- * Pure decision — split out from `_isOpen` so the actual RULE is
- * testable without a localStorage mock, mirroring device-tier.js's
- * resolveDeviceTier/getDeviceTier split (pure resolver vs. DOM/storage
- * wrapper).
- *
- * Three-state storage read: '1' = explicitly open, '0' = explicitly
- * closed — either ALWAYS wins, regardless of tier: an operator's past
- * choice must keep winning on both tiers. Only when the key was never
- * touched (raw === null) does the fallback run: on the 'full' tier (a
- * permanently-visible desktop with room to spare) the fold defaults
- * open, the same way live-detect mode already forces `defaultOpen:true`
- * for its own reasons (its own call site bypasses this fallback
- * entirely by always passing true, so it is unaffected either way);
- * on 'compact' the caller's per-mode default is unchanged from before
- * tier existed (live-detect open, recorded/weather closed).
- *
- * @param {string|null} raw       localStorage.getItem(FINE_FOLD_STORAGE_KEY)
- * @param {boolean} defaultOpen   caller's per-mode fallback
- * @param {string} [tier]         'full' | 'compact' | undefined
- * @returns {boolean}
- */
-export function resolveFoldOpen(raw, defaultOpen, tier) {
-  if (raw === '1') return true;
-  if (raw === '0') return false;
-  if (tier === TIER_FULL) return true;
-  return !!defaultOpen;
-}
-
-function _isOpen(defaultOpen, tier) {
-  try {
-    return resolveFoldOpen(localStorage.getItem(FINE_FOLD_STORAGE_KEY), defaultOpen, tier);
-  } catch {
-    return !!defaultOpen;
-  }
-}
-
-function _saveOpen(open) {
-  try {
-    // Explicit '0' so a user-closed fold stays closed even when the
-    // caller's default would have flipped it open (live-detect mode).
-    if (open) localStorage.setItem(FINE_FOLD_STORAGE_KEY, '1');
-    else localStorage.setItem(FINE_FOLD_STORAGE_KEY, '0');
-  } catch {
-    /* quota / private mode — fall through */
-  }
-}
 
 function _renderLines(lines, opts = {}) {
   if (!Array.isArray(lines) || lines.length === 0) {
@@ -109,7 +69,6 @@ function _renderLines(lines, opts = {}) {
 
 export function renderFineAnalysisFold(host, lines, opts = {}) {
   if (!host) return null;
-  const open0 = _isOpen(opts.defaultOpen, opts.tier);
   // B23 · live-detect mounts pass { live: true } so the empty-state
   // copy reads "Warte auf ersten Tick …" instead of the recorded-
   // clip "Kein Server-Trace gespeichert" string. Capture the flag in
@@ -134,33 +93,22 @@ export function renderFineAnalysisFold(host, lines, opts = {}) {
     body.innerHTML = headerHtml + `<div class="mv-fafold-trace">${linesHtml}</div>`;
   };
   const repaintSummary = () => {
-    const title = host.querySelector('.mv-fafold-title');
-    if (!title) return;
     const base = live ? 'Trace' : 'Fein-Analyse · Trace-Log';
-    title.textContent = summaryExtra ? `${base} · ${summaryExtra}` : base;
+    fold?.setTitle(summaryExtra ? `${base} · ${summaryExtra}` : base);
   };
-  host.innerHTML = `
-    <div class="mv-fafold-root" data-open="${open0 ? '1' : '0'}"${live ? ' data-mode="live"' : ''}>
-      <button type="button" class="mv-fafold-header" aria-expanded="${open0 ? 'true' : 'false'}">
-        <span class="mv-fafold-chevron" aria-hidden="true">${_CHEVRON_SVG}</span>
-        <span class="mv-fafold-icon" aria-hidden="true">${_TERM_SVG}</span>
-        <span class="mv-fafold-title">${live ? 'Trace' : 'Fein-Analyse · Trace-Log'}</span>
-        ${live ? '' : '<span class="mv-fafold-sub">capture · coral · verdict · matrix · armed · telegram · schedule · final</span>'}
-      </button>
-      <div class="mv-fafold-body" ${open0 ? '' : 'hidden'}></div>
-    </div>`;
-  const root = host.querySelector('.mv-fafold-root');
-  const header = host.querySelector('.mv-fafold-header');
-  const body = host.querySelector('.mv-fafold-body');
-  if (header && body && root) {
-    header.addEventListener('click', () => {
-      const willOpen = body.hidden;
-      body.hidden = !willOpen;
-      header.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-      root.dataset.open = willOpen ? '1' : '0';
-      _saveOpen(willOpen);
-    });
-  }
+  const fold = renderFold(host, {
+    key: FINE_FOLD_STORAGE_KEY,
+    title: live ? 'Trace' : 'Fein-Analyse · Trace-Log',
+    subtitle: live
+      ? ''
+      : 'capture · coral · verdict · matrix · armed · telegram · schedule · final',
+    icon: _TERM_SVG,
+    defaultOpen: opts.defaultOpen,
+    tier: opts.tier,
+    prefix: 'mv-fafold',
+    mode: live ? 'live' : '',
+  });
+  const body = fold?.body;
   // Initial paint
   repaint();
   repaintSummary();

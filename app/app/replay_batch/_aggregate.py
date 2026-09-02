@@ -17,14 +17,41 @@ had a tracks.json sidecar:
     accumulated;
   * the original side is a whole-clip track count ONLY when a sidecar
     existed (`tracks_comparable`). Otherwise it falls back to the
-    event's own `detections`, which camera_runtime/_loop_stages.py:127
-    froze from the SINGLE frame where recording started.
+    event's own `detections`, which `camera_runtime/_motion.py`
+    ::_build_event_meta froze from the SINGLE frame where recording
+    started (the snapshot-camera path does the same at
+    `camera_runtime/_loop_stages.py`).
 
 A gain measured against that single frame is therefore expected and
 says little. A gain measured track-against-track is a real finding.
 Both are counted, and `basis` on every row says which one it was, so
 the report can lead with the honest number (`birds_gained_strict`)
 instead of the flattering one.
+
+WHY `whole_clip` IS NOT A THIRD BASIS
+------------------------------------
+Events recorded since `camera_runtime/_clip_tally.py` landed DO carry a
+whole-clip baseline of their own, in `event["whole_clip"]`. `_before_birds`
+deliberately does not read it, and `birds_gained_strict` therefore still
+counts exactly what it always counted: clips where the replay found more
+birds than a whole-clip TRACK baseline. Two reasons, both structural.
+
+The first is that it would not be like-for-like. The replay walks at the
+RAW FLOOR — `replay/_run.py` passes `spawn_score=thr.floor` on purpose,
+because a replay that hid everything below the live spawn threshold could
+never answer "did lowering the threshold help?". The post-clip worker
+does the same (`tracking_worker/__init__.py`), which is precisely why the
+sidecar is a fair baseline for it. `whole_clip`, by contrast, is what the
+LIVE pipeline kept: spawn-gated, confirmer-gated, zone-filtered. Comparing
+a floor-level count against a spawn-level one would report a "gain" on
+almost every clip from the threshold difference alone — a flattering
+number of exactly the kind this split exists to avoid.
+
+The second is comparability. `basis` has to mean the same thing across an
+archive that spans both eras, or one aggregate silently mixes two
+baselines. `event["detections"]` stays the trigger frame for that reason
+among others, so an old event and a new one still present the same
+before-side to `replay/_report.py::original_side`.
 
 ON SPECIES
 ----------

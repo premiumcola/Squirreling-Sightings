@@ -29,7 +29,9 @@ const _NO_THUMB_ICON_SVG = `<svg viewBox="0 0 24 24" width="20" height="20" fill
 // placeholder shows through" pattern as mediathek/_cards.js).
 export function _trashThumbHTML(it) {
   const src = it.thumb_url || '';
-  const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+  const img = src
+    ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">`
+    : '';
   return `<div class="trash-row__thumb">${_NO_THUMB_ICON_SVG}${img}</div>`;
 }
 

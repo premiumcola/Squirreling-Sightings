@@ -53,7 +53,8 @@ export function showToast(msg, type = 'info', opts = {}) {
   // Toast lifetime by severity — errors linger longest because the
   // user usually wants time to read what failed before reaching for
   // a retry. An action toast gets 8 s: long enough to notice and reach.
-  const bySeverity = type === 'error' ? 8000 : type === 'warn' || type === 'info' ? 6000 : 4000;
+  const bySeverity =
+    type === 'error' ? 8000 : type === 'warn' || type === 'info' ? 6000 : 4000;
   const lifetime = opts.lifetime || (opts.action ? 8000 : bySeverity);
   const dismiss = () => {
     t.classList.add('toast-out');

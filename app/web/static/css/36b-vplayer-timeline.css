@@ -97,11 +97,19 @@
 }
 
 .vp-tl-seg[data-status='weak'] {
-  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.45) 0 3px, rgba(0, 0, 0, 0) 3px 6px);
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.45) 0 3px,
+    rgba(0, 0, 0, 0) 3px 6px
+  );
 }
 
 .vp-tl-seg[data-status='predicted'] {
-  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.6) 0 2px, rgba(0, 0, 0, 0) 2px 6px);
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.6) 0 2px,
+    rgba(0, 0, 0, 0) 2px 6px
+  );
 }
 
 .vp-tl-seg[data-status='masked'] {
@@ -201,7 +209,11 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: repeating-linear-gradient(45deg, var(--vp-tl-hatch) 0 3px, rgba(0, 0, 0, 0) 3px 6px);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--vp-tl-hatch) 0 3px,
+    rgba(0, 0, 0, 0) 3px 6px
+  );
 }
 
 .vp-tl-band--pre {

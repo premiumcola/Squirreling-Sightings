@@ -107,49 +107,74 @@ class BirdSpeciesClassifier(InferenceTimingMixin):
         if not model_path:
             self.reason = "missing model_path"
             return
-        if not Path(model_path).exists():
-            cpu_alt = self.cfg.get("cpu_model_path")
-            if not (cpu_alt and Path(cpu_alt).exists()):
-                self.reason = f"model file not found: {model_path}"
-                log.warning("[det] Bird classifier: %s", self.reason)
-                return
+        if not self._model_file_reachable(model_path):
+            return
+        self._load(model_path)
 
+    def _model_file_reachable(self, model_path: str) -> bool:
+        """True when either the configured model or its CPU twin exists."""
+        if Path(model_path).exists():
+            return True
+        cpu_alt = self.cfg.get("cpu_model_path")
+        if cpu_alt and Path(cpu_alt).exists():
+            return True
+        self.reason = f"model file not found: {model_path}"
+        log.warning("[det] Bird classifier: %s", self.reason)
+        return False
+
+    def _load(self, model_path: str) -> None:
+        """Tier 1 pycoral → tier 1b EdgeTPU delegate → tier 2 CPU."""
         coral_error = "prefer_cpu"
         if not self._prefer_cpu:
-            # ── Tier 1: pycoral ───────────────────────────────────────────
-            try:
-                from pycoral.adapters import classify, common  # type: ignore
-                from pycoral.utils.edgetpu import make_interpreter  # type: ignore
-
-                self.common = common
-                self.classify = classify
-                self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
-                self.interpreter.allocate_tensors()
-                self.available = True
-                self.mode = "coral"
-                self.reason = "ok"
-                self.active_model_path = model_path
-                log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
+            coral_error = self._try_pycoral(model_path)
+            if coral_error is None:
                 return
-            except Exception as e:
-                log.warning("[det] Bird classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e)
-                coral_error = str(e)
-
-            # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────
-            # See detectors/_edgetpu.py. _classify_cpu already dequantises
-            # uint8/int8 output, so the compiled model parses unchanged.
-            delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
-            if delegated is not None:
-                self.interpreter = delegated
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "coral"
-                self.reason = "edgetpu_delegate"
-                self.active_model_path = model_path
-                log.info("[det] Bird classifier (EdgeTPU-Delegate) aktiv: %s", model_path)
+            if self._try_delegate(model_path):
                 return
+        if self._try_cpu(model_path, coral_error):
+            return
+        self.reason = f"classifier unavailable: {coral_error}"
+        log.warning("[det] Bird species classifier nicht verfügbar")
 
-        # ── Tier 2: tflite-runtime ────────────────────────────────────────
+    def _try_pycoral(self, model_path: str) -> str | None:
+        """None when the TPU tier loaded; otherwise the error to report."""
+        try:
+            from pycoral.adapters import classify, common  # type: ignore
+            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
+
+            self.common = common
+            self.classify = classify
+            self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
+            self.interpreter.allocate_tensors()
+            self.available = True
+            self.mode = "coral"
+            self.reason = "ok"
+            self.active_model_path = model_path
+            log.info("[det] Bird classifier (Coral) aktiv: %s", model_path)
+            return None
+        except Exception as e:
+            log.warning("[det] Bird classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e)
+            return str(e)
+
+    def _try_delegate(self, model_path: str) -> bool:
+        """Tier 1b: EdgeTPU via the tflite-runtime delegate. See
+        detectors/_edgetpu.py. `_classify_cpu` already dequantises
+        uint8/int8 output, so the compiled model parses unchanged."""
+        delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
+        if delegated is None:
+            return False
+        self.interpreter = delegated
+        self._cpu_mode = True
+        self.available = True
+        self.mode = "coral"
+        self.reason = "edgetpu_delegate"
+        self.active_model_path = model_path
+        log.info("[det] Bird classifier (EdgeTPU-Delegate) aktiv: %s", model_path)
+        return True
+
+    def _try_cpu(self, model_path: str, coral_error: str) -> bool:
+        """Tier 2: plain tflite-runtime, preferring the uncompiled twin
+        of an `*_edgetpu.tflite`."""
         cpu_model = self.cfg.get("cpu_model_path")
         if not cpu_model:
             cpu_model = model_path.replace("_edgetpu.tflite", ".tflite")
@@ -174,12 +199,10 @@ class BirdSpeciesClassifier(InferenceTimingMixin):
                 )
                 self.active_model_path = try_path
                 log.info("[det] Bird classifier (CPU) aktiv: %s", try_path)
-                return
+                return True
             except Exception as e2:
                 log.warning("[det] Bird classifier CPU fehlgeschlagen für %s: %s", try_path, e2)
-
-        self.reason = f"classifier unavailable: {coral_error}"
-        log.warning("[det] Bird species classifier nicht verfügbar")
+        return False
 
     def classify_crop(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
         """Return (display_name, latin_binomial, score).

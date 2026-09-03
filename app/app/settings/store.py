@@ -152,12 +152,19 @@ class SettingsStore:
         self.data.setdefault("ui", {}).setdefault(
             "wizard_completed", bool(self.data.get("cameras"))
         )
-        # schedule_migrated saves explicitly inside the original migrate
-        # method; preserved here through the persist pass below.
-        if schedule_migrated:
-            self.save()
         # Persist additive defaults (push schema, runtime section) so the
-        # UI in Phase 2 finds every key present.
+        # UI in Phase 2 finds every key present — and, with them, whatever
+        # migrate_schedules rewrote.
+        #
+        # Exactly ONE save. A second one here (it used to be conditional
+        # on `schedule_migrated`) rotated the 2-deep backup a second time
+        # against a settings.json the first save had already replaced:
+        # the previous generation was pushed out entirely and .bak came
+        # out byte-identical to the live file. That halved the recoverable
+        # history on the one boot where the pre-upgrade state matters
+        # most. `schedule_migrated` is kept only for the log line.
+        if schedule_migrated:
+            log.info("[migration] unified camera schedules migrated to the actions shape")
         self.save()
 
     def _dedupe_cameras_by_id(self) -> int:

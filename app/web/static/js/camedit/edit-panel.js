@@ -13,6 +13,7 @@ import { showToast } from '../core/toast.js';
 import { getCameraIcon, getCameraColor } from '../core/icons.js';
 import { panelState, _restoreEditWrapper, _closeEditPanel } from './panel.js';
 import { hydrateSecretField } from '../chrome/secret-field.js';
+import { _setEyeState } from '../chrome/password-toggle.js';
 import {
   RTSP_PATH_OPTS,
   _applyUrlMask,
@@ -154,10 +155,12 @@ function _hydrateConnection(formEl, f, c) {
   delete f['snapshot_url'].dataset.real;
   _applyUrlMask(f['rtsp_url']);
   _applyUrlMask(f['snapshot_url']);
-  formEl.querySelectorAll('.url-eye').forEach((b) => {
-    b.classList.remove('revealed');
-    b.textContent = '👁';
-  });
+  // Repaint through the one helper that owns the glyph. This used to do
+  // `b.textContent = '👁'`, which threw the button's SVG away and left an
+  // emoji behind — a different size and baseline on every platform, and
+  // it also meant the masked/revealed pair only agreed until the first
+  // re-hydrate. The fields are masked at this point, so: masked state.
+  formEl.querySelectorAll('.url-eye').forEach((b) => _setEyeState(b, false));
 }
 
 // ── Alarmierung · severity matrix, channels, cooldowns, test push ─────────

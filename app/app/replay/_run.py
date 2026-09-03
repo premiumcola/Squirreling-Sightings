@@ -241,13 +241,9 @@ def replay_clip(
     # tracking_worker/_classifier.py.
     classifier = classifier_for(worker, classify)
     tally = SpeciesTally(max_crops=max_crops)
-    # Built once and reused as the answer to "did the second stage run?".
-    # `worker.bird_classifier()` hands back an object even when species
-    # classification is switched off (available=False, reason="disabled"),
-    # so `classifier is not None` is not that answer — `make_sample_hook`
-    # refuses to build a hook for such a classifier and nothing gets
-    # classified. Deriving the reported flag from the hook itself keeps
-    # the two from drifting apart again.
+    # Also THE answer to "did the second stage run?" — a switched-off
+    # classifier is still an object, so `classifier is not None` is not
+    # that answer. See tests/test_replay_classified_flag.py.
     sample_hook = make_sample_hook(classifier, tally)
     try:
         payload = _walk_clip(
@@ -265,11 +261,40 @@ def replay_clip(
     finally:
         cap.release()
 
+    return _replay_result(
+        payload,
+        meta,
+        tally,
+        camera_id=camera_id,
+        detector=detector,
+        classifier=classifier,
+        classified=sample_hook is not None,
+        requested=classify,
+        max_samples=max_samples,
+        elapsed_ms=int((time.time() - started) * 1000),
+    )
+
+
+def _replay_result(
+    payload: dict,
+    meta: dict,
+    tally: SpeciesTally,
+    *,
+    camera_id: str,
+    detector,
+    classifier,
+    classified: bool,
+    requested: bool,
+    max_samples: int,
+    elapsed_ms: int,
+) -> dict:
+    """The replay side of a comparison, plus the one log line that says
+    what the run cost. Split out of ``replay_clip`` so the walk and the
+    report of the walk are separately readable."""
     tracks = payload.get("tracks") or []
     total = available_samples(meta)
     analysed = min(total, max_samples) if total else 0
     species = tally.result()
-    elapsed_ms = int((time.time() - started) * 1000)
     log.info(
         "[tracking] cam=%s replay tracks=%d frames=%d/%d classified=%d/%d "
         "crops=%d species=%d in %d ms",
@@ -296,7 +321,7 @@ def replay_clip(
         # Whole-clip species, best-scoring first — the half of the
         # answer a detector-only replay could never give.
         "species": species,
-        "classified": sample_hook is not None,
-        "classifier": describe_classifier(classifier, requested=classify),
+        "classified": classified,
+        "classifier": describe_classifier(classifier, requested=requested),
         **tally.stats(),
     }

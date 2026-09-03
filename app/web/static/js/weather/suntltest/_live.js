@@ -6,11 +6,18 @@ import { byId, esc } from '../../core/dom.js';
 import { state } from '../../core/state.js';
 import { S } from './_state.js';
 
-export function dnBadge(v) {
-  if (v === true) return '<span class="suntltest-badge suntltest-badge--ok">Color gesetzt</span>';
-  if (v === false)
-    return '<span class="suntltest-badge suntltest-badge--err">fehlgeschlagen</span>';
-  return '<span class="suntltest-badge suntltest-badge--mute">übersprungen</span>';
+// Reolink day/night override result. `true` the CGI call went through,
+// `false` it was attempted and failed, null/undefined it was never
+// attempted (override disabled, or the camera has no rtsp_url to infer
+// a host from — see _apply_daynight_override).
+//
+// The label is a parameter because the same three states describe both
+// halves of the flip: the lead-in that forces Color before the window,
+// and the revert that restores Auto/Black&White after it.
+export function dnBadge(v, label = 'Tag/Nacht') {
+  const cls = v === true ? 'ok' : v === false ? 'err' : 'mute';
+  const word = v === true ? 'gesetzt' : v === false ? 'fehlgeschlagen' : 'übersprungen';
+  return `<span class="suntltest-badge suntltest-badge--${cls}">${esc(label)}: ${word}</span>`;
 }
 
 // Profile pill — DAY (sun yellow) / TWILIGHT (horizon orange) / NIGHT
@@ -173,9 +180,18 @@ function _bindCopyButton(wrap) {
   });
 }
 
-function _pillRow(d) {
+export function pillRow(d) {
+  // The daynight result is the first signal this panel's own header
+  // comment promises, and the backend has filled daynight_color_set on
+  // every session since the feature landed — but dnBadge was never
+  // called, so a Color flip that failed outright looked exactly like
+  // one that worked. The revert badge only appears once a revert was
+  // actually attempted (it is null for the whole capture).
   const pills =
-    profileBadge(d.validator_profile, d.baseline_brightness) + driftBadge(d.phase_drift_warning);
+    profileBadge(d.validator_profile, d.baseline_brightness) +
+    driftBadge(d.phase_drift_warning) +
+    dnBadge(d.daynight_color_set, 'Tag/Nacht → Color') +
+    (d.daynight_revert_set == null ? '' : dnBadge(d.daynight_revert_set, 'Tag/Nacht zurück'));
   return pills ? `<div class="suntltest-pill-row">${pills}</div>` : '';
 }
 
@@ -206,7 +222,7 @@ export function renderLive(d) {
       <div class="suntltest-live-title">${esc(camName)} · ${phaseLabel}</div>
       <div class="suntltest-live-status">${d.finished ? '✅ fertig' : d.running ? '⏺ läuft' : '⏸ pausiert'}</div>
     </div>
-    ${_pillRow(d)}
+    ${pillRow(d)}
     ${_renderHeatmap(d)}
     ${_renderCounterRow(d)}
     ${_renderActionRow(d)}

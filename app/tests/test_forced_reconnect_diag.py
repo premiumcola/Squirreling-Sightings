@@ -27,10 +27,10 @@ _pkg_root = str(Path(__file__).parent.parent)
 if _pkg_root not in sys.path:
     sys.path.insert(0, _pkg_root)
 
-from app.camera_runtime._main_loop import MainLoopMixin  # noqa: E402
+from app.camera_runtime._lifecycle import LifecycleMixin  # noqa: E402
 
 
-class _Cam(MainLoopMixin):
+class _Cam(LifecycleMixin):
     def __init__(self, stale_streak: int):
         self.camera_id = "acme_cam_garden_113"
         self._stale_streak = stale_streak

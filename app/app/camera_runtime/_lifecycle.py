@@ -59,6 +59,26 @@ class LifecycleMixin:
     (frame buffers, lock, config, etc.) which live on the concrete class.
     """
 
+    def _note_forced_reconnect(self) -> None:
+        """Report the stall we are recovering from, THEN clear the streak.
+
+        The streak is the only number on this line that says how bad the
+        stall got — ``_timelapse_capture`` raises ``_force_reconnect``
+        only at ``stale_streak >= 15``, so it is always the interesting
+        part. It used to be zeroed on the line above the log call, so the
+        warning could only ever report ``stale_streak=0`` and the
+        operator lost the one figure the diagnostic exists for.
+        """
+        log_cam.warning(
+            "[cam:%s] forced reconnect — stale-feed recovery "
+            "(stale_streak=%d, last_frame_age=%.0fs, reconnects_24h=%d)",
+            self.camera_id,
+            self._stale_streak,
+            (time.time() - self.frame_ts) if self.frame_ts > 0 else 0,
+            self._reconnect_count_24h(),
+        )
+        self._stale_streak = 0
+
     @property
     def cfg(self):
         return self.config_getter(self.camera_id) or {"id": self.camera_id, "name": self.camera_id}

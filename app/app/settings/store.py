@@ -1,8 +1,14 @@
 """SettingsStore — source of truth for storage/settings.json.
 
 Boot sequence: build_defaults() seeds self.data from base_config, load()
-merges any persisted state on top, then runs every migration in
-MIGRATIONS order, then save() persists the merged result.
+merges any persisted state on top, runs the migrations, then save()
+persists the merged result — exactly once.
+
+The migration order is the explicit call block in :meth:`load`. There is
+no registry to iterate: a function added to ``settings.migrations`` does
+not run until it is imported and called there (or chained from a
+migration that already is). ``test_settings_migration_wiring`` fails if
+one is left unwired.
 """
 
 from __future__ import annotations

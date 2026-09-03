@@ -51,7 +51,13 @@ class EventTLPrebufferMixin:
             self._event_tl_ring_dict = {
                 "rings": {},  # cam_id -> EventTLRing
                 "threads": {},  # cam_id -> (Thread, threading.Event)
-                "inflight": set(),  # cam_ids with a capture running
+                # cam_id -> {trigger, trigger_text, started_at, ends_at}.
+                # A dict rather than a set: the claim is the one moment
+                # that knows what is being captured and for how long, so
+                # the descriptor rides on the claim itself instead of a
+                # parallel structure that could disagree with it.
+                # Membership tests (`cam_id in inflight`) read the same.
+                "inflight": {},
                 "watch_until": {},  # cam_id -> unix ts the watch expires
                 "lock": threading.Lock(),
                 "booted": False,
@@ -252,21 +258,40 @@ class EventTLPrebufferMixin:
                 break
 
     # ── Handover to the capture ─────────────────────────────────────────
-    def _event_tl_claim_capture(self, cam_id: str) -> bool:
+    def _event_tl_claim_capture(self, cam_id: str, trigger: str = "", window_min: int = 0) -> bool:
         """Reserve the camera for one capture. False when a capture is
         already running — the guard against two triggers landing in quick
-        succession and both consuming the same ring."""
+        succession and both consuming the same ring.
+
+        `trigger` and `window_min` are recorded on the claim so the live
+        status can name what is capturing and how long it still has.
+        They are descriptive only: the claim succeeds or fails on
+        membership alone, exactly as before.
+        """
+        from datetime import datetime, timedelta
+
+        # Reuse the archive's German trigger names — the same three
+        # kinds already have labels there, and a second map would be one
+        # more pair of strings to drift apart.
+        from ..weather_episodes._footage import KIND_LABEL_DE
+
         st = self._event_tl_ring_state()
+        now = datetime.now()
         with st["lock"]:
             if cam_id in st["inflight"]:
                 return False
-            st["inflight"].add(cam_id)
+            st["inflight"][cam_id] = {
+                "trigger": trigger or None,
+                "trigger_text": KIND_LABEL_DE.get(trigger) if trigger else None,
+                "started_at": now,
+                "ends_at": (now + timedelta(minutes=window_min)) if window_min > 0 else None,
+            }
         return True
 
     def _event_tl_release_capture(self, cam_id: str) -> None:
         st = self._event_tl_ring_state()
         with st["lock"]:
-            st["inflight"].discard(cam_id)
+            st["inflight"].pop(cam_id, None)
         # Ring dir is gone with the handover (frames were moved into the
         # capture scratch); drop the object so the next sync builds a
         # fresh one.

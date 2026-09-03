@@ -167,7 +167,11 @@ class EventTimelapseMixin(EventTLDetectorsMixin, EventTLPrebufferMixin, EventTLE
                 continue
             # Fire the FIRST matching trigger — once per cam per cycle.
             trig_kind, score, fc_snapshot = triggers[0]
-            if not self._event_tl_claim_capture(cam_id):
+            # Read the window before claiming: the claim records how long
+            # this capture will run so the live status can count it down
+            # from the same number the capture loop uses.
+            window_min = int(evt_cfg.get("window_min", 60) or 60)
+            if not self._event_tl_claim_capture(cam_id, trig_kind, window_min):
                 log.info(
                     "[weather] %s on %s skipped — capture already running",
                     trig_kind,
@@ -175,7 +179,6 @@ class EventTimelapseMixin(EventTLDetectorsMixin, EventTLPrebufferMixin, EventTLE
                 )
                 continue
             self._event_tl_record_trigger(cam_id)
-            window_min = int(evt_cfg.get("window_min", 60) or 60)
             interval_s = max(1, int(evt_cfg.get("interval_s", 6) or 6))
             fps = max(1, int(evt_cfg.get("fps", 24) or 24))
             log.info(

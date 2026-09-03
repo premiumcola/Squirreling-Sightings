@@ -37,41 +37,18 @@ from .._consts import (
     log,
 )
 
-# 70/30 pre-event bias on the sun-timelapse window: most of the captured
-# minutes sit BEFORE the sun event so a sunrise video starts in twilight
-# and watches the sun come up; a sunset video catches the run-up to dusk
-# and a short tail of afterglow. Single source of truth — referenced by
-# both the scheduler in _register_sun_jobs and the preview math in
-# sun_times_today so the two never drift again.
-_SUN_PRE_BIAS = 0.70
-
-# Drift guard: refuse a "sunset" capture that fires hours after the
-# real solar sunset. Without this, a misconfigured schedule produced an
-# MP4 labelled "sunset · score=0.60" that was actually 312 minutes
-# after the real event — pure IR night with no afterglow at all.
-# Production runs refuse outright; test mode logs a WARNING and
-# proceeds (the user is deliberately diagnosing).
-_SUN_TL_DRIFT_LIMIT_MIN = 90
-
-# Locked sunrise/sunset capture window — single value, not user-tunable.
-# Sized to comfortably cover civil twilight (sun 0–6° below horizon, ~30
-# min either side at mid-latitudes) PLUS golden hour (~30 min after the
-# event). With the 70/30 pre-bias above that gives 52 min before and
-# 23 min after the sun event, so the recording starts well into
-# nautical twilight (when the first colours appear in the sky) and
-# ends after the bright phase has settled. Smaller windows (the
-# previous 30-min default) miss the early twilight transition; larger
-# ones bloat the file without adding visible content. Per the F-task
-# spec the user-facing slider was removed — fewer knobs to mis-set.
-_SUN_TL_LOCKED_WINDOW_MIN = 75
-
-# Locked output frame rate — same story as the window above. Every
-# timelapse path in the system encodes at 15 fps; the per-phase `fps`
-# in settings.json is not consulted by the capture path at all (see
-# `target_fps` in _run_sun_capture). Named here so the encoder and the
-# preview endpoint quote one value instead of two literals that can
-# drift apart.
-_SUN_TL_LOCKED_FPS = 15
+# Window sizing lives in _window.py so the scheduler in _schedule.py and
+# the capture loop below can share it without importing each other. Kept
+# importable from this package — external callers and tests reference
+# `weather_service._sun_tl._SUN_TL_LOCKED_WINDOW_MIN`.
+from ._schedule import SunScheduleMixin  # noqa: E402
+from ._window import (  # noqa: E402
+    _SUN_PRE_BIAS,
+    _SUN_TL_DRIFT_LIMIT_MIN,
+    _SUN_TL_LOCKED_FPS,
+    _SUN_TL_LOCKED_WINDOW_MIN,
+    _sun_window_bounds,
+)
 
 
 @dataclass
@@ -202,20 +179,6 @@ def _raw_dir_relpath(session: _SunTLTestSession, sightings_dir: Path) -> str | N
         return str(session.raw_dir)
 
 
-def _sun_window_bounds(sun_dt: datetime, window_min: int) -> tuple[datetime, datetime, int, int]:
-    """Apply _SUN_PRE_BIAS to (sun_dt, window_min). Returns
-    (start_dt, end_dt, pre_min, post_min). Pure function — no `self`,
-    safe to call from anywhere in the module."""
-    pre = int(round(window_min * _SUN_PRE_BIAS))
-    post = window_min - pre
-    return (
-        sun_dt - timedelta(minutes=pre),
-        sun_dt + timedelta(minutes=post),
-        pre,
-        post,
-    )
-
-
 def _write_sun_skip_json(
     out_dir: Path,
     stem: str,
@@ -270,12 +233,13 @@ def _write_sun_skip_json(
         log.warning("[weather] _skip.json write failed: %s · %s", out_dir / f"{stem}_skip.json", e)
 
 
-class SunTimelapseMixin:
+class SunTimelapseMixin(SunScheduleMixin):
     """Sunrise/sunset timelapse subsystem: scheduler + capture + day/night override.
 
     Mixin for WeatherService. Methods access shared state via `self.*`
     (cfg, runtimes, settings_store, scheduler, etc.) which live on the
-    concrete class.
+    concrete class. Job registration lives in the `SunScheduleMixin`
+    base (``_schedule.py``); this class owns the capture itself.
     """
 
     def sun_event_today(self, phase: str, when: date | None = None) -> datetime | None:
@@ -306,144 +270,6 @@ class SunTimelapseMixin:
         except Exception as e:
             log.info("[weather] No %s for %s: %s", phase, when or date.today(), e)
             return None
-
-    def _sun_jobs_keys(self) -> list[str]:
-        if not self._scheduler:
-            return []
-        try:
-            return [
-                j.id
-                for j in self._scheduler.get_jobs()
-                if (
-                    j.id.startswith("sun_tl_capture_")
-                    or j.id.startswith("sun_tl_dnov_")
-                    or j.id.startswith("sun_tl_dnrev_")
-                )
-            ]
-        except Exception:
-            return []
-
-    def _register_sun_jobs(self):
-        """Cancel any previously-registered sunrise/sunset capture jobs and
-        re-register for today's events. Skips windows that have already
-        started (no rückwirkende triggers). Idempotent — safe at every
-        service start, every reload, and on the daily 00:05 re-compute."""
-        if not self._scheduler:
-            return
-        # Drop stale capture jobs first so a phase-toggle change actually
-        # takes effect (and so we don't keep yesterday's jobs after the
-        # daily recompute).
-        for k in self._sun_jobs_keys():
-            with contextlib.suppress(Exception):
-                self._scheduler.remove_job(k)
-        loc = self.server_cfg.get("location") or {}
-        if loc.get("lat") is None or loc.get("lon") is None:
-            log.info("[weather] Standort fehlt — keine Sun-Jobs registriert")
-            return
-        from apscheduler.triggers.date import DateTrigger
-
-        today = date.today()
-        registered = []
-        cams = self._cfg_cameras()
-        for cam in cams:
-            cam_id = cam.get("id")
-            cam_name = cam.get("name") or cam_id
-            cw = cam.get("weather") or {}
-            stl = cw.get("sun_timelapse") or {}
-            for phase in ("sunrise", "sunset"):
-                pcfg = stl.get(phase) or {}
-                if not pcfg.get("enabled"):
-                    continue
-                sun_dt = self.sun_event_today(phase, today)
-                if sun_dt is None:
-                    continue
-                # Window locked to a known-good range — the previous
-                # user-tunable slider let mis-configurations land at
-                # 10 min, far too short to capture civil twilight.
-                # See _SUN_TL_LOCKED_WINDOW_MIN above for sizing rationale.
-                window = _SUN_TL_LOCKED_WINDOW_MIN
-                # 70/30 bias around the sun event — see _SUN_PRE_BIAS.
-                # With a 30-min window that's -21 / +9 around the event.
-                start_dt, _end_dt, _pre, _post = _sun_window_bounds(sun_dt, window)
-                if start_dt <= datetime.now():
-                    log.info(
-                        "[weather] %s %s @ %s already passed — skipping today",
-                        cam_name,
-                        phase,
-                        sun_dt.strftime("%H:%M"),
-                    )
-                    continue
-                key = f"sun_tl_capture_{cam_id}_{phase}_{today.isoformat()}"
-                self._scheduler.add_job(
-                    self._run_sun_capture_safe,
-                    DateTrigger(run_date=start_dt),
-                    id=key,
-                    replace_existing=True,
-                    args=[cam_id, phase, sun_dt, dict(pcfg)],
-                )
-                registered.append(
-                    f"{cam_name} {phase} {sun_dt.strftime('%H:%M')} (window {window} min)"
-                )
-                # Optional day/night override. Two scheduled jobs frame
-                # the capture window symmetrically:
-                #   - LEAD-IN at (start_dt - lead_min): force "Color"
-                #     so the camera's internal IR-cut doesn't sit in
-                #     Black&White when capture begins.
-                #   - REVERT at (end_dt + lead_min): restore "Auto" /
-                #     "Black&White" only AFTER the window has closed
-                #     plus the same lead buffer.
-                # Hard invariant: no day/night flip may fire inside the
-                # active recording window. Anchoring both jobs to
-                # window bounds (NOT to the sun event itself) is what
-                # guarantees this — anchoring to sun_dt would bracket
-                # only a 30-min slice of a 60-min window and let the
-                # camera flip mid-recording.
-                dnov = pcfg.get("daynight_override") or {}
-                if dnov.get("enabled"):
-                    lead_min = max(1, min(15, int(dnov.get("lead_min", 5) or 5)))
-                    override_at = start_dt - timedelta(minutes=lead_min)
-                    revert_at = _end_dt + timedelta(minutes=lead_min)
-                    revert_mode = "Black&White" if dnov.get("revert", "auto") == "off" else "Auto"
-                    if not (cam.get("rtsp_url") or "").strip():
-                        log.warning(
-                            "[weather] %s %s: no rtsp_url, cannot infer Reolink host — daynight override skipped",
-                            cam_name,
-                            phase,
-                        )
-                    elif override_at <= datetime.now():
-                        log.info(
-                            "[weather] %s %s: daynight override window already passed, capture-only",
-                            cam_name,
-                            phase,
-                        )
-                    else:
-                        dn_key = f"sun_tl_dnov_{cam_id}_{phase}_{today.isoformat()}"
-                        self._scheduler.add_job(
-                            self._apply_daynight_override,
-                            DateTrigger(run_date=override_at),
-                            id=dn_key,
-                            replace_existing=True,
-                            args=[cam_id, "Color", phase, lead_min],
-                        )
-                        registered.append(
-                            f"{cam_name} {phase} daynight→Color @{override_at.strftime('%H:%M')}"
-                        )
-                        # Revert job anchored to window-end + lead_min.
-                        rv_key = f"sun_tl_dnrev_{cam_id}_{phase}_{today.isoformat()}"
-                        self._scheduler.add_job(
-                            self._apply_daynight_override,
-                            DateTrigger(run_date=revert_at),
-                            id=rv_key,
-                            replace_existing=True,
-                            args=[cam_id, revert_mode, phase, lead_min],
-                        )
-                        registered.append(
-                            f"{cam_name} {phase} daynight→{revert_mode} @{revert_at.strftime('%H:%M')}"
-                        )
-        if registered:
-            log.info("[weather] Jobs registered: %s", " · ".join(registered))
-        else:
-            log.info("[weather] Keine Sun-Jobs heute (alle aus oder Fenster vorbei)")
 
     def _apply_daynight_override(
         self, cam_id: str, mode: str, phase: str = "", lead_min: int = 0
@@ -536,8 +362,21 @@ class SunTimelapseMixin:
         DateTrigger registered alongside the lead-in (see
         _register_sun_jobs), anchored to (window_end + lead_min).
         That keeps the schedule symmetric and means a crashed capture
-        still gets a clean revert at the proper time."""
-        self._run_sun_capture_inner(cam_id, phase, sun_dt, pcfg)
+        still gets a clean revert at the proper time.
+
+        This is also where the capture registers itself as in flight.
+        The registry is the ONLY thing that makes the live tile say
+        "running": it is written by the worker thread that does the
+        capturing and cleared in a finally, so it cannot claim a run
+        that crashed, and it cannot miss one that is genuinely going.
+        The end time comes from the same locked window constant the
+        capture loop sizes itself with."""
+        ends_at = datetime.now() + timedelta(minutes=_SUN_TL_LOCKED_WINDOW_MIN)
+        self.sun_capture_started(cam_id, phase, ends_at)
+        try:
+            self._run_sun_capture_inner(cam_id, phase, sun_dt, pcfg)
+        finally:
+            self.sun_capture_finished(cam_id, phase)
 
     def _run_sun_capture_inner(
         self,

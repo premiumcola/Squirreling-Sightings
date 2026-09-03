@@ -39,6 +39,7 @@ from ._manual_events import ManualEventsMixin
 from ._recaps import RecapsMixin
 from ._retention import WeatherRetentionMixin
 from ._sun_tl import SunTimelapseMixin
+from ._tl_activity import TimelapseActivityMixin
 
 
 class WeatherService(
@@ -52,6 +53,7 @@ class WeatherService(
     HistoryMixin,
     SunTimelapseMixin,
     EventTimelapseMixin,
+    TimelapseActivityMixin,
 ):
     """Lifecycle mirror of TelegramService — start/shutdown/reload, idempotent.
 

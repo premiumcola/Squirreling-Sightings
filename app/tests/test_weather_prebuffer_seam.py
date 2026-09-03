@@ -169,7 +169,7 @@ def test_no_scratch_or_ring_survives_the_capture(svc, tmp_path: Path):
     leftovers = [p.name for p in evt_dir.iterdir() if p.name.startswith(".")]
     assert leftovers == [], f"capture left scratch behind: {leftovers}"
     assert svc._event_tl_ring_state()["threads"] == {}
-    assert svc._event_tl_ring_state()["inflight"] == set(), "claim leaked — camera is now frozen"
+    assert svc._event_tl_ring_state()["inflight"] == {}, "claim leaked — camera is now frozen"
 
 
 def test_a_camera_that_vanished_releases_its_claim(svc):
@@ -181,7 +181,7 @@ def test_a_camera_that_vanished_releases_its_claim(svc):
     _run(svc)
 
     assert svc.encoded == []
-    assert svc._event_tl_ring_state()["inflight"] == set()
+    assert svc._event_tl_ring_state()["inflight"] == {}
 
 
 def test_too_few_frames_skips_the_encode_but_still_cleans_up(svc, tmp_path: Path):

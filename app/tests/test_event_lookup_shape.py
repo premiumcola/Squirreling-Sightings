@@ -24,7 +24,7 @@ from flask import Flask
 
 from app import app_state
 from app.routes import media as media_routes
-from app.routes.media import EVENT_LOOKUP_KEYS
+from app.routes.media import EVENT_LOOKUP_KEYS, EVENT_LOOKUP_OMITTED
 from app.storage import EventStore
 
 CAM = "cam_lookup"
@@ -89,9 +89,108 @@ def _get(client, event_id: str = EVENT_ID):
 
 
 def test_response_key_set_is_exactly_the_declared_one(client):
-    """The whole point of the file: no key leaves or joins by accident."""
+    """The response answers with the declared list and nothing else.
+
+    Note what this can and cannot catch. It pins the response against
+    ``EVENT_LOOKUP_KEYS``, so a handler that starts inventing keys fails
+    here — but deleting a name from the tuple moves BOTH sides of the
+    assertion at once, so this test would have stayed green through both
+    the `provenance` and the `whole_clip` losses it was written for. The
+    two guards below are the ones that would not have.
+    """
     body = _get(client).get_json()
     assert set(body) == set(EVENT_LOOKUP_KEYS)
+
+
+def test_the_declared_key_set_cannot_silently_shrink():
+    """Literal names, so a deletion from the tuple has to fail something.
+
+    `provenance` and `whole_clip` are here because each was lost once
+    already; the rest are what the hash router needs to switch camera and
+    open the right item.
+    """
+    for key in (
+        "event_id",
+        "camera_id",
+        "top_label",
+        "time",
+        "video_relpath",
+        "snapshot_relpath",
+        "provenance",
+        "whole_clip",
+    ):
+        assert key in EVENT_LOOKUP_KEYS, (
+            f"{key!r} left the projection. If that is deliberate, move it to "
+            "EVENT_LOOKUP_OMITTED with a reason — do not just delete it."
+        )
+
+
+def test_no_key_of_the_full_event_is_dropped_without_being_declared(
+    monkeypatch, tmp_storage_root: Path
+):
+    """The non-circular guard: the stored document against the projection.
+
+    ``store.find_event_anywhere`` is the exact source ``/api/event/<id>``
+    projects from, and ``/api/camera/<cam>/media`` hands that same
+    document through whole. So every key the store returns has to be
+    either carried by this route or listed in ``EVENT_LOOKUP_OMITTED``.
+    Writer on one side, reader on the other — unlike
+    ``test_response_key_set_is_exactly_the_declared_one``, deleting a name
+    from ``EVENT_LOOKUP_KEYS`` moves only one side and fails here.
+
+    The event below is a hand-written full-fat document rather than one
+    harvested from the recording writer's source: coupling this test to
+    ``camera_runtime/_recording/`` by file path would make it break on
+    every refactor over there. The cost is that a brand-new writer key
+    reaches this guard only once someone adds it here too.
+    """
+    store = EventStore(str(tmp_storage_root))
+    # A full-fat event: every block the recording, timelapse and scan
+    # writers put on an event document, so the assertion runs against the
+    # real shape rather than a three-key stub.
+    fat_id = "20260902T101600_cam_lookup"
+    store.add_event(
+        CAM,
+        {
+            "event_id": fat_id,
+            "camera_id": CAM,
+            "camera_name": "Garten",
+            "time": "2026-09-02 10:16:00",
+            "labels": ["bird"],
+            "top_label": "bird",
+            "bird_species": "Grünfink",
+            "alarm_level": 2,
+            "armed": True,
+            "after_hours": False,
+            "whitelisted": False,
+            "cat_name": None,
+            "person_name": None,
+            "video_relpath": f"motion_detection/{CAM}/2026-09-02/{fat_id}.mp4",
+            "snapshot_relpath": f"motion_detection/{CAM}/2026-09-02/{fat_id}.jpg",
+            "detections": [{"label": "bird", "score": 0.62}],
+            "whole_clip": WHOLE_CLIP,
+            "provenance": {"schema": 1, "camera": {"id": CAM}},
+            "duration_s": 6.0,
+            "status": "ready",
+            "stage": "done",
+        },
+    )
+    monkeypatch.setattr(app_state, "store", store, raising=False)
+    monkeypatch.setattr(app_state, "storage_root", tmp_storage_root, raising=False)
+
+    stored = store.find_event_anywhere(fat_id)
+    # Without this the guard passes on an empty document and proves nothing.
+    assert (
+        stored and "whole_clip" in stored
+    ), f"the store did not return the event — the guard would have passed vacuously: {stored!r}"
+
+    declared = set(EVENT_LOOKUP_KEYS) | set(EVENT_LOOKUP_OMITTED) | {"review"}
+    undeclared = sorted(set(stored) - declared)
+    assert not undeclared, (
+        "the stored event carries keys /api/event/<id> neither ships nor "
+        f"declares as omitted: {undeclared}. Add each to EVENT_LOOKUP_KEYS "
+        "or to EVENT_LOOKUP_OMITTED with the reason it stays behind."
+    )
 
 
 def test_whole_clip_survives_the_projection(client):

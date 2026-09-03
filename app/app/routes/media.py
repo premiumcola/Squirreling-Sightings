@@ -387,6 +387,47 @@ EVENT_LOOKUP_KEYS = (
     "whole_clip",
 )
 
+# The other half of the rule above, and the half that was missing.
+#
+# Naming what this route CARRIES cannot detect the next omission: a test
+# comparing the response against EVENT_LOOKUP_KEYS compares the list with
+# itself, and both sides move together when a key is deleted. So the keys
+# deliberately left behind are named too, and the guard in
+# test_event_lookup_shape.py asserts that the list route — which hands
+# the whole event JSON through — produces nothing outside these two
+# tuples. A key a writer adds lands in neither and fails the test, which
+# is the decision point `provenance` and `whole_clip` never got.
+#
+# `review` is not here because the list route attaches it itself; it is
+# not part of the stored event document.
+EVENT_LOOKUP_OMITTED = (
+    # The trigger FRAME — one tick of one clip, and the last of the three
+    # fallbacks the player walks (whole_clip → tracks.json → detections).
+    # The one key whose size grows with the clip.
+    "detections",
+    # Routing needs the one class the hash router filters on, which is
+    # `top_label`; the full list and the species string are re-read from
+    # /api/camera/<cam>/media once the router has switched cameras.
+    "labels",
+    "bird_species",
+    # Same reason, for the rest of the document. This route answers a
+    # Telegram deep link: it has to identify the event and the camera
+    # well enough for the router to switch and open the lightbox, and
+    # the lightbox then loads the full record from the list route. None
+    # of these is needed to route, so none of them is worth putting on a
+    # payload that exists to be small.
+    "camera_name",
+    "alarm_level",
+    "armed",
+    "after_hours",
+    "whitelisted",
+    "cat_name",
+    "person_name",
+    "duration_s",
+    "status",
+    "stage",
+)
+
 
 @bp.get('/api/event/<event_id>')
 def api_event_get(event_id: str):

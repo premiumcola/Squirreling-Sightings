@@ -25,8 +25,8 @@ from .config_loader import load_config
 # Imported here for this file's own callers only; external consumers
 # (routes/bootstrap/_system.py) now import them straight from lifecycle, since
 # importing server.py by name re-runs this whole boot block (R01.6).
+from . import boot_sequence as _boot  # noqa: E402
 from .lifecycle import (  # noqa: E402
-    _emit_boot_inventory,
     _fetch_github_commit_count,
     _file_hash,
     _install_shutdown_hooks,
@@ -44,7 +44,6 @@ from .storage import EventStore
 from .telegram_bot import TelegramService
 from .thresholds._nightly import register_nightly_jobs
 from .timelapse import TimelapseBuilder
-from .tracking_worker import build_worker as build_tracking_worker
 from .weather_service import WeatherService
 
 _fetch_github_commit_count()
@@ -89,42 +88,8 @@ app_state.store = store
 # if we ever do it, will route by top_label at write time instead.
 settings = SettingsStore(storage_root / "settings.json", base_cfg)
 app_state.settings = settings
-# Boot inventory — single block summarising the bootstrap state. Runs
-# right after settings load, before any subsystem starts emitting its
-# own log lines, so the inventory sits at the top of every restart's
-# `docker logs` tail.
-try:
-    _emit_boot_inventory(base_cfg, storage_root)
-except Exception as _e:
-    logging.getLogger(__name__).warning("[boot] inventory render failed: %s", _e)
-# One-shot semantic-id migration. Idempotent — on a clean boot it logs
-# a single "no migration needed" line. Must run BEFORE rebuild_runtimes()
-# so the camera threads pick up the new ids on first start, never the old.
-try:
-    from .storage_migration import migrate as _migrate_storage
-
-    _migrate_storage(settings, storage_root)
-except Exception as _e:
-    logging.getLogger(__name__).error(
-        "[migration] storage migration failed (continuing with existing state): %s",
-        _e,
-        exc_info=True,
-    )
-# Sun-Timelapse layout split: legacy `weather/<cam>/sun_timelapse/`
-# (mixed sunrise+sunset) → per-phase dirs. Idempotent, manifests are
-# backed up before rewrite. Touches only weather sighting files; never
-# settings.json. Must run before WeatherService starts so the service
-# only sees the new layout.
-try:
-    from .weather_service import migrate_sun_timelapse_layout as _migrate_sun_tl
-
-    _migrate_sun_tl(storage_root)
-except Exception as _e:
-    logging.getLogger(__name__).error(
-        "[migration] sun_timelapse split failed (continuing with existing state): %s",
-        _e,
-        exc_info=True,
-    )
+_boot.emit_boot_inventory(base_cfg, storage_root)
+_boot.run_early_migrations(settings, storage_root)
 cfg = settings.export_effective_config(base_cfg)
 cat_registry = IdentityRegistry(
     storage_root / "cat_registry.json",
@@ -181,25 +146,7 @@ from .routes import register_blueprints as _register_blueprints
 _register_blueprints(app)
 
 
-def _log_route_inventory(_app):
-    """P26 · one INFO line summarising registered routes at boot.
-    Anything that drops the count by ≥ 5 between deploys is a sign
-    a blueprint failed to register silently. The DEBUG branch dumps
-    each route so operators can grep for a specific path when
-    diagnosing a 404."""
-    log = logging.getLogger(__name__)
-    routes = sorted(
-        (str(r), sorted(r.methods - {"HEAD", "OPTIONS"}))
-        for r in _app.url_map.iter_rules()
-        if not str(r).startswith("/static")
-    )
-    log.info("[boot] %d routes registered", len(routes))
-    if log.isEnabledFor(logging.DEBUG):
-        for path, methods in routes:
-            log.debug("[boot]   %s  %s", ",".join(methods), path)
-
-
-_log_route_inventory(app)
+_boot.log_route_inventory(app)
 # Capture boot time so /api/health can report uptime.
 _BOOT_TS = time.time()
 
@@ -270,19 +217,8 @@ def _reload_telegram_service():
     _tg_reload_diag_count += 1
     uptime_s = time.time() - _BOOT_TS
     try:
-        _new_cfg = get_effective_config()
-        _new_tg = _new_cfg.get("telegram", {}) or {}
-        if _last_telegram_cfg_snapshot is None:
-            _diag_diff = "prev=None"
-        elif _last_telegram_cfg_snapshot == _new_tg:
-            _diag_diff = "IDENTICAL — skip-guard should have fired"
-        else:
-            a, b = _last_telegram_cfg_snapshot, _new_tg
-            _diag_diff = (
-                f"only_in_prev={sorted(set(a) - set(b))} · "
-                f"only_in_new={sorted(set(b) - set(a))} · "
-                f"changed_keys={sorted(k for k in set(a) & set(b) if a[k] != b[k])}"
-            )
+        _new_tg = get_effective_config().get("telegram", {}) or {}
+        _diag_diff = _boot.telegram_cfg_diff(_last_telegram_cfg_snapshot, _new_tg)
     except Exception as _e:
         _diag_diff = f"snapshot diff failed: {_e}"
     log.warning(
@@ -522,26 +458,7 @@ app_state.restart_single_camera = restart_single_camera
 
 
 rebuild_runtimes()
-# Phase 1 object tracking — start the singleton worker right after the
-# camera runtimes are up. detection_cfg_getter pulls the live processing
-# block from settings on every job so a settings reload swaps the
-# detector without restarting the worker thread.
-_tracking_cfg_getter = lambda: (
-    settings.export_effective_config(base_cfg).get("processing", {}).get("detection", {})
-)
-# The second stage lives in a different block of the same config, and
-# the clip replay needs it to put a NAME on the birds it finds. Read
-# per call for the same reason as the detection block above: a settings
-# reload must swap the model without restarting the worker thread.
-_tracking_bird_cfg_getter = lambda: (
-    settings.export_effective_config(base_cfg).get("processing", {}).get("bird_species", {})
-)
-build_tracking_worker(
-    storage_root=storage_root,
-    detection_cfg_getter=_tracking_cfg_getter,
-    cam_cfg_getter=lambda cam_id: settings.get_camera(cam_id) or {},
-    bird_cfg_getter=_tracking_bird_cfg_getter,
-)
+_boot.start_tracking_worker(settings, base_cfg, storage_root)
 logging.getLogger("app.app.boot").info("[boot] ── inventory complete ──")
 
 
@@ -566,36 +483,7 @@ _first_hb.start()
 _install_shutdown_hooks()
 
 
-# Boot-time migrations — see app/app/migrations.py. Each one spawns
-# its own daemon thread; safe to re-run; idempotent.
-from . import migrations as _migrations
-
-_migrations.cleanup_stale_timelapse_frames(storage_root=storage_root, settings=settings)
-# Tidy loose root-level <event_id>.json (+ .tracks.json) into their date
-# subfolders so the camera root stops collecting clutter. Reads use
-# rglob, so this is purely cosmetic for the on-disk layout.
-_migrations.relocate_root_event_jsons(storage_root=storage_root)
-_migrations.generate_missing_thumbnails(storage_root=storage_root)
-# Clips whose producer died mid-chain (restart, ffmpeg hang, power cut).
-# Everything still in flight from before _BOOT_TS is orphaned by
-# definition — recover it if its mp4 is on disk, otherwise mark it
-# failed so the card stops claiming it is still working.
-_migrations.adopt_orphaned_clips(
-    storage_root=storage_root,
-    settings=settings,
-    base_cfg=base_cfg,
-    started_at=datetime.fromtimestamp(_BOOT_TS),
-)
-_migrations.migrate_timelapse_to_eventstore(
-    storage_root=storage_root,
-    settings=settings,
-    store=store,
-    base_cfg=base_cfg,
-)
-# Diagnostic only — logs a single line when older-schema tracks.json
-# sidecars are present so the operator knows to hit
-# /api/tracking/reindex-all. Never reindexes automatically.
-_migrations.check_tracks_schema_version(storage_root=storage_root)
+_boot.run_boot_migrations(storage_root, settings, store, base_cfg, _BOOT_TS)
 
 
 # All HTTP routes live under app/app/routes/ — see register_blueprints

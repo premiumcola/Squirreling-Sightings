@@ -160,3 +160,48 @@ def register_blueprints(app) -> None:
 
     # Registered after the blueprints so it covers every one of them.
     app.before_request(_reject_traversal_cam_ids)
+    _install_json_error_handlers(app)
+
+
+def _install_json_error_handlers(app) -> None:
+    """Make every failure under ``/api/`` answer JSON.
+
+    The app had no error handler at all, so Flask's defaults applied and
+    a raised exception — or the ``abort(404)`` that
+    ``_reject_traversal_cam_ids`` issues before any handler runs — came
+    back as a ``text/html`` error page on a path the frontend polls as
+    JSON. The client half compounds it: ``apiGet`` returns ``null`` when
+    the body will not parse rather than throwing, so a route that blew
+    up rendered as an empty panel with nothing said anywhere. Same shape
+    as the swallowed exceptions this sweep found elsewhere — a real
+    failure wearing the costume of an empty result.
+
+    Scoped to ``/api/``: the dashboard's own pages are HTML and keep
+    Flask's HTML error pages.
+    """
+    from flask import jsonify, request
+    from werkzeug.exceptions import HTTPException
+
+    def _is_api() -> bool:
+        return request.path.startswith("/api/")
+
+    @app.errorhandler(HTTPException)
+    def _http_error(e):
+        if not _is_api():
+            return e
+        return jsonify({"ok": False, "error": e.name, "status": e.code}), e.code
+
+    @app.errorhandler(Exception)
+    def _unhandled(e):
+        if isinstance(e, HTTPException):
+            return _http_error(e)
+        # The traceback still has to reach the log — answering politely
+        # must not make the failure quieter than the HTML page was.
+        log.error("[http] %s %s failed: %s", request.method, request.path, e, exc_info=True)
+        if not _is_api():
+            raise e
+        # Deliberately not `str(e)`: an exception message here routinely
+        # carries a filesystem path or an RTSP URL with credentials in
+        # it, and this response is unauthenticated. The detail is in the
+        # log line above.
+        return jsonify({"ok": False, "error": "Interner Fehler", "status": 500}), 500

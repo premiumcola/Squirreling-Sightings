@@ -104,6 +104,24 @@ def _profile_status(cam_id: str, pname: str, prof: dict, cam_fps: int) -> dict:
     }
 
 
+def _weather_activity() -> dict:
+    """Sun / event timelapse truth for the status payload.
+
+    The dashboard already polls this endpoint for the periodic
+    timelapses, so the weather-driven ones ride along rather than
+    getting a second poller. When the weather service is not up we say
+    so — an empty list would read as "nothing scheduled", which is a
+    different claim entirely.
+    """
+    ws = app_state.weather_service
+    if ws is None:
+        return {"available": False, "sun": [], "event": [], "running_count": 0}
+    try:
+        return ws.timelapse_activity()
+    except Exception:
+        return {"available": False, "sun": [], "event": [], "running_count": 0}
+
+
 @bp.get('/api/timelapse/status')
 def api_timelapse_status():
     from ..camera_runtime import _PROFILES
@@ -144,6 +162,7 @@ def api_timelapse_status():
             "active_count": total_active,
             "cameras": cameras_out,
             "today": today,
+            "weather": _weather_activity(),
         }
     )
 

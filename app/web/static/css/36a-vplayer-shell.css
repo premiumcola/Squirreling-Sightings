@@ -239,12 +239,23 @@
   background: var(--panel);
 }
 
+/* FOUR SWITCHES, NOT A SEGMENTED CONTROL. A segmented bar means "pick
+   exactly one"; these are four independent layers, any combination of
+   which can be on — and all four are on by default, which is the state
+   the old painting fell apart in. Four tinted rounded rects sharing
+   edges inside a fifth rounded ground put a rounded corner against a
+   rounded corner at every seam, scalloping notches between neighbours
+   and reading as one blue smear: „die buttons zur anwahl sehen richtig
+   grässlich aus, hängen ineinander". Free-standing chips with the panel
+   showing between them read as what they are. The group role stays —
+   they are still one set — but the BAR is not a painted object. */
 .vp-segbar {
   display: inline-flex;
-  flex: 0 0 auto;
-  padding: 3px;
-  border-radius: var(--vp-radius);
-  background: var(--surface);
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  background: none;
 }
 
 .vp-seg {
@@ -255,12 +266,12 @@
      pill chopped in half at the right edge. */
   gap: 5px;
   min-height: var(--vp-tap);
-  padding: 0 9px;
+  padding: 0 10px;
   border: 0;
   border-radius: var(--vp-radius-sm);
-  background: transparent;
-  /* Never dark-on-dark: an inactive segment still reads against the
-     bar it sits in. */
+  /* Its own ground, a step above the row it sits in. Never dark-on-dark
+     and no border line — depth from contrast, per the design rules. */
+  background: var(--surface);
   color: var(--muted);
   font-size: 13px;
   white-space: nowrap;
@@ -271,9 +282,11 @@
    full-strength accent pills side by side were the loudest thing on the
    screen — "modern, refined, flat, clean, no colourful chaos" — and
    white on that accent measures 3.68:1, under the 4.5:1 floor. The tint
-   carries the app's own text colour instead, well clear of it. */
+   is mixed over the chip's own ground rather than over transparency, so
+   an on chip is still lighter than the row behind it and the four never
+   flatten back into one another. */
 .vp-seg[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
   color: var(--text);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
@@ -288,13 +301,17 @@
   }
 }
 
+/* A CAPTION, not a fifth switch. It is read-only — it reports that
+   detection ran on a crop — and painted as a filled chip beside four
+   filled chips it read as a button that would not press. Now it carries
+   no ground of its own (a chip darker than the row it sits in was also
+   the dark-on-dark the design rules forbid) and simply reads as the
+   label it is. */
 .vp-roi-chip {
   flex: 0 0 auto;
-  padding: 6px 10px;
-  border-radius: var(--vp-radius-sm);
-  background: var(--vp-chrome);
+  padding: 0 2px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -316,6 +333,31 @@
 @media (orientation: landscape) and (max-height: 520px) {
   .vp-frame {
     max-height: 62dvh;
+  }
+}
+
+/* Same rule, and the case that actually bit: a DESKTOP window. The frame
+   is width-bound (`width: 100%` + `aspect-ratio: 16/9`), so at 1440 px it
+   claimed 810 px of height — the toggle row ended up jammed against the
+   bottom edge and the objects list sat entirely below the fold, reachable
+   only by scrolling the shell, which also scrolls the play disc off the
+   top of the window. The short-landscape query above could never catch
+   it, because a desktop window is landscape with plenty of height.
+
+   Capped on the STAGE, not on the frame. Both alternatives were tried
+   and this is the one that holds: giving the FRAME a height and centring
+   it in a full-width stage leaves the stage wider than the picture, and
+   the two things pinned to the stage — the timeline (left:0/right:0) and
+   the transport (inset:0) — then stretch across the black surround
+   instead of tracking the picture they belong to. Capping the stage at
+   16/9 of the same height makes the frame's own aspect-ratio land exactly
+   on it, so stage and picture are one box and everything pinned to it
+   lines up by construction. */
+@media (min-width: 901px) {
+  .vp-stage {
+    max-width: calc(58dvh * 16 / 9);
+    margin-inline: auto;
+    width: 100%;
   }
 }
 

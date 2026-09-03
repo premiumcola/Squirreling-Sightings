@@ -40,6 +40,13 @@ from ._consts import log
 # scheduler so the loop and the reporter can never disagree on the set.
 SUN_PHASES = ("sunrise", "sunset")
 
+# Phase -> the archive's kind name, which is where the German labels for
+# these two already live (`weather_episodes._footage.KIND_LABEL_DE`).
+SUN_PHASE_KIND = {
+    "sunrise": "sun_timelapse_rise",
+    "sunset": "sun_timelapse_set",
+}
+
 # Job-id prefix and format — the single source. `_sun_jobs_keys` matches
 # on the prefix, `_register_sun_jobs` builds ids with the function below,
 # and the reporter looks ids up in the list the first one returns. One
@@ -204,6 +211,20 @@ class TimelapseActivityMixin:
             st["running"].pop((cam_id, phase), None)
 
     # ── Report ──────────────────────────────────────────────────────────
+    @staticmethod
+    def _phase_label(phase: str) -> str:
+        """German name of a solar phase, from the archive's label map.
+
+        Imported lazily: ``weather_episodes`` imports back into
+        ``weather_service``, so a module-level import here would close a
+        cycle. The map is reused rather than copied because the frontend
+        would otherwise carry a fourth hand-written pair of these two
+        strings.
+        """
+        from ..weather_episodes._footage import KIND_LABEL_DE
+
+        return KIND_LABEL_DE.get(SUN_PHASE_KIND.get(phase, ""), phase)
+
     def _sun_activity_rows(self, now: datetime) -> list[dict]:
         """One row per camera and phase, cross-checked against the scheduler."""
         st = self._sun_activity_state()
@@ -228,6 +249,7 @@ class TimelapseActivityMixin:
                         "camera_id": cam_id,
                         "camera_name": cam.get("name") or cam_id,
                         "phase": phase,
+                        "phase_text": self._phase_label(phase),
                         "state": state,
                         "state_text": STATE_LABEL_DE[state],
                         "skip_reason": reason,

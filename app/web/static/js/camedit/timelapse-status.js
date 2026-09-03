@@ -11,6 +11,7 @@
 import { byId, esc } from '../core/dom.js';
 import { j } from '../core/api.js';
 import { _TL_PROFILES_DEF, _tlIntervalLabel } from './timelapse-settings.js';
+import { weatherLiveRows, tlTileVisible } from './_timelapse-live.js';
 
 const _TL_FILMSTRIP = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><line x1="6" y1="3" x2="18" y2="3"/><line x1="6" y1="21" x2="18" y2="21"/><polygon points="7,4 17,4 12,12" fill="#c4b5fd" opacity=".8"/><polygon points="12,12 7,20 17,20" fill="#c4b5fd" opacity=".5"/></svg>`;
 
@@ -84,11 +85,34 @@ function _tlCamBlock(cam) {
     </div>`;
 }
 
+// Sun + event timelapses currently capturing. They are their own block
+// at the top of the panel rather than rows inside a camera card: they do
+// not have frame budgets, disk projections or build times, and faking
+// those columns to make them fit the profile layout would be four empty
+// cells per row.
+function _tlLiveBlock(rows) {
+  if (!rows.length) return '';
+  const items = rows
+    .map(
+      (r) => `<div class="tl-sb-live-row">
+        <span class="tl-sb-live-dot" aria-hidden="true"></span>
+        <span class="tl-sb-live-what">${esc(r.camName)} · ${esc(r.what)}</span>
+        <span class="tl-sb-live-rest">${esc(r.remaining)}</span>
+      </div>`,
+    )
+    .join('');
+  return `<div class="tl-sb-live-block">
+      <div class="tl-sb-live-head">Läuft gerade</div>
+      ${items}
+    </div>`;
+}
+
 function renderTlStatusBar() {
   const bar = byId('tlStatusBar');
   if (!bar) return;
   const s = window._tlStatus;
-  if (!s || s.active_count === 0) {
+  const liveRows = weatherLiveRows(s && s.weather);
+  if (!tlTileVisible(s, liveRows)) {
     bar.innerHTML = '';
     return;
   }
@@ -103,18 +127,32 @@ function renderTlStatusBar() {
     0,
   );
   const panelId = 'tlSbPanel';
+  // Each chip is rendered only when it has something to say. A sun
+  // capture can run on a camera with no periodic profile at all, and a
+  // "0" next to the filmstrip would then be a count of the wrong thing.
+  const countChip = activeCams.length
+    ? `<span class="tl-sb-count">${activeCams.length}</span>`
+    : '';
+  const liveChip = liveRows.length ? `<span class="tl-sb-live">${liveRows.length} live</span>` : '';
+  const bytesChip =
+    totalBytes > 0 ? `<span class="tl-sb-bytes">${esc(_tlFmtBytes(totalBytes))}</span>` : '';
+  // The footer describes the frame counters above it, so it goes only
+  // where those counters are.
+  const footer = activeCams.length
+    ? `<div class="tl-sb-footer small muted">
+        Noch nicht kodierte Frames · Stand: ${esc(s.today || '—')}
+      </div>`
+    : '';
   bar.innerHTML = `
     <div class="tl-sb-pill" onclick="byId('${panelId}').classList.toggle('hidden')">
       ${_TL_FILMSTRIP}
       <span>Timelapse aktiv</span>
-      <span class="tl-sb-count">${activeCams.length}</span>
-      <span class="tl-sb-bytes">${esc(_tlFmtBytes(totalBytes))}</span>
+      ${countChip}${liveChip}${bytesChip}
     </div>
     <div class="tl-sb-panel hidden" id="${panelId}">
+      ${_tlLiveBlock(liveRows)}
       ${activeCams.map(_tlCamBlock).join('')}
-      <div class="tl-sb-footer small muted">
-        Noch nicht kodierte Frames · Stand: ${esc(s.today || '—')}
-      </div>
+      ${footer}
     </div>`;
 }
 

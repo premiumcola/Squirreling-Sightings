@@ -426,3 +426,87 @@ export const WEATHER_HISTORY_SPARSE = {
     count: 13,
   },
 };
+
+// ── /api/timelapse/status ─────────────────────────────────────────────────
+// The interesting state for the live tile: one camera recording a
+// periodic profile AND two weather captures in flight. Both halves are
+// posed at once, because the pill renders a different chip for each and
+// the panel stacks the running block above the profile cards.
+//
+// The `sun` array deliberately also carries a phase that is NOT running,
+// with the skip reason the scheduler recorded. Nothing on this surface
+// may render it — the tile answers "what is happening now" and the
+// skip reasons live with the configuration. That is what the picture
+// checks.
+export const TL_STATUS = {
+  ok: true,
+  active_count: 1,
+  today: '2026-09-03',
+  cameras: [
+    {
+      camera_id: 'reolink_rlc810a_garten_42',
+      name: 'Garten',
+      any_active: true,
+      profiles: {
+        daily: {
+          enabled: true,
+          interval_s: 8,
+          interval_clamped: false,
+          fps: 15,
+          expected_frames: 10800,
+          frame_count: 4120,
+          bytes_on_disk: 1236000000,
+          projected_bytes: 3240000000,
+          rejected: 17,
+          next_build_at: '2026-09-04T00:05:00',
+        },
+        weekly: { enabled: false },
+        monthly: { enabled: false },
+        quarterly: { enabled: false },
+        yearly: { enabled: false },
+        custom: { enabled: false },
+      },
+    },
+  ],
+  weather: {
+    available: true,
+    running_count: 2,
+    sun: [
+      {
+        camera_id: 'reolink_rlc810a_garten_42',
+        camera_name: 'Garten',
+        phase: 'sunset',
+        phase_text: 'Sonnenuntergang',
+        state: 'running',
+        state_text: 'läuft',
+        skip_reason: null,
+        skip_text: null,
+        remaining_s: 1980,
+        window_end: '2026-09-03T20:20:00',
+      },
+      {
+        camera_id: 'reolink_rlc810a_garten_42',
+        camera_name: 'Garten',
+        phase: 'sunrise',
+        phase_text: 'Sonnenaufgang',
+        state: 'skipped',
+        state_text: 'übersprungen',
+        skip_reason: 'window_passed',
+        skip_text: 'Fenster war schon vorbei',
+        remaining_s: null,
+      },
+    ],
+    event: [
+      {
+        camera_id: 'reolink_rlc810a_hof_43',
+        camera_name: 'Hof',
+        trigger: 'storm_front',
+        trigger_text: 'Sturmfront',
+        state: 'running',
+        state_text: 'läuft',
+        remaining_s: 2640,
+        window_end: '2026-09-03T21:04:00',
+      },
+    ],
+  },
+};

@@ -22,6 +22,7 @@ import {
   WEATHER_RANGE,
   WEATHER_HISTORY,
   WEATHER_HISTORY_SPARSE,
+  TL_STATUS,
 } from './_fixtures.mjs';
 
 /** Put a fixture on window so the in-page mounts can read it. */
@@ -125,6 +126,34 @@ async function mountWeatherChart(page) {
   });
   await page.waitForSelector('#weatherStatsChartWrap svg', { timeout: 8000 });
   await page.waitForTimeout(400);
+}
+
+/**
+ * The "Timelapse aktiv" pill in the hero, with its panel open.
+ *
+ * Mounted through the component's own entry point (`loadTlStatus`), so
+ * the shot exercises the real fetch → render path against a stubbed
+ * status payload rather than hand-built markup.
+ *
+ * Two harness-only adjustments, both to make the popover photographable
+ * and neither touching the component: the sections after the hero are
+ * hidden so the clip is not the height of the whole dashboard, and the
+ * body is given a floor height because `.tl-sb-panel` is absolutely
+ * positioned and therefore does not extend any ancestor's box.
+ */
+async function mountTimelapseTile(page) {
+  await page.evaluate(async () => {
+    const base = '/static/js';
+    for (const el of document.querySelectorAll('.main > *')) {
+      if (!el.classList.contains('hero')) el.style.display = 'none';
+    }
+    document.body.style.minHeight = '760px';
+    const tls = await import(`${base}/camedit/timelapse-status.js`);
+    await tls.loadTlStatus();
+    document.getElementById('tlSbPanel')?.classList.remove('hidden');
+  });
+  await page.waitForSelector('#tlStatusBar .tl-sb-pill', { timeout: 8000 });
+  await page.waitForTimeout(300);
 }
 
 /** The dashboard camera tile plus its Erkennungsnetz panel row. */
@@ -245,6 +274,14 @@ export const SURFACES = [
     stubs: { '/api/weather/history': WEATHER_HISTORY_SPARSE },
     clip: '#weatherStatsBlock',
     scope: '#weatherStatsBlock',
+  },
+  {
+    id: 'timelapse-tile',
+    title: 'Timelapse-aktiv pill + live panel (sun / event captures)',
+    mount: mountTimelapseTile,
+    stubs: { '/api/timelapse/status': TL_STATUS },
+    clip: 'body',
+    scope: '#tlStatusBar',
   },
   {
     id: 'dashboard-tile',

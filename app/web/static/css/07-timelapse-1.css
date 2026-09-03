@@ -234,6 +234,64 @@
   font-size: 11px;
   font-weight: 700;
 }
+/* "N live" — captures in flight right now (sun / weather event). Amber
+   against the pill's purple so it reads as a different fact from the
+   profile count beside it, not as a second copy of the same number. */
+.tl-sb-live {
+  background: rgba(245, 158, 11, 0.28);
+  color: #fcd34d;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.tl-sb-live-block {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  /* Same card treatment as .tl-sb-cam — depth from the background step,
+     no border line. Amber tint keeps the running block distinct from
+     the purple profile cards below it. */
+  background: rgba(245, 158, 11, 0.12);
+}
+.tl-sb-live-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fcd34d;
+}
+.tl-sb-live-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  /* Rows are read, not tapped — the pill is the touch target. Still
+     roomy enough that two lines never collide at 375 px. */
+  min-height: 22px;
+}
+.tl-sb-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+}
+.tl-sb-live-what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-sb-live-rest {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fcd34d;
+}
 .tl-sb-panel {
   margin-top: 10px;
   padding: 14px 16px;

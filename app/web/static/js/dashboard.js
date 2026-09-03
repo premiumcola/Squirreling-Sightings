@@ -16,7 +16,7 @@
 import { state } from './core/state.js';
 import { byId, esc } from './core/dom.js';
 import { j, apiPost } from './core/api.js';
-import { getCameraIcon, getCameraColor, OBJ_LABEL, DASHBOARD_SVG } from './core/icons.js';
+import { getCameraIcon, getCameraColor, OBJ_LABEL } from './core/icons.js';
 import { isIOS } from './core/ios-video.js';
 import { openLiveViewIosNative } from './chrome/live-view.js';
 import { initNetPanels } from './netz/index.js';
@@ -42,238 +42,34 @@ import {
 window._camImgRetry = _camImgRetryFn;
 window._cvImgLoaded = _cvImgLoadedFn;
 
-
-// ── Surveillance-mode classification ───────────────────────────────────────
-// Drives the colour + label + animation of the .cv-surveil bottom-overlay
-// on each camera tile. Four states:
-//   off     cam disarmed                         → grey, eye crossed-out
-//   watch   armed, no Telegram, no active window → storm-blue, passive
-//   notify  armed + Telegram on                  → amber, eye blinks
-//   alarm   armed + currently inside a schedule
-//           window with telegram or hard action  → red, head pulses
-export const SURVEIL_ACC = {
-  off: '80,80,90',
-  watch: '127,174,201',
-  notify: '251,146,60',
-  alarm: '220,38,38',
-};
-export const SURVEIL_LABEL = {
-  off: 'Stumm',
-  watch: 'Beobachtung',
-  notify: 'Benachrichtigung',
-  alarm: 'Wachmodus',
-};
-export function _isInScheduleWindow(from, to) {
-  if (!from || !to) return false;
-  const now = new Date();
-  const m = now.getHours() * 60 + now.getMinutes();
-  const [fh, fm] = from.split(':').map(Number);
-  const [th, tm] = to.split(':').map(Number);
-  const f = fh * 60 + fm,
-    t = th * 60 + tm;
-  return f <= t ? m >= f && m < t : m >= f || m < t;
-}
-export function _surveilMode(c) {
-  if (!c.armed) return 'off';
-  const sch = c.schedule || {};
-  if (sch.enabled && _isInScheduleWindow(sch.from, sch.to)) {
-    const acts = sch.actions || {};
-    if (acts.telegram !== false || acts.hard !== false) return 'alarm';
-  }
-  return c.telegram_enabled ? 'notify' : 'watch';
-}
-export function _surveilEyeSvg(mode) {
-  if (mode === 'off') {
-    return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
-  }
-  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/></svg>';
-}
+// SURVEIL_ACC / SURVEIL_LABEL / _surveilMode / _surveilEyeSvg went with
+// the `.cv-surveil` bottom-overlay they described: no renderer in this
+// repo ever emits that markup (only live-update.js and camedit's
+// _flashDetection still QUERY for `.cv-surveil-tgt`, and both find
+// nothing), and nothing imported the four symbols.
 
 // ── Camera-tile placeholders ───────────────────────────────────────────────
-// Two states (red = offline, blue = connecting) share the same shell:
-// asymmetric viewfinder brackets in the four corners with a centered
-// stage that hosts whichever animation matches the state. The shell
-// lives at the placeholder's full frame so it never doubles up with
-// the cv-card chrome.
-function _placeholderShell(accent, centerHtml, bracketKeyframe) {
-  return `<div class="cv-ph cv-ph--${accent}">
-    <div class="cv-ph-grid"></div>
-    <svg class="cv-ph-brackets" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <g fill="none" style="animation:${bracketKeyframe} 2s ease-in-out infinite">
-        <polyline points="0,30 0,0 30,0"  stroke-width="2.5" class="cv-ph-br cv-ph-br--tl"/>
-        <polyline points="70,0 100,0 100,30" stroke-width="2"   class="cv-ph-br cv-ph-br--tr" style="animation-delay:.5s"/>
-        <polyline points="100,70 100,100 70,100" stroke-width="2.5" class="cv-ph-br cv-ph-br--br" style="animation-delay:1s"/>
-        <polyline points="30,100 0,100 0,70"    stroke-width="2"   class="cv-ph-br cv-ph-br--bl" style="animation-delay:1.5s"/>
-      </g>
-    </svg>
-    <div class="cv-ph-center">${centerHtml}</div>
-  </div>`;
-}
+// Moved to dashboard/_placeholders.js. Re-exported so existing importers
+// of these names from '../dashboard.js' resolve unchanged; a re-export
+// alone does NOT bind the names in this file, so the ones used locally
+// (renderDashboard, showCameraReloadAnimation) are imported for real
+// below.
+export {
+  _makeOfflinePlaceholder,
+  _makeConnectingPlaceholder,
+  _restorePlaceholder,
+} from './dashboard/_placeholders.js';
+import {
+  _makeOfflinePlaceholder as _makeOfflinePlaceholderFn,
+  _makeConnectingPlaceholder as _makeConnectingPlaceholderFn,
+  _restorePlaceholder as _restorePlaceholderFn,
+} from './dashboard/_placeholders.js';
 
-// Flat-design camera SVGs — filled silhouettes with tonal-shift depth.
-// No hairline strokes (would alias under transform:scale at small
-// tiles); each layer is a filled shape so the icon stays crisp at
-// 52–72 px renders. Lens uses dark-mass + light-iris for "flat depth"
-// instead of a stroked outline. The red slash is a 6 px-wide
-// parallelogram, not a stroke, so it doesn't thin under animation.
-const _CAM_OFF_SVG = `<svg viewBox="0 0 48 48" width="72" height="72" aria-hidden="true" style="display:block">
-  <rect x="8" y="14" width="24" height="20" rx="3" fill="rgba(255,255,255,0.32)"/>
-  <path d="M32 20 L40 14 V34 L32 28 Z" fill="rgba(255,255,255,0.22)"/>
-  <circle cx="20" cy="24" r="5" fill="rgba(0,0,0,0.5)"/>
-  <circle cx="20" cy="24" r="2" fill="rgba(255,255,255,0.55)"/>
-  <polygon points="7,3 3,7 41,45 45,41" fill="rgba(239,68,68,0.95)"/>
-</svg>`;
-const _CAM_SM_SVG = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" style="display:block">
-  <rect x="8" y="14" width="24" height="20" rx="3" fill="rgba(59,130,246,0.42)"/>
-  <path d="M32 20 L40 14 V34 L32 28 Z" fill="rgba(59,130,246,0.28)"/>
-  <circle cx="20" cy="24" r="5" fill="rgba(8,17,38,0.85)"/>
-  <circle cx="20" cy="24" r="2" fill="rgba(147,197,253,0.95)"/>
-</svg>`;
-
-export function _makeOfflinePlaceholder() {
-  // Red: four expanding rings + crosshair + struck-through camera icon.
-  const rings = [0, 1, 2, 3]
-    .map((i) => `<span class="cv-ph-ring" style="animation-delay:${i}s"></span>`)
-    .join('');
-  const center = `
-    <div class="cv-ph-stage">
-      <div class="cv-ph-crosshair"></div>
-      ${rings}
-      <div class="cv-ph-icon cv-ph-icon--glitch cv-ph-icon--red">${_CAM_OFF_SVG}</div>
-    </div>
-    <div class="cv-ph-label cv-ph-label--flicker cv-ph-label--red">KEIN SIGNAL</div>
-  `;
-  return _placeholderShell('red', center, 'bracketPulseRed');
-}
-
-export function _makeConnectingPlaceholder() {
-  // Blue: rotating radar cone + orbiting dots + small camera icon, all
-  // inside the same stage so they share one center.
-  const center = `
-    <div class="cv-ph-stage">
-      <svg class="cv-ph-guides" viewBox="-100 -100 200 200" aria-hidden="true">
-        <circle cx="0" cy="0" r="85" fill="rgba(59,130,246,0.05)"/>
-        <circle cx="0" cy="0" r="45" fill="rgba(59,130,246,0.07)"/>
-      </svg>
-      <svg class="cv-ph-radar" viewBox="-100 -100 200 200" aria-hidden="true">
-        <path d="M0,0 L85,-49 A98,98 0 0 1 85,49 Z" fill="rgba(59,130,246,0.2)"/>
-        <circle class="cv-ph-radar-dot" cx="85" cy="49" r="5" fill="rgba(59,130,246,0.95)"/>
-      </svg>
-      <span class="cv-ph-orbit cv-ph-orbit--1"></span>
-      <span class="cv-ph-orbit cv-ph-orbit--2"></span>
-      <span class="cv-ph-orbit cv-ph-orbit--3"></span>
-      <div class="cv-ph-icon">${_CAM_SM_SVG}</div>
-    </div>
-    <div class="cv-ph-label cv-ph-label--blue">VERBINDE…</div>
-  `;
-  return _placeholderShell('blue', center, 'bracketPulseBlue');
-}
-
-// Restore the offline placeholder + bump the snapshot src after a
-// reload-animation give-up. Used by showCameraReloadAnimation when its
-// poll hits the 15-attempt ceiling without seeing the camera return to
-// active.
-export function _restorePlaceholder(card) {
-  const placeholder = card.querySelector('.cv-loading-placeholder');
-  if (placeholder) placeholder.innerHTML = _makeOfflinePlaceholder();
-  const img = card.querySelector('.cv-img');
-  if (img) {
-    const base = img.src.split('?')[0];
-    img.src = base + '?t=' + Date.now();
-  }
-}
-
-// ── E2 · adaptive overlay palette via per-region luminance sampling ────
-// Every ~2 s each visible tile's snapshot is sub-sampled at three
-// distinct regions — identity (top-left), telegram (mid-bottom-left),
-// classicons (bottom-strip) — and each region's mean Rec.709 luminance
-// is fed through a hysteresis filter (5 % min gap) that flips
-// data-bg="light" / "dark" on the corresponding .cv-overlay-region
-// element. CSS variables scoped to each region then flip text/icon
-// palette + halo direction so overlays stay legible even when the
-// snapshot has strong vertical luminance gradients (bright sky over
-// dark interior, etc.). Buttons stay dark in both modes — they live
-// outside the regions and read a static drop-shadow filter.
-const _BG_LUM_LIGHT_ENTER = 0.55; // dark → light if Y above
-const _BG_LUM_DARK_ENTER = 0.5; // light → dark if Y below
-const _OVERLAY_REGIONS = [
-  // top-left identity (icon · name · live-pill)
-  { region: 'identity', x: 0.0, y: 0.0, w: 0.4, h: 0.22 },
-  // mid-bottom-left telegram/MQTT cluster row
-  { region: 'telegram', x: 0.0, y: 0.62, w: 0.38, h: 0.26 },
-  // bottom-strip class-icon row
-  { region: 'classicons', x: 0.0, y: 0.86, w: 0.38, h: 0.14 },
-];
-let _bgLumCanvas = null;
-let _bgLumCtx = null;
-let _bgLumInterval = null;
-
-function _ensureBgLumCanvas() {
-  if (_bgLumCanvas) return;
-  // 8×8 destination is plenty for an averaging sampler — each region
-  // gets the same small target so the four bytes per pixel stay
-  // dominated by the source-region's content, not by canvas resize
-  // artefacts.
-  _bgLumCanvas = document.createElement('canvas');
-  _bgLumCanvas.width = 8;
-  _bgLumCanvas.height = 8;
-  _bgLumCtx = _bgLumCanvas.getContext('2d', { willReadFrequently: true });
-}
-
-function _sampleTileOverlayLuminance(card) {
-  const img = card.querySelector('.cv-img');
-  if (!img || !img.classList.contains('loaded')) return;
-  const W = img.naturalWidth,
-    H = img.naturalHeight;
-  if (!W || !H) return;
-  _ensureBgLumCanvas();
-  for (const spec of _OVERLAY_REGIONS) {
-    const target = card.querySelector(`.cv-overlay-region[data-region="${spec.region}"]`);
-    if (!target) continue;
-    const sx = Math.floor(W * spec.x);
-    const sy = Math.floor(H * spec.y);
-    const sw = Math.max(1, Math.floor(W * spec.w));
-    const sh = Math.max(1, Math.floor(H * spec.h));
-    try {
-      _bgLumCtx.clearRect(0, 0, 8, 8);
-      _bgLumCtx.drawImage(img, sx, sy, sw, sh, 0, 0, 8, 8);
-      const data = _bgLumCtx.getImageData(0, 0, 8, 8).data;
-      let sum = 0,
-        n = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i],
-          g = data[i + 1],
-          b = data[i + 2];
-        sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        n++;
-      }
-      if (!n) continue;
-      const Y = sum / (n * 255);
-      const current = target.dataset.bg || 'dark';
-      let next = current;
-      if (current === 'dark' && Y > _BG_LUM_LIGHT_ENTER) next = 'light';
-      else if (current === 'light' && Y < _BG_LUM_DARK_ENTER) next = 'dark';
-      if (next !== current) target.dataset.bg = next;
-    } catch {
-      // Canvas can taint on cross-origin pixels — same-origin
-      // snapshots shouldn't trigger this in practice. Swallow so a
-      // single bad frame on one region doesn't kill the loop for
-      // the rest of the tile.
-    }
-  }
-}
-
-export function startBgLuminanceMonitor() {
-  if (_bgLumInterval) clearInterval(_bgLumInterval);
-  _bgLumInterval = setInterval(() => {
-    if (document.hidden) return;
-    const grid = byId('cameraCards');
-    if (!grid) return;
-    grid.querySelectorAll('.cv-card[data-camid]').forEach((card) => {
-      _sampleTileOverlayLuminance(card);
-    });
-  }, 2000);
-}
+// ── E2 · adaptive overlay palette ──────────────────────────────────────────
+// Moved to dashboard/_bg-luminance.js. Only main.js's boot path calls
+// this, via loadAll(), so a plain re-export is enough — nothing in this
+// file uses it locally.
+export { startBgLuminanceMonitor } from './dashboard/_bg-luminance.js';
 
 // ── Stage 3b — dashboard rendering + live state ────────────────────────────
 // HD-stream toggle state. _hdCards holds camera ids whose tile is
@@ -737,100 +533,22 @@ export function _cvOpenSim(camId) {
 window._cvOpenSim = _cvOpenSim;
 
 // zg531 — currentColor SVG glyphs for the bottom-left class pills.
-// Separate from core/icons.js OBJ_SVG (which carries hard-coded hexes
-// for the lightbox / mediathek bbox legend) so the chrome pills can
-// inherit colour from the parent's ``color: var(--class-X)``. Each
-// glyph is a 24-vb / 16-render Tabler-ish silhouette so it reads at
-// a glance even on a 30 px pill.
-const _CHROME_CLASS_SVG = {
-  person: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>`,
-  cat: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4l2 5"/><path d="M19 4l-2 5"/><circle cx="12" cy="14" r="7"/><circle cx="9.5" cy="13.2" r=".8" fill="currentColor"/><circle cx="14.5" cy="13.2" r=".8" fill="currentColor"/><path d="M10 17q2 1.5 4 0"/></svg>`,
-  dog: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l2.5 4"/><path d="M17 4l-2.5 4"/><circle cx="12" cy="14" r="6.5"/><circle cx="12" cy="13.5" r=".9" fill="currentColor"/><path d="M10 17q2 1.5 4 0"/></svg>`,
-  bird: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6c-3.5-1-7 1-8 5l-2 7l5-3c3 2 7 0 8-4"/><circle cx="15.5" cy="6" r=".9" fill="currentColor"/></svg>`,
-  squirrel: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="17" rx="3.5" ry="2.6"/><circle cx="8" cy="10" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="16" cy="10" r="1.6"/><circle cx="6.4" cy="13" r="1.3"/></svg>`,
-  fox: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="17" rx="3.5" ry="2.6"/><circle cx="8" cy="10" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="16" cy="10" r="1.6"/><circle cx="6.4" cy="13" r="1.3"/></svg>`,
-  hedgehog: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="17" rx="3.5" ry="2.6"/><circle cx="8" cy="10" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="16" cy="10" r="1.6"/><circle cx="6.4" cy="13" r="1.3"/></svg>`,
-  car: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 16h14v-3l-2-4h-10l-2 4v3z"/><circle cx="8" cy="16" r="1.5"/><circle cx="16" cy="16" r="1.5"/><path d="M5 13h14"/></svg>`,
-};
-
-function _chromeClassSvg(cls) {
-  return _CHROME_CLASS_SVG[cls] || _CHROME_CLASS_SVG.person;
-}
-
-// P32 · chrome SVGs moved to core/icons.js · DASHBOARD_SVG. The
-// `_CHROME_*_SVG` aliases below stay so callsites read the same way
-// without a search-replace pass; future PRs can inline them.
-const _CHROME_COG_SVG = DASHBOARD_SVG.cog;
-const _CHROME_SIM_SVG = DASHBOARD_SVG.sim;
-const _CHROME_EXPAND_SVG = DASHBOARD_SVG.expand;
-const _CHROME_MINIMIZE_SVG = DASHBOARD_SVG.minimize;
-const _CHROME_TG_SVG = DASHBOARD_SVG.telegram;
-const _CHROME_MQTT_SVG = DASHBOARD_SVG.mqtt;
-
-// Derive the state-dot colour for a notification channel pill.
-//   "on"    → currently armed AND in schedule window         → green dot
-//   "muted" → enabled but camera is NOT armed (user toggled) → amber dot
-//   "idle"  → enabled + armed + outside schedule window       → no dot
-function _channelState(c) {
-  if (!c.armed) return 'muted';
-  const sch =
-    c.schedule_notify && c.schedule_notify.enabled
-      ? c.schedule_notify
-      : c.schedule && c.schedule.enabled
-        ? c.schedule
-        : null;
-  if (sch && sch.from && sch.to) {
-    return _isInScheduleWindow(sch.from, sch.to) ? 'on' : 'idle';
-  }
-  return 'on'; // no schedule defined → always on
-}
-
-// B3 · Channel cluster label resolver. Returns the single line shown
-// inside the TG/MQTT badge — the two-row "sched · status" composition
-// is gone, the schedule window is implied by the wording instead.
-//   always-on (no schedule or 00:00↔00:00)        → "aktiv"
-//   schedule active, state === 'on'               → "aktiv bis HH:MM"
-//   schedule armed but outside window, 'idle'     → "aktiv ab HH:MM"
-//   camera disarmed (state === 'muted')           → "Kamera nicht scharf"
-// schedule_notify takes precedence over the legacy plain schedule.
-function _channelClusterLabel(c, state) {
-  if (state === 'muted') return 'Kamera nicht scharf';
-  const sch =
-    c.schedule_notify && c.schedule_notify.enabled
-      ? c.schedule_notify
-      : c.schedule && c.schedule.enabled
-        ? c.schedule
-        : null;
-  // No schedule, or the always-on sentinel: a single word carries
-  // the whole meaning. Idle should never reach this branch (no
-  // schedule = no idle state) but defaulting to "aktiv" is the
-  // benign choice if it does.
-  if (!sch || !sch.from || !sch.to || sch.from === sch.to) return 'aktiv';
-  if (state === 'on') return `aktiv bis ${sch.to}`;
-  if (state === 'idle') return `aktiv ab ${sch.from}`;
-  return 'aktiv';
-}
-
-// E3 · Channel cluster — horizontal 3-column unit. Column 1: paper-
-// plane / antenna icon (currentColor). Column 2: single-line label
-// (B3 — was a 2-row "sched · status" stack before; the new wording
-// folds schedule + state into one phrase, so the pill height halves).
-// Column 3: active-dot SVG with a pulsing ring while state === 'on'.
-// The cluster is NOT clickable. State-driven visibility comes from
-// the data-state attribute consumed by the CSS in 03-dashboard.css.
-function _channelCluster(c, kind, state) {
-  const headerLabel = kind === 'mqtt' ? 'MQTT-Kanal' : 'Telegram-Kanal';
-  const icon = kind === 'mqtt' ? _CHROME_MQTT_SVG : _CHROME_TG_SVG;
-  const label = _channelClusterLabel(c, state);
-  return `<div class="cv-channel-cluster cv-${kind}-cluster" data-state="${state}" aria-label="${esc(headerLabel)}">
-    <span class="cv-channel-icon" aria-hidden="true">${icon}</span>
-    <span class="cv-channel-label">${esc(label)}</span>
-    <span class="cv-channel-dot" aria-hidden="true">
-      <span class="cv-channel-dot-fill"></span>
-      <span class="cv-channel-dot-ring"></span>
-    </span>
-  </div>`;
-}
+// ── Tile chrome + notification-channel cluster ─────────────────────────────
+// Moved to dashboard/_tile-chrome.js. _isInScheduleWindow went with it —
+// _channelState is its only caller, and leaving it here would have made
+// the two modules import each other. Re-exported for outside importers;
+// the names renderDashboard uses are imported for real below, since a
+// re-export does not bind them in this file.
+export { _isInScheduleWindow } from './dashboard/_tile-chrome.js';
+import {
+  _chromeClassSvg,
+  _channelState,
+  _channelCluster,
+  _CHROME_COG_SVG,
+  _CHROME_SIM_SVG,
+  _CHROME_EXPAND_SVG,
+  _CHROME_MINIMIZE_SVG,
+} from './dashboard/_tile-chrome.js';
 
 // Camera-tile grid renderer. Builds every visible cv-card from
 // state.cameras. The template string carries inline onclick handlers
@@ -922,7 +640,7 @@ export function renderDashboard() {
       return `<article class="cv-card${c.armed ? '' : ' cv-card--muted'}" data-camid="${esc(c.id)}" data-cam-name="${esc(c.name || c.id)}">
   <div class="cv-frame">
     <div class="cv-img-wrap">
-      <div class="cv-loading-placeholder">${isActive ? _makeConnectingPlaceholder() : _makeOfflinePlaceholder()}</div>
+      <div class="cv-loading-placeholder">${isActive ? _makeConnectingPlaceholderFn() : _makeOfflinePlaceholderFn()}</div>
       <img class="cv-img cam-snap" src="${snapUrl}" alt="${esc(c.name)}" data-hd-mode="${hdOn ? '1' : '0'}"
         onload="_cvImgLoaded(this)"
         onerror="_camImgRetry(this)" />
@@ -1040,7 +758,7 @@ export function showCameraReloadAnimation(camId) {
     const placeholder = card.querySelector('.cv-loading-placeholder');
     const img = card.querySelector('.cv-img');
     if (placeholder && !placeholder.querySelector('.cv-ph--blue'))
-      placeholder.innerHTML = _makeConnectingPlaceholder();
+      placeholder.innerHTML = _makeConnectingPlaceholderFn();
     if (img) {
       img.classList.remove('loaded');
       img.style.opacity = '0';
@@ -1051,7 +769,7 @@ export function showCameraReloadAnimation(camId) {
       attempts++;
       if (attempts > 15) {
         clearInterval(poll);
-        _restorePlaceholder(card);
+        _restorePlaceholderFn(card);
         return;
       }
       try {

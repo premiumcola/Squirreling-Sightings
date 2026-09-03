@@ -427,6 +427,72 @@ export const WEATHER_HISTORY_SPARSE = {
   },
 };
 
+// ── Wetter-Timelapse configuration (moved under the charts) ───────────────
+// A camera with the weather master switch on, one solar phase enabled and
+// one off, and the event timelapse armed with all three triggers. That is
+// the state where every control in the block is on screen at once: the
+// sun rows with their preview line, the locked-window chip, the length
+// select, and the event block's window slider plus trigger chips.
+export const WEATHER_CAM = {
+  ...CAMERA,
+  weather: {
+    enabled: true,
+    sun_timelapse: {
+      sunrise: { enabled: true, interval_s: 8, fps: 15, daynight_override: { enabled: false } },
+      sunset: { enabled: false, interval_s: 8, fps: 15, daynight_override: { enabled: false } },
+    },
+    event_timelapse: {
+      enabled: true,
+      window_min: 60,
+      interval_s: 8,
+      fps: 15,
+      prebuffer_min: 15,
+      prebuffer_mode: 'armed',
+      triggers: { thunder_rising: true, front_passing: true, storm_front: false },
+    },
+  },
+};
+
+/** GET /api/weather/sun-times — drives the "Heute: … · Fenster …" line. */
+export const SUN_TIMES = {
+  location_set: true,
+  sunrise: '06:41',
+  sunset: '19:57',
+  cameras: [
+    {
+      id: WEATHER_CAM.id,
+      name: WEATHER_CAM.name,
+      weather_enabled: true,
+      sunrise: {
+        enabled: true,
+        interval_s: 8,
+        fps: 15,
+        window_min: 75,
+        window_start: '05:49',
+        window_end: '07:04',
+        sun_event: '06:41',
+        sun_event_iso: '2026-09-04T06:41:00',
+        capture_start_iso: '2026-09-04T05:49:00',
+        capture_end_iso: '2026-09-04T07:04:00',
+        next_is_tomorrow: true,
+      },
+      sunset: {
+        enabled: false,
+        interval_s: 8,
+        fps: 15,
+        window_min: 75,
+        window_start: '19:05',
+        window_end: '20:20',
+        sun_event: '19:57',
+        sun_event_iso: '2026-09-03T19:57:00',
+        capture_start_iso: '2026-09-03T19:05:00',
+        capture_end_iso: '2026-09-03T20:20:00',
+        next_is_tomorrow: false,
+      },
+    },
+  ],
+};
+
 // ── /api/timelapse/status ─────────────────────────────────────────────────
 // The interesting state for the live tile: one camera recording a
 // periodic profile AND two weather captures in flight. Both halves are

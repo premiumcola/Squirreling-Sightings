@@ -34,7 +34,6 @@ function initWeatherTabs() {
   const bar = document.querySelector('.ws-tab-bar');
   if (!bar) return;
   const allPanels = [
-    'ws-panel-cams',
     'ws-panel-location',
     'ws-panel-events',
     'ws-panel-status',
@@ -96,38 +95,75 @@ function _wsRenderSavedHint() {
   el.textContent = 'zuletzt gespeichert · ' + label;
 }
 
-function _initWsSavedHintLifecycle() {
+/**
+ * Run `start` while the Wetter settings section is open, `stop` when it
+ * closes. `flag` names the dataset key that keeps a second hydrate from
+ * attaching a second observer — hydrateWeatherSettings runs on every
+ * loadAll().
+ *
+ * Extracted because there are now three of these and they were being
+ * hand-rolled one MutationObserver at a time.
+ */
+function _onWeatherSectionOpen(flag, start, stop) {
   const sec = byId('set-weather');
-  if (!sec || sec.dataset.wsHintObs === '1') return;
-  sec.dataset.wsHintObs = '1';
-  const start = () => {
-    _wsRenderSavedHint();
-    if (!_wsHintTimer) _wsHintTimer = setInterval(_wsRenderSavedHint, 15000);
-  };
-  const stop = () => {
-    if (_wsHintTimer) {
-      clearInterval(_wsHintTimer);
-      _wsHintTimer = null;
-    }
-  };
+  if (!sec || sec.dataset[flag] === '1') return;
+  sec.dataset[flag] = '1';
   const sync = () => (sec.classList.contains('open') ? start() : stop());
   new MutationObserver(sync).observe(sec, { attributes: true, attributeFilter: ['class'] });
   sync();
 }
 
+function _initWsSavedHintLifecycle() {
+  _onWeatherSectionOpen(
+    'wsHintObs',
+    () => {
+      _wsRenderSavedHint();
+      if (!_wsHintTimer) _wsHintTimer = setInterval(_wsRenderSavedHint, 15000);
+    },
+    () => {
+      if (_wsHintTimer) {
+        clearInterval(_wsHintTimer);
+        _wsHintTimer = null;
+      }
+    },
+  );
+}
+
+/**
+ * Leaflet needs a sized container, so the map can only be built once the
+ * section is actually open. It used to ride on the "📍 Standort" tab's
+ * click handler — fine while some other tab was the default, but Standort
+ * IS the default now that the camera tab has moved out, and a tab that
+ * starts active is never clicked.
+ */
+function _initWsMapLifecycle() {
+  _onWeatherSectionOpen(
+    'wsMapObs',
+    () => _initWeatherMap(),
+    () => {},
+  );
+}
+
 // ── Live clock + countdown for the sun-tl preview rows ────────────────────
-// One interval ticks every 1s while the Wetter-Settings panel is open and
-// updates every [data-ws-now] (current local time) + [data-ws-countdown]
-// (time until capture_start_iso). Mirrors _initWsSavedHintLifecycle so the
-// timer stops cleanly when the user collapses the section — no leaks on
-// repeated open/close cycles. The actual DOM update lives in
+// One interval ticks every 1s while the rows are on screen and updates
+// every [data-ws-now] (current local time) + [data-ws-countdown] (time
+// until capture_start_iso). The actual DOM update lives in
 // settings-suntl.js (tickSunTlPreview).
+//
+// Keyed on the ROWS being visible, not on the Wetter-Settings section
+// being open: the rows now sit under the weather charts in the
+// Mediathek, so "#set-weather is open" would have started a timer for
+// something off screen and left the visible countdown frozen. An
+// IntersectionObserver on the host is the same signal the chart beside
+// it already uses (weather/stats.js::initWeatherStats), and the host
+// element survives every _renderWeatherCamList re-render — only its
+// innerHTML is replaced — so one observer holds for the page's life.
 let _wsLiveTimer = null;
 
 function _initWsLiveTickerLifecycle() {
-  const sec = byId('set-weather');
-  if (!sec || sec.dataset.wsLiveObs === '1') return;
-  sec.dataset.wsLiveObs = '1';
+  const host = byId('weatherCamList');
+  if (!host || host.dataset.wsLiveObs === '1') return;
+  host.dataset.wsLiveObs = '1';
   const start = () => {
     tickSunTlPreview();
     if (!_wsLiveTimer) _wsLiveTimer = setInterval(tickSunTlPreview, 1000);
@@ -138,9 +174,9 @@ function _initWsLiveTickerLifecycle() {
       _wsLiveTimer = null;
     }
   };
-  const sync = () => (sec.classList.contains('open') ? start() : stop());
-  new MutationObserver(sync).observe(sec, { attributes: true, attributeFilter: ['class'] });
-  sync();
+  new IntersectionObserver((entries) => (entries[0].isIntersecting ? start() : stop()), {
+    threshold: 0,
+  }).observe(host);
 }
 
 let _weatherSaveTimer = null;
@@ -229,6 +265,7 @@ function hydrateWeatherSettings() {
   _bindWeatherHandlers();
   _refreshWeatherStatus();
   _initWsSavedHintLifecycle();
+  _initWsMapLifecycle();
   _initWsLiveTickerLifecycle();
 }
 

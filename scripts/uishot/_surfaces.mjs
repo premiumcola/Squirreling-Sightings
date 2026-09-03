@@ -23,6 +23,8 @@ import {
   WEATHER_HISTORY,
   WEATHER_HISTORY_SPARSE,
   TL_STATUS,
+  WEATHER_CAM,
+  SUN_TIMES,
 } from './_fixtures.mjs';
 
 /** Put a fixture on window so the in-page mounts can read it. */
@@ -126,6 +128,33 @@ async function mountWeatherChart(page) {
   });
   await page.waitForSelector('#weatherStatsChartWrap svg', { timeout: 8000 });
   await page.waitForTimeout(400);
+}
+
+/**
+ * The Wetter-Timelapse configuration in its new home, directly under the
+ * weather charts.
+ *
+ * Mounted through the block's own renderer, so the shot is the real
+ * markup with the real bindings — the same call `hydrateWeatherSettings`
+ * makes after it has the sun-times payload.
+ */
+async function mountWeatherCamConfig(page) {
+  await page.evaluate(async (fx) => {
+    const base = '/static/js';
+    for (let el = document.getElementById('weatherCamConfig'); el; el = el.parentElement) {
+      if (getComputedStyle(el).display === 'none') el.style.display = 'block';
+      el.hidden = false;
+    }
+    const { state } = await import(`${base}/core/state.js`);
+    state.cameras = [fx.cam];
+    state.weather = state.weather || {};
+    state.weather._sunTimes = fx.sunTimes;
+    const suntl = await import(`${base}/weather/settings-suntl.js`);
+    suntl._renderWeatherCamList();
+    suntl.tickSunTlPreview();
+  }, { cam: WEATHER_CAM, sunTimes: SUN_TIMES });
+  await page.waitForSelector('#weatherCamList .ws-cam-block', { timeout: 8000 });
+  await page.waitForTimeout(300);
 }
 
 /**
@@ -274,6 +303,13 @@ export const SURFACES = [
     stubs: { '/api/weather/history': WEATHER_HISTORY_SPARSE },
     clip: '#weatherStatsBlock',
     scope: '#weatherStatsBlock',
+  },
+  {
+    id: 'weather-cam-config',
+    title: 'Wetter-Timelapses · sun + event config under the charts',
+    mount: mountWeatherCamConfig,
+    clip: '#weatherCamConfig',
+    scope: '#weatherCamConfig',
   },
   {
     id: 'timelapse-tile',

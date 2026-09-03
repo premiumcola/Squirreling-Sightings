@@ -347,12 +347,11 @@
 
           <div id="tg-panel-was" class="set-tab-content" hidden>
             <div style="padding-top: 8px; display: grid; gap: 10px">
-              {# D8/D9 · der Schwellen-Regler je Label ist weg — das ist die
-              Push-Komponente einer Netz-Achse, und zwei Bedienwege auf einen Wert
-              sind eine Drift-Quelle. Der An/Aus-Schalter BLEIBT: „über Vögel will
-              ich nie eine Meldung" ist eine Richtlinie, keine Zahl, und das Netz
-              kann „nie" nicht ausdrücken. Nach P1 unterbricht der Schalter den
-              Korpus nicht mehr — deshalb sagt der Hilfetext das jetzt. #}
+              {# D8/D9 · der Schwellen-Regler je Label ist weg — das ist die Push-Komponente einer
+              Netz-Achse, und zwei Bedienwege auf einen Wert sind eine Drift-Quelle. Der
+              An/Aus-Schalter BLEIBT: „über Vögel will ich nie eine Meldung" ist eine Richtlinie,
+              keine Zahl, und das Netz kann „nie" nicht ausdrücken. Nach P1 unterbricht der Schalter
+              den Korpus nicht mehr — deshalb sagt der Hilfetext das jetzt. #}
               <div class="field-help" style="margin: 0 0 4px">
                 Pro Label: Meldung an/aus. Aus = keine Alarm-Meldung. Gefragt wird trotzdem, damit
                 das Netz lernt. Die Schwelle regelt das
@@ -500,24 +499,20 @@
             ><input type="checkbox" id="ws_enabled" /><span class="slider"></span
           ></label>
         </label>
+        {# Der Reiter "📷 Kameras" ist weg: die Sonnen- und Ereignis-Timelapse-Einstellungen, sein
+        einziger Inhalt, sitzen jetzt in der Mediathek direkt unter den Wetterkurven, die ihre
+        Auslöser zeichnen (#weatherCamConfig). Standort bleibt hier — er gehört zum Dienst, nicht zu
+        einer einzelnen Aufnahme — und ist damit der erste Reiter. #}
         <div class="set-tabs ws-tab-bar">
-          <button type="button" class="set-tab active" data-tab="ws-panel-cams">📷 Kameras</button>
-          <button type="button" class="set-tab" data-tab="ws-panel-location">📍 Standort</button>
+          <button type="button" class="set-tab active" data-tab="ws-panel-location">
+            📍 Standort
+          </button>
           <button type="button" class="set-tab" data-tab="ws-panel-events">🎚 Ereignistypen</button>
           <button type="button" class="set-tab" data-tab="ws-panel-status">📡 Status</button>
           <button type="button" class="set-tab" data-tab="ws-panel-suntltest">🌅 Test</button>
         </div>
         <div class="ws-panels-wrap">
-          <div id="ws-panel-cams" class="set-tab-content">
-            <div style="display: grid; gap: 12px; padding-top: 8px">
-              <div>
-                <div class="cam-field-label">Wetter-Kameras</div>
-                <div id="weatherCamList" class="ws-cam-list" style="display: grid; gap: 6px"></div>
-              </div>
-            </div>
-          </div>
-
-          <div id="ws-panel-location" class="set-tab-content" hidden>
+          <div id="ws-panel-location" class="set-tab-content">
             <div style="display: grid; gap: 12px; padding-top: 8px">
               <div>
                 <div class="cam-field-label">Standort</div>

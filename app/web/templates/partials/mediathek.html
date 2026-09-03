@@ -237,6 +237,29 @@
     </div>
   </div>
 
+  {# Wetter-Timelapses — Sonnenauf-/untergang und Ereignis-Timelapse, konfiguriert direkt unter den
+  Kurven, die ihre Auslöser zeichnen. Kommt aus Einstellungen → Wetter → "📷 Kameras"; der Reiter
+  dort ist weg. Der Grund für den Umzug: die Auslöser dieser Aufnahmen (Gewitter, Front, Sturmfront,
+  Sonnenstand) SIND die Kurven darüber, und der periodische Kamera-Timelapse — der mit diesen nichts
+  zu tun hat — sitzt jetzt bei der Kamera. Gefüllt von weather/settings-suntl.js
+  (_renderWeatherCamList); Markup, Bindings und Save-Pfad unverändert, nur der Mount-Punkt ist
+  umgezogen. #}
+  <div class="ws-cam-config" id="weatherCamConfig">
+    <div class="ws-stats-head">
+      <span class="ws-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <use href="#icon-cloud-rain" />
+        </svg>
+        Wetter-Timelapses
+      </span>
+    </div>
+    <p class="field-help">
+      Sonnenauf- und -untergang laufen nach Uhrzeit, der Ereignis-Timelapse nach den Kurven oben.
+      Was gerade aufnimmt, steht in der Kachel „Timelapse aktiv“.
+    </p>
+    <div id="weatherCamList" class="ws-cam-list"></div>
+  </div>
+
   {# Mediathek-Verwaltung — the ONE place every Aufbewahrungsfrist is set. Was two panels: one
   blanket slider here, five per-category sliders in the Wetter-Sektion, two retention windows
   (Kamera-Timelapses, Papierkorb) with no control at all. They are now one form, grouped Kamera /

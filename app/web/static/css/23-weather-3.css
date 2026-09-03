@@ -25,6 +25,21 @@
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
+/* Wetter-Timelapse configuration, directly under the curves that drive
+   it. Same flat, borderless treatment as .ws-stats-block above — this is
+   a sibling sub-section of the same panel, not a card of its own. The
+   top margin is the only separation it needs; a rule line here would be
+   the thin border the design principles rule out. */
+.ws-cam-config {
+  margin: 22px 0 4px;
+}
+.ws-cam-config .field-help {
+  margin: 0 0 10px;
+}
+.ws-cam-list {
+  display: grid;
+  gap: 6px;
+}
 .ws-stats-head .ws-title {
   display: inline-flex;
   align-items: center;

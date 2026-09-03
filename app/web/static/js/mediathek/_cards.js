@@ -122,7 +122,7 @@ function _tlCardHTML(item) {
   return `<article class="media-card mmc-tl" data-event-id="${esc(item.event_id || '')}" data-camera-id="${esc(item.camera_id || '')}">
       <div class="mmc-img-wrap" onclick="window._openMediaItem('${esc(item.event_id || '')}')">
         ${thumbEl}
-        <div style="position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center">
+        <div class="mmc-play-layer">
           <div class="mmc-play-btn" style="background:${tlPlayBg};border:1.5px solid ${tlPlayBorder}"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color:${tlAccent};margin-left:2px"><polygon points="5,3 19,12 5,21"/></svg></div>
         </div>
         <div style="position:absolute;bottom:7px;left:8px;z-index:2;pointer-events:none;width:fit-content">
@@ -175,7 +175,11 @@ function _motionCtx(item) {
     vidDur: _fmtDur(item.duration_s),
     vidSize: _fmtByt(item.file_size_bytes),
     // Inline overrides only border-color and text color; .mmc-tl-badge supplies dark bg + blur + shadow
-    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}${esc(badgeText)}</span>${speciesChip}</div>`,
+    // The label text sits in its own span so it can ellipsize INSIDE the
+    // pill on a 160 px card. Without it the pill is an inline-flex that
+    // never shrinks, overflows its `.mmc-badges` max-width and slides
+    // under the action buttons, which are opaque and one z-layer above.
+    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}<span class="mmc-badge-txt">${esc(badgeText)}</span></span>${speciesChip}</div>`,
   };
 }
 
@@ -190,7 +194,7 @@ function _playerInnerHTML(item, ctx) {
     ? `<img src="${esc(ctx.imgSrc)}" alt="preview" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.7" loading="lazy" onerror="this.remove()">`
     : '';
   return `<div style="position:absolute;inset:0;background:#0a0e1a">${videoThumbEl}</div>
-      <div style="position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center">
+      <div class="mmc-play-layer">
         <div class="mmc-play-btn" style="background:${playBg};border:1.5px solid ${playBorder}"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color:${ctx.accent};margin-left:3px"><polygon points="5,3 19,12 5,21"/></svg></div>
       </div>
       ${_dateTimeBadges(ctx.vidDate, ctx.vidTime, ctx.subBadge)}

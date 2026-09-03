@@ -1874,6 +1874,18 @@
   aspect-ratio: 16/10;
   overflow: hidden;
 }
+/* Below 768 px the grid drops to 160 px columns, which makes a 16/10 wrap
+   only ~100 px tall — too short for the six clusters the tile carries
+   (label pill + species line, two action buttons, date/time, duration/
+   size, play button). Every one of them is information the tile is
+   supposed to show, so the tile gets the height instead of losing a
+   cluster: 4/3 buys ~20 px, which is exactly what the play button needs
+   to sit clear of both text bands. */
+@media (max-width: 768px) {
+  .mmc-img-wrap {
+    aspect-ratio: 4/3;
+  }
+}
 .mmc-img-wrap img {
   width: 100%;
   height: 100%;
@@ -1948,6 +1960,32 @@
     transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     background 0.15s;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+/* The circle stays 30 px — a bigger one would eat the label pill's width
+   on a 160 px card — but the TOUCHABLE area is grown to 44 px tall via a
+   transparent overlay, per the iOS minimum.
+   The horizontal growth is deliberately asymmetric: these two buttons sit
+   5 px apart, so growing both sides evenly to 44 px would make their hit
+   areas overlap by 9 px, and in that strip the later sibling (delete)
+   would win a tap meant for confirm. Each button therefore grows 2 px
+   toward its neighbour — leaving a dead strip between them — and freely
+   outward. Confirm reaches 44 px wide; delete reaches 38 px, bounded by
+   the card edge. A too-small delete button is a far cheaper mistake than
+   a delete that fires when confirm was aimed at. */
+.mmc-btn::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  left: -2px;
+  right: -2px;
+}
+.mmc-actions > .mmc-btn:first-child::after {
+  left: -12px;
+}
+.mmc-actions > .mmc-btn:last-child::after {
+  right: -6px;
 }
 .mmc-btn:hover {
   transform: scale(1.08);

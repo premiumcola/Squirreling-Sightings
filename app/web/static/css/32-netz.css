@@ -450,24 +450,6 @@
   }
 }
 
-/* ── D · what is left where the sliders were ────────────────────────── */
-
-.erk-netz-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.erk-netz-link {
-  align-self: flex-start;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 16px;
-  border-radius: 10px;
-  text-decoration: none;
-}
-
 .erk-note {
   display: block;
   margin-top: 8px;

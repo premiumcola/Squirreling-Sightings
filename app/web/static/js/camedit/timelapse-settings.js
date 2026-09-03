@@ -13,11 +13,9 @@ import { state } from '../core/state.js';
 import { apiGet, apiPost } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 import { loadAll } from '../live-update.js';
-// _renderTlCameraList + _updateTlActiveTags use getCameraIcon to
-// stamp the right thematic emoji (🐿️ / 🌿 / 🚗 / 📷) into each cam
-// row + the "active" tag pill. Missing this import was the cause of
-// "Fehler: getCameraIcon is not defined" on the Timelapse Settings tab.
-import { getCameraIcon } from '../core/icons.js';
+// getCameraIcon is gone with the settings section's camera tab bar and
+// its "active" tag pills — the grid renders for one already-identified
+// camera, so it never names a camera itself.
 // The profile catalogue and every pure period→interval→disk
 // computation live in _timelapse-model.js; this file is the renderer.
 import {
@@ -92,56 +90,6 @@ window.toggleTimelapse = toggleTimelapse;
 const _TL_ICO_SPAN = `<svg width="16" height="14" viewBox="0 0 14 12" fill="none" aria-hidden="true"><rect x="0.75" y="0.75" width="2" height="10.5" rx="1" fill="currentColor"/><line x1="3.5" y1="6" x2="7" y2="6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><polygon points="7,3 13.5,6 7,9" fill="currentColor"/></svg>`;
 const _TL_ICO_FRAMES = `<svg width="15" height="13" viewBox="0 0 13 11" fill="none" aria-hidden="true"><rect x="2.5" y="0.75" width="8" height="9.5" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="0.5" y="2.25" width="2" height="1.75" rx="0.5" fill="currentColor"/><rect x="0.5" y="7" width="2" height="1.75" rx="0.5" fill="currentColor"/><rect x="10.5" y="2.25" width="2" height="1.75" rx="0.5" fill="currentColor"/><rect x="10.5" y="7" width="2" height="1.75" rx="0.5" fill="currentColor"/></svg>`;
 const _TL_ICO_SPEED = `<svg width="14" height="13" viewBox="0 0 12 11" fill="none" aria-hidden="true"><path d="M1 1.25L5 5.5L1 9.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 1.25L10 5.5L6 9.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-function _updateTlActiveTags(cameras) {
-  const wrap = byId('tlActiveTags');
-  if (!wrap) return;
-  const active = (cameras || []).filter((cam) =>
-    _TL_PROFILES_DEF.some((p) => (cam.timelapse || {}).profiles?.[p.key]?.enabled),
-  );
-  if (!active.length) {
-    wrap.innerHTML = '';
-    return;
-  }
-  // Icon only. The row is a settings entry with a label and a chevron;
-  // spelling out every camera name pushed the last chip straight under
-  // that chevron on a phone — "eventuell nur Logos der Kameras ohne Text.
-  // Logos reichen aber, glaub ich." The name survives as the tooltip and
-  // as the accessible name, so nothing is lost for a screen reader or a
-  // pointer.
-  wrap.innerHTML = active
-    .map(
-      (cam) =>
-        `<span class="tl-cam-tag tl-cam-tag--ico" title="${esc(cam.name)}" ` +
-        `aria-label="${esc(cam.name)}">${getCameraIcon(cam.name)}</span>`,
-    )
-    .join('');
-}
-window.loadTlSettings = async function () {
-  const content = byId('tlSettingsContent');
-  if (!content) return;
-  content.innerHTML = '<div class="small muted" style="padding:10px 2px">Lade...</div>';
-  try {
-    const cameras = state.cameras || [];
-    _updateTlActiveTags(cameras);
-    content.innerHTML = _renderTlCameraList(cameras);
-  } catch (e) {
-    content.innerHTML = `<div class="small muted" style="padding:10px 2px">Fehler: ${esc(e.message)}</div>`;
-  }
-};
-function _renderTlCameraList(cameras) {
-  if (!cameras.length)
-    return '<div class="small muted" style="padding:10px 2px">Keine Kameras konfiguriert.</div>';
-  const firstCam = cameras[0];
-  const tabs = cameras
-    .map((cam, i) => {
-      return `<button type="button" class="set-tab${i === 0 ? ' active' : ''}" id="tlTab_${esc(cam.id)}" onclick="selectTlCam('${esc(cam.id)}')">
-      ${getCameraIcon(cam.name)} ${esc(cam.name)}
-    </button>`;
-    })
-    .join('');
-  return `<div class="set-tabs" id="tlCamTabs">${tabs}</div>
-    <div class="sec-content" id="tlCamContent">${_renderTlModesGrid(firstCam)}</div>`;
-}
 function _renderTlModesGrid(cam) {
   const tl = cam.timelapse || {};
   const profs = tl.profiles || {};
@@ -239,15 +187,10 @@ window._tlApplyCustomPreset = function (camId, profKey, val) {
   if (tEl) tEl.value = targetS;
   window._tlRefreshDesc(camId, profKey);
 };
-window.selectTlCam = function (camId) {
-  document
-    .querySelectorAll('#tlCamTabs .set-tab')
-    .forEach((b) => b.classList.toggle('active', b.id === `tlTab_${camId}`));
-  const cam = (state.cameras || []).find((c) => c.id === camId);
-  const content = byId('tlCamContent');
-  if (cam && content) content.innerHTML = _renderTlModesGrid(cam);
-};
-// _renderTlProfileCards replaced by _renderTlModesGrid (4-column grid)
+// _renderTlProfileCards replaced by _renderTlModesGrid (4-column grid).
+// selectTlCam is gone with the settings section's camera tab bar — the
+// grid now renders for the one camera whose edit panel is open, so there
+// is nothing left to select between.
 window._tlRefreshDesc = function (camId, profKey) {
   const targetEl = byId(`tlProfTarget_${camId}_${profKey}`);
   const periodEl = byId(`tlProfPeriod_${camId}_${profKey}`);
@@ -259,7 +202,6 @@ window._tlRefreshDesc = function (camId, profKey) {
   if (lblEl) lblEl.textContent = _tlTargetLabel(parseInt(targetEl.value) || 10);
   if (descEl) descEl.innerHTML = _tlResultDesc(periodEl.value, targetEl.value, _TL_FIXED_FPS);
 };
-// toggleTlCamCard replaced by selectTlCam (tab-based camera selector)
 window.saveTlCameraProfiles = async function (camId) {
   const cam = (state.cameras || []).find((c) => c.id === camId);
   if (!cam) return;
@@ -288,12 +230,12 @@ window.saveTlCameraProfiles = async function (camId) {
   await apiPost('/api/settings/cameras', payload);
   showToast(`Timelapse für ${cam.name} gespeichert.`, 'success');
   await loadAll();
-  _updateTlActiveTags(state.cameras || []);
-  const content = byId('tlSettingsContent');
-  if (content) {
-    content.innerHTML = _renderTlCameraList(state.cameras || []);
-    window.selectTlCam(camId);
-  }
+  // Re-render from the reloaded camera so the grid shows what was
+  // actually persisted, not what was typed. loadAll() replaces
+  // state.cameras, so the stale `cam` above must not be reused here.
+  const content = byId('camTlModes');
+  const fresh = (state.cameras || []).find((c) => c.id === camId);
+  if (content && fresh) content.innerHTML = _renderTlModesGrid(fresh);
 };
 
 // (Wizard form seeds + tab/prev/next/finish bindings moved into
@@ -309,12 +251,13 @@ window.saveTlCameraProfiles = async function (camId) {
 
 // Public surface — bridges in legacy.js consume these by name.
 
-export { loadTimelapse, toggleTimelapse, _updateTlActiveTags };
+export { loadTimelapse, toggleTimelapse };
 // Consumed by timelapse-status.js — the profile catalogue and the
-// interval formatter are shared, not duplicated.
-export { _TL_PROFILES_DEF, _tlIntervalLabel };
+// interval formatter are shared, not duplicated. _renderTlModesGrid is
+// consumed by edit-panel.js, which mounts it into the camera's own
+// Timelapse tab.
+export { _TL_PROFILES_DEF, _tlIntervalLabel, _renderTlModesGrid };
 
-// ── window.* bridges ────────────────────────────────────────────────────────
-// loadAll() in live-update.js looks this up by global name; without it
-// the cam-edit Timelapse-Tab "active" tags never refresh.
-window._updateTlActiveTags = _updateTlActiveTags;
+// The _updateTlActiveTags bridge is gone with #tlActiveTags, the chip row
+// in the removed settings-section header. Which cameras record is answered
+// by the dashboard's "Timelapse aktiv" tile now — one place, not two.

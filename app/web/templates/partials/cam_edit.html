@@ -40,7 +40,7 @@
         <input type="hidden" name="masks_json" />
         <input type="hidden" name="whitelist_names" />
 
-        <!-- Tab bar — 5 tabs: Allgemein / Verbindung / Erkennung / Alerting / Zonen -->
+        <!-- Tab bar — 5 tabs: Allgemein / Verbindung / Timelapse / Alerting / Zonen -->
         <div class="cam-tab-bar">
           <button type="button" class="cam-tab-btn active" data-tab="cam-tab-allgemein">
             <svg
@@ -80,7 +80,13 @@
               <path d="M12 14v4a3 3 0 0 0 3 3h1" /></svg
             ><span>Verbindung</span>
           </button>
-          <button type="button" class="cam-tab-btn" data-tab="cam-tab-erkennung">
+          {# War "Erkennung". Der Tab hatte zuletzt genau einen Regler (den Klassenfilter), und das
+          Erkennungsnetz auf dem Dashboard beantwortet dieselbe Frage vollständiger. Der
+          Klassenfilter steht jetzt im Alerting-Tab, wo die Severity-Matrix ihn ohnehin live
+          auswertet. An dieser Stelle sitzt nun der periodische Timelapse DIESER Kamera — vorher in
+          Einstellungen → Timelapse, also einer kamera-spezifischen Einstellung an einem globalen
+          Ort. #}
+          <button type="button" class="cam-tab-btn" data-tab="cam-tab-timelapse">
             <svg
               class="cam-tab-ico"
               viewBox="0 0 24 24"
@@ -93,9 +99,11 @@
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-              <circle cx="12" cy="12" r="3" /></svg
-            ><span>Erkennung</span>
+              <line x1="6" y1="3" x2="18" y2="3" />
+              <line x1="6" y1="21" x2="18" y2="21" />
+              <polygon points="7,4 17,4 12,12" fill="currentColor" opacity=".8" />
+              <polygon points="12,12 7,20 17,20" fill="currentColor" opacity=".5" /></svg
+            ><span>Timelapse</span>
           </button>
           <button type="button" class="cam-tab-btn" data-tab="cam-tab-alerting">
             <svg
@@ -170,7 +178,7 @@
                  div so the JS that toggles them via #cam-tab-X still
                  works unchanged. -->
         {% include 'partials/cam_edit/allgemein.html' %} {% include
-        'partials/cam_edit/verbindung.html' %} {% include 'partials/cam_edit/erkennung.html' %} {%
+        'partials/cam_edit/verbindung.html' %} {% include 'partials/cam_edit/timelapse.html' %} {%
         include 'partials/cam_edit/alerting.html' %} {% include 'partials/cam_edit/zonen.html' %}
 
         <div class="cam-form-actions">

@@ -22,9 +22,10 @@ export function initCameraEditTabs() {
       btn.classList.add('active');
       const panel = byId(btn.dataset.tab);
       if (panel) panel.classList.add('active');
-      // B2 · when the Alerting tab becomes active, re-evaluate the
-      // severity-matrix locks against the LIVE object-filter so a class
-      // deselected on the Erkennung tab shows as locked here right away.
+      // B2 · re-evaluate the severity-matrix locks against the LIVE
+      // object-filter whenever this tab becomes active. The filter pills
+      // now sit on this very tab, so the pills' own change event carries
+      // most of the work; this keeps the state right after a reopen.
       if (btn.dataset.tab === 'cam-tab-alerting') _refreshSeverityLockState();
     });
   });

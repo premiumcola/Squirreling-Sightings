@@ -124,7 +124,7 @@ export function _wireCluster2(host, cam, ctx) {
   host
     .querySelector('[data-action="open-profil-editor"]')
     ?.addEventListener('click', () => {
-      const url = `/#cam-edit?cam=${encodeURIComponent(camId)}&tab=erkennung`;
+      const url = `/#cam-edit?cam=${encodeURIComponent(camId)}&tab=alerting`;
       window.location.href = url;
     });
 }

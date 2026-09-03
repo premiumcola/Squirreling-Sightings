@@ -217,6 +217,16 @@
 .cam-tab-panel {
   display: none;
   animation: cam-tab-fade 0.15s ease-in;
+  /* Each panel is a grid item of #cameraForm.cam-form-compact, and a
+     grid item defaults to `min-width: auto` — its MIN-CONTENT width,
+     not its track's. Any panel holding something that refuses to wrap
+     therefore stretches to that content's full width and is then
+     clipped by .cam-edit-inner's overflow-x: hidden, silently cutting
+     the panel off screen. Measured at a 375 px viewport with the
+     object-filter pill bar (a nowrap scroller on phones) on the
+     Alerting tab: panel 845 px inside a 295 px track. `min-width: 0`
+     makes the panel take its track and lets the scroller scroll. */
+  min-width: 0;
 }
 .cam-tab-panel.active {
   display: block;

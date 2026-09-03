@@ -34,52 +34,12 @@
     </div>
   </div>
 
-  <!-- 2. Timelapse Einstellungen -->
-  <div class="set-section" id="set-timelapse" data-accent="168,85,247">
-    <button
-      type="button"
-      class="set-hd"
-      data-action="toggleSetSection"
-      data-section="set-timelapse"
-      data-also="loadTlSettings"
-    >
-      <span class="set-icon"
-        ><svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="#c4b5fd"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <line x1="6" y1="3" x2="18" y2="3" />
-          <line x1="6" y1="21" x2="18" y2="21" />
-          <polygon points="7,4 17,4 12,12" fill="#c4b5fd" opacity=".8" />
-          <polygon points="12,12 7,20 17,20" fill="#c4b5fd" opacity=".5" /></svg
-      ></span>
-      <span>Timelapse</span>
-      <span id="tlActiveTags" class="tl-active-tags"></span>
-      <svg
-        class="set-chevron"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <polyline points="5,3 11,8 5,13" />
-      </svg>
-    </button>
-    <div class="set-bd">
-      <div class="set-inner">
-        <div id="tlSettingsContent" class="tl-settings-content" style="padding: 4px 0 8px">
-          <!-- populated by loadTlSettings() -->
-        </div>
-      </div>
-    </div>
-  </div>
-
+  {# Die Sektion "Timelapse" ist weg. Ihr gesamter Inhalt war ein Kamera-Reiter gefolgt vom
+  Profil-Raster EINER Kamera — eine kamera-spezifische Einstellung, erreichbar nur über einen Umweg
+  über die Kameraauswahl. Das Raster sitzt jetzt im Kamera-Dialog im Reiter "Timelapse"
+  (partials/cam_edit/timelapse.html). Bewusst verschoben statt kopiert: die DOM-Ids darin
+  (tlProf_KAMERA_PROFIL …) sind pro Kamera eindeutig, zwei gleichzeitige Hosts hätten byId() auf das
+  jeweils erste Vorkommen zeigen lassen. #}
   <!-- 3. Telegram (contains own form#telegramForm) -->
   <div class="set-section" id="set-telegram" data-accent="56,189,248">
     <button type="button" class="set-hd" data-action="toggleSetSection" data-section="set-telegram">

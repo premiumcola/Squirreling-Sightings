@@ -29,8 +29,8 @@ import {
   _renderCamObjectPills,
   getCamObjectFilterState,
   setCamObjectFilterState,
-  _renderGlobalStatusRows,
 } from './detection.js';
+import { _renderTlModesGrid } from './timelapse-settings.js';
 import {
   drawShapes,
   loadMaskSnapshot,
@@ -48,7 +48,6 @@ import {
   _bindAlertingConflictWatch,
   _renderAlertStatusStrip,
 } from '../alerting.js';
-import { hydrateErkennungFields } from './hydration/erkennung.js';
 import { hydrateAlertingFields } from './hydration/alerting.js';
 import { initCameraEditTabs } from './tabs.js';
 
@@ -93,6 +92,12 @@ function _hydrateIdentity(f, c) {
       syncAvatar(f['color'].value, false);
     };
   }
+  // The detection_trigger select sits on this tab (allgemein.html). It
+  // used to be hydrated from the Erkennung tab's hydrator, which is where
+  // the field lived before an earlier move; hydrating it from a tab it is
+  // not on is how it got left behind twice.
+  if (f['detection_trigger'])
+    f['detection_trigger'].value = c.detection_trigger || 'motion_and_objects';
   if (avatarBtn && f['color']) {
     avatarBtn.onclick = (e) => {
       e.preventDefault();
@@ -168,6 +173,15 @@ function _hydrateAlerting(formEl, c) {
   // form so back-end code that still reads it keeps working.
   const f = formEl.elements;
   if (f['alarm_profile']) f['alarm_profile'].value = c.alarm_profile || 'soft';
+  // Class filter, moved here with the Erkennung tab's removal. It MUST be
+  // hydrated before _renderSeverityMatrix below: the matrix greys out the
+  // row of every class this filter excludes, and it reads the filter
+  // state rather than the camera dict. The hidden input stays the save
+  // path — the submit collector reads form state, never this module's
+  // cache.
+  setCamObjectFilterState(c.object_filter || ['person', 'cat', 'bird']);
+  f['object_filter'].value = getCamObjectFilterState().join(',');
+  _renderCamObjectPills();
   // Rendered after the form id is set so handlers reference the right cam.
   _renderSeverityMatrix(formEl, c);
   _bindAlertingConflictWatch(formEl);
@@ -188,20 +202,22 @@ function _hydrateAlerting(formEl, c) {
   hydrateAlertingFields(formEl, c);
 }
 
-// ── Erkennung · class filter only (D9 — the rest is the Erkennungsprofil) ──
-
-function _hydrateErkennung(formEl, c) {
-  const f = formEl.elements;
-  _renderGlobalStatusRows();
-  // The object filter renders as a pill bar; the hidden input is kept in
-  // sync because the submit handler still reads f['object_filter'].value.
-  setCamObjectFilterState(c.object_filter || ['person', 'cat', 'bird']);
-  f['object_filter'].value = getCamObjectFilterState().join(',');
-  _renderCamObjectPills();
-  hydrateErkennungFields(formEl, c, state);
-  // motion_enabled, resolution, snapshot_interval_s, bottom_crop_px and
-  // wildlife_motion_sensitivity have no UI in this layout; their stored
-  // values survive via the existingCam fallback in the submit handler.
+// ── Timelapse · the periodic profiles for this camera ─────────────────────
+//
+// Replaces the Erkennung tab. Everything that tab still configured lives
+// on: the class filter moved into _hydrateAlerting (where the severity
+// matrix already consumes it), and detection_trigger is hydrated with the
+// Allgemein fields, where its select actually is. Only the read-only
+// Coral status strip was dropped, and the same figures are on the
+// dashboard's Erkennungsnetz, the Coral test panel and the live-detect
+// tab.
+//
+// motion_enabled, resolution, snapshot_interval_s, bottom_crop_px and
+// wildlife_motion_sensitivity have no UI in this layout; their stored
+// values survive via the existingCam fallback in the submit handler.
+function _hydrateTimelapse(formEl, c) {
+  const host = byId('camTlModes');
+  if (host) host.innerHTML = _renderTlModesGrid(c);
   setWhitelistState(c.whitelist_names || []);
   _updateWhitelistHidden();
 }
@@ -299,7 +315,7 @@ export function editCamera(camId) {
     });
     byId('cameraEditTitle').textContent = `Kamera bearbeiten · ${c.name || c.id}`;
     _hydrateConnection(formEl, f, c);
-    _hydrateErkennung(formEl, c);
+    _hydrateTimelapse(formEl, c);
     _hydrateAlerting(formEl, c);
     _hydrateShapes(f, c, camId);
     _openPanelInRow(camId);

@@ -1,3 +1,20 @@
+/* The grid's home is now the camera dialog's Timelapse tab. The tab body
+   is much narrower than the settings panel it came from, so three columns
+   do not fit even on a wide screen — cap it at two.
+   The media query is load-bearing, not decoration: `.cam-tl-modes
+   .tl-modes-grid` outranks the bare `.tl-modes-grid` in the phone
+   breakpoint below, so an unscoped rule here forced two columns at 375 px
+   and pushed the panel 150 px past the viewport. Scoped to the width
+   where the base rule would otherwise say three, it changes only that. */
+.cam-tl-intro {
+  margin: 0 0 12px;
+}
+@media (min-width: 901px) {
+  .cam-tl-modes .tl-modes-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* ── Timelapse mode grid (3 cols desktop → 2 tablet → 1 mobile) ─────────── */
 .tl-modes-grid {
   display: grid;
@@ -58,13 +75,6 @@
   line-height: 1.4;
   min-height: 58px;
   overflow: hidden;
-}
-/* Remove the rounded inner box from .sec-content inside timelapse so
-   we only have one outer container instead of three stacked rounded boxes. */
-#set-timelapse .sec-content {
-  background: transparent;
-  padding: 4px 0 8px;
-  border-radius: 0;
 }
 .tl-drow {
   display: flex;

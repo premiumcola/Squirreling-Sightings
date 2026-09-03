@@ -3,39 +3,6 @@
   display: flex;
   align-items: center;
 }
-.tl-active-tags {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 4px;
-  margin-left: 10px;
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-.tl-cam-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  background: rgba(168, 85, 247, 0.18);
-  color: #d8b4fe;
-  white-space: nowrap;
-}
-/* Icon-only variant: a round badge, so three of them take the width one
-   spelled-out camera name used to and can never reach the row's
-   chevron. */
-.tl-cam-tag--ico {
-  gap: 0;
-  padding: 3px;
-  width: 22px;
-  height: 22px;
-  justify-content: center;
-}
-
 /* Separation by background contrast, not a hairline rule. The footnote
    under the panel is one sentence — it must stay one LINE on a phone
    rather than wrapping into a second and pushing the panel taller. */
@@ -51,11 +18,6 @@
   }
 }
 
-.tl-settings-content {
-  display: grid;
-  gap: 8px;
-  padding: 4px 0;
-}
 .tl-cam-card {
   border-radius: 14px;
   background: var(--surface);

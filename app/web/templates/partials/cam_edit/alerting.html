@@ -11,6 +11,21 @@
     <span class="val" id="alertStatusLast">—</span>
   </div>
 
+  <!-- Klassen-Filter — welche Objektklassen diese Kamera überhaupt sucht.
+       Kam aus dem gelöschten Erkennung-Tab und steht bewusst HIER: die
+       Severity-Matrix darunter sperrt die Zeile jeder Klasse, die dieser
+       Filter ausschließt, und reagiert live darauf (alerting.js hört auf
+       das `cam-objfilter-change`-Event, das die Pillen feuern). Im
+       Erkennungsnetz auf dem Dashboard hätte der Filter diese Kopplung
+       verloren — dort steht die Kamera-weite Empfindlichkeit, nicht die
+       Frage, worüber gemeldet wird.
+       Das versteckte input[name=object_filter] bleibt in verbindung.html:
+       der Submit-Sammler liest den Formularzustand, nicht den JS-Cache. -->
+  <div class="erk-card cam-objfilter-card">
+    <div class="cam-field-label">Welche Klassen sucht diese Kamera?</div>
+    <div id="camObjectFilter" class="cam-objfilter-bar"></div>
+  </div>
+
   <!-- Conflict warning banner — JS toggles `hidden` based on
                    the matrix + channel + master switch state. -->
   <div id="alertConflictBanner" class="alert-conflict" hidden>
@@ -118,10 +133,13 @@
                        × 3 columns (off/info/alarm). Click a cell to
                        toggle that row's severity. -->
       <!-- B2 · shown by JS when ≥1 object class is disabled in the
-                       Erkennung object-filter (its matrix row is then locked). -->
+                       object-filter above (its matrix row is then locked).
+                       The hint used to send the user to the Erkennung tab;
+                       that tab is gone and the filter sits right above this
+                       matrix now, so it points up instead of away. -->
       <div id="alertSeverityLockHint" class="sev-lock-hint" hidden>
-        Ausgegraute Klassen sind in der <strong>Erkennung</strong> deaktiviert — dort
-        aktivieren, um sie hier zu konfigurieren.
+        Ausgegraute Klassen sucht diese Kamera nicht — oben im
+        <strong>Klassen-Filter</strong> aktivieren, um sie hier zu konfigurieren.
       </div>
       <div id="alertSeverityMatrix" class="sev-matrix"></div>
       <button type="button" class="erk-more" id="alertCooldownToggle" aria-expanded="false">

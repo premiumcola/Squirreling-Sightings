@@ -1,0 +1,17 @@
+<div class="cam-tab-panel" id="cam-tab-timelapse">
+  <!-- The periodic timelapse for THIS camera. Was Einstellungen → Timelapse,
+       a global section whose entire content was a camera picker followed by
+       exactly this grid — a per-camera setting reached through a
+       camera-selection detour. There is no second host: the ids inside the
+       grid (tlProf_<cam>_<profile> and friends) are unique per camera, so
+       rendering the same markup in two places at once would have made
+       byId() pick whichever came first in the DOM and let a save read the
+       wrong panel's values.
+       Populated by camedit/edit-panel.js::_hydrateTimelapse via
+       camedit/timelapse-settings.js::_renderTlModesGrid. -->
+  <p class="field-help cam-tl-intro">
+    Läuft dauerhaft und baut je Zeitraum ein Video. Sonnenauf-/untergang und Wetter-Ereignisse sind
+    davon getrennt — die stehen in der Mediathek unter den Wetterkurven.
+  </p>
+  <div id="camTlModes" class="cam-tl-modes"></div>
+</div>

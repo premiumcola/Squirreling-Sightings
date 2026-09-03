@@ -17,7 +17,6 @@ import {
   _resetFailedSnapshotIds,
 } from './dashboard.js';
 import { renderTimeline } from './timeline.js';
-import { _renderGlobalStatusRows } from './camedit/detection.js';
 import {
   renderCameraSettings,
   renderProfiles,
@@ -133,9 +132,9 @@ export function startLiveUpdate() {
         state.cameras = r.cameras || state.cameras;
         renderDashboard();
       }
-      // Erkennung + Alerting status strips refresh on every tick.
-      // Both are direct named imports since stages 8 + 17.
-      _renderGlobalStatusRows();
+      // Alerting status strip refreshes on every tick. The Erkennung
+      // strip beside it is gone with its tab — the same Coral figures
+      // are on the dashboard's Erkennungsnetz and the live-detect tab.
       _renderAlertStatusStrip();
     } catch {
       /* silent */
@@ -175,8 +174,6 @@ export async function loadAll() {
   if (typeof window.hydrateWeatherSettings === 'function') window.hydrateWeatherSettings();
   if (typeof window.initLibraryPage === 'function') window.initLibraryPage();
   if (typeof window.loadTlStatus === 'function') window.loadTlStatus();
-  if (typeof window._updateTlActiveTags === 'function')
-    window._updateTlActiveTags(state.cameras || []);
   if (state.bootstrap.needs_wizard && typeof window.openWizard === 'function') window.openWizard();
   const wizBtn = byId('openWizardBtn');
   if (wizBtn)

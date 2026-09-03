@@ -131,6 +131,46 @@ async function mountWeatherChart(page) {
 }
 
 /**
+ * The camera edit dialog on its new Timelapse tab — the slot the
+ * Erkennung tab used to hold.
+ *
+ * `fxTab` picks which tab is showing, because the two that changed are
+ * worth photographing separately: Timelapse for the grid that moved in,
+ * Alerting for the class filter that moved across and the severity
+ * matrix that reads it. Opened through editCamera(), the dialog's real
+ * entry point, so every hydrator runs exactly as it does for a user.
+ */
+async function mountCamEdit(page, tabId) {
+  await page.evaluate(
+    async (fx) => {
+      const base = '/static/js';
+      const { state } = await import(`${base}/core/state.js`);
+      state.cameras = [fx.cam];
+      state.config = { cameras: [fx.cam], processing: {} };
+      // The camera list must exist first. editCamera ends in
+      // _openPanelInRow, which docks the edit wrapper INTO the clicked
+      // camera's row — and that row is what gives the panel its width.
+      // Without the list the wrapper stays unparented and every child
+      // measures ~850 px wide at a 375 px viewport, so the shot would
+      // report an overflow the real app does not have.
+      const ce = await import(`${base}/camedit/index.js`);
+      ce.renderCameraSettings();
+      const ep = await import(`${base}/camedit/edit-panel.js`);
+      ep.editCamera(fx.cam.id);
+      document
+        .querySelectorAll('.cam-tab-btn')
+        .forEach((b) => b.classList.toggle('active', b.dataset.tab === fx.tab));
+      document
+        .querySelectorAll('.cam-tab-panel')
+        .forEach((p) => p.classList.toggle('active', p.id === fx.tab));
+    },
+    { cam: WEATHER_CAM, tab: tabId },
+  );
+  await page.waitForSelector('#cameraForm', { timeout: 8000 });
+  await page.waitForTimeout(400);
+}
+
+/**
  * The Wetter-Timelapse configuration in its new home, directly under the
  * weather charts.
  *
@@ -303,6 +343,20 @@ export const SURFACES = [
     stubs: { '/api/weather/history': WEATHER_HISTORY_SPARSE },
     clip: '#weatherStatsBlock',
     scope: '#weatherStatsBlock',
+  },
+  {
+    id: 'camedit-timelapse',
+    title: 'Kamera-Dialog · Timelapse tab (was Erkennung)',
+    mount: (page) => mountCamEdit(page, 'cam-tab-timelapse'),
+    clip: '#cameraEditWrapper',
+    scope: '#cam-tab-timelapse',
+  },
+  {
+    id: 'camedit-alerting',
+    title: 'Kamera-Dialog · Alerting tab with the moved class filter',
+    mount: (page) => mountCamEdit(page, 'cam-tab-alerting'),
+    clip: '#cameraEditWrapper',
+    scope: '#cam-tab-alerting',
   },
   {
     id: 'weather-cam-config',

@@ -39,11 +39,7 @@ import {
 import { _updateWhitelistHidden } from './whitelist.js';
 import { _refreshCamIdPreview, _bindCamIdPreviewListeners } from './camera_id.js';
 import { _loadCamDiagnostics, _refreshConnectionWarn } from './recovery.js';
-import {
-  _initCameraFormListeners,
-  _renderCamObjectPills,
-  _renderGlobalStatusRows,
-} from './detection.js';
+import { _initCameraFormListeners, _renderCamObjectPills } from './detection.js';
 import { _renderShapeList, _updateShapeDrawingBar } from '../shape-editor/index.js';
 import { _bindCamProbeDeviceInfo } from './discovery.js';
 import { _bindReolinkImageMode } from './reolink-imgmode.js';

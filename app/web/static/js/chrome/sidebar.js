@@ -54,9 +54,6 @@ registerAction('navJumpToSetting', (el, _ev) => {
   if (!sec) return false;
   if (!sec.classList.contains('open') && typeof window.toggleSetSection === 'function') {
     window.toggleSetSection(secId);
-    if (secId === 'set-timelapse' && typeof window.loadTlSettings === 'function') {
-      window.loadTlSettings();
-    }
   }
   sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
   _lockNavClickTo('settings');

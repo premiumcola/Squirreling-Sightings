@@ -17,14 +17,29 @@ const _CLUSTER1_DEFAULTS = {
 // plus the evidence box. Editing lives on the Erkennung tab behind the
 // Experte fold; see the note on _renderSlider.
 export function _renderCluster1(ctx, cam) {
-  const iou = _readField(cam, 'track_iou_match_threshold', _CLUSTER1_DEFAULTS.track_iou_match_threshold);
-  const grace = _readField(cam, 'track_miss_grace_seconds', _CLUSTER1_DEFAULTS.track_miss_grace_seconds);
-  const floor = _readField(cam, 'track_continue_min_score', _CLUSTER1_DEFAULTS.track_continue_min_score);
+  const iou = _readField(
+    cam,
+    'track_iou_match_threshold',
+    _CLUSTER1_DEFAULTS.track_iou_match_threshold,
+  );
+  const grace = _readField(
+    cam,
+    'track_miss_grace_seconds',
+    _CLUSTER1_DEFAULTS.track_miss_grace_seconds,
+  );
+  const floor = _readField(
+    cam,
+    'track_continue_min_score',
+    _CLUSTER1_DEFAULTS.track_continue_min_score,
+  );
   return `
     <div class="mv-ld-cluster mv-ld-cluster-warn" data-cluster-id="1">
-      ${_renderClusterHeader(1, 'Cluster 1 · Person/Objekt reißt ab beim Bewegen',
+      ${_renderClusterHeader(
+        1,
+        'Cluster 1 · Person/Objekt reißt ab beim Bewegen',
         'Track stirbt obwohl Subjekt noch im Bild ist · neue Person-ID nach Drehung',
-        _cluster1HeaderHint(ctx))}
+        _cluster1HeaderHint(ctx),
+      )}
       <div class="mv-ld-cluster-body">
         ${_renderSlider({
           field: 'track_iou_match_threshold',
@@ -57,8 +72,8 @@ export function _renderCluster1(ctx, cam) {
           hint: '↓ Senken (0.10) = Track überlebt schwache Frames (Drehung, dunkle Pose)',
         })}
         ${_renderCluster1Evidence(ctx, cam)}
-        <div class="mv-ld-cluster-note">Anzeige · geändert wird auf dem Erkennung-Tab
-          unter „Experte · Track-Kontinuität".</div>
+        <div class="mv-ld-cluster-note">Anzeige · geändert wird im Erkennungsnetz
+          auf dem Dashboard.</div>
       </div>
     </div>`;
 }

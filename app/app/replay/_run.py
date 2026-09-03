@@ -241,6 +241,14 @@ def replay_clip(
     # tracking_worker/_classifier.py.
     classifier = classifier_for(worker, classify)
     tally = SpeciesTally(max_crops=max_crops)
+    # Built once and reused as the answer to "did the second stage run?".
+    # `worker.bird_classifier()` hands back an object even when species
+    # classification is switched off (available=False, reason="disabled"),
+    # so `classifier is not None` is not that answer — `make_sample_hook`
+    # refuses to build a hook for such a classifier and nothing gets
+    # classified. Deriving the reported flag from the hook itself keeps
+    # the two from drifting apart again.
+    sample_hook = make_sample_hook(classifier, tally)
     try:
         payload = _walk_clip(
             cap,
@@ -252,7 +260,7 @@ def replay_clip(
             video_path=video_path,
             storage_root=storage_root,
             max_samples=max_samples,
-            sample_hook=make_sample_hook(classifier, tally),
+            sample_hook=sample_hook,
         )
     finally:
         cap.release()
@@ -288,7 +296,7 @@ def replay_clip(
         # Whole-clip species, best-scoring first — the half of the
         # answer a detector-only replay could never give.
         "species": species,
-        "classified": bool(classify and classifier is not None),
+        "classified": sample_hook is not None,
         "classifier": describe_classifier(classifier, requested=classify),
         **tally.stats(),
     }

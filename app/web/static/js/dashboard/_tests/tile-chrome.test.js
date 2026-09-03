@@ -68,7 +68,10 @@ test('a window that wraps past midnight excludes the daytime gap', () => {
 
 test('a disarmed camera is muted no matter what its schedule says', () => {
   atClock(12, 0, () => {
-    assert.equal(_channelState({ armed: false, schedule: { enabled: true, from: '0:00', to: '23:59' } }), 'muted');
+    assert.equal(
+      _channelState({ armed: false, schedule: { enabled: true, from: '0:00', to: '23:59' } }),
+      'muted',
+    );
   });
 });
 

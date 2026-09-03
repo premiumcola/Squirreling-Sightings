@@ -156,6 +156,37 @@ def test_sighting_categories_filter_matches_the_items_own_event_type():
     assert dropped["items"] == []
 
 
+def test_a_category_filter_does_not_let_uncategorised_kinds_through():
+    """Picking "sunrise" must not return the workshop's person clips.
+
+    A motion clip carries no category, and the filter used to wave every
+    such kind through untouched — so selecting a category returned its
+    own items PLUS the whole uncategorised archive. The chip's badge said
+    16 while the grid showed page after page of person clips, because the
+    facet counter (``_tally_facets``) only ever counts the three
+    category-bearing kinds. Two sources describing one set and
+    disagreeing about it.
+
+    Choosing a category is a request FOR that category. Content that
+    cannot carry one is not a match — and with no category selected,
+    nothing is constrained at all, which is the case below that keeps a
+    plain browse unfiltered.
+    """
+    from app.library._feed import _matches_categories
+
+    rise = {"kind": "sighting", "extra": {"event_type": "sun_timelapse_rise"}}
+    person_clip = {"kind": "motion", "extra": {}}
+    timelapse = {"kind": "timelapse", "extra": {}}
+
+    assert _matches_categories(rise, ["sun_timelapse_rise"]) is True
+    assert _matches_categories(rise, ["thunder"]) is False
+    assert _matches_categories(person_clip, ["sun_timelapse_rise"]) is False
+    assert _matches_categories(timelapse, ["sun_timelapse_rise"]) is False
+    # No category chosen: everything passes, unchanged.
+    assert _matches_categories(person_clip, None) is True
+    assert _matches_categories(person_clip, []) is True
+
+
 # ── recap / manual-event overlap boundary ───────────────────────────────
 
 

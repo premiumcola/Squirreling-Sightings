@@ -161,12 +161,31 @@ def _category_of(item: dict) -> set:
     return set()
 
 
+#: The kinds that can carry a category at all. Everything else — motion
+#: clips, recaps, plain timelapses — has no such concept.
+_CATEGORY_KINDS = ("sighting", "manual", "episode")
+
+
 def _matches_categories(item: dict, categories) -> bool:
-    # Categories only constrain the three weather-classified kinds —
-    # it is not a concept motion/recap/timelapse have, so they pass
-    # through unfiltered rather than being blanket-excluded.
-    if not categories or item["kind"] not in ("sighting", "manual", "episode"):
+    """Whether ``item`` satisfies an active category filter.
+
+    A kind that cannot carry a category is NOT a match. It used to pass
+    through untouched, on the reasoning that a filter should not
+    blanket-exclude content the concept does not apply to — but that
+    made picking a category return its own items plus the entire
+    uncategorised archive. Selecting "sunrise" showed the workshop's
+    person clips, while the chip's badge said 16, because the facet
+    counter (``_facets._tally_facets``) only ever counts these three
+    kinds. Two sources describing one set and disagreeing about it.
+
+    Choosing a category is a request FOR that category. With none
+    chosen nothing is constrained, which is what keeps a plain browse
+    showing everything.
+    """
+    if not categories:
         return True
+    if item["kind"] not in _CATEGORY_KINDS:
+        return False
     return bool(_category_of(item) & set(categories))
 
 

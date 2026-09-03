@@ -552,7 +552,10 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 2px 6px 6px;
+  /* Even on all four sides. It was `2px 6px 6px`, so the header's two
+     icon buttons sat 2 px from the top edge and 6 px from the right —
+     visibly lopsided against the rounded corner they share. */
+  padding: 6px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   scroll-snap-align: start;
@@ -733,7 +736,11 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0 10px;
-  padding-top: 3px;
+  /* Indented rather than flush left. A block of legend starting hard at
+     the panel edge is the first thing the eye lands on, ahead of the net
+     it explains; nudging it in lets the chart keep that job. The value
+     lines the row up with the net's own left rail. */
+  padding: 3px 0 0 14px;
   font-size: 11px;
   line-height: 1.2;
   color: #94a3b8;
@@ -757,8 +764,11 @@
    phone, so it stands here in words, on a line of its own so it never
    pushes a colour chip onto a second row. */
 .netz-key-ghost {
-  flex-basis: 100%;
-  align-items: flex-start;
+  /* Flows inline with the other chips. It used to claim a whole row of
+     its own, which cost the panel a third line — and that line comes
+     straight off the chart's height, since the panel is sized to the
+     Live tile beside it. Short label, so it fits. */
+  align-items: center;
   color: #7f8ea3;
 }
 

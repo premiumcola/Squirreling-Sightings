@@ -57,6 +57,7 @@ _DASHBOARD_CSS = (_REPO / "app" / "web" / "static" / "css" / "03-dashboard.css")
 _DASHBOARD_JS = (_JS / "dashboard.js").read_text(encoding="utf-8")
 _CARDS = (_JS / "netz" / "_cards.js").read_text(encoding="utf-8")
 _PANEL = (_JS / "netz" / "_panel.js").read_text(encoding="utf-8")
+_KEY = (_JS / "netz" / "_key.js").read_text(encoding="utf-8")
 
 _TUNING = """{
   frame_interval_ms: 500, motion_sensitivity: 0.5, post_motion_tail_s: 0,
@@ -226,9 +227,31 @@ def test_the_key_row_says_what_a_ghost_is_without_a_hover():
     assert out["sameGlyph"] is True, "the key and the button must show the same ghost"
 
 
-def test_the_ghost_line_never_pushes_a_colour_chip_around():
+def test_the_ghost_entry_costs_the_chart_no_extra_row():
+    """The ghost entry sits inline with the other chips, and last.
+
+    It used to claim a full row of its own (`flex-basis: 100%`) because
+    it carried a whole sentence explaining what a ghost is. That
+    sentence is gone — read, understood, and removed on request — and a
+    short "Ghost aus" has no business taking a line to itself: the key
+    row's height comes straight off the chart, which is sized to the
+    Live tile beside it. "Legende muss auch noch in Zeile zwei passen."
+
+    Last in the markup, so it is the chip that wraps rather than the
+    colour swatches the net is read against."""
     seg = _CSS[_CSS.index(".netz-key-ghost {") :]
-    assert "flex-basis: 100%" in seg[: seg.index("}")]
+    body = seg[: seg.index("}")]
+    assert "flex-basis" not in body, "the ghost entry must not reserve a row of its own"
+
+    key = _CSS[_CSS.index(".netz-key {") :]
+    key_body = key[: key.index("}")]
+    assert "flex-wrap: wrap" in key_body, "the key row has to be allowed to wrap"
+    assert "padding: 3px 0 0 14px" in key_body, "the key is indented, not flush to the panel edge"
+
+    # Rendered last: everything else in the row is a swatch the chart is
+    # read against, and those must not be the ones that move.
+    ghost_at = _KEY.index("netz-key-ghost")
+    assert _KEY.index("_dotSwatch()") < ghost_at
 
 
 def test_the_controls_row_and_the_chip_style_are_gone():

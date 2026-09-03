@@ -12,7 +12,6 @@ answer.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from datetime import datetime
 
@@ -85,7 +84,7 @@ def _archive_manual(cam_id: str, cam: dict, before: dict, written: dict, state: 
     # wrong moment.
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     for i, (label, info) in enumerate(sorted(written.items())):
-        with contextlib.suppress(Exception):
+        try:
             net_archive.record_net_change(
                 app_state.storage_root,
                 event_id=f"netz-{stamp}-{i:02d}-{label}",
@@ -99,15 +98,47 @@ def _archive_manual(cam_id: str, cam: dict, before: dict, written: dict, state: 
                 net_state=net_state,
                 rails=rails(),
             )
+        except Exception as e:
+            # Not fatal to the commit — the threshold is already written.
+            # But this record is the only thing that makes „Netz zu diesem
+            # Zeitpunkt wiederherstellen" possible for a hand-set value,
+            # so losing it silently loses the feature for this moment.
+            log.warning(
+                "[det] Netz: archive record failed for cam=%s label=%s — "
+                "this commit will not be restorable: %s",
+                cam_id,
+                label,
+                e,
+            )
 
 
 def _reload_runtimes() -> None:
     """A threshold the pipeline does not yet read is a threshold that
-    silently did nothing for the rest of the day."""
-    with contextlib.suppress(Exception):
-        rebuild = getattr(app_state, "rebuild_runtimes", None)
-        if callable(rebuild):
-            rebuild()
+    silently did nothing for the rest of the day.
+
+    Which is exactly what a bare `suppress` around this used to
+    guarantee: it has no except body to log from, so a rebuild that threw
+    left no trace — while the callers went on to log "Netz-Achsen
+    gesetzt". The settings are written either way, so the panel re-reads
+    the new value and looks correct; only detection stays on the old
+    numbers. The commit is not rolled back here (the value IS stored),
+    but the failure has to be visible in `docker logs`.
+    """
+    rebuild = getattr(app_state, "rebuild_runtimes", None)
+    if not callable(rebuild):
+        log.warning(
+            "[det] Netz: rebuild_runtimes hook missing — thresholds stored "
+            "but the running pipeline keeps the old ones"
+        )
+        return
+    try:
+        rebuild()
+    except Exception as e:
+        log.warning(
+            "[det] Netz: runtime reload failed — thresholds stored but not "
+            "live until the next restart: %s",
+            e,
+        )
 
 
 @bp.get("/api/netz/<cam_id>/preview")

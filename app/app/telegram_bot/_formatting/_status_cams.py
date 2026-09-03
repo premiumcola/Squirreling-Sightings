@@ -63,9 +63,46 @@ from .._consts import (
 )
 
 
-class _StatusMixin:
-    """Per-camera live blocks, system overview, disk-usage formatting —
-    "what's the system doing right now"."""
+class _StatusCamsMixin:
+    """Per-camera live blocks, disk usage and status icons — "what are
+    the cameras doing right now".
+
+    The system-wide half of the old `_StatusMixin` lives next door in
+    `_status_system.py`. Both are composed into `FormattingMixin`, so
+    every `self._active_cams()` / `self._fmt_bytes()` call from the other
+    mixins resolves exactly as before.
+    """
+
+    def _cam_storage_breakdown(self, cam_id: str) -> tuple[int, list[str]]:
+        """One camera's disk use, as ``(total_bytes, ["Events …", …])``.
+
+        The same three-tree walk stood byte-for-byte in `_cam.py`'s
+        per-camera view and in `_system_view`'s breakdown table; the two
+        copies are what this replaces. Unreadable files are skipped
+        rather than aborting the row — a size readout must not be the
+        thing that takes the whole screen down.
+        """
+        root = self._storage_root()
+        parts: list[str] = []
+        total = 0
+        for sub_label, sub in (
+            ("Events", "motion_detection"),
+            ("TL", "timelapse"),
+            ("Frames", "timelapse_frames"),
+        ):
+            p = root / sub / cam_id
+            bs = 0
+            if p.exists():
+                try:
+                    for f in p.rglob("*"):
+                        if f.is_file():
+                            with contextlib.suppress(OSError):
+                                bs += f.stat().st_size
+                except Exception:
+                    pass
+            total += bs
+            parts.append(f"{sub_label} {self._fmt_bytes(bs)}")
+        return total, parts
 
     def _cam_status_icon(self, st: dict) -> str:
         s = st.get("status", "")
@@ -288,231 +325,3 @@ class _StatusMixin:
             end_local = datetime.fromtimestamp(cam_mute).strftime("%H:%M")
             out.append(f"   🔇 stumm bis {end_local}")
         return out
-
-    def _render_system_status_text(self) -> str:
-        """Build the /status bubble. Defensive — any single source
-        missing falls back to a question mark instead of crashing the
-        whole render. Layout (from spec):
-
-            📊 System-Status
-            ━━━━━━━━━━━
-            <per-cam block>     <— from _render_camera_block
-            <per-cam block>
-            ────
-            Telegram   …
-            Coral      …
-            Wetter     …
-            ────
-            Speicher: free + sum of cam-belegt
-            🔇 Pushes pausiert bis HH:MM   (only when muted)
-        """
-        import shutil as _sh
-
-        cfg = self._cfg()
-        lines = ["📊 <b>System-Status</b>", "━━━━━━━━━━━━━━", ""]
-        cams_info = self._active_cams()
-        cam_disk_total = 0
-        for info in cams_info:
-            try:
-                lines.extend(self._render_camera_block(info))
-                lines.append("")
-            except Exception as e:
-                log.warning("[tg] cam block render failed for %s: %s", info.get("cam_id"), e)
-                continue
-            with contextlib.suppress(Exception):
-                cam_disk_total += self._cam_disk_usage_bytes(info["cam_id"])
-        if not cams_info:
-            lines.append("(keine Kameras konfiguriert)")
-            lines.append("")
-        lines.append("────")
-        # Telegram polling
-        try:
-            ps = self.get_polling_status() if hasattr(self, "get_polling_status") else {}
-        except Exception:
-            ps = {}
-        ps_state = ps.get("state", "?")
-        ps_icon = {"active": "🟢", "conflict": "🟡", "starting": "🟡", "off": "⚪"}.get(
-            ps_state, "⚪"
-        )
-        ps_dur_min = (ps.get("since_seconds", 0) or 0) // 60
-        lines.append(f"Telegram   {ps_icon} Polling {ps_dur_min} min")
-        # Coral state + rolling-average inference latency from any active cam
-        det_mode = (cfg.get("processing", {}).get("detection") or {}).get("mode", "none")
-        coral_icon = "🟢" if det_mode == "coral" else "⚪"
-        avg_inferences = []
-        for info in cams_info:
-            v = (info.get("status") or {}).get("inference_avg_ms")
-            if isinstance(v, (int, float)) and v > 0:
-                avg_inferences.append(v)
-        infer_str = (
-            f" · {sum(avg_inferences)/len(avg_inferences):.0f} ms ø" if avg_inferences else ""
-        )
-        lines.append(f"Coral      {coral_icon} {det_mode}{infer_str}")
-        # Weather — last poll age + summary of active event triggers
-        weather_line = "Wetter     ⚪ kein Poll bekannt"
-        try:
-            from ... import app_state as _st
-
-            wsvc = getattr(_st, "weather_service", None)
-        except Exception:
-            wsvc = None
-        try:
-            if wsvc and hasattr(wsvc, "status"):
-                wstat = wsvc.status() or {}
-                last_iso = wstat.get("last_poll_at")
-                age_min = None
-                if last_iso:
-                    try:
-                        age_min = int(
-                            (datetime.now() - datetime.fromisoformat(last_iso)).total_seconds() / 60
-                        )
-                    except Exception:
-                        age_min = None
-                cur = wstat.get("current_state") or {}
-                # Compact event chip list — only the events the user has
-                # turned on (dot icon + label).
-                from ...weather_service import EVENT_LABEL_DE
-
-                ev_chips = []
-                for evt, lbl in EVENT_LABEL_DE.items():
-                    active = bool(cur.get(evt))
-                    ev_chips.append(f"{lbl} {'🟡' if active else '⚪'}")
-                age_str = (
-                    f"letzter Poll vor {age_min} min"
-                    if age_min is not None
-                    else "kein Poll bekannt"
-                )
-                weather_line = f"Wetter     🟢 {age_str} · {' · '.join(ev_chips)}"
-        except Exception as e:
-            log.debug("[tg] weather row render failed: %s", e)
-        lines.append(weather_line)
-        lines.append("────")
-        # Storage: free disk + sum of per-cam belegt
-        try:
-            root = str(self._storage_root())
-            free_gb = _sh.disk_usage(root).free / (1024**3)
-            cam_total_str = self._fmt_bytes(cam_disk_total) if cam_disk_total else "—"
-            lines.append(
-                f"Speicher:  <b>{free_gb:.1f} GB</b> frei · {cam_total_str} von Cams belegt"
-            )
-        except Exception:
-            pass
-        # Global mute hint
-        if self.settings_store:
-            try:
-                mute_until = float(self.settings_store.runtime_get("global_mute_until") or 0)
-            except Exception:
-                mute_until = 0
-            if mute_until and time.time() < mute_until:
-                end_local = datetime.fromtimestamp(mute_until).strftime("%H:%M")
-                lines.append(f"🔇 Pushes pausiert bis {end_local}")
-        return "\n".join(lines)
-
-    def _system_view(self) -> tuple[str, InlineKeyboardMarkup]:
-        """🛠 System — per-cam disk breakdown + global health checks."""
-        import shutil as _sh
-        from html import escape as _esc
-
-        lines = ["🛠 <b>System</b>", "─────────────"]
-        # Per-cam storage breakdown
-        cams_info = self._active_cams()
-        cam_disk_total = 0
-        if cams_info:
-            lines.append("Speicher pro Kamera:")
-            for info in cams_info:
-                cam_id = info["cam_id"]
-                name = _esc(info["name"])
-                root = self._storage_root()
-                parts = []
-                row_total = 0
-                for sub_label, sub in [
-                    ("Events", "motion_detection"),
-                    ("TL", "timelapse"),
-                    ("Frames", "timelapse_frames"),
-                ]:
-                    p = root / sub / cam_id
-                    bs = 0
-                    if p.exists():
-                        try:
-                            for f in p.rglob("*"):
-                                if f.is_file():
-                                    with contextlib.suppress(OSError):
-                                        bs += f.stat().st_size
-                        except Exception:
-                            pass
-                    row_total += bs
-                    parts.append(f"{sub_label} {self._fmt_bytes(bs)}")
-                cam_disk_total += row_total
-                lines.append(
-                    f"  {name:<12s} {self._fmt_bytes(row_total):>8s}  ({' · '.join(parts)})"
-                )
-            lines.append("")
-        # Free disk
-        try:
-            usage = _sh.disk_usage(str(self._storage_root()))
-            free_gb = usage.free / (1024**3)
-            total_gb = usage.total / (1024**3)
-            lines.append(f"Gesamt frei: <b>{free_gb:.1f} GB</b> von {total_gb:.0f} GB")
-        except Exception:
-            free_gb = None
-            lines.append("Speicher: nicht ermittelbar")
-        lines.append("")
-        # Health rows
-        lines.append("Health:")
-        # Cam state
-        n_runtime = sum(1 for c in cams_info if c["source"] == "runtime")
-        n_fallback = sum(1 for c in cams_info if c["source"] == "settings")
-        if n_fallback == 0 and n_runtime > 0:
-            lines.append("  ✅ Alle Kameras online")
-        elif n_fallback > 0:
-            lines.append(f"  ⚠️ {n_fallback} im Fallback (Runtime nicht aktiv)")
-        elif n_runtime == 0:
-            lines.append("  ⚠️ Keine Kamera-Runtime aktiv")
-        # Reconnects 24h
-        for info in cams_info:
-            n24 = (info.get("status") or {}).get("reconnect_count_24h")
-            if isinstance(n24, int) and n24 > 3:
-                lines.append(f"  ⚠️ {_esc(info['name'])}: {n24} Reconnects letzte 24 h")
-        # Coral
-        cfg = self._cfg()
-        det_mode = (cfg.get("processing", {}).get("detection") or {}).get("mode", "none")
-        if det_mode == "coral":
-            avg_inferences = []
-            for info in cams_info:
-                v = (info.get("status") or {}).get("inference_avg_ms")
-                if isinstance(v, (int, float)) and v > 0:
-                    avg_inferences.append(v)
-            if avg_inferences:
-                lines.append(f"  ✅ Coral · {sum(avg_inferences) / len(avg_inferences):.0f} ms ø")
-            else:
-                lines.append("  ✅ Coral aktiv")
-        else:
-            lines.append(f"  ⚠️ Coral inaktiv (Modus: {det_mode})")
-        # Disk
-        if free_gb is not None:
-            if free_gb < 10:
-                lines.append(f"  🔴 Speicher: nur {free_gb:.1f} GB frei")
-            elif free_gb < 25:
-                lines.append(f"  ⚠️ Speicher: {free_gb:.1f} GB frei")
-            else:
-                lines.append(f"  ✅ Speicher: {free_gb:.0f} GB frei")
-        # Telegram polling
-        try:
-            ps = self.get_polling_status() if hasattr(self, "get_polling_status") else {}
-        except Exception:
-            ps = {}
-        ps_state = ps.get("state", "?")
-        if ps_state == "active":
-            lines.append("  ✅ Telegram-Polling aktiv")
-        elif ps_state in ("starting", "conflict"):
-            lines.append(f"  ⚠️ Telegram-Polling {ps_state}")
-        else:
-            lines.append(f"  🔴 Telegram-Polling {ps_state}")
-
-        rows = [
-            [
-                InlineKeyboardButton("🔄 Aktualisieren", callback_data="menu:system"),
-                InlineKeyboardButton("🏠 Hauptmenü", callback_data="menu:root"),
-            ],
-        ]
-        return "\n".join(lines), InlineKeyboardMarkup(rows)

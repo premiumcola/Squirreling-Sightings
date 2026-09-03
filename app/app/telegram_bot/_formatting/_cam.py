@@ -168,26 +168,7 @@ class _CamMixin:
             lines.append("Heute noch keine Erkennungen.")
         lines.append("")
         # Per-cam storage breakdown
-        root = self._storage_root()
-        parts = []
-        row_total = 0
-        for sub_label, sub in [
-            ("Events", "motion_detection"),
-            ("TL", "timelapse"),
-            ("Frames", "timelapse_frames"),
-        ]:
-            p = root / sub / cam_id
-            bs = 0
-            if p.exists():
-                try:
-                    for f in p.rglob("*"):
-                        if f.is_file():
-                            with contextlib.suppress(OSError):
-                                bs += f.stat().st_size
-                except Exception:
-                    pass
-            row_total += bs
-            parts.append(f"{sub_label} {self._fmt_bytes(bs)}")
+        row_total, parts = self._cam_storage_breakdown(cam_id)
         lines.append(f"Speicher: {self._fmt_bytes(row_total)}  ({' · '.join(parts)})")
         # Health rows (per-cam subset)
         st = info.get("status") or {}

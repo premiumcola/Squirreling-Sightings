@@ -166,9 +166,16 @@ export function wsFieldDigits(key) {
   return _WS_INTEGER_FIELDS.has(key) ? 0 : 2;
 }
 
-export function _wsFmtVal(key, v) {
+// `units` is optional and defaults to this panel's own loaded payload —
+// the behaviour every existing caller had. It exists because the chart
+// primitives are shared: the Gewitter-Archiv hands renderStatsChartInto
+// its own `units` map (storms/_detail.js · WEATHER_FIELD_UNIT_DE) and
+// the tooltip used to ignore it and read _wsStatsState instead, so a
+// storm chart opened without ever visiting this panel printed every
+// value bare. One formatter, the caller says which map.
+export function _wsFmtVal(key, v, units) {
   if (v == null || !isFinite(v)) return '—';
-  const u = (_wsStatsState.data?.units || {})[key] || '';
+  const u = ((units || _wsStatsState.data?.units) ?? {})[key] || '';
   const s = v.toFixed(wsFieldDigits(key));
   return u ? s + ' ' + u : s;
 }

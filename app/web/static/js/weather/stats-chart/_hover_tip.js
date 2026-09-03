@@ -20,7 +20,14 @@
 import { WEATHER_STATS_PALETTE, _wsFmtVal } from '../stats.js';
 
 // Default tooltip body: one row per active metric at this sample.
-export function _defaultRows(sample, fields, labels) {
+//
+// `units` comes from the payload the chart was rendered with, the same
+// place `labels` already came from. It used to be missing here and
+// _wsFmtVal fell through to the Wetterdaten panel's module-global
+// state — so the Gewitter-Archiv's detail chart, which ships its own
+// units map on purpose, printed every hovered value without a unit
+// whenever that panel had not been opened yet.
+export function _defaultRows(sample, fields, labels, units) {
   const sampleVals = sample.values || {};
   return fields
     .map((key) => {
@@ -28,7 +35,7 @@ export function _defaultRows(sample, fields, labels) {
       if (v == null || !Number.isFinite(Number(v))) return '';
       const colour = WEATHER_STATS_PALETTE[key] || '#94a3b8';
       const lbl = labels[key] || key;
-      const valFmt = _wsFmtVal(key, Number(v));
+      const valFmt = _wsFmtVal(key, Number(v), units);
       return `<div class="ws-tt-row"><span class="ws-tt-dot" style="background:${colour}"></span><span class="ws-tt-lbl">${lbl}</span><span class="ws-tt-val">${valFmt}</span></div>`;
     })
     .filter(Boolean)
@@ -92,7 +99,9 @@ export function _paintAt(c, localX, ev) {
   c.guide.setAttribute('x2', guideX.toFixed(1));
   c.guide.style.display = '';
   const head = c.opts.head ? c.opts.head(sample, idx) : _defaultHead(sampleTs, c.spansMultiDay);
-  const rows = c.opts.rows ? c.opts.rows(sample, idx) : _defaultRows(sample, c.fields, c.labels);
+  const rows = c.opts.rows
+    ? c.opts.rows(sample, idx)
+    : _defaultRows(sample, c.fields, c.labels, c.units);
   c.tip.innerHTML = `<div class="ws-tt-time">${head}</div>${rows}`;
   c.tip.hidden = false;
   _placeTip(c.tip, c.wrap, ev);

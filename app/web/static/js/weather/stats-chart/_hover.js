@@ -94,6 +94,10 @@ function _context(wrap, samples, fields, pad, cw, vbW, data, opts) {
     tLast,
     tSpan: tLast - tFirst,
     labels: data?.labels_de || {},
+    // Both halves of a tooltip row come from the payload this chart was
+    // rendered with. `units` used to be missing, and the formatter fell
+    // back to the Wetterdaten panel's module state — see _hover_tip.js.
+    units: data?.units || {},
     hideTimer: { id: 0 },
     spansMultiDay:
       Number.isFinite(first.getTime()) &&

@@ -247,12 +247,7 @@ class CoralObjectDetector(LabelFilterMixin, InferenceTimingMixin, WarmupMixin):
             dets = self._detect_cpu(frame, threshold)
         else:
             dets = self._detect_coral(frame, threshold)
-        kept, drops = self._apply_label_filters_with_reasons(
-            dets,
-            frame,
-            label_thresholds,
-            threshold,
-        )
+        kept, drops = self._apply_label_filters_with_reasons(dets, frame, label_thresholds)
         if cam_id:
             with contextlib.suppress(Exception):
                 log_decision(cam_id, kept, drops)

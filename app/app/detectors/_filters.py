@@ -21,8 +21,11 @@ from ._types import Detection
 class LabelFilterMixin:
     """Per-label confidence and size gates applied after inference.
 
-    Host contract: the class mixing this in must provide `min_score`,
-    which the back-compat `_apply_label_filters` alias falls back to.
+    Self-contained: the gates read nothing off the host beyond what is
+    passed in. The confidence floor the model already cleared is the
+    caller's business — by the time a detection reaches these gates it
+    has passed it, and re-checking it here was never anything the code
+    did, only something its signature claimed.
     """
 
     # Per-label minimum bounding-box constraints. Surveillance cameras at
@@ -39,12 +42,11 @@ class LabelFilterMixin:
         dets: list[Detection],
         frame: np.ndarray,
         label_thresholds: dict[str, float] | None,
-        global_threshold: float,
     ) -> tuple[list[Detection], list[tuple[Detection, str]]]:
-        """Same gates as _apply_label_filters but also returns a parallel
-        list of (detection, drop_reason) for the diagnostic logger. Hot
-        path: the reason-string formatting only happens for dropped
-        detections — the kept-list path is one append per kept det."""
+        """Apply the gates, returning what survived plus a parallel list
+        of (detection, drop_reason) for the diagnostic logger. Hot path:
+        the reason-string formatting only happens for dropped detections
+        — the kept-list path is one append per kept det."""
         out: list[Detection] = []
         drops: list[tuple[Detection, str]] = []
         if not dets:
@@ -77,14 +79,3 @@ class LabelFilterMixin:
                     continue
             out.append(d)
         return out, drops
-
-    # Back-compat alias — anything that historically called
-    # _apply_label_filters keeps the old single-return-value semantics.
-    def _apply_label_filters(self, dets, frame, label_thresholds):
-        kept, _ = self._apply_label_filters_with_reasons(
-            dets,
-            frame,
-            label_thresholds,
-            self.min_score,
-        )
-        return kept

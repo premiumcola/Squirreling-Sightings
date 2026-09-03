@@ -195,11 +195,19 @@ class LifecycleMixin:
         def _bg_rescan():
             try:
                 # Late import avoids the request-context coupling at module load.
-                # api_weather_rescan is a Flask view function; call its
-                # body via the test client to satisfy the request scope.
+                # The rescan runs through the test client so the view gets a
+                # real request scope; the view function itself is never
+                # referenced here.
+                #
+                # It used to be imported anyway — `from ..routes.weather
+                # import api_weather_rescan` — and 5cf94ea2 moved that view
+                # into routes/weather_maintenance.py. The name was unused, so
+                # the only thing the import still did was raise ImportError on
+                # the line above the actual rescan, inside this try. The
+                # rescan therefore never ran; the marker write below is a
+                # separate try and stamped the file regardless, so the
+                # 24-hour throttle then hid the failure until the next day.
                 from flask import current_app
-
-                from ..routes.weather import api_weather_rescan
 
                 with current_app.test_client() as c:
                     r = c.post("/api/weather/rescan")

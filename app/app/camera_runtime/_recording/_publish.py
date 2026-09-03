@@ -120,7 +120,7 @@ class PublishMixin:
         """F06 marker. Mutates both dicts so the JSON on disk carries it
         AND the alert caption can read it without a second store read."""
         try:
-            from .... import app_state as _app_state
+            from ... import app_state as _app_state
 
             detector = getattr(_app_state, "first_since_detector", None)
             if detector is None:
@@ -163,7 +163,7 @@ class PublishMixin:
         """F09 · full re-evaluation per event. The hourly job is the
         safety net; this keeps the pinboard current without the wait."""
         try:
-            from ....quests import reevaluate_and_save
+            from ...quests import reevaluate_and_save
 
             threading.Thread(target=reevaluate_and_save, daemon=True).start()
         except Exception as e:
@@ -172,7 +172,7 @@ class PublishMixin:
     def _publish_dossiers(self, meta: dict, event_id: str) -> None:
         """F08 · register every species_latin in this event."""
         try:
-            from .... import app_state as _app_state
+            from ... import app_state as _app_state
 
             svc = getattr(_app_state, "bird_dossiers", None)
             if svc is None:

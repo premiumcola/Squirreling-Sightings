@@ -41,7 +41,6 @@ _pkg_root = str(Path(__file__).parent.parent)
 if _pkg_root not in sys.path:
     sys.path.insert(0, _pkg_root)
 
-import app.timelapse as tl_mod  # noqa: E402
 from app.timelapse import TimelapseBuilder  # noqa: E402
 
 # Comfortably above frame_helpers' _MIN_FRAME_W/_MIN_FRAME_H.
@@ -103,8 +102,9 @@ def _build(tmp_path, monkeypatch, sizes):
             return SimpleNamespace(returncode=0, stdout=_probe_json(), stderr=b"")
         raise AssertionError(f"unexpected subprocess call: {cmd!r}")
 
+    # The encoder holds the subprocess MODULE, not a bound reference, so
+    # patching the attribute on the module object reaches it.
     monkeypatch.setattr(subprocess, "run", _fake_run)
-    monkeypatch.setattr(tl_mod.subprocess, "run", _fake_run, raising=False)
 
     builder = TimelapseBuilder(tmp_path / "storage")
     out = tmp_path / "storage" / "out.mp4"

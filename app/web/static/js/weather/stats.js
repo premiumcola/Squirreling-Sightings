@@ -360,12 +360,29 @@ function initWeatherStats() {
 // Per-type unit hint for the threshold slider in Settings → Ereignistypen.
 // Exported so weather/settings.js can populate _renderWeatherEventsList +
 // the per-event slider rows from a single source of truth.
+// One row per event in WEATHER_DEFAULTS["events"], with the key that
+// event actually stores. tests/test_weather_threshold_slider_mirror.py
+// holds the two sides together — this table drifted three times before
+// it existed:
+//
+//   thunder  carried the CAPE scale (max 3000, step 50) for as long as
+//            the backend has been on LPI. The row rendered value="0.2"
+//            into a step="50" input, so the thumb sat on 0 next to a
+//            label reading 0.2, and the smallest value a drag could
+//            produce was 50 J/kg — ~60x the top of the published
+//            thunderstorm band, i.e. lightning detection off for good.
+//            Worse, migrate_thunder_lpi_scale only rewrites values >=
+//            100, so 50 would have survived every reboot. The range is
+//            now the index's own: 0.2-0.8 observed, 2.0 is "full
+//            intensity" in weather_episodes/_consts.py.
+//   storm    shipped backend-only and had no row at all.
+//   sunset   kept a row for three commits after the event was removed.
 export const WEATHER_THRESHOLD_HINTS = {
-  thunder: { unit: 'J/kg', min: 0, max: 3000, step: 50, key: 'threshold' },
+  thunder: { unit: 'J/kg', min: 0, max: 5, step: 0.05, key: 'threshold' },
   heavy_rain: { unit: 'mm/h', min: 0, max: 30, step: 0.5, key: 'threshold' },
   snow: { unit: 'cm/h', min: 0, max: 5, step: 0.1, key: 'threshold' },
+  storm: { unit: 'km/h', min: 0, max: 150, step: 5, key: 'threshold' },
   fog: { unit: 'm', min: 100, max: 5000, step: 100, key: 'vis_max_m' },
-  sunset: { unit: '°', min: -10, max: 15, step: 1, key: 'alt_max' },
 };
 
 export const WEATHER_FIELD_LABEL_DE = {

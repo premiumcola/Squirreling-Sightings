@@ -323,8 +323,25 @@ class HistoryMixin:
         # currently off so the user can see what the trigger SHOULD fire
         # at. The parallel `events_enabled` map lets the renderer dim
         # disabled-event ticks instead of hiding them. Fields without an
-        # associated event (cloud_cover, wind_gusts_10m, sun_altitude)
-        # still emit thresholds[k]=None / events_enabled[k]=None.
+        # associated event (cloud_cover, sun_altitude) still emit
+        # thresholds[k]=None / events_enabled[k]=None. wind_gusts_10m
+        # used to be on that list and no longer is — bc935af0 gave it
+        # the `storm` event.
+        #
+        # Local import — weather_episodes imports back into this package
+        # for the field/event map, so a module-level import here would
+        # close an import cycle. Same reason as _sweep_episodes above.
+        #
+        # EVENT_THRESHOLD_KEY is what makes this correct: not every
+        # event stores its boundary under "threshold". Fog stores
+        # `vis_max_m`, and reading a hard-coded "threshold" returned
+        # None for it — an event the payload simultaneously reported as
+        # enabled, so the chart printed "keine Schwelle konfiguriert"
+        # over a live 1000 m trigger. The episode builder has always
+        # looked events up through this table; this was the one place
+        # that did not.
+        from ..weather_episodes._consts import DEFAULT_THRESHOLD_KEY, EVENT_THRESHOLD_KEY
+
         events_cfg = self.cfg.get("events") or {}
         thresholds: dict[str, float | None] = {k: None for k in HISTORY_FIELDS}
         events_enabled: dict[str, bool | None] = {k: None for k in HISTORY_FIELDS}
@@ -334,7 +351,7 @@ class HistoryMixin:
                 continue
             ev_cfg = events_cfg.get(evt) or {}
             events_enabled[key] = bool(ev_cfg.get("enabled", False))
-            thr = ev_cfg.get("threshold")
+            thr = ev_cfg.get(EVENT_THRESHOLD_KEY.get(evt, DEFAULT_THRESHOLD_KEY))
             try:
                 thresholds[key] = float(thr) if thr is not None else None
             except (TypeError, ValueError):

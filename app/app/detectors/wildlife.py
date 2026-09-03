@@ -4,55 +4,37 @@ for mammals the COCO detector cannot name (fox, squirrel, hedgehog).
 Carved out of `_legacy_classes.py` during R02.3. With this commit the
 legacy single-file home is gone — every detector class now lives in
 its own module.
+
+What is where:
+
+* :mod:`._wildlife_rules` — label → category rules, both label spaces
+* :mod:`._wildlife_load`  — the two three-tier model ladders
+* :mod:`._wildlife_infer` — the tensor plumbing both interpreters share
+* this file               — the decision: what the two models add up to
 """
 
 from __future__ import annotations
 
 import logging
-import time
-from pathlib import Path
 
-import cv2
 import numpy as np
 
-from ._edgetpu import make_delegate_interpreter
-from ._label_loader import load_label_map
 from ._timing import InferenceTimingMixin
+from ._wildlife_infer import collect_floor, run_coral, run_tflite, top_k_labels
+from ._wildlife_load import WILDLIFE_MIN_SCORE_DEFAULT, WildlifeLoadMixin
 from ._wildlife_rules import (
     _inat_wildlife_category,
     _is_sciuridae_inat,
     _is_squirrel_likely,
     _wildlife_category,
 )
-from .discovery import discover_wildlife_paths
 
 log = logging.getLogger(__name__)
 
-
-# Threshold the classifier runs at when `processing.wildlife.min_score`
-# is absent from the effective config — which is the live case on any
-# install whose config.yaml predates the `processing.wildlife` block.
-# Named rather than inlined so the debug panel can report the value that
-# is genuinely in effect instead of "not configured": the setting IS
-# read, it just resolves to this.
-WILDLIFE_MIN_SCORE_DEFAULT = 0.35
+__all__ = ["WILDLIFE_MIN_SCORE_DEFAULT", "WildlifeClassifier"]
 
 
-class _InatTiming(InferenceTimingMixin):
-    """Timing holder for the iNat second-opinion interpreter.
-
-    WildlifeClassifier drives TWO interpreters (MobileNet + iNat) and the
-    mixin keeps one rolling window per object, so the second interpreter
-    gets its own holder rather than a second copy of the bucket logic.
-    They are genuinely separate models on possibly different devices —
-    averaging them into one number would hide exactly the case the panel
-    exists to show."""
-
-    def __init__(self) -> None:
-        self._init_timings()
-
-
-class WildlifeClassifier(InferenceTimingMixin):
+class WildlifeClassifier(WildlifeLoadMixin, InferenceTimingMixin):
     """ImageNet MobileNetV2 (1000 classes) second-stage classifier used for
     mammals the COCO detector cannot name — fox, squirrel, hedgehog.
 
@@ -72,241 +54,17 @@ class WildlifeClassifier(InferenceTimingMixin):
         self.available = False
         self.reason = "disabled"
         self.mode = "none"  # "coral" | "cpu" | "none"
-        # Auto-discovery: locate a MobileNet ImageNet model + its labels
-        # file in /app/models. Lets users drop a model in without editing
-        # yaml. Always runs (cheap glob) so partial configs — common case:
-        # model_path set but labels_path missing — still get the labels
-        # filled in. setdefault only — never overwrite a user-supplied
-        # value, even when the file is missing on disk. A non-existent
-        # configured path is more often a transient mount issue at boot
-        # than a bad config; silently swapping in the discovery default
-        # would erase the operator's intent.
-        disc = discover_wildlife_paths()
-        for k, v in disc.items():
-            if not self.cfg.get(k):
-                self.cfg[k] = v
-                continue
-            if not Path(self.cfg[k]).exists():
-                log.warning(
-                    "[det] Wildlife classifier: configured %s=%s does not exist; "
-                    "leaving config as-is. Discovered alternative was %s.",
-                    k,
-                    self.cfg[k],
-                    v,
-                )
-        self.labels = load_label_map(self.cfg.get("labels_path"))
-        self.min_score = float(self.cfg.get("min_score", WILDLIFE_MIN_SCORE_DEFAULT))
-        self.interpreter = None
-        # ── Optional iNaturalist second-stage backend ──────────────────────
-        # When inat_cfg is supplied (typically the bird_species block, since
-        # the user can re-use that path), we load a parallel TFLite
-        # interpreter and run it on the wildlife crop. _classify_inat()
-        # consults _INAT_WILDLIFE_RULES on the iNat label string. Stays None
-        # when no path is configured or loading fails.
-        self._inat_interpreter = None
-        self._inat_labels: dict[int, str] = {}
-        self._inat_common = None
-        self._inat_classify = None
-        self._inat_cpu_mode = False
-        # Own rolling window — the iNat model is a different model on a
-        # possibly different device than MobileNet above.
-        self._inat_timing = _InatTiming()
-        self._inat_min_score = 0.25
-        self._inat_cfg = dict(inat_cfg) if inat_cfg else {}
-        self.common = None
-        self.classify = None
-        self._cpu_mode = False
-        self._init_timings()
-        # The model file the ACTIVE tier really loaded — the CPU tier
-        # substitutes the non-EdgeTPU build, so the configured path is not
-        # the running one.
-        self.active_model_path: str | None = None
-        self.active_inat_model_path: str | None = None
-        # Second-stage classifiers default to CPU — see _CLASSIFIER_CPU_NOTE
-        # in detectors/_edgetpu.py. Set prefer_cpu: false in the
-        # processing.wildlife config to put this back on the TPU.
-        self._prefer_cpu = bool(self.cfg.get("prefer_cpu", True))
-        self._cpu_threads = self.cfg.get("cpu_threads")
-        # Some ImageNet label files include an extra "background" entry at
-        # index 0 (1001 labels total). The model output then has 1001 bins
-        # too, so no offset is required. When the labels file has exactly
-        # 1000 entries and the model emits 1001, we shift by 1 on read.
-        self._label_offset = 0
+        self._resolve_paths()
+        self._init_backend_fields(inat_cfg)
         if not self.enabled:
             return
         model_path = self.cfg.get("model_path")
         if not model_path:
             self.reason = "missing model_path"
             return
-        if not Path(model_path).exists():
-            cpu_alt = self.cfg.get("cpu_model_path")
-            if not (cpu_alt and Path(cpu_alt).exists()):
-                self.reason = f"model file not found: {model_path}"
-                log.warning("[det] Wildlife classifier: %s", self.reason)
-                return
-
-        coral_error = "prefer_cpu"
-        if not self._prefer_cpu:
-            # ── Tier 1: pycoral ───────────────────────────────────────────
-            try:
-                from pycoral.adapters import classify, common  # type: ignore
-                from pycoral.utils.edgetpu import make_interpreter  # type: ignore
-
-                self.common = common
-                self.classify = classify
-                self.interpreter = make_interpreter(model_path, device=self.cfg.get("device"))
-                self.interpreter.allocate_tensors()
-                self.available = True
-                self.mode = "coral"
-                self.reason = "ok"
-                self.active_model_path = model_path
-                log.info(
-                    "[det] Wildlife classifier (Coral) aktiv: %s — %d labels",
-                    model_path,
-                    len(self.labels),
-                )
-                self._load_inat_backend()
-                return
-            except Exception as e:
-                log.warning(
-                    "[det] Wildlife classifier pycoral unavailable (%s) – EdgeTPU-Delegate…", e
-                )
-                coral_error = str(e)
-
-            # ── Tier 1b: EdgeTPU via tflite-runtime delegate ───────────────
-            # See detectors/_edgetpu.py.
-            delegated = make_delegate_interpreter(model_path, self.cfg.get("device"))
-            if delegated is not None:
-                self.interpreter = delegated
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "coral"
-                self.reason = "edgetpu_delegate"
-                self.active_model_path = model_path
-                log.info(
-                    "[det] Wildlife classifier (EdgeTPU-Delegate) aktiv: %s — %d labels",
-                    model_path,
-                    len(self.labels),
-                )
-                self._load_inat_backend()
-                return
-
-        # ── Tier 2: tflite-runtime ────────────────────────────────────────
-        cpu_model = self.cfg.get("cpu_model_path")
-        if not cpu_model:
-            cpu_model = model_path.replace("_edgetpu.tflite", ".tflite")
-            if cpu_model == model_path:
-                cpu_model = None
-
-        for try_path in filter(None, [cpu_model, model_path]):
-            try:
-                import tflite_runtime.interpreter as tflite  # type: ignore
-
-                kwargs = {"model_path": try_path}
-                if self._cpu_threads:
-                    kwargs["num_threads"] = int(self._cpu_threads)
-                interp = tflite.Interpreter(**kwargs)
-                interp.allocate_tensors()
-                self.interpreter = interp
-                self._cpu_mode = True
-                self.available = True
-                self.mode = "cpu"
-                self.reason = (
-                    "cpu_requested" if self._prefer_cpu else f"cpu_fallback (coral: {coral_error})"
-                )
-                self.active_model_path = try_path
-                log.info(
-                    "[det] Wildlife classifier (CPU) aktiv: %s — %d labels",
-                    try_path,
-                    len(self.labels),
-                )
-                self._load_inat_backend()
-                return
-            except Exception as e2:
-                log.warning("[det] Wildlife classifier CPU fehlgeschlagen für %s: %s", try_path, e2)
-
-        self.reason = (
-            f"classifier unavailable: {coral_error}" if coral_error else "classifier unavailable"
-        )
-        log.warning("[det] Wildlife classifier nicht verfügbar")
-
-    def _load_inat_backend(self) -> None:
-        """Try to load the iNaturalist tflite second-stage classifier from
-        self._inat_cfg. No-op when the cfg is empty, the model file doesn't
-        exist, or both Coral/CPU loaders fail. Logged outcome so the user
-        sees a single line in the startup banner."""
-        cfg = self._inat_cfg or {}
-        model_path = cfg.get("model_path")
-        if not model_path or not Path(model_path).exists():
-            cpu_alt = cfg.get("cpu_model_path")
-            if not (cpu_alt and Path(cpu_alt).exists()):
-                return
-            model_path = cpu_alt
-        self._inat_min_score = float(cfg.get("min_score", 0.25))
-        self._inat_labels = load_label_map(cfg.get("labels_path"))
-        # Same prefer_cpu contract as the wildlife stage above, and for the
-        # same reason (see detectors/_edgetpu.py): the Edge TPU caches model
-        # parameters in ~8 MB of SRAM, the shipped models do not fit there
-        # together, and every switch rewrites that cache across USB. The
-        # object detector runs on EVERY frame and owns the stick; this
-        # backend runs only on a wildlife-gated crop.
-        #
-        # This guard was missing, which stayed invisible for as long as the
-        # image ran Python 3.11 — pycoral had no wheel there, so tier 1
-        # always raised and the backend silently landed on CPU anyway. The
-        # moment the :coral image made pycoral importable (2026-08-28) this
-        # started claiming the TPU and evicting the detector on every bird.
-        # Absence of a symptom was never evidence the guard was present.
-        if bool(cfg.get("prefer_cpu", self._prefer_cpu)):
-            self._load_inat_cpu(model_path)
+        if not self._model_file_reachable(model_path):
             return
-        # Tier 1: pycoral
-        try:
-            from pycoral.adapters import classify, common  # type: ignore
-            from pycoral.utils.edgetpu import make_interpreter  # type: ignore
-
-            self._inat_common = common
-            self._inat_classify = classify
-            self._inat_interpreter = make_interpreter(model_path, device=cfg.get("device"))
-            self._inat_interpreter.allocate_tensors()
-            self.active_inat_model_path = model_path
-            log.info(
-                "[det] Wildlife · iNat-Backend (Coral) aktiv: %s — %d labels",
-                model_path,
-                len(self._inat_labels),
-            )
-            return
-        except Exception:
-            pass
-        # Tier 2: tflite-runtime
-        self._load_inat_cpu(model_path)
-
-    def _load_inat_cpu(self, model_path: str) -> None:
-        """Load the iNat backend on the CPU via plain tflite-runtime.
-
-        Reached both as the deliberate default (prefer_cpu) and as the
-        fallback after a failed pycoral load, so it must not assume which
-        path got here. `cpu_model_path` points at the uncompiled twin of an
-        `*_edgetpu.tflite`; running the compiled one on the CPU works but
-        wastes the compilation, hence the preference order.
-        """
-        cfg = self._inat_cfg or {}
-        try:
-            import tflite_runtime.interpreter as tflite  # type: ignore
-
-            cpu_path = cfg.get("cpu_model_path") or model_path
-            self._inat_interpreter = tflite.Interpreter(model_path=cpu_path)
-            self._inat_interpreter.allocate_tensors()
-            self._inat_cpu_mode = True
-            self.active_inat_model_path = cpu_path
-            log.info(
-                "[det] Wildlife · iNat-Backend (CPU) aktiv: %s — %d labels",
-                cpu_path,
-                len(self._inat_labels),
-            )
-        except Exception as e:
-            log.info("[det] Wildlife · iNat-Backend nicht geladen: %s", e)
-            self._inat_interpreter = None
+        self._load_primary(model_path)
 
     def classify_crop(
         self, crop: np.ndarray, min_score: float | None = None
@@ -342,6 +100,15 @@ class WildlifeClassifier(InferenceTimingMixin):
             top3_b = self._top3_inat(crop) if self._inat_interpreter is not None else []
         finally:
             self.min_score = saved_thresh
+        return self._decide(top3_a, top3_b)
+
+    def _decide(self, top3_a, top3_b) -> tuple[str | None, str | None, float | None]:
+        """Steps 2–5 of `classify_crop`, on the two collected top-3 lists.
+
+        Split out so the decision ladder is readable without the
+        threshold bookkeeping around it — and testable by handing it two
+        lists instead of two interpreters.
+        """
         # Step 2: direct MobileNet rule hit on any of top-3.
         for lbl, sc in top3_a:
             cat = _wildlife_category(lbl)
@@ -370,8 +137,9 @@ class WildlifeClassifier(InferenceTimingMixin):
                 avg_score,
             )
             return "squirrel", combined, avg_score
-        # Step 5: nothing matched — return MobileNet's top-1 for UI diagnostics
-        # provided it cleared half the threshold. Hides totally junk noise.
+        # Step 5: nothing matched — return MobileNet's top-1 for UI
+        # diagnostics provided it cleared half the threshold. Hides
+        # totally junk noise.
         if top3_a:
             top_lbl, top_sc = top3_a[0]
             if top_sc >= self.min_score * 0.5:
@@ -385,76 +153,20 @@ class WildlifeClassifier(InferenceTimingMixin):
         classify_crop has access to weaker evidence (a squirrel-likely
         label at 0.40 still triggers the cross-check if iNat strongly
         confirms with Sciurus vulgaris)."""
-        return self._top3_cpu(crop) if self._cpu_mode else self._top3_coral(crop)
-
-    def _top3_coral(self, crop: np.ndarray) -> list[tuple[str, float]]:
-        t_pre = time.perf_counter()
-        rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-        width, height = self.common.input_size(self.interpreter)
-        resized = cv2.resize(rgb, (width, height))
-        self.common.set_input(self.interpreter, resized)
-        # No inference lock on this stage (see _device_lock's "known gap"),
-        # so wait is structurally zero — same mark for t_wait and t_invoke.
-        t_invoke = time.perf_counter()
-        self.interpreter.invoke()
-        t_post = time.perf_counter()
-        self._record_timing(t_pre, t_invoke, t_invoke, t_post)
-        cls = self.classify.get_classes(
-            self.interpreter,
-            top_k=3,
-            score_threshold=max(0.05, self.min_score * 0.5),
-        )
-        return [(self.labels.get(int(c.id), str(c.id)), float(c.score)) for c in cls]
-
-    def _top3_cpu(self, crop: np.ndarray) -> list[tuple[str, float]]:
-        t_pre = time.perf_counter()
-        input_details = self.interpreter.get_input_details()
-        output_details = self.interpreter.get_output_details()
-        in_h = input_details[0]['shape'][1]
-        in_w = input_details[0]['shape'][2]
-        in_dtype = input_details[0]['dtype']
-        rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-        resized = cv2.resize(rgb, (in_w, in_h))
-        inp = np.expand_dims(resized, axis=0)
-        if in_dtype == np.float32:
-            inp = (inp.astype(np.float32) - 127.5) / 127.5
-        else:
-            inp = inp.astype(in_dtype)
-        self.interpreter.set_tensor(input_details[0]['index'], inp)
-        t_invoke = time.perf_counter()
-        self.interpreter.invoke()
-        t_post = time.perf_counter()
-        self._record_timing(t_pre, t_invoke, t_invoke, t_post)
-        scores = self.interpreter.get_tensor(output_details[0]['index'])[0]
-        # Descending sort of the array values; argsort on negative scores
-        # would wrap on uint8, so sort the array itself and reverse.
-        top_ids = np.argsort(scores)[::-1][:3]
-        out_dtype = output_details[0]['dtype']
-        scale, zero_point = (0.0, 0)
-        if out_dtype in (np.uint8, np.int8):
-            q = output_details[0].get('quantization', (0.0, 0))
-            scale = float(q[0]) if q and q[0] else 0.0
-            zero_point = int(q[1]) if q else 0
-
-        def _to_prob(raw: float) -> float:
-            if out_dtype in (np.uint8, np.int8):
-                return (raw - zero_point) * scale if scale else raw / 255.0
-            return float(raw)
-
-        # Detect 1000/1001 mismatch lazily as before.
-        if self._label_offset == 0 and len(self.labels) == 1000 and scores.shape[0] == 1001:
+        floor = collect_floor(self.min_score)
+        if not self._cpu_mode:
+            named, marks = run_coral(
+                self.common, self.classify, self.interpreter, crop, self.labels, floor=floor
+            )
+            self._record_timing(*marks)
+            return named
+        probs, marks = run_tflite(self.interpreter, crop)
+        self._record_timing(*marks)
+        # Detect the 1000/1001 background-class mismatch lazily, on the
+        # first real output — the labels file alone cannot tell us.
+        if self._label_offset == 0 and len(self.labels) == 1000 and probs.shape[0] == 1001:
             self._label_offset = 1
-
-        floor = max(0.05, self.min_score * 0.5)
-        out: list[tuple[str, float]] = []
-        for i in top_ids:
-            i = int(i)
-            sc = _to_prob(float(scores[i]))
-            if sc < floor:
-                break
-            lbl = self.labels.get(i - self._label_offset, str(i))
-            out.append((lbl, sc))
-        return out
+        return top_k_labels(probs, self.labels, floor=floor, label_offset=self._label_offset)
 
     def _top3_inat(self, crop: np.ndarray) -> list[tuple[str, float]]:
         """Return up to 3 (label, score) tuples from the iNat second-stage
@@ -462,59 +174,18 @@ class WildlifeClassifier(InferenceTimingMixin):
         rules and the cross-check uniformly."""
         if self._inat_interpreter is None:
             return []
-        rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-        floor = max(0.05, self._inat_min_score * 0.5)
-        t_pre = time.perf_counter()
-        if self._inat_cpu_mode:
-            det = self._inat_interpreter.get_input_details()
-            outd = self._inat_interpreter.get_output_details()
-            in_h = det[0]['shape'][1]
-            in_w = det[0]['shape'][2]
-            in_dtype = det[0]['dtype']
-            resized = cv2.resize(rgb, (in_w, in_h))
-            inp = np.expand_dims(resized, axis=0)
-            if in_dtype == np.float32:
-                inp = (inp.astype(np.float32) - 127.5) / 127.5
-            else:
-                inp = inp.astype(in_dtype)
-            self._inat_interpreter.set_tensor(det[0]['index'], inp)
-            t_invoke = time.perf_counter()
-            self._inat_interpreter.invoke()
-            t_post = time.perf_counter()
-            self._inat_timing._record_timing(t_pre, t_invoke, t_invoke, t_post)
-            scores = self._inat_interpreter.get_tensor(outd[0]['index'])[0]
-            top_ids = np.argsort(scores)[::-1][:3]
-            out_dtype = outd[0]['dtype']
-            scale, zp = (0.0, 0)
-            if out_dtype in (np.uint8, np.int8):
-                q = outd[0].get('quantization', (0.0, 0))
-                scale = float(q[0]) if q and q[0] else 0.0
-                zp = int(q[1]) if q else 0
-
-            def _to_prob(raw: float) -> float:
-                if out_dtype in (np.uint8, np.int8):
-                    return (raw - zp) * scale if scale else raw / 255.0
-                return float(raw)
-
-            out: list[tuple[str, float]] = []
-            for i in top_ids:
-                i = int(i)
-                p = _to_prob(float(scores[i]))
-                if p < floor:
-                    break
-                out.append((self._inat_labels.get(i, str(i)), p))
-            return out
-        # Coral path
-        width, height = self._inat_common.input_size(self._inat_interpreter)
-        resized = cv2.resize(rgb, (width, height))
-        self._inat_common.set_input(self._inat_interpreter, resized)
-        t_invoke = time.perf_counter()
-        self._inat_interpreter.invoke()
-        t_post = time.perf_counter()
-        self._inat_timing._record_timing(t_pre, t_invoke, t_invoke, t_post)
-        classes = self._inat_classify.get_classes(
-            self._inat_interpreter,
-            top_k=3,
-            score_threshold=floor,
-        )
-        return [(self._inat_labels.get(int(c.id), str(c.id)), float(c.score)) for c in classes]
+        floor = collect_floor(self._inat_min_score)
+        if not self._inat_cpu_mode:
+            named, marks = run_coral(
+                self._inat_common,
+                self._inat_classify,
+                self._inat_interpreter,
+                crop,
+                self._inat_labels,
+                floor=floor,
+            )
+            self._inat_timing._record_timing(*marks)
+            return named
+        probs, marks = run_tflite(self._inat_interpreter, crop)
+        self._inat_timing._record_timing(*marks)
+        return top_k_labels(probs, self._inat_labels, floor=floor)

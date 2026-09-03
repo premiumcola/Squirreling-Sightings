@@ -415,10 +415,21 @@ def test_a_per_camera_override_still_wins_the_line():
 
 def test_the_panel_default_is_the_one_the_detector_actually_uses():
     """The number on screen and the number in the classifier come from
-    one constant — a second literal is how they drift apart."""
+    one constant — a second literal is how they drift apart.
+
+    Read over the whole class hierarchy rather than one method: the
+    threshold now resolves in `WildlifeLoadMixin._init_backend_fields`,
+    and pinning this to a single method's source is what would make the
+    check quietly stop testing anything the next time the class is
+    split. The assertion itself is unchanged.
+    """
     import inspect
 
     from app.detectors import wildlife
 
-    src = inspect.getsource(wildlife.WildlifeClassifier.__init__)
+    src = "".join(
+        inspect.getsource(klass)
+        for klass in wildlife.WildlifeClassifier.__mro__
+        if klass is not object
+    )
     assert 'self.cfg.get("min_score", WILDLIFE_MIN_SCORE_DEFAULT)' in src

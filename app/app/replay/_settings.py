@@ -146,10 +146,23 @@ def resolve_replay_settings(event: dict, current_cfg: dict, spec, *, revisions=N
 
     legacy = event.get("recording_settings")
     if isinstance(legacy, dict) and legacy:
+        # A PARTIAL basis: `_from_legacy` recovers six of the twenty-six
+        # tuning keys. The other twenty have to come from somewhere, and
+        # the note below tells the operator they come from the camera's
+        # current profile — so lay the recovered keys OVER that profile,
+        # the same way the override and revision arms do. Handing
+        # `_from_legacy` straight through left those twenty absent, and
+        # every consumer then fell back to its own library default: an
+        # old clip replayed with a tracker grace of 8 s on a camera
+        # configured for 4.
+        recovered = _from_legacy(legacy)
+        cfg = project_settings(current_cfg)
+        cfg.update(recovered)
         return _set(
-            _from_legacy(legacy),
+            cfg,
             "stored",
             "recording_settings",
+            overridden=recovered.keys(),
             note=(
                 "Diese Aufnahme ist älter als der Settings-Schnappschuss — "
                 "nachsimuliert mit den überlieferten Aufnahme-Settings "

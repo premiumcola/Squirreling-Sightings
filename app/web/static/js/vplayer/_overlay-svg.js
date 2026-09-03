@@ -122,6 +122,15 @@ export function buildTrail(points, colour, opts = {}) {
  * authored in source pixels and the browser does the scaling —
  * the same contract both existing overlays use.
  *
+ * A record may carry `colour` and `masked` alongside its detection.
+ * Both are OPTIONAL and both default to what resolveBox already did:
+ * the live path maps detections without either, and its boxes keep
+ * taking their hue from the track number and their category from the
+ * backend's verdict. They exist for the recorded path, where the hue is
+ * the sidecar's own stamped `track.color` — the value the timeline lanes
+ * and the object rows read, so all three name one subject in one colour
+ * — and where masking is geometry the status vocabulary cannot express.
+ *
  * @param {HTMLElement} host       a layer host from _stage.js
  * @param {Array} detections       mapped detections (see _data/_map.js)
  * @param {object} opts            { frameSize, screenW, selectedTrack }
@@ -146,6 +155,8 @@ export function renderBoxLayer(host, detections, opts = {}) {
       buildBoxSvg(d.raw || d, {
         k,
         frameW: fs.w,
+        colour: d.colour || null,
+        masked: d.masked === true,
         selected: opts.selectedTrack != null && opts.selectedTrack === d.trackNum,
       }),
     )

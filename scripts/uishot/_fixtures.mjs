@@ -32,6 +32,37 @@ export const CAMERA = {
   telegram_enabled: true,
   mqtt_enabled: true,
   schedule_notify: { enabled: true, from: '21:00', to: '06:00' },
+  // Inclusion zone + exclusion mask, stamped in the stand-in clip's own
+  // 640x360 space (see TRACKS). Without these the player's Zonen and
+  // Masken switches sit over an empty layer and the shot cannot show
+  // whether they do anything — which is exactly the defect the harness
+  // failed to catch the first time.
+  zones: [
+    {
+      name: 'Beet Nord',
+      source_w: 640,
+      source_h: 360,
+      points: [
+        { x: 190, y: 175 },
+        { x: 470, y: 165 },
+        { x: 500, y: 320 },
+        { x: 170, y: 315 },
+      ],
+    },
+  ],
+  masks: [
+    {
+      name: 'Gehweg',
+      source_w: 640,
+      source_h: 360,
+      points: [
+        { x: 20, y: 250 },
+        { x: 170, y: 250 },
+        { x: 170, y: 345 },
+        { x: 20, y: 345 },
+      ],
+    },
+  ],
 };
 
 /** The ten camera-wide tuning axes the Erkennungsnetz radar draws. */
@@ -116,6 +147,16 @@ export const CLIP_ITEM = {
  * produced tracks with no samples, every lane came back null, and the
  * surface photographed an empty rail no matter what the renderer did.
  * A fixture whose shape the code cannot read tests nothing.
+ *
+ * COORDINATES ARE THE STAND-IN CLIP'S OWN. A sidecar's bbox space is by
+ * contract the pixel space of the mp4 it sits next to, and every painter
+ * reads the source size off the media element. These used to be authored
+ * against 1920x1080 while _clip.mjs renders 640x360, so a box drawn from
+ * them landed three times too far right and low — outside the picture
+ * entirely for the cat. The same failure the shape note above describes,
+ * one level down: a fixture whose COORDINATES the clip cannot hold
+ * photographs nothing. The cat is left straddling the exclusion mask on
+ * purpose, so the shot shows a masked box as well as a plain one.
  */
 export const TRACKS = {
   schema: 3,
@@ -126,10 +167,10 @@ export const TRACKS = {
       label: 'bird',
       best_score: 0.71,
       samples: [
-        { f: 12, t: 1.2, bbox: { x1: 600, y1: 450, x2: 870, y2: 655 }, score: 0.63, source: 'detect' },
-        { f: 36, t: 3.6, bbox: { x1: 730, y1: 430, x2: 1018, y2: 646 }, score: 0.71, source: 'detect' },
-        { f: 60, t: 6.0, bbox: { x1: 800, y1: 425, x2: 1070, y2: 640 }, score: 0.31, source: 'detect' },
-        { f: 78, t: 7.8, bbox: { x1: 845, y1: 420, x2: 1094, y2: 615 }, score: 0.66, source: 'track' },
+        { f: 12, t: 1.2, bbox: { x1: 200, y1: 150, x2: 290, y2: 218 }, score: 0.63, source: 'detect' },
+        { f: 36, t: 3.6, bbox: { x1: 243, y1: 143, x2: 339, y2: 215 }, score: 0.71, source: 'detect' },
+        { f: 60, t: 6.0, bbox: { x1: 267, y1: 142, x2: 357, y2: 213 }, score: 0.31, source: 'detect' },
+        { f: 78, t: 7.8, bbox: { x1: 282, y1: 140, x2: 365, y2: 205 }, score: 0.66, source: 'track' },
       ],
     },
     {
@@ -137,12 +178,12 @@ export const TRACKS = {
       label: 'cat',
       best_score: 0.58,
       samples: [
-        { f: 51, t: 5.1, bbox: { x1: 1150, y1: 594, x2: 1574, y2: 853 }, score: 0.52, source: 'detect' },
-        { f: 114, t: 11.4, bbox: { x1: 1267, y1: 572, x2: 1670, y2: 821 }, score: 0.58, source: 'detect' },
+        { f: 51, t: 5.1, bbox: { x1: 60, y1: 198, x2: 165, y2: 284 }, score: 0.52, source: 'detect' },
+        { f: 114, t: 11.4, bbox: { x1: 48, y1: 191, x2: 158, y2: 274 }, score: 0.58, source: 'detect' },
       ],
     },
   ],
-  frame_size: [1920, 1080],
+  frame_size: [640, 360],
 };
 
 /**

@@ -23,6 +23,25 @@ import { _pointInPoly, _polyPoints } from '../../shape-editor/geometry.js';
 import { normalizePolygon } from '../../core/polygon-source.js';
 import { _makeLabelVisibleFn } from './_classfilter.js';
 import { clearBboxSvg, drawTrackBoxesSvg } from './svg-boxes.js';
+// The interpolation and the three-tier status moved to core when a THIRD
+// painter needed them — the same journey core/box-model.js made, and for
+// the same reason: they are pure, and reaching them from anywhere else
+// meant importing this module, which wires real DOM at load.
+//
+// IMPORTED under the old names and then exported as those same local
+// bindings, rather than re-exported straight from core. `export { X }
+// from './y'` does not bind X in this file's own scope, and
+// _drawTracksBranch calls both — the exact trap this codebase has hit
+// before and documents in mediaview/player/_transport.js. One import,
+// one export of the same binding, no second path to get it wrong.
+import {
+  classifyTrackStatus as _classifyTrackStatus,
+  interpolateTrackAt as _interpolateTrackAt,
+} from '../../core/track-sampling.js';
+
+// Kept exported: confidence-meter.js imports _interpolateTrackAt from
+// here, and moving that call site is not this change's business.
+export { _classifyTrackStatus, _interpolateTrackAt };
 
 // Bbox + trail visibility — flipped by the overlay-toggles pill bar
 // (bboxes/trails). Module-scoped so the RAF redraw loop and the
@@ -34,66 +53,6 @@ export function setBboxOverlayVisibility({ showBboxes, showTrails }) {
   if (typeof showBboxes === 'boolean') _overlayVisibility.showBboxes = showBboxes;
   if (typeof showTrails === 'boolean') _overlayVisibility.showTrails = showTrails;
   _lbDrawDetections();
-}
-
-// I3 · `predicted`-source samples extend a track past the last
-// real detection so the post-clip worker can express its grace
-// window. On the video those frames are NOT a claim that the
-// subject is still there — they're a tracker-internal "still
-// trying". Capping the bbox draw at the LAST `detect`-source
-// sample (with the small 0.05 s tolerance for sub-sample play
-// positions) makes the on-video box vanish the instant the
-// subject does, instead of pinning a stale outline in place
-// during the grace window. The timeline panel still renders the
-// predicted tail as its diagnostic hatch overlay.
-function _lastDetectT(track) {
-  const samples = track.samples || [];
-  for (let i = samples.length - 1; i >= 0; i--) {
-    const s = samples[i];
-    if (
-      s.source === undefined ||
-      s.source === null ||
-      s.source === 'detect' ||
-      s.source === 'track'
-    ) {
-      return s.t;
-    }
-  }
-  return -1;
-}
-
-export function _interpolateTrackAt(track, t) {
-  const samples = track.samples || [];
-  if (!samples.length) return null;
-  const first = samples[0];
-  if (t < first.t - 0.05) return null;
-  const lastDetectT = _lastDetectT(track);
-  if (lastDetectT < 0) return null;
-  if (t > lastDetectT + 0.05) return null;
-  let prev = first,
-    next = samples[samples.length - 1];
-  for (let i = 0; i < samples.length; i++) {
-    if (samples[i].t <= t) prev = samples[i];
-    if (samples[i].t >= t) {
-      next = samples[i];
-      break;
-    }
-  }
-  if (prev === next || next.t === prev.t) {
-    return { bbox: prev.bbox, score: prev.score, label: track.label };
-  }
-  const a = (t - prev.t) / (next.t - prev.t);
-  const lerp = (k) => prev.bbox[k] + (next.bbox[k] - prev.bbox[k]) * a;
-  return {
-    bbox: { x1: lerp('x1'), y1: lerp('y1'), x2: lerp('x2'), y2: lerp('y2') },
-    score:
-      (prev.source === 'detect'
-        ? prev.score
-        : next.source === 'detect'
-          ? next.score
-          : track.best_score) ?? 0,
-    label: track.label,
-  };
 }
 
 function _firstSampleOfTrack(track) {
@@ -341,30 +300,3 @@ export function _isPointInAnyMask(px, py, srcW, srcH, masks) {
   return false;
 }
 
-/**
- * Classify a track-or-detection sample against the spawn threshold.
- *
- *   confirmed — the SAMPLE's score is ≥ threshold right now.
- *   weak      — the track's best_score reached threshold at some
- *               point, but the CURRENT sample is below it.
- *   ghost     — best_score NEVER reached threshold (the track was
- *               kept alive entirely on tentative continuation).
- *
- * Legacy fallback path (single detection, no track): treat as
- * confirmed/weak based purely on score vs threshold — there's no
- * track history to derive a "best ever" from.
- */
-export function _classifyTrackStatus(track, sample, threshold) {
-  const t = typeof threshold === 'number' ? threshold : _TRACK_SPAWN_SCORE;
-  const cur = sample && sample.score != null ? sample.score : null;
-  const best = track && track.best_score != null ? track.best_score : null;
-  // Track history available — three-tier classification.
-  if (best != null) {
-    if (best < t) return 'ghost';
-    if (cur != null && cur < t) return 'weak';
-    return 'confirmed';
-  }
-  // No track context — collapse to the two-tier legacy view.
-  if (cur != null && cur < t) return 'weak';
-  return 'confirmed';
-}

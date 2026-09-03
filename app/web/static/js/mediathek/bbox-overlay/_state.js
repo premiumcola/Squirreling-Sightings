@@ -37,7 +37,12 @@ export const _REINDEX_MAX_RETRIES = 6;
 // floor is tentative (extends an existing track but couldn't spawn
 // one on its own). The overlay paints it dashed so the operator can
 // see why the same track id is carrying mixed-confidence frames.
-export const _TRACK_SPAWN_SCORE = 0.5;
+//
+// The value itself now lives beside the classifier that compares
+// against it, in core/track-sampling.js, so the unified player reads
+// the same floor without importing this package. Re-exported here
+// because every module in this one already looks for it at this path.
+export { TRACK_SPAWN_SCORE as _TRACK_SPAWN_SCORE } from '../../core/track-sampling.js';
 
 // ?lbdebug=1 surfaces the same diagnostics that go to console.warn in
 // a small bottom-right corner overlay. Off by default; resolved once

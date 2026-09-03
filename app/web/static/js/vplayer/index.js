@@ -35,7 +35,7 @@ import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/
 import { timelineBasis } from './timeline/_basis.js';
 import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
-import { renderBoxLayer } from './_overlay-svg.js';
+import { mountOverlayPainter } from './_overlay-paint.js';
 import { subscribeLive } from './_data/live.js';
 import { loadRecorded } from './_data/recorded.js';
 
@@ -56,7 +56,7 @@ function _onMenuPick(id, cfg, stage) {
  * this only maps and paints. See _data/live.js for why owning any of
  * that loop's logic here would be the migration's worst regression.
  */
-function _wireLive(cfg, stage, panel, timeline) {
+function _wireLive(cfg, stage, panel, timeline, overlays) {
   if (!cfg.flags.live) return null;
   // Only the surfaces that SHOW something from the detection loop
   // subscribe to it. The plain live view wants the continuous stream
@@ -72,12 +72,10 @@ function _wireLive(cfg, stage, panel, timeline) {
     if (frame.snapshot && stage.img.getAttribute('src') !== frame.snapshot) {
       stage.img.src = frame.snapshot;
     }
-    if (cfg.flags.showOverlays) {
-      renderBoxLayer(stage.layers.boxes, frame.detections, {
-        frameSize: frame.frameSize,
-        screenW: stage.rect().w,
-      });
-    }
+    // Through the painter, not straight at the layer: it is what holds
+    // the operator's toggle state, and a direct paint here is how the
+    // simulation's own bbox switch ended up with nothing to switch.
+    overlays?.paintLive(frame);
     panel?.update(frame, null);
     // The rolling window is right-anchored on now, so every tick moves
     // it whether or not a detection landed.
@@ -90,7 +88,7 @@ function _wireLive(cfg, stage, panel, timeline) {
  * with it. Fire-and-forget: the shell is already up, so the picture
  * plays while the sidecar is still in flight.
  */
-function _wireRecorded(cfg, stage, panel, timeline) {
+function _wireRecorded(cfg, stage, panel, timeline, overlays) {
   if (cfg.flags.live) return;
   loadRecorded(cfg.item)
     .then((data) => {
@@ -98,6 +96,10 @@ function _wireRecorded(cfg, stage, panel, timeline) {
       const p = data.provenance || {};
       const rs = cfg.item.recording_settings || {};
       const timing = p.timing || {};
+      // The boxes come from the same sidecar the lanes do, so a lane and
+      // the box it explains are one subject in one colour. The sidecar's
+      // own gate wins over the caller's threshold inside setTracks.
+      overlays?.setTracks(data.tracks, { threshold: p.effective?.spawn_default });
       // The WIDENED item, not cfg.item: loadRecorded folds a `whole_clip`
       // recovered from /api/event/<id> into its copy, and a clip opened
       // from a narrow route would otherwise be told it has no aggregate
@@ -128,10 +130,39 @@ function _wireRecorded(cfg, stage, panel, timeline) {
     });
 }
 
-/** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
-function _mountAll(cfg) {
-  const shell = mountShell(cfg, { onKey: (key) => key === 'Escape' && closeVideoPlayer() });
-  const stage = mountStage(shell.slot('frame'), cfg);
+/**
+ * Drive everything that follows the playhead from the <video>.
+ *
+ * The timeline exposed `tick` from its first commit and NOTHING ever
+ * called it, so the head sat at zero and the clock read "0:00 / −0:00"
+ * for the whole clip however long it played — „Laufzeit-Knopf bewegt
+ * sich nicht, es steht auch keine Abspielzeit an". The overlay painter
+ * has the same dependency: a box interpolated at t only moves if
+ * something tells it t changed.
+ *
+ * `timeupdate` fires ~4×/s while playing; `seeked` and `loadedmetadata`
+ * cover the two moments it does not — a scrub while paused, and the
+ * duration arriving after the first paint.
+ */
+function _wirePlayhead(cfg, stage, timeline, overlays) {
+  if (cfg.flags.live) return;
+  const sync = () => {
+    const t = stage.video.currentTime || 0;
+    timeline?.tick(t);
+    overlays?.repaintAt(t);
+  };
+  for (const ev of ['timeupdate', 'seeked', 'loadedmetadata', 'play', 'pause']) {
+    stage.video.addEventListener(ev, sync);
+  }
+  sync();
+}
+
+/**
+ * The top bar and the overflow menu it triggers. One helper because they
+ * share a slot and a trigger element, and because splitting them off is
+ * what keeps _mountAll under the 60-line ceiling.
+ */
+function _mountChrome(shell, cfg, stage) {
   const topbar = mountTopbar(shell.slot('topbar'), cfg, {
     onClose: () => closeVideoPlayer(),
     onPrev: cfg.actions.onPrev,
@@ -143,9 +174,26 @@ function _mountAll(cfg) {
   const menu = mountOverflowMenu(shell.slot('topbar'), topbar?.trigger, items, (id) =>
     _onMenuPick(id, cfg, stage),
   );
+  return { topbar, menu };
+}
+
+/** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
+function _mountAll(cfg) {
+  const shell = mountShell(cfg, { onKey: (key) => key === 'Escape' && closeVideoPlayer() });
+  const stage = mountStage(shell.slot('frame'), cfg);
+  const { topbar, menu } = _mountChrome(shell, cfg, stage);
+  // The painter first, so the row can push the operator's choice into
+  // it; then the row's own resolved state back into the painter, because
+  // a persisted "trails off" wins over the mode's default and the
+  // picture must start out matching the buttons.
+  const overlays = mountOverlayPainter(stage, cfg);
   const overlayRow = cfg.flags.showOverlays
-    ? mountOverlayRow(shell.slot('toggles'), cfg, { roi: cfg.item.roi_label })
+    ? mountOverlayRow(shell.slot('toggles'), cfg, {
+        roi: cfg.item.roi_label,
+        onChange: (next) => overlays?.setLayers(next),
+      })
     : null;
+  if (overlayRow) overlays?.setLayers(overlayRow.state());
   const transport = mountTransport(shell.slot('stage'), shell.slot('controls'), cfg, stage);
   const timeline = mountTimeline(shell.slot('timeline'), cfg, {
     onSeek: (t) => {
@@ -156,31 +204,30 @@ function _mountAll(cfg) {
     onResume: () => stage.video.play().catch(() => {}),
   });
 
-  // Drive the playhead from the video. The timeline exposed `tick` from
-  // the first commit and NOTHING ever called it, so the head sat at zero
-  // and the clock read "0:00 / −0:00" for the whole clip however long it
-  // played — "Laufzeit-Knopf bewegt sich nicht, es steht auch keine
-  // Abspielzeit an". `timeupdate` fires ~4×/s while playing; `seeked`
-  // and `loadedmetadata` cover the two moments it does not (a scrub while
-  // paused, and the duration arriving after the first paint).
-  if (!cfg.flags.live && timeline) {
-    const sync = () => timeline.tick(stage.video.currentTime || 0);
-    for (const ev of ['timeupdate', 'seeked', 'loadedmetadata', 'play', 'pause']) {
-      stage.video.addEventListener(ev, sync);
-    }
-    sync();
-  }
+  _wirePlayhead(cfg, stage, timeline, overlays);
 
   // A live surface with a stream URL points its <img> straight at it,
   // so the picture is continuous rather than a 1 Hz snapshot loop.
   if (cfg.flags.live && cfg.source?.url) stage.img.src = cfg.source.url;
 
   const panel = renderContextPanel(shell.slot('panel'), cfg, null, cfg.deps || {});
-  const live = _wireLive(cfg, stage, panel, timeline);
+  const live = _wireLive(cfg, stage, panel, timeline, overlays);
   if (!cfg.flags.live && cfg.source?.url) stage.video.src = cfg.source.url;
-  _wireRecorded(cfg, stage, panel, timeline);
+  _wireRecorded(cfg, stage, panel, timeline, overlays);
 
-  return { cfg, shell, stage, topbar, menu, overlayRow, transport, timeline, panel, live };
+  return {
+    cfg,
+    shell,
+    stage,
+    topbar,
+    menu,
+    overlays,
+    overlayRow,
+    transport,
+    timeline,
+    panel,
+    live,
+  };
 }
 
 /**
@@ -221,6 +268,7 @@ export function closeVideoPlayer() {
   p.timeline?.teardown();
   p.transport?.teardown();
   p.overlayRow?.teardown();
+  p.overlays?.teardown();
   p.menu?.teardown();
   p.topbar?.teardown();
   p.stage?.teardown();

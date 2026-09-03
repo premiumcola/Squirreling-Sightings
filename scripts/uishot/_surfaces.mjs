@@ -80,6 +80,38 @@ async function mountVPlayer(page, fxKey) {
       return v && v.readyState >= 1 && v.duration > 0;
     }, { timeout: 8000 })
     .catch(() => {});
+  // Park the playhead where BOTH fixture tracks have samples. At t=0 no
+  // track has started, so every box and trail is correctly empty — and a
+  // shot of correctly-empty overlay layers cannot tell an overlay that
+  // works from one that never paints, which is exactly the confusion
+  // this surface was photographed in the first time.
+  //
+  // PLAYED there, not seeked. ffmpeg's screencast build writes no cues,
+  // so a `currentTime =` assignment on the stand-in clip silently does
+  // nothing — the first attempt at this shot photographed frame 0 with a
+  // clock reading 0:00 and no boxes, which looks exactly like the defect
+  // it was meant to prove fixed. Fast-forwarding is a real playback the
+  // container can do.
+  await page.evaluate(async () => {
+    const v = document.querySelector('.vp-root video');
+    if (!v || !(v.duration > 6)) return;
+    v.playbackRate = 8;
+    await v.play().catch(() => {});
+    await new Promise((done) => {
+      const tick = () => {
+        if (v.currentTime >= 5.4 || v.ended) {
+          v.pause();
+          v.playbackRate = 1;
+          done();
+        } else setTimeout(tick, 50);
+      };
+      tick();
+    });
+    // The idle auto-hide arms itself the moment playback starts, and a
+    // paused clip that has run is allowed to hide. One mouse move puts
+    // the transport back, which is the state the operator looks at.
+    document.querySelector('.vp-stage')?.dispatchEvent(new MouseEvent('mousemove'));
+  });
   await page.waitForTimeout(600);
 }
 

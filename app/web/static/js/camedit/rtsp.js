@@ -9,7 +9,7 @@
 //   • _defaultRtspPathForManufacturer — vendor → main-stream path mapping
 import { byId } from '../core/dom.js';
 import { apiPost } from '../core/api.js';
-import { _setEyeState } from '../chrome/password-toggle.js';
+import { _setEyeState, setSecretResolver } from '../chrome/password-toggle.js';
 
 export const RTSP_PATH_OPTS = [
   { label: 'Reolink H.264 – Main (RLC-810A, ältere FW)', value: '/h264Preview_01_main' },
@@ -87,6 +87,14 @@ async function _fetchSecret(camId) {
     return '';
   }
 }
+
+// The PASSWORD FIELD's eye needs the same fetch the URL field's eye has
+// always had. It lives in chrome/password-toggle.js, which serves the
+// Telegram tab and global Settings too and must not learn about cameras —
+// so the camera side installs the resolver instead. Without it that eye
+// flipped an empty box to `type=text` and revealed nothing, which is
+// exactly what the operator kept reporting.
+setSecretResolver((form) => _fetchSecret(form?.elements?.['id']?.value));
 
 // Inline onclick="_toggleUrlMask(this)" in the cam-edit form.
 window._toggleUrlMask = async function (btn) {

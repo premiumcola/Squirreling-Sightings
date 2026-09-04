@@ -34,14 +34,81 @@ export function _setEyeState(btn, revealed) {
   btn.setAttribute('aria-label', revealed ? 'Passwort verbergen' : 'Passwort anzeigen');
 }
 
-// Inline onclick="togglePwField(this, 'fieldName')" — toggles the
+/**
+ * How to obtain a stored secret that the browser was never given.
+ *
+ * THIS IS THE WHOLE BUG. A camera's password is deliberately never sent
+ * with `/api/cameras` — `routes/_secrets.py::redact_camera` swaps it for
+ * a `password_set` boolean, because that collection is polled every few
+ * seconds by every open dashboard and the secret would land in every
+ * response body, every cache and Chrome's password manager. So the field
+ * in the form is EMPTY, and flipping `input.type` on an empty field
+ * reveals an empty field: „Auge offen, soll das Passwort anzeigen, zeigt
+ * aber nix an. Das Passwort ist einfach nicht da." The eye was doing
+ * exactly what it was written to do, and that was never enough.
+ *
+ * The fetch itself already exists (camedit/rtsp.js's `_fetchSecret`, on
+ * POST /api/cameras/<id>/reveal-secret) and is used for the URL field's
+ * eye. Rather than have this generic module import a camera concern — or,
+ * worse, grow a second copy of that request — the owner installs its
+ * resolver here at load. A surface with no resolver behaves exactly as
+ * before.
+ *
+ * @param {(form: HTMLFormElement) => Promise<string>} fn
+ */
+let _secretResolver = null;
+export function setSecretResolver(fn) {
+  _secretResolver = typeof fn === 'function' ? fn : null;
+}
+
+/** Reveal one field, fetching the stored secret if the box is empty. */
+async function _reveal(input, btn) {
+  if (!input.value && _secretResolver) {
+    const form = btn.closest('form');
+    try {
+      const secret = await _secretResolver(form);
+      if (secret) {
+        input.value = secret;
+        // Remember EXACTLY what was fetched, so hiding again can tell a
+        // look from an edit — see _hide.
+        input.dataset.revealed = secret;
+      }
+    } catch {
+      /* an unreachable box must still flip the field, not throw */
+    }
+  }
+  input.type = 'text';
+  _setEyeState(btn, true);
+}
+
+/**
+ * Hide the field again — and put a merely-LOOKED-at secret back.
+ *
+ * chrome/secret-field.js's contract is that an untouched box means "keep
+ * what is stored" and the key is omitted from the payload entirely.
+ * Leaving a fetched secret sitting in the input would break that: the
+ * next save would report it as typed and write the same password back
+ * over itself, re-encoding URLs and touching settings.json for a change
+ * nobody made. So a value that is still byte-for-byte what the reveal
+ * fetched is cleared; a value the operator edited is theirs and stays.
+ */
+function _hide(input, btn) {
+  if (input.dataset.revealed != null && input.value === input.dataset.revealed) {
+    input.value = '';
+  }
+  delete input.dataset.revealed;
+  input.type = 'password';
+  _setEyeState(btn, false);
+}
+
+// data-action="togglePwField" (core/action-registry.js) — toggles the
 // password input nearest to the eye button via form-element lookup.
 window.togglePwField = function (btn, fieldName) {
   const f = btn.closest('form');
   const input = f?.elements[fieldName];
   if (!input) return;
-  input.type = input.type === 'password' ? 'text' : 'password';
-  _setEyeState(btn, input.type === 'text');
+  if (input.type === 'password') _reveal(input, btn);
+  else _hide(input, btn);
 };
 
 window.togglePwFieldById = function (id) {

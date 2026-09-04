@@ -149,23 +149,16 @@ class FfmpegClipMixin:
         log.info("[%s] Recording started via ffmpeg (%s)", self.camera_id, raw_path.name)
         return True
 
-    def _stop_ffmpeg_and_queue_reencode(self):
-        """Stop the running ffmpeg subprocess gracefully, then kick off a background
-        thread that re-encodes the raw stream-copy to browser-friendly H.264."""
-        proc = self._ffmpeg_proc
-        raw_path = self._ffmpeg_out_path
-        event_id = self._rec_event_id
-        meta = self._rec_event_meta
-        start_time = self._ffmpeg_start_time
-        preroll_frames = self._rec_preroll_frames
-        # Reset state so a new recording can start immediately
-        self._ffmpeg_proc = None
-        self._ffmpeg_out_path = None
-        self._ffmpeg_start_time = None
-        self._rec_event_id = None
-        self._rec_preroll_frames = []
-        if proc is None:
-            return
+    def _await_ffmpeg_exit(self, proc) -> None:
+        """Ask the stream-copy to finish, then wait for it.
+
+        Up to 8 s of waiting lives here (5 s on the 'q', 3 s more after a
+        terminate), and it used to run INLINE ON THE CAPTURE LOOP. For
+        that whole window the camera analysed no frames at all — it was
+        blind in the seconds immediately after a motion event ended,
+        which is exactly when a second animal walks into the same shot.
+        The caller now hands this to the finalize thread instead.
+        """
         try:
             if proc.stdin and not proc.stdin.closed:
                 try:
@@ -184,12 +177,46 @@ class FfmpegClipMixin:
                     proc.kill()
         except Exception as e:
             log.warning("[%s] ffmpeg stop error: %s", self.camera_id, e)
+
+    def _stop_ffmpeg_and_queue_reencode(self):
+        """Hand the finished recording to a background thread — and return.
+
+        NOTHING BLOCKING HAPPENS HERE ANY MORE. This runs on the camera's
+        capture loop (_recording_step.py calls it mid-tick), so every
+        second spent here is a second the camera cannot see. The ffmpeg
+        stop moved into the finalize thread with the rest of the chain;
+        what is left is resetting the state so the next recording can
+        start and spawning the thread.
+
+        Two ffmpeg processes can now briefly overlap — the one being
+        wound down and one a fresh trigger started. They write different
+        files under different event ids and each holds its own RTSP
+        connection, so the overlap costs a moment of bandwidth and buys
+        back the blind window.
+        """
+        proc = self._ffmpeg_proc
+        raw_path = self._ffmpeg_out_path
+        event_id = self._rec_event_id
+        meta = self._rec_event_meta
+        start_time = self._ffmpeg_start_time
+        preroll_frames = self._rec_preroll_frames
+        # Reset state so a new recording can start immediately
+        self._ffmpeg_proc = None
+        self._ffmpeg_out_path = None
+        self._ffmpeg_start_time = None
+        self._rec_event_id = None
+        self._rec_preroll_frames = []
+        if proc is None:
+            return
         log.info(
             "[%s] Recording stopped (%s), queuing re-encode",
             self.camera_id,
             raw_path.name if raw_path else "?",
         )
         if raw_path is None or event_id is None or meta is None or start_time is None:
+            # Nothing to finalize, but the subprocess still has to die or
+            # it holds an RTSP connection and a file handle for ever.
+            threading.Thread(target=self._await_ffmpeg_exit, args=(proc,), daemon=True).start()
             return
         # Stream-copy is on disk, the re-encode thread is about to spawn.
         # Short-lived by design (each clip gets its own thread, there is
@@ -198,6 +225,7 @@ class FfmpegClipMixin:
         threading.Thread(
             target=self._reencode_motion_clip,
             args=(raw_path, event_id, meta, start_time, preroll_frames),
+            kwargs={"proc": proc},
             daemon=True,
         ).start()
 
@@ -208,9 +236,15 @@ class FfmpegClipMixin:
         meta: dict,
         start_time: datetime,
         preroll_frames: list | None = None,
+        *,
+        proc=None,
     ):
-        """Background: transcode raw stream-copy → browser-friendly H.264,
-        then splice the pre-roll ring onto the front of it.
+        """Background: stop the stream-copy, transcode it to H.264, then
+        splice the pre-roll ring onto the front of it.
+
+        The stop is the FIRST thing here and not the caller's job any
+        more — see _stop_ffmpeg_and_queue_reencode for why those seconds
+        must not be spent on the capture loop.
         On success: delete the raw file, set video_url/snapshot/thumb/status=ready.
         On failure: keep raw as fallback, set encode_error on the event.
 
@@ -222,6 +256,10 @@ class FfmpegClipMixin:
         # "recording stopped, when can I watch it". Every sub-step below
         # was individually unmeasured, so the total was too.
         _chain_t0 = time.monotonic()
+        # The raw file is not complete until ffmpeg has closed it, so this
+        # has to finish before anything reads it.
+        if proc is not None:
+            self._await_ffmpeg_exit(proc)
         storage_root = Path(self.global_cfg["storage"]["root"])
         public_base = (self.global_cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
         day_dir = raw_path.parent
@@ -230,11 +268,6 @@ class FfmpegClipMixin:
         video_url, video_relpath, duration_s, file_size_bytes, encode_error = (
             self._transcode_raw_to_mp4(raw_path, vid_path, event_id, storage_root, public_base)
         )
-        thumb_source = vid_path if vid_path.exists() else (raw_path if raw_path.exists() else None)
-        thumb_rel, thumb_url = self._extract_motion_thumbnail(
-            thumb_source, day_dir, event_id, storage_root, public_base
-        )
-
         # Pre-roll splice — ONLY once the trigger-only clip is confirmed
         # playable above. Never risk the footage we already know is good
         # to chase a few extra seconds of lead-in.
@@ -243,6 +276,18 @@ class FfmpegClipMixin:
             achieved_pre_s, duration_s, file_size_bytes = self._apply_preroll_splice(
                 vid_path, preroll_frames, event_id, day_dir, duration_s, file_size_bytes
             )
+
+        # AFTER the splice, not before. The thumbnail seeks to a third of
+        # whatever file it is handed, and it used to be handed the
+        # trigger-only clip — so on every spliced recording the frame it
+        # picked sat a whole pre-roll later than a third of the clip the
+        # operator actually receives. The filmstrip is built from the
+        # final file; the preview picture has to come from the same one,
+        # or the grid and the poster disagree about what this clip is.
+        thumb_source = vid_path if vid_path.exists() else (raw_path if raw_path.exists() else None)
+        thumb_rel, thumb_url = self._extract_motion_thumbnail(
+            thumb_source, day_dir, event_id, storage_root, public_base
+        )
 
         # The scrub filmstrip, AFTER the splice — the sheet has to describe
         # the clip the operator will actually drag through, and the splice

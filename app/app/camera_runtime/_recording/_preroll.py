@@ -252,14 +252,51 @@ class MotionPrerollMixin:
                     spliced_path.unlink()
 
     @staticmethod
-    def _concat_preroll_and_clip(preroll_path: Path, main_path: Path, out_path: Path) -> bool:
-        """ffmpeg concat-demuxer join: preroll_path THEN main_path, re-
-        encoded to one continuous mp4. Mirrors
-        weather_service._recaps._concat_clips's concat-demuxer technique;
-        re-encodes (rather than ``-c copy``) so small parameter drift
-        between the two independent encode passes can never produce an
-        unplayable splice — these clips are a few seconds long, the extra
-        pass is cheap."""
+    def _concat_run(list_file: Path, out_path: Path, tail: list[str], timeout: int) -> bool:
+        """One concat-demuxer attempt. `tail` is the output half of the
+        command — either a stream copy or a full re-encode."""
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), *tail]
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        except Exception:
+            return False
+        return r.returncode == 0 and out_path.exists() and out_path.stat().st_size >= 1024
+
+    @staticmethod
+    def _is_playable(path: Path, min_frames: int = 3) -> bool:
+        """Can this file actually be decoded? The stream-copy path's whole
+        risk is a file ffmpeg writes happily and no decoder will read, so
+        a return code is not evidence — opening it is."""
+        try:
+            cap = cv2.VideoCapture(str(path))
+            frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+            cap.release()
+            return frames >= min_frames and fps > 0
+        except Exception:
+            return False
+
+    @classmethod
+    def _concat_preroll_and_clip(cls, preroll_path: Path, main_path: Path, out_path: Path) -> bool:
+        """ffmpeg concat-demuxer join: preroll THEN main clip, as one mp4.
+
+        STREAM COPY FIRST, re-encode only if that fails. It used to
+        re-encode unconditionally, and the reasoning was sound but rested
+        on a wrong premise: "these clips are a few seconds long, the extra
+        pass is cheap". The pre-roll is a few seconds; the MAIN clip is up
+        to ``clip_max_duration_s`` — 120 s by default — and it had just
+        been encoded, one function earlier, with these exact flags. So
+        every spliced recording paid for a second full encode of the whole
+        clip to glue three seconds onto the front of it.
+
+        The original worry is real and is kept: two independently encoded
+        segments can disagree on SPS/PPS, pixel format or frame rate, and
+        a copied concat then writes a file ffmpeg is perfectly happy with
+        and no decoder will play. That is why the copy is not trusted on
+        its return code — the result is opened and decoded before it is
+        accepted, and anything short of playable falls through to the
+        re-encode that always worked.
+        """
         if not preroll_path.exists() or not main_path.exists():
             return False
         if preroll_path.stat().st_size < 1024 or main_path.stat().st_size < 1024:
@@ -275,15 +312,11 @@ class MotionPrerollMixin:
                 ),
                 encoding="utf-8",
             )
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                str(list_file),
+            copy_tail = ["-c", "copy", "-movflags", "+faststart", "-an", str(out_path)]
+            if cls._concat_run(list_file, out_path, copy_tail, 60) and cls._is_playable(out_path):
+                return True
+            log.debug("[preroll] stream-copy concat unusable, re-encoding %s", out_path.name)
+            encode_tail = [
                 "-vcodec",
                 "libx264",
                 "-preset",
@@ -297,10 +330,7 @@ class MotionPrerollMixin:
                 "-an",
                 str(out_path),
             ]
-            r = subprocess.run(cmd, capture_output=True, timeout=120)
-            if r.returncode != 0 or not out_path.exists() or out_path.stat().st_size < 1024:
-                return False
-            return True
+            return cls._concat_run(list_file, out_path, encode_tail, 120)
         except Exception:
             return False
         finally:

@@ -22,10 +22,23 @@ from pathlib import Path
 
 from .._consts import log
 
-# Sidecar wait budget. Most clips finish tracking in well under this on
-# the target hardware; the poll interval is short enough that the happy
-# path returns on the first tick.
-_TRACKS_WAIT_S = 2.0
+# Sidecar wait budget — a GRACE PERIOD, not a wait for the job.
+#
+# This was 2.0 s, on the belief that "most clips finish tracking in well
+# under this". They do not, and cannot: the tracking job is enqueued
+# about five lines before the alert path runs (_ffmpeg_clip.py), the
+# worker is a single serialised thread shared by every camera, and the
+# pass costs roughly one model invoke per second of clip — the worker's
+# own budget is a THIRD of the clip's duration, which for a 15 s clip is
+# ~5 s. A 2 s wait was therefore two seconds of sleeping before the same
+# fallback, on essentially every alert.
+#
+# What the short budget below is actually for: a sidecar that already
+# exists — a re-send, a /resend, an older clip — or one being written at
+# this instant. Both return on the first or second tick. Anything longer
+# is the module's own stated rule applied one stage earlier: the push is
+# more valuable prompt than best-framed.
+_TRACKS_WAIT_S = 0.4
 _TRACKS_POLL_S = 0.1
 # ffmpeg gets one second to produce a single frame — past that the push
 # is more valuable late-free than best-framed, so we fall back.

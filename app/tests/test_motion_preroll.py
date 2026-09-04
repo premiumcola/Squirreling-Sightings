@@ -58,8 +58,12 @@ def _tiny_frame():
 
 
 class _Splicer(MotionPrerollMixin):
-    def __init__(self, camera_id="cam1"):
+    def __init__(self, camera_id="cam1", cfg=None):
         self.camera_id = camera_id
+        # The splice reads `record_audio` off the camera config; an empty
+        # dict is the shipped default (audio off), which is what every
+        # test in this file below asserts against.
+        self.cfg = cfg or {}
 
 
 class _FakeCap:
@@ -180,11 +184,11 @@ def test_splice_success_replaces_the_clip_and_reports_the_real_span(tmp_path, mo
     vid_path = tmp_path / "evt1.mp4"
     vid_path.write_bytes(b"ORIGINAL-TRIGGER-CLIP" * 100)
 
-    def _fake_encode(frames, out_path, fps, *, crf=22, log_tag=""):
+    def _fake_encode(frames, out_path, fps, *, crf=22, log_tag="", silent_audio=False):
         Path(out_path).write_bytes(b"PREROLL-SEGMENT" * 100)
         return True
 
-    def _fake_concat(preroll_path, main_path, out_path):
+    def _fake_concat(preroll_path, main_path, out_path, want_audio=False):
         Path(out_path).write_bytes(b"SPLICED-RESULT" * 100)
         return True
 
@@ -216,7 +220,7 @@ def test_splice_with_a_not_yet_full_ring_reports_the_shorter_real_span(tmp_path,
     monkeypatch.setattr(
         MotionPrerollMixin,
         "_concat_preroll_and_clip",
-        staticmethod(lambda pre, main, out: Path(out).write_bytes(b"y" * 2000) or True),
+        staticmethod(lambda pre, main, out, **kw: Path(out).write_bytes(b"y" * 2000) or True),
     )
     monkeypatch.setattr(preroll_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=10, fps=15.0))
 
@@ -254,7 +258,7 @@ def test_splice_falls_back_when_the_encode_fails(tmp_path, monkeypatch):
     monkeypatch.setattr(
         MotionPrerollMixin,
         "_concat_preroll_and_clip",
-        staticmethod(lambda *a: concat_called.append(1) or True),
+        staticmethod(lambda *a, **kw: concat_called.append(1) or True),
     )
     splicer = _Splicer()
 
@@ -276,7 +280,7 @@ def test_splice_falls_back_when_the_concat_fails(tmp_path, monkeypatch):
         lambda frames, out_path, fps, **kw: Path(out_path).write_bytes(b"PREROLL") or True,
     )
     monkeypatch.setattr(
-        MotionPrerollMixin, "_concat_preroll_and_clip", staticmethod(lambda *a: False)
+        MotionPrerollMixin, "_concat_preroll_and_clip", staticmethod(lambda *a, **kw: False)
     )
     splicer = _Splicer()
 
@@ -303,7 +307,7 @@ def test_splice_falls_back_when_the_result_is_unreadable(tmp_path, monkeypatch):
     monkeypatch.setattr(
         MotionPrerollMixin,
         "_concat_preroll_and_clip",
-        staticmethod(lambda pre, main, out: Path(out).write_bytes(b"CORRUPT") or True),
+        staticmethod(lambda pre, main, out, **kw: Path(out).write_bytes(b"CORRUPT") or True),
     )
     monkeypatch.setattr(preroll_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=0, fps=0.0))
     splicer = _Splicer()

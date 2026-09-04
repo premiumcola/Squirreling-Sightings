@@ -95,6 +95,13 @@ def api_cameras():
             "to": "06:00",
             "actions": {"record": True, "telegram": True, "hard": True},
         }
+        # Audio opt-in. Projected key-by-key like every field above, so a
+        # field this loop forgets is a field the cam-edit form never sees
+        # (the `color` lesson in test_camera_color_reaches_ui.py). The
+        # save direction needs nothing extra: upsert_camera runs the
+        # payload through CAMERA_SCHEMA, which type-checks and coerces
+        # `record_audio` like any other bool.
+        s["record_audio"] = bool(cam.get("record_audio", False))
         s["bottom_crop_px"] = cam.get("bottom_crop_px", 0)
         s["motion_sensitivity"] = cam.get("motion_sensitivity", 0.5)
         s["detection_min_score"] = float(cam.get("detection_min_score") or 0.0)

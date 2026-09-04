@@ -69,7 +69,7 @@ from .._consts import log
 
 # camera_runtime/_recording/ is two levels under app/app/, so
 # ``...media_encode`` resolves to app.app.media_encode.
-from ...media_encode import encode_jpeg_frames_to_mp4
+from ...media_encode import AAC_OUTPUT_ARGS, encode_jpeg_frames_to_mp4
 
 DEFAULT_CAPACITY_S = 3.0
 DEFAULT_JPEG_QUALITY = 82
@@ -77,6 +77,101 @@ DEFAULT_JPEG_QUALITY = 82
 # this is a generous safety valve for a misconfigured low interval or an
 # unusually detailed scene, not the expected steady-state size.
 DEFAULT_MAX_BYTES = 48 * 1024 * 1024
+
+
+def clip_has_audio_stream(path: Path) -> bool:
+    """True when ffprobe finds at least one audio stream in ``path``.
+
+    False on every failure (no ffprobe on PATH, non-zero exit, unreadable
+    file). That is the conservative branch: the caller then treats the clip
+    as silent and keeps the historical ``-an`` splice, rather than promising
+    an audio track that may not be there.
+    """
+    if not shutil.which("ffprobe"):
+        return False
+    try:
+        r = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
+                str(path),
+            ],
+            capture_output=True,
+            timeout=15,
+        )
+    except Exception:
+        return False
+    return r.returncode == 0 and b"audio" in (r.stdout or b"")
+
+
+def preroll_audio_wanted(cam_cfg: dict, main_path: Path) -> bool:
+    """Should the pre-roll splice carry an audio track?
+
+    THE DECISION, written down here because the alternative is re-derived
+    as a bug every time somebody reads the concat below:
+
+    A silent segment concatenated in front of an audio-bearing one is the
+    case a naive concat gets wrong — the demuxer presents the two files as
+    one input and needs them to agree on their stream layout, so joining a
+    video-only pre-roll to a video+audio clip either fails outright or
+    drops the sound. Two ways out were on the table: (a) give the pre-roll
+    a silent audio track so the layouts match, or (b) drop audio from any
+    clip that gets spliced.
+
+    (b) was rejected: `pre_motion_seconds` defaults to 3 s globally, so
+    almost every clip IS spliced — (b) would mean the operator switches
+    audio on and keeps getting silent clips. So (a): the pre-roll gets a
+    silent AAC track with exactly the parameters `media_encode` pins, and
+    the main clip was re-encoded to the same ones (see
+    `media_encode.build_reencode_cmd`), which makes the stream-copy concat
+    correct by construction rather than by luck.
+
+    (a) has one failure mode of its own, and this is the guard for it: a
+    camera with `record_audio` on but NO microphone produces a main clip
+    with no audio stream, and a silent pre-roll in front of that is the
+    same layout mismatch in reverse — the splice would fail and the clip
+    would silently lose its lead-in. So the main clip is probed, and the
+    answer is "audio" only when there is actually audio to match.
+
+    Nothing here can make a clip unplayable: every negative answer just
+    reproduces the splice this path has always performed, and every
+    failure downstream leaves the trigger-only clip untouched (see
+    ``_splice_preroll_onto_clip``).
+    """
+    if not (cam_cfg or {}).get("record_audio"):
+        return False
+    return clip_has_audio_stream(main_path)
+
+
+def build_concat_tail(out_path: Path, *, reencode: bool, want_audio: bool) -> list[str]:
+    """Output half of a concat-demuxer command line.
+
+    ``reencode=False`` is the stream copy tried first; ``True`` is the
+    fallback full encode. ``want_audio=False`` reproduces the ``-an`` this
+    path has always emitted, byte-for-byte. Pure function so both tails
+    can be asserted on without a working ffmpeg binary.
+    """
+    tail = (
+        ["-vcodec", "libx264", "-preset", "fast", "-crf", "22", "-pix_fmt", "yuv420p"]
+        if reencode
+        else ["-c", "copy"]
+    )
+    tail += ["-movflags", "+faststart"]
+    if not want_audio:
+        tail.append("-an")
+    elif reencode:
+        # The copy branch needs nothing: `-c copy` already carries the
+        # audio, and both segments were built to the same AAC parameters.
+        tail += [*AAC_OUTPUT_ARGS]
+    tail.append(str(out_path))
+    return tail
 
 
 def resolve_pre_motion_seconds(cam_cfg: dict, global_cfg: dict) -> float:
@@ -200,6 +295,10 @@ class MotionPrerollMixin:
         pre_fps = max(1.0, min(30.0, len(preroll_frames) / span))
         preroll_path = day_dir / f"{event_id}.preroll.mp4"
         spliced_path = day_dir / f"{event_id}.spliced.mp4"
+        # Audio only when the camera opted in AND the clip in hand really
+        # carries a track to match — see preroll_audio_wanted for why both
+        # halves are required.
+        want_audio = preroll_audio_wanted(self.cfg, vid_path)
         try:
             if not encode_jpeg_frames_to_mp4(
                 preroll_frames,
@@ -207,6 +306,7 @@ class MotionPrerollMixin:
                 int(round(pre_fps)),
                 crf=22,
                 log_tag=f"[{self.camera_id}]",
+                silent_audio=want_audio,
             ):
                 log.warning(
                     "[%s] pre-roll encode failed for %s — clip keeps 0 s lead-in",
@@ -214,7 +314,9 @@ class MotionPrerollMixin:
                     event_id,
                 )
                 return 0.0
-            if not self._concat_preroll_and_clip(preroll_path, vid_path, spliced_path):
+            if not self._concat_preroll_and_clip(
+                preroll_path, vid_path, spliced_path, want_audio=want_audio
+            ):
                 log.warning(
                     "[%s] pre-roll concat failed for %s — clip keeps 0 s lead-in",
                     self.camera_id,
@@ -223,19 +325,15 @@ class MotionPrerollMixin:
                 return 0.0
             # Verify the spliced result is a healthy, readable video BEFORE
             # trusting it over the clip we already know works — never swap
-            # in something worse than what we had.
-            check = cv2.VideoCapture(str(spliced_path))
-            fc = int(check.get(cv2.CAP_PROP_FRAME_COUNT))
-            cfps = check.get(cv2.CAP_PROP_FPS) or 0.0
-            check.release()
-            if fc < 3 or cfps <= 0:
+            # in something worse than what we had. This used to be its own
+            # inline VideoCapture probe, an exact duplicate of the
+            # ``_is_playable`` the concat already uses for the same
+            # question; one implementation, one place to fix it.
+            if not self._is_playable(spliced_path):
                 log.warning(
-                    "[%s] spliced clip %s unreadable (frames=%d fps=%.1f) — "
-                    "keeping trigger-only clip",
+                    "[%s] spliced clip %s unreadable — keeping trigger-only clip",
                     self.camera_id,
                     event_id,
-                    fc,
-                    cfps,
                 )
                 return 0.0
             # Atomic on the same filesystem (both paths share day_dir).
@@ -277,7 +375,13 @@ class MotionPrerollMixin:
             return False
 
     @classmethod
-    def _concat_preroll_and_clip(cls, preroll_path: Path, main_path: Path, out_path: Path) -> bool:
+    def _concat_preroll_and_clip(
+        cls,
+        preroll_path: Path,
+        main_path: Path,
+        out_path: Path,
+        want_audio: bool = False,
+    ) -> bool:
         """ffmpeg concat-demuxer join: preroll THEN main clip, as one mp4.
 
         STREAM COPY FIRST, re-encode only if that fails. It used to
@@ -296,6 +400,13 @@ class MotionPrerollMixin:
         its return code — the result is opened and decoded before it is
         accepted, and anything short of playable falls through to the
         re-encode that always worked.
+
+        ``want_audio`` (default False = the historical ``-an`` behaviour)
+        says both inputs carry a matching AAC track and the join must keep
+        it. Note the sharp edge: ``_is_playable`` decodes VIDEO only, so it
+        cannot catch a copy that mangled the audio — the protection is that
+        both segments were encoded to ``media_encode``'s pinned parameters,
+        not the playability check. See ``preroll_audio_wanted``.
         """
         if not preroll_path.exists() or not main_path.exists():
             return False
@@ -312,24 +423,11 @@ class MotionPrerollMixin:
                 ),
                 encoding="utf-8",
             )
-            copy_tail = ["-c", "copy", "-movflags", "+faststart", "-an", str(out_path)]
+            copy_tail = build_concat_tail(out_path, reencode=False, want_audio=want_audio)
             if cls._concat_run(list_file, out_path, copy_tail, 60) and cls._is_playable(out_path):
                 return True
             log.debug("[preroll] stream-copy concat unusable, re-encoding %s", out_path.name)
-            encode_tail = [
-                "-vcodec",
-                "libx264",
-                "-preset",
-                "fast",
-                "-crf",
-                "22",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                "-an",
-                str(out_path),
-            ]
+            encode_tail = build_concat_tail(out_path, reencode=True, want_audio=want_audio)
             return cls._concat_run(list_file, out_path, encode_tail, 120)
         except Exception:
             return False

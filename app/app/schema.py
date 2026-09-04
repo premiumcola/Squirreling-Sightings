@@ -165,6 +165,17 @@ CAMERA_SCHEMA: dict = {
     # action defaulted to on. Schedule_record (added alongside the
     # schedule split) gates this further by time of day.
     "recording_enabled": (bool, True),
+    # Whether the camera's microphone is recorded onto the motion clip.
+    # Default False and it must STAY False for existing cameras: a mic
+    # pointed at a garden records the neighbours too, so this is an
+    # explicit per-camera opt-in, never a migration. Read by
+    # media_encode.build_reencode_cmd (AAC into the mp4, run by
+    # camera_runtime/_recording/_ffmpeg_clip) and
+    # _recording/_preroll.preroll_audio_wanted (silent AAC track on the
+    # spliced-in lead-in so the two segments' stream layouts match). Only
+    # the ffmpeg stream-copy path can honour it — the OpenCV fallback
+    # writes decoded frames and has no audio to begin with.
+    "record_audio": (bool, False),
     "object_filter": (list, []),
     "label_thresholds": (dict, {}),
     # Per-class N-of-M confirmation window. Schema default {} means "use

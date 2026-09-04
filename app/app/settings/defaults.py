@@ -167,6 +167,13 @@ def default_camera(cam: dict | None = None) -> dict:
         # Recording-archive toggle. Defaults True to preserve the
         # historical "actions.record=True" behaviour pre-split.
         "recording_enabled": cam.get("recording_enabled", True),
+        # Audio opt-in (schema: CAMERA_SCHEMA["record_audio"]). Listed
+        # here for the same reason `color` and the track_* fields are:
+        # a key missing from this skeleton is dropped by the merged dict
+        # upsert_camera builds, so a saved True could never overwrite the
+        # stored False. Default False — privacy opt-in, never backfilled
+        # to True for a camera the operator did not switch on.
+        "record_audio": bool(cam.get("record_audio", False)),
         # Two independent schedules — see migrate_alerting_schedules
         # for the one-time derivation from the legacy schedule.actions.
         "schedule_notify": cam.get("schedule_notify") or {},

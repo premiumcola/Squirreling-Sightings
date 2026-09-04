@@ -10,6 +10,10 @@ from pathlib import Path
 import cv2
 
 from .._consts import log
+
+# camera_runtime/_recording/ is two levels under app/app/, so
+# ``...media_encode`` resolves to app.app.media_encode.
+from ...media_encode import build_reencode_cmd
 from ._stages import (
     STAGE_ENCODING,
     STAGE_FAILED,
@@ -100,6 +104,14 @@ class FfmpegClipMixin:
         rtsp_url = self.cfg.get("rtsp_url")
         if not rtsp_url:
             return False
+        # `-c copy` carries WHATEVER streams the RTSP feed offers, audio
+        # included — this command has always written the camera's sound
+        # into the raw file and it is `_transcode_raw_to_mp4` that decides
+        # whether it survives. Deliberately NOT gated on `record_audio`:
+        # gating it here would change the raw file (the fallback the event
+        # exposes when the re-encode fails) for cameras that never turned
+        # audio on, and this argv runs on the capture path where an extra
+        # decision is an extra way to break a recording.
         cmd = [
             'ffmpeg',
             '-y',
@@ -368,24 +380,9 @@ class FfmpegClipMixin:
                 raise RuntimeError(
                     f"raw clip missing/empty ({raw_path.stat().st_size if raw_path.exists() else 0} bytes)"
                 )
-            cmd = [
-                'ffmpeg',
-                '-y',
-                '-i',
-                str(raw_path),
-                '-vcodec',
-                'libx264',
-                '-preset',
-                'fast',
-                '-crf',
-                '22',
-                '-pix_fmt',
-                'yuv420p',
-                '-movflags',
-                '+faststart',
-                '-an',
-                str(vid_path),
-            ]
+            cmd = build_reencode_cmd(
+                raw_path, vid_path, record_audio=bool(self.cfg.get("record_audio"))
+            )
             # WALL CLOCK, because nothing measured this. The longest step
             # in the whole finalize chain — the one the operator actually
             # waits out before a clip is watchable — had no elapsed log

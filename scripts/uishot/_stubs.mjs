@@ -18,6 +18,8 @@ import {
   TIMELINE_DAY,
   DETECTION_CLOUD,
   WEATHER_HISTORY,
+  DOSSIERS,
+  DOSSIER_CLIPS,
   SIM_TICK,
   TPU_STATUS,
 } from './_fixtures.mjs';
@@ -40,6 +42,8 @@ function apiBody(url) {
   // keyed on its own file so the sidecar-basis surface keeps its tracks.
   if (pathname.endsWith('e7.tracks.json')) return CLIP_ONLY_TRACKS;
   if (pathname.endsWith('.tracks.json')) return TRACKS;
+  if (pathname.startsWith('/api/bird-dossiers')) return { dossiers: DOSSIERS };
+  if (pathname.startsWith('/api/library')) return DOSSIER_CLIPS;
   // The simulation's per-tick endpoint. Checked BEFORE the /api/cameras
   // prefix, which would otherwise swallow it and answer the poll loop
   // with a camera list — a body it reads as a tick with no detections,

@@ -114,21 +114,34 @@
   grid-template-columns: 1fr;
   aspect-ratio: 3/2;
 }
+/* Taller than square. A bird is a portrait subject and these boxes were
+   1:1, so a standing bird sat in a letterboxed sliver with dead space
+   either side — „bitte mach die Vogelbilder auch bisschen höher". */
 .sd-hero--2 {
   grid-template-columns: 1fr 1fr;
-  aspect-ratio: 2/1;
+  aspect-ratio: 2/1.3;
 }
 .sd-hero--3 {
   grid-template-columns: 1fr 1fr;
-  aspect-ratio: 2/1.75;
+  aspect-ratio: 2/2.05;
 }
 .sd-hero--3 .sd-hero-photo:first-child {
   grid-column: 1 / -1;
 }
-/* Reference photos are `contain`ed on a dark surface (2026-09: was
-   object-fit:cover, which cropped the animal — a Hausrotschwanz's head
-   was cut clean off). Letterboxed when the source isn't the box's own
-   ratio, never cropped. */
+/* CROPPED TO ONE SHAPE, weighted to the top.
+
+   This has now been both ways and neither extreme is right. `cover`
+   centred cut a Hausrotschwanz's head clean off, so it became `contain`
+   — which stopped cropping but let a portrait source letterbox into a
+   narrow strip beside a landscape one, so two reference photos that are
+   supposed to be compared stood at different widths on different
+   grounds: „schneid alles andere weg und setz die schön nebeneinander in
+   gleicher Höhe".
+
+   Cover again, but at 38 % rather than centre. A reference photograph
+   frames its subject in the upper middle and the empty half is below it,
+   so the crop takes from the bottom and the sides — never the head,
+   which is what made centred cover unusable. */
 .sd-hero-photo {
   position: relative;
   min-width: 0;
@@ -138,7 +151,8 @@
 .sd-hero-photo img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: 50% 38%;
   display: block;
 }
 /* Fallback for a dossier with no photo at all — the name still has to
@@ -409,21 +423,34 @@
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
+  /* Centred, because the card below is now shaped rather than stretched
+     and will usually be narrower than the column. */
+  justify-content: center;
 }
-/* mediathek/_cards.js's card is built for a grid cell with a fixed
-   16/10 ratio. Here it is the whole column, so the ratio gives way to
-   the row's height — the poster and the <video> both `contain` inside
-   it, never cropped. */
+/* THE CARD CARRIES THE CLIP'S SHAPE. It used to be told to fill the
+   column and take the row's height instead — and a right-hand column
+   1350 px wide beside a dossier card ~430 px tall is a 3:1 box. The
+   poster letterboxed inside it as a wide, short strip and only snapped
+   to something sensible once the <video> mounted: „das ist aktuell voll
+   länglich und wird erst ins richtige Format genommen, wenn ich auf Play
+   drücke".
+   16/9 with both maxima means the card is height-bound in a short row
+   and width-bound in a narrow one, so the poster and the video occupy
+   the same correctly-shaped box from the first paint. */
 .sd-gal-stage .media-card {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
+  aspect-ratio: 16 / 9;
+  max-width: 100%;
+  max-height: 100%;
   border-radius: 14px;
 }
 .sd-gal-stage .mmc-img-wrap {
   flex: 1 1 auto;
   aspect-ratio: auto;
   min-height: 0;
+  min-width: 0;
 }
 .sd-gal-stage .mmc-img-wrap img {
   object-fit: contain;

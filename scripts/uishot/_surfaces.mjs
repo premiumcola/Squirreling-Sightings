@@ -141,6 +141,30 @@ async function mountVPlayerSim(page) {
   await page.waitForTimeout(2500);
 }
 
+/**
+ * The species dossier — reference photos plus the clip gallery.
+ *
+ * The one surface in this app whose two reported defects could never be
+ * checked: the reference photos standing at different widths, and the
+ * clip preview showing the wrong shape until play is pressed. Both are
+ * layout, both need a render, and neither could be looked at because
+ * this panel was not in the harness.
+ *
+ * The fixture deliberately mixes a LANDSCAPE and a PORTRAIT reference
+ * photo. Two landscape sources would sit at the same width whatever the
+ * CSS did, and would prove nothing about the case the operator sent a
+ * screenshot of.
+ */
+async function mountDossier(page) {
+  await page.evaluate(async () => {
+    const mod = await import('/static/js/sichtungen/_dossier-panel.js');
+    await mod.loadBirdDossiers();
+    mod.selectSpeciesDossierByName('Hausrotschwanz');
+  });
+  await page.waitForSelector('#speciesDossierPanel:not([hidden])', { timeout: 8000 });
+  await page.waitForTimeout(700);
+}
+
 /** The weather manual-event save panel. */
 async function mountWeatherSave(page) {
   await page.evaluate(async () => {
@@ -288,6 +312,13 @@ export const SURFACES = [
     mount: mountVPlayerSim,
     clip: '.vp-root',
     scope: '.vp-root',
+  },
+  {
+    id: 'sichtungen-dossier',
+    title: 'Sichtungen · Artendossier mit Referenzfotos und Clip-Galerie',
+    mount: mountDossier,
+    clip: '#speciesDossierPanel',
+    scope: '#speciesDossierPanel',
   },
   {
     id: 'weather-save-panel',

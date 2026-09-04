@@ -199,6 +199,76 @@ export const TPU_STATUS = {
   },
 };
 
+/** A landscape and a PORTRAIT reference photo, as data: URIs.
+ *
+ * Different shapes on purpose: the defect being photographed is two
+ * reference photos standing at different widths beside each other, and
+ * two landscape sources cannot show it. Solid blocks with a marked
+ * "head" third, so a crop that eats the head is visible in the shot.
+ */
+function _refPhoto(w, h, body, head) {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
+    `<rect width="${w}" height="${h}" fill="#20303c"/>` +
+    `<rect x="0" y="0" width="${w}" height="${Math.round(h * 0.34)}" fill="${head}"/>` +
+    `<ellipse cx="${w / 2}" cy="${h * 0.46}" rx="${w * 0.26}" ry="${h * 0.2}" fill="${body}"/>` +
+    `<text x="${w / 2}" y="${Math.round(h * 0.2)}" text-anchor="middle" font-family="sans-serif" ` +
+    `font-size="${Math.round(Math.min(w, h) * 0.11)}" fill="#0d1116">KOPF</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** /api/library?kinds=motion rows — the shape _motion-adapter.js reads:
+ *  everything real lives under `extra`. Two clips so the gallery's paging
+ *  arrows render too. */
+export const DOSSIER_CLIPS = {
+  items: [
+    {
+      kind: 'motion',
+      id: 'evt_hrs_1',
+      cam_id: CAMERA.id,
+      extra: {
+        ...mediaItem(1, {}),
+        event_id: 'evt_hrs_1',
+        labels: ['motion', 'bird'],
+        bird_species: 'Hausrotschwanz',
+        duration_s: 11,
+      },
+    },
+    {
+      kind: 'motion',
+      id: 'evt_hrs_2',
+      cam_id: CAMERA.id,
+      extra: {
+        ...mediaItem(2, {}),
+        event_id: 'evt_hrs_2',
+        labels: ['motion', 'bird'],
+        bird_species: 'Hausrotschwanz',
+        duration_s: 6,
+      },
+    },
+  ],
+  total: 2,
+};
+
+export const DOSSIERS = [
+  {
+    latin: 'Phoenicurus ochruros',
+    common_name_de: 'Hausrotschwanz',
+    tier: 'Regelmäßig',
+    seen_count: 1,
+    wikipedia_summary:
+      'Der Hausrotschwanz ist ein Singvogel aus der Familie der Fliegenschnäpper (Muscicapidae). ' +
+      'Er ist etwas kleiner als der Haussperling und vor allem an seinem rostorangen Schwanz zu erkennen.',
+    wikipedia_url: 'https://de.wikipedia.org/wiki/Hausrotschwanz',
+    photo_urls: [
+      _refPhoto(640, 420, '#c2703a', '#3d5568'),
+      _refPhoto(360, 620, '#a8603a', '#41607a'),
+    ],
+    recordings: [],
+    audio_url: null,
+  },
+];
+
 /** One motion event, as the Mediathek grid receives it. */
 function mediaItem(n, over) {
   return {

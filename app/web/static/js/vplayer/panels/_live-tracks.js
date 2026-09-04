@@ -31,6 +31,12 @@ function _chipsHtml(cfg, frame, status) {
   const modes = frame?.raw?.modes || null;
   const roi = modes?.roi_mode_active || modes?.roi_mode;
   const busy = tpuBusyLabel(tpuFor(status, cfg.item.camera_id));
+  // No frame, no conditions. During an outage every one of these reads
+  // as an em-dash, and three empty pills directly under the verdict band
+  // add nothing but noise to the moment the operator most needs to read
+  // one thing. The chips describe the last tick; with no tick there is
+  // nothing for them to describe.
+  if (!modes && !frame) return '';
   return (
     `<div class="vp-pnl-chips">` +
     `<span class="vp-pnl-chip">${esc(computeChip(modes))}</span>` +
@@ -95,9 +101,10 @@ function _tracksHtml(frame) {
  * @param {HTMLElement} host
  * @param {object} cfg          normalised config from _config.js
  * @param {object} [frame]      latest mapped frame from _data/_map.js
+ * @param {object} [deps]       { tier } — the fold renderers' contract
  * @returns {{update, teardown}|null}
  */
-export function renderLiveTracks(host, cfg, frame = null) {
+export function renderLiveTracks(host, cfg, frame = null, deps = {}) {
   if (!host) return null;
   host.innerHTML =
     `<div class="vp-pnl-head"></div>` +
@@ -111,8 +118,12 @@ export function renderLiveTracks(host, cfg, frame = null) {
   // Simulation only — renderRevisionChip returns null for every other
   // surface, so the live view cannot grow one by accident.
   const revision = renderRevisionChip(host.querySelector('.vp-pnl-revpick'), cfg);
-  const raw = renderRawDetections(host.querySelector('.vp-pnl-raw'), cfg);
-  const log = renderDebugLog(host.querySelector('.vp-pnl-debug'), cfg);
+  // `deps`, not `cfg`. Both take an object, so passing the config here
+  // failed silently: these two read `deps.tier`, the config has no such
+  // key, and the folds were therefore built as if the device tier were
+  // unknown on every screen — including the desktop the tier exists for.
+  const raw = renderRawDetections(host.querySelector('.vp-pnl-raw'), deps);
+  const log = renderDebugLog(host.querySelector('.vp-pnl-debug'), deps);
 
   const update = (f, status) => {
     head.innerHTML = _chipsHtml(cfg, f, status);

@@ -105,7 +105,13 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  /* 8 px, not 4. The buttons here paint at 36 px and claim their 44 px
+     with a transparent ::before, which reaches 4 px past each edge — so
+     at a 4 px gap the two expanders OVERLAP and the later one in the DOM
+     wins the hit test. A finger aimed 2 px right of the ⋮ closed the
+     player instead of opening the menu, on the one control where a
+     mis-tap costs the most. At 8 px the two targets meet and stop. */
+  gap: 8px;
   padding: 6px 8px;
   background: var(--vp-chrome);
 }

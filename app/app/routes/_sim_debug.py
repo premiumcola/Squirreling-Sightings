@@ -87,7 +87,14 @@ def build_diag(
         "frame_size": {"w": int(sim.frame_w), "h": int(sim.frame_h)},
         "frame_age_ms": int(pick.age_ms),
         "capture_lag_ms": (None if lag_s is None else int(lag_s * 1000)),
-        "coral_available": True,
+        # Asked of the detector, not asserted. This was hard-coded True,
+        # and it lied on the one path where the answer matters: when
+        # another process holds the Coral stick the detector walks down
+        # to its CPU tier and the tick returns a perfectly ordinary 200 —
+        # so the operator saw "coral_available: true" next to inference
+        # that was running on the CPU. The failure mode with no failure
+        # response is exactly the one a diagnostic has to name.
+        "coral_available": describe_backend(getattr(rt, "detector", None))["device"] == "tpu",
         "inference_ms": int(sim.inference_ms),
         # What this tick ACTUALLY cost. The full-frame pass is now reused
         # by the tiling stage exactly as production's rescue reuses it,

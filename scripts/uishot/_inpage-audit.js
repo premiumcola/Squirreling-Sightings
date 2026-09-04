@@ -43,7 +43,8 @@
   /** Is this element actually painted? */
   function visible(el) {
     var cs = getComputedStyle(el);
-    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0)
+      return false;
     var r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   }
@@ -51,7 +52,9 @@
   function parseRgb(v) {
     var m = /rgba?\(([^)]+)\)/.exec(v || '');
     if (!m) return null;
-    var p = m[1].split(',').map(function (x) { return parseFloat(x); });
+    var p = m[1].split(',').map(function (x) {
+      return parseFloat(x);
+    });
     return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
   }
 
@@ -130,12 +133,82 @@
         out.push({
           rule: 'contrast',
           selector: sel(el),
-          detail: r.toFixed(2) + ':1 (min ' + MIN_CONTRAST + ') ' + cs.color + ' on rgb(' +
-            Math.round(bg.r) + ',' + Math.round(bg.g) + ',' + Math.round(bg.b) + ')',
+          detail:
+            r.toFixed(2) +
+            ':1 (min ' +
+            MIN_CONTRAST +
+            ') ' +
+            cs.color +
+            ' on rgb(' +
+            Math.round(bg.r) +
+            ',' +
+            Math.round(bg.g) +
+            ',' +
+            Math.round(bg.b) +
+            ')',
           text: txt.slice(0, 40),
         });
       }
     }
+  }
+
+  /**
+   * Does a finger-sized area centred on this control actually hit it?
+   *
+   * The box is not the answer. A small control with a transparent
+   * pseudo-element hit expander — `::before { inset: -5px 0 }` or an
+   * absolutely-positioned 44×44 box — is fully compliant while its own
+   * rect measures 34 px, and this audit reported every one of them. The
+   * player alone produced 21 such findings per surface, which is how a
+   * column of pure noise teaches everyone to stop reading it.
+   *
+   * So ask the browser instead of the stylesheet: probe the four corners
+   * of the 44×44 square around the control's centre and see what would
+   * receive the tap. A pseudo-element hands back its own owner, so an
+   * expander answers for the control it belongs to. Anything the control
+   * genuinely does not cover comes back as something else — a real
+   * finding, kept.
+   */
+  function tapReaches(el, r) {
+    var cx = r.left + r.width / 2;
+    var cy = r.top + r.height / 2;
+    var h = MIN_TOUCH / 2 - 1;
+    var pts = [
+      [cx - h, cy - h],
+      [cx + h, cy - h],
+      [cx - h, cy + h],
+      [cx + h, cy + h],
+    ];
+    // elementFromPoint only answers for the visible viewport, so a
+    // control below the fold cannot be probed. Fall back to the plain
+    // rect verdict there — i.e. REPORT it.
+    //
+    // The first version returned "fine" instead, on the reasoning that
+    // an unprobeable control is not evidence of a defect. That quietly
+    // dropped every finding below the first screenful, which on a long
+    // panel is most of the page: the dossier's 184×15 Wikipedia link
+    // disappeared from the audit entirely. An audit that over-reports
+    // wastes a minute; one that under-reports is worse than none.
+    if (r.top < 0 || r.left < 0 || r.bottom > window.innerHeight || r.right > window.innerWidth) {
+      return false;
+    }
+    for (var i = 0; i < pts.length; i++) {
+      var x = Math.max(0, Math.min(window.innerWidth - 1, pts[i][0]));
+      var y = Math.max(0, Math.min(window.innerHeight - 1, pts[i][1]));
+      var hit = document.elementFromPoint(x, y);
+      if (!hit) return false;
+      // The control itself, or something inside it (its own icon or
+      // label). A pseudo-element hands back its owner, which is how an
+      // expander answers here.
+      //
+      // Deliberately NOT its ancestors: an early version accepted them,
+      // and a 184×15 link sitting in a big card passed because the
+      // card caught every corner. That silently deleted real findings
+      // across the whole app — the check has to prove the CONTROL is
+      // reachable, not that something is.
+      if (hit !== el && !el.contains(hit)) return false;
+    }
+    return true;
   }
 
   function checkTouch(root, out) {
@@ -146,6 +219,8 @@
       if (el.tagName === 'A' && !el.getAttribute('href')) continue;
       var r = el.getBoundingClientRect();
       if (r.width < MIN_TOUCH || r.height < MIN_TOUCH) {
+        // Small on screen is allowed; small to the FINGER is not.
+        if (tapReaches(el, r)) continue;
         out.push({
           rule: 'touch',
           selector: sel(el),
@@ -189,8 +264,14 @@
         out.push({
           rule: 'overflow',
           selector: sel(el),
-          detail: 'right edge ' + Math.round(r.right) + 'px, width ' + Math.round(r.width) +
-            'px, viewport ' + vw + 'px',
+          detail:
+            'right edge ' +
+            Math.round(r.right) +
+            'px, width ' +
+            Math.round(r.width) +
+            'px, viewport ' +
+            vw +
+            'px',
           text: (el.textContent || '').trim().slice(0, 30),
         });
       }
@@ -261,8 +342,12 @@
 
   /** a fully inside b? */
   function contains(a, b) {
-    return a.left >= b.left - 1 && a.right <= b.right + 1 &&
-      a.top >= b.top - 1 && a.bottom <= b.bottom + 1;
+    return (
+      a.left >= b.left - 1 &&
+      a.right <= b.right + 1 &&
+      a.top >= b.top - 1 &&
+      a.bottom <= b.bottom + 1
+    );
   }
 
   function checkTextCollision(root, out) {

@@ -28,6 +28,9 @@ import { renderRecordedPanel } from './_recorded.js';
  */
 export function renderContextPanel(host, cfg, data = null, deps = {}) {
   if (!host || !cfg.flags.showPanel) return null;
-  if (cfg.flags.panel === 'live') return renderLiveTracks(host, cfg, data);
+  // `deps` goes to BOTH panels. It used to reach only the recorded one,
+  // so the live panel's folds were built with no device tier and the
+  // desktop "there is room, open it" default never applied to them.
+  if (cfg.flags.panel === 'live') return renderLiveTracks(host, cfg, data, deps);
   return renderRecordedPanel(host, cfg, deps);
 }

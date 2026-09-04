@@ -15,6 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  CLIP_BUILDING,
   CLIP_COARSE,
   CLIP_EMPTY,
   CLIP_MISSING,
@@ -28,6 +29,7 @@ import {
 } from '../readiness.js';
 
 const TRIGGER_ITEM = {
+  video_relpath: 'motion_detection/cam_a/2026-08-30/e1.mp4',
   detections: [
     { label: 'bird', score: 0.57, bbox: { x1: 200, y1: 150, x2: 290, y2: 218 } },
     { label: 'cat', score: 0.31, bbox: { x1: 60, y1: 200, x2: 140, y2: 300 } },
@@ -37,6 +39,20 @@ const TRIGGER_ITEM = {
 const SIDECAR = {
   tracks: [{ _num: 1, label: 'bird', samples: [{ t: 1, bbox: { x1: 1, y1: 1, x2: 9, y2: 9 } }] }],
 };
+
+/** Werte, die der Worker wirklich angelegt hat — Sidecar-Schema 4,
+ *  tracking_worker/_payload.py::build_payload. */
+const EMPTY_SIDECAR = {
+  schema: 4,
+  built_at: '2026-08-30T14:35:02',
+  gates: { min_confidence: 0.5, raw_floor: 0.2, miss_grace_s: 2 },
+  tracks: [],
+};
+
+/** Der Wert im Chip kommt aus dem Namen, nicht aus der Position. */
+function factValue(readiness, label) {
+  return (readiness.facts.find((f) => f.label === label) || {}).value;
+}
 
 test('ein Sidecar mit Spuren ist die volle Auskunft', () => {
   const r = clipReadiness(TRIGGER_ITEM, SIDECAR);
@@ -75,7 +91,7 @@ test('nur Erkennungen MIT Kasten zählen als zeichenbar', () => {
 test('ein leerer Sidecar ist eine Antwort, keine Lücke', () => {
   const r = clipReadiness(TRIGGER_ITEM, { tracks: [] });
   assert.equal(r.state, CLIP_EMPTY);
-  assert.match(r.note, /nichts gefunden/);
+  assert.match(r.note, /durchgelaufen/);
 });
 
 test('ein leerer Sidecar bietet den Auslöse-Kasten NICHT als Trostpreis an', () => {
@@ -88,10 +104,122 @@ test('ein leerer Sidecar bietet den Auslöse-Kasten NICHT als Trostpreis an', ()
   assert.equal(r.geometry, GEOM_NONE);
 });
 
-test('gar nichts bekannt sagt das auch', () => {
+test('gar nichts bekannt sagt das auch — und sagt WAS fehlt', () => {
+  // Ohne Videodatei kann die Nachanalyse nichts ablaufen, und
+  // /api/tracking/reindex/<id> antwortet genau darauf mit 404. „Keine
+  // Feinspur" allein hätte den Knopf angeboten, der nur scheitern kann.
   const r = clipReadiness({}, null);
   assert.equal(r.state, CLIP_MISSING);
-  assert.match(r.note, /keine Feinspur/);
+  assert.match(r.note, /keine Videodatei/);
+  assert.equal(r.rebuildable, false);
+});
+
+test('ein Clip mit Video, aber ohne je gebaute Feinspur, darf nachgebaut werden', () => {
+  const r = clipReadiness({ video_relpath: 'a/b.mp4' }, null);
+  assert.equal(r.state, CLIP_MISSING);
+  assert.match(r.note, /nie eine Feinspur/);
+  assert.equal(r.rebuildable, true);
+});
+
+test('eine fehlgeschlagene Umwandlung nennt den Grund und bietet nichts an', () => {
+  // clip_recovery.py::mark_interrupted schreibt genau diese drei Felder.
+  const r = clipReadiness(
+    {
+      status: 'error',
+      stage: 'failed',
+      encode_error: 'Ein Neustart hat die Verarbeitung unterbrochen.',
+    },
+    null,
+  );
+  assert.equal(r.state, CLIP_MISSING);
+  assert.match(r.note, /fehlgeschlagen/);
+  // Der Satz des Recorders steht als eigene Zeile, nicht als Chip: ein
+  // dreizeiliger String in einem Feld für „50 %" ist Layout, keine Angabe.
+  assert.equal(r.sub, 'Ein Neustart hat die Verarbeitung unterbrochen.');
+  assert.deepEqual(r.facts, []);
+  assert.equal(r.rebuildable, false);
+});
+
+// ── Der Clip selbst ist noch nicht fertig ──────────────────────────────────
+
+test('ein Clip in der Umwandlung ist kein Clip ohne Feinspur', () => {
+  // Erreichbar über Vor/Zurück im Player: die Liste ist state._allMedia,
+  // und die enthält die noch entstehenden Clips (media_index/_visible.py).
+  // Vorher landete so ein Clip in „keine Feinspur" samt Nachbau-Knopf,
+  // den die Route mangels Video mit 404 beantwortet.
+  const r = clipReadiness({ stage: 'encoding', status: 'processing', stage_age_s: 42 }, null);
+  assert.equal(r.state, CLIP_BUILDING);
+  assert.equal(r.geometry, GEOM_NONE);
+  assert.equal(r.rebuildable, false);
+});
+
+test('die Produktion des Clips schlägt jede Sidecar-Frage', () => {
+  // Auch mit vorliegendem Sidecar: solange ffmpeg schreibt, ist die
+  // ehrliche Auskunft die Phase, nicht die Spurenlage.
+  const item = { stage: 'recording', status: 'recording' };
+  assert.equal(clipReadiness(item, SIDECAR).state, CLIP_BUILDING);
+  assert.equal(clipReadiness(item, undefined).state, CLIP_BUILDING);
+});
+
+test('ein Ereignis ohne Stage-Angabe ist fertig, nicht in Arbeit', () => {
+  // _stages.py::stage_of fällt für alte Ereignisse auf „ready" zurück;
+  // ein leeres Objekt darf nie als laufende Aufnahme gelesen werden.
+  assert.notEqual(clipReadiness({}, null).state, CLIP_BUILDING);
+  assert.notEqual(clipReadiness({ status: 'ready' }, SIDECAR).state, CLIP_BUILDING);
+});
+
+// ── Die Gründe, die jeder Zustand mitbringt ────────────────────────────────
+
+test('nichts gefunden nennt die Schwelle, gegen die es nichts fand', () => {
+  const item = {
+    ...TRIGGER_ITEM,
+    whole_clip: { detections: [{ label: 'bird', score: 0.33 }] },
+  };
+  const r = clipReadiness(item, EMPTY_SIDECAR);
+  assert.equal(r.gate.threshold, 0.5, 'gates.min_confidence, nicht geraten');
+  assert.equal(r.gate.best, 0.33, 'der beste Wert, den die Live-Pipeline je hatte');
+  assert.equal(r.gate.bestFrom, 'clip');
+  assert.equal(factValue(r, 'Schwelle'), '50 %');
+  assert.equal(factValue(r, 'bester Live-Wert'), '33 %');
+  assert.equal(factValue(r, 'geprüft'), '14:35', 'built_at belegt, dass der Lauf durch ist');
+});
+
+test('ohne whole_clip zählt der beste Wert des Auslöse-Bildes — und sagt das', () => {
+  // Zwei verschiedene Läufe. Der Auslöse-Wert als „Live-Wert" zu
+  // etikettieren wäre die eine Zahl, die hier lügen könnte.
+  const r = clipReadiness(TRIGGER_ITEM, EMPTY_SIDECAR);
+  assert.equal(r.gate.bestFrom, 'trigger');
+  assert.equal(factValue(r, 'bester Auslöse-Wert'), '57 %');
+});
+
+test('ein Sidecar ohne gates-Block erfindet keine Schwelle', () => {
+  // Schema 3 und älter kennt den Block nicht. Dann bleibt der Satz —
+  // aber keine Zahl, die es nie gab.
+  const r = clipReadiness(TRIGGER_ITEM, { schema: 3, built_at: '2026-08-30T14:35:02', tracks: [] });
+  assert.equal(r.gate.threshold, null);
+  assert.equal(factValue(r, 'Schwelle'), undefined);
+  assert.equal(factValue(r, 'geprüft'), '14:35');
+});
+
+test('nichts gefunden bietet keinen Nachbau an', () => {
+  // Derselbe Lauf mit denselben Gates fände dasselbe Nichts. Die Gates
+  // sind das Handlungsfähige daran, nicht ein zweiter Durchlauf.
+  assert.equal(clipReadiness(TRIGGER_ITEM, EMPTY_SIDECAR).rebuildable, false);
+});
+
+test('die grobe Spur beziffert, was an ihr grob ist', () => {
+  const r = clipReadiness(TRIGGER_ITEM, null);
+  assert.equal(factValue(r, 'Kästen'), '2');
+  assert.equal(factValue(r, 'sichtbar'), 'nur pausiert');
+  assert.equal(factValue(r, 'bester Wert'), '57 %');
+  assert.equal(r.rebuildable, true);
+});
+
+test('der laufende Abruf ist sichtbar, der fertige Clip stumm', () => {
+  // Die eine Stelle, an der „kein Banner" die richtige Antwort ist —
+  // und die eine, an der es vorher fälschlich dieselbe war.
+  assert.equal(clipReadiness(TRIGGER_ITEM, SIDECAR).note, null);
+  assert.ok(clipReadiness(TRIGGER_ITEM, undefined).note);
 });
 
 test('ein Auslöse-Kasten steht still — also nur bei Pause', () => {

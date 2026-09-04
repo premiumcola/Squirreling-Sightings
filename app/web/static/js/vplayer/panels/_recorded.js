@@ -45,7 +45,12 @@ function _paintPanel(parts, st) {
   // `st.fetched` distinguishes "the sidecar request has not come back"
   // from "there is none" — collapsing those two is exactly what made an
   // empty picture unreadable.
-  parts.note?.update(clipReadiness(st.item, st.fetched ? st.tracks : undefined));
+  //
+  // The ITEM travels with the verdict: the note's building face reads the
+  // stage vocabulary and the seconds-in-stage off it, and `st.item` is
+  // the only reference that survives both a correction (patched in place)
+  // and a widening (replaced by loadRecorded).
+  parts.note?.update(clipReadiness(st.item, st.fetched ? st.tracks : undefined), st.item);
   parts.replay?.update(st.item);
   parts.details?.update(st.item);
 }

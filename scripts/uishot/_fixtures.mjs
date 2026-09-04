@@ -541,8 +541,211 @@ export const CLIP_ONLY_ITEM = {
   },
 };
 
-/** The indexer ran on that clip and confirmed no track at all. */
-export const CLIP_ONLY_TRACKS = { schema: 3, built_at: '2026-08-30T14:35:02', tracks: [] };
+/**
+ * The indexer ran on that clip and confirmed no track at all.
+ *
+ * SCHEMA 4 WITH ITS `gates` BLOCK, which is what the worker has written
+ * since tracking_worker/_consts.py bumped the version — `min_confidence`
+ * is the spawn floor it actually applied to this clip and `raw_floor`
+ * the detector threshold underneath it. Without them the empty state can
+ * only say "nothing found"; with them it can say what the bar was, which
+ * is the whole difference between a label and an answer. A schema-3
+ * fixture here would photograph the legacy fallback and hide the face
+ * this surface exists to show.
+ */
+export const CLIP_ONLY_TRACKS = {
+  schema: 4,
+  built_at: '2026-08-30T14:35:02',
+  video_path: `motion_detection/${CAMERA.id}/2026-08-30/e7.mp4`,
+  fps: 12.0,
+  frame_count: 144,
+  duration_s: 12.0,
+  best_frame: null,
+  filter_applied: ['person', 'cat', 'bird', 'dog'],
+  gates: { min_confidence: 0.5, raw_floor: 0.2, miss_grace_s: 2.0 },
+  tracks: [],
+};
+
+/* ── Readiness states ─────────────────────────────────────────────────────
+ *
+ * Six verdicts, six fixtures. The player decides what a clip can show in
+ * vplayer/_model/readiness.js, and every state below is one of its
+ * branches with the data that branch genuinely has behind it.
+ *
+ * Shapes are the writers' own, not approximations:
+ *   the in-flight stub  camera_runtime/_recording/_ffmpeg_clip.py
+ *                       ::_write_recording_event_stub, PLUS the three
+ *                       fields media_index/_visible.py derives at read
+ *                       time (annotate_stage → stage, stage_age_s,
+ *                       stage_stalled). An item arrives at the frontend
+ *                       with BOTH halves; a fixture with only the stub
+ *                       half photographs a payload the API never sends.
+ *   the failure         clip_recovery.py::mark_interrupted — stage
+ *                       `failed`, status `error`, the German
+ *                       INTERRUPTED_REASON_DE in `encode_error`, and an
+ *                       `interrupted_at` stamp.
+ *   the trigger boxes   detectors/_types.py::Detection.to_dict — bbox as
+ *                       {x1,y1,x2,y2} ints, in the CLIP's own pixel
+ *                       space (640x360, same as TRACKS above).
+ */
+
+/** Trigger-frame detections, exactly as the event JSON carries them. */
+const TRIGGER_DETS = [
+  {
+    label: 'cat',
+    score: 0.44,
+    bbox: { x1: 96, y1: 188, x2: 214, y2: 286 },
+    species: null,
+    species_latin: null,
+    species_score: null,
+    identity: null,
+    raw_cls_id: 17,
+    via_roi: false,
+    model: 'coco',
+  },
+  {
+    label: 'bird',
+    score: 0.31,
+    bbox: { x1: 372, y1: 128, x2: 442, y2: 186 },
+    species: null,
+    species_latin: null,
+    species_score: null,
+    identity: null,
+    raw_cls_id: 16,
+    via_roi: true,
+    model: 'coco',
+  },
+];
+
+/** A clip whose ffmpeg re-encode is still running. */
+function recordingStub(over = {}) {
+  return {
+    event_id: '20260904-141207-004821',
+    camera_id: CAMERA.id,
+    camera_name: CAMERA.name,
+    armed: true,
+    after_hours: false,
+    alarm_level: 'alarm',
+    time: '2026-09-04 14:12:07',
+    labels: ['motion', 'cat'],
+    top_label: 'cat',
+    bird_species: null,
+    cat_name: null,
+    person_name: null,
+    whitelisted: false,
+    detections: TRIGGER_DETS,
+    whole_clip: null,
+    snapshot_url: null,
+    snapshot_relpath: null,
+    thumb_url: null,
+    video_url: null,
+    video_relpath: null,
+    duration_s: 0.0,
+    file_size_bytes: 0,
+    status: 'processing',
+    stage: 'encoding',
+    stage_since: '2026-09-04T14:12:49',
+    stage_age_s: 42,
+    stage_stalled: false,
+    recording_settings: { pre_motion_seconds: 0, post_motion_seconds: 5, conf_thresh_general: 0.4 },
+    provenance: { model: 'efficientdet_lite0_edgetpu', profile: 'garden' },
+    ...over,
+  };
+}
+
+/** Still encoding — the honest state of a clip 42 s into its re-encode. */
+export const CLIP_ENCODING_ITEM = recordingStub();
+
+/**
+ * The same clip after a container restart ate the encoder.
+ *
+ * `stage_stalled` is derived on READ, never stored: nothing would ever
+ * come along to write a flag onto an event whose process is gone, so age
+ * past the stage's own ceiling is the only honest tell.
+ */
+export const CLIP_STALLED_ITEM = recordingStub({
+  event_id: '20260904-140102-771004',
+  stage_since: '2026-09-04T14:01:44',
+  stage_age_s: 512,
+  stage_stalled: true,
+});
+
+/** No sidecar, but the trigger frame carries drawable boxes. */
+export const CLIP_TRIGGER_ITEM = {
+  ...mediaItem(8, {}),
+  camera_name: CAMERA.name,
+  labels: ['motion', 'cat'],
+  top_label: 'cat',
+  bird_species: null,
+  whole_clip: null,
+  detections: TRIGGER_DETS,
+  recording_settings: { pre_motion_seconds: 3, post_motion_seconds: 5, conf_thresh_general: 0.4 },
+};
+
+/** The encode failed, so there is no video and nothing to re-walk. */
+export const CLIP_FAILED_ITEM = {
+  ...mediaItem(9, {}),
+  camera_name: CAMERA.name,
+  labels: ['motion'],
+  bird_species: null,
+  whole_clip: null,
+  detections: [],
+  video_relpath: null,
+  video_url: null,
+  duration_s: 0,
+  file_size_bytes: 0,
+  status: 'error',
+  stage: 'failed',
+  stage_since: '2026-09-03T22:41:10',
+  interrupted_at: '2026-09-03T22:41:10',
+  encode_error:
+    'Ein Neustart hat die Verarbeitung unterbrochen — das Video wurde nicht fertiggestellt.',
+};
+
+/**
+ * The gallery's case list — one row per readiness verdict.
+ *
+ * `tracks` is a KIND rather than the value itself, because the
+ * distinction that matters most cannot survive the trip into the page:
+ * `undefined` (request in flight) and `null` (no sidecar) are two
+ * different states and a serialiser flattens the first into the second.
+ * The mount maps each kind back to the real value and hands it to the
+ * real clipReadiness().
+ */
+export const READINESS_CASES = [
+  {
+    id: 'building',
+    caption: 'building · encode läuft',
+    item: 'CLIP_ENCODING_ITEM',
+    tracks: 'absent',
+  },
+  {
+    id: 'stalled',
+    caption: 'building · hängt (Neustart)',
+    item: 'CLIP_STALLED_ITEM',
+    tracks: 'absent',
+  },
+  { id: 'pending', caption: 'pending · Abruf läuft', item: 'CLIP_ITEM', tracks: 'inflight' },
+  { id: 'ready', caption: 'ready · kein Banner', item: 'CLIP_ITEM', tracks: 'full' },
+  {
+    id: 'coarse',
+    caption: 'coarse · nur Auslöse-Kästen',
+    item: 'CLIP_TRIGGER_ITEM',
+    tracks: 'absent',
+  },
+  {
+    id: 'empty',
+    caption: 'empty · Nachanalyse ohne Treffer',
+    item: 'CLIP_ONLY_ITEM',
+    tracks: 'empty',
+  },
+  {
+    id: 'missing',
+    caption: 'missing · Umwandlung fehlgeschlagen',
+    item: 'CLIP_FAILED_ITEM',
+    tracks: 'absent',
+  },
+];
 
 /** Weather samples with a real precipitation swing, so a chip pre-lights. */
 export const WEATHER_SAMPLES = Array.from({ length: 24 }, (_, i) => ({

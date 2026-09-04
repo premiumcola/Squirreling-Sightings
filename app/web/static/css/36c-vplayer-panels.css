@@ -449,8 +449,8 @@
 }
 
 /* ── Readiness note ────────────────────────────────────────────────────────
-   One line above the object rows saying how much to trust them, and — when
-   the answer is "a file is missing" — the button that makes it.
+   The banner above the object rows saying how much to trust them, and —
+   when the answer is "a file is missing" — the button that makes it.
 
    It exists because an empty picture is ambiguous: "no sidecar", "the
    indexer found nothing" and "still loading" all rendered as nothing at
@@ -459,44 +459,278 @@
    aggregate knows WHEN a subject was there and never WHERE, so no box can
    follow it, and that fact belongs on screen rather than being inferred.
 
-   Two tones, because an answer and a gap must not look alike: `is-partial`
-   for a clip that could be improved, `is-quiet` for one that already told
-   us everything it has. */
+   FIVE FACES, not two tones. The states used to share `is-partial` /
+   `is-quiet` and differ only in their sentence, which is a label rather
+   than a design. Each one now carries the shape of what it knows:
+   `is-building` a three-segment stage chain, `is-pending` one
+   indeterminate bar, `is-empty` the score gate drawn to scale,
+   `is-coarse` a frame holding a pause, `is-missing` a struck-through
+   frame. A ready clip gets NO banner at all — the sixth face is the
+   absence of one.
+
+   Depth is colour contrast on a filled block, never a hairline. */
 .vp-rn {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 11px;
   margin: 0 0 10px;
-  padding: 11px 14px;
+  padding: 12px 14px;
   border-radius: var(--vp-radius-sm);
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
+  color: var(--text);
 }
 
 .vp-rn:empty {
   display: none;
 }
 
-.vp-rn-text {
+/* The text column. Everything the state has to say stacks here, so the
+   glyph / meter on the left never has to align with more than one line. */
+.vp-rn-body {
+  display: flex;
   flex: 1 1 240px;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
 }
 
-.vp-rn.is-partial {
-  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
-  color: var(--text);
+.vp-rn-head {
+  font-size: 13.5px;
+  font-weight: 700;
 }
 
-.vp-rn.is-quiet {
+.vp-rn-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.vp-rn-mark {
+  display: flex;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+/* ── The five grounds ──────────────────────────────────────────────────── */
+
+/* Work in flight — the same blue the rest of the chrome uses for
+   "something is happening", not the warning amber of a gap. */
+.vp-rn.is-building {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+}
+
+/* …unless it has stopped moving. `stage_stalled` is derived on read
+   (camera_runtime/_recording/_stages.py), because a container restart
+   mid-encode leaves a clip frozen with no process behind it. */
+.vp-rn.is-building.is-stalled,
+.vp-rn.is-building.is-failed {
+  background: color-mix(in srgb, var(--warn) 15%, var(--panel));
+}
+
+/* A request in flight. Quiet on purpose: nothing is wrong, we simply do
+   not know yet — but it is VISIBLE, which is the whole fix. This state
+   used to render as nothing and was therefore identical to a healthy
+   clip. */
+.vp-rn.is-pending {
   background: var(--surface);
   color: var(--muted);
 }
 
+/* The two full-width meters claim their own line by BASIS, not by a
+   column direction on the banner itself. `.vp-rn-body`'s `flex-basis:
+   240px` is a WIDTH only while the main axis is horizontal; flipping the
+   banner to a column turned that basis into a 240 px minimum HEIGHT and
+   left half a screen of empty ground under two lines of text. The
+   harness photographed it, which is what it is for. */
+.vp-rn-steps,
+.vp-rn-shimmer {
+  flex: 0 0 100%;
+}
+
+/* The indexer ran and confirmed nothing. An ANSWER — so the green of a
+   completed pass, not the amber of something broken. */
+.vp-rn.is-empty {
+  background: color-mix(in srgb, var(--vp-accent) 12%, var(--panel));
+}
+
+.vp-rn.is-empty .vp-rn-mark {
+  color: var(--vp-accent);
+}
+
+/* Boxes exist, but only for one instant. Improvable, hence amber. */
+.vp-rn.is-coarse {
+  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
+}
+
+.vp-rn.is-coarse .vp-rn-mark {
+  color: var(--warn);
+}
+
+/* No source at all. */
+.vp-rn.is-missing {
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+}
+
+.vp-rn.is-missing .vp-rn-mark {
+  color: var(--danger);
+}
+
+/* ── Stage chain (building) ────────────────────────────────────────────────
+   Three segments — Aufnahme, Umwandlung, fertig — driven by
+   mediathek/_processing.js's own `step`, so the player and the library
+   card cannot disagree about how far along a clip is. Deliberately not a
+   percentage: ffmpeg can only report one by rewriting the event JSON at
+   ~1 Hz per clip. */
+.vp-rn-steps {
+  display: flex;
+  gap: 4px;
+}
+
+.vp-rn-steps i {
+  flex: 1 1 0;
+  height: 5px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 12%);
+}
+
+.vp-rn-steps i.is-done {
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.vp-rn-steps i.is-now {
+  background: var(--accent);
+  animation: vp-rn-breathe 1.6s ease-in-out infinite;
+}
+
+.vp-rn-steps i.is-halted {
+  background: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+@keyframes vp-rn-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ── Indeterminate bar (pending) ───────────────────────────────────────────
+   One bar, not three: the counterpart to the chain above says "we cannot
+   number this" rather than pretending to a position. */
+.vp-rn-shimmer {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 10%);
+}
+
+.vp-rn-shimmer::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: 999px;
+  background: var(--muted);
+  animation: vp-rn-sweep 1.4s ease-in-out infinite;
+  content: '';
+}
+
+@keyframes vp-rn-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/* A stopped animation must still read as its state, so the segment and
+   the bar keep their colour — they simply stop moving. */
+@media (prefers-reduced-motion: reduce) {
+  .vp-rn-steps i.is-now,
+  .vp-rn-shimmer::after {
+    animation: none;
+  }
+}
+
+/* ── The gate, drawn (empty) ───────────────────────────────────────────────
+   Fill = the best score this clip ever produced, tick = the spawn
+   threshold the indexer applied (tracks.json `gates.min_confidence`,
+   sidecar schema 4). A fill stopping short of the tick IS the reason the
+   walk confirmed nothing; a fill past it says the score was not the
+   blocker — both are answers the sentence alone could never give. */
+.vp-rn-gate {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 10%);
+}
+
+.vp-rn-gate-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.vp-rn-gate-fill.is-over {
+  background: var(--vp-accent);
+}
+
+.vp-rn-gate-tick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--text);
+  transform: translateX(-50%);
+}
+
+/* ── Fact chips ────────────────────────────────────────────────────────────
+   Value first, label under it. The numbers are the point; the words are
+   what makes them readable. */
+.vp-rn-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vp-rn-facts li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: var(--vp-radius-sm);
+  background: rgb(255 255 255 / 7%);
+}
+
+.vp-rn-facts b {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.vp-rn-facts span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* A real 44px target: this is the one control in the panel that starts
-   work on the box, and it must not be a 28px strip on a phone. */
+   work on the box, and it must not be a 28px strip on a phone.
+
+   `flex: 1 0 auto` and no `margin-left: auto`. Once the text column has
+   claimed its 240px basis the button wraps to its own line on a phone
+   and fills it, which is the widest target the row can give it; the auto
+   margin that would have pushed it right instead is the exact pairing
+   CLAUDE.md names as the recurring iOS layout fault. */
 .vp-rn-btn {
-  flex: 0 0 auto;
+  flex: 1 0 auto;
+  min-width: 160px;
   min-height: var(--vp-tap);
   padding: 0 16px;
   border: 0;

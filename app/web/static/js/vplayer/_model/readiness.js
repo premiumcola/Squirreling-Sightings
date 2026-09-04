@@ -25,10 +25,19 @@
 // so both the painter and the panel obey the same rule instead of each
 // re-deriving it.
 //
+// EVERY STATE CARRIES ITS OWN GROUNDS. A verdict used to be a sentence
+// and a colour, which is a label rather than an answer: „nichts
+// gefunden" never said what the bar was, „keine Quelle" never said what
+// was missing, and „noch nicht geladen" rendered as literally nothing —
+// indistinguishable from a healthy clip. `facts` and `gate` carry the
+// numbers each state genuinely has (derived in _evidence.js), and
+// `rebuildable` says whether the reindex route could even succeed.
+//
 // No DOM, no fetch, no module state — so every rule below is a unit test
 // rather than a browser smoke.
 
-import { normalizeBox } from '../../core/box-model.js';
+import { pctLabel } from '../../core/format.js';
+import { drawableTriggerDets, gateEvidence, hasVideo, missingReason } from './_evidence.js';
 
 /** Per-frame geometry: the sidecar ran and found subjects. */
 export const CLIP_READY = 'ready';
@@ -40,16 +49,57 @@ export const CLIP_EMPTY = 'empty';
 export const CLIP_MISSING = 'missing';
 /** The sidecar request has not come back yet. */
 export const CLIP_PENDING = 'pending';
+/** The CLIP itself is still being produced. No sidecar can exist yet. */
+export const CLIP_BUILDING = 'building';
 
 /** What can be drawn, which is a different question from what is known. */
 export const GEOM_PER_FRAME = 'per-frame';
 export const GEOM_TRIGGER = 'trigger';
 export const GEOM_NONE = 'none';
 
-/** Trigger-frame detections that actually carry a drawable box. */
-function _drawableTriggerDets(item) {
-  const list = (item && item.detections) || [];
-  return list.filter((d) => d && normalizeBox(d.bbox));
+/**
+ * Stages that mean the clip is still being produced.
+ *
+ * A MIRROR of camera_runtime/_recording/_stages.py::PENDING_STAGES, the
+ * way core/camera-id.js mirrors camera_id.py. mediathek/_processing.js
+ * holds the same set for the library tile and is deliberately NOT
+ * imported here: it publishes a `window.x` bridge at module scope, and
+ * this module is node-testable by contract (the same call _helpers.js's
+ * header documents for the German age formatter). The FACE of this
+ * state does import it — a panel may, a model may not — so the words
+ * and the elapsed clock have exactly one source even though the
+ * membership test has two.
+ */
+const _PENDING_STAGES = new Set(['recording', 'queued', 'encoding', 'processing']);
+
+/**
+ * Is this clip still on its way through the recorder?
+ *
+ * `stage` is the fine value; `status` is the coarse one every event
+ * written before stages existed carries. An event with neither is
+ * finished — that is `_stages.py::stage_of`'s own fallback, and it is
+ * what keeps a plain `{}` out of this branch.
+ */
+function _isBuilding(item) {
+  const stage = (item && (item.stage || item.status)) || '';
+  return _PENDING_STAGES.has(stage);
+}
+
+/** A `{label, value}` chip, dropped entirely when the value is absent. */
+function _fact(label, value) {
+  return value == null ? null : { label, value };
+}
+
+/** The grounds for „die Nachanalyse hat nichts gefunden". */
+function _emptyFacts(gate) {
+  return [
+    _fact('Schwelle', gate.threshold == null ? null : pctLabel(gate.threshold)),
+    _fact(
+      gate.bestFrom === 'trigger' ? 'bester Auslöse-Wert' : 'bester Live-Wert',
+      gate.best == null ? null : pctLabel(gate.best),
+    ),
+    _fact('geprüft', gate.checkedAt),
+  ].filter(Boolean);
 }
 
 /**
@@ -64,17 +114,44 @@ function _drawableTriggerDets(item) {
  * Collapsing "not fetched yet", "no sidecar exists" and "the indexer
  * found nothing" into one blank picture is precisely the defect.
  *
+ * The clip's OWN production outranks all three: while ffmpeg is still
+ * writing it there is no video to walk, so „keine Feinspur" would blame
+ * a missing sidecar for a clip that does not exist yet — and would offer
+ * a rebuild the reindex route answers 404 to.
+ *
  * @param {object} item                   the mediathek event item
  * @param {object|null|undefined} tracks  the sidecar, per that contract
- * @returns {{state: string, geometry: string, trigger: Array, note: string|null}}
+ * @returns {{state: string, geometry: string, trigger: Array,
+ *            note: string|null, facts: Array, sub: string|null,
+ *            gate: object|null, rebuildable: boolean}}
  */
 export function clipReadiness(item, tracks) {
+  const base = {
+    geometry: GEOM_NONE,
+    trigger: [],
+    facts: [],
+    // Free-form backend prose — the recorder's own German for a failure.
+    // A sentence, so never a chip; the face renders it as a second line.
+    sub: null,
+    gate: null,
+    rebuildable: false,
+  };
+  if (_isBuilding(item)) {
+    return {
+      ...base,
+      state: CLIP_BUILDING,
+      note: 'Der Clip wird noch erzeugt — die Feinspur entsteht erst danach.',
+    };
+  }
   if (tracks === undefined) {
-    return { state: CLIP_PENDING, geometry: GEOM_NONE, trigger: [], note: null };
+    return { ...base, state: CLIP_PENDING, note: 'Die Feinspur wird geladen …' };
   }
   const list = tracks && Array.isArray(tracks.tracks) ? tracks.tracks : null;
   if (list && list.length) {
-    return { state: CLIP_READY, geometry: GEOM_PER_FRAME, trigger: [], note: null };
+    // A healthy clip carries no status line at all. Anything else would
+    // be chrome that says „alles in Ordnung" over a picture that already
+    // shows it.
+    return { ...base, state: CLIP_READY, geometry: GEOM_PER_FRAME, note: null };
   }
   if (list) {
     // The sidecar exists and holds nothing. The trigger box is deliberately
@@ -82,27 +159,44 @@ export function clipReadiness(item, tracks) {
     // at a lower floor than the live pipeline and still found nothing, so a
     // single trigger-frame rectangle would contradict the more thorough
     // answer we already have.
+    //
+    // No rebuild either: the same walk with the same gates returns the
+    // same nothing. The gates themselves are the actionable part, which
+    // is why they are on screen.
+    const gate = gateEvidence(item, tracks);
     return {
+      ...base,
       state: CLIP_EMPTY,
-      geometry: GEOM_NONE,
-      trigger: [],
-      note: 'Die Nachanalyse hat in diesem Clip nichts gefunden.',
+      note: 'Die Nachanalyse ist durchgelaufen und hat keine Spur bestätigt.',
+      facts: _emptyFacts(gate),
+      gate,
     };
   }
-  const trigger = _drawableTriggerDets(item);
+  const trigger = drawableTriggerDets(item);
   if (trigger.length) {
+    const best = gateEvidence(item, null).best;
     return {
+      ...base,
       state: CLIP_COARSE,
       geometry: GEOM_TRIGGER,
       trigger,
-      note: 'Keine Feinspur — die Kästen stammen aus dem Auslöse-Bild und stehen still.',
+      note: 'Nur das Auslöse-Bild: ein einziger Augenblick, keine Geometrie pro Bild.',
+      facts: [
+        _fact('Kästen', String(trigger.length)),
+        _fact('sichtbar', 'nur pausiert'),
+        _fact('bester Wert', best == null ? null : pctLabel(best)),
+      ].filter(Boolean),
+      rebuildable: hasVideo(item),
     };
   }
+  const why = missingReason(item);
   return {
+    ...base,
     state: CLIP_MISSING,
-    geometry: GEOM_NONE,
-    trigger: [],
-    note: 'Für diesen Clip gibt es keine Feinspur.',
+    note: why.note,
+    facts: why.facts,
+    sub: why.sub,
+    rebuildable: why.rebuildable,
   };
 }
 

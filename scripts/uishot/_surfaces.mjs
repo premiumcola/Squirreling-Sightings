@@ -18,6 +18,13 @@ import {
   MEDIA,
   CLIP_ITEM,
   CLIP_ONLY_ITEM,
+  CLIP_ONLY_TRACKS,
+  CLIP_ENCODING_ITEM,
+  CLIP_STALLED_ITEM,
+  CLIP_TRIGGER_ITEM,
+  CLIP_FAILED_ITEM,
+  READINESS_CASES,
+  TRACKS,
   WEATHER_SAMPLES,
   WEATHER_RANGE,
   WEATHER_HISTORY,
@@ -36,6 +43,13 @@ export async function seedFixtures(page) {
       MEDIA,
       CLIP_ITEM,
       CLIP_ONLY_ITEM,
+      CLIP_ONLY_TRACKS,
+      CLIP_ENCODING_ITEM,
+      CLIP_STALLED_ITEM,
+      CLIP_TRIGGER_ITEM,
+      CLIP_FAILED_ITEM,
+      READINESS_CASES,
+      TRACKS,
       WEATHER_SAMPLES,
       WEATHER_RANGE,
       WEATHER_HISTORY,
@@ -75,10 +89,13 @@ async function mountVPlayer(page, fxKey) {
   // The timeline lays out against video.duration; without metadata every
   // lane collapses to zero width and the shot would flatter the layout.
   await page
-    .waitForFunction(() => {
-      const v = document.querySelector('.vp-root video');
-      return v && v.readyState >= 1 && v.duration > 0;
-    }, { timeout: 8000 })
+    .waitForFunction(
+      () => {
+        const v = document.querySelector('.vp-root video');
+        return v && v.readyState >= 1 && v.duration > 0;
+      },
+      { timeout: 8000 },
+    )
     .catch(() => {});
   // Park the playhead where BOTH fixture tracks have samples. At t=0 no
   // track has started, so every box and trail is correctly empty — and a
@@ -113,6 +130,80 @@ async function mountVPlayer(page, fxKey) {
     document.querySelector('.vp-stage')?.dispatchEvent(new MouseEvent('mousemove'));
   });
   await page.waitForTimeout(600);
+}
+
+/**
+ * Every readiness verdict, in one panel, at one width.
+ *
+ * The defect this surface exists for cannot be photographed one shot at
+ * a time: the claim is that the states no longer look alike, and that is
+ * a claim ABOUT THE SET. Six separate PNGs prove each one renders;
+ * only this one proves they are six different things.
+ *
+ * Both halves are the real modules — clipReadiness() classifies and
+ * renderReadinessNote() mounts, against fixtures shaped from the
+ * backend's own writers. The only markup the harness contributes is the
+ * caption above each row, because a gallery whose rows are unlabelled
+ * cannot be read back against the state list.
+ *
+ * The player is opened first and its panel emptied, so every banner sits
+ * in the real .vp-panel with the real cascade around it rather than on a
+ * bare page where its ground colour would come from nowhere.
+ */
+async function mountReadinessStates(page) {
+  await page.evaluate(async () => {
+    const vp = await import('/static/js/vplayer/index.js');
+    vp.openVideoPlayer({
+      mode: 'recorded',
+      source: { url: '/static/uishot-clip.webm' },
+      item: window.__fx.CLIP_ITEM,
+      actions: { onClose() {} },
+    });
+  });
+  await page.waitForSelector('.vp-panel', { timeout: 8000 });
+  await page.evaluate(async () => {
+    const base = '/static/js/vplayer';
+    const { clipReadiness } = await import(`${base}/_model/readiness.js`);
+    const { renderReadinessNote } = await import(`${base}/panels/_readiness-note.js`);
+    const panel = document.querySelector('.vp-panel');
+    panel.innerHTML = '';
+    // The shell is `position: fixed; height: 100dvh` with the panel as a
+    // SHRINKING flex item, so a gallery taller than the phone is clipped
+    // to one screen and the shot proves only the first two states. The
+    // stage and the top bar are not what this surface photographs, so
+    // the shell is released into normal page flow for the duration — the
+    // panel's own cascade, which IS what is under test, is untouched.
+    const root = document.querySelector('.vp-root');
+    root.style.cssText += ';position:static;height:auto;overflow:visible';
+    panel.style.flex = '0 0 auto';
+    for (const sel of ['.vp-stage', '.vp-topbar']) {
+      document.querySelector(sel)?.setAttribute('hidden', '');
+    }
+    // The three-way sidecar contract, restored on this side of the
+    // bridge: `undefined` is a request in flight, `null` is no sidecar,
+    // an object with an empty array is the indexer's own "nothing here".
+    const sidecar = {
+      inflight: undefined,
+      absent: null,
+      empty: window.__fx.CLIP_ONLY_TRACKS,
+      full: window.__fx.TRACKS,
+    };
+    for (const c of window.__fx.READINESS_CASES) {
+      const cap = document.createElement('div');
+      cap.textContent = c.caption;
+      cap.setAttribute(
+        'style',
+        'margin:16px 2px 6px;font:600 10.5px/1.3 ui-monospace,monospace;' +
+          'letter-spacing:.06em;text-transform:uppercase;color:#9ba3ad',
+      );
+      panel.appendChild(cap);
+      const host = document.createElement('div');
+      panel.appendChild(host);
+      const item = window.__fx[c.item];
+      renderReadinessNote(host, { item }, {}).update(clipReadiness(item, sidecar[c.tracks]), item);
+    }
+  });
+  await page.waitForTimeout(400);
 }
 
 /**
@@ -303,6 +394,20 @@ export const SURFACES = [
     id: 'vplayer-clip-basis',
     title: 'Unified video player · lanes from the whole-clip aggregate',
     mount: (page) => mountVPlayer(page, 'CLIP_ONLY_ITEM'),
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-readiness-states',
+    title: 'Unified video player · every readiness state in one panel',
+    mount: mountReadinessStates,
+    clip: '.vp-panel',
+    scope: '.vp-panel',
+  },
+  {
+    id: 'vplayer-building',
+    title: 'Unified video player · a clip whose re-encode is still running',
+    mount: (page) => mountVPlayer(page, 'CLIP_ENCODING_ITEM'),
     clip: '.vp-root',
     scope: '.vp-root',
   },

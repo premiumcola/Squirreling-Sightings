@@ -64,6 +64,34 @@
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+/* The dismiss. A notice with no way out is a trap, and this one is
+   fixed over the content: a tab that is merely one deploy behind is
+   still perfectly usable, so the operator has to be able to say "later"
+   — see 05-chrome-dock.css for what it would otherwise cover. Quiet by
+   design; the reload button is the one that should read as the action. */
+.version-bar-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .version-bar-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+}
+.version-bar-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 /* Below ~430 px the sentence plus a 44 px button no longer fit on one
    line without the text going to three words per row. */
 @media (max-width: 430px) {
@@ -73,5 +101,23 @@
     gap: 10px;
     padding: 14px;
     text-align: center;
+  }
+  .version-bar-close {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Clear the mobile dock. Same breakpoint the dock itself uses, and the
+   same tokens, so the two can never drift apart. Without this the bar
+   sits exactly on top of the five navigation buttons — the operator
+   would lose their primary navigation to a message that says nothing is
+   actually wrong. */
+@media (max-width: 768px) {
+  .version-bar {
+    bottom: calc(var(--m-dock-bottom-gap) + var(--m-dock-h) + 8px);
   }
 }

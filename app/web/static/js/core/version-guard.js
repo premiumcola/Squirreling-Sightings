@@ -27,6 +27,8 @@ let _serverHash = null;
 let _bootHash = null;
 let _timer = null;
 let _shown = false;
+let _dismissed = false;
+let _onVisible = null;
 
 /** The hash the server stamped into this document at render time. */
 function bootHash() {
@@ -85,12 +87,25 @@ function showBanner() {
   bar.setAttribute('role', 'status');
   bar.innerHTML =
     '<span class="version-bar-text">Diese Seite läuft auf einer älteren Fassung als der Server.</span>' +
-    '<button type="button" class="version-bar-btn">Neu laden</button>';
+    '<button type="button" class="version-bar-btn">Neu laden</button>' +
+    '<button type="button" class="version-bar-close" aria-label="Hinweis ausblenden">×</button>';
   bar.querySelector('.version-bar-btn').addEventListener('click', hardReload);
+  // Dismissable on purpose. Being one deploy behind breaks nothing, and
+  // the bar is fixed over the content — on a phone it sits where the
+  // navigation dock is. A notice the operator cannot get out of the way
+  // is worse than the staleness it reports, and it would be dismissed by
+  // closing the tab, which is the one action that loses their place.
+  bar.querySelector('.version-bar-close').addEventListener('click', () => {
+    bar.remove();
+    // Stays gone for this tab. It will come back on the next full load,
+    // which is exactly when acting on it is free.
+    _dismissed = true;
+  });
   document.body.appendChild(bar);
 }
 
 async function check() {
+  if (_dismissed) return;
   const server = await fetchServerHash();
   if (!server) return;
   _serverHash = server;
@@ -99,22 +114,32 @@ async function check() {
   if (!_bootHash || _bootHash !== _serverHash) showBanner();
 }
 
-/** Start watching. Idempotent. */
+/** Start watching. Idempotent — a second call is a no-op.
+ *
+ * The guard for that is real, not defensive boilerplate: without it a
+ * second call stacks a second interval and a second listener, and every
+ * later stop leaks both.
+ */
 export function startVersionGuard() {
+  if (_timer) return;
   _bootHash = bootHash();
   check();
   // A dashboard tab stays open for days on a wall display. Poll slowly,
   // and check again whenever it comes back to the foreground — that is
   // when someone is actually looking, and it costs nothing while hidden.
   _timer = setInterval(check, POLL_MS);
-  document.addEventListener('visibilitychange', () => {
+  // Named, so stopVersionGuard can actually take it off again.
+  _onVisible = () => {
     if (!document.hidden) check();
-  });
+  };
+  document.addEventListener('visibilitychange', _onVisible);
 }
 
 export function stopVersionGuard() {
   if (_timer) clearInterval(_timer);
   _timer = null;
+  if (_onVisible) document.removeEventListener('visibilitychange', _onVisible);
+  _onVisible = null;
 }
 
 // Exposed for the diagnostics panel and for anyone debugging this from

@@ -141,7 +141,34 @@ def shell_hash() -> str:
     So hash the JS tree too. Names go in alongside the bytes, which
     makes a file that is *added* or *deleted* shift the hash as well —
     a new module that nothing yet imports still counts as a new shell.
+
+    MEMOISED, and it has to be: walking and digesting 400-odd JS files
+    measured 246 ms. `/version.json` is polled by every open tab every
+    five minutes AND on every tab focus, and the value is stamped into
+    every page render — on the same box that runs the capture loops and
+    Coral inference. Un-memoised, a wall display and a phone left on the
+    dashboard would spend a quarter second of that box's time on md5 for
+    no reason at all.
+
+    Safe because the files cannot change under a running process: a
+    deploy replaces the container. In development the memo makes the
+    stamp and the endpoint agree on one value for the process's life,
+    which is what the guard needs — two calls disagreeing would report a
+    permanent phantom mismatch.
     """
+    if _shell_hash_memo[0] is not None:
+        return _shell_hash_memo[0]
+    _shell_hash_memo[0] = _compute_shell_hash()
+    return _shell_hash_memo[0]
+
+
+#: One slot, filled on first use. See shell_hash's docstring.
+_shell_hash_memo: list = [None]
+
+
+def _compute_shell_hash() -> str:
+    """The actual walk. Split out so the memo above stays readable and so
+    a test can force a recomputation without reaching into the cache."""
     h = _hashlib.md5()
     static = _pathlib.Path(__file__).parent.parent / "web" / "static"
     try:

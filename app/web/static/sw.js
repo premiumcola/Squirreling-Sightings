@@ -104,10 +104,25 @@ async function _fallback(request) {
 }
 
 /** Network-first: the answer is whatever the server says, and the cache
- *  is only consulted when the network fails. */
+ *  is only consulted when the network fails.
+ *
+ *  `cache: 'no-cache'` is load-bearing, not decoration. A plain
+ *  `fetch(request)` is served by the BROWSER's HTTP cache, so this
+ *  function could hand back a stale file while believing it had gone to
+ *  the network — the same bug one layer down, and it would have made
+ *  this whole rewrite look like it did nothing.
+ *
+ *  Note it is 'no-cache', not 'no-store': the request still carries its
+ *  validators, so an unchanged file comes back as a 304 with no body.
+ *  Correctness on every load, at the cost of one conditional request per
+ *  file — and, critically, this no longer depends on the server sending
+ *  the right Cache-Control. index.html stamps ?v= on exactly two URLs;
+ *  the several hundred ES modules behind them are fetched at addresses
+ *  that never change, so their freshness rests entirely here.
+ */
 async function _networkFirst(request) {
   try {
-    const net = await fetch(request);
+    const net = await fetch(request, { cache: 'no-cache' });
     if (net && net.ok) _put(request, net.clone());
     return net;
   } catch (err) {

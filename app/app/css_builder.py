@@ -148,6 +148,36 @@ LOAD_ORDER = [
     "38-version-bar.css",
 ]
 
+
+def _warn_unregistered(partials_dir, log) -> list:
+    """Name every partial on disk that LOAD_ORDER does not mention.
+
+    LOAD_ORDER is an explicit list, so a new partial that nobody adds to
+    it is simply not compiled — no error, no warning, and `app.css` is
+    byte-identical to the previous build, which means even the "rebuilt
+    from N partials" line does not move. The author sees their file in
+    the directory, the browser never sees a single one of its rules, and
+    the symptom is a specific block of styling missing while everything
+    around it is current.
+
+    Cheap to detect and impossible to notice otherwise, so: say it out
+    loud. Returns the orphans so a test can assert there are none.
+    """
+    try:
+        on_disk = {p.name for p in partials_dir.glob("*.css")}
+    except Exception:
+        return []
+    orphans = sorted(on_disk - set(LOAD_ORDER))
+    if orphans:
+        log.warning(
+            "[css] %d Partial(s) liegen im Ordner, stehen aber nicht in LOAD_ORDER "
+            "und werden NICHT kompiliert: %s",
+            len(orphans),
+            ", ".join(orphans),
+        )
+    return orphans
+
+
 _BANNER = (
     "/* GENERATED FILE — do not edit. Source of truth: app/web/static/css/*.css\n"
     " * Run scripts/build_css.py (or restart the server) to regenerate.\n"
@@ -174,6 +204,13 @@ def build_css(*, log: logging.Logger | None = None) -> bool:
             log.debug("[css] partials dir missing — skipping build")
         return False
 
+    # BEFORE the build, and unconditionally — the report below only runs
+    # when the output actually changes, and an orphan-only commit
+    # produces byte-identical output. The one case that most needs the
+    # warning is the one that would never reach it.
+    if log:
+        _warn_unregistered(partials_dir, log)
+
     chunks: list[str] = [_BANNER]
     found = 0
     missing: list[str] = []
@@ -193,6 +230,16 @@ def build_css(*, log: logging.Logger | None = None) -> bool:
             log.debug("[css] no partials present — skipping build (app.css untouched)")
         return False
 
+    # Same reasoning: a partial listed but absent is a shipped stylesheet
+    # one file short, and it was reported only as a parenthetical on an
+    # INFO line that a no-op build never prints.
+    if missing and log:
+        log.warning(
+            "[css] %d Partial(s) stehen in LOAD_ORDER, fehlen aber auf der Platte: %s",
+            len(missing),
+            ", ".join(missing),
+        )
+
     new_content = "\n".join(chunks)
     if out_path.exists() and out_path.read_text(encoding="utf-8") == new_content:
         if log:
@@ -201,10 +248,7 @@ def build_css(*, log: logging.Logger | None = None) -> bool:
 
     out_path.write_text(new_content, encoding="utf-8")
     if log:
-        msg = "[css] rebuilt app.css from %d partials"
-        if missing:
-            msg += f" (missing: {', '.join(missing)})"
-        log.info(msg, found)
+        log.info("[css] rebuilt app.css from %d partials", found)
     return True
 
 

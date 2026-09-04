@@ -5,9 +5,27 @@ on:
     tags: ['v*.*.*']
   workflow_dispatch:
 
+# NEVER cancel a main build. This workflow's only triggers are a push to
+# main, a version tag, and a manual dispatch — there is no pull_request
+# trigger, so `cancel-in-progress: true` never saved a redundant CI run.
+# What it cancelled was PUBLISHES.
+#
+# The two jobs below share this group, and they are not equally fast:
+# `:latest` is a normal Python image while `:coral` is Python 3.9 with
+# pycoral and tflite-runtime and takes substantially longer. A second
+# push landing in that gap killed the run with `:latest` already pushed
+# and `:coral` — the image the production host actually pulls — never
+# published for that commit.
+#
+# Which is exactly what happened: five commits went to main inside two
+# hours, each one cancelling its predecessor's Coral build, so
+# `docker compose pull` on the host kept finding nothing new and weeks
+# of front-end work stayed invisible. A queued duplicate build costs a
+# few CI minutes; a cancelled one costs a deploy nobody knows is
+# missing.
 concurrency:
   group: ghcr-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/premiumcola/squirreling-sightings

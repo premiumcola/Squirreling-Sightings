@@ -78,6 +78,17 @@ app = Flask(
 
 # Jinja `?v=...` cache-bust helper — the template tag {{ static_v('app.css') }}
 # calls _file_hash which lives in lifecycle.py post-refactor.
+# Force revalidation on every static file. Werkzeug's DOCUMENTED default
+# when max_age is unset is already `no-cache`, and that default is the
+# only thing keeping ~350 unstamped ES-module URLs fresh: index.html
+# hash-stamps app.css and main.js and nothing else, so every module
+# behind them is fetched at an address that never changes between
+# deploys. Relying on an inherited default for that is how the mixed
+# builds happened — one well-meant `SEND_FILE_MAX_AGE_DEFAULT = 31536000`
+# performance tweak would silently pin every module for a year.
+# Stated here so it is a decision, and pinned by a test.
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
 app.jinja_env.globals["static_v"] = _file_hash
 # The whole-shell hash (css + the JS tree), stamped into index.html so a
 # tab can tell whether it is running the server's current build.

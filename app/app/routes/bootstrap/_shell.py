@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import jsonify, render_template, send_from_directory
+from flask import jsonify, make_response, render_template, send_from_directory
 
 from ... import app_state
 from ._blueprint import bp
@@ -12,7 +12,20 @@ from ._blueprint import bp
 
 @bp.get('/')
 def index():
-    return render_template('index.html')
+    """The app shell.
+
+    Explicitly no-store, and it matters more than it looks: this document
+    is the ONLY carrier of the two ?v= cache-bust stamps and of the
+    shell-version meta tag the staleness guard reads. Served with no
+    Cache-Control, no ETag and no Last-Modified — as it was — the service
+    worker could pin a browser to an old shell after a single transient
+    network failure, and that old shell then hands out old ?v= values for
+    everything else. One stale response propagating into a stale build is
+    exactly the failure this whole chain has been fighting.
+    """
+    resp = make_response(render_template('index.html'))
+    resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+    return resp
 
 
 @bp.get('/media/<path:subpath>')

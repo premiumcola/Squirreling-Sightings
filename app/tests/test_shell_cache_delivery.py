@@ -41,22 +41,35 @@ def _code() -> str:
 # ── 1. the hash has to move when JavaScript moves ────────────────────
 
 
-def test_shell_hash_covers_javascript(tmp_path, monkeypatch):
+@pytest.fixture
+def fresh_hash():
+    """`shell_hash` is memoised for the process's life (it costs ~350 ms
+    and every open tab polls it). These tests edit files on purpose, so
+    they need the computation, not the cached answer."""
+    from app import lifecycle
+
+    def compute():
+        lifecycle._shell_hash_memo[0] = None
+        return lifecycle.shell_hash()
+
+    yield compute
+    lifecycle._shell_hash_memo[0] = None
+
+
+def test_shell_hash_covers_javascript(fresh_hash):
     """A JS-only change must produce a different shell hash.
 
     This is the one that stranded the player: the whole rework was
     JavaScript, app.css never moved, and the hash the SW keys its cache
     on stayed byte-identical across every deploy.
     """
-    from app import lifecycle
-
-    before = lifecycle.shell_hash()
+    before = fresh_hash()
 
     victim = next(iter(sorted((STATIC / "js").rglob("*.js"))))
     original = victim.read_bytes()
     try:
         victim.write_bytes(original + b"\n// cache-bust probe\n")
-        after = lifecycle.shell_hash()
+        after = fresh_hash()
     finally:
         victim.write_bytes(original)
 
@@ -66,14 +79,14 @@ def test_shell_hash_covers_javascript(tmp_path, monkeypatch):
     )
     # …and it comes back when the edit is reverted, i.e. it is a hash of
     # the content and not a counter that drifts.
-    assert lifecycle.shell_hash() == before
+    assert fresh_hash() == before
 
 
-def test_shell_hash_covers_css_too():
+def test_shell_hash_covers_css_too(fresh_hash):
     """The css half must not have been lost in the rewrite."""
     from app import lifecycle
 
-    before = lifecycle.shell_hash()
+    before = fresh_hash()
     css = STATIC / "app.css"
     if not css.exists():
         pytest.skip("app.css is built at boot and absent in this checkout")
@@ -81,10 +94,45 @@ def test_shell_hash_covers_css_too():
     try:
         css.write_bytes(original + b"\n/* probe */\n")
         lifecycle._static_hashes.pop("app.css", None)
-        assert lifecycle.shell_hash() != before
+        assert fresh_hash() != before
     finally:
         css.write_bytes(original)
         lifecycle._static_hashes.pop("app.css", None)
+
+
+def test_the_hash_is_memoised():
+    """It walks ~400 files and measured 350 ms. Every open tab polls
+    /version.json every five minutes and on every focus, and the value is
+    stamped into every render — on the box that runs Coral inference.
+    Recomputing it per call is not an option."""
+    import time
+
+    from app import lifecycle
+
+    lifecycle._shell_hash_memo[0] = None
+    t0 = time.perf_counter()
+    first = lifecycle.shell_hash()
+    cold_ms = (time.perf_counter() - t0) * 1000
+
+    t0 = time.perf_counter()
+    second = lifecycle.shell_hash()
+    warm_ms = (time.perf_counter() - t0) * 1000
+
+    assert first == second
+    # Not a timing assertion on the cold path (CI machines vary wildly);
+    # the claim is only that the second call does no work at all.
+    assert warm_ms < max(
+        1.0, cold_ms / 20
+    ), f"second call took {warm_ms:.3f} ms against a {cold_ms:.1f} ms cold call — not memoised"
+
+
+def test_the_stamp_and_the_endpoint_cannot_disagree():
+    """Both go through the same memo. Two calls returning different
+    values would make core/version-guard.js report a permanent phantom
+    mismatch and train the operator to ignore the bar."""
+    from app import lifecycle
+
+    assert lifecycle.shell_hash() == lifecycle.shell_hash()
 
 
 def test_version_endpoint_uses_the_shell_hash():
@@ -140,8 +188,12 @@ def test_sw_is_network_first_for_code():
     net = src[src.index("async function _networkFirst") : src.index("async function _cacheFirst")]
     # The network response is what gets returned; the cache is only
     # touched in the catch.
-    assert "const net = await fetch(request)" in net
+    assert "const net = await fetch(request" in net
     assert "return net" in net
+    # And it must actually GO to the network. A plain fetch() inside a
+    # service worker is answered by the browser's own HTTP cache, so
+    # "network-first" without this reads stale and reports success.
+    assert "cache: 'no-cache'" in net, "the network-first path can be served from the HTTP cache"
     cached_return = net.index("if (cached) return cached")
     assert net.index("catch") < cached_return, "cache is consulted before the network fails"
 
@@ -172,3 +224,119 @@ def test_sw_does_not_cache_its_own_version_probe():
     cache would be circular."""
     src = SW.read_text(encoding="utf-8")
     assert "url.pathname === '/version.json'" in src
+
+
+# ── 4. the last mile: headers nobody was asserting ───────────────────
+
+
+def _configured_max_age() -> object:
+    """The SEND_FILE_MAX_AGE_DEFAULT literal server.py actually sets.
+
+    Read from the source rather than hardcoded, so this test measures the
+    project's real choice: change that line to 31536000 and the header
+    assertion below fails, which is the whole point — the value was
+    previously not set at all and the correct behaviour was inherited
+    from a library default nobody had pinned.
+    """
+    src = (Path(__file__).resolve().parents[1] / "app" / "server.py").read_text(encoding="utf-8")
+    # Anchored on the assignment, not the bare name: the comment above
+    # that line names 31536000 as the value that would BREAK this, and a
+    # looser pattern happily read the warning instead of the setting.
+    m = re.search(r'app\.config\[\s*"SEND_FILE_MAX_AGE_DEFAULT"\s*\]\s*=\s*([0-9]+|None)', src)
+    assert m, "server.py no longer states a static cache policy"
+    return None if m.group(1) == "None" else int(m.group(1))
+
+
+def test_unstamped_modules_are_revalidated():
+    """index.html hash-stamps app.css and main.js and NOTHING else, so
+    the several hundred ES modules behind them are fetched at URLs that
+    never change between deploys. Their freshness rests entirely on the
+    Cache-Control this policy produces.
+
+    A bare Flask app over the real static folder, following the pattern
+    the other route tests use — booting app.server would need the
+    container's config file.
+    """
+    flask = pytest.importorskip("flask")
+
+    app = flask.Flask(__name__, static_folder=str(STATIC))
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = _configured_max_age()
+
+    resp = app.test_client().get("/static/js/core/dom.js")
+    assert resp.status_code == 200
+    cc = (resp.headers.get("Cache-Control") or "").lower()
+    assert "no-cache" in cc or "max-age=0" in cc, (
+        f"static modules would be served with Cache-Control: {cc!r} — a browser "
+        "may hold them across deploys and rebuild the mixed-build symptom"
+    )
+
+
+def test_the_shell_document_is_never_stored():
+    """The shell carries both ?v= stamps and the shell-version meta, and
+    the service worker caches it. A cached shell hands out stale stamps
+    for everything else, so one bad response propagates into a whole
+    stale build."""
+    src = (
+        Path(__file__).resolve().parents[1] / "app" / "routes" / "bootstrap" / "_shell.py"
+    ).read_text(encoding="utf-8")
+    body = src[src.index("def index(") : src.index("def media_file")]
+    assert "Cache-Control" in body, "the app shell is served with no cache directive at all"
+    assert "no-store" in body, f"the shell is cacheable:\n{body}"
+
+
+def test_the_static_cache_policy_is_stated_not_inherited():
+    """It was correct only because of a library default that nothing in
+    this repo asserted, and Werkzeug was not even pinned."""
+    src = (Path(__file__).resolve().parents[1] / "app" / "server.py").read_text(encoding="utf-8")
+    assert "SEND_FILE_MAX_AGE_DEFAULT" in src
+    reqs = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text(encoding="utf-8")
+    assert "werkzeug==" in reqs.lower(), "werkzeug decides that header and is unpinned"
+
+
+# ── 5. the CSS build cannot drop a partial in silence ────────────────
+
+
+def test_every_partial_on_disk_is_registered():
+    """LOAD_ORDER is an explicit list; a partial missing from it is not
+    compiled, and app.css stays byte-identical so nothing looks wrong."""
+    from app.css_builder import LOAD_ORDER
+
+    css_dir = Path(__file__).resolve().parents[1] / "web" / "static" / "css"
+    on_disk = {p.name for p in css_dir.glob("*.css")}
+    orphans = sorted(on_disk - set(LOAD_ORDER))
+    assert not orphans, f"partials on disk but not in LOAD_ORDER — never compiled: {orphans}"
+
+
+def test_an_unregistered_partial_is_reported(tmp_path):
+    """And when it does happen, it has to be audible."""
+    from app.css_builder import _warn_unregistered
+
+    (tmp_path / "99-orphan.css").write_text("/* x */", encoding="utf-8")
+    said = []
+
+    class _Log:
+        def warning(self, msg, *args):
+            said.append(msg % args)
+
+    assert _warn_unregistered(tmp_path, _Log()) == ["99-orphan.css"]
+    assert said and "99-orphan.css" in said[0]
+
+
+# ── 6. the guard is actually wired in ────────────────────────────────
+
+
+def test_the_guard_is_wired_end_to_end():
+    """Three load-bearing connections, none of which fails loudly: the
+    meta tag, the Jinja global behind it, and the start call."""
+    web = Path(__file__).resolve().parents[1] / "web"
+    app_dir = Path(__file__).resolve().parents[1] / "app"
+
+    tpl = (web / "templates" / "index.html").read_text(encoding="utf-8")
+    assert 'name="shell-version"' in tpl
+    assert "shell_v()" in tpl
+
+    server = (app_dir / "server.py").read_text(encoding="utf-8")
+    assert '"shell_v"' in server, "the template calls shell_v() but nothing registers it"
+
+    main_js = (web / "static" / "js" / "main.js").read_text(encoding="utf-8")
+    assert "startVersionGuard(" in main_js, "the guard is imported but never started"

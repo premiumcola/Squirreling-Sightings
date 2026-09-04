@@ -66,6 +66,29 @@ export function railClockHtml() {
 }
 
 /**
+ * The playhead — which IS the play button.
+ *
+ * „Timeline button mit play in gross fehlt noch" and, before that, „der
+ * play button in der abspiel timeline". One object, two jobs: it marks
+ * where you are and it starts and stops you being there. A separate disc
+ * floating over the middle of the picture said the same thing a second
+ * time, in the one place that covers the subject.
+ *
+ * Both glyphs ship and CSS shows one, so a play/pause flip is a class on
+ * an ancestor and never a re-render under the finger mid-drag.
+ */
+function _headHtml() {
+  return (
+    `<button type="button" class="vp-tl-head" aria-label="Abspielen oder anhalten">` +
+    `<svg class="vp-tl-head-icon vp-tl-head-icon--play" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">` +
+    `<path fill="currentColor" d="M8 5v14l11-7z"/></svg>` +
+    `<svg class="vp-tl-head-icon vp-tl-head-icon--pause" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">` +
+    `<path fill="currentColor" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>` +
+    `</button>`
+  );
+}
+
+/**
  * Render the rail's static furniture for a model. The playhead is NOT
  * included: it moves every frame and is written through the custom
  * property instead of being re-rendered.
@@ -90,7 +113,7 @@ export function railHtml(model) {
   return (
     railCaptionsHtml(model) +
     `<div class="vp-tl-track">${bands}${marker}` +
-    `<div class="vp-tl-fill"></div><div class="vp-tl-head"></div></div>` +
+    `<div class="vp-tl-fill"></div>${_headHtml()}</div>` +
     // The drag surface. Transparent, full width, and tall enough to
     // meet the 44 px touch minimum around a 6 px rail — see 36b.
     `<div class="vp-tl-hit" role="slider" aria-label="Wiedergabeposition" tabindex="0"></div>` +

@@ -58,5 +58,10 @@ export function mountTransport(stageEl, controlsHost, cfg, stage) {
     // No ±10 either: two discs that reproduce a drag of the playhead,
     // and stand in front of the picture to do it.
     skips: false,
+    // And no centre disc. The timeline's own playhead IS the play button
+    // now (timeline/_rail.js), so a disc over the middle of the picture
+    // is the same control a second time, standing exactly where the
+    // subject usually is.
+    playPause: false,
   });
 }

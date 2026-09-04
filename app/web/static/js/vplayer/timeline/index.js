@@ -44,6 +44,7 @@ export function mountTimeline(host, cfg, deps = {}) {
     globalThis.matchMedia('(pointer: coarse)').matches;
 
   const rail = () => host.querySelector('.vp-tl-track');
+  const head = () => host.querySelector('.vp-tl-head');
 
   // How tall the lane block is, published to CSS so the playhead's riser
   // can reach exactly to the top of it — „Die Linie geht hoch, dadrüber
@@ -96,25 +97,38 @@ export function mountTimeline(host, cfg, deps = {}) {
       getDuration: () => model.duration,
       isTouch: () => _touch,
     });
-    scrub = attachScrub(host.querySelector('.vp-tl-hit'), {
-      getRect: () => rail()?.getBoundingClientRect() || { left: 0, width: 0 },
-      getDuration: () => model.duration,
-      onSeek: deps.onSeek,
-      // Every drag position lands here, and NOTHING here decodes video.
-      // The marker moves so the drag tracks the finger, and the
-      // filmstrip bubble shows the frame — the picture itself catches up
-      // once, on release. See _scrub.js's header for the five-second
-      // backlog this replaced.
-      onPreview: (t, x, phase) => {
-        setPlayhead(host, t, model.duration);
-        if (phase === 'end') preview?.hide();
-        else if (phase === 'start') preview?.show(x, t);
-        else preview?.moveTo(x, t);
+    // TWO drag surfaces, one behaviour. The transparent band gives the
+    // 6 px rail a 44 px target anywhere along its length; the grip
+    // itself has to be draggable too, or the one thing that LOOKS
+    // grabbable is the one thing that is not. Only the grip answers a
+    // tap, because only the grip is the play button.
+    const wire = (el, onTap) =>
+      attachScrub(el, {
+        getRect: () => rail()?.getBoundingClientRect() || { left: 0, width: 0 },
+        getDuration: () => model.duration,
+        onSeek: deps.onSeek,
+        onTap,
+        // Every drag position lands here, and NOTHING here decodes video.
+        // The marker moves so the drag tracks the finger, and the
+        // filmstrip bubble shows the frame — the picture itself catches up
+        // once, on release. See _scrub.js's header for the five-second
+        // backlog this replaced.
+        onPreview: (t, x, phase) => {
+          setPlayhead(host, t, model.duration);
+          if (phase === 'end') preview?.hide();
+          else if (phase === 'start') preview?.show(x, t);
+          else preview?.moveTo(x, t);
+        },
+        isPlaying: deps.isPlaying,
+        onPause: deps.onPause,
+        onResume: deps.onResume,
+      });
+    scrub = {
+      parts: [wire(host.querySelector('.vp-tl-hit'), null), wire(head(), deps.onToggle)],
+      teardown() {
+        for (const s of this.parts) s?.teardown();
       },
-      isPlaying: deps.isPlaying,
-      onPause: deps.onPause,
-      onResume: deps.onResume,
-    });
+    };
     rescan = wireRescan(host, deps);
     return model;
   };
@@ -124,6 +138,12 @@ export function mountTimeline(host, cfg, deps = {}) {
     model: () => model,
     /** Playhead only — called every frame, so it touches one property. */
     tick: (t) => setPlayhead(host, t, model.duration),
+    /** Which glyph the grip shows. An attribute, so the swap is CSS and
+     *  never a re-render of the element under a dragging finger. */
+    setPlaying: (on) => {
+      const v = on ? '1' : '0';
+      if (host.dataset.playing !== v) host.dataset.playing = v;
+    },
     teardown: () => {
       scrub?.teardown();
       preview?.teardown();

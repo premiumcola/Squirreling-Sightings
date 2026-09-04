@@ -132,6 +132,12 @@ export function mountPlayerChrome(stage, controlsHost, opts = {}) {
     getVideo,
     timebar: opts.timebar !== false,
     skips: opts.skips !== false,
+    // Forwarded like the two above. This object is built by hand rather
+    // than spread, so an option added to renderTransport and not added
+    // HERE is silently ignored — which is exactly what happened to
+    // `playPause` on its first pass: the caller asked for no centre
+    // disc, the disc kept rendering, and nothing anywhere said why.
+    playPause: opts.playPause !== false,
     nativeAvailable: pills && canNativeFullscreen(video),
     onInteract: () => autoHide?.reveal(),
     onNative: () => handoffToNativePlayer(getVideo()),

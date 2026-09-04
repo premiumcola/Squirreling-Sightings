@@ -207,3 +207,83 @@ test('eine Schiene ohne Breite löst nicht alles auf den linken Rand auf', () =>
   assert.equal(pctFromRect(150, { left: 100, width: 0 }), null);
   assert.equal(timeFromRect(150, { left: 100, width: 0 }, 10), null);
 });
+
+// ── der Griff ist zugleich der Play-Knopf ─────────────────────────────
+//
+// „Timeline button mit play in gross fehlt noch" — der Zeiger markiert
+// nicht nur die Stelle, er startet und stoppt auch. Damit muss ein Druck
+// ohne Bewegung etwas anderes bedeuten als ein Zug.
+
+test('ein Druck ohne Bewegung schaltet um, statt auf sich selbst zu springen', () => {
+  const taps = [];
+  const el = stubEl();
+  const seeks = [];
+  attachScrub(el, {
+    getRect: () => ({ left: 100, width: 200 }),
+    getDuration: () => 10,
+    onSeek: (t) => seeks.push(t),
+    onTap: () => taps.push(1),
+  });
+  down(el, 180);
+  up(el, 180);
+  assert.equal(taps.length, 1, 'der Druck hat nicht umgeschaltet');
+  assert.deepEqual(seeks, [], 'und er darf nicht zusätzlich springen');
+});
+
+test('ein Wackeln von zwei Pixeln bleibt ein Druck', () => {
+  const taps = [];
+  const el = stubEl();
+  attachScrub(el, {
+    getRect: () => ({ left: 100, width: 200 }),
+    getDuration: () => 10,
+    onSeek: () => {},
+    onTap: () => taps.push(1),
+  });
+  down(el, 180);
+  move(el, 182);
+  up(el, 182);
+  assert.equal(taps.length, 1, 'eine Hand hält nie ganz still');
+});
+
+test('ein echter Zug springt und schaltet NICHT um', () => {
+  const taps = [];
+  const el = stubEl();
+  const seeks = [];
+  attachScrub(el, {
+    getRect: () => ({ left: 100, width: 200 }),
+    getDuration: () => 10,
+    onSeek: (t) => seeks.push(t),
+    onTap: () => taps.push(1),
+  });
+  down(el, 120);
+  move(el, 200);
+  up(el, 200);
+  assert.deepEqual(taps, []);
+  assert.deepEqual(seeks, [5]);
+});
+
+test('ohne onTap springt ein Druck weiterhin — die Schiene ist kein Knopf', () => {
+  const { el, seeks } = harness();
+  down(el, 200);
+  up(el, 200);
+  assert.deepEqual(seeks, [5]);
+});
+
+test('das Umschalten überstimmt das Fortsetzen des Zuges', () => {
+  // Sonst pausiert der Druck (weil gespielt wurde), schaltet um — und
+  // der resume des Zuges startet gleich wieder. Der Knopf täte nichts.
+  const events = [];
+  const el = stubEl();
+  attachScrub(el, {
+    getRect: () => ({ left: 100, width: 200 }),
+    getDuration: () => 10,
+    onSeek: () => {},
+    onTap: () => events.push('toggle'),
+    isPlaying: () => true,
+    onPause: () => events.push('pause'),
+    onResume: () => events.push('resume'),
+  });
+  down(el, 180);
+  up(el, 180);
+  assert.deepEqual(events, ['pause', 'toggle'], 'kein resume nach dem Umschalten');
+});

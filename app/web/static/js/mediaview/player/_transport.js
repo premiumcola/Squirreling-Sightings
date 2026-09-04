@@ -78,7 +78,7 @@ function _seekBy(video, delta) {
   video.currentTime = dur > 0 ? Math.min(dur, next) : next;
 }
 
-function _markup(nativeAvailable, pipAvailable, timebar = true, skips = true) {
+function _markup(nativeAvailable, pipAvailable, timebar = true, skips = true, playPause = true) {
   const nativeBtn = nativeAvailable
     ? `<button type="button" class="mv-player-native" data-act="native" ` +
       `title="Im Systemplayer öffnen — ${NATIVE_WARNING}" ` +
@@ -110,13 +110,20 @@ function _markup(nativeAvailable, pipAvailable, timebar = true, skips = true) {
     ? `<button type="button" class="mv-player-btn mv-player-skip" data-skip="10" ` +
       `aria-label="10 Sekunden vor" title="10 s vor">${_skipSvg(false)}</button>`
     : '';
+  // The centre disc is OPTIONAL too. Where the caller's own timeline
+  // carries the playhead AS the play button, a second disc floating over
+  // the middle of the picture is the same control twice — and it sits on
+  // the one part of the frame the subject is usually in. „das ganze
+  // Player Layout mit dem Play Button … der Play Button fließt unten auf
+  // der Timeline." The legacy shell keeps it (default true).
+  const play = playPause
+    ? `<button type="button" class="mv-player-btn mv-player-play" data-act="play" ` +
+      `aria-label="Abspielen / Pause" title="Abspielen / Pause">${_PLAY_SVG}</button>`
+    : '';
+  const centre =
+    play || back || fwd ? `<div class="mv-player-center">${back}${play}${fwd}</div>` : '';
   return (
-    `<div class="mv-player-center">` +
-    back +
-    `<button type="button" class="mv-player-btn mv-player-play" data-act="play" ` +
-    `aria-label="Abspielen / Pause" title="Abspielen / Pause">${_PLAY_SVG}</button>` +
-    fwd +
-    `</div>` +
+    centre +
     // The strip is suppressed whole when the host already owns a clock:
     // it is centred ON the picture, so where a caller renders its own
     // time axis below the stage the two print through each other. With
@@ -208,6 +215,7 @@ export function renderTransport(host, opts = {}) {
     !!opts.pipAvailable,
     opts.timebar !== false,
     opts.skips !== false,
+    opts.playPause !== false,
   );
   const playBtn = host.querySelector('.mv-player-play');
   const elapsedEl = host.querySelector('.mv-player-elapsed');

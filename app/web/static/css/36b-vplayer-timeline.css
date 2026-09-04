@@ -190,7 +190,11 @@
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 2px 10px;
-  margin-bottom: 4px;
+  /* Clearance for the grip. It is a 44 px disc centred on a 6 px rail,
+     so it reaches ~19 px above the rail's top edge — straight into this
+     row, where it clipped „▼ erstes Ereignis" in half. The caption row
+     has to stand off by more than that overhang. */
+  margin-bottom: 22px;
   pointer-events: none;
   font-size: 11px;
   line-height: 1.3;
@@ -261,34 +265,79 @@
   background: var(--vp-accent);
 }
 
-/* THE PLAYHEAD, as drawn in the concept: a solid grip on the rail with
-   a line rising from it through the lanes above, so the moment under the
-   finger is readable against every object's own bar at once —
-   „Die Linie geht hoch, dadrüber sind die Timelines in Farbe zu den
-   Objekten eingezeichnet."
+/* THE PLAYHEAD, which IS the play button — "Timeline button mit play in
+   gross fehlt noch". One object doing both jobs: it marks where you are,
+   and it starts and stops you being there. A second disc floating over
+   the middle of the picture said the same thing twice, in the one place
+   that covers the subject.
 
-   18 px, not 14. It is the one thing on this strip that gets dragged,
-   and it was smaller than the dots marking single detections. */
+   A line rises from it through the lanes above, so the moment under the
+   finger is readable against every object's own bar at once — "Die Linie
+   geht hoch, dadrueber sind die Timelines in Farbe zu den Objekten
+   eingezeichnet." */
 .vp-tl-head {
   position: absolute;
   top: 50%;
   left: calc(var(--vp-play-pct) * 100%);
-  width: 18px;
-  height: 18px;
-  margin-left: -9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vp-tap);
+  height: var(--vp-tap);
+  margin-left: calc(var(--vp-tap) / -2);
+  padding: 0;
+  border: 0;
   transform: translateY(-50%);
   border-radius: 50%;
   background: #ffffff;
-  /* Reads as a grip on top of the rail rather than a bead threaded
+  /* Near-black on white: the glyph has to survive being dragged across a
+     bright band and a dark one. */
+  color: #0b1014;
+  /* Reads as a grip resting ON the rail rather than a bead threaded
      through it. */
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  cursor: grab;
+  touch-action: none;
   z-index: 3;
+}
+
+.vp-tl-head:active {
+  cursor: grabbing;
+}
+
+@media (hover: hover) {
+  .vp-tl-head:hover {
+    background: #f2fff6;
+  }
+}
+
+.vp-tl-head:focus-visible {
+  outline: 2px solid var(--vp-accent);
+  outline-offset: 3px;
+}
+
+/* One glyph at a time. Both ship in the markup so a play/pause flip is a
+   class on the strip root — never a re-render under a dragging finger. */
+.vp-tl-head-icon {
+  display: block;
+}
+
+.vp-tl-head-icon--pause {
+  display: none;
+}
+
+.vp-timeline[data-playing='1'] .vp-tl-head-icon--play {
+  display: none;
+}
+
+.vp-timeline[data-playing='1'] .vp-tl-head-icon--pause {
+  display: block;
 }
 
 /* The riser. Drawn upward out of the rail and behind the grip, so it
    crosses every lane at the playhead's own position. `bottom: 50%`
    starts it at the rail's centre line; the height is the lane block's,
-   published by _lanes.js as --vp-tl-lanes-h. */
+   published by timeline/index.js as --vp-tl-lanes-h. */
 .vp-tl-head::before {
   content: '';
   position: absolute;
@@ -297,7 +346,7 @@
   width: 2px;
   height: var(--vp-tl-lanes-h, 0px);
   margin-left: -1px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.5);
   pointer-events: none;
 }
 

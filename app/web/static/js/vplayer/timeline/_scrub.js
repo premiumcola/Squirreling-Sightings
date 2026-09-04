@@ -71,6 +71,9 @@ export function timeFromRect(clientX, rect, duration) {
  * @param {() => boolean} [opts.isPlaying]
  * @param {() => void} [opts.onPause]
  * @param {() => void} [opts.onResume]
+ * @param {() => void} [opts.onTap]  a press that never moved — the
+ *        playhead is also the play button, so pressing it without
+ *        dragging must toggle rather than seek to where it already is.
  * @returns {{teardown: () => void}|null}
  */
 export function attachScrub(el, opts = {}) {
@@ -78,6 +81,12 @@ export function attachScrub(el, opts = {}) {
 
   let resumeAfter = false;
   let lastTime = null;
+  let downX = null;
+  let moved = false;
+
+  /** Past this many pixels a press is a drag, not a tap. Four is the
+   *  usual slop for a finger that meant to hold still. */
+  const TAP_SLOP_PX = 4;
 
   /** The time under the pointer, or null when there is nothing to seek. */
   const timeAt = (clientX) => timeFromRect(clientX, opts.getRect(), opts.getDuration());
@@ -92,6 +101,8 @@ export function attachScrub(el, opts = {}) {
     } catch {
       /* a browser without pointer capture still gets the seek */
     }
+    downX = ev.clientX;
+    moved = false;
     resumeAfter = opts.isPlaying ? opts.isPlaying() === true : false;
     if (resumeAfter) opts.onPause?.();
     const t = timeAt(ev.clientX);
@@ -102,6 +113,7 @@ export function attachScrub(el, opts = {}) {
 
   const onMove = (ev) => {
     if (!el.hasPointerCapture?.(ev.pointerId)) return;
+    if (downX != null && Math.abs(ev.clientX - downX) > TAP_SLOP_PX) moved = true;
     const t = timeAt(ev.clientX);
     if (t == null) return;
     lastTime = t;
@@ -118,14 +130,27 @@ export function attachScrub(el, opts = {}) {
         /* already released */
       }
     }
-    // The one seek of the whole gesture. A click without any move lands
-    // here too, having gone through onDown, so a plain tap on the rail
-    // still jumps — it just jumps once.
     const t = timeAt(ev.clientX);
     const target = t == null ? lastTime : t;
-    if (target != null) opts.onSeek(target);
     opts.onPreview?.(target ?? 0, localX(ev.clientX), 'end');
+
+    // A press that never moved is a TAP, and on the playhead — which is
+    // the play button — that means toggle, not "seek to where you
+    // already are". Only offered when the caller wants it; the rail's
+    // own band has no tap meaning and still jumps.
+    if (!moved && typeof opts.onTap === 'function') {
+      opts.onTap();
+      // The toggle owns the playback state now, so the drag's own
+      // resume must not fight it back the other way.
+      resumeAfter = false;
+    } else if (target != null) {
+      // The one seek of the whole gesture.
+      opts.onSeek(target);
+    }
+
     lastTime = null;
+    downX = null;
+    moved = false;
     if (resumeAfter) opts.onResume?.();
     resumeAfter = false;
   };

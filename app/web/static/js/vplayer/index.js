@@ -183,9 +183,11 @@ function _wirePlayhead(cfg, stage, timeline, overlays) {
     raf = requestAnimationFrame(frame);
   };
   const start = () => {
+    timeline?.setPlaying(true);
     if (!raf) raf = requestAnimationFrame(frame);
   };
   const stop = () => {
+    timeline?.setPlaying(false);
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
     // One last sync so the head lands exactly on the paused position
@@ -202,6 +204,7 @@ function _wirePlayhead(cfg, stage, timeline, overlays) {
   video.addEventListener('seeked', sync);
   video.addEventListener('loadedmetadata', sync);
   if (!video.paused) start();
+  else timeline?.setPlaying(false);
   sync();
 
   return {
@@ -301,6 +304,12 @@ function _mountAll(cfg) {
     isPlaying: () => !stage.video.paused && !stage.video.ended,
     onPause: () => stage.video.pause(),
     onResume: () => stage.video.play().catch(() => {}),
+    // The playhead IS the play button, so a press on it that never moved
+    // toggles playback instead of seeking to where it already sits.
+    onToggle: () => {
+      if (stage.video.paused || stage.video.ended) stage.video.play().catch(() => {});
+      else stage.video.pause();
+    },
   });
 
   const playhead = _wirePlayhead(cfg, stage, timeline, overlays);

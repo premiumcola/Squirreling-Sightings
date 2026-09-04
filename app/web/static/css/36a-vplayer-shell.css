@@ -140,8 +140,13 @@
   height: 36px;
   padding: 0;
   border: 0;
-  border-radius: var(--vp-radius-sm);
-  background: var(--surface);
+  /* Discs, and the same glass as the chevrons on the picture — one
+     language for every round control in this player. They used to be
+     --surface squares on the --vp-chrome bar, which is two dark greys
+     on top of each other: the dark-on-dark button CLAUDE.md forbids,
+     and it read as two grey boxes bolted to the corner. */
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text);
   cursor: pointer;
 }
@@ -161,7 +166,7 @@
    reads as permanently active. */
 @media (hover: hover) {
   .vp-top-btn:hover {
-    background: #2e2e2e;
+    background: rgba(255, 255, 255, 0.16);
   }
 }
 
@@ -284,11 +289,14 @@
   /* Sized so all four German labels fit inside 375 px rather than
      relying on the row's horizontal scroll, which on a phone reads as a
      pill chopped in half at the right edge. */
-  gap: 5px;
+  gap: 6px;
   min-height: var(--vp-tap);
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
-  border-radius: var(--vp-radius-sm);
+  /* PILLS. They were 8 px rectangles sitting next to the ROI chip's
+     999 px pill, so the row held two different shapes for no reason —
+     „Die buttons oben sehr hässlich". One family, one radius. */
+  border-radius: 999px;
   /* Its own ground, a step above the row it sits in. Never dark-on-dark
      and no border line — depth from contrast, per the design rules. */
   background: var(--surface);
@@ -305,10 +313,14 @@
    is mixed over the chip's own ground rather than over transparency, so
    an on chip is still lighter than the row behind it and the four never
    flatten back into one another. */
+/* ONE device for "on", not three. It used to carry a tinted ground AND
+   an inset accent underline AND a colour shift, which over bright
+   footage read as an outlined box — the thin border line the design
+   rules forbid, arrived at by accident. The tint alone says it, and the
+   icon takes the accent so the state survives a glance. */
 .vp-seg[aria-pressed='true'] {
   background: color-mix(in srgb, var(--vp-accent) 26%, var(--surface));
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--vp-accent);
 }
 
 .vp-seg[aria-pressed='true'] svg {
@@ -472,27 +484,45 @@
   pointer-events: auto;
 }
 
+/* ON THE PICTURE the four of them are the loudest thing on screen, and
+   they were four separate frosted slabs with hard edges sitting over the
+   footage — „Die buttons oben sehr hässlich :o".
+//
+   Darker, denser glass and a heavier blur, so each one reads as a hole
+   punched in the picture rather than a grey card laid on top of it; and
+   quiet ink, because an OFF switch has nothing to announce. */
 .vp-toggles--onstage .vp-seg {
-  background: rgba(10, 14, 20, 0.5);
-  backdrop-filter: blur(6px);
-  color: #cfe0d5;
+  background: rgba(6, 10, 14, 0.62);
+  backdrop-filter: blur(14px) saturate(1.1);
+  color: rgba(226, 236, 231, 0.72);
   /* Smaller on the picture than in a bar of its own: it sits over the
      footage now, and the footage is the point. */
-  min-height: 34px;
+  min-height: 32px;
+  padding: 0 12px;
   font-size: 12px;
 }
 
+/* Only the icon carries the accent. A whole tinted pill per active
+   layer put four green blocks across the sky; the glyph is enough to
+   read at a glance and leaves the picture alone. */
 .vp-toggles--onstage .vp-seg[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--vp-accent) 30%, rgba(10, 14, 20, 0.5));
+  background: rgba(6, 10, 14, 0.62);
   color: #f2fff6;
+}
+
+.vp-toggles--onstage .vp-seg[aria-pressed='false'] svg {
+  opacity: 0.55;
 }
 
 /* The 44 px target the smaller paint gives up, as a transparent hitbox —
    the same trick the top bar's buttons use. */
+/* 32 px of paint, 44 px of target. -6 px each side, not -5: the chip is
+   32 px tall now, and 32 + 2×5 is 42 — two pixels under the iOS floor,
+   which the harness duly reported. */
 .vp-toggles--onstage .vp-seg::before {
   content: '';
   position: absolute;
-  inset: -5px 0;
+  inset: -6px 0;
 }
 .vp-toggles--onstage .vp-seg {
   position: relative;

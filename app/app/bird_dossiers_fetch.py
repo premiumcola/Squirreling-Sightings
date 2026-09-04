@@ -22,15 +22,36 @@ from urllib.parse import quote, urlparse
 
 log = logging.getLogger("app.bird_dossiers")
 
-# Xeno-canto API v3 requires a per-account `key` parameter (v2 is gone
-# as of early 2026). When `XENO_CANTO_API_KEY` is unset, the audio
-# fetch is silently skipped — `audio_url` stays None and the frontend
-# hides the player. q:A means "Quality A"; len:5-15 picks recordings
-# short enough to play inline as MP3 in the dossier panel.
-_XC_API_KEY = os.environ.get("XENO_CANTO_API_KEY", "").strip()
-_XC_QUERY_TEMPLATE = (
-    "https://xeno-canto.org/api/3/recordings" "?query={latin}+q:A+len:5-15&key={key}"
-)
+# Xeno-canto API v3 requires a per-account `key` parameter (the free v2
+# endpoint was retired 2025-10-10). The key is read PER CALL, not
+# snapshotted at import: a module-level `os.environ[...]` made the gate
+# invisible (no log line, no way to see it in a test without reloading
+# the module) and froze the value at boot. Without a key the audio fetch
+# is skipped — but loudly, once, so "no play button on any bird" has a
+# findable cause in the log instead of looking like a missing feature.
+_XC_API_URL = "https://xeno-canto.org/api/3/recordings"
+_xc_key_warned = [False]
+
+
+def _xc_api_key() -> str:
+    """Current xeno-canto API key, "" when unconfigured (warned once)."""
+    key = os.environ.get("XENO_CANTO_API_KEY", "").strip()
+    if not key and not _xc_key_warned[0]:
+        _xc_key_warned[0] = True
+        log.warning(
+            "[dossiers] XENO_CANTO_API_KEY nicht gesetzt — Vogelstimmen bleiben leer "
+            "(API v3 verlangt einen Account-Key von xeno-canto.org/account)"
+        )
+    return key
+
+
+# Filter ladder for the recordings query, strictest first. q:A is
+# "Quality A", len:5-15 picks clips short enough to play inline in the
+# panel — but a species whose only uploads are longer or unrated used to
+# come back empty FOREVER under that one strict query. Each rung is
+# tried in turn and the first one with a hit wins, so the common case
+# still gets a short quality-A clip and the rare one gets *something*.
+_XC_FILTER_LADDER = ("q:A len:5-15", "q:A", "")
 
 # The MediaWiki REST summary endpoint. Returns title, extract, thumbnail,
 # content_urls, and a couple of cross-language hints. Works on every
@@ -275,72 +296,91 @@ def _de_type(raw: str | None) -> str:
     return raw.strip().capitalize() or "Aufnahme"
 
 
+def xc_query_urls(latin: str, key: str) -> list[str]:
+    """Every xeno-canto URL to try for `latin`, strictest filter first.
+
+    Pure — no I/O — so the query FORM is testable without the network,
+    which is what this needed: API v3 documents its search as tags
+    (`gen:larus sp:fuscus`), and the bare binomial this used to send
+    (`query=Phoenicurus%20ochruros`) is not a documented v3 form. A
+    genus/species split also makes the old subspecies retry pass
+    unnecessary — the third name is simply never sent, so
+    "Erithacus rubecula rubecula" hits the species on the first try
+    instead of burning a rate-limited request on a guaranteed miss.
+    """
+    parts = (latin or "").split()
+    if not parts:
+        return []
+    taxon = f"gen:{parts[0]}"
+    if len(parts) >= 2:
+        taxon += f" sp:{parts[1]}"
+    urls = []
+    for extra in _XC_FILTER_LADDER:
+        query = f"{taxon} {extra}".strip()
+        # `safe=":"` keeps the tag colons readable in the log; spaces
+        # become %20, which PHP's query parser reads as a separator
+        # exactly like the docs' "+".
+        urls.append(f"{_XC_API_URL}?query={quote(query, safe=':')}&key={quote(key)}")
+    return urls
+
+
+def _pick_diverse(recordings: list, want: int) -> list[dict]:
+    """Up to `want` recordings, preferring a new call type each round.
+
+    One Gesang + one Ruf + one Warnruf reads better than three Gesänge;
+    once the types run out the remaining slots fill in API order."""
+    seen_types: set[str] = set()
+    picked: list[dict] = []
+    leftover: list[dict] = []
+    for rec in recordings:
+        type_de = _de_type(rec.get("type"))
+        if type_de in seen_types:
+            leftover.append(rec)
+            continue
+        seen_types.add(type_de)
+        picked.append(rec)
+        if len(picked) >= want:
+            return picked
+    return (picked + leftover)[:want]
+
+
+def _recording_dict(rec: dict) -> dict | None:
+    """One API recording → the dossier's own shape. None when the entry
+    carries no playable file URL."""
+    file_url = rec.get("file") or ""
+    if file_url.startswith("//"):
+        file_url = "https:" + file_url
+    if not file_url:
+        return None
+    return {
+        "id": str(rec.get("id") or "").strip() or None,
+        "file_url": file_url,
+        "type_en": rec.get("type") or "",
+        "type_de": _de_type(rec.get("type")),
+        "recordist": rec.get("rec") or None,
+        "license_url": rec.get("lic") or None,
+        "length": rec.get("length") or None,
+    }
+
+
 def fetch_xeno_canto(latin: str, max_recordings: int = 3) -> list[dict]:
-    """Pull up to `max_recordings` quality-A 5-15 s clips for the species.
+    """Pull up to `max_recordings` clips of the species' voice.
 
     Returns a list of recording dicts (`id`, `file_url`, `type_en`,
     `type_de`, `recordist`, `license_url`, `length`). Empty list when
-    no recordings are available — typical for rare or recently-named
-    species — OR when no API key is configured. Both cases let the
-    frontend hide the audio block.
-
-    Subspecies fallback mirrors the Wikipedia path. The picker prefers
-    a diverse set of call types when available (one Gesang + one Ruf
-    + one Warnruf reads better than three Gesänge), then fills the
-    remaining slots in API order.
+    xeno-canto has nothing for the species on any rung of the filter
+    ladder — or when no API key is configured, which `_xc_api_key`
+    warns about once per process rather than skipping in silence.
     """
-    if not _XC_API_KEY:
+    key = _xc_api_key()
+    if not key:
         return []
-    candidates = [latin]
-    stripped = _strip_subspecies(latin)
-    if stripped != latin:
-        candidates.append(stripped)
-    for cand in candidates:
-        url = _XC_QUERY_TEMPLATE.format(latin=quote(cand), key=_XC_API_KEY)
+    for url in xc_query_urls(latin, key):
         data = _rate_limited_get(url)
-        if not data:
-            continue
-        recordings = data.get("recordings") or []
+        recordings = (data or {}).get("recordings") or []
         if not recordings:
             continue
-        # Diversity-first picker: walk the list and prefer a new type
-        # each round; when we run out of new types, fall back to API
-        # order to fill remaining slots.
-        seen_types: set[str] = set()
-        first_pass: list[dict] = []
-        leftover: list[dict] = []
-        for rec in recordings:
-            type_de = _de_type(rec.get("type"))
-            if type_de in seen_types:
-                leftover.append(rec)
-                continue
-            seen_types.add(type_de)
-            first_pass.append(rec)
-            if len(first_pass) >= max_recordings:
-                break
-        picked = first_pass
-        for rec in leftover:
-            if len(picked) >= max_recordings:
-                break
-            picked.append(rec)
-        out: list[dict] = []
-        for rec in picked:
-            file_url = rec.get("file") or ""
-            if file_url.startswith("//"):
-                file_url = "https:" + file_url
-            if not file_url:
-                continue
-            out.append(
-                {
-                    "id": str(rec.get("id") or "").strip() or None,
-                    "file_url": file_url,
-                    "type_en": rec.get("type") or "",
-                    "type_de": _de_type(rec.get("type")),
-                    "recordist": rec.get("rec") or None,
-                    "license_url": rec.get("lic") or None,
-                    "length": rec.get("length") or None,
-                }
-            )
+        out = [r for r in map(_recording_dict, _pick_diverse(recordings, max_recordings)) if r]
         if out:
             return out
     return []

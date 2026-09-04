@@ -114,9 +114,24 @@ function _audioItemHtml(r, idx) {
 // native <audio controls> widget is gone: playback now runs entirely
 // through the hero button + this list's own small row buttons, wired
 // by wireHeroAudio() below.
+//
+// With no recording the block does NOT vanish: an empty slot read as
+// "this app has no bird-song feature" rather than "this species has no
+// clip yet" — the same honesty _dossier-panel.js already applies to a
+// missing Wikipedia extract. Still no play button on the hero (that
+// would be a tappable dead end); just a line saying which of the two
+// states this is. `audio_checked_at` is stamped on every xeno-canto
+// attempt, hit or miss (bird_dossiers.py::_apply_xeno_canto), so a
+// dossier that was asked and came back empty is distinguishable from
+// one that has not been asked yet.
 export function audioListHtml(d) {
   const list = _recordingsOf(d);
-  if (!list.length) return '';
+  if (!list.length) {
+    const msg = d.audio_checked_at
+      ? 'Keine Vogelstimme verfügbar — der nächste Abgleich versucht es erneut.'
+      : 'Vogelstimme noch nicht geladen — der nächste Abgleich holt sie nach.';
+    return `<div class="sd-audio"><div class="sd-audio-source">${esc(msg)}</div></div>`;
+  }
   return `<div class="sd-audio">
     ${list.map(_audioItemHtml).join('')}
     <div class="sd-audio-source">Quelle: <a href="https://xeno-canto.org/" target="_blank" rel="noopener noreferrer">xeno-canto.org</a></div>

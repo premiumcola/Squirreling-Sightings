@@ -170,6 +170,13 @@ class BirdDossierService:
             "audio_attribution": None,
             "audio_license": None,
             "audio_fetched_at": None,
+            # When xeno-canto was last ASKED, hit or miss —
+            # `audio_fetched_at` only ever records a hit. The difference
+            # is what lets the panel say "noch nicht geladen" instead of
+            # "keine Aufnahme verfügbar" (a silent empty audio block is
+            # what made the operator think the feature didn't exist),
+            # and it orders the audio backfill oldest-check-first.
+            "audio_checked_at": None,
         }
 
     def on_new_species(
@@ -284,6 +291,26 @@ class BirdDossierService:
         pending.sort(key=lambda d: d.get("wikipedia_fetched_at") or "")
         return [d["latin"] for d in pending if d.get("latin")]
 
+    def audio_backfill_candidates(self) -> list[str]:
+        """Latin names of already-fetched dossiers that still have no
+        recording, longest-unchecked first.
+
+        Without this a xeno-canto miss was PERMANENT: `sweep_prebuild`
+        only creates dossiers that don't exist, the photo backfill only
+        looks at photo count, and `on_new_species` spawns a fetch on the
+        FIRST sighting only — so one empty answer (no API key at the
+        time, a network hiccup, a filter that matched nothing) meant that
+        species never got a play button again short of a manual
+        /refetch. Ordering by `audio_checked_at` rotates the set: a
+        dossier just re-checked sinks to the end."""
+        with self._lock:
+            items = list(self.data["dossiers"].values())
+        pending = [
+            d for d in items if d.get("wikipedia_fetched_at") and not (d.get("recordings") or [])
+        ]
+        pending.sort(key=lambda d: d.get("audio_checked_at") or "")
+        return [d["latin"] for d in pending if d.get("latin")]
+
     def sweep_photo_backfill(self, *, budget: int = DOSSIER_PHOTO_BACKFILL_BUDGET) -> dict:
         """Bounded catch-up pass that re-fetches dossiers cached BEFORE
         `photo_urls` existed (or that simply came back with fewer photos
@@ -298,8 +325,17 @@ class BirdDossierService:
         A species Wikipedia genuinely only illustrates once stays at one
         photo and simply comes up again on a later tick: cheap (one
         rate-limited request), never a placeholder, and it self-heals the
-        day the article gains a second image."""
-        candidates = self.photo_backfill_candidates()[: max(0, budget)]
+        day the article gains a second image.
+
+        Dossiers still missing their bird song ride along (see
+        `audio_backfill_candidates`) — one `_spawn_fetch` already covers
+        wiki + photos + xeno-canto, so the audio retry costs nothing
+        extra beyond the entries that are photo-complete but silent.
+        Photo-short names go first; the budget caps the union."""
+        candidates = self.photo_backfill_candidates()
+        seen = set(candidates)
+        candidates += [x for x in self.audio_backfill_candidates() if x not in seen]
+        candidates = candidates[: max(0, budget)]
         for latin in candidates:
             self._spawn_fetch(latin)
         return {"pending": len(candidates)}
@@ -425,7 +461,13 @@ class BirdDossierService:
         fields (`audio_url` / `audio_attribution` / `audio_license`)
         mirror the first entry for backward-compat with older
         consumers but the frontend prefers iterating `recordings[]`.
+
+        A MISS still stamps `audio_checked_at`: "we asked and got
+        nothing" and "we never asked" are different states for both the
+        panel and the backfill sweep, and only stamping on success made
+        them indistinguishable.
         """
+        dossier["audio_checked_at"] = now_iso
         if not recordings:
             return
         dossier["recordings"] = recordings

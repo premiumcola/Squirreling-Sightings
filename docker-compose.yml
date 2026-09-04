@@ -51,6 +51,17 @@ services:
       # (FLAP_DIAG=1 docker compose up -d). Empty when unset → the
       # `os.getenv("FLAP_DIAG")` check returns "" and short-circuits.
       - FLAP_DIAG=${FLAP_DIAG:-}
+      # Xeno-canto API key for the bird-song fetch. From 2025-10-10 the
+      # v3 API refuses every request without one, and the fetcher then
+      # writes an empty recordings list — which is exactly why no
+      # species dossier ever showed a play button. Passed THROUGH from
+      # the host, never written here: this file is tracked in a public
+      # repo (CLAUDE.md hard rule 3). Get a key from a xeno-canto
+      # account and put it in the host's `.env` beside this file, or
+      # export it before `docker compose up -d`. Empty when unset — the
+      # app then logs one WARNING per boot naming this variable and the
+      # dossier says "noch nicht geladen" instead of showing nothing.
+      - XENO_CANTO_API_KEY=${XENO_CANTO_API_KEY:-}
 
   # Coral TPU variant — Python 3.9 + pycoral 2.0, the stack Google tests
   # against libedgetpu. Use INSTEAD OF the service above (both claim

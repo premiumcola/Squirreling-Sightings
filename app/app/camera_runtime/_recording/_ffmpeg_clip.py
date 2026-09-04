@@ -239,6 +239,13 @@ class FfmpegClipMixin:
                 vid_path, preroll_frames, event_id, day_dir, duration_s, file_size_bytes
             )
 
+        # The scrub filmstrip, AFTER the splice — the sheet has to describe
+        # the clip the operator will actually drag through, and the splice
+        # changes both its length and its first seconds. Never before the
+        # clip is playable: this is a convenience, and a convenience must
+        # not be able to delay the footage.
+        scrub = self._build_scrub_sprite(vid_path if video_url else None)
+
         ev = self._update_reencoded_event(
             event_id,
             video_url=video_url,
@@ -250,6 +257,7 @@ class FfmpegClipMixin:
             encode_error=encode_error,
             achieved_pre_s=achieved_pre_s,
             meta=meta,
+            scrub=scrub,
         )
 
         # Tracking sidecar — enqueue once per finalized clip so the
@@ -394,6 +402,29 @@ class FfmpegClipMixin:
             log.debug("[%s] motion thumb (post-encode) failed: %s", self.camera_id, _te)
         return None, None
 
+    def _build_scrub_sprite(self, vid_path: Path | None) -> dict | None:
+        """The scrub filmstrip for a finished clip, or None.
+
+        Thin wrapper so the finalize chain reads as one list of steps and
+        the sprite logic stays in ``scrub_sprite.py`` where it is unit
+        tested without a runtime. Imported lazily for the same reason the
+        rest of this module defers heavy imports: a recorder that never
+        finishes a clip should not pay for it at start-up.
+        """
+        if vid_path is None or not vid_path.exists():
+            return None
+        from ...scrub_sprite import build_scrub_sprite
+
+        geo = build_scrub_sprite(vid_path)
+        if geo:
+            log.debug(
+                "[%s] scrub filmstrip: %d Kacheln, alle %.2fs",
+                self.camera_id,
+                geo["count"],
+                geo.get("interval_s") or 0.0,
+            )
+        return geo
+
     def _apply_preroll_splice(
         self,
         vid_path: Path,
@@ -436,6 +467,7 @@ class FfmpegClipMixin:
         encode_error: str | None,
         achieved_pre_s: float,
         meta: dict | None = None,
+        scrub: dict | None = None,
     ) -> dict:
         """Transition the event JSON from 'processing' → 'ready'/'error'.
         Returns the dict actually written (``{}`` on a store read/write
@@ -464,6 +496,13 @@ class FfmpegClipMixin:
             ev["video_relpath"] = video_relpath
             ev["duration_s"] = duration_s
             ev["file_size_bytes"] = file_size_bytes
+            # The scrub filmstrip's geometry travels ON the event, not in
+            # a sidecar: the library already sends this object with every
+            # item, so the player gets the grid for free. Only written
+            # when a sheet was actually produced — an absent key is the
+            # honest "no preview for this clip".
+            if scrub:
+                ev["scrub"] = scrub
             ev["snapshot_url"] = thumb_url
             ev["snapshot_relpath"] = thumb_rel
             ev["thumb_url"] = thumb_url

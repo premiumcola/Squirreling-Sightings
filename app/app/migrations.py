@@ -134,6 +134,79 @@ def generate_missing_thumbnails(*, storage_root: Path) -> None:
     threading.Thread(target=_do, daemon=True).start()
 
 
+def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
+    """Backfill the scrub filmstrip for motion clips recorded before it.
+
+    Every clip from here on gets its sheet in the re-encode thread. The
+    archive does not, and a player whose drag-preview works only on
+    clips newer than one deploy is the kind of half-feature that reads
+    as broken. So: one pass at boot, in the background, skipping
+    anything that already has a sheet.
+
+    PACED ON PURPOSE. This is a full sequential decode per clip, and an
+    archive can hold thousands. The sleep between clips is what keeps a
+    backfill from competing with live recording for the same cores —
+    the same reason ``generate_missing_thumbnails`` paces itself, and
+    the same reason ``check_tracks_schema_version`` refuses to
+    auto-reindex.
+
+    The event JSON is updated too, when a store is supplied: the sheet
+    on disk is useless to the player without the grid that addresses
+    it. A clip whose manifest cannot be found still gets its sheet, so
+    a later reconcile can pick it up.
+    """
+
+    def _do():
+        base = storage_root / "motion_detection"
+        if not base.exists():
+            return
+        from .scrub_sprite import build_scrub_sprite, sprite_path_for
+
+        made = 0
+        for cam_dir in sorted(base.iterdir()):
+            if not cam_dir.is_dir():
+                continue
+            for mp4 in sorted(cam_dir.rglob("*.mp4")):
+                # `.raw.mp4` is the stream copy, not the clip the player
+                # plays — a sheet built from it would drift from the
+                # spliced, re-encoded file by the whole pre-roll.
+                if mp4.name.endswith(".raw.mp4"):
+                    continue
+                if sprite_path_for(mp4).exists():
+                    continue
+                try:
+                    geo = build_scrub_sprite(mp4)
+                    if not geo:
+                        continue
+                    made += 1
+                    if store is not None:
+                        _attach_scrub(store, cam_dir.name, mp4.stem, geo)
+                except Exception as e:
+                    log.debug("[scrub] backfill failed for %s: %s", mp4.name, e)
+                _time.sleep(0.05)  # pace startup
+        if made:
+            log.info("[boot] %d Scrub-Filmstreifen nachgebaut", made)
+
+    threading.Thread(target=_do, daemon=True).start()
+
+
+def _attach_scrub(store, camera_id: str, event_id: str, geo: dict) -> None:
+    """Put one backfilled sheet's geometry onto its event JSON.
+
+    Additive by construction — reads the manifest, sets one key, writes
+    it back through the store's own atomic path. Never touches anything
+    else on the event.
+    """
+    try:
+        ev = store.get_event(camera_id, event_id)
+        if not ev:
+            return
+        ev["scrub"] = geo
+        store.update_event(camera_id, event_id, ev)
+    except Exception as e:
+        log.debug("[scrub] manifest update failed for %s: %s", event_id, e)
+
+
 def check_tracks_schema_version(*, storage_root: Path) -> None:
     """Boot scan: count existing tracks.json sidecars whose schema
     version is older than the current ``TRACKS_SCHEMA``. The intent is

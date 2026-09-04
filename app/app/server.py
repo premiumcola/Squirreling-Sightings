@@ -576,6 +576,10 @@ _migrations.cleanup_stale_timelapse_frames(storage_root=storage_root, settings=s
 # rglob, so this is purely cosmetic for the on-disk layout.
 _migrations.relocate_root_event_jsons(storage_root=storage_root)
 _migrations.generate_missing_thumbnails(storage_root=storage_root)
+# The scrub filmstrip for clips recorded before it existed. Background
+# and paced — see the function's own note on why it must not race live
+# recording for cores.
+_migrations.generate_missing_scrub_sprites(storage_root=storage_root, store=app_state.store)
 # Clips whose producer died mid-chain (restart, ffmpeg hang, power cut).
 # Everything still in flight from before _BOOT_TS is orphaned by
 # definition — recover it if its mp4 is on disk, otherwise mark it

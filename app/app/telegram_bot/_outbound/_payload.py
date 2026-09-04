@@ -20,7 +20,35 @@ import contextlib
 from io import BytesIO
 from pathlib import Path
 
+from ...video_meta import video_dimensions
 from .._consts import _PHOTO_LIMIT_BYTES, _VIDEO_LIMIT_BYTES, log
+
+
+def _video_hints(video) -> dict:
+    """``width`` / ``height`` / ``duration`` for a video we send from disk.
+
+    Telegram guesses these when they are absent, and its guess put the
+    daily timelapse on the phone in a box that was nothing like the
+    camera's own shape — „Format vom gesendetem timelapse strange 😬".
+    The encoder's output is correct (timelapse.py pads to the right box
+    and writes setsar=1), so the fix is to stop leaving the shape to be
+    inferred.
+
+    Only for a path: an in-memory clip has no file for ffprobe to read,
+    and every failure returns {} so the send proceeds exactly as before.
+    ``supports_streaming`` rides along because a timelapse is played
+    where it lands, not downloaded first.
+    """
+    if not isinstance(video, (str, Path)):
+        return {}
+    dims = video_dimensions(video)
+    if not dims:
+        return {}
+    w, h, duration = dims
+    hints = {"width": w, "height": h, "supports_streaming": True}
+    if duration > 0:
+        hints["duration"] = duration
+    return hints
 
 
 def prepare_input(src, default_name: str):
@@ -81,7 +109,10 @@ async def dispatch_send(bot, *, text, photo, video, caption, common):
             if size and size > _VIDEO_LIMIT_BYTES:
                 log.info("[tg] video > 50MB, falling back to sendDocument")
                 return await bot.send_document(document=src, caption=caption, **common)
-            return await bot.send_video(video=src, caption=caption, **common)
+            # Probed BEFORE the handle is attached, from the path — the
+            # stream is positioned at 0 for the upload and ffprobe reads
+            # the file independently either way.
+            return await bot.send_video(video=src, caption=caption, **_video_hints(video), **common)
         size = src_size_bytes(photo)
         src = _attach(stack, photo, "photo.jpg")
         if size and size > _PHOTO_LIMIT_BYTES:

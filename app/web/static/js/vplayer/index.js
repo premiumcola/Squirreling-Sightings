@@ -158,6 +158,31 @@ function _wirePlayhead(cfg, stage, timeline, overlays) {
 }
 
 /**
+ * Start the clip the moment it is opened.
+ *
+ * Opening a clip IS the request to watch it — „logisch, wenn ich
+ * draufklicke, will ich's anschauen" — so there is no first tap on a
+ * play button any more. The open runs inside the click that asked for
+ * it, which is the gesture browsers require, so an unmuted start is
+ * normally permitted.
+ *
+ * A refusal gets ONE muted retry and then silence, deliberately: a
+ * picture playing without sound is much closer to what was asked for
+ * than an error toast about audio nobody asked to hear, and if both
+ * attempts fail the transport's own play button is sitting on the
+ * picture. This is the one play() in the package allowed to swallow its
+ * rejection — the button's own handler still reports failures, because
+ * there a dead press has nothing else to explain it.
+ */
+function _autoplay(video) {
+  if (!video) return;
+  video.play().catch(() => {
+    video.muted = true;
+    video.play().catch(() => {});
+  });
+}
+
+/**
  * The top bar and the overflow menu it triggers. One helper because they
  * share a slot and a trigger element, and because splitting them off is
  * what keeps _mountAll under the 60-line ceiling.
@@ -212,7 +237,10 @@ function _mountAll(cfg) {
 
   const panel = renderContextPanel(shell.slot('panel'), cfg, null, cfg.deps || {});
   const live = _wireLive(cfg, stage, panel, timeline, overlays);
-  if (!cfg.flags.live && cfg.source?.url) stage.video.src = cfg.source.url;
+  if (!cfg.flags.live && cfg.source?.url) {
+    stage.video.src = cfg.source.url;
+    _autoplay(stage.video);
+  }
   _wireRecorded(cfg, stage, panel, timeline, overlays);
 
   return {

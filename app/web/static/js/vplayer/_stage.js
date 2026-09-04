@@ -46,6 +46,13 @@ function _buildFrame(frame) {
   // older WebKit and the clip then takes over the whole screen on play.
   video.setAttribute('playsinline', '');
   video.preload = 'metadata';
+  // Endless, and deliberately NOT a switch. A clip here is a few seconds
+  // of an animal doing something and watching it twice is the normal
+  // case, so the operator's ruling stands as written: „die Endlosschleife
+  // muss man nicht an- und ausmachen können. Das ist einfach so."
+  // `loop` also suppresses `ended`, which is why the transport's
+  // play/pause glyph keeps reading correctly across the wrap.
+  video.loop = true;
   video.hidden = true;
 
   const img = document.createElement('img');

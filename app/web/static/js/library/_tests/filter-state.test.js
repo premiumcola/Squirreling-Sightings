@@ -71,30 +71,42 @@ test('all three groups combine into one query string, never a `kinds` param', ()
   assert.equal(params.has('kinds'), false);
 });
 
-// ── Stage 7: the Wetterdaten-chart's drag-zoom composes in here too ──────
+// ── the Wetterdaten chart does NOT filter this grid ─────────────────────
+//
+// It used to: a span dragged in the weather graph put since/until into
+// this query. The two live in different sections of the page, so the
+// operator zoomed the graph, scrolled up, and found "Keine Eintraege im
+// gewaehlten Zeitraum" with nothing on screen explaining it — "der
+// Zeitraum von dem Wettergrafen darf nicht die Mediathek bestimmen,
+// also loes da die Verbindung".
+//
+// These three pinned the coupling. They now pin its absence, because a
+// convenience that silently empties the library is worse than no
+// convenience.
 
-test('an active zoom range adds since/until, with no chip filters set', () => {
+test('ein aktiver Chart-Zoom filtert die Mediathek NICHT', () => {
   const filter = createLibraryFilterState();
   setZoomRange('2026-08-20T12:00:00', '2026-08-20T18:00:00');
   try {
     const params = libraryQueryParams(filter);
-    assert.equal(params.get('since'), '2026-08-20T12:00:00');
-    assert.equal(params.get('until'), '2026-08-20T18:00:00');
+    assert.equal(params.has('since'), false, 'der Graph darf das Raster nicht einengen');
+    assert.equal(params.has('until'), false);
   } finally {
     clearZoomRange();
   }
 });
 
-test('a cleared zoom range omits since/until entirely — not empty strings', () => {
+test('ohne Zoom ist seit jeher nichts gesetzt — daran aendert sich nichts', () => {
   setZoomRange('2026-08-20T12:00:00', '2026-08-20T18:00:00');
   clearZoomRange();
-  const filter = createLibraryFilterState();
-  const params = libraryQueryParams(filter);
+  const params = libraryQueryParams(createLibraryFilterState());
   assert.equal(params.has('since'), false);
   assert.equal(params.has('until'), false);
 });
 
-test('chip filters and an active zoom range compose — neither overrides the other', () => {
+test('die eigenen Filter des Rasters bleiben davon unberuehrt', () => {
+  // Der Schnitt darf nur den Zoom entfernen. Kamera, Label und Kategorie
+  // sind die Filter, die NEBEN dem Raster stehen, und die bleiben.
   const filter = createLibraryFilterState();
   filter.cameraIds.add('cam1');
   filter.labels.add('fox');
@@ -105,8 +117,7 @@ test('chip filters and an active zoom range compose — neither overrides the ot
     assert.equal(params.get('camera_ids'), 'cam1');
     assert.equal(params.get('labels'), 'fox');
     assert.equal(params.get('categories'), 'thunder');
-    assert.equal(params.get('since'), '2026-08-20T12:00:00');
-    assert.equal(params.get('until'), '2026-08-20T18:00:00');
+    assert.equal(params.has('since'), false);
   } finally {
     clearZoomRange();
   }

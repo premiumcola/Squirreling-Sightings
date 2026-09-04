@@ -12,8 +12,27 @@ from __future__ import annotations
 
 import pytest
 
+import re
+from pathlib import Path
+
 from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
 from ._node_js import run_js as _js
+
+#: The frontend tree these source-text checks read.
+_JS = Path(__file__).resolve().parents[1] / "web" / "static" / "js"
+
+
+def _code(src: str) -> str:
+    """JavaScript with its comments removed.
+
+    These checks scan for words like `since` and `until` — and the code
+    that removed them explains itself using exactly those words. Reading
+    the raw text makes the documentation fail the test, which happened
+    on the first run.
+    """
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return "\n".join(re.sub(r"//.*$", "", line) for line in src.splitlines())
+
 
 pytestmark = pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
 
@@ -47,111 +66,47 @@ def test_reset_clears_the_shared_zoom_state():
     assert out["active"] is False
 
 
-def test_range_select_reaches_the_merged_grid_via_the_reload_bridge_not_a_direct_import():
-    """Stage 6 (the Mediathek + Wetter-Ereignisse section merge) retired
-    weather/sightings.js's own grid painter and window.renderWeatherSightings
-    with it. Stage 7 wires the chart's drag-zoom into the merged library
-    grid (library/page.js) — but through window.reloadLibraryPage, the
-    SAME global-name bridge every other mutation in the merged section
-    already uses (delete, restore, rescan, manual-event save), never a
-    direct import of library/ or the retired sightings.js — that would
-    reopen the cross-import cycle weather/_zoom.js's own header exists to
-    avoid. Supersedes this file's Stage-6-era pin, which predated the
-    bridge call this asserts is now present."""
-    import pathlib
+def test_the_chart_zoom_does_not_reach_the_library_at_all():
+    """Der Wettergraph filtert die Mediathek nicht mehr.
 
-    src = (
-        pathlib.Path(__file__).resolve().parents[2]
-        / "app"
-        / "web"
-        / "static"
-        / "js"
-        / "weather"
-        / "stats.js"
-    ).read_text(encoding="utf-8")
-    assert "window.renderWeatherSightings" not in src
-    assert "window.reloadLibraryPage" in src
-    assert "from './sightings.js'" not in src
-    assert "from '../library" not in src
+    Er tat es: eine im Graphen gezogene Spanne setzte `since`/`until` in
+    die Abfrage des Rasters. Die beiden stehen in verschiedenen
+    Abschnitten der Seite, also zoomte der Betreiber unten, scrollte
+    hoch und fand „Keine Einträge im gewählten Zeitraum" — ohne dass
+    irgendetwas auf dem Bildschirm den Grund nannte.
+
+    „der Zeitraum von dem Wettergrafen darf nicht die Mediathek
+    bestimmen, also lös da die Verbindung."
+
+    Diese Datei hielt vorher die Brücke fest. Sie hält jetzt fest, dass
+    es keine gibt — eine Bequemlichkeit, die stillschweigend die
+    Mediathek leert, ist schlechter als gar keine.
+    """
+    filt = _code((_JS / "library" / "_filter-state.js").read_text(encoding="utf-8"))
+    body = filt[filt.index("export function libraryQueryParams") :]
+    body = body[: body.index("\n}")]
+    assert "getZoomRange" not in body, "das Raster liest wieder den Zoom des Graphen"
+    assert "since" not in body and "until" not in body
 
 
-# ── Stage 7: the reload bridge itself fires, exactly once per transition ──
+def test_the_library_keeps_its_own_filters():
+    """Der Schnitt darf NUR den Zoom entfernen."""
+    filt = _code((_JS / "library" / "_filter-state.js").read_text(encoding="utf-8"))
+    body = filt[filt.index("export function libraryQueryParams") :]
+    for own in ("camera_ids", "labels", "categories"):
+        assert own in body, f"{own} ist mit weggefallen"
 
 
-def test_range_select_triggers_exactly_one_grid_reload():
-    out = _js(
-        """
-        const stats = await import(JS + '/weather/stats.js');
-        let calls = 0;
-        window.reloadLibraryPage = () => { calls += 1; };
-        stats.onWeatherChartRangeSelect('2026-08-29T14:00:00', '2026-08-29T18:00:00');
-        console.log(JSON.stringify({ calls }));
-        """
-    )
-    assert out["calls"] == 1
+def test_the_chart_no_longer_reloads_the_grid():
+    """Ohne den Filter wäre ein Neuladen des Rasters nur noch ein
+    Flackern ohne Wirkung — die drei Aufrufe und ihr Helfer sind weg."""
+    stats = _code((_JS / "weather" / "stats.js").read_text(encoding="utf-8"))
+    assert "_reloadLibraryKeepingChartAnchored" not in stats
+    assert "reloadLibraryPage" not in stats, "der Graph greift wieder ins Raster"
 
 
-def test_reset_triggers_exactly_one_grid_reload():
-    out = _js(
-        """
-        const stats = await import(JS + '/weather/stats.js');
-        stats.onWeatherChartRangeSelect('2026-08-29T14:00:00', '2026-08-29T18:00:00');
-        let calls = 0;
-        window.reloadLibraryPage = () => { calls += 1; };
-        stats.resetWeatherChartZoom();
-        console.log(JSON.stringify({ calls }));
-        """
-    )
-    assert out["calls"] == 1
-
-
-# ── Stage 9: the reload is wrapped so the chart stays scroll-anchored ────
-
-
-def test_reload_call_sites_are_wrapped_in_the_scroll_anchor_helper():
-    """Regression: dragging a zoom-select on the chart and releasing used
-    to leave `window.reloadLibraryPage?.()` unwrapped — #libraryBlock
-    sits above #weatherStatsChartWrap in the DOM, so a narrowed reload
-    could shrink it by thousands of pixels while the operator was still
-    looking at the chart, and the browser's scroll position (which
-    doesn't move on its own) would land the viewport somewhere in the
-    unrelated #achievements/"Sichtungen" section further down the page.
-    All three call sites (drag-zoom, the reset chip, a preset click that
-    clears an active zoom) must go through the anchor helper, not a bare
-    reload."""
-    import pathlib
-
-    src = (
-        pathlib.Path(__file__).resolve().parents[2]
-        / "app"
-        / "web"
-        / "static"
-        / "js"
-        / "weather"
-        / "stats.js"
-    ).read_text(encoding="utf-8")
-    assert "from '../core/scroll-anchor.js'" in src
-    assert "withScrollAnchor(byId('weatherStatsChartWrap')" in src
-    assert src.count("window.reloadLibraryPage?.()") == 1, (
-        "exactly one raw call site — inside the shared "
-        "_reloadLibraryKeepingChartAnchored helper, not duplicated per caller"
-    )
-    # One definition + three call sites (drag-zoom, the reset chip, and
-    # the zoom-clearing preset-pill branch) — all routed through the
-    # same anchored helper, none reaching the raw bridge directly.
-    assert src.count("_reloadLibraryKeepingChartAnchored()") == 4
-
-
-def test_reload_bridge_is_a_no_op_when_the_grid_is_not_mounted():
-    """`window.reloadLibraryPage` is only defined once library/page.js has
-    run (it is `undefined` on any other page rendering the chart) — the
-    optional-call must not throw."""
-    out = _js(
-        """
-        const stats = await import(JS + '/weather/stats.js');
-        stats.onWeatherChartRangeSelect('2026-08-29T14:00:00', '2026-08-29T18:00:00');
-        stats.resetWeatherChartZoom();
-        console.log(JSON.stringify({ ok: true }));
-        """
-    )
-    assert out["ok"] is True
+def test_no_dead_import_survived_the_cut():
+    """withScrollAnchor war nur für diesen Helfer da. Git-Historie ist
+    das Archiv (CLAUDE.md) — Leichen bleiben nicht im Quelltext."""
+    stats = _code((_JS / "weather" / "stats.js").read_text(encoding="utf-8"))
+    assert "withScrollAnchor" not in stats

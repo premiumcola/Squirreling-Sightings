@@ -18,7 +18,6 @@ import { renderWeatherStatsChart } from './stats-chart/index.js';
 import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-summary.js';
 import { apiGet } from '../core/api.js';
 import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
-import { withScrollAnchor } from '../core/scroll-anchor.js';
 import { resetChartAnnotations } from './_chart-annotations.js';
 import { applyRangePills } from './_range-pills.js';
 
@@ -240,44 +239,25 @@ function _closeZoomSavePanel() {
   resetChartAnnotations();
 }
 
-// Every reload of the merged grid triggered from here goes through this
-// — #libraryBlock sits above #weatherStatsChartWrap in the DOM, so a
-// narrowed-down reload can shrink it by thousands of pixels while the
-// operator is still looking at the chart below. Without correction, the
-// browser's scroll position (an absolute pixel offset) doesn't move just
-// because the content above it did: the chart — and the unrelated
-// #achievements/"Sichtungen" section right after this one in the page —
-// gets dragged sharply upward under a scrollY that stayed put, landing
-// the viewport somewhere in that unrelated section. withScrollAnchor
-// (core/scroll-anchor.js) measures the chart wrap's viewport position
-// before and after the reload and corrects scroll by the delta so it
-// never visibly moves — root-caused and fixed against exactly that
-// symptom report.
-function _reloadLibraryKeepingChartAnchored() {
-  withScrollAnchor(byId('weatherStatsChartWrap'), () => window.reloadLibraryPage?.());
-}
-
 // Fired by the chart's drag-to-zoom (stats-chart/_hover.js's
 // opts.onRangeSelect, wired in stats-chart/index.js). Overrides whatever
 // preset is selected — none of the five pills matches a custom range.
-// Stage 7: also narrows the merged grid below to the same window, via
-// the same `window.reloadLibraryPage` bridge every other mutation in
-// the merged section already calls (delete/restore/rescan/manual-event
-// save) — library/_filter-state.js reads the new range itself
-// (getZoomRange), this call only triggers the refetch.
+// The zoom is the CHART'S. It used to narrow the Mediathek grid to the
+// same window as well, and that coupling is gone: the grid sits in a
+// different section of the page, so a span dragged down here left
+// „Keine Einträge im gewählten Zeitraum" up there with nothing on
+// screen to explain it. See library/_filter-state.js.
 export function onWeatherChartRangeSelect(startTs, endTs) {
   setZoomRange(startTs, endTs);
   renderWeatherStats();
   _closeZoomSavePanel();
-  _reloadLibraryKeepingChartAnchored();
 }
 
 // The reset chip, and clicking ANY preset (even the one already
 // active) — both documented, discoverable ways back to a preset per
 // the brief. Exported so weather.html's inline wiring (none currently)
 // or a future affordance could call it directly; today only the reset
-// button and _bindWeatherStatsPills below use it. Also re-narrows the
-// grid back to "Alles gemischt" — see onWeatherChartRangeSelect above.
+// button and _bindWeatherStatsPills below use it.
 export function resetWeatherChartZoom() {
   clearZoomRange();
   // Closed (and mark-mode cleared) BEFORE the redraw below — unlike
@@ -286,7 +266,6 @@ export function resetWeatherChartZoom() {
   // very next render must already reflect markMode:false.
   _closeZoomSavePanel();
   renderWeatherStats();
-  _reloadLibraryKeepingChartAnchored();
 }
 
 function _bindWeatherStatsPills() {
@@ -305,7 +284,6 @@ function _bindWeatherStatsPills() {
         // Same grid-reload bridge resetWeatherChartZoom uses below — a
         // preset click clears zoom exactly like the reset chip does, so
         // the grid has to un-narrow here too, on every branch below.
-        _reloadLibraryKeepingChartAnchored();
       }
       if (h === _wsStatsState.hours) {
         if (hadZoom) renderWeatherStats();

@@ -56,12 +56,34 @@ MAX_TILES = 120
 JPEG_Q = 70
 
 
-def sprite_path_for(video_path: Path) -> Path:
-    """``<id>.mp4`` → ``<id>.scrub.jpg``, beside the clip.
+#: Sub-folder the sheets live in, one per day directory.
+SPRITE_DIR = "scrub"
 
-    Same convention the tracks sidecar follows (``<id>.tracks.json``), so
-    everything belonging to one event shares one stem and the storage
-    reconcile keeps treating them as a unit.
+
+def sprite_path_for(video_path: Path) -> Path:
+    """``<day>/<id>.mp4`` → ``<day>/scrub/<id>.jpg``.
+
+    IN ITS OWN FOLDER, not beside the clip as ``<id>.scrub.jpg``. That is
+    where it started, and it was wrong: several readers in this tree pick
+    "the first ``*.jpg`` in the event's directory" as a preview when the
+    manifest has no explicit one, and a sprite sheet answering that
+    question puts a grid of forty postage stamps on a media card. The
+    operator saw exactly that, across the whole Mediathek, the moment the
+    backfill ran.
+
+    Excluding the name at each of those readers would be a list to keep
+    in step for ever; a directory they do not walk cannot be got wrong.
+    The stem still matches the clip, so everything belonging to one event
+    is still findable as a unit.
+    """
+    return video_path.parent / SPRITE_DIR / f"{video_path.stem}.jpg"
+
+
+def legacy_sprite_path_for(video_path: Path) -> Path:
+    """Where the sheets were written before they moved.
+
+    Kept only so the backfill can clean them up — see
+    ``migrations.generate_missing_scrub_sprites``.
     """
     return video_path.with_suffix("").with_suffix(".scrub.jpg")
 
@@ -143,6 +165,7 @@ def build_scrub_sprite(
             sheet[r * tile_h : (r + 1) * tile_h, c * tile_w : (c + 1) * tile_w] = tile
 
         out = sprite_path_for(video_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
         if not cv2.imwrite(str(out), sheet, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_Q]):
             return None
         return {

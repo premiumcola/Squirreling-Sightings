@@ -42,11 +42,23 @@ def _write_clip(path: Path, *, frames: int, fps: int = 12, w: int = 320, h: int 
     writer.release()
 
 
-def test_der_pfad_folgt_der_sidecar_konvention():
-    # Alles zu einem Event teilt einen Stamm — <id>.mp4, <id>.tracks.json,
-    # <id>.scrub.jpg —, sonst behandelt der Storage-Abgleich sie nicht
-    # mehr als eine Einheit.
-    assert sprite_path_for(Path("/x/y/evt_1.mp4")).name == "evt_1.scrub.jpg"
+def test_das_blatt_liegt_NICHT_neben_dem_clip():
+    """Der Fehler, der einmal die ganze Mediathek verunstaltet hat.
+
+    Als `<id>.scrub.jpg` neben dem Clip fanden Leser, die „das erste
+    *.jpg in diesem Ordner" als Vorschau nehmen, das Sprite-Blatt — und
+    die Kacheln zeigten ein Raster aus vierzig Briefmarken statt eines
+    Bildes. Ein eigener Unterordner ist die einzige Fassung, die kein
+    künftiger Glob wieder aufgreifen kann; eine Ausschlussliste an jeder
+    Fundstelle müsste man ewig pflegen.
+    """
+    out = sprite_path_for(Path("/x/y/evt_1.mp4"))
+    assert out.parent.name == "scrub"
+    assert out.name == "evt_1.jpg"
+    assert out.parent != Path("/x/y")
+    # Und der Stamm bleibt der des Clips, damit alles zu einem Event
+    # weiterhin als Einheit auffindbar ist.
+    assert out.stem == "evt_1"
 
 
 def test_zwei_kacheln_pro_sekunde_bei_normaler_laenge():

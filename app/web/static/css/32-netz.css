@@ -633,12 +633,26 @@
     height: 100%;
   }
 
+  /* NEVER SCROLLS. `overflow-y: auto` here produced both halves of one
+     reported defect at narrow window widths: the legend wraps to a second
+     row, the height-locked card overflows by that row, a scrollbar
+     appears — and the scrollbar takes ~15 px of WIDTH, which the radar
+     had already been measured and drawn against. So the operator got an
+     ugly bar down the side of every card AND labels clipped off the right
+     edge, from the same cause.
+
+     Hiding is safe here because nothing needs to scroll: the legend is
+     `flex: 0 0 auto` and keeps its rows, and the chart below is
+     `flex: 1 1 auto; min-height: 0` and gives up exactly the height the
+     legend took. The card was deliberately height-locked to its
+     neighbouring tile; a scrollbar was the escape valve for a box that
+     is supposed to fit. */
   .netz-card-body {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
+    overflow: hidden;
   }
 
   /* Whatever the flex column above has left, all of it. */

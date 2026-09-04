@@ -9,6 +9,7 @@ has zero coupling back to server.py.
 
 from __future__ import annotations
 
+import contextlib
 import json as _json
 import logging
 import shutil as _shutil
@@ -160,9 +161,10 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
         base = storage_root / "motion_detection"
         if not base.exists():
             return
-        from .scrub_sprite import build_scrub_sprite, sprite_path_for
+        from .scrub_sprite import build_scrub_sprite, legacy_sprite_path_for, sprite_path_for
 
         made = 0
+        swept = 0
         for cam_dir in sorted(base.iterdir()):
             if not cam_dir.is_dir():
                 continue
@@ -172,6 +174,15 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
                 # spliced, re-encoded file by the whole pre-roll.
                 if mp4.name.endswith(".raw.mp4"):
                     continue
+                # Sheets briefly lived beside the clip as `<id>.scrub.jpg`,
+                # where readers that pick "the first *.jpg here" found them
+                # and put a grid of postage stamps on the media card. Sweep
+                # any that a previous boot wrote.
+                stale = legacy_sprite_path_for(mp4)
+                if stale.exists():
+                    with contextlib.suppress(Exception):
+                        stale.unlink()
+                        swept += 1
                 if sprite_path_for(mp4).exists():
                     continue
                 try:
@@ -184,6 +195,8 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
                 except Exception as e:
                     log.debug("[scrub] backfill failed for %s: %s", mp4.name, e)
                 _time.sleep(0.05)  # pace startup
+        if swept:
+            log.info("[boot] %d fehlplatzierte Scrub-Blätter entfernt", swept)
         if made:
             log.info("[boot] %d Scrub-Filmstreifen nachgebaut", made)
 

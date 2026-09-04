@@ -501,14 +501,50 @@ def test_the_panel_stretches_to_the_tiles_height_on_desktop():
     assert "align-items: stretch" in seg
 
 
+def _media_block(css: str, header: str) -> str:
+    """The whole `@media … { … }` block, by brace count.
+
+    This used to be a flat 900-character slice, which meant a comment
+    added inside the block could push a rule out of the window and fail
+    the test without changing one declaration. The assertions below are
+    the point; how much text sits between them is not.
+    """
+    start = css.index(header)
+    depth = 0
+    for i in range(start, len(css)):
+        if css[i] == "{":
+            depth += 1
+        elif css[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return css[start : i + 1]
+    raise AssertionError(f"unbalanced braces after {header!r}")
+
+
 def test_the_chart_box_fills_the_flexed_card_on_desktop():
     """The card is the tile's height; the body flexes to fill it; the
     chart box takes whatever the body has left."""
-    seg = _CSS[_CSS.index("@media (min-width: 901px) {") :][:900]
+    seg = _media_block(_CSS, "@media (min-width: 901px) {")
     assert ".netz-card {" in seg and "height: 100%" in seg
     chart = seg[seg.index(".netz-card-chart {") :]
     assert "flex: 1 1 auto" in chart[: chart.index("}")]
     assert "min-height: 0" in chart[: chart.index("}")]
+
+
+def test_the_card_body_never_grows_a_scrollbar():
+    """`overflow-y: auto` on the height-locked body produced BOTH halves
+    of a reported defect at narrow widths: the legend wraps to a second
+    row, the card overflows by that row, and the scrollbar that appears
+    takes ~15 px of WIDTH the radar was already measured against — an
+    ugly bar down every card AND labels clipped off the right edge, from
+    one cause. Nothing in there needs to scroll: the chart is
+    `flex: 1 1 auto; min-height: 0` and gives up exactly what the legend
+    takes."""
+    seg = _media_block(_CSS, "@media (min-width: 901px) {")
+    body = seg[seg.index(".netz-card-body {") :]
+    rule = body[: body.index("}")]
+    assert "overflow: hidden" in rule
+    assert "overflow-y: auto" not in rule
 
 
 def test_the_chart_box_has_a_real_height_on_a_phone():

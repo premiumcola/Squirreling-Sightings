@@ -303,12 +303,18 @@ function _mountAll(cfg) {
     },
     isPlaying: () => !stage.video.paused && !stage.video.ended,
     onPause: () => stage.video.pause(),
-    onResume: () => stage.video.play().catch(() => {}),
     // The playhead IS the play button, so a press on it that never moved
     // toggles playback instead of seeking to where it already sits.
-    onToggle: () => {
-      if (stage.video.paused || stage.video.ended) stage.video.play().catch(() => {});
-      else stage.video.pause();
+    //
+    // `wasPlaying` is the state BEFORE the press paused it. Reading
+    // `stage.video.paused` here instead would always see "paused" — the
+    // pointerdown just did that — and start the clip again, so pressing
+    // pause on a running clip did nothing at all.
+    onToggle: (wasPlaying) => {
+      // It was running and the press already stopped it. Leave it
+      // stopped; that IS the pause.
+      if (wasPlaying) return;
+      stage.video.play().catch(() => {});
     },
   });
 

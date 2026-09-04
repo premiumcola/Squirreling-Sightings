@@ -121,7 +121,6 @@ export function mountTimeline(host, cfg, deps = {}) {
         },
         isPlaying: deps.isPlaying,
         onPause: deps.onPause,
-        onResume: deps.onResume,
       });
     scrub = {
       parts: [wire(host.querySelector('.vp-tl-hit'), null), wire(head(), deps.onToggle)],

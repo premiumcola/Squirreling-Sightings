@@ -105,7 +105,10 @@ test('die x-Angabe der Vorschau ist schienenrelativ, nicht fensterrelativ', () =
 
 // ── the pause/resume contract survived the rewrite ───────────────────
 
-test('ein Zug während der Wiedergabe pausiert und läuft danach weiter', () => {
+test('ein Zug pausiert - und bleibt pausiert', () => {
+  // Vorher lief das Video nach dem Loslassen weiter. Damit war die Pause
+  // unsichtbar: das Bild sprang an die neue Stelle und lief sofort davon,
+  // bevor man draufschauen konnte.
   const events = [];
   const { el } = harness({
     isPlaying: () => true,
@@ -114,7 +117,35 @@ test('ein Zug während der Wiedergabe pausiert und läuft danach weiter', () => 
   });
   down(el, 120);
   up(el, 160);
-  assert.deepEqual(events, ['pause', 'resume']);
+  assert.deepEqual(events, ['pause'], 'nach dem Zug darf nichts von selbst weiterlaufen');
+});
+
+test('ein Druck auf den laufenden Regler pausiert wirklich', () => {
+  // DER FEHLER, den dieser Test festhaelt: onDown pausiert bereits, und
+  // ein Umschalter, der danach den VIDEO-Zustand liest, sieht "pausiert"
+  // und startet neu - der Knopf hob seine eigene Pause auf und wirkte
+  // tot.
+  const events = [];
+  let taps = null;
+  const { el } = harness({
+    isPlaying: () => true,
+    onPause: () => events.push('pause'),
+    onTap: (wasPlaying) => {
+      taps = wasPlaying;
+    },
+  });
+  down(el, 150);
+  up(el, 150);
+  assert.deepEqual(events, ['pause']);
+  assert.equal(taps, true, 'der Umschalter muss erfahren, dass vorher gespielt wurde');
+});
+
+test('ein Druck auf den pausierten Regler meldet false', () => {
+  let taps = null;
+  const { el } = harness({ isPlaying: () => false, onTap: (w) => (taps = w) });
+  down(el, 150);
+  up(el, 150);
+  assert.equal(taps, false, 'sonst startet ein Druck im Stillstand die Wiedergabe nie');
 });
 
 test('ein Zug im pausierten Zustand startet die Wiedergabe nicht', () => {

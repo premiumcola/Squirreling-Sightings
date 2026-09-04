@@ -6,10 +6,11 @@
 // the element keeps receiving moves until the finger lifts anywhere on
 // screen.
 //
-// THE PAUSE/RESUME CONTRACT. A drag that started during playback pauses,
-// seeks, and resumes on release; a drag that started while paused leaves
-// it paused. Getting this backwards makes a scrub either stutter against
-// the running playhead or silently start playback.
+// A DRAG ALWAYS ENDS PAUSED. It used to resume whatever it interrupted,
+// which made the pause invisible — the picture jumped to the new spot
+// and ran straight on. Scrubbing exists to look at a moment, so it stops
+// there and waits: „wenn ich wo hin ziehe soll es ja auch erst mal
+// pausieren". Playback restarts only on an explicit tap on the grip.
 //
 // ── WHY THIS DOES NOT SEEK WHILE YOU DRAG ─────────────────────────────
 //
@@ -70,16 +71,18 @@ export function timeFromRect(clientX, rect, duration) {
  *        filmstrip bubble. Called on the caller's own frame budget.
  * @param {() => boolean} [opts.isPlaying]
  * @param {() => void} [opts.onPause]
- * @param {() => void} [opts.onResume]
- * @param {() => void} [opts.onTap]  a press that never moved — the
- *        playhead is also the play button, so pressing it without
- *        dragging must toggle rather than seek to where it already is.
+ * @param {(wasPlaying: boolean) => void} [opts.onTap]  a press that
+ *        never moved — the playhead is also the play button, so pressing
+ *        it without dragging toggles rather than seeking to where it
+ *        already is. `wasPlaying` is the state BEFORE this gesture
+ *        paused it; a toggle that reads the video instead would undo
+ *        its own pause.
  * @returns {{teardown: () => void}|null}
  */
 export function attachScrub(el, opts = {}) {
   if (!el || typeof opts.onSeek !== 'function') return null;
 
-  let resumeAfter = false;
+  let wasPlaying = false;
   let lastTime = null;
   let downX = null;
   let moved = false;
@@ -103,8 +106,8 @@ export function attachScrub(el, opts = {}) {
     }
     downX = ev.clientX;
     moved = false;
-    resumeAfter = opts.isPlaying ? opts.isPlaying() === true : false;
-    if (resumeAfter) opts.onPause?.();
+    wasPlaying = opts.isPlaying ? opts.isPlaying() === true : false;
+    if (wasPlaying) opts.onPause?.();
     const t = timeAt(ev.clientX);
     if (t == null) return;
     lastTime = t;
@@ -135,24 +138,31 @@ export function attachScrub(el, opts = {}) {
     opts.onPreview?.(target ?? 0, localX(ev.clientX), 'end');
 
     // A press that never moved is a TAP, and on the playhead — which is
-    // the play button — that means toggle, not "seek to where you
-    // already are". Only offered when the caller wants it; the rail's
-    // own band has no tap meaning and still jumps.
+    // the play button — that means toggle. Only offered when the caller
+    // wants it; the rail's own band has no tap meaning and still jumps.
+    //
+    // THE TAP IS TOLD WHAT WAS PLAYING BEFORE IT. onDown has already
+    // paused a running clip, so a toggle that reads the CURRENT state
+    // sees "paused" and starts it again — the press pauses and unpauses
+    // in one gesture and the button appears dead: „Wenn ich pause drücke
+    // am laufenden Regler dann pausiert es nicht".
     if (!moved && typeof opts.onTap === 'function') {
-      opts.onTap();
-      // The toggle owns the playback state now, so the drag's own
-      // resume must not fight it back the other way.
-      resumeAfter = false;
+      opts.onTap(wasPlaying);
     } else if (target != null) {
       // The one seek of the whole gesture.
       opts.onSeek(target);
     }
 
+    // AND A DRAG LEAVES IT PAUSED. It used to resume whatever it
+    // interrupted, which made the pause invisible: the picture jumped to
+    // the new position and ran on before the operator could look at it.
+    // Scrubbing exists to inspect a moment — „wenn ich wo hin ziehe soll
+    // es ja auch erst mal pausieren". Playback now starts again only by
+    // an explicit tap on the grip.
     lastTime = null;
     downX = null;
     moved = false;
-    if (resumeAfter) opts.onResume?.();
-    resumeAfter = false;
+    wasPlaying = false;
   };
 
   el.addEventListener('pointerdown', onDown);

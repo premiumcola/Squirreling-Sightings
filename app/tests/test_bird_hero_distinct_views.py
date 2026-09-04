@@ -125,3 +125,66 @@ def test_identity_and_variant_keys_cannot_collide():
     url = f"{COMMONS}/x/Parus_caeruleus.jpg"
     assert photo_identity(url).endswith(".jpg")
     assert "." not in photo_variant_key(url)
+
+
+# ── repairing what is already on disk ────────────────────────────────
+
+
+def _store_with(tmp_path, dossier: dict):
+    """A dossier store on disk, loaded through the real service."""
+    import json
+
+    from app.bird_dossiers import BirdDossierService
+
+    path = tmp_path / "bird_dossiers.json"
+    path.write_text(
+        json.dumps({"schema": 1, "dossiers": {dossier["latin"]: dossier}}),
+        encoding="utf-8",
+    )
+    return BirdDossierService(path)
+
+
+def test_a_stored_duplicate_is_collapsed_on_load(tmp_path):
+    """The fix must reach dossiers written BEFORE it.
+
+    Every dossier in the operator's store already holds the thumbnail
+    and the original of one file. Waiting for the backfill sweep to
+    reach each species would leave the same bird shown twice for days.
+    """
+    svc = _store_with(
+        tmp_path,
+        {
+            "latin": "Delichon urbicum",
+            "photo_urls": [THUMB, ORIGINAL],
+            "wikipedia_thumb_url": THUMB,
+            "wikipedia_thumb_url_2": ORIGINAL,
+            "wikipedia_fetched_at": "2026-09-01T10:00:00",
+        },
+    )
+    d = svc.data["dossiers"]["Delichon urbicum"]
+    assert d["photo_urls"] == [THUMB], "the duplicate survived the load"
+    assert d["wikipedia_thumb_url_2"] is None, (
+        "the legacy mirror still points at the dropped duplicate — the "
+        "frontend falls back to it and would show the pair again"
+    )
+
+
+def test_the_repair_makes_the_species_a_backfill_candidate(tmp_path):
+    """Collapsing 2→1 has to be followed by fetching a real second view,
+    or the fix trades a duplicate for a missing photo."""
+    svc = _store_with(
+        tmp_path,
+        {
+            "latin": "Delichon urbicum",
+            "photo_urls": [THUMB, ORIGINAL],
+            "wikipedia_fetched_at": "2026-09-01T10:00:00",
+        },
+    )
+    assert "Delichon urbicum" in svc.photo_backfill_candidates()
+
+
+def test_distinct_photos_are_left_alone(tmp_path):
+    """The repair must not touch a dossier that is already correct."""
+    good = [f"{COMMONS}/x/A_perched.jpg", f"{COMMONS}/x/A_flight.jpg"]
+    svc = _store_with(tmp_path, {"latin": "A b", "photo_urls": list(good)})
+    assert svc.data["dossiers"]["A b"]["photo_urls"] == good

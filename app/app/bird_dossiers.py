@@ -43,6 +43,7 @@ from pathlib import Path
 # (this module and any future ones) all land on one implementation.
 from .bird_dossiers_fetch import PHOTO_TARGET
 from .bird_dossiers_fetch import fetch_photos as _fetch_photos
+from .bird_dossiers_fetch import photo_identity as _photo_identity
 from .bird_dossiers_fetch import fetch_wikipedia as _fetch_wikipedia
 from .bird_dossiers_fetch import fetch_xeno_canto as _fetch_xeno_canto
 from .io_utils import atomic_write_json as _atomic_write_json  # noqa: F401
@@ -78,6 +79,61 @@ DOSSIER_PREBUILD_BUDGET = 200
 DOSSIER_PHOTO_BACKFILL_BUDGET = 40
 
 
+def _dedupe_photo_list(urls: list) -> list:
+    """Drop repeats of one Commons file from a STORED photo list.
+
+    Order-preserving, first spelling wins. Applies `photo_identity`, so
+    the thumbnail URL and the original URL of one file collapse — which
+    is the shape every dossier written before that function existed has
+    on disk. Purely local: repairing an existing list costs no request,
+    so it happens on the next write rather than waiting for a sweep.
+    """
+    out: list = []
+    seen: set[str] = set()
+    for url in urls:
+        if not url:
+            continue
+        key = _photo_identity(url)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(url)
+    return out
+
+
+def _repair_photo_lists(dossiers: dict) -> int:
+    """Collapse duplicated photos across every dossier at load time.
+
+    Without this the repair only lands when a dossier happens to be
+    re-fetched, and the operator keeps looking at the same bird twice
+    until the backfill sweep reaches that species — days, for a species
+    far down the queue. It is a local list operation on data already in
+    memory, so doing it on load costs nothing and fixes every dossier at
+    once. The shortened list also makes the species a backfill candidate
+    (`len < PHOTO_TARGET`), so a genuine second view gets fetched.
+
+    Returns how many dossiers changed, for the log line.
+    """
+    repaired = 0
+    for d in dossiers.values():
+        if not isinstance(d, dict):
+            continue
+        before = d.get("photo_urls") or []
+        after = _dedupe_photo_list(before)
+        if len(after) == len(before):
+            continue
+        d["photo_urls"] = after
+        # The legacy scalar mirrors are what the frontend falls back to
+        # for a dossier cached before photo_urls existed; leaving them
+        # pointing at the dropped duplicate would put it straight back.
+        d["wikipedia_thumb_url"] = after[0] if after else None
+        d["wikipedia_thumb_url_2"] = after[1] if len(after) > 1 else None
+        repaired += 1
+    if repaired:
+        log.info("[dossiers] %d Dossier(s) zeigten dasselbe Foto doppelt — bereinigt", repaired)
+    return repaired
+
+
 # ── Service ────────────────────────────────────────────────────────────────
 class BirdDossierService:
     """Owns `bird_dossiers.json` plus the background fetcher pool.
@@ -108,6 +164,7 @@ class BirdDossierService:
                 return {"schema": 1, "dossiers": {}}
             d.setdefault("schema", 1)
             d.setdefault("dossiers", {})
+            _repair_photo_lists(d["dossiers"])
             return d
         except Exception as e:
             log.warning("[dossiers] load failed (%s) — starting empty", e)
@@ -439,7 +496,16 @@ class BirdDossierService:
         dossier["wikipedia_summary"] = wiki.get("extract") or None
         dossier["wikipedia_url"] = page_url or None
         photos = [p for p in (photos or []) if p]
-        if len(photos) >= len(dossier.get("photo_urls") or []):
+        # Repair what is already on disk before comparing lengths.
+        # Dossiers written before the selector learned that a thumbnail
+        # URL and an original URL can be the SAME Commons file hold that
+        # file twice, and the "never shrink" rule below would preserve
+        # the duplicate for ever: a species with one usable photo fetches
+        # one, `1 >= 2` is false, and the two identical pictures stay
+        # side by side — which is what the operator was looking at.
+        stored_now = _dedupe_photo_list(dossier.get("photo_urls") or [])
+        dossier["photo_urls"] = stored_now
+        if len(photos) >= len(stored_now):
             dossier["photo_urls"] = photos
         stored = dossier.get("photo_urls") or []
         # Legacy mirrors — same pattern as the audio fields below.

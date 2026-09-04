@@ -85,10 +85,20 @@ export const NETZ_STATE = {
   cam_id: CAMERA.id,
   cam_name: CAMERA.name,
   role: 'garden',
+  // SIX class axes, not three. A real garden camera runs person, cat,
+  // dog, bird, squirrel and car, and the axis count is what decides how
+  // tall the radar has to be and how many rows the legend below it
+  // wraps to. With three axes the card fit its height-locked box in the
+  // harness while the operator's own screenshot showed a scrollbar down
+  // the side of every one of them — a fixture thinner than the real
+  // data cannot photograph a layout that only breaks when it is full.
   axes: [
     { label: 'person', E: 62, push: 0.68, push_enabled: true, spawn: 0.42, confirm_n: 2, confirm_s: 1.5, provenance: 'manuell' },
     { label: 'cat', E: 48, push: 0.55, push_enabled: true, spawn: 0.38, confirm_n: 2, confirm_s: 1.2, provenance: 'auto' },
     { label: 'bird', E: 35, push: 0.41, push_enabled: false, spawn: 0.3, confirm_n: 3, confirm_s: 2, provenance: 'auto' },
+    { label: 'dog', E: 44, push: 0.5, push_enabled: true, spawn: 0.36, confirm_n: 2, confirm_s: 1.4, provenance: 'auto' },
+    { label: 'squirrel', E: 71, push: 0.62, push_enabled: true, spawn: 0.34, confirm_n: 2, confirm_s: 1.1, provenance: 'manuell' },
+    { label: 'car', E: 28, push: 0.33, push_enabled: false, spawn: 0.45, confirm_n: 3, confirm_s: 2.2, provenance: 'auto' },
   ],
   frozen: [{ key: 'confirmation_window', de: 'Bestätigungsfenster' }],
   tuning: TUNING,

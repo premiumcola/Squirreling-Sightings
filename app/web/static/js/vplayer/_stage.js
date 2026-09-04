@@ -21,6 +21,9 @@ import { containRect } from '../core/video-fit.js';
 // One positioner for every layer in the app, carrying the `inset` ban
 // with it. See core/box-model.js::placeOverlayBox.
 import { placeOverlay } from '../core/box-model.js';
+// The refit is also the moment the crowding verdict can change, so the
+// density rule rides the same trigger rather than growing a third one.
+import { chromeRects, mountDensity } from './_density.js';
 
 /** The layers, in paint order. Zones sit under the boxes drawn on them. */
 export const VP_LAYERS = ['zones', 'trails', 'boxes'];
@@ -132,11 +135,18 @@ export function mountStage(frame, cfg) {
   let rect = { x: 0, y: 0, w: 0, h: 0, scale: 1 };
   const listeners = new Set();
 
+  // The frame's own parent. Everything that floats ON the picture — the
+  // layer switches, the transport, the timeline strip — is pinned to it,
+  // so it is also what the density verdict has to be written onto.
+  const stageEl = frame.parentElement;
+  const density = mountDensity(stageEl, () => rect.h);
+
   const refit = () => {
     const box = frame.getBoundingClientRect();
     const src = _sourceSize(media);
     rect = containRect(src.w, src.h, box.width, box.height);
     for (const name of VP_LAYERS) placeOverlay(layers[name], rect);
+    density.measure();
     listeners.forEach((fn) => fn(rect));
   };
 
@@ -150,6 +160,12 @@ export function mountStage(frame, cfg) {
     layers,
     /** Current picture rect, in frame coordinates. */
     rect: () => ({ ...rect }),
+    /**
+     * The on-picture chrome, in picture coordinates. The painter hands
+     * it to the plate renderer so a label never lands underneath the
+     * layer switches, a chevron or the play disc.
+     */
+    chrome: () => chromeRects(stageEl, rect),
     refit,
     /** Call fn(rect) after every refit. Returns the unsubscribe. */
     onRefit: (fn) => {
@@ -158,6 +174,7 @@ export function mountStage(frame, cfg) {
     },
     teardown: () => {
       detach();
+      density.teardown();
       listeners.clear();
       _releaseMedia(video, img);
       frame.innerHTML = '';

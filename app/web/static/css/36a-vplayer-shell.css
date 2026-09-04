@@ -500,6 +500,23 @@
   color: #cfe0d5;
 }
 
+/* ── Compact density · the chrome follows the PICTURE ──────────────────────
+   In compact density the timeline strip drops out of the overlay and
+   into the stage's flow (36b), so the stage is taller than the frame by
+   exactly the strip's height. Everything pinned to the stage with
+   `inset: 0` — this package's chevron layer and mediaview's transport —
+   would then centre on frame-plus-strip, putting the play disc below the
+   middle of the picture and the chevrons on top of the lanes.
+
+   `--vp-strip-h` is written next to `data-density` by _density.js from
+   the same measurement, so the two can never disagree. Overriding the
+   ONE longhand leaves the other three from `inset: 0` untouched, which
+   is what makes this a two-line rule rather than a re-declaration. */
+.vp-stage[data-density='compact'] > .vp-glass,
+.vp-stage[data-density='compact'] > .mv-player {
+  bottom: var(--vp-strip-h, 0px);
+}
+
 /* Fade with the rest of the chrome. Same attribute, same timing as
    30h-mediaview-player.css uses for the transport, so the group leaves
    and returns together instead of in two waves. */

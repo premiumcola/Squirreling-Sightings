@@ -70,11 +70,16 @@ test('overlayScale degrades to 1 rather than dividing by zero', () => {
 });
 
 test('a box renders its rect, its stroke and its plate', () => {
+  // The box is deliberately BIG: 400 viewBox units at k=2 is 200 CSS px
+  // of screen, which is wide enough to carry the full label. A box that
+  // cannot carry it gets a shorter one instead (see the density tests in
+  // _tests/density.test.js) — a plate is never printed wider than the
+  // rectangle it names.
   const svg = buildBoxSvg(
-    { verdict: 'pass', score: 0.87, label: 'person', track_num: 2, bbox: [10, 20, 40, 30] },
-    { k: 2, frameW: 960 },
+    { verdict: 'pass', score: 0.87, label: 'person', track_num: 2, bbox: [10, 20, 400, 120] },
+    { k: 2, frameW: 1280 },
   );
-  assert.ok(svg.includes('<rect x="10" y="20" width="40" height="30"'));
+  assert.ok(svg.includes('<rect x="10" y="20" width="400" height="120"'));
   assert.ok(svg.includes('vector-effect="non-scaling-stroke"'), 'strokes must not scale');
   assert.ok(svg.includes('#2 · Person · 87 %'), 'the plate text belongs on the box');
 });
@@ -115,10 +120,14 @@ test('the plate flips below the box when the box hugs the top edge', () => {
 });
 
 test('the label is escaped, so a crafted class name cannot inject markup', () => {
+  // Room enough to actually PRINT the label, or the escaping would go
+  // untested: a box too small for it drops the plate entirely and the
+  // assertion would pass on an empty string.
   const svg = buildBoxSvg(
-    { verdict: 'pass', score: 0.5, label: '<script>x</script>', bbox: [0, 0, 10, 10] },
-    { k: 1 },
+    { verdict: 'pass', score: 0.5, label: '<script>x</script>', bbox: [0, 0, 400, 120] },
+    { k: 1, frameW: 960 },
   );
+  assert.ok(svg.includes('&lt;script&gt;'), 'the label must reach the plate to be escaped');
   assert.equal(svg.includes('<script>'), false);
 });
 

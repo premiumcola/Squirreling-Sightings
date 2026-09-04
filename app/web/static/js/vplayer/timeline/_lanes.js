@@ -68,11 +68,19 @@ function _laneHtml(lane, duration) {
     `<div class="vp-tl-lane" data-status="${esc(lane.status)}" ` +
     `data-track="${lane.trackNum == null ? '' : esc(String(lane.trackNum))}" ` +
     `style="--vp-lane-colour:${esc(colour)}" title="${esc(title)}">` +
+    // THE TIME AXIS IS ITS OWN BOX. The bar and the dot are positioned
+    // as a percentage of it, so it — not the whole row — has to be the
+    // element the label is beside rather than on top of. Without this
+    // wrapper a lane whose subject stayed to the end of the clip has a
+    // bar running the full width and the label printed straight through
+    // it, which is what „#2 Katze" over its own green bar was.
+    `<span class="vp-tl-lane-track">` +
     `<span class="vp-tl-bar" style="left:${_pct(t0)};width:${_pct(Math.max(0, t1 - t0))}">` +
     `${_segmentsHtml(lane, duration)}</span>` +
     // The dot is painted after the bar so a single-sample track — whose
     // bar has no width at all — still shows something.
     `<span class="vp-tl-dot" style="left:${_pct(dot)}"></span>` +
+    `</span>` +
     `<span class="vp-tl-lane-label">${esc(_laneLabel(lane))}</span>` +
     `</div>`
   );

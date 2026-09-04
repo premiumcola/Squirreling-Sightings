@@ -207,10 +207,34 @@ export const SIM_TICK = {
       track_num: null,
       model: 'coco',
     },
+    // Two more, because a live tick with three well-spaced detections is
+    // not what a garden camera reports. The squirrel is deliberately at
+    // the TOP of the frame and small: its plate would be drawn above the
+    // box, which is where the layer switches are — the case the plate's
+    // flip rule exists for. „Eichhörnchen" is also the longest German
+    // class name there is, on the smallest box in the tick.
+    {
+      label: 'squirrel',
+      score: 0.63,
+      bbox: [484, 34, 76, 60],
+      verdict: 'pass',
+      track_num: 3,
+      model: 'coco',
+    },
+    {
+      label: 'marten',
+      score: 0.41,
+      bbox: [150, 246, 112, 82],
+      verdict: 'tentative',
+      track_num: 4,
+      model: 'coco',
+    },
   ],
   decision_trace: [
     { t: 'SPAWN', track: 1, label: 'person', score: 0.81 },
     { t: 'HOLD', track: 2, label: 'cat', score: 0.34 },
+    { t: 'SPAWN', track: 3, label: 'squirrel', score: 0.63 },
+    { t: 'HOLD', track: 4, label: 'marten', score: 0.41 },
   ],
   diag: { motion_px: 4210, gate: 'motion', roi_tiles: 4 },
   cluster_evidence: null,
@@ -229,6 +253,8 @@ export const SIM_TICK = {
     tracks: [
       { num: 1, label: 'person', score: 0.81, state: 'active', age_s: 4.2, misses: 0 },
       { num: 2, label: 'cat', score: 0.34, state: 'coasting', age_s: 1.1, misses: 2 },
+      { num: 3, label: 'squirrel', score: 0.63, state: 'active', age_s: 2.6, misses: 0 },
+      { num: 4, label: 'marten', score: 0.41, state: 'coasting', age_s: 0.8, misses: 1 },
     ],
   },
 };
@@ -389,7 +415,29 @@ export const CLIP_ITEM = {
 };
 
 /**
- * tracks.json sidecar for that clip — two tracks, so lanes have colour.
+ * tracks.json sidecar for that clip — FIVE tracks, four of them alive at
+ * the instant the surface parks the playhead.
+ *
+ * IT USED TO CARRY TWO, and that is the fixture-thinner-than-reality
+ * trap this harness has now fallen into five times. A garden camera at
+ * dusk routinely holds four or five subjects at once — a bird on the
+ * feeder, a cat under it, a squirrel on the fence, a marten crossing the
+ * path — and every one of them prints a box, an identity plate, a trail
+ * and a lane. With two clean, well-separated tracks the picture looks
+ * roomy at 375 px and the density defect is invisible; with the real
+ * count the plates lie across the transport, the chevrons and each
+ * other, which is the state the operator actually sees.
+ *
+ * The labels are picked for LENGTH as well as plausibility:
+ * „Eichhörnchen" is twelve characters and OBJ_LABEL's longest, and a
+ * plate that has to carry it plus a track number plus a percentage is
+ * three times the width of the box it names.
+ *
+ * Boxes are spread across the frame on purpose — four subjects stacked
+ * in one corner would be a different (and rarer) defect. Their SIZES are
+ * the point: a squirrel on a fence 15 m away is 70 px wide in a 640 px
+ * frame, which at 375 px of screen is 41 CSS px of box under a 130 px
+ * label.
  *
  * SHAPE IS tracker_core's, not an approximation of it. Every reader of a
  * sidecar walks `track.samples` (`bbox-overlay/fetcher.js` sorts them by
@@ -470,6 +518,83 @@ export const TRACKS = {
         },
       ],
     },
+    // On the fence, top right. Small and far, with the longest German
+    // class name in OBJ_LABEL — the worst case for a plate.
+    {
+      track_id: '7a8b9c',
+      label: 'squirrel',
+      best_score: 0.66,
+      samples: [
+        {
+          f: 24,
+          t: 2.4,
+          bbox: { x1: 468, y1: 58, x2: 540, y2: 118 },
+          score: 0.49,
+          source: 'detect',
+        },
+        {
+          f: 52,
+          t: 5.2,
+          bbox: { x1: 486, y1: 62, x2: 561, y2: 124 },
+          score: 0.66,
+          source: 'detect',
+        },
+        {
+          f: 80,
+          t: 8.0,
+          bbox: { x1: 503, y1: 66, x2: 575, y2: 127 },
+          score: 0.38,
+          source: 'track',
+        },
+      ],
+    },
+    // Crossing the path, bottom right. Runs through the instant the
+    // shot is taken, so its box and the cat's are on screen together.
+    {
+      track_id: 'b1c2d3',
+      label: 'marten',
+      best_score: 0.54,
+      samples: [
+        {
+          f: 40,
+          t: 4.0,
+          bbox: { x1: 418, y1: 246, x2: 545, y2: 324 },
+          score: 0.44,
+          source: 'detect',
+        },
+        {
+          f: 56,
+          t: 5.6,
+          bbox: { x1: 437, y1: 251, x2: 566, y2: 330 },
+          score: 0.54,
+          source: 'detect',
+        },
+        {
+          f: 72,
+          t: 7.2,
+          bbox: { x1: 455, y1: 255, x2: 583, y2: 334 },
+          score: 0.31,
+          source: 'detect',
+        },
+      ],
+    },
+    // A single-sample subject: one frame, no bar to speak of, and still
+    // a lane and a plate. The case that proves a zero-width bar and a
+    // full-length label can share a row.
+    {
+      track_id: 'e4f5a6',
+      label: 'hedgehog',
+      best_score: 0.47,
+      samples: [
+        {
+          f: 63,
+          t: 6.3,
+          bbox: { x1: 196, y1: 302, x2: 258, y2: 341 },
+          score: 0.47,
+          source: 'detect',
+        },
+      ],
+    },
   ],
   frame_size: [640, 360],
 };
@@ -497,6 +622,12 @@ export const CLIP_ONLY_ITEM = {
   // Rows as camera_runtime/_clip_tally.py::ClipTally.rows() writes them:
   // best-scoring first, one row per tracked subject, `track_id` from the
   // LIVE tracker's run (which is why the rail must not number them).
+  //
+  // FIVE ROWS, and three of them named by the bird classifier. That is
+  // what makes this surface the harder of the two for the lane row: a
+  // sidecar lane is called „Vogel", but an identified one is called
+  // „Hausrotschwanz", and a fourteen-character name beside a bar that
+  // runs the length of the clip is precisely the collision that shipped.
   whole_clip: {
     detections: [
       {
@@ -521,6 +652,17 @@ export const CLIP_ONLY_ITEM = {
         last_s: 8.2,
       },
       {
+        track_id: 6,
+        label: 'bird',
+        species: 'Hausrotschwanz',
+        species_latin: 'Phoenicurus ochruros',
+        score: 0.44,
+        model: 'bird_classifier',
+        frames: 31,
+        first_s: 0.4,
+        last_s: 11.2,
+      },
+      {
         track_id: 9,
         label: 'bird',
         species: 'Blaumeise',
@@ -531,9 +673,25 @@ export const CLIP_ONLY_ITEM = {
         first_s: 6.1,
         last_s: 7.0,
       },
+      {
+        track_id: 11,
+        label: 'hedgehog',
+        species: null,
+        score: 0.29,
+        model: 'wildlife_classifier',
+        frames: 7,
+        first_s: 8.8,
+        last_s: 10.4,
+      },
     ],
     species: [
       { species: 'Grünfink', species_latin: 'Chloris chloris', best_score: 0.57, frames: 26 },
+      {
+        species: 'Hausrotschwanz',
+        species_latin: 'Phoenicurus ochruros',
+        best_score: 0.44,
+        frames: 31,
+      },
       { species: 'Blaumeise', species_latin: 'Cyanistes caeruleus', best_score: 0.33, frames: 4 },
     ],
     frames: 120,

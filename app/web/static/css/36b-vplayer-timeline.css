@@ -40,7 +40,14 @@
 /* ── The strip, mounted INSIDE the stage ───────────────────────────────────
    Over the bottom of the picture rather than in a band below it. The
    scrim is what keeps a white marker readable over an overexposed sky
-   without painting a solid bar across the video. */
+   without painting a solid bar across the video.
+
+   ON the picture only while it FITS on the picture. `data-density` is
+   written onto the stage by vplayer/_density.js from measured pixels —
+   the letterboxed picture height and this strip's own laid-out height —
+   and never from a viewport width, because the identical crowding
+   appears on a short desktop window at 1440 px. See the compact block at
+   the end of this file for what changes. */
 .vp-timeline {
   position: absolute;
   left: 0;
@@ -70,10 +77,30 @@
   overscroll-behavior: contain;
 }
 
+/* THE NAME GETS A COLUMN, not a corner of the bar. A bar's position IS
+   the subject's timing, so it may be anywhere and is very often the full
+   width — a subject on screen to the end of the clip. Any label placed
+   over that row lands on some bar; the previous rule pinned it right and
+   gave it its own dark ground, and it still printed through the bar
+   underneath it at every width including desktop. Two columns cost the
+   time axis ~90 px and cost the reader nothing. */
 .vp-tl-lane {
-  position: relative;
+  display: grid;
+  /* fit-content, not auto: the name column is as wide as the name and
+     never wider than 42 % of the row, so one long species cannot
+     squeeze the time axis it is supposed to annotate. */
+  grid-template-columns: minmax(0, 1fr) fit-content(42%);
+  align-items: center;
+  gap: 8px;
   height: var(--vp-tl-lane-h);
   touch-action: pan-y;
+}
+
+/* The time axis. Bars, dots and segments are percentages of THIS, which
+   is why it exists — see _lanes.js. */
+.vp-tl-lane-track {
+  position: relative;
+  height: 100%;
 }
 
 .vp-tl-bar {
@@ -121,23 +148,21 @@
   background: var(--vp-lane-colour, var(--vp-accent));
 }
 
-/* Pinned to the right of the lane, which is where the bar ends whenever
-   the subject was on screen to the end of the clip — so the label sat ON
-   its own bar and both became unreadable. It cannot move: any fixed
-   position collides with some bar, because a bar's position is the
-   subject's timing and it may be anywhere. So the label carries its own
-   ground instead, the same trick the picture's timestamp OSD uses. */
+/* The lane's own column, so it can never be printed through a bar. It
+   keeps its ground because the strip still lies on the picture whenever
+   there is room for it, and grey text on an overexposed sky is not text.
+   A long German species name („Hausrotschwanz", „Buntspecht") is
+   ellipsed rather than allowed to eat the time axis — the whole name is
+   on the row's `title` and in the objects list below. */
 .vp-tl-lane-label {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
   padding: 1px 5px;
   border-radius: 6px;
   background: rgba(11, 15, 20, 0.82);
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 
@@ -370,4 +395,57 @@
 .vp-tl-tip-summary {
   margin-top: 6px;
   color: var(--muted);
+}
+
+/* ── Compact density · the strip leaves the picture ────────────────────────
+   The whole point of this file's layout is that a 6 px rail and a row of
+   14 px lanes are cheap enough to lie over the footage. On a 375 px
+   phone they are not: the picture is ~211 px tall and the strip alone
+   measures ~150 of them, so the lanes, the pre-/post-roll captions and
+   the clock all print through the subject, the prev/next chevrons and
+   the play disc at once.
+
+   `position: static` is the entire mechanism. The strip falls back into
+   the stage's normal flow directly under the frame, the stage grows by
+   exactly its height, and every lane, caption and clock digit lands in a
+   row of its own with nothing behind it. Nothing is hidden and nothing
+   is duplicated — the same markup, one row lower.
+
+   WHEN is not a width. vplayer/_density.js measures the picture and the
+   strip and writes `data-density` on the stage; a 1440 px window only
+   500 px tall gets exactly this treatment, which is the case a
+   breakpoint list cannot see. */
+.vp-stage[data-density='compact'] > .vp-timeline {
+  position: static;
+  /* No scrim: there is no picture behind it any more. Its own ground,
+     one step off the black stage, so the row reads as a row — depth from
+     contrast, never from a border line. */
+  background: var(--panel);
+  /* No safe-area inset here any more: in this density the strip is no
+     longer the last thing on the screen — the objects panel is below it,
+     and `.vp-root` already carries the home-indicator padding for the
+     whole column. Adding it twice puts a notch-sized gap in the middle
+     of the page on exactly the phones it was meant to protect. */
+  padding: 8px 10px;
+}
+
+/* Below the picture the row is not competing with the footage, so the
+   list may be taller before it starts scrolling — but it still must not
+   push the objects list off a phone screen. */
+.vp-stage[data-density='compact'] .vp-tl-lanes {
+  max-height: 22dvh;
+}
+
+/* The captions and the clock get the picture's own text colours back:
+   without a video behind them the text-shadow was compensating for a
+   contrast problem that no longer exists. */
+.vp-stage[data-density='compact'] .vp-tl-caps {
+  text-shadow: none;
+}
+
+/* And the lane name loses its plate — on a flat ground it was a second
+   box drawn around text that was already legible. */
+.vp-stage[data-density='compact'] .vp-tl-lane-label {
+  background: none;
+  padding: 1px 0;
 }

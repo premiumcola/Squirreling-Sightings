@@ -190,6 +190,7 @@ function _paintRecorded(stage, st, t, playing) {
   renderBoxLayer(stage.layers.boxes, st.layers.bboxes ? samples : [], {
     frameSize: src,
     screenW: stage.rect().w,
+    chrome: stage.chrome(),
   });
   _paintTrails(stage.layers.trails, st.tracks, t, src, st.layers.trails);
   _paintZones(stage.layers.zones, st.polys, src, st.layers);
@@ -212,6 +213,7 @@ function _paintLiveFrame(stage, st, frame) {
   renderBoxLayer(stage.layers.boxes, st.layers.bboxes ? frame.detections : [], {
     frameSize: fs,
     screenW: stage.rect().w,
+    chrome: stage.chrome(),
   });
   _paintZones(stage.layers.zones, st.polys, st.liveSrc || _sourceSize(stage), st.layers);
 }

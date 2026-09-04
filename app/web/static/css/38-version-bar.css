@@ -1,0 +1,77 @@
+/* ── Stale-build bar ──────────────────────────────────────────────────
+   Shown by core/version-guard.js when this tab's bundle is older than
+   the server's. Rare by design, so it may be loud — but it is a notice,
+   not an alarm: nothing is broken, the operator is just looking at
+   yesterday.
+
+   Bottom rather than top: the top of this app is the hero and the live
+   pill, and a bar that pushes those down on a wall display is worse
+   than the staleness it reports. */
+.version-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  /* dvh, not vh — iOS collapses the address bar and a vh-anchored bar
+     walks off the bottom of the screen (CLAUDE.md's iOS checklist). */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  z-index: var(--z-toast);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 12px 12px 18px;
+  border-radius: 14px;
+  background: #1d2b22;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  animation: version-bar-in 240ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .version-bar {
+    animation: none;
+  }
+}
+@keyframes version-bar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+}
+.version-bar-text {
+  font-size: 14px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+}
+/* Light on dark — CLAUDE.md forbids dark-on-dark buttons, and this bar
+   is the darkest surface in the app. */
+.version-bar-btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #5fc98a;
+  color: #06210f;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .version-bar-btn:hover {
+    background: #74d99b;
+  }
+}
+.version-bar-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+/* Below ~430 px the sentence plus a 44 px button no longer fit on one
+   line without the text going to three words per row. */
+@media (max-width: 430px) {
+  .version-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px;
+    text-align: center;
+  }
+}

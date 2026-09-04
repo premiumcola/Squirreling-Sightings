@@ -25,6 +25,11 @@ import './core/standalone.js';
 // drop doesn't blank the screen. Live data (/api, /media, MJPEG) is
 // excluded by sw.js's fetch handler.
 import './pwa.js';
+// Watches whether this tab's bundle still matches the server's, and
+// offers a reload that clears the service worker + caches. Imported next
+// to pwa.js because it is the other half of that story: pwa.js installs
+// the cache, this tells the operator when the cache has gone stale.
+import { startVersionGuard } from './core/version-guard.js';
 // iOS playback hardening — fires `tamspy:viewport-resumed` after the
 // app comes back from a backgrounded tab so video/MJPEG consumers can
 // re-init their streams. Also exports isIOS / MAX_CONCURRENT_STREAMS
@@ -114,6 +119,8 @@ loadAll().then(() => {
   loadAchievements();
   loadBirdDossiers();
 });
+// After the boot fetches, so a first paint is never delayed by it.
+startVersionGuard();
 // loadLogs() self-fires from chrome/logs.js's import-time boot.
 
 // debug helper used by a couple of inline-onclick attributes when the

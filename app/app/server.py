@@ -79,6 +79,11 @@ app = Flask(
 # Jinja `?v=...` cache-bust helper — the template tag {{ static_v('app.css') }}
 # calls _file_hash which lives in lifecycle.py post-refactor.
 app.jinja_env.globals["static_v"] = _file_hash
+# The whole-shell hash (css + the JS tree), stamped into index.html so a
+# tab can tell whether it is running the server's current build.
+from .lifecycle import shell_hash as _shell_hash
+
+app.jinja_env.globals["shell_v"] = _shell_hash
 
 store = EventStore(str(storage_root))
 app_state.store = store
@@ -210,21 +215,24 @@ def _api_health():
     Telegram cron-pings poll this. Cheap: only reads in-memory
     counters, no settings/disk I/O."""
     from flask import jsonify
+
     try:
         from . import buildinfo as _bi  # type: ignore[no-redef]
+
         commit = getattr(_bi, "commit", "dev")
     except Exception:
         commit = "dev"
-    routes_n = sum(
-        1 for r in app.url_map.iter_rules() if not str(r).startswith("/static")
+    routes_n = sum(1 for r in app.url_map.iter_rules() if not str(r).startswith("/static"))
+    return jsonify(
+        {
+            "ok": True,
+            "build": commit,
+            "uptime_seconds": int(time.time() - _BOOT_TS),
+            "routes_registered": routes_n,
+            "runtimes_active": len(runtimes),
+        }
     )
-    return jsonify({
-        "ok": True,
-        "build": commit,
-        "uptime_seconds": int(time.time() - _BOOT_TS),
-        "routes_registered": routes_n,
-        "runtimes_active": len(runtimes),
-    })
+
 
 # Single-flight lock + last-applied snapshot for telegram reloads. The lock
 # prevents two HTTP saves landing simultaneously from each starting a fresh
@@ -287,13 +295,17 @@ def _reload_telegram_service():
         _diag_diff = f"snapshot diff failed: {_e}"
     log.warning(
         "[tg] _reload_telegram_service call #%d at uptime=%.1fs · %s",
-        _tg_reload_diag_count, uptime_s, _diag_diff,
+        _tg_reload_diag_count,
+        uptime_s,
+        _diag_diff,
     )
     if _tg_reload_diag_count <= _TG_RELOAD_DIAG_FULL_STACK_CALLS:
         import traceback as _tb
+
         log.warning(
             "[tg] call #%d caller stack:\n%s",
-            _tg_reload_diag_count, "".join(_tb.format_stack(limit=8)),
+            _tg_reload_diag_count,
+            "".join(_tb.format_stack(limit=8)),
         )
     global _last_telegram_reload_at
     with _telegram_reload_lock:

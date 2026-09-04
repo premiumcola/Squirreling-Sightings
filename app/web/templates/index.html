@@ -47,6 +47,12 @@
       src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"
       crossorigin="anonymous"
     ></script>
+    <!-- The build this DOCUMENT was rendered from. Travels with the page,
+         so core/version-guard.js can compare it against a live
+         /version.json and tell the operator when the tab is older than
+         the server — which is not otherwise knowable from inside the
+         tab, and went unnoticed for weeks. -->
+    <meta name="shell-version" content="{{ shell_v() }}" />
     <link rel="stylesheet" href="/static/app.css?v={{ static_v('app.css') }}" />
   </head>
   <body>

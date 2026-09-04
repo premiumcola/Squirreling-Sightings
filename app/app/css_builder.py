@@ -141,6 +141,11 @@ LOAD_ORDER = [
     # it only adds — the report body reuses 20-mediathek-2.css's .mi-*
     # rules and this partial holds nothing that needs to win a cascade.
     "37-replay-batch.css",
+    # The stale-build bar (core/version-guard.js). Last, and deliberately
+    # so: it is the one surface that must render correctly even when the
+    # rest of the page is from an older build, because that is exactly
+    # when it appears.
+    "38-version-bar.css",
 ]
 
 _BANNER = (

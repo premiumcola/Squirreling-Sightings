@@ -13,9 +13,14 @@
 //
 // No real IPs, no real tokens: doc-range values only (RFC 5737).
 
+// The simulation's own fixtures live next door — see that file's header
+// for why the camera id is declared THERE and read back here.
+import { SIM_CAM_ID } from './_fixtures-sim.mjs';
+export { SIM_TICK, SIM_FAILURES, SIM_TICK_CPU_FALLBACK, TPU_STATUS } from './_fixtures-sim.mjs';
+
 /** One fully-populated camera, as /api/cameras returns it. */
 export const CAMERA = {
-  id: 'reolink_rlc810a_garten_51',
+  id: SIM_CAM_ID,
   name: 'Garten Nord',
   status: 'active',
   armed: true,
@@ -29,6 +34,14 @@ export const CAMERA = {
   resolution: '3840x2160',
   object_filter: ['person', 'cat', 'bird', 'dog'],
   class_severity: { dog: 'off' },
+  // The camera's configured tiling mode. live-detect.js::_seedSession
+  // reads it off `state.cameras` to decide which mode the simulation
+  // opens on — a camera without it opens on "Aus" and the panel then
+  // describes a pipeline the camera does not run, which is the very
+  // mismatch _seedSession's comment says this field exists to prevent.
+  // Kept equal to SIM_TICK's `modes.roi_mode`, so the picker, the chip
+  // and the tick agree the way they do on a real box.
+  roi_mode: '2x2',
   telegram_enabled: true,
   mqtt_enabled: true,
   schedule_notify: { enabled: true, from: '21:00', to: '06:00' },
@@ -156,127 +169,6 @@ export const NETZ_STATE = {
   ],
   frozen: [{ key: 'confirmation_window', de: 'Bestätigungsfenster' }],
   tuning: TUNING,
-};
-
-/**
- * One tick of POST /api/cameras/<id>/test-detection — the simulation's
- * whole world.
- *
- * Shaped from routes/coral_test_detection.py's own response body, not
- * invented: `modes` is _sim_debug.modes_block (the ROI and device chips
- * read `roi_mode_active` and `inference.device` off it), `detections`
- * are the pre-gate rows with their verdicts, `decision_trace` feeds the
- * track-events list and `debug.tracks` the track rows.
- *
- * It exists because the harness could not exercise the simulation at
- * all: with no answer for this endpoint the poll loop only ever saw a
- * network error, so no shot and no probe could tell a loop that was
- * running from one that had never been started — which is exactly the
- * defect that shipped.
- */
-export const SIM_TICK = {
-  ok: true,
-  snapshot: null,
-  frame_size: { w: 640, h: 360 },
-  frame_age_ms: 120,
-  frame_interval_avg_ms: 350,
-  decoder_backlog_suspected: false,
-  revision: null,
-  detections: [
-    {
-      label: 'person',
-      score: 0.81,
-      bbox: [210, 90, 120, 210],
-      verdict: 'pass',
-      track_num: 1,
-      model: 'coco',
-    },
-    {
-      label: 'cat',
-      score: 0.34,
-      bbox: [420, 200, 90, 70],
-      verdict: 'tentative',
-      track_num: 2,
-      model: 'coco',
-    },
-    {
-      label: 'bird',
-      score: 0.29,
-      bbox: [60, 250, 40, 35],
-      verdict: 'masked',
-      track_num: null,
-      model: 'coco',
-    },
-    // Two more, because a live tick with three well-spaced detections is
-    // not what a garden camera reports. The squirrel is deliberately at
-    // the TOP of the frame and small: its plate would be drawn above the
-    // box, which is where the layer switches are — the case the plate's
-    // flip rule exists for. „Eichhörnchen" is also the longest German
-    // class name there is, on the smallest box in the tick.
-    {
-      label: 'squirrel',
-      score: 0.63,
-      bbox: [484, 34, 76, 60],
-      verdict: 'pass',
-      track_num: 3,
-      model: 'coco',
-    },
-    {
-      label: 'marten',
-      score: 0.41,
-      bbox: [150, 246, 112, 82],
-      verdict: 'tentative',
-      track_num: 4,
-      model: 'coco',
-    },
-  ],
-  decision_trace: [
-    { t: 'SPAWN', track: 1, label: 'person', score: 0.81 },
-    { t: 'HOLD', track: 2, label: 'cat', score: 0.34 },
-    { t: 'SPAWN', track: 3, label: 'squirrel', score: 0.63 },
-    { t: 'HOLD', track: 4, label: 'marten', score: 0.41 },
-  ],
-  diag: { motion_px: 4210, gate: 'motion', roi_tiles: 4 },
-  cluster_evidence: null,
-  modes: {
-    inference: { device: 'tpu', model: 'efficientdet_lite0_edgetpu' },
-    role: 'garden',
-    alarm_profile: 'standard',
-    detection_trigger: 'motion',
-    roi_mode: '2x2',
-    roi_mode_active: '2x2',
-  },
-  models: {
-    coco: { file: 'coco_ssd_mobilenet_v2_edgetpu.tflite', sha256: 'ab12cd34' },
-  },
-  debug: {
-    tracks: [
-      { num: 1, label: 'person', score: 0.81, state: 'active', age_s: 4.2, misses: 0 },
-      { num: 2, label: 'cat', score: 0.34, state: 'coasting', age_s: 1.1, misses: 2 },
-      { num: 3, label: 'squirrel', score: 0.63, state: 'active', age_s: 2.6, misses: 0 },
-      { num: 4, label: 'marten', score: 0.41, state: 'coasting', age_s: 0.8, misses: 1 },
-    ],
-  },
-};
-
-/**
- * The `tpu` block of GET /api/status, as detectors/_utilisation.py's
- * fleet_tpu_utilisation writes it. The simulation panel's TPU chip
- * reads it through tpuFor(status, camId) — from the STATUS payload, not
- * from the frame, which is why a panel handed a null status can never
- * fill that chip however well the poll loop is running.
- */
-// Field names are detectors/_utilisation.py::_readouts's own — `busy`
-// is the 0..1 fraction the chip prints, and it is NOT called
-// `busy_ratio`, which is what this fixture said on the first pass. A
-// stub that invents a field name renders a placeholder and proves the
-// chip broken when it is fine.
-export const TPU_STATUS = {
-  window_s: 60,
-  total: { count: 118, busy_s: 1.74, span_s: 4.1, mean_ms: 14.7, per_s: 28.8, busy: 0.424 },
-  cameras: {
-    [CAMERA.id]: { count: 118, busy_s: 1.74, span_s: 4.1, mean_ms: 14.7, per_s: 28.8, busy: 0.424 },
-  },
 };
 
 /** A landscape and a PORTRAIT reference photo.

@@ -94,6 +94,69 @@ function apiBody(url) {
 /** Code assets must never be answered with a picture or a JSON blob. */
 const CODE_RE = /\.(m?js|json|css|map)$/i;
 
+// ── Overrides that are not a 200 ───────────────────────────────────────────
+// A surface used to be able to say only "answer this path with this body",
+// which is enough to pose a different SUCCESS and nothing else. The whole
+// failure half of the simulation — every 429, every 503, and a fetch that
+// never lands at all — was therefore unphotographable, and "the panel
+// explains the outage" could not be told apart from "the panel says
+// nothing", which is exactly the defect that shipped.
+//
+// Tagged with `__uishot` rather than sniffed, because a real API body may
+// legitimately have a `status` key of its own and guessing would silently
+// answer the wrong thing.
+
+const TAG = '__uishot';
+
+/**
+ * Answer one path with a non-200 status.
+ *
+ * @param {number} status
+ * @param {object} body  the JSON the real endpoint would send
+ */
+export function reply(status, body) {
+  return { [TAG]: 'reply', status, body };
+}
+
+/**
+ * Fail one path at the transport, the way an unplugged box does: the
+ * request is aborted, so `fetch` REJECTS rather than resolving with an
+ * error status. That is a different branch in the poll loop
+ * (`_handleTickError`, not `_consumeResponse`) and a different verdict on
+ * screen, so it needs its own stub.
+ */
+export function netFail() {
+  return { [TAG]: 'abort' };
+}
+
+/**
+ * Does this override key select this path?
+ *
+ * A key starting with `/` is a path PREFIX, as it always was. Anything
+ * else is a substring, mirroring apiBody's own `includes('/test-detection')`
+ * — the simulation's endpoint sits under `/api/cameras/<id>/`, so a prefix
+ * wide enough to reach it would also swallow the camera list the whole
+ * page boots from.
+ */
+function overrideMatches(key, pathname) {
+  return key.startsWith('/') ? pathname.startsWith(key) : pathname.includes(key);
+}
+
+/** Apply one matched override. Returns true when it answered the route. */
+async function applyOverride(route, value) {
+  if (value && value[TAG] === 'abort') {
+    await route.abort('connectionrefused');
+    return true;
+  }
+  const isReply = value && value[TAG] === 'reply';
+  await route.fulfill({
+    status: isReply ? value.status : 200,
+    contentType: 'application/json',
+    body: JSON.stringify(isReply ? value.body : value),
+  });
+  return true;
+}
+
 /** The two CDN libraries index.html loads, as inert stand-ins. */
 const CDN_SHIM =
   'window.Hls={isSupported:function(){return false}};' +
@@ -105,11 +168,14 @@ const CDN_SHIM =
  * Install request interception on one page.
  * Anything not matched falls through to the harness's static server.
  *
- * `overrides` is an optional { pathPrefix: body } from the surface, for
+ * `overrides` is an optional { pathPrefix: answer } from the surface, for
  * the cases where the SAME endpoint has to answer differently than the
  * default fixture — a sparse weather archive, say, which is a state the
  * default payload cannot also be. Checked before apiBody, so a surface
  * can shadow any answer without editing the shared table.
+ *
+ * `answer` is a plain JSON body for a 200, or `reply(status, body)` /
+ * `netFail()` for the failure states.
  */
 export async function installStubs(page, overrides = null) {
   // The CDN <script> tags carry SRI hashes, so a stubbed BODY is rejected
@@ -138,10 +204,11 @@ export async function installStubs(page, overrides = null) {
     if (isImg) return route.fulfill({ contentType: 'image/svg+xml', body: SNAPSHOT_SVG });
 
     if (p.startsWith('/api/') || (p.startsWith('/media/') && !p.endsWith('.mp4'))) {
-      const over = Object.entries(overrides || {}).find(([prefix]) => p.startsWith(prefix));
+      const over = Object.entries(overrides || {}).find(([key]) => overrideMatches(key, p));
+      if (over) return applyOverride(route, over[1]);
       return route.fulfill({
         contentType: 'application/json',
-        body: JSON.stringify(over ? over[1] : apiBody(url)),
+        body: JSON.stringify(apiBody(url)),
       });
     }
     return route.continue();

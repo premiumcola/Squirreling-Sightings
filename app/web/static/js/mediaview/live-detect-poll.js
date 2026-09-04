@@ -11,7 +11,8 @@
 //   _live-detect-frame.js            what ONE response turns into on screen
 import { S } from './live-detect-state.js';
 import { _refreshCadenceRow } from './live-detect-diag.js';
-import { _showModeRefusedBanner, _showBusyNotice } from './live-detect-stall.js';
+import { _healthInfo } from './live-detect-stall.js';
+import { showOutage, showHealth, registerVerdictAction } from './live-detect-verdict.js';
 import { mvModeInvokes } from './mode-indicator.js';
 import { _cadenceForCycle, _nextCycleEma, _holdMsFromEma } from './_live-detect-cadence.js';
 import {
@@ -51,19 +52,29 @@ function _deferWhileInflight(session) {
 }
 
 // B23' · an ok=false response. Stash the code+message for the fold's
-// "Letzter Tick" banner, and let the two 429 codes paint their own
-// explanation — leaving either of them wordless is what let the stall
-// watchdog's guess stand in for the real reason.
+// "Letzter Tick" line, and paint the verdict band.
+//
+// The band is the fix for the outage being INVISIBLE. Only two of the
+// endpoint's ten failure bodies used to reach a surface at all, and both
+// reached the legacy modal's host — a node the unified player does not
+// render, so nothing was on screen. Everything now goes through one
+// classifier (_live-detect-outage.js) and one band, so a mode that
+// nobody wrote a special case for still says what it is instead of
+// leaving the panel looking idle.
+//
+// The fold keeps its own copy deliberately: it is the scroll-back, and
+// the band only ever shows the CURRENT truth.
 function _handleTickFailure(status, data) {
-  const { msg, text } = _classifyTickFailure(status, data);
+  const { text } = _classifyTickFailure(status, data);
   S.tickState.lastTickError = text;
   S.session?.fold?.setLastError?.(text);
-  if (data?.code === 'mode_too_expensive') {
-    _showModeRefusedBanner(msg || text, () => _fallbackToOff());
-  } else if (data?.code === 'busy') {
-    _showBusyNotice();
-  }
+  showOutage({ kind: 'http', status, data });
 }
+
+// The way out of a mode this hardware cannot sustain. Registered rather
+// than passed to the banner: the verdict band owns no knowledge of the
+// loop, and the loop owns no knowledge of the band's markup.
+registerVerdictAction('mode-off', () => _fallbackToOff());
 
 // Supersede whatever was in flight and stamp the new request's clock.
 // Returns the controller this tick must be judged against — every later
@@ -150,6 +161,11 @@ async function _consumeResponse(r, session, controller) {
     // clear protects against an empty-trace ok=true response.
     S.session?.fold?.setLastError?.(null);
     _renderFrame(data);
+    // AFTER the frame, because the healthy verdict reads the device this
+    // tick actually ran on — which _renderFrame is what stores. A tick
+    // that succeeded on the CPU because the TPU was taken is still a
+    // finding, and it is the one the panel used to swallow whole.
+    showHealth(_healthInfo());
   } else {
     _handleTickFailure(r?.status, data);
   }
@@ -169,9 +185,14 @@ function _handleTickError(err, session, controller) {
     return false;
   }
   S.tickState.lastStatus = 'neterr';
-  const text = `neterr · ${(err && (err.message || String(err))) || 'unknown'}`;
+  const why = (err && (err.message || String(err))) || 'unknown';
+  const text = `neterr · ${why}`;
   S.tickState.lastTickError = text;
   S.session?.fold?.setLastError?.(text);
+  // A rejected fetch never reached the server, so nothing on the box can
+  // report it — this band is the only place the operator can learn that
+  // the browser, not the camera, is the one that lost contact.
+  showOutage({ kind: 'neterr', message: why });
   return true;
 }
 

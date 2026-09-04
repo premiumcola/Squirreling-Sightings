@@ -251,3 +251,25 @@ def busy_payload(cam_id: str) -> dict:
         "code": "busy",
         "error": "Simulation läuft noch — die vorherige Analyse ist nicht abgeschlossen.",
     }
+
+
+# The two 503s that are not about a frame. Named, so ``coral_test_detection`` can
+# refuse in one line and stay inside the 80-line function budget.
+RUNTIME_OFF = "Kamera-Runtime nicht aktiv (deaktiviert?)"
+CORAL_OFF = "Coral nicht verfügbar (motion-only?)"
+
+
+def refusal(code: str, message: str) -> dict:
+    """One shape for every refusal this endpoint can answer with.
+
+    Five of them used to be a bare ``{"error": ...}`` while the two 429s
+    and the frame failure carried ``ok`` and ``code``, so the client had
+    to tell "the Coral is gone" from "the runtime is down" by matching on
+    the German prose — both are a 503 with no other distinguishing mark.
+    A verdict picked by regex over a message is a verdict that changes
+    when someone rewords the message.
+
+    Purely additive: ``error`` keeps the exact text it always had, and
+    ``ok: False`` is what every reader already treats an error body as.
+    """
+    return {"ok": False, "code": code, "error": message}

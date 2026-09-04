@@ -35,20 +35,6 @@
   padding: 8px 10px calc(10px + var(--vp-safe-bottom));
 }
 
-.vp-pnl-empty {
-  padding: 12px 2px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.vp-pnl-subhead {
-  padding: 10px 2px 4px;
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 /* ── Rows ──────────────────────────────────────────────────────────────────
    A row is a touch target. Depth comes from the ground/row colour
    difference, never from a hairline border. */
@@ -779,4 +765,272 @@
   /* Decorative: the species name itself is the information, and a
      screen reader announcing "herb" before every bird helps nobody. */
   speak: never;
+}
+
+/* ── Reading order on the live + simulation panel ──────────────────────────
+   A diagnostic screen is read top-down ONCE, so it has to be ordered by
+   what answers the question first. It was not: the mode chips, the track
+   rows and two raw-data folds sat at one weight underneath each other in
+   whatever order they happened to be built, and nothing said whether the
+   thing was even working.
+
+   ORDER, not markup. The band is prepended by mediaview/live-detect-
+   verdict.js and the rest is built by vplayer/panels/_live-tracks.js;
+   pinning the sequence here means neither one has to know where the other
+   inserts, and a future row lands in the right band by naming its class.
+
+     0  verdict   is it working, and if not, what do I do
+     1  chips     under what conditions this tick ran
+     2  tracks    what the pipeline is currently holding — the evidence
+     3  raw       every detection including the discarded ones
+     4  debug     the dump
+
+   Scoped to the two live modes: the recorded panel is a different
+   question ("what is in this clip") and keeps its own order. */
+.vp-root[data-mode='sim'] .vp-panel,
+.vp-root[data-mode='live'] .vp-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.vp-root[data-mode='sim'] .vp-panel > #mvSimVerdict,
+.vp-root[data-mode='live'] .vp-panel > #mvSimVerdict {
+  order: 0;
+}
+
+.vp-root[data-mode='sim'] .vp-panel > .vp-pnl-head,
+.vp-root[data-mode='live'] .vp-panel > .vp-pnl-head {
+  order: 1;
+}
+
+.vp-root[data-mode='sim'] .vp-panel > .vp-pnl-revpick,
+.vp-root[data-mode='live'] .vp-panel > .vp-pnl-revpick {
+  order: 2;
+}
+
+.vp-root[data-mode='sim'] .vp-panel > .vp-pnl-tracks,
+.vp-root[data-mode='live'] .vp-panel > .vp-pnl-tracks {
+  order: 3;
+}
+
+.vp-root[data-mode='sim'] .vp-panel > .vp-pnl-raw,
+.vp-root[data-mode='live'] .vp-panel > .vp-pnl-raw {
+  order: 4;
+}
+
+.vp-root[data-mode='sim'] .vp-panel > .vp-pnl-debug,
+.vp-root[data-mode='live'] .vp-panel > .vp-pnl-debug {
+  order: 5;
+}
+
+/* The two raw folds are the DUMP, and a dump that shouts is a dump that
+   gets read instead of the answer. Pushed down and quietened as a group:
+   one gap above the pair, the second sitting tight under the first. */
+.vp-root[data-mode='sim'] .vp-panel > .vp-pnl-raw,
+.vp-root[data-mode='live'] .vp-panel > .vp-pnl-raw {
+  margin-top: 6px;
+}
+
+.vp-root[data-mode='sim'] .vp-pnl-raw .vp-fold-header,
+.vp-root[data-mode='live'] .vp-pnl-raw .vp-fold-header,
+.vp-root[data-mode='sim'] .vp-pnl-debug .vp-fold-header,
+.vp-root[data-mode='live'] .vp-pnl-debug .vp-fold-header {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* A fold title carries its own count ("2 übernommen · 1 verworfen") and
+   at 375 px that count was the half being ellipsed away — which is the
+   half worth reading. Let it wrap onto a second line instead. */
+.vp-root[data-mode='sim'] .vp-fold-title,
+.vp-root[data-mode='live'] .vp-fold-title {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+/* ── The mode chips, demoted to a caption ──────────────────────────────────
+   They are conditions, not findings: TPU/CPU, the ROI mode, the busy
+   ratio. Full-weight chips made them compete with the verdict directly
+   above and the track rows directly below, so all three read as one
+   undifferentiated list. */
+.vp-root[data-mode='sim'] .vp-pnl-chips,
+.vp-root[data-mode='live'] .vp-pnl-chips {
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.vp-root[data-mode='sim'] .vp-pnl-chips .vp-pnl-chip,
+.vp-root[data-mode='live'] .vp-pnl-chips .vp-pnl-chip {
+  padding: 2px 7px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* …except the one that says this tick did NOT run the camera's profile.
+   That changes how every number below is read, so it keeps its warmth. */
+.vp-root[data-mode='sim'] .vp-pnl-chips .vp-pnl-chip.is-revision,
+.vp-root[data-mode='live'] .vp-pnl-chips .vp-pnl-chip.is-revision {
+  background: color-mix(in srgb, var(--warn) 20%, var(--panel));
+  color: var(--warn);
+}
+
+/* ── Verdict band ──────────────────────────────────────────────────────────
+   The first thing in the panel and the only thing with weight: whether
+   the simulation is working, and if it is not, which failure it is and
+   what to do about it.
+
+   Before this, every failure message the poll loop produced was appended
+   to the legacy modal's media wrap — a node the unified player does not
+   render — so a real outage showed NOTHING. The panel sat unchanged and
+   looked idle. See mediaview/live-detect-verdict.js.
+
+   Four tones, each a tinted ground rather than a border: ok (running),
+   wait (transient, self-healing), warn (a decision to make), bad (broken
+   until someone acts). Depth by colour contrast, per CLAUDE.md. */
+.vp-sv {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: var(--vp-radius-sm);
+  background: var(--vp-sv-bg, var(--surface));
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.vp-sv[data-tone='ok'] {
+  --vp-sv-bg: color-mix(in srgb, var(--good) 13%, var(--panel));
+  --vp-sv-fg: var(--good);
+}
+
+/* BLUE, not the player's green accent. "Analyse läuft noch" and
+   "Simulation läuft" are the two states an operator most needs to tell
+   apart at a glance — one means wait, the other means read on — and in
+   two shades of green they looked like the same band. This is the app's
+   own --accent, the same blue the panel's chips are tinted with. */
+.vp-sv[data-tone='wait'] {
+  --vp-sv-bg: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  --vp-sv-fg: #93c5fd;
+}
+
+.vp-sv[data-tone='warn'] {
+  --vp-sv-bg: color-mix(in srgb, var(--warn) 16%, var(--panel));
+  --vp-sv-fg: var(--warn);
+}
+
+.vp-sv[data-tone='bad'] {
+  --vp-sv-bg: color-mix(in srgb, var(--danger) 18%, var(--panel));
+  --vp-sv-fg: var(--danger);
+}
+
+.vp-sv-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--vp-sv-fg, var(--muted));
+}
+
+/* The waiting glyph is a clock, and a clock that does not move reads as a
+   frozen screen — which is the exact misreading this band exists to
+   prevent. Slow enough not to nag. */
+.vp-sv[data-tone='wait'] .vp-sv-icon {
+  animation: vp-sv-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes vp-sv-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.42;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-sv[data-tone='wait'] .vp-sv-icon {
+    animation: none;
+  }
+}
+
+.vp-sv-body {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.vp-sv-title {
+  color: var(--vp-sv-fg, var(--text));
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+/* `anywhere`, for the same reason .vp-pnl-reason has it: a quoted backend
+   message can carry a model file name or a URL with nothing to break at,
+   and the panel must never gain a horizontal scroll. */
+.vp-sv-detail {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.vp-sv-hint {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* The one action a verdict offers. Light on the tinted ground — never
+   dark-on-dark, and a full 44 px target. Its own line at phone widths so
+   the label never competes with the text for the same 375 px.
+
+   Deliberately NEUTRAL rather than the accent green: it sits on four
+   different tinted grounds and has to read as "the way out" on all of
+   them. Green on the danger ground read as an unrelated affirmative, and
+   the tone colour itself would make "Erneut versuchen" look destructive. */
+.vp-sv-btn {
+  flex: 1 0 100%;
+  min-height: var(--vp-tap);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--vp-radius-sm);
+  background: var(--text);
+  color: var(--panel);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (min-width: 560px) {
+  .vp-sv-btn {
+    flex: 0 0 auto;
+    align-self: center;
+  }
+}
+
+@media (hover: hover) {
+  .vp-sv-btn:hover {
+    filter: brightness(1.08);
+  }
+}
+
+.vp-pnl-empty {
+  padding: 12px 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.vp-pnl-subhead {
+  padding: 10px 2px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }

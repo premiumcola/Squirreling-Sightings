@@ -8,11 +8,16 @@
 //   * CONTACT  — nothing answered at all. Keyed on `lastContactAt`, which
 //     any HTTP response updates (200, 429, 503 alike). Threshold is
 //     mode-INDEPENDENT: a reachable server answers promptly whatever it
-//     answers. This one, and only this one, shows the reconnect banner and
+//     answers. This one, and only this one, shows the reconnect verdict and
 //     re-kicks the loop.
 //   * PACE     — answers arrive but frames are slow. Keyed on `lastRespAt`
 //     and scaled by the mode's inference count, so 3×3 gets ten times the
 //     budget of "Aus". It shows an informational notice and never aborts.
+//
+// Neither one PAINTS any more. Both hand a verdict to
+// live-detect-verdict.js, which is what put the message on a surface that
+// is actually rendered — this file's own `_banner()` hosted itself in the
+// legacy modal, so during a real outage nothing appeared at all.
 //
 // The old single watchdog compared the frame gap against a threshold
 // seeded from the cadence measured BEFORE the mode switch. Picking 3×3
@@ -21,13 +26,17 @@
 // each retry added another ten-inference job. The EMA never learned the
 // new cost because no tick ever completed: a bootstrap deadlock that
 // looked, on screen, exactly like a dead camera.
-import { byId, esc } from '../core/dom.js';
 import { S } from './live-detect-state.js';
-import { zoneEl } from './live-detect-skeleton.js';
 import { _tick } from './live-detect-poll.js';
 import { _renderBboxOverlay } from './live-detect-bbox.js';
 import { _debugDiagOn, _renderDiagStrip } from './live-detect-diag.js';
 import { mvModeInvokes, mvModeLabel } from './mode-indicator.js';
+import {
+  showOutage,
+  showHealth,
+  clearOutage,
+  registerVerdictAction,
+} from './live-detect-verdict.js';
 import {
   _STALL_FLOOR_MS,
   _STALL_FACTOR,
@@ -72,18 +81,39 @@ function _paceBudgetMs() {
   return Math.max(_PACE_FLOOR_MS, Math.round(_STALL_FACTOR * expected));
 }
 
+// What the healthy verdict says, and the two facts that decide whether it
+// is healthy at all.
+//
+// `device`/`reason` come off the LAST TICK'S OWN payload, not off a
+// setting: when another process owns the Edge TPU the detector walks down
+// to its CPU tier and the endpoint answers a perfectly ordinary 200 whose
+// only trace of the problem is `modes.inference.reason`. That is the one
+// failure mode with no failure response — see describeHealth.
+export function _healthInfo() {
+  const mode = S.session?.detMode || 'off';
+  const inference = S.session?.lastFullData?.modes?.inference || null;
+  const ema = S.cycleEmaMs;
+  return {
+    modeLabel: mvModeLabel(mode),
+    invokes: mvModeInvokes(mode),
+    cadenceMs: Number.isFinite(ema) ? ema : S.tickState.lastDelayMs,
+    device: inference?.device || null,
+    reason: inference?.reason || '',
+  };
+}
+
 // Contact is (re-)established: drop the stall state and take down the
-// disconnect banner — and ONLY that banner. A busy / refused / pace
-// notice put up by the poll loop describes the current truth and must
-// survive; blanket-hiding here is what made the two paths fight.
+// disconnect verdict — and ONLY that one. A busy / refused / pace notice
+// put up by the poll loop describes the current truth and must survive;
+// blanket-hiding here is what made the two paths fight. `clearOutage`
+// takes the id it is allowed to clear for exactly that reason.
 function _clearContactStall() {
   if (S.stallState.active) {
     console.warn(`[sim-stall] recovered after ${Date.now() - S.stallState.sinceMs} ms`);
     S.stallState.active = false;
     S.stallState.backoffMs = _STALL_BACKOFF_START;
   }
-  const el = byId('mvLiveStallBanner');
-  if (el && el.dataset.tone === 'warn') el.remove();
+  clearOutage('contact', _healthInfo());
 }
 
 export function _checkStall() {
@@ -130,7 +160,7 @@ export function _checkStall() {
   // PACE — contact is fine, frames are just slow. Informational only.
   const frameGap = now - (t.lastRespAt || started);
   if (frameGap > _paceBudgetMs()) _showPaceNotice();
-  else if (!t.lastTickError) _hideStallBanner();
+  else if (!t.lastTickError) showHealth(_healthInfo());
 }
 
 // Contact watchdog body — kept out of _checkStall so neither function
@@ -146,13 +176,17 @@ function _handleContactStall(now, gap, ref) {
       `[sim-stall] no response for ${gap} ms · ` +
         `lastContact=${t.lastContactAt ? new Date(t.lastContactAt).toISOString() : 'none'}`,
     );
-    _showStallBanner();
+    showOutage({ kind: 'contact', gapMs: gap });
     _retryTickNow();
     S.stallState.nextRetryAt = now + S.stallState.backoffMs;
     return;
   }
+  // Repaint on every backoff step, not only on the way in: the verdict
+  // counts the seconds since the last answer, and a frozen number is the
+  // one thing that makes a live outage look like a stuck banner.
   if (now >= S.stallState.nextRetryAt) {
     S.stallState.backoffMs = Math.min(_STALL_BACKOFF_MAX, S.stallState.backoffMs * 2);
+    showOutage({ kind: 'contact', gapMs: gap });
     _retryTickNow();
     S.stallState.nextRetryAt = now + S.stallState.backoffMs;
   }
@@ -185,95 +219,21 @@ export function _retryTickNow() {
   _tick();
 }
 
-// One banner element, two tones. `data-tone="warn"` is the genuine
-// no-contact case; `data-tone="info"` is "slow, still running" and must
-// never read as a connection fault — that wrong message is the whole
-// reason this file was rewritten.
-function _banner(tone, html) {
-  const host = zoneEl('video') || byId('lightboxMediaWrap');
-  if (!host) return null;
-  let el = byId('mvLiveStallBanner');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'mvLiveStallBanner';
-    el.className = 'mv-ld-stall-banner';
-    host.appendChild(el);
-  }
-  if (el.dataset.tone !== tone || el.dataset.body !== html) {
-    el.dataset.tone = tone;
-    el.dataset.body = html;
-    el.innerHTML = html;
-    el.querySelector('[data-action="stall-retry"]')?.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      console.warn('[sim-stall] manual retry');
-      S.stallState.backoffMs = _STALL_BACKOFF_START;
-      S.session && (S.session.inflightSince = 0);
-      _retryTickNow();
-    });
-  }
-  el.style.display = 'flex';
-  return el;
-}
-
-export function _showStallBanner() {
-  _banner(
-    'warn',
-    '<div class="mv-ld-stall-inner">' +
-      '<div class="mv-ld-stall-spinner" aria-hidden="true"></div>' +
-      '<div class="mv-ld-stall-text">Keine Antwort vom Server — ' +
-      'versuche erneut zu verbinden …</div>' +
-      '<button type="button" class="mv-ld-stall-retry" data-action="stall-retry">' +
-      'Erneut versuchen</button>' +
-      '</div>',
-  );
-}
-
-// Slow-but-alive. Names the cost so the number explains the wait.
+// Slow-but-alive. Names the cost so the number explains the wait — and it
+// must never read as a connection fault, which is the wrong message this
+// file was rewritten to stop sending.
 function _showPaceNotice() {
   const mode = S.session?.detMode || 'off';
-  const n = mvModeInvokes(mode);
-  _banner(
-    'info',
-    '<div class="mv-ld-stall-inner">' +
-      '<div class="mv-ld-stall-spinner" aria-hidden="true"></div>' +
-      `<div class="mv-ld-stall-text">Analyse läuft noch — ${esc(mvModeLabel(mode))} ` +
-      `kostet ${n} Inferenzen je Bild.</div>` +
-      '</div>',
-  );
+  showOutage({ kind: 'pace', modeLabel: mvModeLabel(mode), invokes: mvModeInvokes(mode) });
 }
 
-// The backend still owns its single slot from the previous request
-// (429 · busy). Flask cannot cancel that handler, so the honest thing to
-// say is that it is finishing — not that the camera is unreachable.
-export function _showBusyNotice() {
-  _banner(
-    'info',
-    '<div class="mv-ld-stall-inner">' +
-      '<div class="mv-ld-stall-spinner" aria-hidden="true"></div>' +
-      '<div class="mv-ld-stall-text">Vorherige Analyse läuft noch — ' +
-      'der Server rechnet den letzten Tick zu Ende.</div>' +
-      '</div>',
-  );
-}
-
-// The backend refused the mode outright (429 · mode_too_expensive). Not a
-// stall and not a camera fault: show the arithmetic and offer the way out.
-export function _showModeRefusedBanner(text, onFallback) {
-  const el = _banner(
-    'refused',
-    '<div class="mv-ld-stall-inner">' +
-      `<div class="mv-ld-stall-text">${esc(text)}</div>` +
-      '<button type="button" class="mv-ld-stall-retry" data-action="mode-fallback">' +
-      'Auf „Aus“ zurückschalten</button>' +
-      '</div>',
-  );
-  el?.querySelector('[data-action="mode-fallback"]')?.addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    onFallback?.();
-  });
-}
-
-export function _hideStallBanner() {
-  const banner = byId('mvLiveStallBanner');
-  if (banner) banner.remove();
-}
+// The manual escape from a wedged loop, offered by every verdict whose
+// recovery is "ask again". Registered rather than imported: the verdict
+// band must not import this file, which already imports the poll loop
+// that imports it back.
+registerVerdictAction('retry', () => {
+  console.warn('[sim-stall] manual retry');
+  S.stallState.backoffMs = _STALL_BACKOFF_START;
+  if (S.session) S.session.inflightSince = 0;
+  _retryTickNow();
+});

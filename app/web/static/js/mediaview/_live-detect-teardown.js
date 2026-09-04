@@ -9,7 +9,7 @@
 // a re-export would not bind it in that file's scope.
 import { byId } from '../core/dom.js';
 import { S } from './live-detect-state.js';
-import { _hideStallBanner } from './live-detect-stall.js';
+import { teardownVerdict } from './live-detect-verdict.js';
 import { unmountLdSkeleton } from './live-detect-skeleton.js';
 import { stopSnapshotPrefetch } from './live-detect-debug/index.js';
 
@@ -39,7 +39,7 @@ function _stopSessionTimers(session) {
 }
 
 // SIMU-FIX-01c · restore the pre-mount overflow + height values
-  // on body and <html> so a subsequent recorded-clip open behaves
+// on body and <html> so a subsequent recorded-clip open behaves
 // normally. Empty string clears the inline style, letting the
 // page stylesheet take over.
 function _restoreViewport(session) {
@@ -96,8 +96,8 @@ function _removeLiveNodes(session) {
   if (diagStrip) diagStrip.remove();
   const livePill = byId('mvLiveScrubPill');
   if (livePill) livePill.remove();
-  // Q2-5 · drop the stall banner if a teardown happens while stalled.
-  _hideStallBanner();
+  // Q2-5 · drop the verdict band if a teardown happens while stalled.
+  teardownVerdict();
   // SIMU-FIX-05c · stop the debug-snapshot pre-fetch loop so it
   // doesn't keep hitting the closed session's camId.
   stopSnapshotPrefetch();

@@ -29,7 +29,10 @@ import {
   WEATHER_RANGE,
   WEATHER_HISTORY,
   WEATHER_HISTORY_SPARSE,
+  SIM_FAILURES,
+  SIM_TICK_CPU_FALLBACK,
 } from './_fixtures.mjs';
+import { reply, netFail } from './_stubs.mjs';
 
 /** Put a fixture on window so the in-page mounts can read it. */
 export async function seedFixtures(page) {
@@ -233,6 +236,27 @@ async function mountVPlayerSim(page) {
 }
 
 /**
+ * The simulation with the endpoint refusing — the OUTAGE surfaces.
+ *
+ * Same mount as the healthy one, so the only variable is the answer the
+ * poll loop gets. That is the whole point: these shots are the proof that
+ * a failing tick reaches the operator's eyes at all. Before the verdict
+ * band, every one of these states painted its message into
+ * `#lightboxMediaWrap` — the legacy modal, which the unified player
+ * replaced and does not render — and photographed as a panel sitting
+ * quietly on the previous tick's numbers, indistinguishable from a
+ * healthy one that simply had not moved.
+ *
+ * 6 s, not 2.5: the CONTACT watchdog's floor is 5 s, so a shorter wait
+ * catches the network-failure surface before the verdict that explains it
+ * can exist, and would photograph the blank state as if it were the fix.
+ */
+async function mountVPlayerSimFailure(page) {
+  await mountVPlayerSim(page);
+  await page.waitForTimeout(3600);
+}
+
+/**
  * The species dossier — reference photos plus the clip gallery.
  *
  * The one surface in this app whose two reported defects could never be
@@ -415,6 +439,74 @@ export const SURFACES = [
     id: 'vplayer-sim',
     title: 'Unified video player · detection simulation',
     mount: mountVPlayerSim,
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim-tpu-taken',
+    title: 'Simulation · 503, der Coral-Stick ist nicht zu bekommen',
+    mount: mountVPlayerSimFailure,
+    stubs: {
+      'test-detection': reply(
+        SIM_FAILURES.coralUnavailable.status,
+        SIM_FAILURES.coralUnavailable.body,
+      ),
+    },
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim-busy',
+    // The one refusal that is NOT a fault: the previous tick still owns
+    // the camera's single slot. It has to look different from the four
+    // above at a glance, because the recovery is "wait" and every button
+    // offered here would only add a second request to a handler Flask
+    // cannot cancel.
+    title: 'Simulation · 429, der vorherige Tick rechnet noch',
+    mount: mountVPlayerSimFailure,
+    stubs: { 'test-detection': reply(SIM_FAILURES.busy.status, SIM_FAILURES.busy.body) },
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim-mode-refused',
+    title: 'Simulation · 429, der Kachel-Modus ist zu teuer für die Hardware',
+    mount: mountVPlayerSimFailure,
+    stubs: {
+      'test-detection': reply(SIM_FAILURES.modeRefused.status, SIM_FAILURES.modeRefused.body),
+    },
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim-stale',
+    title: 'Simulation · 503, der Stream-Puffer hinkt der Kamera hinterher',
+    mount: mountVPlayerSimFailure,
+    stubs: { 'test-detection': reply(SIM_FAILURES.stale.status, SIM_FAILURES.stale.body) },
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim-offline',
+    // The transport-level failure: the request never lands, so `fetch`
+    // rejects instead of resolving. A different branch of the poll loop
+    // and a different verdict — and the one state a status-code stub
+    // cannot pose.
+    title: 'Simulation · die Anfrage kommt gar nicht erst an',
+    mount: mountVPlayerSimFailure,
+    stubs: { 'test-detection': netFail() },
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim-cpu-fallback',
+    // 200 OK, and still a finding. The Edge TPU has exactly one owner, so
+    // a live instance holding it pushes the detector onto its CPU tier —
+    // and the endpoint then answers perfectly normally. The panel used to
+    // show a chip reading "CPU" and nothing else.
+    title: 'Simulation · Tick gelingt, aber auf der CPU statt auf der TPU',
+    mount: mountVPlayerSim,
+    stubs: { 'test-detection': SIM_TICK_CPU_FALLBACK },
     clip: '.vp-root',
     scope: '.vp-root',
   },

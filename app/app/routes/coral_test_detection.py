@@ -41,7 +41,16 @@ from .. import app_state
 from ..detect_setup import apply_bottom_crop, build_detection_setup
 from ..replay import simulation_cfg
 from . import _sim_debug, _sim_evidence, _sim_frame, _sim_pipeline, _sim_routing, _sim_trace
-from ._sim_guard import affordability, busy_payload, record_cost, refusal_payload, sim_slot
+from ._sim_guard import (
+    CORAL_OFF,
+    RUNTIME_OFF,
+    affordability,
+    busy_payload,
+    record_cost,
+    refusal,
+    refusal_payload,
+    sim_slot,
+)
 from ._sim_tiling import VALID_MODES
 
 bp = Blueprint("coral_test_detection", __name__)
@@ -94,7 +103,7 @@ def api_test_detection(cam_id: str):
     """
     cam = app_state.settings.get_camera(cam_id)
     if not cam:
-        return jsonify({"error": "camera not found"}), 404
+        return jsonify(refusal("camera_not_found", "camera not found")), 404
     setup_mode = build_detection_setup(cam_id, cam).det_mode
     det_mode, _ = _requested_det_mode(setup_mode)
     with sim_slot(cam_id) as slot:
@@ -110,7 +119,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
     """One simulated tick: acquire → detect → gate → track → explain."""
     rt = app_state.runtimes.get(cam_id)
     if rt is None:
-        return jsonify({"error": "Kamera-Runtime nicht aktiv (deaktiviert?)"}), 503
+        return jsonify(refusal("runtime_inactive", RUNTIME_OFF)), 503
     # Q2-5 · note this poll so a connectivity drop gets one INFO line.
     _sim_frame.note_client_request(cam_id)
     stream_pref, _ = _requested_stream()
@@ -133,7 +142,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
             pick.age_ms,
             pick.src,
         )
-        return jsonify({"error": "Coral nicht verfügbar (motion-only?)"}), 503
+        return jsonify(refusal("coral_unavailable", CORAL_OFF)), 503
 
     # The config PRODUCTION runs, not a second reading of it. rt.cfg is
     # the runtime's live view of the camera; the store's copy is the
@@ -149,7 +158,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
             app_state.storage_root, cam_id, cam_cfg, request.args.get("revision")
         )
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify(refusal("unknown_revision", str(e))), 400
     setup = build_detection_setup(
         cam_id,
         cam_cfg,
@@ -167,7 +176,7 @@ def _run_test_detection(cam_id: str, cam: dict, det_mode_hint: str):
         sim = _run_pass(rt, cam_cfg, cam_id, setup, pick.frame, det_mode, entry, debug)
     except Exception as e:  # noqa: BLE001 — a diagnostic must not 500
         log.warning("[test-detection] %s inference failed: %s", cam_id, e)
-        return jsonify({"error": f"Inference fehlgeschlagen: {e}"}), 500
+        return jsonify(refusal("inference_failed", f"Inference fehlgeschlagen: {e}")), 500
     sim.revision = revision
     record_cost(cam_id, det_mode, sim.inference_ms, sim.invokes)
     return _respond(

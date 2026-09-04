@@ -50,6 +50,7 @@ import { S } from './live-detect-state.js';
 import { _seedSession } from './live-detect.js';
 import { _tick } from './live-detect-poll.js';
 import { _startHoldRefresh } from './live-detect-stall.js';
+import { teardownVerdict } from './live-detect-verdict.js';
 
 /** Is the loop currently owned by a headless producer? */
 export function isHeadlessLiveSession() {
@@ -57,7 +58,13 @@ export function isHeadlessLiveSession() {
 }
 
 /**
- * Stop whatever session is running, without touching any DOM.
+ * Stop whatever session is running, touching only this producer's own node.
+ *
+ * The one exception to "no DOM" is the verdict band, because this producer
+ * is what puts it there: it is mounted into the PLAYER's panel slot, never
+ * into the legacy chrome (live-detect-verdict.js refuses the legacy host
+ * for a headless session), so removing it takes back exactly what this
+ * module added and nothing else.
  *
  * These are the two steps of `closeLiveDetect` that do the stopping —
  * see this file's header for why the other five must not run here.
@@ -70,6 +77,10 @@ export function isHeadlessLiveSession() {
 export function stopHeadlessLiveSession() {
   const session = S.session;
   S.session = null;
+  // The ONE node this producer paints. It lives in the player's panel, so
+  // a camera switch that keeps the player open must not leave the previous
+  // camera's outage standing over the new one's numbers.
+  teardownVerdict();
   S.traceLines = [];
   S.traceTicks = [];
   S.detBuffer = [];

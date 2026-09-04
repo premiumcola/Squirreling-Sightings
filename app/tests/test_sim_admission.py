@@ -269,9 +269,15 @@ def test_the_pace_notice_can_fire_in_the_mode_it_was_written_for():
     # wondering rather than after they have given up.
     assert floor <= 6000, f"{floor} ms is too long to leave a frozen picture unexplained"
     # …and the notice itself still names the cost, which is what makes it
-    # an explanation rather than another spinner.
+    # an explanation rather than another spinner. The wording moved to
+    # _live-detect-outage.js when the banners were routed to a surface the
+    # unified player actually renders; this file's own `_showPaceNotice`
+    # now only hands over the mode and its invoke count.
     pace = stall[stall.index("function _showPaceNotice") :]
-    assert "Inferenzen je Bild" in pace[: pace.index("\n}")]
+    pace = pace[: pace.index("\n}")]
+    assert "mvModeInvokes" in pace and "kind: 'pace'" in pace
+    verdicts = _read("_live-detect-outage.js")
+    assert "Inferenzen je Bild" in verdicts[verdicts.index("  pace: {") :]
 
 
 def test_a_429_clears_the_disconnect_banner_it_was_provoked_by():
@@ -288,9 +294,10 @@ def test_a_429_clears_the_disconnect_banner_it_was_provoked_by():
     assert "_clearContactStall()" in branch, "a 429 must drop the stall state on its way out"
     clear = stall[stall.index("function _clearContactStall") :]
     clear = clear[: clear.index("\n}\n")]
-    assert "dataset.tone === 'warn'" in clear, (
-        "only the disconnect banner may be removed here — a busy or refused "
-        "notice describes the current truth"
+    assert "clearOutage('contact'" in clear, (
+        "only the disconnect verdict may be cleared here — a busy or refused "
+        "notice describes the current truth, and clearOutage takes the id it "
+        "is allowed to take down for exactly that reason"
     )
 
 
@@ -298,13 +305,53 @@ def test_busy_paints_its_own_message():
     """With the watchdog standing aside for a 429 and busy painting
     nothing, the operator got a frozen picture and no text."""
     poll = _read("live-detect-poll.js")
-    assert "_showBusyNotice" in poll and "data?.code === 'busy'" in poll
-    stall = _read("live-detect-stall.js")
-    body = stall[stall.index("export function _showBusyNotice") :]
-    body = body[: body.index("\n}")]
-    assert "'info'" in body, "busy is not a fault tone"
+    assert "showOutage({ kind: 'http', status, data })" in poll, (
+        "every ok=false response must reach the verdict band, not only the "
+        "two the loop happened to special-case"
+    )
+    verdicts = _read("_live-detect-outage.js")
+    body = verdicts[verdicts.index("  busy: {") : verdicts.index("  mode_too_expensive: {")]
+    assert "tone: WAIT" in body, "busy is not a fault tone"
     assert "läuft noch" in body
     assert "Verbindung" not in body and "Keine Antwort" not in body
+
+
+def test_every_failure_the_endpoint_can_send_reaches_the_operator():
+    """The bug this file was extended for: the messages were CORRECT and
+    invisible. `_banner` hosted itself in `#lightboxMediaWrap`, the legacy
+    modal the unified player replaced and does not render, so a real
+    outage showed nothing at all and the panel looked idle.
+
+    Pin both halves: the band no longer resolves the legacy host for a
+    headless (player-owned) session, and every code the Python can answer
+    with has a verdict on the JS side.
+    """
+    verdict = _read("live-detect-verdict.js")
+    assert "[data-slot=\"panel\"]" in verdict, "the band must target the player's panel"
+    assert (
+        "S.session?.headless" in verdict
+    ), "a headless producer owns no legacy chrome and must not write into it"
+    outage = _read("_live-detect-outage.js")
+    for code in (
+        "busy",
+        "mode_too_expensive",
+        "no_frame",
+        "stale",
+        "corrupt",
+        "coral_unavailable",
+        "runtime_inactive",
+        "unknown_revision",
+        "inference_failed",
+        "camera_not_found",
+    ):
+        assert f"  {code}: {{" in outage, f"{code} has no verdict of its own"
+    # …and the Python actually labels the bodies the JS keys on, rather
+    # than leaving two 503s to be told apart by their German prose.
+    src = (
+        Path(__file__).resolve().parents[1] / "app" / "routes" / "coral_test_detection.py"
+    ).read_text(encoding="utf-8")
+    for code in ("camera_not_found", "runtime_inactive", "coral_unavailable"):
+        assert f'refusal("{code}"' in src, f"the endpoint sends {code} unlabelled"
 
 
 def test_the_mode_switch_drops_the_stale_cadence_average():
@@ -317,14 +364,13 @@ def test_the_mode_switch_drops_the_stale_cadence_average():
 def test_the_slow_notice_is_not_a_connection_error():
     """The whole point: 'expensive' and 'disconnected' must not share a
     message."""
-    stall = _read("live-detect-stall.js")
-    warn = stall[stall.index("export function _showStallBanner") :]
-    warn = warn[: warn.index("\n}")]
-    assert "Keine Antwort vom Server" in warn
-    pace = stall[stall.index("function _showPaceNotice") :]
-    pace = pace[: pace.index("\n}")]
+    verdicts = _read("_live-detect-outage.js")
+    contact = verdicts[verdicts.index("  contact: {") : verdicts.index("  pace: {")]
+    assert "Keine Antwort vom Server" in contact
+    pace = verdicts[verdicts.index("  pace: {") : verdicts.index("\n};")]
     assert "Verbindung" not in pace and "unterbrochen" not in pace
     assert "Inferenzen je Bild" in pace, "the notice must name the cost"
+    assert "tone: WAIT" in pace, "slow-but-alive is not a fault tone"
 
 
 def test_the_inference_count_mirrors_the_python_table():

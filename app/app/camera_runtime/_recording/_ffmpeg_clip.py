@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import subprocess as _subprocess
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -217,6 +218,10 @@ class FfmpegClipMixin:
         CLAUDE.md's 80-line function ceiling — this orchestrator just
         threads state between them in order.
         """
+        # The whole chain's wall clock — the operator's actual answer to
+        # "recording stopped, when can I watch it". Every sub-step below
+        # was individually unmeasured, so the total was too.
+        _chain_t0 = time.monotonic()
         storage_root = Path(self.global_cfg["storage"]["root"])
         public_base = (self.global_cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
         day_dir = raw_path.parent
@@ -258,6 +263,19 @@ class FfmpegClipMixin:
             achieved_pre_s=achieved_pre_s,
             meta=meta,
             scrub=scrub,
+        )
+
+        # The number the operator is really asking about: how long after
+        # the recording stopped the clip became watchable. Everything
+        # after this line — the tracking sidecar, MQTT, the Telegram
+        # alert — happens on an already-playable clip and is deliberately
+        # outside this measurement.
+        log.info(
+            "[%s] Clip abspielbar nach %.1fs (clip %.1fs, Vorlauf %.1fs)",
+            self.camera_id,
+            time.monotonic() - _chain_t0,
+            duration_s,
+            achieved_pre_s,
         )
 
         # Tracking sidecar — enqueue once per finalized clip so the
@@ -323,7 +341,18 @@ class FfmpegClipMixin:
                 '-an',
                 str(vid_path),
             ]
+            # WALL CLOCK, because nothing measured this. The longest step
+            # in the whole finalize chain — the one the operator actually
+            # waits out before a clip is watchable — had no elapsed log
+            # anywhere in the tree. The line below that looks like one
+            # prints the CLIP's length and its file size, not the time
+            # this took, so "how long until I can watch it" was
+            # unanswerable from the logs. The timelapse encoder has
+            # measured itself properly all along (_timelapse_encode.py);
+            # this path simply never did.
+            _t0 = time.monotonic()
             r = _subprocess.run(cmd, capture_output=True, timeout=300)
+            encode_wall_s = time.monotonic() - _t0
             if r.returncode != 0 or not vid_path.exists() or vid_path.stat().st_size < 1024:
                 stderr_text = (r.stderr or b'').decode('utf-8', errors='replace')
                 raise RuntimeError(f"ffmpeg re-encode rc={r.returncode}: {stderr_text[-300:]}")
@@ -344,11 +373,18 @@ class FfmpegClipMixin:
             # Delete raw on success
             with contextlib.suppress(Exception):
                 raw_path.unlink()
+            # Both numbers, named for what they are. `clip` is how long
+            # the footage runs; `real` is how long the operator waited
+            # for it. Only the second answers "why is it not there yet",
+            # and the ratio is what says whether this box can keep up:
+            # above 1.0 the encoder is slower than the camera records.
             log.info(
-                "[%s] Re-encode complete: %s (%.1fs %dKB)",
+                "[%s] Re-encode complete: %s (clip %.1fs · real %.1fs · %.2fx · %dKB)",
                 self.camera_id,
                 vid_path.name,
                 duration_s,
+                encode_wall_s,
+                (encode_wall_s / duration_s) if duration_s > 0 else 0.0,
                 file_size_bytes // 1024,
             )
         except Exception as e:

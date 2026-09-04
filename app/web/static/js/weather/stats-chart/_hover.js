@@ -63,13 +63,32 @@ function _defaultHead(sampleTs, spansMultiDay) {
   return `${headTime} · ${p2(dt.getDate())}.${p2(dt.getMonth() + 1)}`;
 }
 
-// Position the tip 12 right / 6 above the cursor, clamped to the wrapper.
+/** How far the readout stands off the pointer, by input class.
+ *
+ * A mouse cursor is a few pixels of arrow, so 12/-6 puts the box right
+ * next to it. A FINGERTIP is about 45 px across and its owner's hand
+ * covers everything below and right of it — „zeige die werte am ios
+ * neben dem finger an sonst sieht man nie was weil der finger es
+ * verdeckt!". On touch the box therefore clears the contact point
+ * upward by more than a fingertip's radius, and sits to the LEFT, which
+ * is the side a right-handed finger does not cover.
+ */
+const _TIP_OFFSET = {
+  mouse: { x: 12, y: -6 },
+  touch: { x: -28, y: -64 },
+};
+
+// Position the readout clear of the pointer, clamped to the wrapper.
 function _placeTip(tip, wrap, ev) {
   const wRect = wrap.getBoundingClientRect();
-  const cx = ev.clientX - wRect.left + 12;
-  const cy = ev.clientY - wRect.top - 6;
+  const off = ev?.pointerType === 'touch' ? _TIP_OFFSET.touch : _TIP_OFFSET.mouse;
+  // Measure BEFORE clamping: offsetWidth of a box still positioned at
+  // the previous sample's coordinates is the box's own width either way,
+  // but the reset keeps a long row from dragging the wrapper wider first.
   tip.style.left = '0px';
   tip.style.top = '0px';
+  const cx = ev.clientX - wRect.left + off.x - (off.x < 0 ? tip.offsetWidth : 0);
+  const cy = ev.clientY - wRect.top + off.y - (off.y < -32 ? tip.offsetHeight : 0);
   const px = Math.max(4, Math.min(cx, wRect.width - tip.offsetWidth - 4));
   const py = Math.max(4, Math.min(cy, wRect.height - tip.offsetHeight - 4));
   tip.style.left = px + 'px';
@@ -394,7 +413,14 @@ export function bindChartHover(wrap, samples, fields, pad, cw, vbW, data, opts =
     else _onMove(c, ev);
   };
   c.area.addEventListener('pointermove', move);
-  c.area.addEventListener('pointerdown', (ev) => _onDown(c, ev));
+  c.area.addEventListener('pointerdown', (ev) => {
+    // Belt to the CSS's braces (23-weather-3.css). Suppressing the
+    // default on a touch pointerdown is what stops iOS treating the
+    // press as the start of a text selection; the callout it throws up
+    // lands right across the plot the operator is reading.
+    if (ev.pointerType === 'touch') ev.preventDefault();
+    _onDown(c, ev);
+  });
   c.area.addEventListener('pointerup', (ev) => _onUp(c, ev));
   c.area.addEventListener('pointercancel', (ev) => _onUp(c, ev));
   c.area.addEventListener('pointerleave', () => {

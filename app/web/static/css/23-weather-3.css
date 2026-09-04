@@ -95,6 +95,16 @@
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.18);
   overflow: hidden;
+  /* NOTHING HERE IS TEXT TO SELECT. Dragging across the chart on iOS
+     picked up the axis labels and the legend and threw up the system
+     selection callout — „Kopieren | Nachschlagen | Übersetzen" — right
+     across the plot, mid-gesture: „Bitte lass es nicht zu dass ich das
+     markiere".
+     -webkit-touch-callout is the one that suppresses the callout
+     itself; user-select alone still lets the long-press start. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .ws-stats-chart-wrap svg {
   display: block;

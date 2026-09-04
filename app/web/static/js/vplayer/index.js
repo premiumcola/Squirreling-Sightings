@@ -162,16 +162,59 @@ function _wireRecorded(cfg, stage, panel, timeline, overlays) {
  * duration arriving after the first paint.
  */
 function _wirePlayhead(cfg, stage, timeline, overlays) {
-  if (cfg.flags.live) return;
+  if (cfg.flags.live) return null;
+  const video = stage.video;
   const sync = () => {
-    const t = stage.video.currentTime || 0;
+    const t = video.currentTime || 0;
     timeline?.tick(t);
     overlays?.repaintAt(t);
   };
-  for (const ev of ['timeupdate', 'seeked', 'loadedmetadata', 'play', 'pause']) {
-    stage.video.addEventListener(ev, sync);
-  }
+
+  // WHILE PLAYING, THE FRAME LOOP DRIVES IT. `timeupdate` fires about
+  // four times a second, so a head driven by it advances in visible
+  // jumps — „der Sekundenzeiger springt pro Sekunde komplett schnell
+  // weiter. Der soll flüssig fließen." requestAnimationFrame ticks with
+  // the display instead, and costs nothing when the clip is paused
+  // because the loop is not running then.
+  let raf = 0;
+  const frame = () => {
+    sync();
+    raf = requestAnimationFrame(frame);
+  };
+  const start = () => {
+    if (!raf) raf = requestAnimationFrame(frame);
+  };
+  const stop = () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    // One last sync so the head lands exactly on the paused position
+    // rather than wherever the cancelled frame left it.
+    sync();
+  };
+
+  video.addEventListener('play', start);
+  video.addEventListener('playing', start);
+  video.addEventListener('pause', stop);
+  video.addEventListener('ended', stop);
+  // The moments no frame loop covers: a scrub while paused, and the
+  // duration arriving after the first paint.
+  video.addEventListener('seeked', sync);
+  video.addEventListener('loadedmetadata', sync);
+  if (!video.paused) start();
   sync();
+
+  return {
+    teardown: () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      video.removeEventListener('play', start);
+      video.removeEventListener('playing', start);
+      video.removeEventListener('pause', stop);
+      video.removeEventListener('ended', stop);
+      video.removeEventListener('seeked', sync);
+      video.removeEventListener('loadedmetadata', sync);
+    },
+  };
 }
 
 /**
@@ -246,7 +289,7 @@ function _mountAll(cfg) {
     onResume: () => stage.video.play().catch(() => {}),
   });
 
-  _wirePlayhead(cfg, stage, timeline, overlays);
+  const playhead = _wirePlayhead(cfg, stage, timeline, overlays);
 
   // A live surface with a stream URL points its <img> straight at it,
   // so the picture is continuous rather than a 1 Hz snapshot loop.
@@ -268,6 +311,7 @@ function _mountAll(cfg) {
     menu,
     overlays,
     overlayRow,
+    playhead,
     transport,
     timeline,
     panel,
@@ -314,6 +358,7 @@ export function closeVideoPlayer() {
   p.timeline?.teardown();
   p.transport?.teardown();
   p.overlayRow?.teardown();
+  p.playhead?.teardown();
   p.overlays?.teardown();
   p.menu?.teardown();
   p.topbar?.teardown();

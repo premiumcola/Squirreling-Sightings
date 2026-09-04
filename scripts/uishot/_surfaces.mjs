@@ -115,6 +115,32 @@ async function mountVPlayer(page, fxKey) {
   await page.waitForTimeout(600);
 }
 
+/**
+ * The detection simulation, opened the way the dashboard button opens it.
+ *
+ * Through `_cvOpenSim` deliberately, not by calling openVideoPlayer
+ * directly. The defect this surface exists to catch was ENTIRELY in that
+ * function: it opens the new player and returns, so the legacy path that
+ * seeds the poll session and starts it never runs, and the panel sits on
+ * "Warte auf ersten Tick" for ever while the picture — an independent
+ * MJPEG stream — plays on. A surface that mounted the player itself
+ * would have photographed a perfectly healthy panel and proved nothing.
+ *
+ * There was no simulation surface here at all before, which is how the
+ * whole thing shipped.
+ */
+async function mountVPlayerSim(page) {
+  await page.evaluate(async () => {
+    const dash = await import('/static/js/dashboard.js');
+    const { state } = await import('/static/js/core/state.js');
+    dash._cvOpenSim(state.cameras[0].id);
+  });
+  // Long enough for the first tick to land AND for the cadence to
+  // schedule a second — one arriving frame could be a fluke of mount
+  // order, two is a running loop.
+  await page.waitForTimeout(2500);
+}
+
 /** The weather manual-event save panel. */
 async function mountWeatherSave(page) {
   await page.evaluate(async () => {
@@ -253,6 +279,13 @@ export const SURFACES = [
     id: 'vplayer-clip-basis',
     title: 'Unified video player · lanes from the whole-clip aggregate',
     mount: (page) => mountVPlayer(page, 'CLIP_ONLY_ITEM'),
+    clip: '.vp-root',
+    scope: '.vp-root',
+  },
+  {
+    id: 'vplayer-sim',
+    title: 'Unified video player · detection simulation',
+    mount: mountVPlayerSim,
     clip: '.vp-root',
     scope: '.vp-root',
   },

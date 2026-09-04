@@ -18,6 +18,8 @@ import {
   TIMELINE_DAY,
   DETECTION_CLOUD,
   WEATHER_HISTORY,
+  SIM_TICK,
+  TPU_STATUS,
 } from './_fixtures.mjs';
 
 /** A neutral picture stand-in, so tiles show a frame and not a placeholder. */
@@ -38,13 +40,20 @@ function apiBody(url) {
   // keyed on its own file so the sidecar-basis surface keeps its tracks.
   if (pathname.endsWith('e7.tracks.json')) return CLIP_ONLY_TRACKS;
   if (pathname.endsWith('.tracks.json')) return TRACKS;
+  // The simulation's per-tick endpoint. Checked BEFORE the /api/cameras
+  // prefix, which would otherwise swallow it and answer the poll loop
+  // with a camera list — a body it reads as a tick with no detections,
+  // which looks exactly like a loop that is running and finding nothing.
+  if (pathname.includes('/test-detection')) return SIM_TICK;
   if (pathname.startsWith('/api/cameras')) return { cameras: [CAMERA] };
   if (pathname.startsWith('/api/bootstrap')) {
     return { wizard_done: true, cameras: [CAMERA], settings: {}, app: {} };
   }
   if (pathname.startsWith('/api/event/')) return {};
   if (pathname.startsWith('/api/status') || pathname.startsWith('/api/system')) {
-    return { ok: true, cameras: {} };
+    // `tpu` carried here and not on the frame, because that is where the
+    // real endpoint puts it and where the panel's TPU chip looks.
+    return { ok: true, cameras: {}, tpu: TPU_STATUS };
   }
   // camedit/index.js::renderProfiles does an unguarded
   // `cats.profiles.map(...)`, and it is awaited from live-update.js's

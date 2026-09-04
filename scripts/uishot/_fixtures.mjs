@@ -104,6 +104,96 @@ export const NETZ_STATE = {
   tuning: TUNING,
 };
 
+/**
+ * One tick of POST /api/cameras/<id>/test-detection — the simulation's
+ * whole world.
+ *
+ * Shaped from routes/coral_test_detection.py's own response body, not
+ * invented: `modes` is _sim_debug.modes_block (the ROI and device chips
+ * read `roi_mode_active` and `inference.device` off it), `detections`
+ * are the pre-gate rows with their verdicts, `decision_trace` feeds the
+ * track-events list and `debug.tracks` the track rows.
+ *
+ * It exists because the harness could not exercise the simulation at
+ * all: with no answer for this endpoint the poll loop only ever saw a
+ * network error, so no shot and no probe could tell a loop that was
+ * running from one that had never been started — which is exactly the
+ * defect that shipped.
+ */
+export const SIM_TICK = {
+  ok: true,
+  snapshot: null,
+  frame_size: { w: 640, h: 360 },
+  frame_age_ms: 120,
+  frame_interval_avg_ms: 350,
+  decoder_backlog_suspected: false,
+  revision: null,
+  detections: [
+    {
+      label: 'person',
+      score: 0.81,
+      bbox: [210, 90, 120, 210],
+      verdict: 'pass',
+      track_num: 1,
+      model: 'coco',
+    },
+    {
+      label: 'cat',
+      score: 0.34,
+      bbox: [420, 200, 90, 70],
+      verdict: 'tentative',
+      track_num: 2,
+      model: 'coco',
+    },
+    {
+      label: 'bird',
+      score: 0.29,
+      bbox: [60, 250, 40, 35],
+      verdict: 'masked',
+      track_num: null,
+      model: 'coco',
+    },
+  ],
+  decision_trace: [
+    { t: 'SPAWN', track: 1, label: 'person', score: 0.81 },
+    { t: 'HOLD', track: 2, label: 'cat', score: 0.34 },
+  ],
+  diag: { motion_px: 4210, gate: 'motion', roi_tiles: 4 },
+  cluster_evidence: null,
+  modes: {
+    inference: { device: 'tpu', model: 'efficientdet_lite0_edgetpu' },
+    role: 'garden',
+    alarm_profile: 'standard',
+    detection_trigger: 'motion',
+    roi_mode: '2x2',
+    roi_mode_active: '2x2',
+  },
+  models: {
+    coco: { file: 'coco_ssd_mobilenet_v2_edgetpu.tflite', sha256: 'ab12cd34' },
+  },
+  debug: {
+    tracks: [
+      { num: 1, label: 'person', score: 0.81, state: 'active', age_s: 4.2, misses: 0 },
+      { num: 2, label: 'cat', score: 0.34, state: 'coasting', age_s: 1.1, misses: 2 },
+    ],
+  },
+};
+
+/**
+ * The `tpu` block of GET /api/status, as detectors/_utilisation.py's
+ * fleet_tpu_utilisation writes it. The simulation panel's TPU chip
+ * reads it through tpuFor(status, camId) — from the STATUS payload, not
+ * from the frame, which is why a panel handed a null status can never
+ * fill that chip however well the poll loop is running.
+ */
+export const TPU_STATUS = {
+  window_s: 60,
+  total: { busy_ratio: 0.42, invokes: 118, ms: 1740 },
+  cameras: {
+    [CAMERA.id]: { busy_ratio: 0.42, invokes: 118, ms: 1740 },
+  },
+};
+
 /** One motion event, as the Mediathek grid receives it. */
 function mediaItem(n, over) {
   return {

@@ -113,7 +113,10 @@ function _wireRecorded(cfg, stage, panel, timeline, overlays) {
       // The boxes come from the same sidecar the lanes do, so a lane and
       // the box it explains are one subject in one colour. The sidecar's
       // own gate wins over the caller's threshold inside setTracks.
-      overlays?.setTracks(data.tracks, { threshold: p.effective?.spawn_default });
+      overlays?.setTracks(data.tracks, {
+        threshold: p.effective?.spawn_default,
+        item: data.item || cfg.item,
+      });
       // The WIDENED item, not cfg.item: loadRecorded folds a `whole_clip`
       // recovered from /api/event/<id> into its copy, and a clip opened
       // from a narrow route would otherwise be told it has no aggregate

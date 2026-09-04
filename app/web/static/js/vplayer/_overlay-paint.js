@@ -44,6 +44,8 @@ import {
 import { normalizeBox } from '../core/box-model.js';
 import { buildTrail, renderBoxLayer } from './_overlay-svg.js';
 import { maskProbePoint, pointInAnyMask } from './_geometry.js';
+import { clipReadiness, triggerBoxVisible } from './_model/readiness.js';
+import { liveTrackColor } from '../core/track-color.js';
 
 /** Trail stroke width, in source pixels per 1000 px of source width. */
 const _TRAIL_W_PER_KPX = 3;
@@ -140,16 +142,51 @@ function _paintZones(host, polys, src, on) {
 }
 
 /**
+ * The trigger frame's own detections, as painter records.
+ *
+ * The fallback for every clip with no sidecar, which is most of them.
+ * They carry no track number and no sidecar colour — deliberately: the
+ * numbering and the palette belong to the sidecar's pass, and inventing
+ * either here would put a "#1" on the picture that matches no lane and
+ * no row. `liveTrackColor(null)` gives them the neutral fallback stroke,
+ * so they read as "detected" without claiming an identity.
+ */
+function _triggerSamples(dets, src, masks) {
+  return dets.map((d) => {
+    const box = normalizeBox(d.bbox);
+    const probe = box ? maskProbePoint(box) : null;
+    return {
+      raw: { ...d, track_num: null },
+      colour: liveTrackColor(null),
+      masked: !!probe && pointInAnyMask(probe.x, probe.y, src.w, src.h, masks),
+      trackNum: null,
+    };
+  });
+}
+
+/**
  * One full repaint of a RECORDED clip at time `t`.
  *
  * Split out of mountOverlayPainter so that function stays under the
  * 60-line ceiling. `st` is the painter's own mutable box: the layer
- * switches, the sidecar, the spawn threshold and the polygons.
+ * switches, the sidecar, the spawn threshold, the polygons and the
+ * readiness verdict for this clip.
+ *
+ * TWO GEOMETRIES, never mixed. A sidecar gives per-frame boxes that
+ * follow the subject; without one the trigger frame's boxes are all
+ * there is, and those are a single instant — so they show while the clip
+ * is parked and vanish the moment it runs, rather than trailing a stale
+ * rectangle behind a subject that has walked out of it.
  */
-function _paintRecorded(stage, st, t) {
+function _paintRecorded(stage, st, t, playing) {
   const src = _sourceSize(stage);
   if (!src) return;
-  const samples = st.tracks ? _samplesAt(st.tracks, t, src, st.polys.masks, st.threshold) : [];
+  let samples = [];
+  if (st.tracks) {
+    samples = _samplesAt(st.tracks, t, src, st.polys.masks, st.threshold);
+  } else if (triggerBoxVisible(st.readiness, playing)) {
+    samples = _triggerSamples(st.readiness.trigger, src, st.polys.masks);
+  }
   renderBoxLayer(stage.layers.boxes, st.layers.bboxes ? samples : [], {
     frameSize: src,
     screenW: stage.rect().w,
@@ -199,12 +236,16 @@ export function mountOverlayPainter(stage, cfg) {
     tracks: null,
     threshold: TRACK_SPAWN_SCORE,
     liveSrc: null,
+    // Undefined tracks = "the sidecar request has not come back yet",
+    // which is a third state and not the same as "there is none".
+    readiness: clipReadiness(cfg.item, undefined),
   };
   let lastT = 0;
 
   const repaintAt = (t) => {
     lastT = Number.isFinite(t) ? t : 0;
-    _paintRecorded(stage, st, lastT);
+    const v = stage.video;
+    _paintRecorded(stage, st, lastT, !!v && !v.paused && !v.ended);
   };
 
   // A layer host only knows where the picture is after a refit, and the
@@ -220,13 +261,20 @@ export function mountOverlayPainter(stage, cfg) {
       Object.assign(st.layers, next || {});
       repaintAt(lastT);
     },
-    /** The recorded clip's sidecar landed. */
+    /**
+     * The recorded clip's sidecar landed — or came back absent, which is
+     * the answer for most clips and the one the painter used to treat as
+     * "draw nothing and say nothing".
+     */
     setTracks: (data, opts = {}) => {
       st.tracks = data || null;
+      st.readiness = clipReadiness(opts.item || cfg.item, data === undefined ? undefined : data);
       const gate = data?.gates?.min_confidence;
       st.threshold = typeof gate === 'number' ? gate : (opts.threshold ?? TRACK_SPAWN_SCORE);
       repaintAt(lastT);
     },
+    /** What this clip's evidence amounts to, for the panel to render. */
+    readiness: () => st.readiness,
     repaintAt,
     paintLive: (frame) => _paintLiveFrame(stage, st, frame),
     teardown: () => {

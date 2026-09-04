@@ -128,6 +128,35 @@ def _file_hash(filename: str) -> str:
     return _static_hashes[filename]
 
 
+def shell_hash() -> str:
+    """One hash over EVERYTHING the browser has to re-fetch after a deploy.
+
+    This used to be the hash of ``app.css`` alone, on the theory that a
+    CSS partial shifts on every front-end commit. It doesn't: the entire
+    player rework was JavaScript, ``app.css`` never moved, the service
+    worker kept its old cache name and the browser kept serving the old
+    modules. Weeks of front-end work simply did not arrive — „wieso
+    kommt der neue player nicht bei mir an??"
+
+    So hash the JS tree too. Names go in alongside the bytes, which
+    makes a file that is *added* or *deleted* shift the hash as well —
+    a new module that nothing yet imports still counts as a new shell.
+    """
+    h = _hashlib.md5()
+    static = _pathlib.Path(__file__).parent.parent / "web" / "static"
+    try:
+        h.update(_file_hash("app.css").encode())
+        for f in sorted((static / "js").rglob("*.js")):
+            h.update(str(f.relative_to(static)).encode())
+            h.update(_hashlib.md5(f.read_bytes()).digest())
+    except Exception:
+        # A hash we cannot compute must never be a STABLE wrong answer:
+        # that is precisely the failure above. Fall back to the css
+        # hash, which at least still moves on CSS commits.
+        return _file_hash("app.css")
+    return h.hexdigest()[:12]
+
+
 _DISK_FREE_CACHE: list = [0.0, 0.0]  # (last_check_ts, free_gb)
 
 

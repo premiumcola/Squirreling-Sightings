@@ -49,7 +49,11 @@ _pkg_root = str(Path(__file__).parent.parent)
 if _pkg_root not in sys.path:
     sys.path.insert(0, _pkg_root)
 
-import app.camera_runtime._recording._ffmpeg_clip as clip_mod  # noqa: E402
+# The transcode moved to _finalize.py when _ffmpeg_clip.py crossed the
+# 500-line ceiling; the mixin below still exposes the whole chain, but
+# the module-level `cv2`/`_subprocess` these tests patch live where the
+# code that uses them does.
+import app.camera_runtime._recording._finalize as clip_mod  # noqa: E402
 import app.camera_runtime._recording._preroll as preroll_mod  # noqa: E402
 from app import app_state  # noqa: E402
 from app.camera_runtime._recording._ffmpeg_clip import FfmpegClipMixin  # noqa: E402

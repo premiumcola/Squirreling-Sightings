@@ -17,6 +17,7 @@ had been deleted there as a duplicate. It was the only one that ran.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -29,7 +30,7 @@ REC = Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_reco
 # = the legacy in-memory frame-buffer path). Kept as one map so a future
 # move only needs updating here, not at every call site below.
 _FINALIZE_FILE = {
-    "_reencode_motion_clip": "_ffmpeg_clip.py",
+    "_reencode_motion_clip": "_finalize.py",
     "_finalize_motion_clip": "_opencv_fallback.py",
 }
 
@@ -39,19 +40,63 @@ def _src(name: str) -> str:
 
 
 def _function_body(src: str, name: str) -> str:
-    """Crude but sufficient: from `def name(` to the next top-level def."""
+    """Crude but sufficient: from `def name(` to the next top-level def.
+
+    Still used by the assertions that care about the ORDER of statements
+    inside one method, where the call graph says nothing.
+    """
     start = src.index(f"    def {name}(")
     nxt = src.find("\n    def ", start + 10)
     return src[start : nxt if nxt != -1 else len(src)]
+
+
+def _reaches(src: str, entry: str, target: str) -> bool:
+    """Does ``entry`` reach ``target``, directly or through helpers?
+
+    Was a flat "is the call in this function's text" check, which is the
+    same assertion only as long as nobody extracts a step. When the
+    post-recording chain was split for CLAUDE.md's size ceilings the
+    publish moved one call deep and the test went red without a single
+    behaviour changing — a test that fails on a refactor stops being
+    read as a real signal.
+
+    So it now walks the call graph inside the file: from the entry
+    method, into every ``self._x()`` it calls that is defined in the same
+    class, until the target is reached or the graph is exhausted. That is
+    strictly STRONGER than the text match — it still catches a dropped
+    call, and it additionally catches one that is only reachable from a
+    method nobody calls.
+    """
+    tree = ast.parse(src)
+    bodies = {
+        n.name: n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    seen: set[str] = set()
+
+    def walk(name: str) -> bool:
+        if name in seen or name not in bodies:
+            return False
+        seen.add(name)
+        for node in ast.walk(bodies[name]):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            called = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+            if called == target:
+                return True
+            if called and walk(called):
+                return True
+        return False
+
+    return walk(entry)
 
 
 def test_both_finalize_paths_publish():
     """The load-bearing assertion. If either path stops calling the
     shared publisher, that recording mode goes silent again."""
     for fn, filename in _FINALIZE_FILE.items():
-        body = _function_body(_src(filename), fn)
-        assert "_publish_finalized_event(" in body, (
-            f"{fn} does not publish its event — that recording mode will "
+        assert _reaches(_src(filename), fn, "_publish_finalized_event"), (
+            f"{fn} does not reach the publisher — that recording mode will "
             "record clips and never alert, exactly as before"
         )
 
@@ -61,7 +106,13 @@ def test_the_alert_has_exactly_one_call_site():
     wrong one. One site cannot be half-removed."""
     publish = _src("_publish.py")
     assert publish.count("send_event_alert(") == 1
-    for filename in ("__init__.py", "_ffmpeg_clip.py", "_opencv_fallback.py", "_preroll.py"):
+    for filename in (
+        "__init__.py",
+        "_ffmpeg_clip.py",
+        "_finalize.py",
+        "_opencv_fallback.py",
+        "_preroll.py",
+    ):
         assert "send_event_alert(" not in _src(filename), (
             f"the alert must live only in _publish.py, reachable from both paths "
             f"(found a second call site in {filename})"
@@ -86,9 +137,13 @@ def test_every_consequence_runs_from_the_shared_step(consequence):
 
 def test_ffmpeg_path_stamps_first_since():
     """It updates an existing stub, so the marker is applied in the
-    publish step rather than before a first write."""
-    body = _function_body(_src("_ffmpeg_clip.py"), "_reencode_motion_clip")
-    assert "apply_first_since=False" not in body
+    publish step rather than before a first write.
+
+    Read over the whole finalize module rather than one method: the
+    chain was split across several of them for the size ceilings, and
+    the statement being made — this path never opts OUT of the marker —
+    is about the path, not about which method holds the call."""
+    assert "apply_first_since=False" not in _src("_finalize.py")
 
 
 def test_opencv_path_stamps_first_since_before_add_event():

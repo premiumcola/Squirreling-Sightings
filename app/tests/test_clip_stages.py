@@ -215,21 +215,23 @@ def test_a_store_that_blows_up_does_not_take_the_encode_down():
 
 
 def test_the_recorder_announces_every_transition():
-    """Three call sites, one per stage change. A dropped one leaves the
+    """Four announcements, one per stage change. A dropped one leaves the
     tile stuck on the previous phase for the rest of the clip.
 
-    Lives in _ffmpeg_clip.py — the ffmpeg stream-copy lifecycle was split
-    out of _recording/__init__.py to keep that file under CLAUDE.md's
-    500-line ceiling once the pre-roll splice landed there too."""
+    Read across BOTH halves of the ffmpeg lifecycle. It used to live in
+    _ffmpeg_clip.py alone; when that file crossed CLAUDE.md's 500-line
+    ceiling the post-recording chain moved to _finalize.py, taking the
+    `encoding` and `ready` stamps with it. The assertion is deliberately
+    unchanged — every transition must still be announced by exactly one
+    call site — it just no longer cares which of the two files holds it,
+    because a stage stamp moving between them is a refactor and a stage
+    stamp disappearing is the bug this test exists for."""
     from pathlib import Path
 
-    src = (
-        Path(__file__).resolve().parent.parent
-        / "app"
-        / "camera_runtime"
-        / "_recording"
-        / "_ffmpeg_clip.py"
-    ).read_text(encoding="utf-8")
+    base = Path(__file__).resolve().parent.parent / "app" / "camera_runtime" / "_recording"
+    src = "\n".join(
+        (base / name).read_text(encoding="utf-8") for name in ("_ffmpeg_clip.py", "_finalize.py")
+    )
     assert '"stage": STAGE_RECORDING' in src, "the stub must be born knowing its stage"
     assert "_set_clip_stage(event_id, STAGE_QUEUED)" in src
     assert "_set_clip_stage(event_id, STAGE_ENCODING)" in src

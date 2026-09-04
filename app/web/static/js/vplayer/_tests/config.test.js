@@ -86,8 +86,14 @@ test('a missing or unknown mode throws instead of rendering nothing', () => {
 });
 
 test('overlays default per mode and are always all four booleans', () => {
+  // Detection layers ON, survey layers OFF — the LAYER's own default
+  // from core/overlay-layers.js, not "is it in this mode's toggle list".
+  // The list holds all four, so the old derivation opened every clip
+  // with the zone and mask polygons painted over the picture: the exact
+  // annoyance („ich will die nur hin und wieder sehen") that table was
+  // written to end, reintroduced because the player could not read it.
   const sim = buildPlayerConfig({ mode: 'sim' }).overlays;
-  assert.deepEqual(sim, { bboxes: true, trails: true, zones: true, masks: true });
+  assert.deepEqual(sim, { bboxes: true, trails: true, zones: false, masks: false });
 
   // Live hides them, so every layer defaults off — and off is `false`,
   // never `undefined`, which is how a layer sneaks back on.
@@ -97,7 +103,10 @@ test('overlays default per mode and are always all four booleans', () => {
 });
 
 test('an explicit overlay choice from the caller wins over the default', () => {
-  const cfg = buildPlayerConfig({ mode: 'sim', overlays: { trails: false, masks: false } });
+  // Both directions: the caller can force a default-on layer off AND a
+  // default-off layer on. A one-way override would leave the zone layer
+  // unreachable for the surfaces that legitimately want it up front.
+  const cfg = buildPlayerConfig({ mode: 'sim', overlays: { trails: false, zones: true } });
   assert.deepEqual(cfg.overlays, { bboxes: true, trails: false, zones: true, masks: false });
 });
 

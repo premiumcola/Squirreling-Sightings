@@ -80,24 +80,39 @@ const MODE_FLAGS = {
 /** Rolling live window, in ms. One number, used by every live surface. */
 export const LIVE_WINDOW_MS = 60000;
 
-/** Overlay layers, in paint order. */
-const OVERLAY_KEYS = ['bboxes', 'trails', 'zones', 'masks'];
+// The layer set AND each layer's default come from core/overlay-layers.js
+// — pure data, safe to import here. This file used to list the keys
+// itself and derive "on by default" from "is the layer in this mode's
+// toggle list", which is every layer, so the player opened every clip
+// with the zone and mask polygons painted over the picture. The shared
+// table has said `zones/masks: default false` since that annoyance was
+// first reported; the player simply could not read it.
+import { OVERLAY_LAYERS, OVERLAY_LAYER_KEYS } from '../core/overlay-layers.js';
 
 /** Action handlers the shell may wire up; anything absent stays null. */
 const ACTION_KEYS = ['onClose', 'onPrev', 'onNext', 'onConfirm', 'onDelete', 'onDownload'];
 
 /**
  * Normalise the overlay block: only the four known layers, always all
- * four present as booleans, defaulting to the mode's own answer. A
- * missing key must never read as `undefined` downstream — an overlay
- * that is neither on nor off is how a layer ends up painting when the
- * operator turned it off.
+ * four present as booleans. A missing key must never read as
+ * `undefined` downstream — an overlay that is neither on nor off is how
+ * a layer ends up painting when the operator turned it off.
+ *
+ * Three things decide a layer, in order: an explicit choice from the
+ * caller wins; otherwise the LAYER's own default (bboxes and trails on,
+ * zones and masks off — reference geometry the operator wants now and
+ * then, not on every clip); and a mode that shows no overlays at all
+ * forces every layer off regardless.
  */
 function _normalizeOverlays(raw, flags) {
   const out = {};
-  for (const key of OVERLAY_KEYS) {
-    const wanted = flags.overlayToggles.includes(key);
-    out[key] = raw && key in raw ? raw[key] === true : wanted && flags.showOverlays;
+  for (const key of OVERLAY_LAYER_KEYS) {
+    if (raw && key in raw) {
+      out[key] = raw[key] === true;
+      continue;
+    }
+    const offered = flags.overlayToggles.includes(key) && flags.showOverlays;
+    out[key] = offered && OVERLAY_LAYERS[key].default === true;
   }
   return out;
 }

@@ -24,6 +24,7 @@
 
 import { byId, esc } from '../core/dom.js';
 import { showTooltip, hideTooltip } from '../core/tooltip.js';
+import { OVERLAY_LAYERS } from '../core/overlay-layers.js';
 
 const _LS_KEY = 'tamspy.overlayToggles.v1';
 
@@ -51,32 +52,13 @@ const _LS_KEY = 'tamspy.overlayToggles.v1';
 // shared via getOverlayToggleState/setOverlayToggleState; sharing the
 // labels too means a second surface cannot call the same layer
 // something else.
-export const _TOGGLES = {
-  bboxes: {
-    label: 'Bboxes',
-    default: true,
-    persist: true,
-    desc: 'Erkannte Objekte als Rahmen über dem Video einblenden',
-  },
-  trails: {
-    label: 'Trails',
-    default: true,
-    persist: true,
-    desc: 'Bewegungspfade jeder erkannten Spur einzeichnen',
-  },
-  zones: {
-    label: 'Zonen',
-    default: false,
-    persist: false,
-    desc: 'Erkennungs-Zonen (grün) anzeigen',
-  },
-  masks: {
-    label: 'Masken',
-    default: false,
-    persist: false,
-    desc: 'Ausschluss-Masken (rot) anzeigen',
-  },
-};
+// The table itself moved to core/overlay-layers.js. This module reads
+// localStorage at import time, so a PURE consumer — vplayer/_config.js,
+// unit-tested without a browser — could not import it and invented its
+// own defaults instead, turning zones and masks on for every clip. The
+// rule and the storage now live apart; `_TOGGLES` stays the name every
+// call site in this package already uses.
+export const _TOGGLES = OVERLAY_LAYERS;
 
 // L1 · inline 14 px glyphs (lifted from live-detect.js so the sim-player
 // pill look is the shared one — recorded gains the icons too). currentColor

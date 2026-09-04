@@ -124,8 +124,13 @@ export async function installStubs(page, overrides = null) {
     // the word "snapshot" alone also catches real modules such as
     // mediaview/player/_snapshot.js, which then arrive as image/svg+xml
     // and take the whole module graph down with them.
+    // `.mjpg` belongs here too: the live and simulation surfaces point
+    // their <img> at a stream URL, and without it that request fell
+    // through to the static server, 404'd, and photographed a broken-
+    // image icon over a black stage — which reads as "the player cannot
+    // show a picture" when the player is fine.
     const isImg =
-      !CODE_RE.test(p) && (/\.(jpe?g|png|webp|gif)$/i.test(p) || p.includes('snapshot'));
+      !CODE_RE.test(p) && (/\.(jpe?g|png|webp|gif|mjpg)$/i.test(p) || p.includes('snapshot'));
     if (isImg) return route.fulfill({ contentType: 'image/svg+xml', body: SNAPSHOT_SVG });
 
     if (p.startsWith('/api/') || (p.startsWith('/media/') && !p.endsWith('.mp4'))) {

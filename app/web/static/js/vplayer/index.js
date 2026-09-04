@@ -37,6 +37,7 @@ import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
 import { mountOverlayPainter } from './_overlay-paint.js';
 import { subscribeLive } from './_data/live.js';
+import { liveStatus, resetLiveStatus } from './_data/status.js';
 import { loadRecorded } from './_data/recorded.js';
 
 /** The single open player, or null. One at a time, by construction. */
@@ -81,7 +82,15 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
     // the operator's toggle state, and a direct paint here is how the
     // simulation's own bbox switch ended up with nothing to switch.
     overlays?.paintLive(frame);
-    panel?.update(frame, null);
+    // The second argument is the SYSTEM status, not part of the frame:
+    // the tick says which device ran it, /api/status says how loaded that
+    // device is, and the panel's TPU chip reads the latter. It was hard
+    // wired to `null` here, so that chip could only ever print a
+    // placeholder — a defect quite separate from the loop not running,
+    // and one that would have outlived the fix for it. liveStatus()
+    // returns synchronously off a cache and refreshes itself at most
+    // every 8 s, so this adds no second poller and never delays a paint.
+    panel?.update(frame, liveStatus());
     // The rolling window is right-anchored on now, so every tick moves
     // it whether or not a detection landed.
     timeline?.render(frame.tracks || [], { now: Date.now() / 1000, item: cfg.item });
@@ -297,6 +306,7 @@ export function closeVideoPlayer() {
   // The live subscription goes first: a frame arriving mid-teardown
   // would paint into a panel that is already gone.
   p.live?.teardown();
+  resetLiveStatus();
   p.panel?.teardown();
   p.timeline?.teardown();
   p.transport?.teardown();

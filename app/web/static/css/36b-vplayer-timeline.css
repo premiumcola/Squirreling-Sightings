@@ -211,7 +211,13 @@
 .vp-tl-clock {
   display: flex;
   justify-content: space-between;
-  margin-top: 4px;
+  /* Clearance for the grip, the same reasoning as .vp-tl-caps above it.
+     The playhead is a 44 px disc centred on a 6 px rail, so it hangs
+     ~19 px BELOW the rail as well — and at position 0 it sat squarely on
+     the elapsed readout: „Der Play Button überfällt jetzt die Abspielzeit,
+     weil der Button so schön groß ist". The disc stays big; the row
+     moves down. */
+  margin-top: 22px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--muted, #8291a0);
@@ -498,6 +504,32 @@
   background: rgba(10, 14, 20, 0.92);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   pointer-events: none;
+  /* Fades in and out rather than snapping — „vielleicht kannst Du's auch
+     ganz leicht sanft auftauchen lassen, nicht zu lang, aber sodass es
+     flüssig auftaucht und flüssig wieder verschwindet."
+     140 ms is FADE_MS in timeline/_preview.js, which waits exactly this
+     long before hiding the element; the two must stay in step or the
+     fade-out is cut off at its first pixel. A little lift makes the
+     appearance read as "coming forward" instead of blinking. */
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.vp-scrub-preview.is-on {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Someone who asked for less motion still gets the thumbnail — just
+   without the travel. */
+@media (prefers-reduced-motion: reduce) {
+  .vp-scrub-preview {
+    transform: none;
+    transition: opacity 140ms ease;
+  }
 }
 
 /* A finger covers the rail and everything just above it, so on a touch

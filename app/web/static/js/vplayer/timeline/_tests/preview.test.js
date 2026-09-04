@@ -318,3 +318,59 @@ test('das Umschalten überstimmt das Fortsetzen des Zuges', () => {
   up(el, 180);
   assert.deepEqual(events, ['pause', 'toggle'], 'kein resume nach dem Umschalten');
 });
+
+// ── die Vorschau flackert nicht bei einem Druck ───────────────────────
+//
+// „wenn ich nur kurz drauf drücke, darf das Thumbnail noch nicht
+// angezeigt werden. Es gibt 'n komischen Flackereffekt." Ein Druck auf
+// den Griff ist ein Play/Pause-Druck und lief trotzdem durch show().
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const PREVIEW_SRC = readFileSync(fileURLToPath(new URL('../_preview.js', import.meta.url)), 'utf8');
+const TL_CSS = readFileSync(
+  fileURLToPath(new URL('../../../../css/36b-vplayer-timeline.css', import.meta.url)),
+  'utf8',
+);
+
+test('es gibt eine Haltezeit, bevor die Vorschau erscheint', () => {
+  const m = PREVIEW_SRC.match(/const HOLD_MS = (\d+)/);
+  assert.ok(m, 'keine Haltezeit definiert');
+  const ms = Number(m[1]);
+  assert.ok(ms >= 200, `${ms} ms ist kurz genug, dass ein Druck sie noch auslöst`);
+  assert.ok(ms <= 400, `${ms} ms fühlt sich wie Warten an`);
+});
+
+test('show() zeigt nichts sofort, sondern stellt den Wecker', () => {
+  const fn = PREVIEW_SRC.slice(PREVIEW_SRC.indexOf('    show: (x, t) =>'));
+  const body = fn.slice(0, fn.indexOf('    moveTo:'));
+  assert.match(body, /setTimeout\(reveal, HOLD_MS\)/);
+  assert.equal(/shown = true/.test(body), false, 'show() darf nicht selbst sichtbar schalten');
+});
+
+test('ein echter Zug zeigt sie sofort, ohne die Haltezeit abzuwarten', () => {
+  const m = PREVIEW_SRC.match(/const REVEAL_DRAG_PX = (\d+)/);
+  assert.ok(m, 'kein Schwellwert für „schon am Ziehen"');
+  // Über der 4-px-Toleranz, mit der _scrub.js Druck von Zug trennt —
+  // sonst zeigt genau das Wackeln die Vorschau, das noch ein Druck ist.
+  assert.ok(Number(m[1]) > 4);
+  const fn = PREVIEW_SRC.slice(PREVIEW_SRC.indexOf('    moveTo: (x, t) =>'));
+  assert.match(fn.slice(0, 400), /REVEAL_DRAG_PX\) reveal\(\)/);
+});
+
+test('die Ausblendzeit im Code und in der CSS sind dieselbe Zahl', () => {
+  // hide() nimmt das Element erst nach FADE_MS aus dem Layout. Läuft die
+  // CSS länger, wird die Blende mittendrin abgeschnitten.
+  const js = Number(PREVIEW_SRC.match(/const FADE_MS = (\d+)/)[1]);
+  const rule = TL_CSS.slice(TL_CSS.indexOf('.vp-scrub-preview {'));
+  const css = Number(rule.slice(0, rule.indexOf('}')).match(/opacity (\d+)ms/)[1]);
+  assert.equal(js, css, `JS wartet ${js} ms, die CSS blendet ${css} ms`);
+});
+
+test('die Blende hat einen eigenen Zustand statt hidden umzuschalten', () => {
+  // `hidden` lässt sich nicht animieren; ohne eine Klasse springt sie.
+  assert.match(TL_CSS, /\.vp-scrub-preview\.is-on/);
+  assert.match(PREVIEW_SRC, /classList\.add\('is-on'\)/);
+  assert.match(PREVIEW_SRC, /classList\.remove\('is-on'\)/);
+});

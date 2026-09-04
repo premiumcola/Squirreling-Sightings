@@ -24,6 +24,28 @@
 // therefore stored and applied ONCE per animation frame, on the same
 // clock the playhead already runs on.
 
+/** How long a finger has to rest before the bubble is meant.
+ *
+ * A tap on the grip is a play/pause press, and it went through `show()`
+ * on its way — so the thumbnail flashed up and vanished inside the same
+ * gesture: "wenn ich nur kurz drauf drücke, darf das Thumbnail noch
+ * nicht angezeigt werden. Es gibt 'n komischen Flackereffekt."
+ *
+ * Long enough that a press never triggers it, short enough that a
+ * deliberate hold does not feel like waiting.
+ */
+const HOLD_MS = 260;
+
+/** …or this much movement, whichever comes first. Someone who starts
+ *  dragging immediately has already said what they want, and making them
+ *  wait out the timer would be its own kind of lag. Above the 4 px slop
+ *  _scrub.js uses to tell a tap from a drag. */
+const REVEAL_DRAG_PX = 8;
+
+/** Must match the opacity transition in 36b-vplayer-timeline.css — the
+ *  element is only hidden once the fade has actually finished. */
+const FADE_MS = 140;
+
 /** Geometry we cannot draw without. */
 function _usable(geo) {
   return !!(
@@ -130,6 +152,12 @@ export function mountScrubPreview(rail, opts = {}) {
   let pending = null;
   let raf = 0;
   let shown = false;
+  // `armed` = a gesture is running and positions are being tracked.
+  // `shown` = the bubble is actually visible. The gap between them is
+  // the hold, and it is what stops a press from flashing it.
+  let armed = false;
+  let holdTimer = 0;
+  let startX = 0;
 
   const flush = () => {
     raf = 0;
@@ -155,8 +183,28 @@ export function mountScrubPreview(rail, opts = {}) {
     if (!raf) raf = requestAnimationFrame(flush);
   };
 
+  const reveal = () => {
+    if (!armed || shown) return;
+    shown = true;
+    el.hidden = false;
+    // Next frame, so the browser has the element laid out at opacity 0
+    // before the class flips it — otherwise the transition is skipped
+    // and it snaps in, which is the flicker by another route.
+    requestAnimationFrame(() => {
+      if (shown) el.classList.add('is-on');
+    });
+    schedule();
+  };
+
+  const disarm = () => {
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = 0;
+    armed = false;
+  };
+
   return {
-    /** Arm the bubble. No sheet → stays hidden and the drag is normal. */
+    /** Arm the bubble — it appears only after a hold or a real drag.
+     *  No sheet → nothing happens and the drag is normal. */
     show: (x, t) => {
       const geo = opts.getGeometry?.();
       if (!_usable(geo)) return;
@@ -164,22 +212,33 @@ export function mountScrubPreview(rail, opts = {}) {
       // On a touch screen the finger covers the rail, so the bubble
       // rides higher than it does under a mouse pointer.
       el.classList.toggle('vp-scrub-preview--touch', opts.isTouch?.() === true);
-      shown = true;
-      el.hidden = false;
+      armed = true;
+      startX = x;
       pending = { x, t };
-      schedule();
+      if (holdTimer) clearTimeout(holdTimer);
+      holdTimer = setTimeout(reveal, HOLD_MS);
     },
     moveTo: (x, t) => {
-      if (!shown) return;
+      if (!armed) return;
       pending = { x, t };
-      schedule();
+      // A real drag says what a hold would have said, sooner.
+      if (!shown && Math.abs(x - startX) > REVEAL_DRAG_PX) reveal();
+      else if (shown) schedule();
     },
     hide: () => {
-      shown = false;
+      disarm();
       pending = null;
-      el.hidden = true;
+      if (!shown) return;
+      shown = false;
+      // Fade out, then take it out of the layout — removing it in the
+      // same frame would cut the transition off at its first pixel.
+      el.classList.remove('is-on');
+      setTimeout(() => {
+        if (!shown) el.hidden = true;
+      }, FADE_MS);
     },
     teardown: () => {
+      disarm();
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
       el.remove();

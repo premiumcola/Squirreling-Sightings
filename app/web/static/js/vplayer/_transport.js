@@ -55,5 +55,8 @@ export function mountTransport(stageEl, controlsHost, cfg, stage) {
     getVideo: () => stage.video,
     handoffPills: false,
     timebar: false,
+    // No ±10 either: two discs that reproduce a drag of the playhead,
+    // and stand in front of the picture to do it.
+    skips: false,
   });
 }

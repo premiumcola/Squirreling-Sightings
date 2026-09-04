@@ -25,6 +25,7 @@ import { mountStage } from './_stage.js';
 import { mountTopbar } from './_topbar.js';
 import { mountTransport } from './_transport.js';
 import { mountOverlayRow } from './_overlay-row.js';
+import { mountStageChrome } from './_stage-chrome.js';
 import {
   buildOverflowItems,
   mountOverflowMenu,
@@ -250,6 +251,9 @@ function _autoplay(video) {
 function _mountChrome(shell, cfg, stage) {
   const topbar = mountTopbar(shell.slot('topbar'), cfg, {
     onClose: () => closeVideoPlayer(),
+  });
+  // prev/next live on the picture now, not in the title row.
+  const stageChrome = mountStageChrome(shell.slot('stage'), cfg, {
     onPrev: cfg.actions.onPrev,
     onNext: cfg.actions.onNext,
   });
@@ -259,21 +263,31 @@ function _mountChrome(shell, cfg, stage) {
   const menu = mountOverflowMenu(shell.slot('topbar'), topbar?.trigger, items, (id) =>
     _onMenuPick(id, cfg, stage),
   );
-  return { topbar, menu };
+  return { topbar, menu, stageChrome };
 }
 
 /** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
 function _mountAll(cfg) {
   const shell = mountShell(cfg, { onKey: (key) => key === 'Escape' && closeVideoPlayer() });
   const stage = mountStage(shell.slot('frame'), cfg);
-  const { topbar, menu } = _mountChrome(shell, cfg, stage);
+  const { topbar, menu, stageChrome } = _mountChrome(shell, cfg, stage);
   // The painter first, so the row can push the operator's choice into
   // it; then the row's own resolved state back into the painter, because
   // a persisted "trails off" wins over the mode's default and the
   // picture must start out matching the buttons.
   const overlays = mountOverlayPainter(stage, cfg);
+  // Its OWN node appended to the stage — never the stage slot itself.
+  // mountOverlayRow assigns host.innerHTML, so handing it the stage
+  // would wipe the <video>, the overlay layers and the timeline with
+  // one assignment. That is the same trap mountPlayerChrome avoids by
+  // creating its own host, and it is worth stating twice.
+  const togglesHost = cfg.flags.showOverlays ? document.createElement('div') : null;
+  if (togglesHost) {
+    togglesHost.className = 'vp-toggles vp-toggles--onstage';
+    shell.slot('stage')?.appendChild(togglesHost);
+  }
   const overlayRow = cfg.flags.showOverlays
-    ? mountOverlayRow(shell.slot('toggles'), cfg, {
+    ? mountOverlayRow(togglesHost, cfg, {
         roi: cfg.item.roi_label,
         onChange: (next) => overlays?.setLayers(next),
       })
@@ -309,8 +323,10 @@ function _mountAll(cfg) {
     stage,
     topbar,
     menu,
+    stageChrome,
     overlays,
     overlayRow,
+    togglesHost,
     playhead,
     transport,
     timeline,
@@ -358,9 +374,11 @@ export function closeVideoPlayer() {
   p.timeline?.teardown();
   p.transport?.teardown();
   p.overlayRow?.teardown();
+  p.togglesHost?.remove();
   p.playhead?.teardown();
   p.overlays?.teardown();
   p.menu?.teardown();
+  p.stageChrome?.teardown();
   p.topbar?.teardown();
   p.stage?.teardown();
   p.shell?.teardown();

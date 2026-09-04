@@ -390,3 +390,131 @@
     animation: none !important;
   }
 }
+
+/* ── Glass: everything that belongs ON the picture ─────────────────────────
+   One language for every on-picture control — translucent, blurred,
+   never a solid slab — so the transport discs, the layer switches and
+   the navigation read as one set rather than three families of button
+   that happen to share a screen: „nicht so massive Buttons, sondern
+   irgendwie schöne so wie der Play … leicht überblendet, leicht
+   transparent".
+
+   Every one of these is a CHILD OF THE STAGE, which is what hooks them
+   into the existing idle auto-hide: _autohide.js writes data-chrome on
+   the stage and the rule at the bottom fades the whole group. So they
+   go away while the clip runs and come back on the same gesture the
+   transport does, with no second mechanism. */
+.vp-glass,
+.vp-toggles--onstage {
+  position: absolute;
+  z-index: 18;
+}
+
+.vp-glass {
+  inset: 0;
+  /* The layer itself must never eat a tap meant for the picture — the
+     auto-hide's tap-to-toggle listens on the stage underneath. */
+  pointer-events: none;
+}
+
+.vp-glass-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--vp-tap);
+  height: var(--vp-tap);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(10, 14, 20, 0.5);
+  backdrop-filter: blur(6px);
+  color: #eaf2ea;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vp-glass-nav--prev {
+  left: 10px;
+}
+.vp-glass-nav--next {
+  right: 10px;
+}
+
+@media (hover: hover) {
+  .vp-glass-nav:hover {
+    background: rgba(20, 28, 36, 0.72);
+  }
+}
+
+/* The layer switches, top-left of the picture. Same glass, and the row
+   keeps its wrapping so four German labels still fit a 375 px screen. */
+.vp-toggles--onstage {
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  padding: 0;
+  background: none;
+  pointer-events: none;
+}
+
+.vp-toggles--onstage .vp-segbar,
+.vp-toggles--onstage .vp-roi-chip {
+  pointer-events: auto;
+}
+
+.vp-toggles--onstage .vp-seg {
+  background: rgba(10, 14, 20, 0.5);
+  backdrop-filter: blur(6px);
+  color: #cfe0d5;
+  /* Smaller on the picture than in a bar of its own: it sits over the
+     footage now, and the footage is the point. */
+  min-height: 34px;
+  font-size: 12px;
+}
+
+.vp-toggles--onstage .vp-seg[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--vp-accent) 30%, rgba(10, 14, 20, 0.5));
+  color: #f2fff6;
+}
+
+/* The 44 px target the smaller paint gives up, as a transparent hitbox —
+   the same trick the top bar's buttons use. */
+.vp-toggles--onstage .vp-seg::before {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+.vp-toggles--onstage .vp-seg {
+  position: relative;
+}
+
+.vp-toggles--onstage .vp-roi-chip {
+  background: rgba(10, 14, 20, 0.5);
+  backdrop-filter: blur(6px);
+  border-radius: 999px;
+  padding: 5px 11px;
+  color: #cfe0d5;
+}
+
+/* Fade with the rest of the chrome. Same attribute, same timing as
+   30h-mediaview-player.css uses for the transport, so the group leaves
+   and returns together instead of in two waves. */
+.vp-stage[data-chrome] > .vp-glass,
+.vp-stage[data-chrome] > .vp-toggles--onstage {
+  transition: opacity 0.24s ease;
+}
+.vp-stage[data-chrome='0'] > .vp-glass,
+.vp-stage[data-chrome='0'] > .vp-toggles--onstage {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vp-stage[data-chrome] > .vp-glass,
+  .vp-stage[data-chrome] > .vp-toggles--onstage {
+    transition: none;
+  }
+}

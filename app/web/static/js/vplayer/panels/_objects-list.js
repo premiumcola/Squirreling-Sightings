@@ -69,12 +69,19 @@ function _rowHtml(row, models) {
   // read as two birds. Same rule as the Mediathek card's badge —
   // core/clip-species.js owns it, this does not restate it.
   const cls = subjectLabel(row.label, row.species) || 'Unbekannt';
+  // A SPECIES is a different kind of answer from a class, and until now
+  // "Grünfink" and "Vogel" sat in the same grey with nothing to tell
+  // them apart — „bitte verdeutliche auch, wenn eben eine spezielle
+  // Vogelspezies erkannt wurde". The cascade got further than the
+  // detector did on this row; the marker says so, and the class it
+  // refines follows in the row's own detail line.
+  const named = !!(row.species && row.label === 'bird');
   const colour = row.colour || (row.num == null ? 'var(--muted)' : liveTrackColor(row.num));
   const num = row.num == null ? '' : `<span class="vp-pnl-num">#${esc(String(row.num))}</span>`;
   return (
     `<div class="vp-pnl-row vp-pnl-obj" data-key="${esc(row.key)}" ` +
     `style="--vp-lane-colour:${esc(colour)}">` +
-    `${num}<span class="vp-pnl-cls">${esc(cls)}</span>` +
+    `${num}<span class="vp-pnl-cls${named ? ' is-species' : ''}">${esc(cls)}</span>` +
     `<span class="vp-pnl-score">${esc(pctLabel(row.score))}</span>` +
     `<button type="button" class="vp-pnl-iconbtn" data-act="edit" ` +
     `aria-label="Erkennungen dieser Aufnahme korrigieren">${_EDIT_SVG}</button>` +

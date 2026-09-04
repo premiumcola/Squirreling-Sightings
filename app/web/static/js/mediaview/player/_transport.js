@@ -78,7 +78,7 @@ function _seekBy(video, delta) {
   video.currentTime = dur > 0 ? Math.min(dur, next) : next;
 }
 
-function _markup(nativeAvailable, pipAvailable, timebar = true) {
+function _markup(nativeAvailable, pipAvailable, timebar = true, skips = true) {
   const nativeBtn = nativeAvailable
     ? `<button type="button" class="mv-player-native" data-act="native" ` +
       `title="Im Systemplayer öffnen — ${NATIVE_WARNING}" ` +
@@ -97,14 +97,25 @@ function _markup(nativeAvailable, pipAvailable, timebar = true) {
       `aria-label="Bild-in-Bild öffnen. ${NATIVE_WARNING}">` +
       `${_PIP_SVG}<span>Bild-in-Bild</span></button>`
     : '';
+  // The two skip discs are OPTIONAL. They reproduce what dragging the
+  // playhead already does, and they do it by standing permanently in
+  // front of the picture — „das plus minus 10 brauch ich nicht". The
+  // legacy shell keeps them (default true); the unified player asks for
+  // the centre disc alone.
+  const back = skips
+    ? `<button type="button" class="mv-player-btn mv-player-skip" data-skip="-10" ` +
+      `aria-label="10 Sekunden zurück" title="10 s zurück">${_skipSvg(true)}</button>`
+    : '';
+  const fwd = skips
+    ? `<button type="button" class="mv-player-btn mv-player-skip" data-skip="10" ` +
+      `aria-label="10 Sekunden vor" title="10 s vor">${_skipSvg(false)}</button>`
+    : '';
   return (
     `<div class="mv-player-center">` +
-    `<button type="button" class="mv-player-btn mv-player-skip" data-skip="-10" ` +
-    `aria-label="10 Sekunden zurück" title="10 s zurück">${_skipSvg(true)}</button>` +
+    back +
     `<button type="button" class="mv-player-btn mv-player-play" data-act="play" ` +
     `aria-label="Abspielen / Pause" title="Abspielen / Pause">${_PLAY_SVG}</button>` +
-    `<button type="button" class="mv-player-btn mv-player-skip" data-skip="10" ` +
-    `aria-label="10 Sekunden vor" title="10 s vor">${_skipSvg(false)}</button>` +
+    fwd +
     `</div>` +
     // The strip is suppressed whole when the host already owns a clock:
     // it is centred ON the picture, so where a caller renders its own
@@ -192,7 +203,12 @@ export function renderTransport(host, opts = {}) {
   const getVideo = opts.getVideo;
   if (!host || typeof getVideo !== 'function') return null;
   host.className = 'mv-player';
-  host.innerHTML = _markup(!!opts.nativeAvailable, !!opts.pipAvailable, opts.timebar !== false);
+  host.innerHTML = _markup(
+    !!opts.nativeAvailable,
+    !!opts.pipAvailable,
+    opts.timebar !== false,
+    opts.skips !== false,
+  );
   const playBtn = host.querySelector('.mv-player-play');
   const elapsedEl = host.querySelector('.mv-player-elapsed');
   const remainEl = host.querySelector('.mv-player-remain');

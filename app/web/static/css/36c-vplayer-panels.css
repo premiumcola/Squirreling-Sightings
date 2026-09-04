@@ -523,3 +523,26 @@
   font-size: 12.5px;
   font-style: italic;
 }
+
+/* A SPECIES, not just a class. When the cascade names the bird, that row
+   answers a harder question than "Vogel" does — and until now both sat
+   in the same grey with nothing to tell them apart. The leaf marker and
+   the accent are the whole difference: „bitte verdeutliche auch, wenn
+   eben eine spezielle Vogelspezies erkannt wurde".
+
+   Deliberately NOT a second line of text. The class it refines is
+   already in the row's own detail line, and repeating it beside the
+   name would be the same fact twice. */
+.vp-pnl-cls.is-species {
+  color: var(--vp-accent);
+  font-weight: 600;
+}
+
+.vp-pnl-cls.is-species::before {
+  content: '🌿';
+  margin-right: 5px;
+  font-size: 0.9em;
+  /* Decorative: the species name itself is the information, and a
+     screen reader announcing "herb" before every bird helps nobody. */
+  speak: never;
+}

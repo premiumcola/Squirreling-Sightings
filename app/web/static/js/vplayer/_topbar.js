@@ -1,28 +1,23 @@
 // ─── vplayer/_topbar.js ────────────────────────────────────────────────────
-// prev · title · next, then the overflow trigger and close.
+// title, then the overflow trigger and close. That is all.
 //
-// The chevrons and the close are 36 px of PAINT carrying a 44 px
-// TOUCH TARGET, via a transparent ::before in 36a. Painting them at
-// 44 px would put four heavy discs across the top of a 375 px screen;
-// shrinking the target to the paint is the iOS failure this project
-// keeps re-fixing. The row also carries safe-area-inset-top, because
-// it is the first thing under the notch.
+// PREV/NEXT MOVED TO THE PICTURE (_stage-chrome.js). Beside a camera
+// name they read as menu items rather than as navigation — „das links,
+// rechts vielleicht eher links, rechts am Video, oben ist son bisschen
+// verwirrend in der Zettelleiste. Und die drei Punkte und das x, das
+// passt da oben." At the picture's own edges there is no ambiguity, and
+// the title row goes from five controls to two.
 //
-// Navigation buttons render only when the caller supplied a handler.
-// A permanently disabled chevron on a phone is a 44 px slot spent
-// saying "no".
+// The close is 36 px of PAINT carrying a 44 px TOUCH TARGET, via a
+// transparent ::before in 36a. Painting it at 44 px would put heavy
+// discs across the top of a 375 px screen; shrinking the target to the
+// paint is the iOS failure this project keeps re-fixing. The row also
+// carries safe-area-inset-top, because it is the first thing under the
+// notch.
 
 import { esc } from '../core/dom.js';
 import { overflowTriggerHtml } from './_overflow-menu.js';
 
-const _CHEVRON_LEFT =
-  '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M15 5l-7 7 7 7"/></svg>';
-const _CHEVRON_RIGHT =
-  '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" ' +
-  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M9 5l7 7-7 7"/></svg>';
 const _CLOSE =
   '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" ' +
   'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
@@ -41,36 +36,19 @@ export function titleFor(cfg) {
   return cfg.flags.live ? 'Live' : 'Aufnahme';
 }
 
-function _navHtml(cfg) {
-  const { onPrev, onNext } = cfg.actions;
-  const canNav = cfg.flags.canNavigate;
-  const prev =
-    canNav && onPrev
-      ? `<button type="button" class="vp-top-btn vp-top-prev" aria-label="Vorherige Aufnahme">${_CHEVRON_LEFT}</button>`
-      : '';
-  const next =
-    canNav && onNext
-      ? `<button type="button" class="vp-top-btn vp-top-next" aria-label="Nächste Aufnahme">${_CHEVRON_RIGHT}</button>`
-      : '';
-  return { prev, next };
-}
-
 /**
  * Mount the top bar.
  *
  * @param {HTMLElement} host  the shell's [data-slot="topbar"]
  * @param {object} cfg        normalised config from _config.js
- * @param {object} handlers   { onClose, onPrev, onNext, onMore }
+ * @param {object} handlers   { onClose, onMore }
  * @returns {{trigger: HTMLElement|null, setTitle: (t: string) => void,
  *   teardown: () => void}|null}
  */
 export function mountTopbar(host, cfg, handlers = {}) {
   if (!host) return null;
-  const { prev, next } = _navHtml(cfg);
   host.innerHTML =
-    prev +
     `<span class="vp-top-title">${esc(titleFor(cfg))}</span>` +
-    next +
     overflowTriggerHtml() +
     `<button type="button" class="vp-top-btn vp-top-close" aria-label="Schließen">${_CLOSE}</button>`;
 
@@ -82,8 +60,6 @@ export function mountTopbar(host, cfg, handlers = {}) {
     el.addEventListener('click', fn);
     wired.push([el, fn]);
   };
-  wire('.vp-top-prev', handlers.onPrev);
-  wire('.vp-top-next', handlers.onNext);
   wire('.vp-top-close', handlers.onClose);
 
   return {

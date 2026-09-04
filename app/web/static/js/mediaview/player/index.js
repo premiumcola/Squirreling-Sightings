@@ -131,6 +131,7 @@ export function mountPlayerChrome(stage, controlsHost, opts = {}) {
   const transport = renderTransport(host, {
     getVideo,
     timebar: opts.timebar !== false,
+    skips: opts.skips !== false,
     nativeAvailable: pills && canNativeFullscreen(video),
     onInteract: () => autoHide?.reveal(),
     onNative: () => handoffToNativePlayer(getVideo()),

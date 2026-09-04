@@ -58,6 +58,15 @@ def api_system():
     except Exception:
         pass
     try:
+        # THE HOST'S uptime, not this container's. /proc/uptime is not
+        # namespaced by Linux, so a container reads the machine it runs
+        # on unless lxcfs is mounted over it — which nothing here does.
+        # The settings panel labelled this "Container-Uptime" and the
+        # operator caught the contradiction it produced: 120 h of uptime
+        # beside a restart two hours earlier. Both numbers were right;
+        # the label was wrong. This process's own uptime is
+        # `time.time() - _BOOT_TS`, which "Letzter Neustart" already
+        # reports as a timestamp.
         with open('/proc/uptime') as f:
             uptime_s = float(f.read().split()[0])
     except Exception:

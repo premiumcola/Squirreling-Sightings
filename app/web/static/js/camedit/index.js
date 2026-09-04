@@ -395,7 +395,7 @@ async function updateSystemPanel() {
         <div class="app-info-section-title">Build &amp; System</div>
         <div class="app-info-row"><span class="app-info-row-label">Build</span><span class="app-info-row-val">${buildBadge} <code>${esc(shortCommit)}</code> · ${esc(date)}</span></div>
         ${s.process_start ? `<div class="app-info-row"><span class="app-info-row-label">Letzter Neustart</span><span class="app-info-row-val" title="${esc(s.process_start)}">${esc(restartShort)}</span></div>` : ''}
-        ${uptime ? `<div class="app-info-row"><span class="app-info-row-label">Container-Uptime</span><span class="app-info-row-val">${uptimeStr}</span></div>` : ''}
+        ${uptime ? `<div class="app-info-row"><span class="app-info-row-label" title="Laufzeit des Hosts — /proc/uptime ist in Docker nicht abgeschottet und meldet die Maschine, nicht den Container">Host-Uptime</span><span class="app-info-row-val">${uptimeStr}</span></div>` : ''}
         ${s.camera_count !== undefined ? `<div class="app-info-row"><span class="app-info-row-label">Aktive Kameras</span><span class="app-info-row-val">${s.camera_count}</span></div>` : ''}
 
         <div class="app-info-section-title">Ressourcen</div>

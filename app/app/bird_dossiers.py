@@ -45,7 +45,7 @@ from .bird_dossiers_fetch import PHOTO_TARGET
 from .bird_dossiers_fetch import fetch_photos as _fetch_photos
 from .bird_dossiers_fetch import photo_identity as _photo_identity
 from .bird_dossiers_fetch import fetch_wikipedia as _fetch_wikipedia
-from .bird_dossiers_fetch import fetch_xeno_canto as _fetch_xeno_canto
+from .bird_dossiers_fetch import fetch_bird_audio as _fetch_bird_audio
 from .io_utils import atomic_write_json as _atomic_write_json  # noqa: F401
 
 log = logging.getLogger("app.bird_dossiers")
@@ -460,7 +460,7 @@ class BirdDossierService:
         with self._lock:
             d_existing = self.data["dossiers"].get(latin)
             already_have_audio = bool(d_existing and d_existing.get("recordings"))
-        recordings = [] if already_have_audio else _fetch_xeno_canto(latin)
+        recordings = [] if already_have_audio else _fetch_bird_audio(wiki, latin)
         now_iso = datetime.now().isoformat(timespec="seconds")
         with self._lock:
             d = self.data["dossiers"].get(latin)
@@ -522,7 +522,7 @@ class BirdDossierService:
     def _apply_xeno_canto(dossier: dict, recordings: list, now_iso: str) -> None:
         """Merge xeno-canto recordings into the dossier.
 
-        `recordings` is a list of dicts (see _fetch_xeno_canto). Stored
+        `recordings` is a list of dicts (see _fetch_bird_audio). Stored
         on `dossier["recordings"]` directly; the legacy single-clip
         fields (`audio_url` / `audio_attribution` / `audio_license`)
         mirror the first entry for backward-compat with older

@@ -21,6 +21,10 @@ import threading
 import time
 from urllib.parse import quote, unquote, urlparse
 
+from .bird_audio_commons import article_title_of as _article_title_of
+from .bird_audio_commons import audio_title_from_media_list as _audio_title_from_media_list
+from .bird_audio_commons import commons_audio as _commons_audio
+
 log = logging.getLogger("app.bird_dossiers")
 
 # Xeno-canto API v3 requires a per-account `key` parameter (the free v2
@@ -28,8 +32,13 @@ log = logging.getLogger("app.bird_dossiers")
 # snapshotted at import: a module-level `os.environ[...]` made the gate
 # invisible (no log line, no way to see it in a test without reloading
 # the module) and froze the value at boot. Without a key the audio fetch
-# is skipped — but loudly, once, so "no play button on any bird" has a
-# findable cause in the log instead of looking like a missing feature.
+# is skipped — but said once, so a missing extra has a findable cause.
+#
+# NO LONGER FATAL for bird song: Wikimedia Commons carries the article's
+# own recording and needs no credential at all (bird_audio_commons.py).
+# xeno-canto is now the enrichment, not the source, which is why this
+# dropped from a WARNING to an INFO — it stopped describing a feature
+# that does not work.
 _XC_API_URL = "https://xeno-canto.org/api/3/recordings"
 _xc_key_warned = [False]
 
@@ -39,9 +48,10 @@ def _xc_api_key() -> str:
     key = os.environ.get("XENO_CANTO_API_KEY", "").strip()
     if not key and not _xc_key_warned[0]:
         _xc_key_warned[0] = True
-        log.warning(
-            "[dossiers] XENO_CANTO_API_KEY nicht gesetzt — Vogelstimmen bleiben leer "
-            "(API v3 verlangt einen Account-Key von xeno-canto.org/account)"
+        log.info(
+            "[dossiers] XENO_CANTO_API_KEY nicht gesetzt — Vogelstimmen kommen von "
+            "Wikimedia Commons. Ein Key von xeno-canto.org/account bringt zusätzlich "
+            "mehrere Aufnahmen je Art mit Ruf-/Gesang-Unterscheidung."
         )
     return key
 
@@ -490,3 +500,36 @@ def fetch_xeno_canto(latin: str, max_recordings: int = 3) -> list[dict]:
         if out:
             return out
     return []
+
+
+def fetch_bird_audio(wiki: dict | None, latin: str) -> list[dict]:
+    """The species' voice, from whichever source can actually answer.
+
+    WIKIMEDIA COMMONS FIRST, and it is not a fallback. The article's own
+    media list — the one this module already fetches for the reference
+    photos — carries the recording, so this needs no credential of any
+    kind. xeno-canto has demanded a per-account API key since 2025-10-10,
+    and without one every dossier in the archive showed „Keine
+    Vogelstimme verfügbar" while the answer sat in a response we had
+    already downloaded and thrown away.
+
+    xeno-canto still runs when a key IS configured: it offers several
+    recordings per species with call/song types, which Commons does not.
+    Its results are appended, so the always-available one is what plays
+    first and the extras enrich it.
+    """
+    out: list[dict] = []
+    page_url = ((wiki or {}).get("content_urls") or {}).get("desktop", {}).get("page") or ""
+    title = (wiki or {}).get("title") or _article_title_of(page_url)
+    host = urlparse(page_url).netloc if page_url else ""
+    if host and title:
+        data = _rate_limited_get(f"https://{host}/api/rest_v1/page/media-list/{quote(title)}")
+        file_title = _audio_title_from_media_list((data or {}).get("items") or [])
+        if file_title:
+            rec = _commons_audio(file_title, _rate_limited_get)
+            if rec:
+                out.append(rec)
+    out.extend(fetch_xeno_canto(latin))
+    if not out:
+        log.info("[dossiers] keine Vogelstimme für %s — weder Commons noch xeno-canto", latin)
+    return out

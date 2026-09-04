@@ -173,18 +173,27 @@ def test_an_entry_without_a_playable_file_is_dropped(monkeypatch):
 
 def test_a_missing_api_key_is_reported_once_not_swallowed(monkeypatch, caplog):
     """Ohne Key liefert v3 nichts — das war bisher ein wortloses
-    `return []`. Für den Operator sah „kein Play-Knopf bei KEINEM Vogel"
-    dadurch aus wie eine fehlende Funktion statt wie eine fehlende
-    Einstellung. Genau eine WARNING pro Prozess: die Prebuild-Sweep geht
-    über Hunderte Arten, ein Log-Sturm hilft niemandem."""
+    `return []`. Genau eine Meldung pro Prozess: die Prebuild-Sweep geht
+    über Hunderte Arten, ein Log-Sturm hilft niemandem.
+
+    Die Stufe ist jetzt INFO, nicht WARNING, und das ist der Punkt: der
+    fehlende Key macht die Vogelstimme nicht mehr kaputt. Sie kommt von
+    Wikimedia Commons und braucht überhaupt keine Zugangsdaten
+    (bird_audio_commons.py); xeno-canto liefert nur noch zusätzliche
+    Aufnahmen. Eine WARNING würde behaupten, dass etwas nicht geht, was
+    geht — und genau diese Fehlinformation hat den Betreiber wochenlang
+    „Keine Vogelstimme verfügbar" lesen lassen."""
     monkeypatch.delenv("XENO_CANTO_API_KEY", raising=False)
     _router(monkeypatch, {"xeno-canto": {"recordings": [_rec("1", "song")]}})
-    with caplog.at_level(logging.WARNING, logger="app.bird_dossiers"):
+    with caplog.at_level(logging.INFO, logger="app.bird_dossiers"):
         assert fetch_xeno_canto("Turdus merula") == []
         assert fetch_xeno_canto("Erithacus rubecula") == []
     hits = [r for r in caplog.records if "XENO_CANTO_API_KEY" in r.getMessage()]
-    assert len(hits) == 1
-    assert hits[0].levelno == logging.WARNING
+    assert len(hits) == 1, "genau einmal, nicht je Art"
+    assert hits[0].levelno == logging.INFO
+    # Und die Meldung muss sagen, wo die Stimme HERKOMMT — sonst sucht
+    # der nächste Leser wieder nach einem Key, den er nicht braucht.
+    assert "Commons" in hits[0].getMessage()
 
 
 # ── Der Nachfass-Sweep ───────────────────────────────────────────────────
@@ -269,7 +278,7 @@ def test_a_missed_fetch_records_that_it_was_asked(tmp_path, monkeypatch):
     svc = BirdDossierService(tmp_path / "bird_dossiers.json")
     monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", lambda latin: None)
     monkeypatch.setattr("app.bird_dossiers._fetch_photos", lambda wiki, latin, want=3: [])
-    monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", lambda latin, max_recordings=3: [])
+    monkeypatch.setattr("app.bird_dossiers._fetch_bird_audio", lambda wiki, latin: [])
     monkeypatch.setattr(svc, "_spawn_fetch", lambda latin: None)
 
     svc._create_placeholder("Phoenicurus ochruros", "Hausrotschwanz")

@@ -149,7 +149,11 @@ def test_prebuilt_species_actually_fetches_reference_content(tmp_path, monkeypat
             "content_urls": {"desktop": {"page": "https://example.invalid/wiki/Rotkehlchen"}},
         }
 
-    def _fake_xc(latin, max_recordings=3):
+    # Signature follows the service's own call: bird song now comes from
+    # Wikimedia Commons FIRST (the article's own recording, no
+    # credential) with xeno-canto appended when a key exists, so the
+    # fetch takes the wiki summary it already has.
+    def _fake_xc(wiki, latin):
         return [
             {
                 "id": "1",
@@ -169,7 +173,7 @@ def test_prebuilt_species_actually_fetches_reference_content(tmp_path, monkeypat
         ]
 
     monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", _fake_wiki)
-    monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", _fake_xc)
+    monkeypatch.setattr("app.bird_dossiers._fetch_bird_audio", _fake_xc)
     monkeypatch.setattr("app.bird_dossiers._fetch_photos", _fake_photos)
 
     created = svc._create_placeholder("Erithacus rubecula", "Rotkehlchen")
@@ -200,7 +204,7 @@ def test_photo_fetch_receives_the_wikipedia_result(tmp_path, monkeypatch):
         return None
 
     monkeypatch.setattr("app.bird_dossiers._fetch_wikipedia", _fake_wiki)
-    monkeypatch.setattr("app.bird_dossiers._fetch_xeno_canto", lambda latin, max_recordings=3: [])
+    monkeypatch.setattr("app.bird_dossiers._fetch_bird_audio", lambda wiki, latin: [])
     monkeypatch.setattr(
         "app.bird_dossiers._fetch_photos", lambda wiki, latin, want=3: seen.append(wiki) or []
     )

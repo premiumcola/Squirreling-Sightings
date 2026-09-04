@@ -85,6 +85,16 @@
   overscroll-behavior: contain;
   padding-top: var(--vp-safe-top);
   padding-bottom: var(--vp-safe-bottom);
+  /* NOTHING IN A VIDEO PLAYER IS TEXT TO SELECT. Dragging the playhead
+     on iOS swept a selection across the title, the layer chips and the
+     clock and painted the whole screen blue mid-gesture — „beim Hin- und
+     Herschieben des Displayreglers markiere ich wieder den ganzen
+     Abspielscreen, sieht man selbst an der blauen Farbe".
+     Same three properties as the weather chart (23-weather-3.css); the
+     callout one is what stops the long-press from starting at all. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Any slot with nothing in it takes no space, so one skeleton serves

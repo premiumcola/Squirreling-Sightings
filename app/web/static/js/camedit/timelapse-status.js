@@ -93,6 +93,15 @@ function renderTlStatusBar() {
     return;
   }
   const activeCams = (s.cameras || []).filter((c) => c.any_active);
+  // COUNT THE PROFILES, not the cameras. The pill says "Timelapse aktiv"
+  // and showed `activeCams.length` — three cameras running six profiles
+  // between them reported "3", and the panel it opens lists all six.
+  // A badge whose number contradicts the list underneath it is worse
+  // than no badge: „es sind doch 5 timelapses??"
+  const activeProfiles = activeCams.reduce(
+    (n, cam) => n + _TL_PROFILES_DEF.filter((p) => cam.profiles?.[p.key]?.enabled).length,
+    0,
+  );
   const totalBytes = activeCams.reduce(
     (sum, cam) =>
       sum +
@@ -107,7 +116,7 @@ function renderTlStatusBar() {
     <div class="tl-sb-pill" onclick="byId('${panelId}').classList.toggle('hidden')">
       ${_TL_FILMSTRIP}
       <span>Timelapse aktiv</span>
-      <span class="tl-sb-count">${activeCams.length}</span>
+      <span class="tl-sb-count" title="${activeProfiles} Profile auf ${activeCams.length} Kamera(s)">${activeProfiles}</span>
       <span class="tl-sb-bytes">${esc(_tlFmtBytes(totalBytes))}</span>
     </div>
     <div class="tl-sb-panel hidden" id="${panelId}">

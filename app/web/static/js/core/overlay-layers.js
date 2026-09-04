@@ -36,13 +36,13 @@
 /** @type {Record<string, OverlayLayer>} */
 export const OVERLAY_LAYERS = {
   bboxes: {
-    label: 'Bboxes',
+    label: 'Rahmen',
     default: true,
     persist: true,
     desc: 'Erkannte Objekte als Rahmen über dem Video einblenden',
   },
   trails: {
-    label: 'Trails',
+    label: 'Spuren',
     default: true,
     persist: true,
     desc: 'Bewegungspfade jeder erkannten Spur einzeichnen',

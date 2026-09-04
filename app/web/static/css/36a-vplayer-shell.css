@@ -42,6 +42,20 @@
      own painted size. */
   --vp-tap: 44px;
 
+  /* THE PLAYER'S OWN ACCENT, and deliberately not the app's --accent.
+     This system counts birds and squirrels; the blue read as borrowed
+     from somewhere else — „wir haben ein Gartenmotto, das Blaue passt
+     hier gar nicht". Leaf green, saturated enough to read as a control
+     on black without going neon.
+
+     Scoped to .vp-* rather than redefining --accent globally, because
+     the accent belongs to the whole app and the dashboard, the wizard
+     and the settings panel did not ask to change colour. */
+  --vp-accent: #5fc98a;
+  /* Ink on top of a filled accent surface. Near-black rather than white:
+     white on this green measures under the 4.5:1 floor. */
+  --vp-on-accent: #06210f;
+
   /* Notch and home-indicator insets, resolved at use. Every fixed edge
      of the shell adds the matching one. */
   --vp-safe-top: env(safe-area-inset-top, 0px);
@@ -286,13 +300,13 @@
    an on chip is still lighter than the row behind it and the four never
    flatten back into one another. */
 .vp-seg[aria-pressed='true'] {
-  background: color-mix(in srgb, var(--accent) 26%, var(--surface));
+  background: color-mix(in srgb, var(--vp-accent) 26%, var(--surface));
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  box-shadow: inset 0 -2px 0 var(--vp-accent);
 }
 
 .vp-seg[aria-pressed='true'] svg {
-  color: var(--accent);
+  color: var(--vp-accent);
 }
 
 @media (hover: hover) {

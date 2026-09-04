@@ -514,12 +514,14 @@
    would then centre on frame-plus-strip, putting the play disc below the
    middle of the picture and the chevrons on top of the lanes.
 
-   `--vp-strip-h` is written next to `data-density` by _density.js from
-   the same measurement, so the two can never disagree. Overriding the
-   ONE longhand leaves the other three from `inset: 0` untouched, which
-   is what makes this a two-line rule rather than a re-declaration. */
-.vp-stage[data-density='compact'] > .vp-glass,
-.vp-stage[data-density='compact'] > .mv-player {
+   `--vp-strip-h` is the strip's measured height, published by
+   _density.js. Unconditional now: the strip always sits under the
+   picture (see 36b's header), so the stage is always taller than the
+   frame. Overriding the ONE longhand leaves the other three from
+   `inset: 0` untouched, which is what makes this a two-line rule rather
+   than a re-declaration. */
+.vp-stage > .vp-glass,
+.vp-stage > .mv-player {
   bottom: var(--vp-strip-h, 0px);
 }
 

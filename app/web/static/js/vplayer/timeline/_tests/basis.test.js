@@ -202,11 +202,21 @@ test('a lane with no class at all still has a name', () => {
 /**
  * The narrowest host mountTimeline actually touches. There is no DOM in
  * this test tree at all — every gate here is plain node — and the mount
- * only ever reads `querySelector` (both hits guard on null) and writes
- * `innerHTML` and `dataset`, so the real element is not needed to pin
- * the one attribute a later reader will look for.
+ * reads `querySelector` (every hit guards on null) and writes
+ * `innerHTML`, `dataset` and `style`, so the real element is not needed
+ * to pin the one attribute a later reader will look for.
+ *
+ * `style` is here because the mount publishes the lane block's measured
+ * height as a custom property for the playhead's riser. Every real
+ * element has one; leaving it off the stub made the mount throw on a
+ * host that could not exist.
  */
-const stubHost = () => ({ dataset: {}, innerHTML: '', querySelector: () => null });
+const stubHost = () => ({
+  dataset: {},
+  innerHTML: '',
+  querySelector: () => null,
+  style: { setProperty() {}, removeProperty() {} },
+});
 
 test('the rail records on itself which population it drew', () => {
   const host = stubHost();

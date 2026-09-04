@@ -30,11 +30,9 @@ import {
   fitPlateText,
   plateTiers,
   plateWidthPx,
-  stripDensity,
+  mountStripHeight,
   VP_PLATE_H_PX,
   VP_PLATE_MIN_PICTURE_PX,
-  VP_STRIP_MAX_SHARE,
-  VP_STRIP_MIN_CLEAR_PX,
 } from '../_density.js';
 import { buildBoxSvg } from '../_overlay-svg.js';
 
@@ -185,41 +183,55 @@ test('bleibt beides unter dem Chrom, wird das Schild ganz weggelassen', () => {
 });
 
 // ── Der Zeitstreifen ──────────────────────────────────────────────────
+//
+// Hier stand eine gemessene Umschaltung: der Streifen durfte auf dem
+// Bild liegen, solange er genug Bild uebrig liess. Sie funktionierte,
+// und sie ist trotzdem weg — der Betreiber hat die Frage durch Hinsehen
+// entschieden: "der play button in der abspiel timeline es soll genau so
+// wie bei dir im bild aussehen!". Diese Kameras brennen ihre eigene Uhr
+// in den unteren Bildrand, also stritten Schiene, Zeitangabe und
+// 01/09/2026 15:46:02 um dieselben zwanzig Pixel — auf einem 1440-px-
+// Fenster, wo rechnerisch reichlich Platz war. Platz war nie das
+// Problem, das Bildmaterial war es.
+//
+// Geblieben ist die MESSUNG: die Hoehe des Streifens wird veroeffent-
+// licht, damit die Bedienelemente auf dem Bild sich weiter auf das BILD
+// zentrieren und nicht auf Bild-plus-Streifen.
 
-test('auf einem Telefonbild zieht der Streifen unter das Bild', () => {
-  // 211 px Bild (375 px breit, 16:9), ~150 px Streifen mit fünf Lanes.
-  assert.equal(stripDensity(211, 150), 'compact');
+/** Eine Buehne mit einem Streifen bekannter Hoehe. */
+function _stubStage(stripH) {
+  const props = {};
+  return {
+    style: {
+      props,
+      setProperty: (k, v) => {
+        props[k] = v;
+      },
+      getPropertyValue: (k) => props[k] || '',
+      removeProperty: (k) => {
+        delete props[k];
+      },
+    },
+    querySelector: () => (stripH == null ? null : { offsetHeight: stripH }),
+  };
+}
+
+test('die Streifenhoehe wird an die Buehne gemeldet', () => {
+  const stage = _stubStage(96);
+  const h = mountStripHeight(stage);
+  assert.equal(h.measure(), 96);
+  assert.equal(stage.style.props['--vp-strip-h'], '96px');
 });
 
-test('auf einem hohen Desktopfenster bleibt er auf dem Bild', () => {
-  assert.equal(stripDensity(520, 150), 'roomy');
+test('ohne Streifen wird 0 gemeldet statt geraten', () => {
+  const stage = _stubStage(null);
+  assert.equal(mountStripHeight(stage).measure(), 0);
 });
 
-test('ein KURZES Desktopfenster ist derselbe Fall — dafür gibt es den Anteil', () => {
-  // 1440 px breit, 500 px hoch: das Bild ist auf 58dvh gedeckelt, also
-  // 290 px. Der Restabstand wäre noch erfüllt, der Anteil nicht — und
-  // eine Breakpoint-Liste sähe hier nur „Desktop".
-  const pictureH = 290;
-  const stripH = 150;
-  assert.ok(pictureH - stripH >= VP_STRIP_MIN_CLEAR_PX, 'der Restabstand allein greift hier nicht');
-  assert.ok(stripH > pictureH * VP_STRIP_MAX_SHARE, 'der Anteil ist die Bedingung, die greift');
-  assert.equal(stripDensity(pictureH, stripH), 'compact');
-});
-
-test('ein SCHMALES Bild mit magerem Streifen greift über den Restabstand', () => {
-  // 320 px breites Telefon: 180 px Bild, zwei Lanes plus Schiene, ~60 px.
-  // Anteilig völlig harmlos — und trotzdem bleibt kein Bild übrig.
-  const pictureH = 180;
-  const stripH = 60;
-  assert.ok(stripH <= pictureH * VP_STRIP_MAX_SHARE, 'der Anteil allein greift hier nicht');
-  assert.ok(pictureH - stripH < VP_STRIP_MIN_CLEAR_PX, 'der Restabstand ist die Bedingung');
-  assert.equal(stripDensity(pictureH, stripH), 'compact');
-});
-
-test('ohne Messwerte bleibt es beim Ist-Zustand statt zu springen', () => {
-  // Vor dem ersten Layout ist beides 0. „compact" zu raten hieße, den
-  // Streifen bei jedem Öffnen einmal hin- und herzuschieben.
-  assert.equal(stripDensity(0, 0), 'roomy');
-  assert.equal(stripDensity(211, 0), 'roomy');
-  assert.equal(stripDensity(NaN, 150), 'roomy');
+test('der Abbau raeumt die Eigenschaft wieder ab', () => {
+  const stage = _stubStage(96);
+  const h = mountStripHeight(stage);
+  h.measure();
+  h.teardown();
+  assert.equal(stage.style.props['--vp-strip-h'], undefined);
 });

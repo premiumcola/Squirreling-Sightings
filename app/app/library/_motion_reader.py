@@ -39,6 +39,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from ..scrub_sprite import sprite_relpath_for
 from ..weather_service._consts import _safe_dt
 
 log = logging.getLogger(__name__)
@@ -186,8 +187,28 @@ def motion_candidate(cam_id: str, cam_name: str, obj: dict) -> dict | None:
             "/media/{}".format(obj.get("snapshot_relpath")) if obj.get("snapshot_relpath") else ""
         ),
         "missing_media": not obj.get("video_relpath"),
-        "extra": dict(obj),
+        "extra": _with_scrub_url(dict(obj)),
     }
+
+
+def _with_scrub_url(obj: dict) -> dict:
+    """Attach the scrub filmstrip's URL, when the clip has geometry for it.
+
+    The sheet has been built since the filmstrip landed and its geometry
+    written onto the event, but nothing ever handed the player an ADDRESS
+    for it — so the drag preview had no image to show and the whole
+    feature was invisible.
+
+    Only when ``scrub`` is present: geometry is what says a sheet was
+    actually produced, and a URL without it would point the player at a
+    404 for every clip recorded before the filmstrip existed.
+    """
+    if not isinstance(obj.get("scrub"), dict):
+        return obj
+    rel = sprite_relpath_for(obj.get("video_relpath") or "")
+    if rel:
+        obj["scrub"] = {**obj["scrub"], "url": "/media/{}".format(rel)}
+    return obj
 
 
 def motion_candidates(

@@ -23,7 +23,7 @@ import { containRect } from '../core/video-fit.js';
 import { placeOverlay } from '../core/box-model.js';
 // The refit is also the moment the crowding verdict can change, so the
 // density rule rides the same trigger rather than growing a third one.
-import { chromeRects, mountDensity } from './_density.js';
+import { chromeRects, mountStripHeight } from './_density.js';
 
 /** The layers, in paint order. Zones sit under the boxes drawn on them. */
 export const VP_LAYERS = ['zones', 'trails', 'boxes'];
@@ -139,7 +139,7 @@ export function mountStage(frame, cfg) {
   // layer switches, the transport, the timeline strip — is pinned to it,
   // so it is also what the density verdict has to be written onto.
   const stageEl = frame.parentElement;
-  const density = mountDensity(stageEl, () => rect.h);
+  const density = mountStripHeight(stageEl);
 
   const refit = () => {
     const box = frame.getBoundingClientRect();

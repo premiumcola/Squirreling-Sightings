@@ -22,10 +22,9 @@
 //                  label, so it steps down a ladder of shorter forms and
 //                  falls off the end rather than printing across the
 //                  picture.
-//   stripDensity   the timeline strip may lie ON the picture only while
-//                  it leaves a usable picture behind it. Otherwise it
-//                  drops out of the stage's overlay and into its own row
-//                  under the frame, where nothing competes with it.
+//   stripHeight    the timeline strip's measured height, published so
+//                  the on-picture chrome can centre on the PICTURE and
+//                  not on picture-plus-strip.
 //
 // The plate metrics live here rather than in _overlay-svg.js because the
 // fit test and the renderer have to agree on them to the pixel; two
@@ -58,12 +57,6 @@ const _GLYPH_W = 0.58;
  * geometry is the information, the wording is the luxury.
  */
 export const VP_PLATE_MIN_PICTURE_PX = 128;
-
-/** Picture that must stay clear of the on-picture strip, in CSS px. */
-export const VP_STRIP_MIN_CLEAR_PX = 132;
-
-/** Share of the picture the strip may claim before it moves out. */
-export const VP_STRIP_MAX_SHARE = 0.34;
 
 /** Estimated on-screen width of the plate that would carry `text`. */
 export function plateWidthPx(text) {
@@ -131,29 +124,6 @@ export function fitPlateText(det, cat, geom = {}) {
 }
 
 /**
- * PURE: may the timeline strip lie on the picture?
- *
- * Two conditions, because two different shapes of crowding exist and
- * neither alone catches both:
- *
- *   · a SMALL picture with an ordinary strip — a phone. What is left
- *     over has to still be a picture, hence an absolute floor.
- *   · a BIG picture with a huge strip — eight tracked objects on a short
- *     desktop window. 130 px of lanes over a 290 px picture leaves the
- *     floor satisfied and still buries the footage, hence the share.
- *
- * @param {number} pictureH  letterboxed picture height, CSS px
- * @param {number} stripH    the strip's own laid-out height, CSS px
- * @returns {'roomy'|'compact'}
- */
-export function stripDensity(pictureH, stripH) {
-  if (!(pictureH > 0) || !(stripH > 0)) return 'roomy';
-  if (pictureH - stripH < VP_STRIP_MIN_CLEAR_PX) return 'compact';
-  if (stripH > pictureH * VP_STRIP_MAX_SHARE) return 'compact';
-  return 'roomy';
-}
-
-/**
  * Everything this player paints ON the picture and expects a finger on:
  * the layer switches and the ROI caption at the top, the two navigation
  * chevrons at the sides, and mediaview's transport disc in the middle.
@@ -215,9 +185,8 @@ export function clearOfChrome(rect, chrome) {
   return true;
 }
 
-/** Write the verdict onto the stage, but only when it actually moved. */
-function _write(stageEl, mode, stripH) {
-  if (stageEl.dataset.density !== mode) stageEl.dataset.density = mode;
+/** Publish the strip's height, but only when it actually moved. */
+function _write(stageEl, stripH) {
   const px = `${Math.round(stripH)}px`;
   if (stageEl.style.getPropertyValue('--vp-strip-h') !== px) {
     stageEl.style.setProperty('--vp-strip-h', px);
@@ -225,29 +194,27 @@ function _write(stageEl, mode, stripH) {
 }
 
 /**
- * Watch the stage and keep `data-density` on it truthful.
+ * Keep `--vp-strip-h` on the stage equal to the strip's real height.
+ *
+ * The strip sits under the picture, so the stage is always taller than
+ * the frame — and everything pinned to the stage with `inset: 0` (the
+ * chevron layer, mediaview's transport) would centre on frame-plus-strip
+ * and drift below the middle of the picture. This is the number that
+ * pulls them back onto it.
  *
  * The strip's height changes when its DATA changes — a sidecar landing,
  * a live tick adding a lane — which no resize of the stage reports, so
- * the strip gets its own observer. The measurement itself cannot
- * oscillate: the frame is width-bound (`aspect-ratio`), so moving the
- * strip out of the picture does not change the picture it was measured
- * against.
+ * it gets its own observer.
  *
- * `--vp-strip-h` rides along because the on-picture chrome has to centre
- * on the FRAME once the stage is taller than it.
- *
- * @param {HTMLElement} stageEl       the shell's [data-slot="stage"]
- * @param {() => number} getPictureH  current picture height, CSS px
+ * @param {HTMLElement} stageEl  the shell's [data-slot="stage"]
  */
-export function mountDensity(stageEl, getPictureH) {
-  if (!stageEl) return { measure: () => 'roomy', teardown: () => {} };
+export function mountStripHeight(stageEl) {
+  if (!stageEl) return { measure: () => 0, teardown: () => {} };
   const strip = stageEl.querySelector('[data-slot="timeline"]');
   const measure = () => {
     const stripH = strip ? strip.offsetHeight : 0;
-    const mode = stripDensity(getPictureH(), stripH);
-    _write(stageEl, mode, stripH);
-    return mode;
+    _write(stageEl, stripH);
+    return stripH;
   };
   const ro = strip && typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
   ro?.observe(strip);
@@ -255,7 +222,6 @@ export function mountDensity(stageEl, getPictureH) {
     measure,
     teardown: () => {
       ro?.disconnect();
-      delete stageEl.dataset.density;
       stageEl.style.removeProperty('--vp-strip-h');
     },
   };

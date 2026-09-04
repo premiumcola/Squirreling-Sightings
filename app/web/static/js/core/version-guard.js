@@ -70,8 +70,8 @@ async function hardReload() {
     // (WindowOrWorkerGlobalScope). Identical in a browser tab, and the
     // right reference anywhere else.
     if (globalThis.caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
+      const keys = await globalThis.caches.keys();
+      await Promise.all(keys.map((k) => globalThis.caches.delete(k)));
     }
   } catch (e) {
     console.warn('[version] cache clear failed:', e);

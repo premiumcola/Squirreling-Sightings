@@ -14,6 +14,7 @@ import { emptyStateFor, emptyStateHtml, wireRescan } from './_empty-states.js';
 import { lanesHtml } from './_lanes.js';
 import { railHtml, setPlayhead } from './_rail.js';
 import { renderRolling } from './_rolling.js';
+import { mountScrubPreview } from './_preview.js';
 import { attachScrub } from './_scrub.js';
 import { buildTimelineModel } from './_model.js';
 
@@ -32,8 +33,42 @@ export function mountTimeline(host, cfg, deps = {}) {
   let model = buildTimelineModel([], rolling ? { windowMs: cfg.windowMs, now: 0 } : {});
   let scrub = null;
   let rescan = null;
+  let preview = null;
+  // Coarse pointers get the bubble lifted clear of the finger. Read once
+  // per mount: a device does not change its input class mid-clip, and a
+  // matchMedia listener here would outlive the player.
+  // globalThis, not window: this module is imported by node tests that
+  // stub a document and have no window at all.
+  const _touch =
+    typeof globalThis.matchMedia === 'function' &&
+    globalThis.matchMedia('(pointer: coarse)').matches;
 
   const rail = () => host.querySelector('.vp-tl-track');
+
+  // How tall the lane block is, published to CSS so the playhead's riser
+  // can reach exactly to the top of it — „Die Linie geht hoch, dadrüber
+  // sind die Timelines in Farbe zu den Objekten eingezeichnet."
+  //
+  // Observed rather than measured once: the lane count changes when a
+  // sidecar lands or a live tick adds a track, and neither of those is a
+  // resize of anything else.
+  let laneRo = null;
+  const watchLanes = () => {
+    laneRo?.disconnect();
+    const lanes = host.querySelector('.vp-tl-lanes');
+    if (!lanes) {
+      host.style.removeProperty('--vp-tl-lanes-h');
+      return;
+    }
+    const publish = () => {
+      host.style.setProperty('--vp-tl-lanes-h', `${Math.round(lanes.offsetHeight)}px`);
+    };
+    publish();
+    if (typeof ResizeObserver === 'function') {
+      laneRo = new ResizeObserver(publish);
+      laneRo.observe(lanes);
+    }
+  };
 
   /** Repaint everything that only changes when the DATA changes. */
   const render = (tracks, opts = {}) => {
@@ -54,10 +89,28 @@ export function mountTimeline(host, cfg, deps = {}) {
       ? `<div class="vp-tl-lanes">${lanesHtml(model)}</div>`
       : emptyStateHtml(emptyStateFor(opts.item, opts.tracks), opts);
     host.innerHTML = body + railHtml(model);
+    watchLanes();
+    preview?.teardown();
+    preview = mountScrubPreview(rail(), {
+      getGeometry: () => opts.item?.scrub || null,
+      getDuration: () => model.duration,
+      isTouch: () => _touch,
+    });
     scrub = attachScrub(host.querySelector('.vp-tl-hit'), {
       getRect: () => rail()?.getBoundingClientRect() || { left: 0, width: 0 },
       getDuration: () => model.duration,
       onSeek: deps.onSeek,
+      // Every drag position lands here, and NOTHING here decodes video.
+      // The marker moves so the drag tracks the finger, and the
+      // filmstrip bubble shows the frame — the picture itself catches up
+      // once, on release. See _scrub.js's header for the five-second
+      // backlog this replaced.
+      onPreview: (t, x, phase) => {
+        setPlayhead(host, t, model.duration);
+        if (phase === 'end') preview?.hide();
+        else if (phase === 'start') preview?.show(x, t);
+        else preview?.moveTo(x, t);
+      },
       isPlaying: deps.isPlaying,
       onPause: deps.onPause,
       onResume: deps.onResume,
@@ -73,6 +126,8 @@ export function mountTimeline(host, cfg, deps = {}) {
     tick: (t) => setPlayhead(host, t, model.duration),
     teardown: () => {
       scrub?.teardown();
+      preview?.teardown();
+      laneRo?.disconnect();
       rescan?.teardown();
       host.innerHTML = '';
       delete host.dataset.vpFp;

@@ -37,24 +37,30 @@
   --vp-play-pct: 0;
 }
 
-/* ── The strip, mounted INSIDE the stage ───────────────────────────────────
-   Over the bottom of the picture rather than in a band below it. The
-   scrim is what keeps a white marker readable over an overexposed sky
-   without painting a solid bar across the video.
+/* ── The strip, in its own row UNDER the picture ───────────────────────────
+   It used to lie over the bottom of the footage and drop below it only
+   once the picture got too short to share — a measured rule, and a good
+   one, but it answered a question the operator settled by looking:
+   „der play button in der abspiel timeline es soll genau so wie bei dir
+   im bild aussehen!", pointing at the below-the-picture layout.
 
-   ON the picture only while it FITS on the picture. `data-density` is
-   written onto the stage by vplayer/_density.js from measured pixels —
-   the letterboxed picture height and this strip's own laid-out height —
-   and never from a viewport width, because the identical crowding
-   appears on a short desktop window at 1440 px. See the compact block at
-   the end of this file for what changes. */
+   The screenshot that prompted it shows why. These cameras burn their
+   own clock into the frame along the bottom edge, so the rail, the
+   elapsed time and `01/09/2026 15:46:02` all fought over the same twenty
+   pixels — on a 1440 px window, where by measurement there was plenty of
+   room. Room was never the problem; the footage was.
+
+   So: always its own row, never a scrim over the video. Every lane name,
+   caption and clock digit gets a line to itself with nothing behind it.
+   No safe-area inset here — the strip is not the last thing on screen
+   (the objects panel is below it) and `.vp-root` already pads the whole
+   column; adding it twice put a notch-sized gap mid-page. */
 .vp-timeline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 8px 10px calc(6px + var(--vp-safe-bottom));
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+  position: static;
+  /* Its own ground, one step off the black stage, so the row reads as a
+     row — depth from contrast, never from a border line. */
+  background: var(--panel);
+  padding: 8px 10px;
   /* Vertical page scroll must still work when a finger starts here;
      only horizontal gestures belong to the rail. */
   touch-action: pan-y;
@@ -72,7 +78,7 @@
   margin-bottom: 6px;
   /* Many objects must not push the picture out of view; the lane list
      scrolls itself. */
-  max-height: 30dvh;
+  max-height: 22dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -148,16 +154,14 @@
   background: var(--vp-lane-colour, var(--vp-accent));
 }
 
-/* The lane's own column, so it can never be printed through a bar. It
-   keeps its ground because the strip still lies on the picture whenever
-   there is room for it, and grey text on an overexposed sky is not text.
-   A long German species name („Hausrotschwanz", „Buntspecht") is
-   ellipsed rather than allowed to eat the time axis — the whole name is
-   on the row's `title` and in the objects list below. */
+/* The lane's own column, so it can never be printed through a bar. No
+   plate any more: on the flat ground the strip now stands on, a box
+   drawn around already-legible text is one box too many. A long German
+   species name („Hausrotschwanz", „Buntspecht") is ellipsed rather than
+   allowed to eat the time axis — the whole name is on the row's `title`
+   and in the objects list below. */
 .vp-tl-lane-label {
-  padding: 1px 5px;
-  border-radius: 6px;
-  background: rgba(11, 15, 20, 0.82);
+  padding: 1px 0;
   color: var(--muted);
   font-size: 11px;
   white-space: nowrap;
@@ -191,7 +195,6 @@
   font-size: 11px;
   line-height: 1.3;
   color: var(--muted, #8291a0);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
 }
 
 .vp-tl-cap--first {
@@ -258,16 +261,44 @@
   background: var(--vp-accent);
 }
 
+/* THE PLAYHEAD, as drawn in the concept: a solid grip on the rail with
+   a line rising from it through the lanes above, so the moment under the
+   finger is readable against every object's own bar at once —
+   „Die Linie geht hoch, dadrüber sind die Timelines in Farbe zu den
+   Objekten eingezeichnet."
+
+   18 px, not 14. It is the one thing on this strip that gets dragged,
+   and it was smaller than the dots marking single detections. */
 .vp-tl-head {
   position: absolute;
   top: 50%;
   left: calc(var(--vp-play-pct) * 100%);
-  width: 14px;
-  height: 14px;
-  margin-left: -7px;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
   transform: translateY(-50%);
   border-radius: 50%;
   background: #ffffff;
+  /* Reads as a grip on top of the rail rather than a bead threaded
+     through it. */
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  z-index: 3;
+}
+
+/* The riser. Drawn upward out of the rail and behind the grip, so it
+   crosses every lane at the playhead's own position. `bottom: 50%`
+   starts it at the rail's centre line; the height is the lane block's,
+   published by _lanes.js as --vp-tl-lanes-h. */
+.vp-tl-head::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 2px;
+  height: var(--vp-tl-lanes-h, 0px);
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
 }
 
 /* The drag surface. A 6 px rail is not a touch target; this transparent
@@ -397,55 +428,49 @@
   color: var(--muted);
 }
 
-/* ── Compact density · the strip leaves the picture ────────────────────────
-   The whole point of this file's layout is that a 6 px rail and a row of
-   14 px lanes are cheap enough to lie over the footage. On a 375 px
-   phone they are not: the picture is ~211 px tall and the strip alone
-   measures ~150 of them, so the lanes, the pre-/post-roll captions and
-   the clock all print through the subject, the prev/next chevrons and
-   the play disc at once.
+/* ── The drag preview ──────────────────────────────────────────────────────
+   The thumbnail that follows the finger while the playhead is dragged.
+   „gut wäre noch ein thumb vorschau wenn ich den play button halte und
+   hin und her ziehe … bitte thumb größer im verhältnis!"
 
-   `position: static` is the entire mechanism. The strip falls back into
-   the stage's normal flow directly under the frame, the stage grows by
-   exactly its height, and every lane, caption and clock digit lands in a
-   row of its own with nothing behind it. Nothing is hidden and nothing
-   is duplicated — the same markup, one row lower.
+   Its image is one window onto the sprite sheet built at record time
+   (app/app/scrub_sprite.py); vplayer/timeline/_preview.js does the
+   arithmetic. A background-position change per frame is why this stays
+   smooth where seeking the video did not — see _scrub.js's header.
 
-   WHEN is not a width. vplayer/_density.js measures the picture and the
-   strip and writes `data-density` on the stage; a 1440 px window only
-   500 px tall gets exactly this treatment, which is the case a
-   breakpoint list cannot see. */
-.vp-stage[data-density='compact'] > .vp-timeline {
-  position: static;
-  /* No scrim: there is no picture behind it any more. Its own ground,
-     one step off the black stage, so the row reads as a row — depth from
-     contrast, never from a border line. */
-  background: var(--panel);
-  /* No safe-area inset here any more: in this density the strip is no
-     longer the last thing on the screen — the objects panel is below it,
-     and `.vp-root` already carries the home-indicator padding for the
-     whole column. Adding it twice puts a notch-sized gap in the middle
-     of the page on exactly the phones it was meant to protect. */
-  padding: 8px 10px;
+   Anchored to the rail and positioned from its left edge, so it can be
+   clamped inside the rail's own width rather than escaping the player. */
+.vp-scrub-preview {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  z-index: 4;
+  padding: 4px 4px 2px;
+  border-radius: 10px;
+  background: rgba(10, 14, 20, 0.92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 
-/* Below the picture the row is not competing with the footage, so the
-   list may be taller before it starts scrolling — but it still must not
-   push the objects list off a phone screen. */
-.vp-stage[data-density='compact'] .vp-tl-lanes {
-  max-height: 22dvh;
+/* A finger covers the rail and everything just above it, so on a touch
+   screen the bubble rides clear of the hand instead of under it. */
+.vp-scrub-preview--touch {
+  bottom: calc(100% + 56px);
 }
 
-/* The captions and the clock get the picture's own text colours back:
-   without a video behind them the text-shadow was compensating for a
-   contrast problem that no longer exists. */
-.vp-stage[data-density='compact'] .vp-tl-caps {
-  text-shadow: none;
+.vp-scrub-preview-img {
+  display: block;
+  border-radius: 7px;
+  background-repeat: no-repeat;
+  /* Sized entirely from JS: one tile of the sheet, scaled to the bubble
+     width. Declaring a size here would fight it every frame. */
+  background-color: #000;
 }
 
-/* And the lane name loses its plate — on a flat ground it was a second
-   box drawn around text that was already legible. */
-.vp-stage[data-density='compact'] .vp-tl-lane-label {
-  background: none;
-  padding: 1px 0;
+.vp-scrub-preview-time {
+  display: block;
+  padding-top: 3px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.86);
 }

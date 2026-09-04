@@ -1,19 +1,34 @@
 // ─── vplayer/timeline/_scrub.js ────────────────────────────────────────────
-// Drag-to-seek on the rail. Ported from the recorded scrubber's
-// pointer-capture drag, with every global lookup replaced by an
-// argument — that is the whole change, and it is what lets one
-// implementation drive both a recorded scrubber and a read-only live
-// strip (omit onSeek and the drag simply never arms).
+// Drag-to-seek on the rail.
 //
 // POINTER CAPTURE IS THE POINT. Without it a drag dies the moment the
-// finger leaves the 6 px rail, which on a phone is immediately. With
-// it the element keeps receiving moves until the finger lifts anywhere
-// on screen.
+// finger leaves the 6 px rail, which on a phone is immediately. With it
+// the element keeps receiving moves until the finger lifts anywhere on
+// screen.
 //
-// THE PAUSE/RESUME CONTRACT. A drag that started during playback
-// pauses, seeks, and resumes on release; a drag that started while
-// paused leaves it paused. Getting this backwards makes a scrub either
-// stutter against the running playhead or silently start playback.
+// THE PAUSE/RESUME CONTRACT. A drag that started during playback pauses,
+// seeks, and resumes on release; a drag that started while paused leaves
+// it paused. Getting this backwards makes a scrub either stutter against
+// the running playhead or silently start playback.
+//
+// ── WHY THIS DOES NOT SEEK WHILE YOU DRAG ─────────────────────────────
+//
+// It used to, on every single pointermove, and that made the feature
+// unusable: „Ich kann den Button auch total nur extrem buggy hin- und
+// herschieben … es dauert fünf Sekunden, bis ich überhaupt den Play
+// Button hin- und herschieben kann mit der Maus."
+//
+// A mouse emits pointermove far faster than the screen refreshes, and
+// each of those calls set `video.currentTime`. Seeking an inter-coded
+// MP4 means decoding from the nearest keyframe, so every one of those
+// costs real time; the browser queues them and the picture arrives
+// seconds behind the finger. The handle looked stuck because it was
+// waiting on a backlog of seeks nobody wanted.
+//
+// So the drag moves two cheap things — the playhead marker and the
+// filmstrip preview — and the video is seeked EXACTLY ONCE, on release.
+// That is what the sprite sheet is for: scrubbing shows the sheet, not
+// the decoder. `onPreview` gets every position; `onSeek` gets one.
 
 /**
  * PURE: where along a rect a pointer landed, as a fraction.
@@ -50,6 +65,9 @@ export function timeFromRect(clientX, rect, duration) {
  * @param {() => DOMRect} opts.getRect       the rail's measured rect
  * @param {() => number} opts.getDuration    clip length in seconds
  * @param {(t: number) => void} [opts.onSeek]  omit for a read-only strip
+ * @param {(t: number, x: number, phase: 'start'|'move'|'end') => void} [opts.onPreview]
+ *        every drag position, cheap — the playhead marker and the
+ *        filmstrip bubble. Called on the caller's own frame budget.
  * @param {() => boolean} [opts.isPlaying]
  * @param {() => void} [opts.onPause]
  * @param {() => void} [opts.onResume]
@@ -59,11 +77,13 @@ export function attachScrub(el, opts = {}) {
   if (!el || typeof opts.onSeek !== 'function') return null;
 
   let resumeAfter = false;
+  let lastTime = null;
 
-  const seekTo = (clientX) => {
-    const t = timeFromRect(clientX, opts.getRect(), opts.getDuration());
-    if (t != null) opts.onSeek(t);
-  };
+  /** The time under the pointer, or null when there is nothing to seek. */
+  const timeAt = (clientX) => timeFromRect(clientX, opts.getRect(), opts.getDuration());
+
+  /** Rail-relative x, for placing the preview bubble. */
+  const localX = (clientX) => clientX - (opts.getRect()?.left || 0);
 
   const onDown = (ev) => {
     ev.preventDefault();
@@ -74,12 +94,20 @@ export function attachScrub(el, opts = {}) {
     }
     resumeAfter = opts.isPlaying ? opts.isPlaying() === true : false;
     if (resumeAfter) opts.onPause?.();
-    seekTo(ev.clientX);
+    const t = timeAt(ev.clientX);
+    if (t == null) return;
+    lastTime = t;
+    opts.onPreview?.(t, localX(ev.clientX), 'start');
   };
 
   const onMove = (ev) => {
     if (!el.hasPointerCapture?.(ev.pointerId)) return;
-    seekTo(ev.clientX);
+    const t = timeAt(ev.clientX);
+    if (t == null) return;
+    lastTime = t;
+    // Preview only. See the header: seeking here is what made the drag
+    // feel broken.
+    opts.onPreview?.(t, localX(ev.clientX), 'move');
   };
 
   const onUp = (ev) => {
@@ -90,6 +118,14 @@ export function attachScrub(el, opts = {}) {
         /* already released */
       }
     }
+    // The one seek of the whole gesture. A click without any move lands
+    // here too, having gone through onDown, so a plain tap on the rail
+    // still jumps — it just jumps once.
+    const t = timeAt(ev.clientX);
+    const target = t == null ? lastTime : t;
+    if (target != null) opts.onSeek(target);
+    opts.onPreview?.(target ?? 0, localX(ev.clientX), 'end');
+    lastTime = null;
     if (resumeAfter) opts.onResume?.();
     resumeAfter = false;
   };

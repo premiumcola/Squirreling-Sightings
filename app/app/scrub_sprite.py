@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import logging
 import math
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import cv2
 import numpy as np
@@ -77,6 +77,33 @@ def sprite_path_for(video_path: Path) -> Path:
     is still findable as a unit.
     """
     return video_path.parent / SPRITE_DIR / f"{video_path.stem}.jpg"
+
+
+def sprite_relpath_for(video_relpath: str) -> str:
+    """The same mapping, on the RELATIVE path the event JSON stores.
+
+    ``motion_detection/<cam>/<day>/<id>.mp4``
+      → ``motion_detection/<cam>/<day>/scrub/<id>.jpg``
+
+    The layout lives in this module and nowhere else. The player needs a
+    URL for the filmstrip, and the two obvious places to put one were
+    both worse: writing it onto the event at build time leaves every clip
+    recorded before that commit without a preview for ever, and deriving
+    it in JavaScript copies the storage layout into the browser, where
+    the next change to it would silently stop matching.
+
+    Derived on read instead, from a path the event already has — so an
+    archive of existing clips gains previews the moment their sheets are
+    backfilled, with no migration.
+
+    Returns "" for anything that is not a clip path.
+    """
+    if not video_relpath:
+        return ""
+    p = PurePosixPath(str(video_relpath))
+    if not p.name or not p.suffix:
+        return ""
+    return str(p.parent / SPRITE_DIR / f"{p.stem}.jpg")
 
 
 def legacy_sprite_path_for(video_path: Path) -> Path:

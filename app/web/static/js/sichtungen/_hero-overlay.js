@@ -10,7 +10,7 @@
 // state: tapping the hero button toggles the currently "active"
 // recording; tapping a row switches which recording is active and
 // starts it. Only one <audio> element plays at a time.
-import { esc } from '../core/dom.js';
+import { cssUrl, esc } from '../core/dom.js';
 
 function _recordingsOf(d) {
   if (Array.isArray(d.recordings) && d.recordings.length) return d.recordings.slice(0, 3);
@@ -88,7 +88,22 @@ export function heroHtml(d) {
         i === 0
           ? `<div class="sd-hero-scrim"></div><div class="sd-hero-caption"><div class="sd-hero-name">${name}</div>${latinLine}</div>${playBtn}`
           : '';
-      return `<div class="sd-hero-photo"><img src="${esc(src)}" alt="" loading="lazy"/>${overlay}</div>`;
+      // The bird is shown whole (`contain`), and the frame around it is
+      // filled by the same photograph, blown up and blurred — see the
+      // .sd-hero-photo block in 29-birds.css for why this box was
+      // rebuilt rather than patched a fourth time.
+      //
+      // The blurred ground is a ::before fed by this custom property,
+      // not a second <img>. One image element means assistive tech is
+      // not told about the same photo twice, and a pseudo-element has no
+      // layout box of its own to escape the frame — an over-scaled <img>
+      // does, and its rect reached down over the summary text even
+      // though `overflow: hidden` clipped the paint.
+      return (
+        `<div class="sd-hero-photo" style="--sd-hero-src: url(&quot;${cssUrl(src)}&quot;)">` +
+        `<img class="sd-hero-subject" src="${esc(src)}" alt="" loading="lazy"/>` +
+        `${overlay}</div>`
+      );
     })
     .join('');
   return `<div class="sd-hero sd-hero--${photos.length}">${boxes}</div>`;

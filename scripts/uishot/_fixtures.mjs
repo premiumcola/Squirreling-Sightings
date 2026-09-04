@@ -93,12 +93,66 @@ export const NETZ_STATE = {
   // the side of every one of them — a fixture thinner than the real
   // data cannot photograph a layout that only breaks when it is full.
   axes: [
-    { label: 'person', E: 62, push: 0.68, push_enabled: true, spawn: 0.42, confirm_n: 2, confirm_s: 1.5, provenance: 'manuell' },
-    { label: 'cat', E: 48, push: 0.55, push_enabled: true, spawn: 0.38, confirm_n: 2, confirm_s: 1.2, provenance: 'auto' },
-    { label: 'bird', E: 35, push: 0.41, push_enabled: false, spawn: 0.3, confirm_n: 3, confirm_s: 2, provenance: 'auto' },
-    { label: 'dog', E: 44, push: 0.5, push_enabled: true, spawn: 0.36, confirm_n: 2, confirm_s: 1.4, provenance: 'auto' },
-    { label: 'squirrel', E: 71, push: 0.62, push_enabled: true, spawn: 0.34, confirm_n: 2, confirm_s: 1.1, provenance: 'manuell' },
-    { label: 'car', E: 28, push: 0.33, push_enabled: false, spawn: 0.45, confirm_n: 3, confirm_s: 2.2, provenance: 'auto' },
+    {
+      label: 'person',
+      E: 62,
+      push: 0.68,
+      push_enabled: true,
+      spawn: 0.42,
+      confirm_n: 2,
+      confirm_s: 1.5,
+      provenance: 'manuell',
+    },
+    {
+      label: 'cat',
+      E: 48,
+      push: 0.55,
+      push_enabled: true,
+      spawn: 0.38,
+      confirm_n: 2,
+      confirm_s: 1.2,
+      provenance: 'auto',
+    },
+    {
+      label: 'bird',
+      E: 35,
+      push: 0.41,
+      push_enabled: false,
+      spawn: 0.3,
+      confirm_n: 3,
+      confirm_s: 2,
+      provenance: 'auto',
+    },
+    {
+      label: 'dog',
+      E: 44,
+      push: 0.5,
+      push_enabled: true,
+      spawn: 0.36,
+      confirm_n: 2,
+      confirm_s: 1.4,
+      provenance: 'auto',
+    },
+    {
+      label: 'squirrel',
+      E: 71,
+      push: 0.62,
+      push_enabled: true,
+      spawn: 0.34,
+      confirm_n: 2,
+      confirm_s: 1.1,
+      provenance: 'manuell',
+    },
+    {
+      label: 'car',
+      E: 28,
+      push: 0.33,
+      push_enabled: false,
+      spawn: 0.45,
+      confirm_n: 3,
+      confirm_s: 2.2,
+      provenance: 'auto',
+    },
   ],
   frozen: [{ key: 'confirmation_window', de: 'Bestätigungsfenster' }],
   tuning: TUNING,
@@ -199,13 +253,24 @@ export const TPU_STATUS = {
   },
 };
 
-/** A landscape and a PORTRAIT reference photo, as data: URIs.
+/** A landscape and a PORTRAIT reference photo.
  *
  * Different shapes on purpose: the defect being photographed is two
  * reference photos standing at different widths beside each other, and
  * two landscape sources cannot show it. Solid blocks with a marked
  * "head" third, so a crop that eats the head is visible in the shot.
+ *
+ * Served over http by _server.mjs rather than inlined as a data: URI.
+ * Real photo URLs are `https://upload.wikimedia.org/…`, and the code
+ * treats the two differently: the blurred hero ground runs its URL
+ * through core/dom.js's `cssUrl` allowlist, which admits http(s) and
+ * root-relative paths only. With data: fixtures that ground silently
+ * did not paint, so the harness photographed a state production never
+ * reaches — the fourth time this session that a fixture was thinner
+ * than reality and hid the thing it was pointed at.
  */
+export const REF_PHOTOS = new Map();
+
 function _refPhoto(w, h, body, head) {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">` +
@@ -214,7 +279,9 @@ function _refPhoto(w, h, body, head) {
     `<ellipse cx="${w / 2}" cy="${h * 0.46}" rx="${w * 0.26}" ry="${h * 0.2}" fill="${body}"/>` +
     `<text x="${w / 2}" y="${Math.round(h * 0.2)}" text-anchor="middle" font-family="sans-serif" ` +
     `font-size="${Math.round(Math.min(w, h) * 0.11)}" fill="#0d1116">KOPF</text></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  const name = `/__fixture__/ref-${w}x${h}-${body.replace('#', '')}.svg`;
+  REF_PHOTOS.set(name, svg);
+  return name;
 }
 
 /** /api/library?kinds=motion rows — the shape _motion-adapter.js reads:
@@ -290,9 +357,19 @@ function mediaItem(n, over) {
 /** A grid's worth of media — mixed labels so the accent colours differ. */
 export const MEDIA = [
   mediaItem(1, {}),
-  mediaItem(2, { labels: ['motion', 'person'], bird_species: null, whole_clip: null, confirmed: true }),
+  mediaItem(2, {
+    labels: ['motion', 'person'],
+    bird_species: null,
+    whole_clip: null,
+    confirmed: true,
+  }),
   mediaItem(3, { labels: ['motion', 'cat'], bird_species: null, whole_clip: null }),
-  mediaItem(4, { labels: ['motion'], bird_species: null, whole_clip: null, encode_error: 'ffmpeg exit 1' }),
+  mediaItem(4, {
+    labels: ['motion'],
+    bird_species: null,
+    whole_clip: null,
+    encode_error: 'ffmpeg exit 1',
+  }),
   mediaItem(5, { labels: ['motion', 'bird'], duration_s: 47, file_size_bytes: 512_000 }),
   mediaItem(6, { labels: ['motion', 'dog'], bird_species: null, whole_clip: null }),
 ];
@@ -342,10 +419,34 @@ export const TRACKS = {
       label: 'bird',
       best_score: 0.71,
       samples: [
-        { f: 12, t: 1.2, bbox: { x1: 200, y1: 150, x2: 290, y2: 218 }, score: 0.63, source: 'detect' },
-        { f: 36, t: 3.6, bbox: { x1: 243, y1: 143, x2: 339, y2: 215 }, score: 0.71, source: 'detect' },
-        { f: 60, t: 6.0, bbox: { x1: 267, y1: 142, x2: 357, y2: 213 }, score: 0.31, source: 'detect' },
-        { f: 78, t: 7.8, bbox: { x1: 282, y1: 140, x2: 365, y2: 205 }, score: 0.66, source: 'track' },
+        {
+          f: 12,
+          t: 1.2,
+          bbox: { x1: 200, y1: 150, x2: 290, y2: 218 },
+          score: 0.63,
+          source: 'detect',
+        },
+        {
+          f: 36,
+          t: 3.6,
+          bbox: { x1: 243, y1: 143, x2: 339, y2: 215 },
+          score: 0.71,
+          source: 'detect',
+        },
+        {
+          f: 60,
+          t: 6.0,
+          bbox: { x1: 267, y1: 142, x2: 357, y2: 213 },
+          score: 0.31,
+          source: 'detect',
+        },
+        {
+          f: 78,
+          t: 7.8,
+          bbox: { x1: 282, y1: 140, x2: 365, y2: 205 },
+          score: 0.66,
+          source: 'track',
+        },
       ],
     },
     {
@@ -353,8 +454,20 @@ export const TRACKS = {
       label: 'cat',
       best_score: 0.58,
       samples: [
-        { f: 51, t: 5.1, bbox: { x1: 60, y1: 198, x2: 165, y2: 284 }, score: 0.52, source: 'detect' },
-        { f: 114, t: 11.4, bbox: { x1: 48, y1: 191, x2: 158, y2: 274 }, score: 0.58, source: 'detect' },
+        {
+          f: 51,
+          t: 5.1,
+          bbox: { x1: 60, y1: 198, x2: 165, y2: 284 },
+          score: 0.52,
+          source: 'detect',
+        },
+        {
+          f: 114,
+          t: 11.4,
+          bbox: { x1: 48, y1: 191, x2: 158, y2: 274 },
+          score: 0.58,
+          source: 'detect',
+        },
       ],
     },
   ],

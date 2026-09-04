@@ -128,32 +128,83 @@
 .sd-hero--3 .sd-hero-photo:first-child {
   grid-column: 1 / -1;
 }
-/* CROPPED TO ONE SHAPE, weighted to the top.
+/* THE WHOLE BIRD, IN A FRAME THAT STILL LINES UP.
 
-   This has now been both ways and neither extreme is right. `cover`
-   centred cut a Hausrotschwanz's head clean off, so it became `contain`
-   — which stopped cropping but let a portrait source letterbox into a
-   narrow strip beside a landscape one, so two reference photos that are
-   supposed to be compared stood at different widths on different
-   grounds: „schneid alles andere weg und setz die schön nebeneinander in
-   gleicher Höhe".
+   Three passes went into this box and all three flipped between the same
+   two bad options. `cover` centred cut a Hausrotschwanz's head off.
+   `contain` stopped the cropping but left a portrait source as a narrow
+   strip beside a landscape one — „schneid alles andere weg und setz die
+   schön nebeneinander in gleicher Höhe". `cover` at 38 % moved the cut
+   from the head to the tail and the beak, which is not a fix: „vögel
+   nicht abschneiden!".
 
-   Cover again, but at 38 % rather than centre. A reference photograph
-   frames its subject in the upper middle and the empty half is below it,
-   so the crop takes from the bottom and the sides — never the head,
-   which is what made centred cover unusable. */
+   The two demands are not actually opposed. "Show the whole bird" is
+   about the SUBJECT; "equal height, equal width, one ground" is about
+   the FRAME. So the frame is filled by the same photograph, scaled up
+   and blurred out of legibility, and the subject sits on top of it
+   complete. Nothing is cropped, every box is still the same size, and
+   the fill carries the photo's own colours so the border reads as
+   matting rather than as dead space. */
 .sd-hero-photo {
   position: relative;
   min-width: 0;
   overflow: hidden;
   background: #0c0c0c;
+  /* Own stacking context: the fill must sit under the subject, and the
+     caption/scrim above both, without any of them escaping the box. */
+  isolation: isolate;
 }
-.sd-hero-photo img {
+/* The out-of-focus ground — a pseudo-element, not a second <img>.
+
+   An over-scaled <img> keeps a layout box, and `transform: scale()`
+   grows it: its rect reached down across the summary text below the
+   hero. `overflow: hidden` clipped the PAINT, so it looked right and
+   still reported as an overlap on every element under it. A ::before is
+   clipped the same way and has no box anyone can collide with.
+
+   Deliberately over-scaled all the same — a blur samples past its own
+   edges and would otherwise leave a pale rim inside the frame. */
+.sd-hero-photo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--sd-hero-src);
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.35);
+  filter: blur(26px) saturate(1.25) brightness(0.55);
+  z-index: 0;
+  pointer-events: none;
+}
+/* No photo URL (or one the CSS-url allowlist rejected) → no ground.
+   Without this the frame paints an empty blurred nothing over the flat
+   background it should have fallen back to. */
+.sd-hero-photo:not([style*='--sd-hero-src'])::before {
+  display: none;
+}
+/* The bird. `contain` is the whole point of this block. */
+.sd-hero-subject {
+  position: relative;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: 50% 38%;
+  object-fit: contain;
   display: block;
+  z-index: 1;
+}
+/* The scrim and caption already sit on top; keep them there now that
+   the box has two image layers under them. */
+.sd-hero-scrim,
+.sd-hero-caption,
+.sd-hero-play {
+  z-index: 2;
+}
+/* A blur this size is a compositing cost on a long dossier list, and it
+   is decoration. Readers who ask for less motion/effect get the flat
+   ground instead — the subject layer is unchanged either way. */
+@media (prefers-reduced-transparency: reduce) {
+  .sd-hero-photo::before {
+    display: none;
+  }
 }
 /* Fallback for a dossier with no photo at all — the name still has to
    appear exactly once, and with no hero there is nothing to burn it

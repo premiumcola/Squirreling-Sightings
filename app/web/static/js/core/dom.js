@@ -27,6 +27,23 @@ export const esc = (s) =>
       })[m],
   );
 
+// A URL safe to drop inside a CSS `url("…")` that itself sits in an
+// HTML style attribute — two nested contexts, so an allowlist rather
+// than an escape table. `esc` alone is not enough here: it leaves
+// backslashes and parentheses untouched, and both are meaningful to the
+// CSS tokenizer, which would let a remote-supplied string close the
+// url() and start a declaration of its own.
+//
+// Only absolute http(s) and root-relative paths pass, and only when
+// they contain nothing that can terminate a CSS string or function.
+// Anything else returns '' — a missing background, never an injection.
+// The survivor still goes through `esc` for the attribute layer.
+export const cssUrl = (raw) => {
+  const s = String(raw ?? '');
+  if (!/^(?:https?:\/\/|\/)[^\s'"();\\<>]*$/i.test(s)) return '';
+  return esc(s);
+};
+
 // Convenience query helpers — used sparingly today but normalised
 // here so any future migration off byId-everywhere can land without
 // every callsite chasing document.querySelector boilerplate.

@@ -15,6 +15,8 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, normalize, extname } from 'node:path';
 
+import { REF_PHOTOS } from './_fixtures.mjs';
+
 const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
@@ -49,9 +51,23 @@ function _safeJoin(root, urlPath) {
 export function startServer(staticRoot, shellPath) {
   const server = createServer(async (req, res) => {
     const path = req.url === '/' ? '/__shell__' : req.url;
+
+    // Fixture images, served rather than inlined. A data: URI would not
+    // survive the hero ground's `cssUrl` allowlist, and a fixture the
+    // code silently rejects photographs a state production never gets
+    // into. See REF_PHOTOS in _fixtures.mjs.
+    const fixture = REF_PHOTOS.get(path);
+    if (fixture) {
+      res
+        .writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' })
+        .end(fixture);
+      return;
+    }
+
     let file = null;
     if (path.startsWith('/__shell__')) file = shellPath;
-    else if (path.startsWith('/static/')) file = _safeJoin(staticRoot, path.slice('/static'.length));
+    else if (path.startsWith('/static/'))
+      file = _safeJoin(staticRoot, path.slice('/static'.length));
 
     if (!file) {
       res.writeHead(404).end('not found');

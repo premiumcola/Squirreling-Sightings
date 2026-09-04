@@ -16,9 +16,10 @@ from __future__ import annotations
 import json as _json_mod
 import logging
 import os
+import re
 import threading
 import time
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 log = logging.getLogger("app.bird_dossiers")
 
@@ -165,6 +166,92 @@ _PHOTO_SKIP_WORDS = (
 # .ogv thumbnails, none of which belong in the hero.
 _PHOTO_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
+# Render prefixes Commons puts in front of a scaled file name.
+_RENDER_PREFIX = re.compile(r"^(?:lossy-)?(?:page\d+-)?(?:thumbnail-)?\d+px-")
+
+# Markers that say "this is a derivative of another file in the same
+# list" rather than a separate photograph.
+_DERIVATIVE_MARKERS = (
+    "(cropped)",
+    "_cropped",
+    "-cropped",
+    "cropped",
+    "_crop",
+    "-crop",
+    "_edit",
+    "-edit",
+    "retouched",
+    "_adjusted",
+    "denoise",
+    "_flipped",
+    "_mirror",
+)
+
+# A trailing sequence number — `_1`, `-02`, ` (3)`. Same shoot, same
+# pose, next frame.
+_TRAILING_SEQ = re.compile(r"[ _-]*\(?\d{1,3}\)?$")
+
+
+def photo_identity(url: str) -> str:
+    """The Commons file a URL points at, independent of how it is served.
+
+    The same photograph reaches us under two different basenames: the
+    summary endpoint hands out a scaled thumbnail
+    ``…/thumb/9/9a/Delichon_urbicum.jpg/320px-Delichon_urbicum.jpg``
+    while the media list hands out the original
+    ``…/9/9a/Delichon_urbicum.jpg``. Comparing raw basenames therefore
+    said "different file" and the Mehlschwalbe's dossier showed the very
+    same picture twice, side by side.
+
+    Strips the ``NNNpx-`` render prefix (and the ``lossy-page1-`` and
+    ``thumbnail-`` variants Commons puts in front of it) and percent-
+    decodes, so both spellings collapse to one identity.
+    """
+    name = unquote(url.rsplit("/", 1)[-1]).lower()
+    prev = None
+    while prev != name:
+        prev = name
+        name = _RENDER_PREFIX.sub("", name)
+    return name
+
+
+def photo_variant_key(url: str) -> str:
+    """The SUBJECT of a photo — one step coarser than its identity.
+
+    „vögel sollen aus einer unterschiedlichen perspektive sein!" A media
+    list routinely carries several derivatives of one shot: the original,
+    a crop, a retouched pass, a numbered sequence from the same session.
+    They are distinct files, so identity alone lets all of them through
+    and the operator gets the same bird in the same pose twice — which is
+    useless next to their own camera frame.
+
+    Dropping the extension, the trailing sequence number and the common
+    derivative markers folds those back together, so the second slot has
+    to come from a genuinely different photograph.
+    """
+    stem = photo_identity(url).rsplit(".", 1)[0]
+    for marker in _DERIVATIVE_MARKERS:
+        stem = stem.replace(marker, "")
+    # Alternate stripping separators and a trailing number until the
+    # stem stops changing. One pass is not enough: removing "(cropped)"
+    # from `parus_caeruleus_2_(cropped)` leaves a trailing underscore
+    # that hides the `_2` from the sequence pattern, so the crop and its
+    # original would still read as two different shots.
+    prev = None
+    while prev != stem:
+        prev = stem
+        stem = _TRAILING_SEQ.sub("", stem.strip(" _-"))
+    return stem.strip(" _-")
+
+
+def _seed_variant(seen: set[str], url: str) -> None:
+    """Record a picked URL's variant key so later candidates from the
+    same shot are rejected. Separate from the identity `seen.add` at each
+    call site only because an empty key must not be stored."""
+    variant = photo_variant_key(url)
+    if variant:
+        seen.add(variant)
+
 
 def _photo_url_of(item: dict) -> str | None:
     """Best available source URL for one media-list item, protocol-fixed.
@@ -188,7 +275,19 @@ def select_photo_urls(items: list, skip_names: set[str], want: int) -> list[str]
     already in `skip_names` (the primary thumbnail, plus everything an
     earlier article already contributed). `skip_names` is MUTATED as
     picks are made, so a caller can thread one set through several
-    media lists and never get the same file twice."""
+    media lists and never get the same file twice.
+
+    Two levels of sameness are rejected, not one. `photo_identity`
+    catches the same Commons file arriving under a thumbnail name and an
+    original name — that is what put one identical Mehlschwalbe beside
+    another. `photo_variant_key` then catches the crop / retouch /
+    next-frame derivatives of a shot already picked, because the point
+    of the second slot is a DIFFERENT view of the bird, not a second
+    copy of the same pose.
+
+    `skip_names` carries both kinds of key. They cannot collide: an
+    identity always keeps its extension, a variant key never has one.
+    """
     out: list[str] = []
     for item in items or []:
         if len(out) >= want:
@@ -198,14 +297,19 @@ def select_photo_urls(items: list, skip_names: set[str], want: int) -> list[str]
         url = _photo_url_of(item)
         if not url:
             continue
-        name = url.rsplit("/", 1)[-1].lower()
+        name = photo_identity(url)
         if not name.endswith(_PHOTO_EXTS):
             continue
         if name in skip_names:
             continue
         if any(w in name for w in _PHOTO_SKIP_WORDS):
             continue
+        variant = photo_variant_key(url)
+        if variant and variant in skip_names:
+            continue
         skip_names.add(name)
+        if variant:
+            skip_names.add(variant)
         out.append(url)
     return out
 
@@ -242,7 +346,8 @@ def fetch_photos(wiki: dict | None, latin: str, want: int = PHOTO_TARGET) -> lis
     photos: list[str] = []
     primary = (wiki.get("thumbnail") or {}).get("source") or ""
     if primary:
-        seen.add(primary.rsplit("/", 1)[-1].lower())
+        seen.add(photo_identity(primary))
+        _seed_variant(seen, primary)
         photos.append(primary)
     page_url = ((wiki.get("content_urls") or {}).get("desktop") or {}).get("page") or ""
     photos += _media_list_photos(page_url, wiki.get("title") or "", seen, want - len(photos))
@@ -257,8 +362,9 @@ def fetch_photos(wiki: dict | None, latin: str, want: int = PHOTO_TARGET) -> lis
     if en_page and en_page == page_url:
         return photos  # same article we already walked
     en_thumb = (en.get("thumbnail") or {}).get("source") or ""
-    if en_thumb and en_thumb.rsplit("/", 1)[-1].lower() not in seen and len(photos) < want:
-        seen.add(en_thumb.rsplit("/", 1)[-1].lower())
+    if en_thumb and photo_identity(en_thumb) not in seen and len(photos) < want:
+        seen.add(photo_identity(en_thumb))
+        _seed_variant(seen, en_thumb)
         photos.append(en_thumb)
     photos += _media_list_photos(en_page, en.get("title") or "", seen, want - len(photos))
     return photos[:want]

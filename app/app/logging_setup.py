@@ -41,7 +41,13 @@ class _LogBuffer(logging.Handler):
     minimal so the JS side can render its own coloured rows. Kept in a
     deque so emit() is O(1) regardless of buffer size."""
 
-    def __init__(self, maxlen: int = 400):
+    #: 800, up from 400. At DEBUG a single misbehaving camera can emit
+    #: several lines a second, and 400 records covered barely two minutes
+    #: — short enough that the event an operator was trying to look at
+    #: had already scrolled out by the time they opened the tab. The
+    #: deque is bounded and emit() stays O(1), so the only cost is memory
+    #: for 400 more short dicts.
+    def __init__(self, maxlen: int = 800):
         super().__init__()
         self.setFormatter(logging.Formatter("%(message)s"))
         self._records: deque = deque(maxlen=maxlen)

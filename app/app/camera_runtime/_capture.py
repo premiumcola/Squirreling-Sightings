@@ -61,6 +61,12 @@ _LAG_RECONNECT_S = 5.0
 # permanently too expensive to decode does not reconnect-loop.
 _LAG_RECONNECT_COOLDOWN_S = 30.0
 
+# How often a camera that keeps dropping frames on the corrupt-strip
+# test may say so. One line a minute is enough to notice a camera whose
+# detection has stopped, and small enough that a genuine fault does not
+# push everything else out of the 800-record log ring.
+_CORRUPT_NOTICE_S = 60.0
+
 # Wait for a replacement after discarding a pink frame. A pink frame
 # proves the stream IS delivering, so the full read timeout would only
 # stall the loop; the next frame is one frame-interval away.
@@ -446,3 +452,52 @@ class CaptureMixin:
         from ..frame_helpers import has_corrupt_strip as _has
 
         return _has(frame, strip_height=strip_height)
+
+    def _note_corrupt_strip(self) -> None:
+        """Count one dropped frame and, at most once a minute, say so.
+
+        This was a DEBUG line per frame. On a camera whose scene happened
+        to match the old detector it was ~3 lines a second without pause:
+        it drowned the log an operator actually reads, and it buried the
+        one fact that mattered — that this camera was running with NO
+        motion detection, because every frame was being skipped before
+        the motion stage. A DEBUG line per frame is the wrong level for
+        that and the wrong volume for anything.
+
+        So: one WARNING per minute while it persists, naming the count
+        and the consequence. State is resolved lazily with getattr, the
+        same way ``_lag_reconnect_ts`` already is in this mixin, so the
+        runtime's __init__ does not grow two more fields for a condition
+        most cameras never hit.
+        """
+        streak = getattr(self, "_corrupt_strip_streak", 0) + 1
+        self._corrupt_strip_streak = streak
+        now = time.time()
+        if now - getattr(self, "_corrupt_strip_notice_ts", 0.0) < _CORRUPT_NOTICE_S:
+            return
+        self._corrupt_strip_notice_ts = now
+        log_cam.warning(
+            "[cam:%s] %d frames dropped as corrupt bottom strip — motion "
+            "detection is not running on this camera",
+            self.camera_id,
+            streak,
+        )
+
+    def _clear_corrupt_strip_streak(self) -> None:
+        """A good frame arrived: report the recovery once, then reset.
+
+        Without this the operator sees the problem start and never sees
+        it stop, which is the half of a fault report that decides whether
+        anyone still needs to go and look at the camera.
+        """
+        streak = getattr(self, "_corrupt_strip_streak", 0)
+        if not streak:
+            return
+        self._corrupt_strip_streak = 0
+        self._corrupt_strip_notice_ts = 0.0
+        if streak > 1:
+            log_cam.info(
+                "[cam:%s] frames accepted again after %d corrupt-strip drops",
+                self.camera_id,
+                streak,
+            )

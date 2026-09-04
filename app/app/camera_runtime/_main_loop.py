@@ -200,11 +200,16 @@ class MainLoopMixin:
                 setup = self.detect_setup
                 # Apply bottom crop before processing (removes corrupt H.264 bottom strip)
                 proc_frame = apply_bottom_crop(frame, setup.bottom_crop_px)
-                # Skip frames with corrupt bottom strip (high-saturation codec artifact)
+                # Skip frames with a corrupt bottom strip (chroma flush).
+                # The notice is rate-limited and reports the CONSEQUENCE —
+                # a camera stuck here is running with no motion detection
+                # at all, which a DEBUG line per frame said three times a
+                # second and still managed to hide.
                 if self._has_corrupt_strip(proc_frame):
-                    log.debug("[%s] corrupt strip detected, frame skipped", self.camera_id)
+                    self._note_corrupt_strip()
                     time.sleep(interval)
                     continue
+                self._clear_corrupt_strip_streak()
                 # Quality gate: skip corrupt/uniform/artifact frames for events only
                 if not self._is_frame_valid(proc_frame):
                     if self._recording:

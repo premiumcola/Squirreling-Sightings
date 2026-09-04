@@ -295,10 +295,57 @@ def is_bottom_strip_anomaly(
 # is intentionally less sensitive (no row-delta z-score, no chroma-
 # hue carving) so a clean test frame doesn't get rejected by the
 # stricter band heuristic.
+def _hue_spread(hue) -> float:
+    """How far around the colour wheel a band's hues are scattered, 0..1.
+
+    Hue is circular, so a plain standard deviation is wrong at the
+    red wrap-around: 179 and 0 are neighbours, not opposites. This is
+    the circular-statistics answer — the resultant length of the hue
+    angles as unit vectors. One dominant colour (a lawn, a wall, a sky)
+    gives vectors that mostly agree, a long resultant, and a spread near
+    0; a rainbow flush scatters them around the circle, the resultant
+    cancels, and the spread approaches 1.
+    """
+    ang = hue.astype(np.float32) * np.float32(np.pi / 90.0)  # 0..179 → 0..2π
+    return float(1.0 - np.hypot(float(np.cos(ang).mean()), float(np.sin(ang).mean())))
+
+
+#: How much MORE saturated the strip must be than the band above it.
+_STRIP_SAT_JUMP = 40.0
+#: …or how much more scattered its hues must be. Either alone is enough:
+#: a flush over a dull scene shows up as the saturation jump, a flush
+#: over an already-vivid scene as the hue scatter.
+_STRIP_HUE_JUMP = 0.25
+
+
 def has_corrupt_strip(frame, strip_height: int = 60) -> bool:
-    """Detect H.264 corrupt bottom strip (pink/rainbow codec artifact).
-    Returns True when the bottom ``strip_height`` rows show the
-    hue-saturation signature of a chroma-buffer flush."""
+    """Detect the H.264 corrupt bottom strip (pink/rainbow chroma flush).
+
+    DIFFERENTIAL, not absolute — and that is the whole fix. The test used
+    to ask only whether the bottom rows were saturated and varied, which
+    is also an exact description of a sunlit, mown lawn. On a garden
+    camera pointed at one it matched EVERY frame: the main loop skipped
+    ~3 frames a second for as long as the sun was out, so that camera ran
+    with no motion detection at all, and the only trace was a DEBUG line
+    per frame that nobody reads.
+
+    What proved it a false alarm rather than a real artifact: the same
+    camera's timelapse grabs, taken off the same stream in the same
+    seconds and validated by an independent check, passed on the first
+    attempt. A chroma flush is also bursty — one that lasts unbroken for
+    minutes is not a codec fault, it is a heuristic matching the scene.
+
+    So the strip is now compared with an equally tall reference band
+    directly above it. A flush does not resemble the picture it is
+    attached to: either it is far more saturated than the scene, or its
+    hues are scattered around the wheel where the scene's are not. A lawn
+    simply continues into the strip — same green, same saturation — and
+    is kept.
+
+    The absolute test is retained as the cheap first gate, so a frame
+    that never looked like a flush costs one more HSV conversion than
+    before only when it does.
+    """
     if frame is None:
         return False
     if frame.ndim < 3 or frame.shape[2] < 3:
@@ -308,4 +355,13 @@ def has_corrupt_strip(frame, strip_height: int = 60) -> bool:
     strip = frame[-strip_height:, :, :]
     hsv = cv2.cvtColor(strip, cv2.COLOR_BGR2HSV)
     sat = hsv[:, :, 1].astype(np.float32)
-    return float(sat.mean()) > 120 and float(sat.std()) > 60
+    if not (float(sat.mean()) > 120 and float(sat.std()) > 60):
+        return False
+    # The band immediately above, same height — the picture this strip
+    # claims to be part of.
+    ref = frame[-2 * strip_height : -strip_height, :, :]
+    ref_hsv = cv2.cvtColor(ref, cv2.COLOR_BGR2HSV)
+    ref_sat = ref_hsv[:, :, 1].astype(np.float32)
+    if float(sat.mean()) - float(ref_sat.mean()) > _STRIP_SAT_JUMP:
+        return True
+    return _hue_spread(hsv[:, :, 0]) - _hue_spread(ref_hsv[:, :, 0]) > _STRIP_HUE_JUMP

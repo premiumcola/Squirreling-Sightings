@@ -20,9 +20,12 @@
 
 import { applyLabelPatch } from '../../core/label-patch.js';
 import { objectRowsFor, objectsNote } from '../_data/_map.js';
+import { clipReadiness } from '../_model/readiness.js';
 import { renderObjectsList } from './_objects-list.js';
 import { renderProvenance } from './_provenance.js';
+import { renderReadinessNote } from './_readiness-note.js';
 import { openReclassify } from './_reclassify.js';
+import { renderReplay } from './_replay.js';
 
 /**
  * Rebuild both halves of the panel from the state bag.
@@ -36,10 +39,15 @@ import { openReclassify } from './_reclassify.js';
  * @param {object|null} details  the provenance-fold handle
  * @param {{item: object, tracks: object|null, models: object|null}} st
  */
-function _paintPanel(objects, details, st) {
+function _paintPanel(parts, st) {
   const rows = objectRowsFor(st.item, st.tracks);
-  objects?.update(rows, st.models, objectsNote(rows, st.item));
-  details?.update(st.item);
+  parts.objects?.update(rows, st.models, objectsNote(rows, st.item));
+  // `st.fetched` distinguishes "the sidecar request has not come back"
+  // from "there is none" — collapsing those two is exactly what made an
+  // empty picture unreadable.
+  parts.note?.update(clipReadiness(st.item, st.fetched ? st.tracks : undefined));
+  parts.replay?.update(st.item);
+  parts.details?.update(st.item);
 }
 
 /**
@@ -52,9 +60,19 @@ function _paintPanel(objects, details, st) {
  */
 export function renderRecordedPanel(host, cfg, deps = {}) {
   if (!host) return null;
-  host.innerHTML = `<div class="vp-pnl-objects"></div><div class="vp-pnl-details"></div>`;
+  // The readiness note sits ABOVE the rows: it says how much to trust
+  // what follows, which is worthless underneath it.
+  // Order is the argument. First why the picture looks like this, then
+  // WHAT was detected, then the actions that change it, and only then the
+  // record of how the clip was made. The replay used to sit last, inside
+  // the collapsed fold and under fifteen rows.
+  host.innerHTML =
+    `<div class="vp-pnl-readiness"></div>` +
+    `<div class="vp-pnl-objects"></div>` +
+    `<div class="vp-pnl-replay"></div>` +
+    `<div class="vp-pnl-details"></div>`;
 
-  const st = { item: cfg.item, tracks: null, models: null };
+  const st = { item: cfg.item, tracks: null, models: null, fetched: false };
   let sheet = null;
 
   const objects = renderObjectsList(host.querySelector('.vp-pnl-objects'), {
@@ -68,13 +86,22 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
     },
   });
 
-  const details = renderProvenance(host.querySelector('.vp-pnl-details'), {
-    tier: deps.tier,
+  const note = renderReadinessNote(host.querySelector('.vp-pnl-readiness'), cfg, {
     request: deps.request,
     onError: deps.onError,
   });
 
-  const paint = () => _paintPanel(objects, details, st);
+  const replay = renderReplay(host.querySelector('.vp-pnl-replay'), {
+    request: deps.request,
+    onError: deps.onError,
+  });
+
+  const details = renderProvenance(host.querySelector('.vp-pnl-details'), {
+    tier: deps.tier,
+  });
+
+  const parts = { objects, note, replay, details };
+  const paint = () => _paintPanel(parts, st);
 
   // A correction came back. The reply is authoritative — `top_label` is
   // the backend's own derivation and `bird_species` may just have been
@@ -93,11 +120,15 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
       st.item = data?.item || st.item;
       st.tracks = data?.tracks || null;
       st.models = data?.provenance?.models || null;
+      // loadRecorded has answered — whatever it found, including nothing.
+      st.fetched = true;
       paint();
     },
     teardown: () => {
       sheet?.teardown();
       objects?.teardown();
+      note?.teardown();
+      replay?.teardown();
       details?.teardown();
       host.innerHTML = '';
     },

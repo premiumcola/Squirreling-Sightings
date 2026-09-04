@@ -16,26 +16,22 @@
 
 import { renderFold } from '../../core/fold.js';
 import { kvRowsHtml, provenanceRows } from './_helpers.js';
-import { renderReplay } from './_replay.js';
 
 /** Its own key, so this fold opens independently of the other two. */
 const FOLD_KEY = 'tamspy.vplayer.fold.details';
 
 /**
- * Render the 'Aufnahme-Details' fold.
+ * Render the 'Aufnahme-Details' fold — the rows, and only the rows.
  *
- * The rows say what this clip was recorded WITH; the replay block below
- * them (panels/_replay.js) is what turns that record into something you
- * can act on — re-running this very clip under the settings on record
- * or under the camera's current profile, and showing the difference
- * inline.
- *
- * The two halves get their own hosts because they repaint on different
- * clocks: the rows are rewritten on every `update`, while the replay
- * block owns a request in flight and must survive one.
+ * The replay block used to live in here, under those rows. It is an
+ * ACTION and they are a record, and burying an action inside a collapsed
+ * fold beneath fifteen key/value lines is how it stopped being findable:
+ * „bitte nehm die option weiter oben rein". It is now mounted by
+ * _recorded.js directly beneath the object list, where the thing it
+ * changes is visible.
  *
  * @param {HTMLElement} host
- * @param {object} deps  { tier, request, onError }
+ * @param {object} deps  { tier }
  * @returns {{update: (item) => void, teardown: () => void}|null}
  */
 export function renderProvenance(host, deps = {}) {
@@ -49,24 +45,16 @@ export function renderProvenance(host, deps = {}) {
   });
   if (!fold) return null;
 
-  fold.body.innerHTML = `<div class="vp-pnl-prov-rows"></div><div class="vp-pnl-prov-replay"></div>`;
+  fold.body.innerHTML = `<div class="vp-pnl-prov-rows"></div>`;
   const rowsHost = fold.body.querySelector('.vp-pnl-prov-rows');
-  const replay = renderReplay(fold.body.querySelector('.vp-pnl-prov-replay'), {
-    request: deps.request,
-    onError: deps.onError,
-  });
 
   const paint = (item) => {
     rowsHost.innerHTML = kvRowsHtml(provenanceRows(item));
-    replay?.update(item);
   };
 
   paint(null);
   return {
     update: paint,
-    teardown: () => {
-      replay?.teardown();
-      fold.teardown();
-    },
+    teardown: () => fold.teardown(),
   };
 }

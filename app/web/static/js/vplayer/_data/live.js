@@ -24,15 +24,43 @@
 // this migration.
 
 import { onLiveFrame } from '../../mediaview/live-detect-poll.js';
+import {
+  startHeadlessLiveSession,
+  stopHeadlessLiveSession,
+} from '../../mediaview/live-detect-session.js';
 import { mapFrame } from './_map.js';
 
 /**
- * Subscribe to the live loop.
+ * Subscribe to the live loop — AND start it.
+ *
+ * Starting it is the half that was missing, and it is why the whole
+ * simulation surface was dead. This adapter used to only register an
+ * observer, on the reasonable assumption that something else ran the
+ * loop: in the legacy world `openLiveDetect()` did, as a side effect of
+ * mounting its chrome. `dashboard.js::_cvOpenSim` stopped calling that
+ * the moment it began routing to the new player, and nothing took the
+ * job over. Nobody noticed because the picture is a separate MJPEG
+ * stream that keeps playing regardless — so the surface looked alive
+ * while its panel read "Warte auf ersten Tick …" indefinitely.
+ *
+ * A subscriber that starts its own producer cannot regress that way: if
+ * the loop is not running, this function is not running either.
  *
  * @param {(frame: object) => void} onFrame  receives a mapped frame
+ * @param {{camId?: string, cameraName?: string}} [opts]  which camera to
+ *   poll. Omitted for a surface that only wants to watch a loop someone
+ *   else owns — then this behaves exactly as it did before.
  * @returns {{teardown: () => void}}
  */
-export function subscribeLive(onFrame) {
+export function subscribeLive(onFrame, opts = {}) {
   const off = onLiveFrame((data) => onFrame(mapFrame(data)));
-  return { teardown: off };
+  const owned = opts.camId ? startHeadlessLiveSession(opts) : false;
+  return {
+    teardown: () => {
+      // Unsubscribe BEFORE stopping, so a frame that lands mid-teardown
+      // cannot reach a panel that is already gone.
+      off();
+      if (owned) stopHeadlessLiveSession();
+    },
+  };
 }

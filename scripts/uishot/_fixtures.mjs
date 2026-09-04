@@ -186,11 +186,16 @@ export const SIM_TICK = {
  * from the frame, which is why a panel handed a null status can never
  * fill that chip however well the poll loop is running.
  */
+// Field names are detectors/_utilisation.py::_readouts's own — `busy`
+// is the 0..1 fraction the chip prints, and it is NOT called
+// `busy_ratio`, which is what this fixture said on the first pass. A
+// stub that invents a field name renders a placeholder and proves the
+// chip broken when it is fine.
 export const TPU_STATUS = {
   window_s: 60,
-  total: { busy_ratio: 0.42, invokes: 118, ms: 1740 },
+  total: { count: 118, busy_s: 1.74, span_s: 4.1, mean_ms: 14.7, per_s: 28.8, busy: 0.424 },
   cameras: {
-    [CAMERA.id]: { busy_ratio: 0.42, invokes: 118, ms: 1740 },
+    [CAMERA.id]: { count: 118, busy_s: 1.74, span_s: 4.1, mean_ms: 14.7, per_s: 28.8, busy: 0.424 },
   },
 };
 

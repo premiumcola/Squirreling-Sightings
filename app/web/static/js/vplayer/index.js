@@ -64,6 +64,11 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
   // overwrite it would turn a live picture into a slideshow, which is
   // worse than the tile the operator expanded from.
   if (!cfg.flags.showPanel && !cfg.flags.showOverlays) return null;
+  // The camera is what makes this a PRODUCER and not just a listener:
+  // subscribeLive starts the poll loop for it and stops it on teardown.
+  // Passing it is what fixes "TPU zeigt nix, ROI zeigt nix, Debug-Log
+  // leer, wartet auf einen Tick, der nie kommt".
+  const source = { camId: cfg.item.camera_id, cameraName: cfg.item.camera_name };
   return subscribeLive((frame) => {
     // The picture. The backend hands back the exact frame inference ran
     // on, as a base64 JPEG in the SAME coordinate space as the boxes —
@@ -80,7 +85,7 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
     // The rolling window is right-anchored on now, so every tick moves
     // it whether or not a detection landed.
     timeline?.render(frame.tracks || [], { now: Date.now() / 1000, item: cfg.item });
-  });
+  }, source);
 }
 
 /**

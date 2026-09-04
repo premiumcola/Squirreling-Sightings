@@ -115,7 +115,15 @@ function _tearDownForOpen() {
 // A fresh session plus every per-open counter reset. Nothing here touches
 // the DOM — that is _mountChrome's job, and it must run after this so the
 // renderers find a session to read.
-function _seedSession(camId, cameraName, tornDownPrev) {
+//
+// EXPORTED for live-detect-session.js, the headless producer the unified
+// player starts. That module needs exactly this and nothing else from the
+// legacy open path: seeding a session by hand there would be a second,
+// drifting definition of the object every module in this package writes
+// to — and _storeFrameState dereferences it with no optional chaining
+// (_live-detect-frame.js), so a session missing a field is a TypeError
+// mid-tick, not a degraded render.
+export function _seedSession(camId, cameraName, tornDownPrev) {
   S.session = {
     camId,
     cameraName,

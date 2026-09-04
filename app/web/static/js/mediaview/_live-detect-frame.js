@@ -182,11 +182,28 @@ function _renderFrameLayers(data) {
   _notifyFrameObservers(data);
 }
 
+// A HEADLESS session (live-detect-session.js) owns no chrome and must not
+// touch the legacy player's. Skipping the render fan-out is not an
+// optimisation — those renderers do not throw without their chrome, but
+// they are far from inert: _paintSnapshot writes a base64 JPEG into the
+// STATIC #lightboxImg every tick, _ensureOverlayLayer creates SVGs inside
+// #lightboxMediaWrap, _renderLiveSwimlane overwrites #lightboxBottomStack
+// — the RECORDED player's swimlane host — and stamps its fingerprint, and
+// _pinScrubberRight sets --play-pct: 1 on every .lb-time-stack in the
+// document. Subscribers still get their frame; that is the whole point.
+//
+// The legacy sequence below is deliberately byte-identical to what it has
+// always been. The two branches bracket it rather than reordering it.
 export function _renderFrame(data) {
-  _paintSnapshot(data);
+  const headless = !!S.session?.headless;
+  if (!headless) _paintSnapshot(data);
   _storeFrameState(data);
   _logFrameDiagOnce(data);
   _stampFrameCounters(data);
   _bufferDetections(data);
+  if (headless) {
+    _notifyFrameObservers(data);
+    return;
+  }
   _renderFrameLayers(data);
 }

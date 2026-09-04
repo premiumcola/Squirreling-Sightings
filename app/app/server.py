@@ -27,7 +27,6 @@ from .config_loader import load_config
 # importing server.py by name re-runs this whole boot block (R01.6).
 from .lifecycle import (  # noqa: E402
     _emit_boot_inventory,
-    _fetch_github_commit_count,
     _file_hash,
     _install_shutdown_hooks,
     _startup_media_scan,
@@ -46,8 +45,6 @@ from .thresholds._nightly import register_nightly_jobs
 from .timelapse import TimelapseBuilder
 from .tracking_worker import build_worker as build_tracking_worker
 from .weather_service import WeatherService
-
-_fetch_github_commit_count()
 
 
 base_cfg = load_config()

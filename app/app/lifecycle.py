@@ -91,28 +91,24 @@ _BUILD_INFO = _get_build_info()
 _PROCESS_START_ISO = _dt.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
-def _fetch_github_commit_count():
-    """One-shot background fetch of the live commit count from GitHub.
-    Git isn't present inside the container, so buildinfo.json is frozen at build time.
-    Pulling the real count from the public API keeps the dashboard in sync."""
-    import re as _re
-    import threading as _thr
-    import urllib.request as _ur
-
-    def _do():
-        global _BUILD_INFO
-        try:
-            url = 'https://api.github.com/repos/premiumcola/cam-manager/commits?per_page=1'
-            req = _ur.Request(url, headers={'User-Agent': 'squirreling-sightings'})
-            with _ur.urlopen(req, timeout=8) as r:
-                link = r.headers.get('Link', '') or ''
-                m = _re.search(r'page=(\d+)>; rel="last"', link)
-                if m:
-                    _BUILD_INFO = {**_BUILD_INFO, 'count': m.group(1)}
-        except Exception as e:
-            logging.getLogger(__name__).debug('GitHub commit count fetch failed: %s', e)
-
-    _thr.Thread(target=_do, daemon=True).start()
+# There was a _fetch_github_commit_count() here that replaced the build
+# number at boot with the repository's live commit count, pulled from
+# api.github.com. It is gone, and the Build row now shows only what the
+# IMAGE was built with.
+#
+# Three things were wrong with it and they compounded. It queried
+# `premiumcola/cam-manager` while this repository is
+# `premiumcola/Squirreling-Sightings`, so the number came from somewhere
+# else entirely. When the call succeeded it showed that; when it failed
+# it showed BUILD_COUNT — so the same running container reported #1717
+# and then #1249, and a build identifier that goes BACKWARDS is worse
+# than none. And a commit count rises on every push, including the ones
+# whose image never finished building, which is exactly the case this
+# panel exists to catch.
+#
+# BUILD_COUNT is the CI run number, baked in by the Dockerfile ARG. It
+# cannot move without a rebuild, which is the only property that makes
+# it worth printing. (git history is the archive — CLAUDE.md.)
 
 
 _static_hashes: dict[str, str] = {}

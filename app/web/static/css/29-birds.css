@@ -433,9 +433,14 @@
   color: var(--muted);
   padding: 0 4px;
 }
+/* A 15 px-tall line of text is not a link on a phone. `inline-flex` with
+   the tap minimum gives it a real target without moving it or growing
+   the type — the padding does the work, the text stays where it was. */
 .sd-wiki-link {
-  display: inline-block;
-  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 4px;
   font-size: 13px;
   font-weight: 600;
   color: rgba(var(--acc), 0.95);
@@ -549,6 +554,18 @@
   opacity: 0;
   pointer-events: none;
 }
+/* THE CARD'S OWN ACTIONS DO NOT BELONG HERE. `mediaCardHTML` is the
+   Mediathek's card and brings its confirm and delete buttons with it —
+   into a species dossier, which is a place for looking at what this bird
+   did, not for deleting it. They also sat in the top-right corner the
+   gallery's own counter needs, so „1 / 2" was printed straight through
+   them, and they are 30 px targets on a surface reached by thumb.
+   Removing them settles all three at once; the Mediathek is one tap away
+   and is where a clip is confirmed or deleted. */
+.sd-gal-stage .mmc-actions {
+  display: none;
+}
+
 .sd-gal-count {
   position: absolute;
   z-index: 3;
@@ -575,10 +592,38 @@
 
 /* Single column: nothing to match heights with any more, so the clip
    goes back to its natural 16/9 instead of stretching to a row height
-   that no longer exists. */
+   that no longer exists.
+
+   THE INTENT WAS RIGHT AND THE MECHANISM WAS MISSING, which cost the
+   whole gallery on every phone: „Media bei Hausrotschwanz Dossier eigene
+   Daten nicht da". Dropping `min-height` here left NO height source at
+   all, because the card has no intrinsic size to fall back on — every
+   child of `.mmc-img-wrap` is absolutely positioned, so it measures 0 —
+   and `flex: 0 1 auto` above means it never grows to the column either.
+   The rule at :470 was the only thing holding the box open, and this
+   block took it away.
+
+   Measured at 393 px: `.sd-clips-grid` came out 337 × **0**. It is
+   `position: relative`, so it is also the containing block for the
+   gallery's chrome — and in a zero-height box `top: 50%` with
+   `translateY(-50%)` puts a 44 px button 22 px ABOVE it, straight into
+   the heading. That is the reported „title printed over the card": the
+   heading never moved, the controls climbed out of a collapsed box. The
+   badges went the other way and fell out of the panel's bottom edge.
+
+   So the card is made WIDTH-bound here, which is what the comment above
+   `.sd-gal-stage .media-card` already claims it is. `aspect-ratio` then
+   derives the height from a width that exists: 337 px becomes 189.6 px,
+   a true 16/9 — rather than the 240 px the old floor stretched it to.
+   Desktop is untouched: at 1440 px `flex: 1 1 auto` against the row's
+   definite height already yields the same 401 px it always did. */
 @media (max-width: 860px) {
   .sd-clips-grid {
     min-height: 0;
+  }
+  .sd-gal-stage .media-card {
+    flex: 1 1 auto;
+    width: 100%;
   }
   .sd-gal-stage .mmc-img-wrap {
     aspect-ratio: 16/9;

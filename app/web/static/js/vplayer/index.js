@@ -35,6 +35,7 @@ import {
 } from './_overflow-menu.js';
 import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
 import { timelineBasis } from './timeline/_basis.js';
+import { makeLiveTrackBuffer } from './timeline/_live-buffer.js';
 import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
 import { mountOverlayPainter } from './_overlay-paint.js';
@@ -72,6 +73,10 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
   // Passing it is what fixes "TPU zeigt nix, ROI zeigt nix, Debug-Log
   // leer, wartet auf einen Tick, der nie kommt".
   const source = { camId: cfg.item.camera_id, cameraName: cfg.item.camera_name };
+  // THE HISTORY THE BACKEND DOES NOT KEEP. A tick answers "what is in
+  // this frame"; the rolling strip draws the last sixty seconds, and
+  // nothing was assembling one — see timeline/_live-buffer.js.
+  const history = makeLiveTrackBuffer({ windowS: (cfg.windowMs || 60000) / 1000 });
   return subscribeLive((frame) => {
     // The picture. The backend hands back the exact frame inference ran
     // on, as a base64 JPEG in the SAME coordinate space as the boxes —
@@ -95,7 +100,14 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
     panel?.update(frame, liveStatus());
     // The rolling window is right-anchored on now, so every tick moves
     // it whether or not a detection landed.
-    timeline?.render(frame.tracks || [], { now: Date.now() / 1000, item: cfg.item });
+    //
+    // `frame.tracks` used to be the argument here, and `mapFrame` has
+    // never produced such a key — so this was `[]` on every tick since
+    // the strip existed, on the live view and in the simulation alike.
+    // The history is folded in first, then drawn.
+    const nowS = Date.now() / 1000;
+    history.push(frame, nowS);
+    timeline?.render(history.tracks(), { now: nowS, item: cfg.item });
   }, source);
 }
 

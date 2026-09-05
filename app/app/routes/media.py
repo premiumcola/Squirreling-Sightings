@@ -22,6 +22,7 @@ import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from .. import migrations as _migrations
 from ..camera_runtime._recording._stages import DEFAULT_CLIP_MAX_S
 from ..media_index import (
     build_report,
@@ -294,6 +295,32 @@ def api_media_fix_thumbnails():
 def api_media_fix_thumbnails_status():
     with _fix_thumbs_lock:
         return jsonify(dict(_thumb_task))
+
+
+@bp.post('/api/media/rebuild-scrub')
+def api_media_rebuild_scrub():
+    """Rebuild every missing scrub filmstrip, now, without a restart.
+
+    The backfill has always existed, but only as a boot migration — so
+    an archive that gained clips (or lost a manifest key) between two
+    restarts had no way to catch up short of restarting the container,
+    which on this deployment means an SSH session on the Unraid host.
+    „bitte lasse ein Skript laufen dass alle Thumbnails Previews der
+    Videos erstellt, hier is nix da" is a request this endpoint answers
+    and a boot-only migration cannot.
+
+    Same worker, same pacing, same skip rule — this is a second trigger
+    for one implementation, never a second implementation. Returns as
+    soon as the thread is running; the pass logs its own tally.
+    """
+    try:
+        _migrations.generate_missing_scrub_sprites(
+            storage_root=app_state.store.root,
+            store=app_state.store,
+        )
+        return jsonify({"ok": True, "started": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.post('/api/media/purge-orphans')

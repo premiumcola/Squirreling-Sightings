@@ -22,6 +22,7 @@ import pytest
 cv2 = pytest.importorskip("cv2")
 np = pytest.importorskip("numpy")
 
+from app.migrations import _has_scrub  # noqa: E402
 from app.scrub_sprite import (  # noqa: E402
     MAX_TILES,
     _plan,
@@ -104,3 +105,50 @@ def test_die_kacheln_behalten_das_seitenverhaeltnis(tmp_path):
     geo = build_scrub_sprite(clip)
     assert geo is not None
     assert geo["tile_w"] / geo["tile_h"] == pytest.approx(640 / 360, abs=0.02)
+
+
+# ── Der Nachbau überspringt nur, was WIRKLICH fertig ist ────────────────
+
+
+class _FakeStore:
+    """Gerade so viel Ablage, wie der Nachbau anfasst: lesen und schreiben."""
+
+    def __init__(self, events):
+        self.root = Path("/nicht/benutzt")
+        self._events = events
+
+    def get_event(self, cam_id, event_id):
+        return self._events.get((cam_id, event_id))
+
+    def update_event(self, cam_id, event_id, ev):
+        self._events[(cam_id, event_id)] = ev
+
+
+def test_ein_blatt_ohne_eintrag_im_manifest_gilt_als_unfertig():
+    # DER FEHLER, den das hier festhält: übersprungen wurde allein nach
+    # der Datei auf der Platte. Ein Clip, dessen Blatt gebaut, dessen
+    # Geometrie aber nie ins Ereignis geschrieben wurde, war damit bei
+    # JEDEM Start wieder übersprungen — dauerhaft. Der Player adressiert
+    # eine Kachel über genau diese Geometrie; ohne sie ist das Blatt eine
+    # Datei, die niemand lesen kann.
+    store = _FakeStore({("cam_a", "evt_1"): {"event_id": "evt_1"}})
+    assert _has_scrub(store, "cam_a", "evt_1") is False
+
+
+def test_ein_vollstaendiger_eintrag_gilt_als_fertig():
+    geo = {"cols": 5, "rows": 5, "count": 24, "tile_w": 320, "tile_h": 180}
+    store = _FakeStore({("cam_a", "evt_1"): {"scrub": geo}})
+    assert _has_scrub(store, "cam_a", "evt_1") is True
+
+
+def test_eine_halbe_geometrie_zaehlt_nicht_als_fertig():
+    # timeline/_preview.js::_usable weigert sich, daraus zu zeichnen —
+    # also ist so ein Eintrag genauso wertlos wie gar keiner.
+    store = _FakeStore({("cam_a", "evt_1"): {"scrub": {"cols": 5, "rows": 5}}})
+    assert _has_scrub(store, "cam_a", "evt_1") is False
+
+
+def test_ohne_ablage_entscheidet_die_platte_allein():
+    # Der Unit-Test-Pfad: ohne Store gibt es nichts zu prüfen und nichts
+    # zu schreiben, also zählt das Blatt für sich.
+    assert _has_scrub(None, "cam_a", "evt_1") is True

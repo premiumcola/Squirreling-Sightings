@@ -183,7 +183,17 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
                     with contextlib.suppress(Exception):
                         stale.unlink()
                         swept += 1
-                if sprite_path_for(mp4).exists():
+                # A SHEET ON DISK IS NOT ENOUGH. The player addresses a
+                # tile through the grid on the EVENT — cols, rows, count,
+                # interval, tile size — and a sheet whose geometry never
+                # reached the manifest is a file nothing can read. The
+                # skip used to test the disk alone, so any clip whose
+                # `_attach_scrub` had failed (or that was built before
+                # that step existed) was skipped again on every boot,
+                # for good: „bitte lasse ein Skript laufen dass alle
+                # Thumbnails Previews der Videos erstellt, hier is nix
+                # da." Both halves have to be there to count as done.
+                if sprite_path_for(mp4).exists() and _has_scrub(store, cam_dir.name, mp4.stem):
                     continue
                 try:
                     geo = build_scrub_sprite(mp4)
@@ -201,6 +211,27 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
             log.info("[boot] %d Scrub-Filmstreifen nachgebaut", made)
 
     threading.Thread(target=_do, daemon=True).start()
+
+
+def _has_scrub(store, camera_id: str, event_id: str) -> bool:
+    """Does this event's manifest already carry a usable scrub grid?
+
+    Without a store there is nothing to check and nothing to write, so
+    the disk answer stands alone — that is the unit-test path and the
+    only case where a bare sheet counts as finished.
+
+    A grid missing `count` or `tile_w` is treated as absent: the player
+    refuses to draw from one (``_usable`` in timeline/_preview.js), so
+    keeping it would be keeping a value that renders as nothing.
+    """
+    if store is None:
+        return True
+    try:
+        ev = store.get_event(camera_id, event_id) or {}
+    except Exception:
+        return False
+    geo = ev.get("scrub")
+    return bool(isinstance(geo, dict) and geo.get("count") and geo.get("tile_w"))
 
 
 def _attach_scrub(store, camera_id: str, event_id: str, geo: dict) -> None:

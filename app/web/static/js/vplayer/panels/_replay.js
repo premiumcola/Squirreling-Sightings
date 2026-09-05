@@ -57,12 +57,33 @@ export function replayRequestFor(item, mode) {
   return { url: pre.url, method: 'POST', body: { settings: mode } };
 }
 
+/**
+ * The simulation glyph: a frame with an arrow running back around it.
+ *
+ * „simulations icon in der grün farbe des players!" — so it is drawn in
+ * `currentColor` and the stylesheet gives it `--vp-accent`, the same
+ * green the playhead and the rail fill already wear. One accent, used
+ * for the things this player DOES, so a control that re-runs the clip
+ * reads as part of the same object as the control that plays it.
+ *
+ * While a run is in flight the glyph turns — the arrow is the moving
+ * part, which is what makes the rotation mean "this is going round
+ * again" rather than a generic spinner parked next to a label.
+ */
+const _SIM_ICON =
+  `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ` +
+  `stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+  `<path d="M20 12a8 8 0 1 1-2.34-5.66"/><polyline points="20,3.5 20,7.5 16,7.5"/>` +
+  `<polygon points="10.2,9.2 15,12 10.2,14.8" fill="currentColor" stroke="none"/></svg>`;
+
 /** One button, disabled with a reason or ready to fire. */
-function _btnHtml(mode, { disabled, hint }) {
+function _btnHtml(mode, { disabled, hint, busy }) {
   const label = hint ? `${LABELS[mode]} — ${hint}` : LABELS[mode];
   return (
-    `<button type="button" class="vp-pnl-btn" data-replay="${mode}"` +
-    `${disabled ? ' disabled' : ''}>${esc(label)}</button>`
+    `<button type="button" class="vp-pnl-btn vp-pnl-btn--sim${busy ? ' is-running' : ''}" ` +
+    `data-replay="${mode}"${disabled ? ' disabled' : ''}>` +
+    `<span class="vp-pnl-btn-icon">${_SIM_ICON}</span>` +
+    `<span class="vp-pnl-btn-label">${esc(label)}</span></button>`
   );
 }
 
@@ -71,10 +92,11 @@ function _barHtml(state) {
   const identical = state.preflight?.identical === true;
   return (
     `<div class="vp-pnl-replay-bar">` +
-    _btnHtml('stored', { disabled: busy }) +
+    _btnHtml('stored', { disabled: busy, busy: state.busy === 'stored' }) +
     _btnHtml('current', {
       disabled: busy || identical,
       hint: identical ? 'identisch mit den gespeicherten' : '',
+      busy: state.busy === 'current',
     }) +
     `</div>`
   );
@@ -89,9 +111,14 @@ function _barHtml(state) {
 function _outHtml(state) {
   if (state.busy) {
     const which = LABELS[state.busy] || '';
+    // A SWEEP, not a percentage. The backend walks the clip and reports
+    // once at the end, so any number here would be invented — but the
+    // run takes long enough that a static line reads as a hung panel.
+    // An indeterminate bar says "working" and claims nothing else.
     return (
       `<div class="vp-pnl-replay-out" aria-live="polite">` +
-      `<div class="vp-pnl-replay-busy">Läuft — ${esc(which)}…</div></div>`
+      `<div class="vp-pnl-replay-busy">Läuft — ${esc(which)}…</div>` +
+      `<div class="vp-pnl-replay-sweep" aria-hidden="true"><i></i></div></div>`
     );
   }
   if (state.error) {

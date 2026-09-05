@@ -281,16 +281,109 @@
   text-align: left;
 }
 
+/* The simulation buttons carry the player's own green — „simulations
+   icon in der grün farbe des players!". Icon only: a fully green button
+   would compete with the playhead for the one accent on the surface. */
+.vp-pnl-btn--sim {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.vp-pnl-btn--sim .vp-pnl-btn-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--vp-accent);
+}
+
+.vp-pnl-btn--sim[disabled] .vp-pnl-btn-icon {
+  color: var(--muted);
+}
+
+/* Turning while the run is in flight. The glyph IS the arrow going
+   round again, so the rotation says what the run is doing rather than
+   parking a generic spinner beside a label. */
+.vp-pnl-btn--sim.is-running .vp-pnl-btn-icon {
+  animation: vp-sim-spin 1.15s linear infinite;
+}
+
+@keyframes vp-sim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .vp-pnl-replay-busy {
   padding: 6px 0;
   color: var(--muted);
   font-size: 13px;
 }
 
+/* Indeterminate sweep. The replay reports once, at the end — there is
+   no honest percentage to draw, and this claims none. */
+.vp-pnl-replay-sweep {
+  position: relative;
+  height: 3px;
+  margin-bottom: 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--vp-accent) 16%, transparent);
+  overflow: hidden;
+}
+
+.vp-pnl-replay-sweep i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  border-radius: 2px;
+  background: var(--vp-accent);
+  animation: vp-sim-sweep 1.25s ease-in-out infinite;
+}
+
+@keyframes vp-sim-sweep {
+  0% {
+    left: -38%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Someone who asked for less motion gets the state, not the travel: the
+   bar stays, filled and still, and the icon stops turning. */
+@media (prefers-reduced-motion: reduce) {
+  .vp-pnl-btn--sim.is-running .vp-pnl-btn-icon,
+  .vp-pnl-replay-sweep i {
+    animation: none;
+  }
+
+  .vp-pnl-replay-sweep i {
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
 .vp-pnl-replay-verdict {
   padding: 6px 0 8px;
   font-size: 14px;
   font-weight: 600;
+  /* The answer arrives after a wait, so it comes forward rather than
+     appearing — „nach simulieren mit schöner animation bitte". */
+  animation: vp-sim-land 220ms ease both;
+}
+
+@keyframes vp-sim-land {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-pnl-replay-verdict {
+    animation: none;
+  }
 }
 
 .vp-pnl-replay-verdict.is-ok {

@@ -48,8 +48,20 @@ import { maskProbePoint, pointInAnyMask } from './_geometry.js';
 import { clipReadiness, GEOM_PER_FRAME, triggerBoxVisible } from './_model/readiness.js';
 import { liveTrackColor } from '../core/track-color.js';
 
-/** Trail stroke width, in source pixels per 1000 px of source width. */
-const _TRAIL_W_PER_KPX = 3;
+/** Trail stroke width, in CSS pixels.
+ *
+ * A PLAIN NUMBER, because `buildTrailSvg` stamps the stroke with
+ * `vector-effect="non-scaling-stroke"` — the browser then renders it at
+ * this many SCREEN pixels whatever the viewBox is. The old value was
+ * computed in SOURCE pixels (3 per 1000 of source width) and handed to
+ * that same non-scaling stroke, so the two rules fought: the arithmetic
+ * made the line thicker for a 4K camera, and the attribute then ignored
+ * the scale it was compensating for. A 4K trail came out four times
+ * heavier than a 1080p one on the same screen, for no reason anybody
+ * chose. non-scaling-stroke already delivers the resolution
+ * independence; the number just has to say what it means.
+ */
+const _TRAIL_W_PX = 2.5;
 
 /** The camera's zone and mask polygons, each with its authored dims. */
 function _camPolygons(camId) {
@@ -105,9 +117,8 @@ function _paintTrails(host, tracks, t, src, on) {
     host.innerHTML = '';
     return;
   }
-  const width = Math.max(2, (src.w / 1000) * _TRAIL_W_PER_KPX);
   const body = ((tracks && tracks.tracks) || [])
-    .map((tr) => buildTrail(buildTrailPoints(tr, t), tr.color, { strokeWidth: width }))
+    .map((tr) => buildTrail(buildTrailPoints(tr, t), tr.color, { strokeWidth: _TRAIL_W_PX }))
     .filter(Boolean)
     .join('');
   host.innerHTML = body
@@ -165,7 +176,16 @@ function _triggerSamples(dets, src, masks) {
     const box = normalizeBox(d.bbox);
     const probe = box ? maskProbePoint(box) : null;
     return {
-      raw: { ...d, track_num: null },
+      // STATUS `ghost`, not the default. A sample with no status falls
+      // through to `confirmed` — a solid, full-strength stroke, which
+      // the status legend labels „Bestätigt". These boxes are the exact
+      // opposite: one instant from the trigger frame, on a clip whose
+      // re-analysis confirmed no track at all. Drawing the strongest
+      // style available on the weakest evidence available is the same
+      // defect as the green tick over „keine Spur bestätigt", one layer
+      // down. `ghost` is dotted at 55 % with the „≈" marker, which is
+      // what a single-frame guess actually looks like.
+      raw: { ...d, track_num: null, status: 'ghost' },
       colour: (d.label && classColor(d.label)) || liveTrackColor(null),
       masked: !!probe && pointInAnyMask(probe.x, probe.y, src.w, src.h, masks),
       trackNum: null,

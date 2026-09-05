@@ -40,23 +40,11 @@ function _segmentHtml(id, on) {
 }
 
 /**
- * The ROI chip. Read-only: it reports that detection ran on a crop
- * rather than the full frame, which is the single most common reason a
- * box "should have been found" and was not. Absent when there is no
- * ROI, because a chip reading "kein ROI" on every clip is noise.
- */
-function _roiChipHtml(roi) {
-  if (!roi) return '';
-  return `<span class="vp-roi-chip" title="Erkennung lief auf einem Ausschnitt">ROI ${esc(roi)}</span>`;
-}
-
-/**
  * Mount the overlay row.
  *
  * @param {HTMLElement} host   the shell's [data-slot="toggles"]
  * @param {object} cfg         normalised config from _config.js
  * @param {object} [opts]
- * @param {string} [opts.roi]  ROI label, when the clip/session has one
  * @param {(state: object) => void} [opts.onChange]  full layer state
  * @returns {{state: () => object, teardown: () => void}|null}
  */
@@ -78,8 +66,12 @@ export function mountOverlayRow(host, cfg, opts = {}) {
     `<div class="vp-segbar" role="group" aria-label="Overlays">` +
     ids.map((id) => _segmentHtml(id, state[id])).join('') +
     `</div>` +
-    _hintHtml() +
-    _roiChipHtml(opts.roi);
+    // THE ROI CHIP IS GONE, and it was never once on screen: it read
+    // `cfg.item.roi_label`, a field nothing in app/ writes — only the
+    // screenshot fixtures set it, so the harness photographed a control
+    // production could not produce. The panels already name the ROI
+    // („ROI 2x2"), from a value the tick actually carries.
+    _hintHtml();
 
   const hint = host.querySelector('.vp-seg-hint');
 

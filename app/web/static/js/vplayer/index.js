@@ -82,13 +82,32 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
     // on, as a base64 JPEG in the SAME coordinate space as the boxes —
     // which is why the boxes are painted against it rather than against
     // a live stream that has moved on since.
+    //
+    // PAINTED AFTER THE DECODE, not with the assignment. `img.src = …`
+    // starts a decode; until it finishes the element still shows the
+    // PREVIOUS frame. Painting synchronously here put frame N's boxes
+    // over frame N−1's pixels for the whole decode, and on a moving
+    // subject that is exactly „personen sind zu bboxes extrem versetzt".
+    // `decode()` resolves when the new pixels are ready to present, so
+    // the frame drawn on and the frame measured are the same one by
+    // construction rather than by luck.
+    //
+    // The fallback matters as much as the happy path: no snapshot means
+    // the picture is NOT the analysed frame, and boxes over it would be
+    // a claim about pixels nobody has seen. Then nothing is repainted
+    // and the previous, honest overlay stands.
+    const paint = () => overlays?.paintLive(frame);
     if (frame.snapshot && stage.img.getAttribute('src') !== frame.snapshot) {
       stage.img.src = frame.snapshot;
+      if (typeof stage.img.decode === 'function') {
+        stage.img.decode().then(paint, paint);
+      } else {
+        stage.img.addEventListener('load', paint, { once: true });
+      }
+    } else if (frame.snapshot) {
+      // Byte-identical snapshot: already on screen, nothing to wait for.
+      paint();
     }
-    // Through the painter, not straight at the layer: it is what holds
-    // the operator's toggle state, and a direct paint here is how the
-    // simulation's own bbox switch ended up with nothing to switch.
-    overlays?.paintLive(frame);
     // The second argument is the SYSTEM status, not part of the frame:
     // the tick says which device ran it, /api/status says how loaded that
     // device is, and the panel's TPU chip reads the latter. It was hard
@@ -364,7 +383,6 @@ function _mountAll(cfg) {
   const togglesHost = cfg.flags.showOverlays ? shell.slot('toggles') : null;
   const overlayRow = cfg.flags.showOverlays
     ? mountOverlayRow(togglesHost, cfg, {
-        roi: cfg.item.roi_label,
         onChange: (next) => overlays?.setLayers(next),
       })
     : null;
@@ -400,9 +418,19 @@ function _mountAll(cfg) {
 
   const playhead = _wirePlayhead(cfg, stage, timeline, overlays);
 
-  // A live surface with a stream URL points its <img> straight at it,
-  // so the picture is continuous rather than a 1 Hz snapshot loop.
-  if (cfg.flags.live && cfg.source?.url) stage.img.src = cfg.source.url;
+  // A live surface with a stream URL points its <img> straight at it, so
+  // the picture is continuous rather than a 1 Hz snapshot loop.
+  //
+  // NOT ON A SURFACE THAT DRAWS BOXES. The stream is the camera's HD
+  // feed, decoded by a different pipeline and always AHEAD of the frame
+  // inference ran on; the simulation would then paint measured boxes
+  // over pixels nobody measured. That is a picture claiming a
+  // correspondence it does not have — and the simulation exists to show
+  // the correspondence. It waits for its first snapshot instead; on this
+  // box that is one tick.
+  if (cfg.flags.live && cfg.source?.url && !cfg.flags.showOverlays) {
+    stage.img.src = cfg.source.url;
+  }
 
   const panel = renderContextPanel(shell.slot('panel'), cfg, null, cfg.deps || {});
   const live = _wireLive(cfg, stage, panel, timeline, overlays);

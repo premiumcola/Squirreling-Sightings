@@ -53,7 +53,7 @@ export const SIM_CAM_ID = 'reolink_rlc810a_garten_51';
 // `diag` carries the real gate/threshold/parity blocks for the same
 // reason: the Debug tab and the trace read them, and a two-key stand-in
 // photographs an empty tab as if it were unimplemented.
-/** A real 2×2 JPEG as a data URL.
+/** A real 32×18 JPEG as a data URL — 16:9, the fixture's own ratio.
  *
  * NOT `null`, and the difference is a whole class of defect. The player
  * assigns `frame.snapshot` to the stage's <img> on every tick; the
@@ -64,16 +64,29 @@ export const SIM_CAM_ID = 'reolink_rlc810a_garten_51';
  * boxes on a surface where the operator saw none.
  *
  * So the fixture has to complete the loop the production tick completes.
- * Tiny on purpose: it exists to make the <img> emit `load`, not to be
- * looked at — the surfaces paint their own backdrop.
+ *
+ * AND IT HAS TO CARRY THE RIGHT SHAPE. It was a 2×2 pixel beside a
+ * `frame_size` of 640×360, which is a 1:1 image posing as 16:9 — the
+ * stage letterboxes the picture from the image's OWN aspect, so every
+ * layer got pinned to a square inside a wide box. The harness therefore
+ * could not have seen a misplaced box however wrong the maths went, and
+ * a misplaced box is exactly what was reported. Tiny is fine; the wrong
+ * ratio is not.
  */
 const _PIXEL =
-  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL' +
-  'DBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAACAAIBAREA/8QAHwAA' +
-  'AQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1Fh' +
-  'ByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZn' +
-  'aGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ' +
-  '2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APn+iiiigD//2Q==';
+  'data:image/jpeg;base64,' +
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4p' +
+  'LSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09P' +
+  'T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAASACADASIA' +
+  'AhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQA' +
+  'AAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3' +
+  'ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWm' +
+  'p6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEA' +
+  'AwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSEx' +
+  'BhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElK' +
+  'U1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3' +
+  'uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDiqKdi' +
+  'jFP2qMhtFOxRij2qAWiiisQCiiigD//Z';
 
 export const SIM_TICK = {
   ok: true,

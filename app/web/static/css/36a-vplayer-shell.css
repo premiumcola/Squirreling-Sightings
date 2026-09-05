@@ -375,20 +375,6 @@
   }
 }
 
-/* A CAPTION, not a fifth switch. It is read-only — it reports that
-   detection ran on a crop — and painted as a filled chip beside four
-   filled chips it read as a button that would not press. Now it carries
-   no ground of its own (a chip darker than the row it sits in was also
-   the dark-on-dark the design rules forbid) and simply reads as the
-   label it is. */
-.vp-roi-chip {
-  flex: 0 0 auto;
-  padding: 0 2px;
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 /* ── Controls + panel hosts ────────────────────────────────────────────── */
 .vp-controls {
   display: flex;

@@ -112,6 +112,26 @@ test('an event with neither key falls back to its trigger frame', () => {
   assert.equal(m.firstEventT, 3);
 });
 
+test('mehrere Auslöse-Erkennungen derselben Klasse werden EINE Spur', () => {
+  // Die Achse ist Zeit, und ein Auslöse-Bild ist ein Augenblick. Zwei
+  // „Person"-Zeilen auf demselben Tick, mit demselben Namen, sind durch
+  // nichts zu unterscheiden — „da passt so einiges nicht". Der beste
+  // Wert der Klasse gewinnt; WIE VIELE es waren, steht als Kästen im
+  // Bild und als Zeilen in der Objektliste.
+  const item = {
+    detections: [
+      { label: 'person', score: 0.41 },
+      { label: 'person', score: 0.58 },
+      { label: 'bird', score: 0.62 },
+    ],
+  };
+  const picked = timelineBasis(item, null, { triggerT: 2 });
+  assert.equal(picked.basis, TL_BASIS_TRIGGER);
+  assert.equal(picked.tracks.length, 2, 'zwei Klassen, nicht drei Erkennungen');
+  const person = picked.tracks.find((t) => t.label === 'person');
+  assert.equal(person.samples[0].score, 0.58, 'der beste Wert der Klasse');
+});
+
 test('an event with no detections at all still draws nothing', () => {
   const bare = { event_id: 'evt_2026_0101', type: 'motion' };
   const picked = timelineBasis(bare, null);

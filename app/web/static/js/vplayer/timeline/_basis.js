@@ -108,6 +108,38 @@ function _trackForClipRow(row) {
 }
 
 /**
+ * PURE: the trigger frame's detections → ONE pseudo-track per class.
+ *
+ * GROUPED, and the grouping is the point. The lane strip's axis is TIME,
+ * and every detection in a trigger frame shares one instant — so N
+ * detections produced N rows sitting on the same tick with the same
+ * name. A clip that triggered on two person-shaped things showed
+ * „Person" twice, at the same position, distinguishable by nothing:
+ * „da passt so einiges nicht". Two rows that cannot be told apart are
+ * not two facts.
+ *
+ * One row per class, carrying the best score of that class, says exactly
+ * what the frame knows. HOW MANY there were is still on the picture, as
+ * boxes, and in the object list below — both of which have room for it.
+ */
+function _triggerTracks(dets, atT) {
+  const byLabel = new Map();
+  for (const d of dets) {
+    const label = d?.label || '';
+    if (!label) continue;
+    const prev = byLabel.get(label);
+    const score = typeof d.score === 'number' ? d.score : null;
+    // Best score wins, and with it the species that was identified on
+    // that same detection — a name is only as good as the box it came
+    // from.
+    if (!prev || (score != null && (prev.score == null || score > prev.score))) {
+      byLabel.set(label, { label, score, species: d.species || null });
+    }
+  }
+  return [...byLabel.values()].map((d) => _trackForTriggerDet(d, atT)).filter(Boolean);
+}
+
+/**
  * PURE: one trigger-frame detection → one single-instant pseudo-track.
  *
  * THE THIRD BASIS, and the reason it had to exist: „auch hier ist 'n
@@ -157,7 +189,7 @@ export function timelineBasis(item, tracks, opts = {}) {
   const trig = item?.detections;
   if (Array.isArray(trig) && trig.length) {
     const at = Number.isFinite(opts.triggerT) && opts.triggerT > 0 ? opts.triggerT : 0;
-    const built = trig.map((d) => _trackForTriggerDet(d, at)).filter(Boolean);
+    const built = _triggerTracks(trig, at);
     if (built.length) return { basis: TL_BASIS_TRIGGER, tracks: built };
   }
   // An event with none of the three lands here with an empty list — the

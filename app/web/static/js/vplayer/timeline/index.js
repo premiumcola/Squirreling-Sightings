@@ -27,6 +27,11 @@ import { buildTimelineModel } from './_model.js';
  * @param {object} deps       { getVideo, post, reload }
  * @returns {object|null} handle with update/teardown
  */
+/** Above this many lanes the block scrolls; at or below it never does.
+ *  Six rows of 14 px plus gaps is ~100 px — comfortably inside the 22dvh
+ *  cap, so the cap only ever engages once it is genuinely needed. */
+const LANES_BEFORE_SCROLL = 6;
+
 export function mountTimeline(host, cfg, deps = {}) {
   if (!host) return null;
 
@@ -89,8 +94,12 @@ export function mountTimeline(host, cfg, deps = {}) {
     scrub?.teardown();
     rescan?.teardown();
     beads?.teardown();
+    // `data-many` decides whether the block may scroll at all. Below the
+    // threshold it must not: a reserved scrollbar gutter beside two rows
+    // is a control for a list that fits. See 36b.
     const body = model.lanes.length
-      ? `<div class="vp-tl-lanes">${lanesHtml(model)}</div>`
+      ? `<div class="vp-tl-lanes" data-many="${model.lanes.length > LANES_BEFORE_SCROLL ? '1' : '0'}">` +
+        `${lanesHtml(model)}</div>`
       : emptyStateHtml(emptyStateFor(opts.item, opts.tracks), opts);
     host.innerHTML = body + railHtml(model);
     watchLanes();

@@ -99,11 +99,20 @@
   flex-direction: column;
   gap: 3px;
   margin-bottom: 6px;
-  /* Many objects must not push the picture out of view; the lane list
-     scrolls itself. */
+}
+
+/* MANY objects must not push the picture out of view, so the list scrolls
+   itself — but ONLY then. `max-height` plus `overflow-y: auto` was on the
+   block unconditionally, and a browser that reserves a scrollbar gutter
+   drew one beside two 14 px rows: a scrollbar for a list that fits, right
+   where the operator was already asking what the empty band was for.
+   timeline/index.js stamps `data-many` once the count can actually
+   overflow, which is a fact it already has and CSS cannot count. */
+.vp-tl-lanes[data-many='1'] {
   max-height: 22dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 /* THE NAME GETS A COLUMN, not a corner of the bar. A bar's position IS

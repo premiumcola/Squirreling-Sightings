@@ -42,18 +42,34 @@ log = logging.getLogger("app.camera_runtime")
 #: and half-second granularity answers it without a sheet nobody needs.
 DEFAULT_FPS = 2.0
 
-#: Width of one tile. 240 px is legible on a phone at roughly half the
-#: screen and still only a few KB per frame.
-TILE_W = 240
+#: Width of one tile.
+#:
+#: 240 was too small, and the player made it worse by displaying it at
+#: 200: „Thumbnail, dunkel, zu klein. Ich hab immer mehrmals gesagt,
+#: Thumbnail, bitte größer." The display cap is lifted in
+#: timeline/_preview.js, and it derives its size from THIS number — so
+#: the sheet has to grow too, or a larger bubble is only a larger blur.
+#:
+#: Applies to clips recorded from here on; existing sheets keep their own
+#: geometry, which is why the player reads tile_w off the event rather
+#: than assuming it.
+TILE_W = 320
 
 #: Hard ceiling on tiles per sheet. A 120 s clip at 2/s would be 240
 #: tiles; past this the interval widens instead, so the sheet's pixel
 #: size and decode cost stay bounded no matter how long the clip is.
-MAX_TILES = 120
+#:
+#: Lowered with the tile bump so the sheet's PIXEL budget stays where it
+#: was — 96 × 320 × 180 is 5.8 MPix against the old 120 × 240 × 135 at
+#: 3.9 MPix, and a sheet that a phone refuses to decode shows nothing at
+#: all. Only clips over ~48 s are coarsened, and there the stride was
+#: already widening.
+MAX_TILES = 96
 
-#: JPEG quality. These are 240 px wide and only ever seen in motion under
-#: a finger, so quality buys nothing above this and costs bytes.
-JPEG_Q = 70
+#: JPEG quality. Raised with the tile size: at 320 px the artefacts of 70
+#: are visible on the grass-and-fence subjects these cameras actually
+#: watch, and the sheet is fetched once per clip, not per drag.
+JPEG_Q = 78
 
 
 #: Sub-folder the sheets live in, one per day directory.

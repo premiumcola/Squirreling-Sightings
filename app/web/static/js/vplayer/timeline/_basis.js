@@ -35,6 +35,8 @@ import { classColor } from '../../core/class-colors.js';
 export const TL_BASIS_SIDECAR = 'sidecar';
 /** `whole_clip.detections` — one row per subject, two timestamps. */
 export const TL_BASIS_CLIP = 'clip';
+/** `item.detections` — the trigger frame alone, one instant. */
+export const TL_BASIS_TRIGGER = 'trigger';
 /** Neither key held anything. The rail draws no lanes. */
 export const TL_BASIS_NONE = 'none';
 /** The rolling live buffer. Not a recorded population at all. */
@@ -106,13 +108,45 @@ function _trackForClipRow(row) {
 }
 
 /**
+ * PURE: one trigger-frame detection → one single-instant pseudo-track.
+ *
+ * THE THIRD BASIS, and the reason it had to exist: „auch hier ist 'n
+ * Vogel drin. Keine Box." The clip he was looking at holds a `bird` at
+ * 57 % with a bbox and an identified species — Hausrotschwanz — on
+ * `item.detections`, and NOTHING on the rail, because the two bases
+ * above it were both empty: the sidecar confirmed nothing and the clip
+ * predates `whole_clip` entirely. Two empty sources are not evidence of
+ * an empty clip when a third source is sitting on the same record.
+ *
+ * ONE INSTANT, DRAWN AS ONE. The trigger frame is a single moment, so
+ * this is a dot with a zero-length bar and never a span — claiming a
+ * duration for it would be inventing the thing the sidecar exists to
+ * measure. `source: 'detect'` because it is a real detection; the score
+ * is carried, so a sub-spawn trigger reads `weak` and dashes itself.
+ */
+function _trackForTriggerDet(det, atT) {
+  const label = det?.label || '';
+  if (!label) return null;
+  return {
+    _num: null,
+    label,
+    species: det.species || null,
+    color: classColor(label),
+    samples: [{ t: atT, score: det.score, source: 'detect' }],
+  };
+}
+
+/**
  * PURE: the population this render draws, and the tracks to draw.
  *
- * @param {object} item     the event, possibly widened by loadRecorded
- * @param {object} tracks   the tracks.json sidecar, or null
+ * @param {object} item      the event, possibly widened by loadRecorded
+ * @param {object} tracks    the tracks.json sidecar, or null
+ * @param {object} [opts]
+ * @param {number} [opts.triggerT]  when the trigger frame sits in the
+ *   clip — the end of the pre-roll. Falls back to 0.
  * @returns {{basis: string, tracks: Array}}
  */
-export function timelineBasis(item, tracks) {
+export function timelineBasis(item, tracks, opts = {}) {
   const sidecar = tracks && Array.isArray(tracks.tracks) ? tracks.tracks : null;
   if (sidecar && sidecar.length) return { basis: TL_BASIS_SIDECAR, tracks: sidecar };
   const clip = item?.whole_clip?.detections;
@@ -120,8 +154,14 @@ export function timelineBasis(item, tracks) {
     const built = clip.map(_trackForClipRow).filter(Boolean);
     if (built.length) return { basis: TL_BASIS_CLIP, tracks: built };
   }
-  // An event predating the aggregate has neither key, and lands here
-  // with an empty list — the same argument the rail was given before
-  // any of this existed, so it renders exactly as it always has.
+  const trig = item?.detections;
+  if (Array.isArray(trig) && trig.length) {
+    const at = Number.isFinite(opts.triggerT) && opts.triggerT > 0 ? opts.triggerT : 0;
+    const built = trig.map((d) => _trackForTriggerDet(d, at)).filter(Boolean);
+    if (built.length) return { basis: TL_BASIS_TRIGGER, tracks: built };
+  }
+  // An event with none of the three lands here with an empty list — the
+  // same argument the rail was given before any of this existed, so it
+  // renders exactly as it always has.
   return { basis: TL_BASIS_NONE, tracks: [] };
 }

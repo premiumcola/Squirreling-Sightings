@@ -56,8 +56,12 @@ const _TONE = {
 };
 
 const _MARK = {
-  // A ring with a tick: the walk RAN. This is an answer, not a gap.
-  [CLIP_EMPTY]: _svg('<circle cx="12" cy="12" r="8.5"/><polyline points="8.3,12 11,14.6 15.7,9"/>'),
+  // A magnifier over an empty field: the walk RAN and came back with
+  // nothing. NOT the tick it used to be — a tick is the mark of a thing
+  // confirmed, and this banner sits directly above a row naming a
+  // subject the live pipeline did confirm. Two verdicts, and the tick
+  // was on the wrong one.
+  [CLIP_EMPTY]: _svg('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 20 20"/>'),
   // A frame holding a pause: geometry that exists, and stands still.
   [CLIP_COARSE]: _svg(
     '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M10 9.5v5M14 9.5v5"/>',
@@ -164,8 +168,13 @@ export function readinessFaceHTML(readiness, item, action = '', liveAge = null) 
   // The backend's own sentence about a failure is prose, not a value —
   // it gets its own quiet line rather than a chip built for „50 %".
   const sub = readiness.sub ? `<span class="vp-rn-sub">${esc(readiness.sub)}</span>` : '';
+  // A quiet verdict is the default; only one that contradicts its own
+  // trigger frame is allowed to raise its voice.
+  const tone = `${_TONE[readiness.state] || 'is-pending'}${
+    readiness.contradicts ? ' is-contradiction' : ''
+  }`;
   return (
-    `<div class="vp-rn ${_TONE[readiness.state] || 'is-pending'}">${mark}` +
+    `<div class="vp-rn ${tone}">${mark}` +
     `<span class="vp-rn-body">` +
     `<span class="vp-rn-text">${esc(readiness.note)}</span>${sub}` +
     `${_gateBar(readiness.gate)}${_facts(readiness.facts)}` +

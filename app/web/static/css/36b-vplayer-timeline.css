@@ -35,6 +35,16 @@
   /* Playhead position, 0..1. Written once per frame by _rail.js; the
      fill and the head both read it, so they cannot drift apart. */
   --vp-play-pct: 0;
+
+  /* How far the rail is held clear of the row's edges.
+     „Bitte lass die Timeline auch so anfangen, dass der Play Kreis
+     komplett sichtbar ist links und rechts, anfangen und enden."
+     The playhead is a 44 px disc centred on its position, so at 0 % and
+     at 100 % exactly half of it used to hang outside the rail's box and
+     get clipped. Half the disc is therefore the inset, and the drag
+     surface takes the same one so a pointer and the grip it is dragging
+     never disagree about where the ends are. */
+  --vp-tl-inset: calc(var(--vp-tap) / 2);
 }
 
 /* ── The strip, in its own row UNDER the picture ───────────────────────────
@@ -205,6 +215,15 @@
   color: var(--text, #edf4fb);
 }
 
+/* The rolls could not be laid on this clip, so no band was drawn. This
+   caption is the reason, and it is deliberately louder than the two it
+   replaces: it reports a contradiction between what was configured and
+   what was recorded, which is a thing to look into rather than a value
+   to read. */
+.vp-tl-cap--warn {
+  color: var(--warn, #e2b341);
+}
+
 /* The clock, under the rail. The transport's own strip is suppressed in
    this shell (mediaview/player/_transport.js's `timebar` option) — two
    readouts printed through each other at both ends of the rail. */
@@ -227,6 +246,9 @@
 .vp-tl-track {
   position: relative;
   height: var(--vp-tl-rail-h);
+  /* Both ends held clear of the row so the playhead disc is whole at 0 %
+     and at 100 % — see --vp-tl-inset. */
+  margin: 0 var(--vp-tl-inset);
   border-radius: calc(var(--vp-tl-rail-h) / 2);
   background: rgba(237, 244, 251, 0.22);
 }
@@ -361,13 +383,144 @@
    to. Sized from the same token as every other control. */
 .vp-tl-hit {
   position: absolute;
-  left: 0;
-  right: 0;
+  /* The SAME inset as the rail. The drag maps a pointer x onto the
+     rail's own rect, so a hit area wider than the rail would make the
+     outermost strip of it map to a position it can never reach. */
+  left: var(--vp-tl-inset);
+  right: var(--vp-tl-inset);
   bottom: 0;
   height: var(--vp-tl-band);
   min-height: 44px;
   touch-action: none;
   cursor: pointer;
+}
+
+/* ── Beads: the events and the roll boundaries, ON the rail ────────────────
+   „zeichne die Ereignisse und die Vorläufe in der Timeline des Play
+   Elements als Knödel ein, die man auch anwählen kann, wo dann 'n
+   kleines Hover over kommt, was anzeigt, was das ist."
+
+   Each is a real button, so it seeks on click and takes focus — and the
+   tip shows on focus as well as on hover, which is the only reason this
+   works on a phone at all.
+
+   TAP TARGET, and the honest note about it: 28 × 44 px, not 44 × 44.
+   The height meets the minimum; the width cannot. Horizontal room on a
+   time axis is not free — two subjects two seconds apart in a ten-second
+   clip sit 20 % of the rail apart, and 44 px-wide beads would overlap
+   into one smear where the leftmost is unreachable, which is worse than
+   a narrow target. Height is free, so the target takes all of it. */
+.vp-tl-beads {
+  position: absolute;
+  inset: 0;
+  /* The container must not eat the drag; only the beads themselves are
+     interactive. */
+  pointer-events: none;
+  z-index: 2;
+}
+
+.vp-tl-bead {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 44px;
+  margin-left: -14px;
+  padding: 0;
+  border: 0;
+  transform: translateY(-50%);
+  background: none;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* The bead proper. A roll boundary is a neutral pill; an event wears its
+   own object's colour, the same hue its lane and its box carry. */
+.vp-tl-bead::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--vp-bead-colour, rgba(237, 244, 251, 0.72));
+  /* A ring in the rail's own ground, so a bead sitting on the accent
+     fill still reads as a separate object — depth from contrast, never
+     from a border line. */
+  box-shadow: 0 0 0 2px var(--panel, #11171d);
+}
+
+.vp-tl-bead[data-kind='pre']::before,
+.vp-tl-bead[data-kind='post']::before {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 2px;
+}
+
+.vp-tl-bead:focus-visible {
+  outline: 2px solid var(--vp-accent);
+  outline-offset: 0;
+  border-radius: 6px;
+}
+
+/* The tip. Hidden by default, shown on hover and on focus — the second
+   half is what makes it reachable with a thumb and with a keyboard. */
+.vp-tl-bead-tip {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 46vw;
+  width: max-content;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(10, 14, 20, 0.95);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  color: #eef4fb;
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+/* A tip centred on a bead near either end hangs off the player, where
+   the stage's overflow eats it. _markers.js works out which end that is
+   and stamps the side. */
+.vp-tl-bead[data-tip-side='start'] .vp-tl-bead-tip {
+  left: 0;
+  transform: none;
+}
+
+.vp-tl-bead[data-tip-side='end'] .vp-tl-bead-tip {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.vp-tl-bead:focus-visible .vp-tl-bead-tip,
+.vp-tl-bead.is-tipped .vp-tl-bead-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (hover: hover) {
+  .vp-tl-bead:hover .vp-tl-bead-tip {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vp-tl-bead-tip {
+    transition: none;
+  }
 }
 
 /* ── The filtered fold (live) ──────────────────────────────────────────── */
@@ -498,7 +651,14 @@
 .vp-scrub-preview {
   position: absolute;
   bottom: calc(100% + 12px);
-  z-index: 4;
+  /* Above the playhead (3) and the beads (2): it is the thing being
+     looked at while it is up, and it is pointer-transparent anyway. */
+  z-index: 6;
+  /* Stated rather than inherited. timeline/_preview.js computes the
+     outer width as image + 2 × BUBBLE_PAD_PX and the two must agree on
+     what "width" counts; when they did not, the picture hung over the
+     right edge with no frame behind it. */
+  box-sizing: border-box;
   padding: 4px 4px 2px;
   border-radius: 10px;
   background: rgba(10, 14, 20, 0.92);

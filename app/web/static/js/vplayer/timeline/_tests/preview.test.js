@@ -17,7 +17,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { attachScrub, pctFromRect, timeFromRect } from '../_scrub.js';
-import { bubbleWidth, clampLeft, tileIndexAt, tileStyle } from '../_preview.js';
+import {
+  BUBBLE_PAD_PX,
+  bubbleOuterWidth,
+  bubbleWidth,
+  clampLeft,
+  tileIndexAt,
+  tileStyle,
+} from '../_preview.js';
 
 /** Minimal element that records listeners and answers pointer capture. */
 function stubEl() {
@@ -215,16 +222,38 @@ test('die Blase verlässt die Schiene an keinem Ende', () => {
   assert.equal(clampLeft(200, 400, 200), 100, 'in der Mitte zentriert');
 });
 
-test('die Blase ist gross, aber nie breiter als die Schiene', () => {
-  // „bitte thumb größer im verhältnis!" — 200 px, wo Platz ist.
-  assert.equal(bubbleWidth(1200), 200, 'am PC der volle Wunschwert');
-  assert.ok(bubbleWidth(359) < 359, 'auf einem 375-px-Telefon passt sie hinein');
-  assert.ok(bubbleWidth(359) >= 200 === false || bubbleWidth(359) === 200);
-  // Und eine Untergrenze, damit sie nicht zur Briefmarke wird: unter
-  // ~136 px Schiene ist die Blase breiter als ihre Schiene, was clampLeft
-  // links anschlägt. Das ist bewusst — ein Vorschaubild von 60 px zeigt
-  // keinen Vogel mehr, und so schmal wird keine echte Schiene.
-  assert.equal(bubbleWidth(60), 120, 'die Untergrenze gilt');
+test('die Blase richtet sich nach der Kachel, nicht nach einem Festwert', () => {
+  // „Thumbnail, dunkel, zu klein. Ich hab immer mehrmals gesagt,
+  // Thumbnail, bitte größer." Der alte Festwert von 200 px zeigte eine
+  // 240-px-Kachel KLEINER, als sie gespeichert ist — deshalb wirkte sie
+  // klein und weich zugleich. Die Größe hängt jetzt an der Kachel.
+  const alt = { tile_w: 240, tile_h: 135 };
+  const neu = { tile_w: 320, tile_h: 180 };
+  assert.equal(bubbleWidth(1200, alt), 300, 'alte Blätter: 1,25 × 240');
+  assert.equal(bubbleWidth(1200, neu), 400, 'neue Blätter wachsen mit');
+  // Nie so weit über die native Breite, dass nur die Unschärfe wächst.
+  assert.ok(bubbleWidth(4000, alt) <= 240 * 1.25);
+});
+
+test('die Blase passt trotzdem auf ein Telefon', () => {
+  const alt = { tile_w: 240, tile_h: 135 };
+  // 375-px-Gerät, Schiene abzüglich der Innenabstände.
+  const railW = 331;
+  assert.ok(bubbleOuterWidth(bubbleWidth(railW, alt)) <= railW, 'sie passt hinein');
+  // Und eine Untergrenze, damit sie nicht zur Briefmarke wird. So schmal
+  // wird keine echte Schiene; ein Vorschaubild von 60 px zeigt keinen
+  // Vogel mehr.
+  assert.equal(bubbleWidth(60, alt), 140, 'die Untergrenze gilt');
+});
+
+test('die Aussenbreite trägt den Rahmen mit', () => {
+  // DER FEHLER, den das hier festhält: die Blase bekam die Breite des
+  // BILDES, ist aber border-box mit 4 px Innenabstand — also stand das
+  // Bild rechts 8 px über und dort war kein Rahmen mehr hinter ihm.
+  // „Der schwarze Rand geht nicht ums Thumbnail komplett rum, da ist
+  // rechts auch 'ne Kante, wo das Bild rausschaut."
+  assert.equal(bubbleOuterWidth(300), 300 + BUBBLE_PAD_PX * 2);
+  assert.ok(bubbleOuterWidth(300) > 300, 'aussen ist breiter als innen');
 });
 
 // ── the fractions the whole thing rests on ───────────────────────────

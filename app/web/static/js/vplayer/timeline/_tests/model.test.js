@@ -104,10 +104,49 @@ test('a post-roll longer than the clip is clamped inside the rail', () => {
   assert.equal(m.preRoll + m.postRoll <= m.duration, true);
 });
 
-test('a pre-roll longer than the clip is clamped too', () => {
+test('a pre-roll that swallows the whole clip is not drawn at all', () => {
+  // It used to be clamped to the duration, which painted the ENTIRE rail
+  // as pre-roll and left no room for the event the clip exists to show.
+  // „Du sagst hier Vor- und Nachlauf drei Sekunden, aber das Video dauert
+  // nur drei Sekunden … das kann schon mal gar nicht stimmen." Right: a
+  // band covering everything is not a shortened measurement, it is a
+  // false one, and saying so is the only honest option left.
   const m = buildTimelineModel([], { duration: 5, preRoll: 30, postRoll: 0 });
-  assert.equal(m.preRoll, 5);
-  assert.equal(pctOf(m.preRoll, m.duration), 1);
+  assert.equal(m.preRoll, 0);
+  assert.equal(m.postRoll, 0);
+  assert.equal(m.rollsUnreliable, true);
+});
+
+test('the two rolls may not add up to more than the clip', () => {
+  // The photographed case, to the second: a 3.9 s clip carrying a
+  // configured 3 s pre-roll and 3 s post-roll, with a person detected
+  // over it. Six seconds of roll do not fit in 3.9 seconds of video.
+  const m = buildTimelineModel([], { duration: 3.9, preRoll: 3, postRoll: 3 });
+  assert.equal(m.rollsUnreliable, true);
+  assert.equal(m.preRoll, 0);
+  assert.equal(m.postRoll, 0);
+});
+
+test('a detection inside the pre-roll does NOT shrink the pre-roll', () => {
+  // The complement of the rule above, and the reason the fix stops at
+  // the sum: the pre-roll is footage from before the TRIGGER, and a
+  // subject already standing in frame is legitimately detected inside
+  // it. Inferring the roll from detection times would rewrite it.
+  const m = buildTimelineModel([track(1, 'person', 1, 8)], {
+    duration: 10,
+    preRoll: 3,
+    postRoll: 3,
+  });
+  assert.equal(m.preRoll, 3);
+  assert.equal(m.postRoll, 3);
+  assert.equal(m.rollsUnreliable, false);
+});
+
+test('with no lanes the configured rolls stand, as long as they fit', () => {
+  const m = buildTimelineModel([], { duration: 20, preRoll: 3, postRoll: 3 });
+  assert.equal(m.preRoll, 3);
+  assert.equal(m.postRoll, 3);
+  assert.equal(pctOf(m.preRoll, m.duration), 0.15);
 });
 
 test('a predicted tail is segmented as predicted, not as detected', () => {

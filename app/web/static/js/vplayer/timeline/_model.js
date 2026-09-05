@@ -142,6 +142,60 @@ export function pctOf(t, duration) {
 }
 
 /**
+ * PURE: the pre- and post-roll this clip ACTUALLY contains.
+ *
+ * THE BUG THIS EXISTS FOR, in the operator's own words: „Du sagst hier
+ * Vor- und Nachlauf drei Sekunden, aber das Video dauert nur drei
+ * Sekunden, aber Du hast eine Person erkannt. Das kann schon mal gar
+ * nicht stimmen." He is right, and the arithmetic is not close: a 3.9 s
+ * clip was drawn as 3 s pre-roll plus 0.9 s post-roll, which leaves zero
+ * seconds for the event — while the object row underneath said the
+ * person was visible 0:00–0:03.
+ *
+ * The cause is that `opts.preRoll` and `opts.postRoll` are the
+ * CONFIGURED buffers (`provenance.timing.*`) — intentions — and the old
+ * code painted them as if they were measurements, clamping each one
+ * separately into the rail until it fit. Clamping made them fit; it did
+ * not make them true.
+ *
+ * THE ONE RULE, and deliberately only this one. A clip is pre-roll, then
+ * the motion that triggered it, then post-roll. The recording exists
+ * because something moved, so the middle part is never empty and
+ *
+ *     preRoll + postRoll < duration
+ *
+ * always holds for a clip whose rolls are what they claim. When it does
+ * not hold, the numbers do not describe this recording: the ring buffer
+ * handed over less than it was asked for, or the clip was cut short, and
+ * nothing on the event records which. Neither band is drawn and
+ * `unreliable` says so — a silently shortened band reads as a
+ * measurement and would hide exactly the contradiction that was
+ * reported.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT DO: clamp the pre-roll to the first
+ * detection. The pre-roll is footage from before the TRIGGER, and a
+ * subject already in frame is legitimately detected inside it — that
+ * rule predates this function and has its own test. Inferring the roll
+ * from detection times would silently rewrite it.
+ *
+ * @param {number} duration
+ * @param {object} opts    { preRoll, postRoll } as configured
+ * @returns {{preRoll: number, postRoll: number, unreliable: boolean}}
+ */
+export function reconcileRolls(duration, opts = {}) {
+  const none = { preRoll: 0, postRoll: 0, unreliable: false };
+  if (!(duration > 0)) return none;
+  const want = (v) => (Number.isFinite(v) && v > 0 ? Math.min(v, duration) : 0);
+  const pre = want(opts.preRoll);
+  const post = want(opts.postRoll);
+  if (!pre && !post) return none;
+  // Equality counts as failure too: a clip exactly pre + post long
+  // recorded no motion at all, and this one demonstrably did.
+  if (pre + post >= duration) return { preRoll: 0, postRoll: 0, unreliable: true };
+  return { preRoll: pre, postRoll: post, unreliable: false };
+}
+
+/**
  * Build the timeline model.
  *
  * @param {Array} tracks  tracks.json-shaped tracks, or the live buffer
@@ -175,18 +229,17 @@ export function buildTimelineModel(tracks, opts = {}) {
   const shifted = rolling ? _toWindow(lanes, windowStart, windowS) : lanes;
   _sortLanes(shifted);
 
-  const preRoll = Math.max(0, Math.min(duration, opts.preRoll || 0));
-  // The post-roll band starts where it starts even if the clip was cut
-  // short; clamping the START (not just the width) is what keeps a
-  // post-roll longer than the remaining clip inside the rail.
-  const postRoll = Math.max(0, Math.min(duration - preRoll, opts.postRoll || 0));
+  const rolls = reconcileRolls(duration, opts);
 
   return {
     duration,
     rolling,
-    preRoll,
-    postRoll,
-    postRollT0: Math.max(preRoll, duration - postRoll),
+    preRoll: rolls.preRoll,
+    postRoll: rolls.postRoll,
+    // True when the configured rolls cannot be laid on this clip at all.
+    // The bands are suppressed; the caption says why. See reconcileRolls.
+    rollsUnreliable: rolls.unreliable,
+    postRollT0: Math.max(rolls.preRoll, duration - rolls.postRoll),
     // The white marker sits at the first detection of any lane. With no
     // lanes — or no duration to place it on — it is suppressed rather
     // than pinned to zero, where it would read as "the event began

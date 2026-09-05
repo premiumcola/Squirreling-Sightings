@@ -192,6 +192,15 @@ function _paintRecorded(stage, st, t, playing) {
     screenW: stage.rect().w,
     chrome: stage.chrome(),
   });
+  // THE SILENT STATE, reported. „Ich hab im Player noch kein einziges Mal
+  // eine Box gesehen" — said about clips that do carry geometry, on a
+  // surface whose trails were painting the whole time. The `bboxes`
+  // toggle persists across every clip and every session (it shares one
+  // bucket with the Aufnahme-Settings checkbox), so one stray tap hides
+  // every box on every clip from then on, and nothing anywhere says why
+  // the picture is bare. The number of boxes WITHHELD is pushed out so
+  // the row can offer them back.
+  st.onHidden?.(st.layers.bboxes ? 0 : samples.length);
   _paintTrails(stage.layers.trails, st.tracks, t, src, st.layers.trails);
   _paintZones(stage.layers.zones, st.polys, src, st.layers);
 }
@@ -241,6 +250,9 @@ export function mountOverlayPainter(stage, cfg) {
     // Undefined tracks = "the sidecar request has not come back yet",
     // which is a third state and not the same as "there is none".
     readiness: clipReadiness(cfg.item, undefined),
+    // Set by the caller; called with how many boxes this repaint had but
+    // did not draw. See _paintRecorded.
+    onHidden: null,
   };
   let lastT = 0;
 
@@ -258,6 +270,11 @@ export function mountOverlayPainter(stage, cfg) {
 
   return {
     layers: () => ({ ...st.layers }),
+    /** Report withheld boxes to whoever can offer them back. */
+    onBoxesHidden: (fn) => {
+      st.onHidden = fn;
+      repaintAt(lastT);
+    },
     /** The operator flipped a toggle. */
     setLayers: (next) => {
       Object.assign(st.layers, next || {});

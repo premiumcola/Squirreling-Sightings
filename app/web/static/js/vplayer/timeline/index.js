@@ -12,6 +12,7 @@
 import { TL_BASIS_LIVE, TL_BASIS_NONE } from './_basis.js';
 import { emptyStateFor, emptyStateHtml, wireRescan } from './_empty-states.js';
 import { lanesHtml } from './_lanes.js';
+import { wireBeads } from './_markers.js';
 import { railHtml, setPlayhead } from './_rail.js';
 import { renderRolling } from './_rolling.js';
 import { mountScrubPreview } from './_preview.js';
@@ -34,6 +35,7 @@ export function mountTimeline(host, cfg, deps = {}) {
   let scrub = null;
   let rescan = null;
   let preview = null;
+  let beads = null;
   // Coarse pointers get the bubble lifted clear of the finger. Read once
   // per mount: a device does not change its input class mid-clip, and a
   // matchMedia listener here would outlive the player.
@@ -86,6 +88,7 @@ export function mountTimeline(host, cfg, deps = {}) {
     }
     scrub?.teardown();
     rescan?.teardown();
+    beads?.teardown();
     const body = model.lanes.length
       ? `<div class="vp-tl-lanes">${lanesHtml(model)}</div>`
       : emptyStateHtml(emptyStateFor(opts.item, opts.tracks), opts);
@@ -129,6 +132,7 @@ export function mountTimeline(host, cfg, deps = {}) {
       },
     };
     rescan = wireRescan(host, deps);
+    beads = wireBeads(host, { onSeek: deps.onSeek, onPause: deps.onPause });
     return model;
   };
 
@@ -148,6 +152,7 @@ export function mountTimeline(host, cfg, deps = {}) {
       preview?.teardown();
       laneRo?.disconnect();
       rescan?.teardown();
+      beads?.teardown();
       host.innerHTML = '';
       delete host.dataset.vpFp;
       delete host.dataset.basis;

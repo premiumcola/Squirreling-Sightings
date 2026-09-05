@@ -117,10 +117,41 @@ export function clampLeft(x, railW, bubbleW) {
   return Math.min(Math.max(0, railW - bubbleW), Math.max(0, x - bubbleW / 2));
 }
 
-/** Bubble width: „thumb größer im verhältnis" — but never wider than
- *  the rail it belongs to, which on a 375 px phone it otherwise is. */
-export function bubbleWidth(railW) {
-  return Math.max(120, Math.min(200, railW - 16));
+/** The bubble's own padding, in px, on every side of the image.
+ *
+ * IT LIVES HERE BECAUSE THE ARITHMETIC NEEDS IT. The frame is drawn as
+ * padding on the outer element, the page is `box-sizing: border-box`,
+ * and the outer element used to be given the IMAGE's width — so the
+ * content box came out 2 × this narrower than the image inside it and
+ * the picture hung over the right edge with no frame behind it:
+ * „Der schwarze Rand geht nicht ums Thumbnail komplett rum, da ist
+ * rechts auch 'ne Kante, wo das Bild rausschaut."
+ *
+ * Must equal the horizontal padding in 36b-vplayer-timeline.css.
+ */
+export const BUBBLE_PAD_PX = 4;
+
+/** PURE: the outer width that actually fits an image of width `w`. */
+export function bubbleOuterWidth(w) {
+  return w + BUBBLE_PAD_PX * 2;
+}
+
+/**
+ * Image width inside the bubble — „bitte thumb größer im verhältnis",
+ * said more than once and answered too timidly each time.
+ *
+ * TIED TO THE SHEET, not to a taste. The tiles are `tile_w` px wide
+ * (scrub_sprite.py), so beyond about a quarter over native what arrives
+ * is a bigger blur rather than a bigger picture — and the old fixed
+ * 200 px cap was showing a 240 px tile SMALLER than it was stored, which
+ * is why it read as small and soft at the same time. The floor rises
+ * with it; the rail's own width still wins on a narrow phone.
+ */
+export function bubbleWidth(railW, geo) {
+  const native = geo && geo.tile_w > 0 ? geo.tile_w : 240;
+  const want = Math.round(native * 1.25);
+  const room = railW - BUBBLE_PAD_PX * 2 - 8;
+  return Math.max(140, Math.min(want, Math.max(140, room)));
 }
 
 /**
@@ -168,14 +199,18 @@ export function mountScrubPreview(rail, opts = {}) {
     if (!_usable(geo)) return;
 
     const railW = rail.getBoundingClientRect().width;
-    const w = bubbleWidth(railW);
+    const w = bubbleWidth(railW, geo);
+    const outer = bubbleOuterWidth(w);
     const st = tileStyle(tileIndexAt(t, geo, opts.getDuration?.() || 0), geo, w);
     img.style.width = st.width;
     img.style.height = st.height;
     img.style.backgroundSize = st.backgroundSize;
     img.style.backgroundPosition = st.backgroundPosition;
-    el.style.width = st.width;
-    el.style.left = `${Math.round(clampLeft(x, railW, w))}px`;
+    // The OUTER width, which is the image plus its frame. Handing the
+    // image's own width to a border-box element is what let the picture
+    // hang over the right edge — see BUBBLE_PAD_PX.
+    el.style.width = `${outer}px`;
+    el.style.left = `${Math.round(clampLeft(x, railW, outer))}px`;
     cap.textContent = _clock(t);
   };
 

@@ -534,14 +534,42 @@
   flex: 0 0 100%;
 }
 
-/* The indexer ran and confirmed nothing. An ANSWER — so the green of a
-   completed pass, not the amber of something broken. */
+/* The indexer ran and confirmed nothing.
+
+   IT USED TO WEAR THE ACCENT GREEN OF A COMPLETED PASS, on the argument
+   that finishing and finding nothing is an answer rather than a fault.
+   That reasoning ignored what the answer sits next to: „wieso steht das
+   da so dominant, wieso ist das Video überhaupt noch bei Personen
+   gelistet dann??" — a green tick reading „keine Spur bestätigt"
+   directly above a row that says „Person 67 %" claims the louder of two
+   verdicts, and it is the weaker one. The live pipeline is what
+   triggered the recording and what the archive files the clip under; the
+   sidecar is a second opinion taken later.
+
+   So: the quietest tone in the set. It is a footnote to the row below
+   it, not a headline over it. */
 .vp-rn.is-empty {
-  background: color-mix(in srgb, var(--vp-accent) 12%, var(--panel));
+  background: var(--panel-2, color-mix(in srgb, var(--text) 6%, var(--panel)));
 }
 
-.vp-rn.is-empty .vp-rn-mark {
-  color: var(--vp-accent);
+.vp-rn.is-empty .vp-rn-mark,
+.vp-rn.is-empty .vp-rn-text {
+  color: var(--muted);
+}
+
+/* …unless it contradicts its own trigger frame, which is not a footnote.
+   readiness.js sets this only when the trigger scored at or above the
+   very threshold the sidecar says it applied. */
+.vp-rn.is-empty.is-contradiction {
+  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
+}
+
+.vp-rn.is-empty.is-contradiction .vp-rn-mark {
+  color: var(--warn);
+}
+
+.vp-rn.is-empty.is-contradiction .vp-rn-text {
+  color: var(--text);
 }
 
 /* Boxes exist, but only for one instant. Improvable, hence amber. */

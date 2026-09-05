@@ -78,25 +78,58 @@ export function mountOverlayRow(host, cfg, opts = {}) {
     `<div class="vp-segbar" role="group" aria-label="Overlays">` +
     ids.map((id) => _segmentHtml(id, state[id])).join('') +
     `</div>` +
+    _hintHtml() +
     _roiChipHtml(opts.roi);
 
-  const onClick = (ev) => {
-    const btn = ev.target.closest?.('[data-layer]');
-    if (!btn) return;
-    const id = btn.dataset.layer;
-    const on = !state[id];
+  const hint = host.querySelector('.vp-seg-hint');
+
+  const apply = (id, on) => {
     state[id] = on;
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const btn = host.querySelector(`[data-layer="${id}"]`);
+    btn?.setAttribute('aria-pressed', on ? 'true' : 'false');
     setOverlayToggleState(ctx, id, on);
     opts.onChange?.({ ...state });
+  };
+
+  const onClick = (ev) => {
+    if (ev.target?.closest?.('.vp-seg-hint')) {
+      apply('bboxes', true);
+      return;
+    }
+    const btn = ev.target.closest?.('[data-layer]');
+    if (!btn) return;
+    apply(btn.dataset.layer, !state[btn.dataset.layer]);
   };
   host.addEventListener('click', onClick);
 
   return {
     state: () => ({ ...state }),
+    /**
+     * How many boxes this frame had and did not draw, from the painter.
+     *
+     * The whole point of the chip: the `bboxes` toggle persists across
+     * every clip and every session, so one stray tap hides every box
+     * from then on and the picture just looks like nothing was found.
+     * A count is proof there IS something, and the chip hands it back in
+     * one tap rather than sending the operator hunting for which of four
+     * pills is the wrong colour.
+     */
+    setHiddenBoxes: (n) => {
+      if (!hint) return;
+      const show = n > 0;
+      hint.hidden = !show;
+      if (show) hint.textContent = `${n} Rahmen ausgeblendet — einblenden`;
+    },
     teardown: () => {
       host.removeEventListener('click', onClick);
       host.innerHTML = '';
     },
   };
+}
+
+/** The "boxes are hidden" chip. Present but empty until the painter
+ *  reports withheld boxes; a chip that renders on every clip would be
+ *  the same noise the ROI chip is suppressed to avoid. */
+function _hintHtml() {
+  return `<button type="button" class="vp-seg-hint" hidden></button>`;
 }

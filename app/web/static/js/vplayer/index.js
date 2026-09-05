@@ -20,6 +20,7 @@
 // later sweep, once this has soaked.
 
 import { buildPlayerConfig } from './_config.js';
+import { keyAction, seekTarget } from './_keys.js';
 import { mountShell } from './_shell.js';
 import { mountStage } from './_stage.js';
 import { mountTopbar } from './_topbar.js';
@@ -126,11 +127,15 @@ function _wireRecorded(cfg, stage, panel, timeline, overlays) {
       // ONE basis per render, chosen once — the sidecar's tracks when it
       // has any, else lanes synthesised from the clip aggregate. Never
       // both: see timeline/_basis.js for why merging them would lie.
-      const { basis, tracks } = timelineBasis(item, data.tracks);
+      const preRoll = timing.pre_roll_s ?? rs.pre_motion_seconds;
+      // The trigger frame sits at the END of the pre-roll — that is what
+      // a pre-roll IS. Only the third basis uses it, and only when the
+      // sidecar and the aggregate are both empty.
+      const { basis, tracks } = timelineBasis(item, data.tracks, { triggerT: preRoll });
       const render = () =>
         timeline?.render(tracks, {
           duration: stage.video.duration,
-          preRoll: timing.pre_roll_s ?? rs.pre_motion_seconds,
+          preRoll,
           postRoll: timing.post_roll_s ?? rs.post_motion_seconds,
           threshold: p.effective?.spawn_default ?? rs.conf_thresh_general,
           basis,
@@ -269,9 +274,42 @@ function _mountChrome(shell, cfg, stage) {
   return { topbar, menu, stageChrome };
 }
 
+/**
+ * Turn a swallowed key into something happening to the video.
+ *
+ * The mapping itself is in _keys.js and is pure; this is the half that
+ * touches the element. A LIVE surface gets Escape and nothing else —
+ * there is no position to seek in a stream, and Space toggling a
+ * <video> that is not the live <img> would look like a broken key.
+ */
+function _keyHandler(cfg, stage) {
+  return (key, ev) => {
+    const action = keyAction(key, { shift: ev?.shiftKey === true });
+    if (!action) return;
+    if (action.type === 'close') {
+      closeVideoPlayer();
+      return;
+    }
+    const v = stage?.video;
+    if (!v || cfg.flags.live) return;
+    if (action.type === 'toggle') {
+      if (v.paused || v.ended) v.play().catch(() => {});
+      else v.pause();
+      return;
+    }
+    const t = seekTarget(action, v.currentTime, v.duration);
+    if (t != null) v.currentTime = t;
+  };
+}
+
 /** Compose the shell's parts. Kept apart so openVideoPlayer stays thin. */
 function _mountAll(cfg) {
-  const shell = mountShell(cfg, { onKey: (key) => key === 'Escape' && closeVideoPlayer() });
+  // The shell installs the key trap at mount, before the stage it needs
+  // to act on exists. So it calls through this holder, which is filled in
+  // once there IS a video — a press that lands in the gap does nothing,
+  // which is what it did before anyway.
+  let onKey = (key) => key === 'Escape' && closeVideoPlayer();
+  const shell = mountShell(cfg, { onKey: (key, ev) => onKey(key, ev) });
   const stage = mountStage(shell.slot('frame'), cfg);
   const { topbar, menu, stageChrome } = _mountChrome(shell, cfg, stage);
   // The painter first, so the row can push the operator's choice into
@@ -295,7 +333,12 @@ function _mountAll(cfg) {
         onChange: (next) => overlays?.setLayers(next),
       })
     : null;
-  if (overlayRow) overlays?.setLayers(overlayRow.state());
+  if (overlayRow) {
+    overlays?.setLayers(overlayRow.state());
+    // The painter is the only thing that knows a repaint HAD boxes and
+    // withheld them; the row is the only thing that can offer them back.
+    overlays?.onBoxesHidden((n) => overlayRow.setHiddenBoxes(n));
+  }
   const transport = mountTransport(shell.slot('stage'), shell.slot('controls'), cfg, stage);
   const timeline = mountTimeline(shell.slot('timeline'), cfg, {
     onSeek: (t) => {
@@ -317,6 +360,8 @@ function _mountAll(cfg) {
       stage.video.play().catch(() => {});
     },
   });
+
+  onKey = _keyHandler(cfg, stage);
 
   const playhead = _wirePlayhead(cfg, stage, timeline, overlays);
 

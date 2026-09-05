@@ -154,22 +154,70 @@ export function clipReadiness(item, tracks) {
     return { ...base, state: CLIP_READY, geometry: GEOM_PER_FRAME, note: null };
   }
   if (list) {
-    // The sidecar exists and holds nothing. The trigger box is deliberately
-    // NOT offered as a consolation here: the indexer walked the whole clip
-    // at a lower floor than the live pipeline and still found nothing, so a
-    // single trigger-frame rectangle would contradict the more thorough
-    // answer we already have.
+    // The sidecar exists and holds nothing.
     //
-    // No rebuild either: the same walk with the same gates returns the
-    // same nothing. The gates themselves are the actionable part, which
-    // is why they are on screen.
+    // THE TRIGGER BOX IS NOW SHOWN ANYWAY, and the reversal is worth its
+    // paragraph. The old rule withheld it on the argument that the
+    // indexer walks the whole clip at a lower floor than the live
+    // pipeline, so its silence is the more thorough answer and a single
+    // rectangle would contradict it. That argument assumed the walk
+    // actually looked, and clips on this box demonstrate it does not
+    // always: an event whose trigger frame carries a bird at 57 % with a
+    // box and an identified species — Hausrotschwanz — has an empty
+    // sidecar sitting beside it, and the operator's summary of the
+    // result was „Ich hab im Player noch kein einziges Mal eine Box
+    // gesehen und auch hier ist 'n Vogel drin."
+    //
+    // He is right, and withholding evidence to protect a verdict is the
+    // wrong way round: the box is a measurement, the empty sidecar is a
+    // conclusion, and when they disagree the measurement is shown and
+    // the disagreement is named. `triggerBoxVisible` still confines it
+    // to a paused clip, so it never claims a position during playback.
     const gate = gateEvidence(item, tracks);
+    const trigger = drawableTriggerDets(item);
+    if (!trigger.length) {
+      // No rebuild: the same walk with the same gates returns the same
+      // nothing. The gates themselves are the actionable part, which is
+      // why they are on screen.
+      return {
+        ...base,
+        state: CLIP_EMPTY,
+        note: 'Die Nachanalyse ist durchgelaufen und hat keine Spur bestätigt.',
+        facts: _emptyFacts(gate),
+        gate,
+      };
+    }
+    // The one case that is not a judgement call but an outright
+    // contradiction: the trigger scored at or above the very threshold
+    // the indexer says it applied. Something other than the picture
+    // decided this, and the operator is the one who can chase it.
+    const contradicts =
+      gate.threshold != null && gate.best != null && gate.best >= gate.threshold;
     return {
       ...base,
       state: CLIP_EMPTY,
-      note: 'Die Nachanalyse ist durchgelaufen und hat keine Spur bestätigt.',
-      facts: _emptyFacts(gate),
+      geometry: GEOM_TRIGGER,
+      trigger,
+      // WHOSE VERDICT THIS IS, said out loud. „wieso ist das Video
+      // überhaupt noch bei Personen gelistet dann??" — because the label
+      // comes from the live pipeline, which is what triggered the
+      // recording; the sidecar is a later second opinion and its silence
+      // does not retract the first one. The sentence used to omit that
+      // and read as the clip's single verdict, which is why the question
+      // had to be asked at all.
+      note: contradicts
+        ? 'Die Nachanalyse fand keine Spur — obwohl der Auslöser über der Schwelle lag.'
+        : 'Die Nachanalyse fand keine Spur. Die Erkennung im Auslöse-Bild bleibt bestehen.',
+      contradicts,
+      facts: [
+        ..._emptyFacts(gate),
+        _fact('Auslöse-Kästen', String(trigger.length)),
+        _fact('sichtbar', 'nur pausiert'),
+      ].filter(Boolean),
       gate,
+      // A walk that contradicts its own trigger frame is worth running
+      // again — unlike the genuinely empty case above.
+      rebuildable: contradicts && hasVideo(item),
     };
   }
   const trigger = drawableTriggerDets(item);

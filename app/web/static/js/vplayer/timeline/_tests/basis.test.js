@@ -10,7 +10,13 @@ import assert from 'node:assert/strict';
 
 import { classColor } from '../../../core/class-colors.js';
 import { liveTrackColor } from '../../../core/track-color.js';
-import { TL_BASIS_CLIP, TL_BASIS_NONE, TL_BASIS_SIDECAR, timelineBasis } from '../_basis.js';
+import {
+  TL_BASIS_CLIP,
+  TL_BASIS_NONE,
+  TL_BASIS_SIDECAR,
+  TL_BASIS_TRIGGER,
+  timelineBasis,
+} from '../_basis.js';
 import { mountTimeline } from '../index.js';
 import { lanesHtml } from '../_lanes.js';
 import { buildTimelineModel } from '../_model.js';
@@ -88,16 +94,42 @@ test('both populations empty draws no lanes and does not throw', () => {
   }
 });
 
-test('an event with neither key renders exactly as it does today', () => {
-  // Every clip in the archive from before the aggregate existed. It must
-  // reach the model with the same empty list it always did, so the empty
-  // state below it is unchanged.
+test('an event with neither key falls back to its trigger frame', () => {
+  // Every clip in the archive from before the aggregate existed. It used
+  // to reach the model with an empty list and draw nothing — which is
+  // precisely what was reported: „auch hier ist 'n Vogel drin. Keine
+  // Box." The bird is on `detections`, and that is a third source.
   const old = { event_id: 'evt_2026_0101', type: 'motion', detections: [{ label: 'bird' }] };
-  const picked = timelineBasis(old, null);
+  const picked = timelineBasis(old, null, { triggerT: 3 });
+  assert.equal(picked.basis, TL_BASIS_TRIGGER);
+  const m = buildTimelineModel(picked.tracks, OPTS);
+  assert.equal(m.lanes.length, 1);
+  assert.equal(m.lanes[0].label, 'bird');
+  // ONE INSTANT, never a span: the trigger frame has no duration and
+  // claiming one would invent what the sidecar exists to measure.
+  assert.equal(m.lanes[0].barT0, 3);
+  assert.equal(m.lanes[0].barT1, 3);
+  assert.equal(m.firstEventT, 3);
+});
+
+test('an event with no detections at all still draws nothing', () => {
+  const bare = { event_id: 'evt_2026_0101', type: 'motion' };
+  const picked = timelineBasis(bare, null);
   assert.deepEqual(picked, { basis: TL_BASIS_NONE, tracks: [] });
   const m = buildTimelineModel(picked.tracks, OPTS);
   assert.deepEqual(m.lanes, []);
   assert.equal(m.firstEventT, null);
+});
+
+test('the sidecar and the aggregate both outrank the trigger frame', () => {
+  // The third basis is a fallback, not a merge. A clip that HAS per-frame
+  // geometry must never be drawn from its one trigger instant instead.
+  const item = { ...clipItem(clipRow()), detections: [{ label: 'bird' }] };
+  assert.equal(timelineBasis(item, null).basis, TL_BASIS_CLIP);
+  assert.equal(
+    timelineBasis(item, { tracks: [sidecarTrack(1, 'cat', 5, 9)] }).basis,
+    TL_BASIS_SIDECAR,
+  );
 });
 
 test('a malformed aggregate is treated as no aggregate at all', () => {
@@ -210,11 +242,19 @@ test('a lane with no class at all still has a name', () => {
  * height as a custom property for the playhead's riser. Every real
  * element has one; leaving it off the stub made the mount throw on a
  * host that could not exist.
+ *
+ * The listener pair and `querySelectorAll` are here for the same reason:
+ * the mount delegates the rail beads' clicks off the host. A stub thinner
+ * than the thing it stands for turns a working change into a red test —
+ * which is the failure mode this file has now hit twice.
  */
 const stubHost = () => ({
   dataset: {},
   innerHTML: '',
   querySelector: () => null,
+  querySelectorAll: () => [],
+  addEventListener() {},
+  removeEventListener() {},
   style: { setProperty() {}, removeProperty() {} },
 });
 

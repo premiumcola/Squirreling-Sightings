@@ -88,20 +88,44 @@ test('nur Erkennungen MIT Kasten zählen als zeichenbar', () => {
   assert.equal(r.geometry, GEOM_NONE);
 });
 
-test('ein leerer Sidecar ist eine Antwort, keine Lücke', () => {
-  const r = clipReadiness(TRIGGER_ITEM, { tracks: [] });
+test('ein leerer Sidecar ohne Auslöse-Kasten ist eine Antwort, keine Lücke', () => {
+  const r = clipReadiness({ video_relpath: 'a/b.mp4' }, { tracks: [] });
   assert.equal(r.state, CLIP_EMPTY);
-  assert.match(r.note, /durchgelaufen/);
+  assert.match(r.note, /keine Spur bestätigt/);
+  assert.equal(r.geometry, GEOM_NONE);
+  // Derselbe Lauf mit denselben Schwellen liefert dasselbe Nichts.
+  assert.equal(r.rebuildable, false);
 });
 
-test('ein leerer Sidecar bietet den Auslöse-Kasten NICHT als Trostpreis an', () => {
-  // Die Nachanalyse ist den ganzen Clip mit einer niedrigeren Schwelle
-  // abgelaufen als die Live-Pipeline und hat nichts gefunden. Ein
-  // einzelner Auslöse-Kasten würde der gründlicheren Antwort
-  // widersprechen, die schon vorliegt.
+test('ein leerer Sidecar zeigt den Auslöse-Kasten TROTZDEM', () => {
+  // Die Umkehr einer früheren Regel, und zwar an Belegen: ein Ereignis
+  // mit einem Vogel bei 57 % samt Kasten und bestimmter Art hat auf
+  // dieser Kiste einen leeren Sidecar daneben liegen. „auch hier ist 'n
+  // Vogel drin. Keine Box." Der Kasten ist die Messung, der leere
+  // Sidecar die Schlussfolgerung — bei Widerspruch gewinnt die Messung.
   const r = clipReadiness(TRIGGER_ITEM, { tracks: [] });
-  assert.deepEqual(r.trigger, []);
-  assert.equal(r.geometry, GEOM_NONE);
+  assert.equal(r.state, CLIP_EMPTY);
+  assert.equal(r.geometry, GEOM_TRIGGER);
+  assert.equal(r.trigger.length, 2);
+});
+
+test('lag der Auslöser über der Schwelle, wird der Widerspruch benannt', () => {
+  const r = clipReadiness(TRIGGER_ITEM, {
+    tracks: [],
+    gates: { min_confidence: 0.5 },
+    built_at: '2026-09-01T15:46:21',
+  });
+  assert.match(r.note, /obwohl der Auslöser über der Schwelle lag/);
+  // Und NUR dann lohnt ein zweiter Lauf.
+  assert.equal(r.rebuildable, true);
+});
+
+test('unter der Schwelle ist kein Widerspruch und kein Nachbau', () => {
+  const low = { ...TRIGGER_ITEM, detections: [{ ...TRIGGER_ITEM.detections[0], score: 0.3 }] };
+  const r = clipReadiness(low, { tracks: [], gates: { min_confidence: 0.5 } });
+  assert.equal(r.geometry, GEOM_TRIGGER, 'gezeigt wird er trotzdem');
+  assert.equal(/über der Schwelle/.test(r.note), false);
+  assert.equal(r.rebuildable, false);
 });
 
 test('gar nichts bekannt sagt das auch — und sagt WAS fehlt', () => {
@@ -201,10 +225,17 @@ test('ein Sidecar ohne gates-Block erfindet keine Schwelle', () => {
   assert.equal(factValue(r, 'geprüft'), '14:35');
 });
 
-test('nichts gefunden bietet keinen Nachbau an', () => {
+test('nichts gefunden bietet keinen Nachbau an — solange nichts widerspricht', () => {
   // Derselbe Lauf mit denselben Gates fände dasselbe Nichts. Die Gates
   // sind das Handlungsfähige daran, nicht ein zweiter Durchlauf.
-  assert.equal(clipReadiness(TRIGGER_ITEM, EMPTY_SIDECAR).rebuildable, false);
+  //
+  // TRIGGER_ITEM widerspricht allerdings: sein Vogel liegt mit 57 % über
+  // der Schwelle von 50 %, die der Sidecar selbst angibt. Genau dann ist
+  // ein zweiter Lauf das Richtige, und dieser Test hält beide Seiten
+  // fest, damit die Ausnahme nicht zur Regel wird.
+  const sub = { video_relpath: 'a/b.mp4', detections: [] };
+  assert.equal(clipReadiness(sub, EMPTY_SIDECAR).rebuildable, false);
+  assert.equal(clipReadiness(TRIGGER_ITEM, EMPTY_SIDECAR).rebuildable, true);
 });
 
 test('die grobe Spur beziffert, was an ihr grob ist', () => {

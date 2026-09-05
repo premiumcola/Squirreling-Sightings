@@ -343,6 +343,31 @@
   }
 }
 
+/* The "boxes are hidden" chip — see _overlay-row.js::setHiddenBoxes.
+   Amber, because it reports that something IS there and is not being
+   shown; the four pills beside it are neutral controls and this is a
+   finding. Hidden until the painter actually withholds a box, so it
+   never appears on a clip that simply has no geometry. */
+.vp-seg-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--vp-tap);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 22%, var(--surface));
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .vp-seg-hint:hover {
+    background: color-mix(in srgb, var(--warn) 34%, var(--surface));
+  }
+}
+
 /* A CAPTION, not a fifth switch. It is read-only — it reports that
    detection ran on a crop — and painted as a filled chip beside four
    filled chips it read as a button that would not press. Now it carries

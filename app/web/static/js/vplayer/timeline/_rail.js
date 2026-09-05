@@ -13,6 +13,7 @@
 // cannot drift apart mid-drag.
 
 import { clockLabel, remainingLabel } from '../../core/clock-format.js';
+import { markersHtml } from './_markers.js';
 import { pctOf } from './_model.js';
 
 const _pct = (v) => `${(v * 100).toFixed(3)}%`;
@@ -37,6 +38,17 @@ function _secs(v) {
  */
 export function railCaptionsHtml(model) {
   const parts = [];
+  // The rolls did not fit the clip, so no band was drawn and the reason
+  // takes the caption row instead. Saying nothing here is what produced
+  // „es passt einfach alles nicht zusammen": the numbers were still in
+  // the details fold, contradicting a rail that had quietly given up.
+  if (model.rollsUnreliable) {
+    return (
+      `<div class="vp-tl-caps" aria-hidden="true">` +
+      `<span class="vp-tl-cap vp-tl-cap--warn">` +
+      `Vor- und Nachlauf passen nicht in diesen Clip — Aufnahme verkürzt</span></div>`
+    );
+  }
   if (model.preRoll > 0) {
     parts.push(`<span class="vp-tl-cap vp-tl-cap--pre">Vorlauf ${_secs(model.preRoll)}</span>`);
   }
@@ -113,7 +125,7 @@ export function railHtml(model) {
   return (
     railCaptionsHtml(model) +
     `<div class="vp-tl-track">${bands}${marker}` +
-    `<div class="vp-tl-fill"></div>${_headHtml()}</div>` +
+    `<div class="vp-tl-fill"></div>${markersHtml(model)}${_headHtml()}</div>` +
     // The drag surface. Transparent, full width, and tall enough to
     // meet the 44 px touch minimum around a 6 px rail — see 36b.
     `<div class="vp-tl-hit" role="slider" aria-label="Wiedergabeposition" tabindex="0"></div>` +

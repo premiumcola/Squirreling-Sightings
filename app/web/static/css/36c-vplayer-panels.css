@@ -868,11 +868,22 @@
 /* While the rebuild is in flight or has been queued. Muted rather than
    coloured — it is a status, not an action, and it replaces the button
    so the same request cannot be fired twice by an impatient tap. */
+/* THE STATUS LINE MAY WRAP. `flex: 0 0 auto` refused to shrink it, so a
+   sentence longer than the space left over ran straight off the right
+   edge and was clipped mid-word — which is what happened the moment the
+   rebuild notice grew from four words into one that actually explains
+   itself. A status that cannot be read is not a status.
+
+   `min-width: 0` is the half that does the work: a flex item's automatic
+   minimum size is its content, so without it the shrink factor has
+   nothing to shrink into. */
 .vp-rn-state {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--muted);
   font-size: 12.5px;
   font-style: italic;
+  text-wrap: pretty;
 }
 
 /* A SPECIES, not just a class. When the cascade names the bird, that row

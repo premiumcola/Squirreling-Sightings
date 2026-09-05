@@ -48,11 +48,12 @@ const _TICK_MS = 1000;
  */
 function _actionHTML(st) {
   if (st.failed) return `<span class="vp-rn-state">Nachbau fehlgeschlagen</span>`;
+  // Short enough to fit beside the chips it shares a row with. The first
+  // attempt at explaining this properly ran off the right edge and was
+  // clipped mid-word — the row wraps now, but a status line still has no
+  // business being a paragraph.
   if (st.done) {
-    return (
-      `<span class="vp-rn-state">Feinspur wird neu berechnet · ` +
-      `dauert etwa so lange wie der Clip — danach den Clip noch einmal öffnen</span>`
-    );
+    return `<span class="vp-rn-state">Feinspur wird neu berechnet — danach neu öffnen</span>`;
   }
   if (st.busy) return `<span class="vp-rn-state">Auftrag wird abgeschickt …</span>`;
   if (st.readiness?.rebuildable) {

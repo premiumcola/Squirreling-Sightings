@@ -39,7 +39,20 @@ import { byId, esc } from '../core/dom.js';
 export const MV_STATUS_STYLE = {
   confirmed: { dash: [], alpha: 1, marker: '' },
   weak: { dash: [6, 4], alpha: 1, marker: '↓' },
-  ghost: { dash: [2, 4], alpha: 0.55, marker: '≈' },
+  // THE DASH CARRIES THE MEANING, NOT THE FADE. This was 0.55, and a
+  // 3 px dotted line at just over half opacity is below the threshold of
+  // being noticed at all on sunlit footage at phone size: „Bboxes bei
+  // Vögeln werden nicht angezeigt :o!" — said about a box that WAS being
+  // drawn, in this style, on the one clip whose single trigger box the
+  // operator had gone looking for.
+  //
+  // A tight dot pattern and the „≈" marker already say „the tracker did
+  // not keep this one"; they say it whether or not the line is faint,
+  // and they keep saying it at a distance. Opacity was doing no work
+  // except making the least-certain evidence the hardest to see — which
+  // is exactly backwards for an overlay whose job is to explain why
+  // something was excluded.
+  ghost: { dash: [2, 4], alpha: 0.9, marker: '≈' },
   masked: { dash: [], alpha: 1, marker: '⊘' },
 };
 

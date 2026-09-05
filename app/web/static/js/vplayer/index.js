@@ -333,16 +333,23 @@ function _mountAll(cfg) {
   // a persisted "trails off" wins over the mode's default and the
   // picture must start out matching the buttons.
   const overlays = mountOverlayPainter(stage, cfg);
-  // Its OWN node appended to the stage — never the stage slot itself.
-  // mountOverlayRow assigns host.innerHTML, so handing it the stage
-  // would wipe the <video>, the overlay layers and the timeline with
-  // one assignment. That is the same trap mountPlayerChrome avoids by
-  // creating its own host, and it is worth stating twice.
-  const togglesHost = cfg.flags.showOverlays ? document.createElement('div') : null;
-  if (togglesHost) {
-    togglesHost.className = 'vp-toggles vp-toggles--onstage';
-    shell.slot('stage')?.appendChild(togglesHost);
-  }
+  // THE SHELL'S OWN ROW, below the picture — `data-slot="toggles"` is a
+  // sibling AFTER `.vp-stage` and 36a already styles it as a row.
+  //
+  // It used to be a node created here, absolutely positioned onto the
+  // stage with `vp-toggles--onstage`, so four pills sat permanently over
+  // the footage on every surface: „In der SIMU ist es schlecht, dass die
+  // Buttons dauerhaft über dem Video liegen." The timeline learned this
+  // exact lesson already — 36b's header explains at length why it stopped
+  // being a scrim over the picture — and these cameras burn their own
+  // clock into the frame, so anything floating over it is competing with
+  // the footage for the same pixels.
+  //
+  // Handing over the shell's empty slot is safe in the way the stage slot
+  // never was: mountOverlayRow assigns `host.innerHTML`, which on the
+  // stage would have wiped the <video>, the overlay layers and the
+  // timeline in one statement. This slot owns nothing.
+  const togglesHost = cfg.flags.showOverlays ? shell.slot('toggles') : null;
   const overlayRow = cfg.flags.showOverlays
     ? mountOverlayRow(togglesHost, cfg, {
         roi: cfg.item.roi_label,

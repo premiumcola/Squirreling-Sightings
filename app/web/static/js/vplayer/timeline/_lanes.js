@@ -68,6 +68,17 @@ function _laneHtml(lane, duration) {
     `<div class="vp-tl-lane" data-status="${esc(lane.status)}" ` +
     `data-track="${lane.trackNum == null ? '' : esc(String(lane.trackNum))}" ` +
     `style="--vp-lane-colour:${esc(colour)}" title="${esc(title)}">` +
+    // THE NAME COMES FIRST, in the gutter to the left of the axis —
+    // „bitte mach die Spur-beschriftungen davor, da wo normal der
+    // Vorlauf wäre".
+    //
+    // It used to sit in a right-hand column, which put a one-instant
+    // track's dot hard against the left edge and its name at the far
+    // right of the same row with nothing between them: „was ist links
+    // der grüne Punkt???" — a fair question about a mark whose label was
+    // 300 px away. Beside the axis, a name and the thing it names are one
+    // object.
+    `<span class="vp-tl-lane-label">${esc(_laneLabel(lane))}</span>` +
     // THE TIME AXIS IS ITS OWN BOX. The bar and the dot are positioned
     // as a percentage of it, so it — not the whole row — has to be the
     // element the label is beside rather than on top of. Without this
@@ -81,7 +92,6 @@ function _laneHtml(lane, duration) {
     // bar has no width at all — still shows something.
     `<span class="vp-tl-dot" style="left:${_pct(dot)}"></span>` +
     `</span>` +
-    `<span class="vp-tl-lane-label">${esc(_laneLabel(lane))}</span>` +
     `</div>`
   );
 }

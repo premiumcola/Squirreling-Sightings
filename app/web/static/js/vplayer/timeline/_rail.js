@@ -92,9 +92,9 @@ export function railClockHtml() {
 function _headHtml() {
   return (
     `<button type="button" class="vp-tl-head" aria-label="Abspielen oder anhalten">` +
-    `<svg class="vp-tl-head-icon vp-tl-head-icon--play" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">` +
+    `<svg class="vp-tl-head-icon vp-tl-head-icon--play" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">` +
     `<path fill="currentColor" d="M8 5v14l11-7z"/></svg>` +
-    `<svg class="vp-tl-head-icon vp-tl-head-icon--pause" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">` +
+    `<svg class="vp-tl-head-icon vp-tl-head-icon--pause" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">` +
     `<path fill="currentColor" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>` +
     `</button>`
   );

@@ -35,11 +35,26 @@ import { elapsedLabel, readinessFaceHTML } from './_readiness-face.js';
 /** How often the seconds-in-stage readout advances. */
 const _TICK_MS = 1000;
 
-/** The trailing control: a rebuild, or the outcome of one already sent. */
+/**
+ * The trailing control: a rebuild, or the outcome of one already sent.
+ *
+ * SAY WHAT IS HAPPENING AND WHAT THE PERSON SHOULD DO. „Wird nachgebaut
+ * — gleich neu öffnen" was neither: „was ist damit gemeint???" It never
+ * said WHAT was being rebuilt, and „gleich" is not an instruction — the
+ * job is queued behind a background worker, the result lands in a
+ * sidecar file, and the open player has no subscription to it. Reopening
+ * the clip is genuinely what fetches the new answer; the sentence just
+ * has to admit that plainly and say roughly how long.
+ */
 function _actionHTML(st) {
   if (st.failed) return `<span class="vp-rn-state">Nachbau fehlgeschlagen</span>`;
-  if (st.done) return `<span class="vp-rn-state">Wird nachgebaut — gleich neu öffnen</span>`;
-  if (st.busy) return `<span class="vp-rn-state">Wird angefordert …</span>`;
+  if (st.done) {
+    return (
+      `<span class="vp-rn-state">Feinspur wird neu berechnet · ` +
+      `dauert etwa so lange wie der Clip — danach den Clip noch einmal öffnen</span>`
+    );
+  }
+  if (st.busy) return `<span class="vp-rn-state">Auftrag wird abgeschickt …</span>`;
   if (st.readiness?.rebuildable) {
     return `<button type="button" class="vp-rn-btn" data-act="reindex">Feinspur nachbauen</button>`;
   }

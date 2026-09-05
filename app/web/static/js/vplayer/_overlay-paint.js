@@ -45,7 +45,7 @@ import {
 import { normalizeBox } from '../core/box-model.js';
 import { buildTrail, renderBoxLayer } from './_overlay-svg.js';
 import { maskProbePoint, pointInAnyMask } from './_geometry.js';
-import { clipReadiness, triggerBoxVisible } from './_model/readiness.js';
+import { clipReadiness, GEOM_PER_FRAME, triggerBoxVisible } from './_model/readiness.js';
 import { liveTrackColor } from '../core/track-color.js';
 
 /** Trail stroke width, in source pixels per 1000 px of source width. */
@@ -190,8 +190,24 @@ function _triggerSamples(dets, src, masks) {
 function _paintRecorded(stage, st, t, playing) {
   const src = _sourceSize(stage);
   if (!src) return;
+  // WHICH GEOMETRY, asked of the readiness model — not of whether the
+  // sidecar object happens to exist.
+  //
+  // „Wieso ist kein Rahmen in dem Vogel Video?" — because `st.tracks` was
+  // tested for TRUTHINESS, and an empty sidecar is `{tracks: [], gates:
+  // {…}}`, which is a perfectly truthy object. So a clip whose indexer
+  // ran and confirmed nothing took the per-frame branch, got an empty
+  // sample list out of it, and never reached the trigger branch at all —
+  // while the banner directly underneath said „1 Auslöse-Kästen · nur
+  // pausiert". The model and the painter disagreed about the same clip,
+  // and the model was right.
+  //
+  // readiness.geometry is the single answer to "what can be drawn here",
+  // which is exactly the question this is: GEOM_PER_FRAME means the
+  // sidecar has real tracks, GEOM_TRIGGER means the trigger frame is all
+  // there is. Nothing else may decide it.
   let samples = [];
-  if (st.tracks) {
+  if (st.readiness.geometry === GEOM_PER_FRAME && st.tracks) {
     samples = _samplesAt(st.tracks, t, src, st.polys.masks, st.threshold);
   } else if (triggerBoxVisible(st.readiness, playing)) {
     samples = _triggerSamples(st.readiness.trigger, src, st.polys.masks);

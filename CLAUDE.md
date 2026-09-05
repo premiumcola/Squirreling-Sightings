@@ -321,6 +321,38 @@ In docs use only RFC placeholders — `192.0.2.x`,
 `198.51.100.x`, `203.0.113.x`, `2001:db8::*`, `<BOT_TOKEN>`,
 `<CHAT_ID>`, `cam.lan`.
 
+## Reading the LIVE box from the devbox
+
+The devbox has no Docker CLI and cannot see `appdata` — but it is a
+container on the SAME host as the app, so the running API answers over
+the container's own default gateway. Verified: `/version.json` and
+`/api/cameras` both return 200.
+
+    python3 scripts/host_api.py /api/cameras
+    python3 scripts/host_api.py '/api/cameras/<cam_id>/debug-snapshot?format=json'
+    python3 scripts/host_api.py /api/status
+    python3 scripts/host_api.py --post /api/debug/bundle
+
+No address is written down anywhere: the helper reads the gateway from
+`/proc/net/route` at call time. `SQ_HOST=<addr>` overrides it when the
+app runs elsewhere.
+
+USE THIS INSTEAD OF ASKING FOR A PASTE. Before this existed the only way
+to get a state dump off the box was the operator copying an enormous
+JSON document out of the browser — „Debug bitte irgendwie ablegen dass
+du es hier am besten direkt selbst einlesen kannst ohne dass ichs
+schicken muss den ewigen text!". A diagnosis that starts with "please
+send me…" is now a diagnosis that could have started with a GET.
+
+Two things it does NOT replace: the Unraid root shell is still the only
+way to restart the container or read the raw files under
+`storage/`, and `docker logs` is still host-side.
+
+NEVER fetch `/api/settings/export` with this. It returns the Telegram
+token, chat ids and RTSP passwords unredacted, and whatever this prints
+lands in a transcript. The debug bundle is redacted; that endpoint is
+not.
+
 ## Deployment (IMPORTANT — read before touching the container)
 
 Seit 2026-08-25 läuft das Projekt auf dem **Unraid-Server**, nicht mehr

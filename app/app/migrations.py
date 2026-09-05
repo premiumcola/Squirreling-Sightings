@@ -22,6 +22,12 @@ import cv2 as _cv2
 
 from . import clip_recovery
 from .media_index import register_timelapse_events
+
+# The tile width the archive is expected to be cut at. Imported at module
+# scope rather than inside the pass: it is the version number _has_scrub
+# compares against, and a version check that lives behind a lazy import
+# is one nobody finds.
+from .scrub_sprite import TILE_W
 from .storage import event_date_subdir
 
 log = logging.getLogger(__name__)
@@ -165,6 +171,10 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
 
         made = 0
         swept = 0
+        failed = 0
+        # The first failure's own words. A count says how bad it is; one
+        # example says what to go and look at, and costs one string.
+        first_error = ""
         for cam_dir in sorted(base.iterdir()):
             if not cam_dir.is_dir():
                 continue
@@ -198,31 +208,63 @@ def generate_missing_scrub_sprites(*, storage_root: Path, store=None) -> None:
                 try:
                     geo = build_scrub_sprite(mp4)
                     if not geo:
+                        # Unreadable or empty clip. Counted, not silent:
+                        # a `continue` here is exactly how one clip went
+                        # on failing every pass with nothing to show for
+                        # it.
+                        failed += 1
+                        first_error = first_error or f"{mp4.name}: kein Blatt gebaut"
                         continue
                     made += 1
                     if store is not None:
                         _attach_scrub(store, cam_dir.name, mp4.stem, geo)
                 except Exception as e:
+                    failed += 1
+                    first_error = first_error or f"{mp4.name}: {e}"
                     log.debug("[scrub] backfill failed for %s: %s", mp4.name, e)
                 _time.sleep(0.05)  # pace startup
         if swept:
             log.info("[boot] %d fehlplatzierte Scrub-Blätter entfernt", swept)
         if made:
             log.info("[boot] %d Scrub-Filmstreifen nachgebaut", made)
+        # AT WARNING, not debug. A clip whose filmstrip never builds shows
+        # the operator a drag with no preview and no reason, forever —
+        # and the only trace of it was a debug line nobody reads at the
+        # level this app runs at.
+        if failed:
+            log.warning(
+                "[scrub] %d Filmstreifen konnten nicht gebaut werden — erster: %s",
+                failed,
+                first_error,
+            )
 
     threading.Thread(target=_do, daemon=True).start()
 
 
 def _has_scrub(store, camera_id: str, event_id: str) -> bool:
-    """Does this event's manifest already carry a usable scrub grid?
+    """Does this event's manifest carry a CURRENT, usable scrub grid?
 
     Without a store there is nothing to check and nothing to write, so
     the disk answer stands alone — that is the unit-test path and the
     only case where a bare sheet counts as finished.
 
-    A grid missing `count` or `tile_w` is treated as absent: the player
-    refuses to draw from one (``_usable`` in timeline/_preview.js), so
-    keeping it would be keeping a value that renders as nothing.
+    Three ways to fail, and each is a real state seen on this archive:
+
+    * no grid at all — the sheet may sit on disk, but the player
+      addresses a tile THROUGH this block and cannot find it without one;
+    * a grid missing `count` or `tile_w` — ``_usable`` in
+      timeline/_preview.js refuses to draw from it, so keeping it is
+      keeping a value that renders as nothing;
+    * a grid whose `tile_w` is below the current :data:`TILE_W` — built
+      by an older version. The player sizes the drag preview from this
+      number (it never assumes one), so an archive of 240 px sheets goes
+      on looking soft however large the bubble is allowed to get. Tiles
+      are always resized to exactly TILE_W at build time, so a smaller
+      value can only mean "older", never "this clip was small".
+
+    That last one is a VERSION CHECK, deliberately shaped like
+    ``check_tracks_schema_version``: bump the constant and the next pass
+    re-cuts the archive without a force flag anyone has to remember.
     """
     if store is None:
         return True
@@ -231,7 +273,12 @@ def _has_scrub(store, camera_id: str, event_id: str) -> bool:
     except Exception:
         return False
     geo = ev.get("scrub")
-    return bool(isinstance(geo, dict) and geo.get("count") and geo.get("tile_w"))
+    if not isinstance(geo, dict) or not geo.get("count"):
+        return False
+    try:
+        return int(geo.get("tile_w") or 0) >= int(TILE_W)
+    except (TypeError, ValueError):
+        return False
 
 
 def _attach_scrub(store, camera_id: str, event_id: str, geo: dict) -> None:

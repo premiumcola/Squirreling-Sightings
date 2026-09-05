@@ -25,6 +25,7 @@ np = pytest.importorskip("numpy")
 from app.migrations import _has_scrub  # noqa: E402
 from app.scrub_sprite import (  # noqa: E402
     MAX_TILES,
+    TILE_W,
     _plan,
     build_scrub_sprite,
     sprite_path_for,
@@ -136,9 +137,25 @@ def test_ein_blatt_ohne_eintrag_im_manifest_gilt_als_unfertig():
 
 
 def test_ein_vollstaendiger_eintrag_gilt_als_fertig():
-    geo = {"cols": 5, "rows": 5, "count": 24, "tile_w": 320, "tile_h": 180}
+    geo = {"cols": 5, "rows": 5, "count": 24, "tile_w": TILE_W, "tile_h": 180}
     store = _FakeStore({("cam_a", "evt_1"): {"scrub": geo}})
     assert _has_scrub(store, "cam_a", "evt_1") is True
+
+
+def test_ein_blatt_mit_zu_kleinen_kacheln_wird_neu_geschnitten():
+    # DIE VERSIONSPRUEFUNG. Der Player bemisst die Ziehvorschau an
+    # `tile_w` — ein Archiv aus 240-px-Blaettern bleibt also weich, egal
+    # wie gross die Blase werden darf. Kacheln werden beim Bauen IMMER
+    # auf genau TILE_W skaliert, ein kleinerer Wert heisst deshalb
+    # „aelter" und nie „dieser Clip war klein".
+    alt = {"cols": 5, "rows": 5, "count": 24, "tile_w": TILE_W - 80, "tile_h": 135}
+    store = _FakeStore({("cam_a", "evt_1"): {"scrub": alt}})
+    assert _has_scrub(store, "cam_a", "evt_1") is False
+
+
+def test_eine_unlesbare_kachelbreite_zaehlt_als_unfertig():
+    store = _FakeStore({("cam_a", "evt_1"): {"scrub": {"count": 5, "tile_w": "breit"}}})
+    assert _has_scrub(store, "cam_a", "evt_1") is False
 
 
 def test_eine_halbe_geometrie_zaehlt_nicht_als_fertig():

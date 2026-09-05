@@ -52,8 +52,30 @@ export function railCaptionsHtml(model) {
   if (model.preRoll > 0) {
     parts.push(`<span class="vp-tl-cap vp-tl-cap--pre">Vorlauf ${_secs(model.preRoll)}</span>`);
   }
+  // POSITIONED AT THE MOMENT IT NAMES, not laid out as a flex item.
+  //
+  // „wieso erstes Ereignis an Schluss???" — because it was the second of
+  // two items in a `justify-content: space-between` row, so with no
+  // post-roll caption beside it the free space pushed it to the far
+  // right. A caption carrying a ▼ points at something; this one pointed
+  // at whatever the flexbox left under it, and only looked correct when
+  // all three captions happened to be present.
+  //
+  // Still only shown WITH a pre-roll: without one the clip starts at the
+  // event, and a label on the left edge says nothing that is not already
+  // obvious.
   if (model.firstEventT != null && model.preRoll > 0) {
-    parts.push('<span class="vp-tl-cap vp-tl-cap--first">▼ erstes Ereignis</span>');
+    const at = pctOf(model.firstEventT, model.duration);
+    // „Vorlauf ist zeitlich NACH der Erkennung der Person???" — it can
+    // be, and that is not a fault: the pre-roll is footage from before
+    // the MOTION TRIGGER, and a subject already standing in frame is
+    // legitimately detected inside it. Left unsaid it reads as a
+    // contradiction, so the caption says it.
+    const inside = model.firstEventT < model.preRoll;
+    const text = inside ? '▼ erstes Ereignis · noch im Vorlauf' : '▼ erstes Ereignis';
+    parts.push(
+      `<span class="vp-tl-cap vp-tl-cap--first" style="left:${_pct(at)}">${text}</span>`,
+    );
   }
   if (model.postRoll > 0) {
     parts.push(`<span class="vp-tl-cap vp-tl-cap--post">Nachlauf ${_secs(model.postRoll)}</span>`);

@@ -247,13 +247,32 @@ def test_lane_rows_let_a_vertical_swipe_through():
 
 def test_the_lane_list_cannot_push_the_picture_off_screen():
     """Many objects at 375 px would otherwise grow the strip without
-    limit and bury the video under its own timeline."""
+    limit and bury the video under its own timeline.
+
+    The cap now hangs on ``[data-many='1']``, which timeline/index.js
+    stamps once the count can actually overflow. The contract is
+    unchanged — a long list still cannot grow without limit — but it is
+    no longer paid for by every short one: an unconditional
+    ``overflow-y: auto`` had browsers reserving a scrollbar gutter beside
+    two 14 px rows.
+    """
     css = _strip_comments(_read(_TIMELINE))
-    block = re.search(r"\.vp-tl-lanes\s*\{([^}]*)\}", css)
-    assert block, ".vp-tl-lanes has no rule block"
+    block = re.search(r"\.vp-tl-lanes\[data-many='1'\]\s*\{([^}]*)\}", css)
+    assert block, "the lane list has no capped rule block"
     body = block.group(1)
     assert "overflow-y: auto" in body
     assert "dvh" in body, "the cap must track the visual viewport, not vh"
+
+
+def test_a_short_lane_list_does_not_scroll_at_all():
+    """A scrollbar for a list that fits is a control for nothing — and it
+    appeared right where the operator was already asking what the empty
+    band beside the lanes was for."""
+    css = _strip_comments(_read(_TIMELINE))
+    base = re.search(r"\.vp-tl-lanes\s*\{([^}]*)\}", css)
+    assert base, ".vp-tl-lanes has no base rule block"
+    assert "overflow" not in base.group(1)
+    assert "max-height" not in base.group(1)
 
 
 def test_the_panel_clears_the_home_indicator():

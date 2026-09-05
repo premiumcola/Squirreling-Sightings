@@ -381,16 +381,19 @@
 /* The drag surface. A 6 px rail is not a touch target; this transparent
    band centred on it is, and it is what the pointer-capture drag binds
    to. Sized from the same token as every other control. */
+/* A child of .vp-tl-track now — see _rail.js for why it could not stay a
+   sibling. Spanning the track exactly means it spans the box the drag
+   measures against, so a pointer and the position it produces cannot
+   disagree; centred on the rail means it is actually over the thing it
+   makes grabbable. */
 .vp-tl-hit {
   position: absolute;
-  /* The SAME inset as the rail. The drag maps a pointer x onto the
-     rail's own rect, so a hit area wider than the rail would make the
-     outermost strip of it map to a position it can never reach. */
-  left: var(--vp-tl-inset);
-  right: var(--vp-tl-inset);
-  bottom: 0;
+  left: 0;
+  right: 0;
+  top: 50%;
   height: var(--vp-tl-band);
   min-height: 44px;
+  transform: translateY(-50%);
   touch-action: none;
   cursor: pointer;
 }

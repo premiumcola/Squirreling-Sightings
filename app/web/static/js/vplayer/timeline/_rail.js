@@ -125,10 +125,23 @@ export function railHtml(model) {
   return (
     railCaptionsHtml(model) +
     `<div class="vp-tl-track">${bands}${marker}` +
-    `<div class="vp-tl-fill"></div>${markersHtml(model)}${_headHtml()}</div>` +
-    // The drag surface. Transparent, full width, and tall enough to
-    // meet the 44 px touch minimum around a 6 px rail — see 36b.
+    `<div class="vp-tl-fill"></div>${markersHtml(model)}${_headHtml()}` +
+    // The drag surface. Transparent, the rail's full width, and tall
+    // enough to meet the 44 px touch minimum around a 6 px rail.
+    //
+    // INSIDE THE TRACK, which is the fix. It used to be a sibling —
+    // absolutely positioned with `bottom: 0` inside `.vp-timeline`,
+    // which is explicitly `position: static`. So its containing block
+    // was some ancestor further up and the band was pinned to the bottom
+    // of THAT, not centred on the rail: the one element whose whole job
+    // is to make a hairline scrubber grabbable was not over the
+    // scrubber. Only the 44 px disc actually answered a drag, which is
+    // what „ich kann den Button nur extrem buggy hin- und herschieben"
+    // describes. The track is `position: relative`, so in here the band
+    // lands on the rail by construction — and on the SAME box
+    // `attachScrub` measures the pointer against.
     `<div class="vp-tl-hit" role="slider" aria-label="Wiedergabeposition" tabindex="0"></div>` +
+    `</div>` +
     railClockHtml()
   );
 }

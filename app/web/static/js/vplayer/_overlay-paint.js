@@ -33,6 +33,7 @@
 // a box ends up half a gutter off its subject.
 
 import { state } from '../core/state.js';
+import { classColor } from '../core/class-colors.js';
 import { normalizePolygon } from '../core/polygon-source.js';
 import { renderZoneLayer } from '../mediaview/canvas/zone-layer.js';
 import { buildTrailPoints } from '../mediaview/canvas/trail-layer.js';
@@ -145,11 +146,19 @@ function _paintZones(host, polys, src, on) {
  * The trigger frame's own detections, as painter records.
  *
  * The fallback for every clip with no sidecar, which is most of them.
- * They carry no track number and no sidecar colour — deliberately: the
- * numbering and the palette belong to the sidecar's pass, and inventing
- * either here would put a "#1" on the picture that matches no lane and
- * no row. `liveTrackColor(null)` gives them the neutral fallback stroke,
- * so they read as "detected" without claiming an identity.
+ * They carry no track NUMBER — deliberately: the numbering belongs to
+ * the sidecar's pass, and inventing one here would put a "#1" on the
+ * picture that matches no lane and no row.
+ *
+ * THE COLOUR, THOUGH, IS THE CLASS. It used to be `liveTrackColor(null)`
+ * — the neutral grey — on the argument that a trigger box claims no
+ * identity. But the class IS known, and withholding it left one subject
+ * painted three different ways on one screen: „Wieso nur 'n graue bbox
+ * wenn ich pausiere??" — with a green „Vogel" lane above the rail and a
+ * green „Vogel 52 %" row below it. `classColor` is the same palette
+ * timeline/_basis.js gives a clip-aggregate lane, and for the same
+ * reason: the class is a fact, the track identity is not. Grey now means
+ * only what it always should have — an unknown class, or a masked box.
  */
 function _triggerSamples(dets, src, masks) {
   return dets.map((d) => {
@@ -157,7 +166,7 @@ function _triggerSamples(dets, src, masks) {
     const probe = box ? maskProbePoint(box) : null;
     return {
       raw: { ...d, track_num: null },
-      colour: liveTrackColor(null),
+      colour: (d.label && classColor(d.label)) || liveTrackColor(null),
       masked: !!probe && pointInAnyMask(probe.x, probe.y, src.w, src.h, masks),
       trackNum: null,
     };

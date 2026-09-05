@@ -127,7 +127,22 @@ function _wireRecorded(cfg, stage, panel, timeline, overlays) {
       // ONE basis per render, chosen once — the sidecar's tracks when it
       // has any, else lanes synthesised from the clip aggregate. Never
       // both: see timeline/_basis.js for why merging them would lie.
-      const preRoll = timing.pre_roll_s ?? rs.pre_motion_seconds;
+      // THE MEASUREMENT WINS OVER THE INTENTION, and the order used to be
+      // the other way round — which is the whole of „wieso kein Vor- und
+      // Nachlauf!???".
+      //
+      // `provenance.timing.pre_roll_s` is what the pre-roll was CONFIGURED
+      // as (3 s on every camera here). `recording_settings.pre_motion_seconds`
+      // is what the splice actually ACHIEVED — _finalize.py writes
+      // `round(achieved_pre_s, 2)` into it after the ring has been spliced
+      // onto the clip. Reading the configured number first meant the rail
+      // drew a 3 s band onto clips that contain no pre-roll at all: every
+      // clip in this archive reports an achieved pre-roll of 0.0.
+      //
+      // The details fold keeps showing the configured value, correctly —
+      // there it is labelled as the setting. Here the rail is a picture of
+      // the clip, so it may only draw what the clip has.
+      const preRoll = rs.pre_motion_seconds ?? timing.pre_roll_s;
       // The trigger frame sits at the END of the pre-roll — that is what
       // a pre-roll IS. Only the third basis uses it, and only when the
       // sidecar and the aggregate are both empty.
@@ -136,7 +151,8 @@ function _wireRecorded(cfg, stage, panel, timeline, overlays) {
         timeline?.render(tracks, {
           duration: stage.video.duration,
           preRoll,
-          postRoll: timing.post_roll_s ?? rs.post_motion_seconds,
+          // Same rule, same reason: the clip's own number first.
+          postRoll: rs.post_motion_seconds ?? timing.post_roll_s,
           threshold: p.effective?.spawn_default ?? rs.conf_thresh_general,
           basis,
           item,

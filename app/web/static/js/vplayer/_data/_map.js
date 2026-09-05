@@ -27,6 +27,22 @@ import { resolveBox } from '../_box-model.js';
  */
 export const DISCARDED_VERDICTS = new Set(['filtered', 'masked', 'outside_zone', 'no_track']);
 
+/** Detected, but below the spawn threshold — so it starts no track.
+ *
+ * ITS OWN BUCKET, and the reason is the operator's report: the panel
+ * said "1 übernommen" while nothing at all was drawn on the picture. A
+ * tentative detection is not discarded (the tracker still uses it to
+ * sustain an existing track, which is why it was never in
+ * DISCARDED_VERDICTS) — but it is not "übernommen" either. It produced
+ * no track, and a box on this picture comes from a track.
+ *
+ * The asymmetry was already visible in this file: DISCARD_REASON_DE has
+ * carried an entry for `tentative` all along — „Unter der Spawn-Schwelle
+ * · hält nur die Spur" — while the set beside it did not. The table knew
+ * what the counter did not.
+ */
+export const TENTATIVE_VERDICTS = new Set(['tentative']);
+
 /** German for each discard verdict — why this box was not acted on. */
 export const DISCARD_REASON_DE = {
   filtered: 'Klasse nicht im Objekt-Filter',
@@ -60,6 +76,7 @@ export function mapDetection(d) {
     // verdict it did not explain.
     reason: det.reason || DISCARD_REASON_DE[det.verdict] || null,
     discarded: DISCARDED_VERDICTS.has(det.verdict),
+    tentative: TENTATIVE_VERDICTS.has(det.verdict),
     style: resolveBox(det),
   };
 }
@@ -75,7 +92,9 @@ export function mapFrame(data) {
     frameSize: d.frame_size || null,
     snapshot: d.snapshot || null,
     detections,
-    kept: detections.filter((x) => !x.discarded),
+    // Three buckets, not two. `kept` is what actually became something.
+    kept: detections.filter((x) => !x.discarded && !x.tentative),
+    tentative: detections.filter((x) => x.tentative),
     discarded: detections.filter((x) => x.discarded),
     diag: d.diag || null,
     // Stage → {file, sha256}, sent once per payload rather than on every

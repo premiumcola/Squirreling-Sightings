@@ -24,7 +24,8 @@ const FOLD_KEY = 'tamspy.vplayer.fold.raw';
 
 function _rowHtml(det) {
   const cls = det.label ? OBJ_LABEL[det.label] || det.label : '—';
-  const num = det.trackNum == null ? '' : `<span class="vp-pnl-num">#${esc(String(det.trackNum))}</span>`;
+  const num =
+    det.trackNum == null ? '' : `<span class="vp-pnl-num">#${esc(String(det.trackNum))}</span>`;
   const reason = det.discarded
     ? `<span class="vp-pnl-reason">${esc(valueOr(det.reason))}</span>`
     : '';
@@ -37,11 +38,26 @@ function _rowHtml(det) {
   );
 }
 
-/** PURE: the fold's subtitle — how many were kept, how many were not. */
+/** PURE: the fold's subtitle — kept, held back, and dropped.
+ *
+ * THREE NUMBERS, because two of them were a lie. A detection below the
+ * spawn threshold used to be counted as "übernommen", so the fold could
+ * read "1 übernommen" while the picture stayed empty — the operator saw
+ * exactly that and reasonably concluded the object was not detected at
+ * all. It was: it just never became a track, and a box comes from a
+ * track. The middle number is that state, named.
+ *
+ * The middle term is omitted when it is zero, so the common case reads
+ * exactly as it always did.
+ */
 export function rawSummary(frame) {
   const kept = frame?.kept?.length || 0;
+  const held = frame?.tentative?.length || 0;
   const dropped = frame?.discarded?.length || 0;
-  return `${kept} übernommen · ${dropped} verworfen`;
+  const parts = [`${kept} übernommen`];
+  if (held) parts.push(`${held} unter der Spawn-Schwelle`);
+  parts.push(`${dropped} verworfen`);
+  return parts.join(' · ');
 }
 
 function _bodyHtml(frame) {
@@ -49,13 +65,21 @@ function _bodyHtml(frame) {
   if (!all.length) {
     return `<div class="vp-pnl-empty">Keine Erkennungen in diesem Frame</div>`;
   }
-  // Kept first, then discarded — the discarded block is the diagnostic
-  // half and reads as a group rather than as scattered greyed rows.
+  // Kept first, then the ones held below the threshold, then the
+  // discarded — each block reads as a group rather than as scattered
+  // greyed rows.
   const kept = frame.kept.map(_rowHtml).join('');
+  // Its own group, between the two. These are the rows that explain an
+  // empty picture: detected, listed, and yet nothing was drawn — because
+  // below the spawn threshold nothing becomes a track.
+  const held = (frame.tentative || []).length
+    ? `<div class="vp-pnl-subhead">Unter der Spawn-Schwelle · keine Spur</div>` +
+      frame.tentative.map(_rowHtml).join('')
+    : '';
   const dropped = frame.discarded.length
     ? `<div class="vp-pnl-subhead">Verworfen</div>${frame.discarded.map(_rowHtml).join('')}`
     : '';
-  return kept + dropped;
+  return kept + held + dropped;
 }
 
 /**

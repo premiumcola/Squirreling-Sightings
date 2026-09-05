@@ -58,6 +58,30 @@ const _GLYPH_W = 0.58;
  */
 export const VP_PLATE_MIN_PICTURE_PX = 128;
 
+/**
+ * The narrowest box that may still carry a plate wider than itself.
+ *
+ * THE SCORE IS THE POINT OF THE PLATE, and clamping the plate to the
+ * box's own width took it away from exactly the boxes that need it most.
+ * A person is a TALL, NARROW box: on a clip that triggered on a fence
+ * post and a gravestone, both were labelled a confident „Person" with no
+ * number, because „Person · 41 %" was a few pixels wider than a 95 px
+ * box and the ladder dropped to the next rung. A 41 % guess presented as
+ * a fact is the whole class of defect this player has been chasing.
+ *
+ * So a plate may overhang a box out to this width — but ONLY a box that
+ * is also TALL, and that qualifier is the whole rule. Narrow-and-tall is
+ * the shape of a standing person, an unmistakable subject with vertical
+ * room to spare. Narrow-and-short is a distant bird or a speck, where a
+ * plate wider than its box is the absurdity the original rule was
+ * written against and stays forbidden. A wide box is untouched;
+ * `_platePos` still clamps every plate inside the frame.
+ */
+export const VP_PLATE_MIN_ROOM_PX = 104;
+
+/** How tall a box must be before it may lend its plate extra width. */
+export const VP_PLATE_TALL_PX = 96;
+
 /** Estimated on-screen width of the plate that would carry `text`. */
 export function plateWidthPx(text) {
   if (!text) return 0;
@@ -111,8 +135,13 @@ export function fitPlateText(det, cat, geom = {}) {
   const pictureH = geom.pictureH > 0 ? geom.pictureH : 0;
   if (pictureH && pictureH < VP_PLATE_MIN_PICTURE_PX) return '';
   const tiers = plateTiers(det, cat);
-  const boxW = geom.boxW > 0 ? geom.boxW : Infinity;
   const boxH = geom.boxH > 0 ? geom.boxH : Infinity;
+  // A TALL box gets a little room beyond its own width — the standing
+  // person whose score was being dropped. See VP_PLATE_MIN_ROOM_PX.
+  // An unmeasured box keeps Infinity.
+  const tall = boxH >= VP_PLATE_TALL_PX;
+  const boxW =
+    geom.boxW > 0 ? (tall ? Math.max(geom.boxW, VP_PLATE_MIN_ROOM_PX) : geom.boxW) : Infinity;
   // A box shorter than the plate that would sit on it cannot carry a
   // sentence — the plate would be the bigger object. Straight to the
   // last rung, and off the end if even that is too wide.

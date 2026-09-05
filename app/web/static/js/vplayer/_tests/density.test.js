@@ -134,6 +134,26 @@ test('ungemessene Geometrie kürzt nichts — sonst gäbe es Stummel ohne Grund'
 
 // ── Die Regel im Renderer, nicht nur in der reinen Funktion ───────────
 
+test('ein schmaler, HOHER Kasten behält seinen Wert', () => {
+  // Die Gestalt einer stehenden Person: schmal und hoch. Genau hier ist
+  // der Prozentwert das Wichtigste am Schild — auf einem Clip, der auf
+  // einen Zaunpfahl und einen Grabstein ausgelöst hat, stand an beiden
+  // ein selbstbewusstes „Person" ohne Zahl, weil „Person · 41 %" ein
+  // paar Pixel breiter war als der 95-px-Kasten.
+  const person = { label: 'person', score: 0.41, track_num: null };
+  const eng = fitPlateText(person, 'confirmed', { boxW: 95, boxH: 260, pictureH: 600 });
+  assert.match(eng, /41/, 'der Wert muss überleben');
+});
+
+test('ein schmaler, NIEDRIGER Kasten bekommt die Zusatzbreite nicht', () => {
+  // Ein entfernter Vogel ist schmal und flach. Ein Schild breiter als
+  // sein Kasten verdeckt dort das Motiv daneben — die alte Regel gilt
+  // unverändert weiter, und nur die Höhe unterscheidet die beiden Fälle.
+  const person = { label: 'person', score: 0.41, track_num: null };
+  const flach = fitPlateText(person, 'confirmed', { boxW: 95, boxH: 40, pictureH: 600 });
+  assert.equal(/41/.test(flach), false);
+});
+
 test('der Renderer malt die gekürzte Form, nicht die volle', () => {
   // Kasten 90 Quelleinheiten breit, k=1.7 → 53 CSS-px. Das ist der
   // Vogel des Fixtures auf einem 375-px-Bild.

@@ -53,9 +53,31 @@ export const SIM_CAM_ID = 'reolink_rlc810a_garten_51';
 // `diag` carries the real gate/threshold/parity blocks for the same
 // reason: the Debug tab and the trace read them, and a two-key stand-in
 // photographs an empty tab as if it were unimplemented.
+/** A real 2×2 JPEG as a data URL.
+ *
+ * NOT `null`, and the difference is a whole class of defect. The player
+ * assigns `frame.snapshot` to the stage's <img> on every tick; the
+ * `load` that follows fires the stage's refit, and a refit used to run
+ * the RECORDED painter on a live surface and wipe the boxes it had just
+ * drawn. With `snapshot: null` the assignment is skipped, no `load`
+ * fires, no refit happens — and the harness photographed five perfect
+ * boxes on a surface where the operator saw none.
+ *
+ * So the fixture has to complete the loop the production tick completes.
+ * Tiny on purpose: it exists to make the <img> emit `load`, not to be
+ * looked at — the surfaces paint their own backdrop.
+ */
+const _PIXEL =
+  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL' +
+  'DBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAACAAIBAREA/8QAHwAA' +
+  'AQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1Fh' +
+  'ByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZn' +
+  'aGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ' +
+  '2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oACAEBAAA/APn+iiiigD//2Q==';
+
 export const SIM_TICK = {
   ok: true,
-  snapshot: null,
+  snapshot: _PIXEL,
   frame_size: { w: 640, h: 360 },
   frame_age_ms: 120,
   frame_interval_avg_ms: 350,

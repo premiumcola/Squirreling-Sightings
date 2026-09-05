@@ -226,6 +226,12 @@ function _paintRecorded(stage, st, t, playing) {
  * exactly the browser where it is hardest to notice.
  */
 function _paintLiveFrame(stage, st, frame) {
+  // KEPT, so a repaint has something to repaint FROM. A live surface has
+  // no `tracks` to re-derive a picture out of — the frame IS the source,
+  // it arrives once per tick, and until now nothing held on to it. That
+  // is half of the wipe described on `repaintAt` below: even a repaint
+  // that wanted to redraw the boxes had nothing to draw.
+  st.liveFrame = frame;
   const fs = frame.frameSize;
   if (fs && fs.w > 0 && fs.h > 0) st.liveSrc = fs;
   renderBoxLayer(stage.layers.boxes, st.layers.bboxes ? frame.detections : [], {
@@ -233,6 +239,11 @@ function _paintLiveFrame(stage, st, frame) {
     screenW: stage.rect().w,
     chrome: stage.chrome(),
   });
+  // The same report the recorded path makes, so the „N Rahmen
+  // ausgeblendet" chip can appear on the surface it is most needed on.
+  // Without it the safety net existed only where the boxes were already
+  // working.
+  st.onHidden?.(st.layers.bboxes ? 0 : (frame.detections || []).length);
   _paintZones(stage.layers.zones, st.polys, st.liveSrc || _sourceSize(stage), st.layers);
 }
 
@@ -256,6 +267,8 @@ export function mountOverlayPainter(stage, cfg) {
     tracks: null,
     threshold: TRACK_SPAWN_SCORE,
     liveSrc: null,
+    // The last frame a live/sim tick painted, so a repaint has a source.
+    liveFrame: null,
     // Undefined tracks = "the sidecar request has not come back yet",
     // which is a third state and not the same as "there is none".
     readiness: clipReadiness(cfg.item, undefined),
@@ -265,29 +278,61 @@ export function mountOverlayPainter(stage, cfg) {
   };
   let lastT = 0;
 
-  const repaintAt = (t) => {
-    lastT = Number.isFinite(t) ? t : 0;
+  /**
+   * Repaint from whichever source THIS surface actually has.
+   *
+   * THE BUG THIS FIXES, and it is the whole of „die Person im Video ist
+   * nicht mit BBox umkreist":
+   *
+   * `repaintAt` used to call `_paintRecorded` unconditionally, including
+   * on the live and simulation surfaces. There, `st.tracks` is null and
+   * readiness is CLIP_PENDING, so `_paintRecorded` produces an empty
+   * sample list and hands it to `renderBoxLayer` — which dutifully sets
+   * `svg.innerHTML = ''`. It does not skip; it WIPES.
+   *
+   * And it ran constantly. Every simulation tick assigns a fresh base64
+   * snapshot to `stage.img.src`; the `load` that follows fires
+   * `_stage.js`'s refit, and the painter's refit listener called
+   * `repaintAt`. So the order per tick was: paintLive draws the boxes →
+   * the snapshot decodes → refit → the recorded painter erases them. The
+   * boxes existed for a few milliseconds each tick and were never seen.
+   *
+   * The screenshot harness could not catch it: its simulation fixture
+   * sends `snapshot: null`, so `img.src` is never reassigned, no `load`
+   * fires, no refit, no wipe. Production and the harness differed in
+   * exactly the one variable that triggers it.
+   */
+  const repaint = () => {
+    if (cfg.flags.live) {
+      if (st.liveFrame) _paintLiveFrame(stage, st, st.liveFrame);
+      return;
+    }
     const v = stage.video;
     _paintRecorded(stage, st, lastT, !!v && !v.paused && !v.ended);
+  };
+
+  const repaintAt = (t) => {
+    lastT = Number.isFinite(t) ? t : 0;
+    repaint();
   };
 
   // A layer host only knows where the picture is after a refit, and the
   // refit that matters — source dimensions arriving — happens AFTER the
   // first paint. Without this the zone canvas would be sized to the
   // pre-metadata box and never corrected.
-  const offRefit = stage.onRefit(() => repaintAt(lastT));
+  const offRefit = stage.onRefit(() => repaint());
 
   return {
     layers: () => ({ ...st.layers }),
     /** Report withheld boxes to whoever can offer them back. */
     onBoxesHidden: (fn) => {
       st.onHidden = fn;
-      repaintAt(lastT);
+      repaint();
     },
     /** The operator flipped a toggle. */
     setLayers: (next) => {
       Object.assign(st.layers, next || {});
-      repaintAt(lastT);
+      repaint();
     },
     /**
      * The recorded clip's sidecar landed — or came back absent, which is

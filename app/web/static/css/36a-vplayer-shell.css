@@ -453,23 +453,24 @@
 
 /* ── Glass: everything that belongs ON the picture ─────────────────────────
    One language for every on-picture control — translucent, blurred,
-   never a solid slab — so the transport discs, the layer switches and
-   the navigation read as one set rather than three families of button
-   that happen to share a screen: „nicht so massive Buttons, sondern
-   irgendwie schöne so wie der Play … leicht überblendet, leicht
-   transparent".
+   never a solid slab — so the transport discs and the navigation read as
+   one set rather than two families of button that happen to share a
+   screen: „nicht so massive Buttons, sondern irgendwie schöne so wie der
+   Play … leicht überblendet, leicht transparent".
 
-   Every one of these is a CHILD OF THE STAGE, which is what hooks them
-   into the existing idle auto-hide: _autohide.js writes data-chrome on
-   the stage and the rule at the bottom fades the whole group. So they
-   go away while the clip runs and come back on the same gesture the
-   transport does, with no second mechanism. */
+   The layer switches were part of this set and are not any more: they
+   sat permanently over the footage, and these cameras burn their own
+   clock into the frame. They now have the shell's own row below the
+   picture.
+
+   What is left is a CHILD OF THE STAGE, which is what hooks it into the
+   existing idle auto-hide: _autohide.js writes data-chrome on the stage
+   and the rule at the bottom fades it. So it goes away while the clip
+   runs and comes back on the same gesture the transport does, with no
+   second mechanism. */
 .vp-glass {
   position: absolute;
   z-index: 18;
-}
-
-.vp-glass {
   inset: 0;
   /* The layer itself must never eat a tap meant for the picture — the
      auto-hide's tap-to-toggle listens on the stage underneath. */

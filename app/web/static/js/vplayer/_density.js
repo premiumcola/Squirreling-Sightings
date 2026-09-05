@@ -124,19 +124,17 @@ export function fitPlateText(det, cat, geom = {}) {
 }
 
 /**
- * Everything this player paints ON the picture and expects a finger on:
- * the layer switches and the ROI caption at the top, the two navigation
- * chevrons at the sides, and mediaview's transport disc in the middle.
+ * Everything this player still paints ON the picture and expects a
+ * finger on: the two navigation chevrons at the sides, and mediaview's
+ * transport disc in the middle.
  *
- * THE CHIPS, NOT THEIR HOST. `.vp-toggles--onstage` is a transparent
- * full-width box that on a 375 px screen wraps to two rows — measuring
- * IT declares 65 px of picture occupied when four chips and a caption
- * actually cover about half of that, and every label near the top of
- * the frame is then suppressed for a button that is not there.
+ * The layer switches and the ROI caption used to be in here too. They
+ * have left the stage for the shell's own row below the picture, so they
+ * occupy none of it — and a selector that keeps hunting them would go on
+ * suppressing labels near the top of the frame for buttons that are no
+ * longer there.
  */
-const _CHROME_SEL =
-  '.vp-toggles--onstage .vp-seg, .vp-toggles--onstage .vp-roi-chip, ' +
-  '.vp-glass-nav, .mv-player-btn';
+const _CHROME_SEL = '.vp-glass-nav, .mv-player-btn';
 
 /**
  * The on-picture chrome, as rects in the PICTURE's own CSS-px space.

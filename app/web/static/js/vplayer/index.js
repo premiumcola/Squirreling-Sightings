@@ -409,7 +409,6 @@ function _mountAll(cfg) {
     stageChrome,
     overlays,
     overlayRow,
-    togglesHost,
     playhead,
     transport,
     timeline,
@@ -457,7 +456,12 @@ export function closeVideoPlayer() {
   p.timeline?.teardown();
   p.transport?.teardown();
   p.overlayRow?.teardown();
-  p.togglesHost?.remove();
+  // NOT `togglesHost.remove()`. That line was written for a node this
+  // file created and appended to the stage itself; the row now lives in
+  // the shell's own `data-slot="toggles"`, and removing it would tear a
+  // slot out of the skeleton — the next open would find no host for the
+  // switches. `overlayRow.teardown()` already empties it, and the shell
+  // is discarded whole a few lines below.
   p.playhead?.teardown();
   p.overlays?.teardown();
   p.menu?.teardown();

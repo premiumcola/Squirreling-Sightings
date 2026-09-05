@@ -129,7 +129,9 @@ export function renderLiveTracks(host, cfg, frame = null, deps = {}) {
     head.innerHTML = _chipsHtml(cfg, f, status);
     tracks.innerHTML = _tracksHtml(f);
     raw?.update(f);
-    log?.update(f?.trace || []);
+    // The frame rides along: the copy button's payload describes THIS
+    // tick, and the fold has no other way to see it.
+    log?.update(f?.trace || [], f);
   };
   update(frame, null);
 

@@ -25,6 +25,35 @@
 import { esc } from '../../core/dom.js';
 import { renderFold } from '../../core/fold.js';
 import { _wireCopyBar } from '../../mediaview/live-detect-debug/_copy-bar.js';
+import { S } from '../../mediaview/live-detect-state.js';
+
+/** The copy bar's context, read from the SHARED live-detect state.
+ *
+ * BOTH BUTTONS USED TO DO NOTHING, and this is why: they were wired only
+ * when the caller happened to hand in `deps.ctx` and `deps.post`. The
+ * recorded entry point passes `{request, onSaved, onError}`; the live and
+ * simulation entry points in dashboard.js pass no `deps` at all — so on
+ * the one surface this fold actually appears on, `deps.ctx` was
+ * undefined, `_wireCopyBar` never ran, and the bundle listener was never
+ * attached. Two buttons rendered, neither reachable.
+ *
+ * A control whose wiring three separate call sites must each remember to
+ * pass is a control that will be dead again after the next one is added.
+ * So the fold builds its own context instead. The fields are exactly the
+ * ones live-detect-tabs.js assembles for the legacy debug tab — same
+ * shape, same source, one implementation.
+ */
+function _copyCtx(frame) {
+  return {
+    tickState: S.tickState,
+    session: S.session,
+    holdMs: S.holdMsActive,
+    cycleEmaMs: S.cycleEmaMs,
+    // The tick payload as the server sent it — `frame.raw` is the
+    // untouched body, `frame` itself is _data/_map.js's mapped view.
+    fullData: frame?.raw || frame || null,
+  };
+}
 
 /** Storage key — its own, so this fold's state is independent. */
 const FOLD_KEY = 'tamspy.vplayer.fold.debug';
@@ -57,6 +86,36 @@ function _barHtml() {
 }
 
 /**
+ * Ask the server to collect a bundle, and say what happened on the
+ * button itself.
+ *
+ * Falls back to its own fetch when no `post` helper was handed in. That
+ * fallback is the fix, not a nicety: the surface this fold appears on
+ * never passed one, so the button's only path was the one it did not
+ * have.
+ */
+async function _requestBundle(btn, post) {
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Bundle wird erstellt …';
+  try {
+    const res =
+      typeof post === 'function'
+        ? await post('/api/debug/bundle')
+        : await fetch('/api/debug/bundle', { method: 'POST' }).then((r) =>
+            r.ok ? r.json().catch(() => ({})) : { ok: false },
+          );
+    btn.textContent = res && res.ok === false ? 'Fehlgeschlagen' : 'Bundle gespeichert';
+  } catch {
+    btn.textContent = 'Fehlgeschlagen';
+  }
+  window.setTimeout(() => {
+    btn.textContent = label;
+    btn.disabled = false;
+  }, 2500);
+}
+
+/**
  * Render the Debug-Log fold.
  *
  * @param {HTMLElement} host
@@ -75,34 +134,19 @@ export function renderDebugLog(host, deps = {}) {
   });
   if (!fold) return null;
 
-  const paint = (lines) => {
+  const paint = (lines, frame) => {
     fold.body.innerHTML = _barHtml() + `<div class="vp-pnl-trace">${_linesHtml(lines)}</div>`;
     // Re-wire after every repaint: the bar is inside the replaced
-    // markup, so its listener goes with it.
-    if (deps.ctx) _wireCopyBar(fold.body, deps.ctx);
+    // markup, so its listener goes with it. Unconditional now — see
+    // _copyCtx for why a `deps.ctx` guard left both buttons dead.
+    _wireCopyBar(fold.body, _copyCtx(frame));
     const bundleBtn = fold.body.querySelector('[data-action="vp-bundle"]');
-    if (bundleBtn && typeof deps.post === 'function') {
-      bundleBtn.addEventListener('click', async () => {
-        bundleBtn.disabled = true;
-        const label = bundleBtn.textContent;
-        bundleBtn.textContent = 'Bundle wird erstellt …';
-        try {
-          const res = await deps.post('/api/debug/bundle');
-          bundleBtn.textContent = res && res.ok === false ? 'Fehlgeschlagen' : 'Bundle gespeichert';
-        } catch {
-          bundleBtn.textContent = 'Fehlgeschlagen';
-        }
-        window.setTimeout(() => {
-          bundleBtn.textContent = label;
-          bundleBtn.disabled = false;
-        }, 2500);
-      });
-    }
+    if (bundleBtn) bundleBtn.addEventListener('click', () => _requestBundle(bundleBtn, deps.post));
   };
 
-  paint([]);
+  paint([], null);
   return {
-    update: (lines) => paint(lines),
+    update: (lines, frame) => paint(lines, frame),
     teardown: () => fold.teardown(),
   };
 }

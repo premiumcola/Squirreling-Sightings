@@ -506,6 +506,16 @@
   font-size: 13px;
 }
 
+/* The sentence that stands in for the rows this clip has no values for
+   — see _provenance.js::_gapNoteHtml. Quiet: it explains an absence, and
+   an absence should not out-shout the values printed above it. */
+.vp-pnl-prov-gap {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
 .vp-pnl-k {
   flex: 0 0 40%;
   color: var(--muted);

@@ -27,6 +27,7 @@ import {
   tpuFor,
   trackRow,
 } from '../_helpers.js';
+import { provenanceView } from '../_provenance.js';
 
 /** A complete event, as the backend writes one today. */
 const FULL_EVENT = {
@@ -297,4 +298,39 @@ test('several rows concatenate, and nothing renders as nothing', () => {
   assert.equal(html.match(/vp-pnl-kv/g).length, 2);
   assert.equal(kvRowsHtml([]), '');
   assert.equal(kvRowsHtml(null), '');
+});
+
+// ── Aufnahme-Details: keine Spalte aus Strichen ────────────────────────
+
+test('leere Zeilen werden weggelassen statt als Strich gedruckt', () => {
+  // „Was bringen unten die ganzen Aufnahmedetails, wenn da überall nur
+  // 'n Strich ist, null oder null Sekunden?" — auf einem Clip von vor
+  // dem Schnappschuss waren zwölf von fünfzehn Zeilen genau das.
+  const alt = {
+    recording_settings: { conf_thresh_general: 0.0, pre_motion_seconds: 0, post_motion_seconds: 0 },
+  };
+  const view = provenanceView(alt);
+  assert.ok(view.rows.length > 0, 'was bekannt ist, bleibt stehen');
+  assert.ok(view.rows.length < provenanceRows(alt).length, 'der Rest faellt weg');
+  for (const r of view.rows) assert.notEqual(r.value, PLACEHOLDER);
+});
+
+test('die Luecke wird EINMAL erklaert, statt vielfach angedeutet', () => {
+  const alt = { recording_settings: { conf_thresh_general: 0.0 } };
+  assert.match(provenanceView(alt).note, /Schnappschuss/);
+});
+
+test('ein vollstaendiger Schnappschuss bekommt keinen Hinweis', () => {
+  const view = provenanceView(FULL_EVENT);
+  assert.equal(view.note, '', 'nichts fehlt, also gibt es nichts zu erklaeren');
+  assert.equal(view.rows.length, provenanceRows(FULL_EVENT).length);
+});
+
+test('bei einem neuen Clip mit Luecken zaehlt der Hinweis sie', () => {
+  // Hier ist die Luecke feldweise und NICHT das Alter des Clips — die
+  // Erklaerung „aeltere Aufnahme" waere dann schlicht falsch.
+  const teil = { provenance: { ...FULL_EVENT.provenance, models: {}, timing: {} } };
+  const view = provenanceView(teil);
+  assert.match(view.note, /weitere Angaben/);
+  assert.equal(/ltere Aufnahme/.test(view.note), false);
 });

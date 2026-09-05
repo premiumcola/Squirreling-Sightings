@@ -14,6 +14,8 @@
 // owns that fallback chain — including the older, narrower
 // recording_settings — and is the only place a field name appears.
 
+import { PLACEHOLDER } from '../../core/format.js';
+import { esc } from '../../core/dom.js';
 import { renderFold } from '../../core/fold.js';
 import { kvRowsHtml, provenanceRows } from './_helpers.js';
 
@@ -34,6 +36,40 @@ const FOLD_KEY = 'tamspy.vplayer.fold.details';
  * @param {object} deps  { tier }
  * @returns {{update: (item) => void, teardown: () => void}|null}
  */
+/**
+ * PURE: the rows worth printing, and the sentence for the ones that
+ * are not.
+ *
+ * ROWS WITH NOTHING IN THEM ARE DROPPED. „Was bringen unten die ganzen
+ * Aufnahmedetails, wenn da überall nur 'n Strich ist, null oder null
+ * Sekunden?" — on a clip older than the provenance snapshot that was
+ * twelve of fifteen rows. A dash says "not recorded", which is worth
+ * saying ONCE, in a sentence, rather than fifteen times in a table that
+ * then buries the three values the clip does have.
+ *
+ * The sentence says WHY, which the dashes never did. The provenance
+ * block is young — a clip recorded before it shipped has
+ * `provenance: null` and can never gain one, so that is a fact about the
+ * clip's age rather than a fault to chase. A clip that HAS a snapshot
+ * but is missing the odd field gets the plain count instead: there the
+ * gap is per-field and the age explanation would be wrong.
+ *
+ * @param {object} item
+ * @returns {{rows: Array, note: string}}
+ */
+export function provenanceView(item) {
+  const all = provenanceRows(item);
+  const rows = all.filter((r) => r.value !== PLACEHOLDER);
+  const missing = all.length - rows.length;
+  if (!missing) return { rows, note: '' };
+  const note = item?.provenance
+    ? `${missing} weitere Angaben wurden für diesen Clip nicht aufgezeichnet.`
+    : rows.length
+      ? 'Ältere Aufnahme — für sie wurde noch kein Settings-Schnappschuss gespeichert.'
+      : 'Für diesen Clip wurde kein Settings-Schnappschuss gespeichert.';
+  return { rows, note };
+}
+
 export function renderProvenance(host, deps = {}) {
   if (!host) return null;
   const fold = renderFold(host, {
@@ -49,7 +85,10 @@ export function renderProvenance(host, deps = {}) {
   const rowsHost = fold.body.querySelector('.vp-pnl-prov-rows');
 
   const paint = (item) => {
-    rowsHost.innerHTML = kvRowsHtml(provenanceRows(item));
+    const view = provenanceView(item);
+    rowsHost.innerHTML =
+      kvRowsHtml(view.rows) +
+      (view.note ? `<p class="vp-pnl-prov-gap">${esc(view.note)}</p>` : '');
   };
 
   paint(null);

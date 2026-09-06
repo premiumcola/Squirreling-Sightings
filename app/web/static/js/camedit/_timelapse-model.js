@@ -250,3 +250,35 @@ export function _tlResultDesc(periodS, targetS, fps) {
       : '';
   return `<div class="tl-drow"><span class="tl-drow-ico">⏱</span><span class="tl-drow-text">${periodLabel} → ${tN}s Video</span></div>${targetLine}<div class="tl-drow"><span class="tl-drow-ico">📸</span><span class="tl-drow-text">${totalFrames} Frames · Alle ${intervalLabel} ein Foto</span></div><div class="tl-drow tl-drow-accent"><span class="tl-drow-ico">⚡</span><span class="tl-drow-text">${compression}× Zeitraffer · ~${_tlDiskLabel(diskMb)} Speicher</span></div>${heavyLine}`;
 }
+
+/** Above this share of discarded frames, the profile is worth a word. */
+const _TL_REJECT_ALARM = 0.3;
+
+/**
+ * PURE: one line about capture health, or '' when there is nothing wrong.
+ *
+ * THE SHARE, not the count. The status row already prints „121
+ * verworfen" beside „40 / 1350 Frames", and those two numbers next to
+ * each other read as a footnote — while what they actually say is that
+ * three quarters of everything the camera captured was thrown away as
+ * unusable. That is the difference between a timelapse being short and a
+ * timelapse being broken, and it is why finished videos kept coming out
+ * graded „lossy" with nobody able to see it coming: the evidence was on
+ * screen the whole time, in a form that did not read as evidence.
+ *
+ * Silent below the threshold, and silent on a handful of frames: a panel
+ * that warns on every profile teaches the operator to stop reading it,
+ * and 2 of 3 rejected at breakfast is not a fault, it is a morning.
+ *
+ * @param {object} prof  one profile block from /api/timelapse/status
+ * @returns {string}
+ */
+export function captureHealthNote(prof) {
+  const kept = Number(prof?.captured) || 0;
+  const rejected = Number(prof?.rejected) || 0;
+  const reached = kept + rejected;
+  if (reached < 10 || !rejected) return '';
+  const share = rejected / reached;
+  if (share < _TL_REJECT_ALARM) return '';
+  return `⚠ ${Math.round(share * 100)} % der Bilder verworfen — der Zeitraffer wird lückenhaft`;
+}

@@ -295,6 +295,19 @@
 .tl-sb-prof-name {
   font-weight: 600;
 }
+
+/* Only present when something is actually wrong — see
+   timelapse-status.js::captureHealthNote. A panel that warns on every
+   row teaches the operator to stop reading it. */
+.tl-sb-prof-health {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
 .tl-sb-prof-frames {
   color: #a78bfa;
 }

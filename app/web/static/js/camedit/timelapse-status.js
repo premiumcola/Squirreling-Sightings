@@ -11,6 +11,7 @@
 import { byId, esc } from '../core/dom.js';
 import { j } from '../core/api.js';
 import { _TL_PROFILES_DEF, _tlIntervalLabel } from './timelapse-settings.js';
+import { captureHealthNote } from './_timelapse-model.js';
 
 const _TL_FILMSTRIP = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><line x1="6" y1="3" x2="18" y2="3"/><line x1="6" y1="21" x2="18" y2="21"/><polygon points="7,4 17,4 12,12" fill="#c4b5fd" opacity=".8"/><polygon points="12,12 7,20 17,20" fill="#c4b5fd" opacity=".5"/></svg>`;
 
@@ -48,6 +49,7 @@ function _tlProfileRow(label, prof) {
   const rejected = Number(prof.rejected) || 0;
   const projLine = projected > 0 ? ` · Ziel ~${esc(_tlFmtBytes(projected))}` : '';
   const rejLine = rejected > 0 ? ` · ${rejected} verworfen` : '';
+  const health = captureHealthNote(prof);
   const clamped = prof.interval_clamped
     ? '<span class="tl-sb-prof-warn" title="Intervall auf 8 s begrenzt">⚠</span>'
     : '';
@@ -68,6 +70,7 @@ function _tlProfileRow(label, prof) {
         <span>${pct} %</span>
         <span>Build ${esc(_tlFmtBuildAt(prof.next_build_at))}</span>
       </div>
+      ${health ? `<div class="tl-sb-prof-health">${esc(health)}</div>` : ''}
     </div>`;
 }
 

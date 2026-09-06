@@ -24,11 +24,14 @@ import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
 import { apiGet } from '../core/api.js';
+import { qaCause, REJECT_REASON_DE } from './_qa-cause.js';
 
+// GERMAN, and no jargon. „lossy" was an English word on a German
+// surface, and it named a symptom nobody could act on.
 const _GRADE_CLASSES = {
-  green: { cls: 'mmc-qa-pill--green', label: 'clean' },
-  yellow: { cls: 'mmc-qa-pill--yellow', label: 'ok' },
-  red: { cls: 'mmc-qa-pill--red', label: 'lossy' },
+  green: { cls: 'mmc-qa-pill--green', label: 'vollständig' },
+  yellow: { cls: 'mmc-qa-pill--yellow', label: 'lückenhaft' },
+  red: { cls: 'mmc-qa-pill--red', label: 'stark lückenhaft' },
 };
 
 // One in-flight fetch per relpath — multiple cards for the same
@@ -83,12 +86,20 @@ function _renderPill(card, qa) {
   if (!meta) return;
   const wrap = card.querySelector('.mmc-img-wrap');
   if (!wrap) return;
+  // A DOT, not a word. „bitte macht das Lossy sein irgendwie schöner,
+  // es überragt beim iPhone" — the pill sat at a fixed `right: 42px`
+  // between the „Timelapse" badge on the left and the delete button on
+  // the right, and on a phone-width tile the three of them fought for
+  // the same strip. A coloured dot cannot collide with anything, and
+  // everything the word said is one tap away in the panel behind it —
+  // where it can be said properly instead of in one English adjective.
+  const cause = qaCause(qa);
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = `mmc-qa-pill ${meta.cls}`;
-  btn.setAttribute('aria-label', `Qualität: ${meta.label}`);
-  btn.title = `${meta.label} · dup ${Math.round((qa.playback?.duplicate_ratio || 0) * 100)} %`;
-  btn.innerHTML = `<span class="mmc-qa-dot"></span><span>${meta.label}</span>`;
+  btn.setAttribute('aria-label', `Aufnahmequalität: ${meta.label}. Antippen für den Grund.`);
+  btn.title = cause ? `${meta.label} — ${cause.headline}` : meta.label;
+  btn.innerHTML = `<span class="mmc-qa-dot"></span>`;
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
     _openModal(card, qa);
@@ -191,6 +202,37 @@ function _openModal(card, qa) {
   });
 }
 
+/**
+ * The panel's opening block: the cause, in words, before any number.
+ *
+ * THE ORDER IS THE POINT. The fps triplet and the duplicate ratio stay —
+ * they are the evidence, and the copy button hands them to whoever is
+ * debugging. But they came FIRST, and four English measurements are not
+ * an answer to „wieso lossy?". Two clips on this box carry the same red
+ * grade and the same high duplicate ratio for reasons that share
+ * nothing: one camera barely captured, the other captured and had three
+ * quarters thrown away as unusable. The numbers show neither; the
+ * sentence shows both. See _qa-cause.js.
+ */
+function _causeHtml(qa) {
+  const c = qaCause(qa);
+  if (!c) return '';
+  const nums = c.numbers
+    .map(
+      (n) =>
+        `<div class="tl-qa-num"><span class="tl-qa-num-v">${esc(n.value)}</span>` +
+        `<span class="tl-qa-num-l">${esc(n.label)}</span></div>`,
+    )
+    .join('');
+  const lever = c.lever ? `<p class="tl-qa-lever">${esc(c.lever)}</p>` : '';
+  return (
+    `<div class="tl-qa-cause" data-kind="${esc(c.kind)}">` +
+    `<p class="tl-qa-cause-head">${esc(c.headline)}</p>` +
+    `<p class="tl-qa-cause-detail">${esc(c.detail)}</p>` +
+    `<div class="tl-qa-nums">${nums}</div>${lever}</div>`
+  );
+}
+
 function _renderModal(item, qa) {
   let modal = byId('tlQAModal');
   if (modal) modal.remove();
@@ -230,6 +272,7 @@ function _renderModal(item, qa) {
       ${
         qa
           ? `
+        ${_causeHtml(qa)}
         <div class="tl-qa-stats">
           <div class="tl-qa-stat"><span class="tl-qa-stat-num">${pb.declared_fps || 0}</span><span class="tl-qa-stat-lbl">declared fps</span></div>
           <div class="tl-qa-stat"><span class="tl-qa-stat-num">${pb.effective_fps || 0}</span><span class="tl-qa-stat-lbl">effective fps</span></div>
@@ -239,9 +282,9 @@ function _renderModal(item, qa) {
         ${
           top3.length
             ? `
-        <div class="tl-qa-section-title">Top reject reasons</div>
+        <div class="tl-qa-section-title">Verworfene Bilder</div>
         <ul class="tl-qa-reasons">
-          ${top3.map(([k, v]) => `<li><span>${esc(k)}</span><span class="tl-qa-reason-n">${v}</span></li>`).join('')}
+          ${top3.map(([k, v]) => `<li><span>${esc(REJECT_REASON_DE[k] || k)}</span><span class="tl-qa-reason-n">${v}</span></li>`).join('')}
         </ul>`
             : ''
         }

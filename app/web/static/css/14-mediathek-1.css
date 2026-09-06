@@ -347,6 +347,14 @@ body.media-select-mode .media-grid .mmc-img-wrap {
    gap (6 + 30 + 6 = 42). The pill only renders for real green /
    yellow / red grades now; n/a tiles stay clean (see qa-pill.js
    #_renderPill). */
+/* A DOT, not a labelled pill — see qa-pill.js. At `right: 42px` with a
+   word inside it, the badge reached left far enough to sit under the
+   „Timelapse" chip and right far enough to touch the delete button:
+   „bitte macht das Lossy sein irgendwie schöner, es überragt beim
+   iPhone". Nothing about the word survived being squeezed between two
+   controls on a 190 px tile, and the word was English on a German
+   surface besides. The colour is the summary; the panel behind it is the
+   explanation. */
 .mmc-qa-pill {
   position: absolute;
   top: 7px;
@@ -354,15 +362,12 @@ body.media-select-mode .media-grid .mmc-img-wrap {
   z-index: 3;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  justify-content: center;
+  padding: 5px;
   border-radius: 999px;
   border: 0;
   background: rgba(8, 18, 28, 0.78);
   color: #e2e8f0;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   cursor: pointer;
@@ -507,6 +512,81 @@ body.media-select-mode .media-grid .mmc-img-wrap {
   margin-top: 2px;
   letter-spacing: 0.01em;
 }
+/* The cause block, above the measurements — see qa-pill.js::_causeHtml.
+   It is the answer; the fps triplet below it is the evidence. */
+.tl-qa-cause {
+  margin: 4px 0 16px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: rgba(226, 232, 240, 0.06);
+  border-left: 3px solid rgba(226, 232, 240, 0.28);
+}
+
+/* The colour names WHERE the chain broke — capture, validation, or the
+   encoder's padding — so two clips with the same red grade do not look
+   like the same fault. */
+.tl-qa-cause[data-kind='starved'] {
+  border-left-color: #f87171;
+}
+.tl-qa-cause[data-kind='rejected'] {
+  border-left-color: #fbbf24;
+}
+.tl-qa-cause[data-kind='stretched'] {
+  border-left-color: #60a5fa;
+}
+
+.tl-qa-cause-head {
+  margin: 0 0 5px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #e2e8f0;
+}
+
+.tl-qa-cause-detail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.tl-qa-nums {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.tl-qa-num {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: rgba(8, 18, 28, 0.5);
+}
+
+.tl-qa-num-v {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
+}
+
+.tl-qa-num-l {
+  font-size: 10.5px;
+  color: rgba(226, 232, 240, 0.6);
+}
+
+/* What to actually do about it — the half a diagnosis is missing when it
+   only names the fault. */
+.tl-qa-lever {
+  margin: 11px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.6);
+}
+
 .tl-qa-dup {
   font-size: 12px;
   color: rgba(226, 232, 240, 0.75);

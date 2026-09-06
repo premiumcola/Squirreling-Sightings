@@ -15,7 +15,7 @@ import logging
 import shutil as _shutil
 import threading
 import time as _time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import cv2 as _cv2
@@ -460,6 +460,63 @@ def adopt_orphaned_clips(
             log.warning("[migration] Clip-Adoption fehlgeschlagen: %s", e)
 
     threading.Thread(target=_do, daemon=True).start()
+
+
+#: How long a clip may sit in one stage before the periodic sweep calls
+#: it stuck. Measured on this installation over 71 finished clips: median
+#: 24 s from event to ready, and every clip whose work actually ran
+#: finished inside a few minutes. Fifteen is far outside that and far
+#: inside the hours a restart-orphaned clip used to sit there.
+_STUCK_GRACE_S = 15 * 60
+
+#: How often the periodic sweep looks. Cheap — it walks manifests and
+#: writes nothing unless something is genuinely stranded.
+_STUCK_SWEEP_EVERY_S = 5 * 60
+
+
+def watch_orphaned_clips(*, storage_root: Path, settings, base_cfg: dict) -> None:
+    """Adopt stranded clips WHILE running, not only at the next boot.
+
+    The boot sweep beside this one has always existed, and it is why a
+    restart-orphaned clip eventually resolves. What it could not do is
+    resolve one before the next restart — so a clip orphaned at 10:48
+    kept its card reading „wird umgewandelt" until the container came up
+    again, which on this installation was measured at up to 6.7 hours:
+    „Räumst du Hänger weg??" The answer was yes, eventually, and
+    eventually was the whole problem.
+
+    The predicate is the boot sweep's own, with a MOVING cutoff instead
+    of the process start. ``_owned_by_this_process`` asks whether a
+    manifest's stage stamp is at or after the reference time; handing it
+    ``now - _STUCK_GRACE_S`` turns that same question into "has anything
+    happened to this clip in the last fifteen minutes". A clip a thread
+    is really working on re-stamps itself as it advances and is never
+    touched; one whose owner died stops re-stamping and is adopted on the
+    next pass. Nothing is deleted — a playable mp4 next to the manifest
+    still becomes ``ready``, everything else an honest ``failed``.
+    """
+
+    def _loop():
+        while True:
+            _time.sleep(_STUCK_SWEEP_EVERY_S)
+            try:
+                cfg = settings.export_effective_config(base_cfg)
+                public_base = (cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
+                cutoff = datetime.now() - timedelta(seconds=_STUCK_GRACE_S)
+                result = clip_recovery.sweep_orphaned_clips(
+                    storage_root, started_at=cutoff, public_base=public_base
+                )
+                if result["recovered"] or result["failed"]:
+                    log.warning(
+                        "[migration] Hänger aufgeräumt: %d wiederhergestellt, "
+                        "%d als fehlgeschlagen markiert",
+                        result["recovered"],
+                        result["failed"],
+                    )
+            except Exception as e:
+                log.debug("[migration] Hänger-Sweep fehlgeschlagen: %s", e)
+
+    threading.Thread(target=_loop, daemon=True).start()
 
 
 def migrate_timelapse_to_eventstore(*, storage_root: Path, settings, store, base_cfg: dict) -> None:

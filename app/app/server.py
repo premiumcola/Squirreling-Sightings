@@ -610,6 +610,13 @@ _migrations.adopt_orphaned_clips(
     base_cfg=base_cfg,
     started_at=datetime.fromtimestamp(_BOOT_TS),
 )
+# …and again every five minutes, so a clip orphaned mid-encode does not
+# have to wait for the NEXT boot to stop claiming it is still working.
+_migrations.watch_orphaned_clips(
+    storage_root=storage_root,
+    settings=settings,
+    base_cfg=base_cfg,
+)
 _migrations.migrate_timelapse_to_eventstore(
     storage_root=storage_root,
     settings=settings,

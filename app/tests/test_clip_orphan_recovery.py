@@ -111,7 +111,7 @@ def test_an_orphan_whose_encode_finished_is_recovered_to_ready(tmp_storage_root)
     )
     (_day(tmp_storage_root) / "20260827-060000-000000.mp4").write_bytes(REAL_MP4)
 
-    assert _sweep(tmp_storage_root) == {"recovered": 1, "failed": 0}
+    assert _sweep(tmp_storage_root) == {"recovered": 1, "failed": 0, "skipped_live": 0}
     ev = _read(path)
     assert ev["stage"] == STAGE_READY
     assert ev["status"] == "ready"
@@ -149,7 +149,7 @@ def test_a_truncated_encode_is_not_sold_as_a_playable_clip(tmp_storage_root):
     )
     (_day(tmp_storage_root) / "20260827-062000-000000.mp4").write_bytes(b"\x00" * 200)
 
-    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 1}
+    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 1, "skipped_live": 0}
     assert _read(path)["status"] == "error"
 
 
@@ -162,7 +162,7 @@ def test_an_orphan_with_nothing_on_disk_is_marked_failed(tmp_storage_root):
         since=BOOT - timedelta(hours=1, minutes=20),
     )
 
-    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 1}
+    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 1, "skipped_live": 0}
     ev = _read(path)
     assert ev["stage"] == "failed"
     assert ev["status"] == "error", "the coarse field the older consumers read must follow"
@@ -200,7 +200,7 @@ def test_a_clip_recording_right_now_is_left_alone(tmp_storage_root):
         since=BOOT + timedelta(seconds=5),
     )
 
-    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 0}
+    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 0, "skipped_live": 0}
     assert _read(path)["stage"] == STAGE_RECORDING
 
 
@@ -217,7 +217,7 @@ def test_a_finished_clip_is_never_touched(tmp_storage_root):
     path = day / "20260827-100000-000000.json"
     path.write_text(json.dumps(before), encoding="utf-8")
 
-    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 0}
+    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 0, "skipped_live": 0}
     assert _read(path) == before
 
 
@@ -241,8 +241,8 @@ def test_a_second_sweep_finds_nothing_left_to_do(tmp_storage_root):
 
     first = _sweep(tmp_storage_root)
     after_first = _read(path)
-    assert first == {"recovered": 1, "failed": 1}
-    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 0}
+    assert first == {"recovered": 1, "failed": 1, "skipped_live": 0}
+    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 0, "skipped_live": 0}
     assert _read(path) == after_first
 
 
@@ -260,7 +260,7 @@ def test_an_unreadable_manifest_does_not_abort_the_sweep(tmp_storage_root):
         since=BOOT - timedelta(hours=4),
     )
 
-    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 1}
+    assert _sweep(tmp_storage_root) == {"recovered": 0, "failed": 1, "skipped_live": 0}
     assert _read(path)["status"] == "error"
 
 
@@ -268,6 +268,7 @@ def test_a_missing_storage_tree_is_not_an_error(tmp_path):
     assert sweep_orphaned_clips(tmp_path / "nope", started_at=BOOT) == {
         "recovered": 0,
         "failed": 0,
+        "skipped_live": 0,
     }
 
 
@@ -310,7 +311,7 @@ def test_the_stamped_clip_is_still_offered_to_the_next_boot(tmp_storage_root):
     # clip "ours" — `interrupted_at` overrides that.
     assert sweep_orphaned_clips(
         tmp_storage_root, started_at=BOOT - timedelta(minutes=1), now=BOOT
-    ) == {"recovered": 1, "failed": 0}
+    ) == {"recovered": 1, "failed": 0, "skipped_live": 0}
     assert _read(path)["stage"] == STAGE_READY
     assert INTERRUPTED_AT not in _read(path)
 
@@ -399,3 +400,32 @@ def test_both_halves_share_the_orphan_predicate():
     assert (
         src.count("needs_adoption(event)") == 2
     ), "the boot sweep and the shutdown stamp must both ask the same helper"
+
+
+# ── E · warten ist kein Hängen ────────────────────────────────────────────
+def test_a_clip_a_living_thread_still_holds_is_never_adopted(tmp_storage_root):
+    """„Wandel von alt nach neu der reihe nach um!"
+
+    Seit die Umwandlung eine echte Reihe hat, kann ein Clip die ganze
+    15-Minuten-Karenz WARTEND verbringen. Alter allein unterscheidet dann
+    „niemand kümmert sich" nicht mehr von „ist gleich dran" — und den
+    Wartenden zu adoptieren stempelt einen halbfertigen Clip auf „fertig",
+    Sekunden bevor der Thread, der ihn ordentlich umgewandelt hätte, an
+    die Reihe kommt.
+    """
+    eid = "20260827-060000-000000"
+    path = _stub(tmp_storage_root, eid, stage=STAGE_ENCODING, since=BOOT - timedelta(hours=5))
+    (_day(tmp_storage_root) / f"{eid}.mp4").write_bytes(REAL_MP4)
+    vorher = _read(path)
+
+    assert _sweep(tmp_storage_root, skip_event_ids=frozenset({eid})) == {
+        "recovered": 0,
+        "failed": 0,
+        "skipped_live": 1,
+    }
+    # Buchstäblich unberührt — nicht bloss „noch encoding".
+    assert _read(path) == vorher
+
+    # Und sobald der Thread weg ist, greift der Sweep wie vorher.
+    assert _sweep(tmp_storage_root) == {"recovered": 1, "failed": 0, "skipped_live": 0}
+    assert _read(path)["stage"] == STAGE_READY

@@ -20,6 +20,7 @@ from pathlib import Path
 import cv2 as _cv2
 
 from . import clip_recovery
+from .camera_runtime._recording._encode_queue import inflight_event_ids
 from .media_index import register_timelapse_events
 
 # Der Filmstreifen wohnt seit dem 500-Zeilen-Schnitt nebenan. Hier
@@ -348,15 +349,24 @@ def watch_orphaned_clips(*, storage_root: Path, settings, base_cfg: dict) -> Non
                 cfg = settings.export_effective_config(base_cfg)
                 public_base = (cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
                 cutoff = datetime.now() - timedelta(seconds=_STUCK_GRACE_S)
+                # Was gerade umgewandelt wird oder in der Reihe steht,
+                # ist kein Hänger. Ohne diese Menge würde der Sweep genau
+                # die Clips wegschnappen, die brav warten — Alter allein
+                # unterscheidet „keiner kümmert sich" nicht von „ist
+                # gleich dran".
                 result = clip_recovery.sweep_orphaned_clips(
-                    storage_root, started_at=cutoff, public_base=public_base
+                    storage_root,
+                    started_at=cutoff,
+                    public_base=public_base,
+                    skip_event_ids=inflight_event_ids(),
                 )
                 if result["recovered"] or result["failed"]:
                     log.warning(
                         "[migration] Hänger aufgeräumt: %d wiederhergestellt, "
-                        "%d als fehlgeschlagen markiert",
+                        "%d als fehlgeschlagen markiert, %d noch in Arbeit",
                         result["recovered"],
                         result["failed"],
+                        result["skipped_live"],
                     )
             except Exception as e:
                 log.debug("[migration] Hänger-Sweep fehlgeschlagen: %s", e)

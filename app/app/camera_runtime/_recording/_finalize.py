@@ -33,6 +33,7 @@ import cv2
 from .._clip_tally import clip_aggregate_fields
 from .._consts import log
 from ...media_encode import build_reencode_cmd
+from ._encode_queue import encode_slot
 from ._stages import (
     STAGE_ENCODING,
     STAGE_FAILED,
@@ -84,11 +85,17 @@ class FinalizeClipMixin:
         day_dir = raw_path.parent
         vid_path = day_dir / f"{event_id}.mp4"
 
-        video_url, video_relpath, duration_s, file_size_bytes, encode_error, achieved_pre_s = (
-            self._produce_playable_clip(
-                raw_path, vid_path, event_id, day_dir, storage_root, public_base, preroll_frames
+        # Ab hier höchstens ENCODE_SLOTS gleichzeitig. Der Clip bleibt
+        # solange auf `queued` stehen — das ist die einzige Stufe, die
+        # ehrlich beschreibt, was er tut: warten. Ohne diese Klammer
+        # liefen acht 4K-Transkodierungen gleichzeitig und keine wurde
+        # fertig; siehe _encode_queue.py für die Messung.
+        with encode_slot(self.camera_id, event_id):
+            video_url, video_relpath, duration_s, file_size_bytes, encode_error, achieved_pre_s = (
+                self._produce_playable_clip(
+                    raw_path, vid_path, event_id, day_dir, storage_root, public_base, preroll_frames
+                )
             )
-        )
 
         # AFTER the splice, not before. The thumbnail seeks to a third of
         # whatever file it is handed, and it used to be handed the

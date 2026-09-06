@@ -11,9 +11,13 @@ coarsest points of it:
 * ``recording`` — the stream-copy subprocess is writing ``<id>.raw.mp4``.
   Bounded by ``processing.clip_max_duration_s`` (default 120 s).
 * ``queued``    — stream-copy finished, the re-encode thread is spawned
-  but has not entered ffmpeg yet. Real, but normally milliseconds long:
-  each clip gets its OWN thread, so this is *not* a FIFO position. Never
-  render it as "3rd in line" — there is no line.
+  but has not entered ffmpeg yet. THIS IS NOW A REAL LINE. It used to
+  say the opposite ("each clip gets its OWN thread, so this is *not* a
+  FIFO position — there is no line"), and that was true only as long as
+  clips arrived one at a time. At a bird feeder they don't: eight 4K
+  transcodes ran at once, each grabbing every core, and none finished.
+  ``_encode_queue.py`` now admits ``ENCODE_SLOTS`` at a time and the
+  rest wait here. Rendering it as a queue position is correct.
 * ``encoding``  — ``ffmpeg -vcodec libx264`` is running. Hard-capped by
   the 300 s ``subprocess.run`` timeout in ``_reencode_motion_clip``.
 * ``ready`` / ``failed`` — terminal.

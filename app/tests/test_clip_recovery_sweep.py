@@ -50,7 +50,7 @@ def test_ein_frisch_gestempelter_clip_wird_nicht_angefasst(tmp_path):
     now = datetime(2026, 9, 6, 12, 0, 0)
     p = _event(tmp_path, "evt_frisch", "encoding", now - timedelta(minutes=2))
     res = sweep_orphaned_clips(tmp_path, started_at=now - timedelta(minutes=15), now=now)
-    assert res == {"recovered": 0, "failed": 0}
+    assert res == {"recovered": 0, "failed": 0, "skipped_live": 0}
     assert _stage_of(p) == "encoding"
 
 
@@ -69,7 +69,7 @@ def test_ein_fertiger_clip_bleibt_unberuehrt(tmp_path):
     now = datetime(2026, 9, 6, 12, 0, 0)
     p = _event(tmp_path, "evt_fertig", "ready", now - timedelta(hours=5))
     res = sweep_orphaned_clips(tmp_path, started_at=now - timedelta(minutes=15), now=now)
-    assert res == {"recovered": 0, "failed": 0}
+    assert res == {"recovered": 0, "failed": 0, "skipped_live": 0}
     assert _stage_of(p) == "ready"
 
 
@@ -81,4 +81,4 @@ def test_der_sweep_schreibt_beim_zweiten_lauf_nichts_mehr(tmp_path):
     first = sweep_orphaned_clips(tmp_path, started_at=now - timedelta(minutes=15), now=now)
     second = sweep_orphaned_clips(tmp_path, started_at=now - timedelta(minutes=15), now=now)
     assert first["failed"] == 1
-    assert second == {"recovered": 0, "failed": 0}
+    assert second == {"recovered": 0, "failed": 0, "skipped_live": 0}

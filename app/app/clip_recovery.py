@@ -280,21 +280,39 @@ def _recent_manifests(storage_root: Path, now: datetime, days: int) -> Iterator[
 
 
 def sweep_orphaned_clips(
-    storage_root, *, started_at: datetime, public_base: str = "", now: datetime = None
+    storage_root,
+    *,
+    started_at: datetime,
+    public_base: str = "",
+    now: datetime = None,
+    skip_event_ids: frozenset[str] = frozenset(),
 ) -> dict:
     """Boot half: adopt every clip left in flight by a dead process.
 
-    Returns ``{"recovered": n, "failed": n}``. Idempotent — the second
-    run over the same tree finds no candidates and writes nothing.
+    Returns ``{"recovered": n, "failed": n, "skipped_live": n}``.
+    Idempotent — the second run over the same tree finds no candidates
+    and writes nothing.
+
+    ``skip_event_ids`` are the clips a LIVING thread is still holding.
+    Empty at boot, where by definition nothing is in flight. It matters
+    for the periodic sweep: once the encode queue admits only a couple of
+    clips at a time, a clip can legitimately spend the whole 15-minute
+    grace WAITING — and adopting it would stamp a half-finished clip
+    "ready" seconds before the thread that was about to do it properly
+    got its turn. Age alone cannot tell "nobody is coming" from "you are
+    third in line"; this set can.
     """
     root = Path(storage_root)
     now = now or datetime.now()
-    result = {"recovered": 0, "failed": 0}
+    result = {"recovered": 0, "failed": 0, "skipped_live": 0}
     for path in _all_manifests(root):
         event = _load(path)
         if event is None or not needs_adoption(event):
             continue
         if _owned_by_this_process(event, started_at):
+            continue
+        if event.get("event_id") in skip_event_ids:
+            result["skipped_live"] += 1
             continue
         result[adopt_event(event, path, root, public_base, now)] += 1
         _write(path, event)

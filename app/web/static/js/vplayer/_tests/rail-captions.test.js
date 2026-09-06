@@ -55,6 +55,24 @@ test('the first-event caption needs a pre-roll to point past', () => {
   assert.match(railCaptionsHtml(model({ preRoll: 4, firstEventT: 4 })), /erstes Ereignis/);
 });
 
+test('das erste Ereignis trennt Symbol und Wort', () => {
+  // „nehm den Text raus für erstes Ereignis, nur n Symbol!" — auf dem
+  // Telefon bleibt das ▼ stehen und das Wort wird per CSS abgeschaltet.
+  // Zwei Elemente sind die Voraussetzung dafür; steht der Text wieder im
+  // selben Knoten wie das Zeichen, verschwindet beides zusammen.
+  const html = railCaptionsHtml(model({ preRoll: 4, firstEventT: 4 }));
+  assert.match(html, /class="vp-tl-cap-mark"[^>]*>▼</);
+  assert.match(html, /class="vp-tl-cap-word">erstes Ereignis</);
+});
+
+test('liegt das erste Ereignis IM Vorlauf, sagt der Titel das', () => {
+  // Der Vorlauf ist Material von vor dem Auslöser; ein Tier, das schon
+  // im Bild steht, wird darin zu Recht erkannt. Unausgesprochen liest
+  // sich das als Widerspruch.
+  const html = railCaptionsHtml(model({ preRoll: 4, firstEventT: 1 }));
+  assert.match(html, /title="erstes Ereignis · noch im Vorlauf"/);
+});
+
 test('the row is hidden from screen readers, which already have the slider', () => {
   assert.match(railCaptionsHtml(model({ preRoll: 4 })), /aria-hidden="true"/);
 });

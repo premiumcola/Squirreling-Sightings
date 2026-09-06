@@ -271,17 +271,20 @@
   color: var(--text, #edf4fb);
 }
 
-/* ON A PHONE IT GOES AWAY, and the row goes back to one line.
-   „Was machen diese Elemente hier, der Text nervt am Handy" — three
-   stacked lines of caption above a six-second clip, two of which were
-   added today. The moment this one names is already on the rail TWICE:
-   the white marker sits exactly on it, and a bead sits there too with
-   the same sentence as its tip. A third telling, in words, over the
-   playhead, is chrome — and on 393 px it was the widest thing in the
-   strip. The words stay on desktop, where the row is not the scarce
-   thing. */
+/* The pointer stays, the words go — „nehm den Text raus für erstes
+   Ereignis, nur n Symbol!"
+   Three stacked lines of caption above a six-second clip was the widest
+   thing in the strip at 393 px, and the moment this one names is already
+   on the rail twice: the white marker sits exactly on it, and so does a
+   bead carrying the same sentence as its tip. A ▼ on the right spot says
+   everything the sentence said. The words come back on desktop, where
+   the row is not the scarce thing, and `title` keeps them everywhere. */
+.vp-tl-cap-word {
+  margin-left: 3px;
+}
+
 @media (max-width: 560px) {
-  .vp-tl-cap--first {
+  .vp-tl-cap-word {
     display: none;
   }
 

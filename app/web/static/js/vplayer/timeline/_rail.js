@@ -72,9 +72,16 @@ export function railCaptionsHtml(model) {
     // legitimately detected inside it. Left unsaid it reads as a
     // contradiction, so the caption says it.
     const inside = model.firstEventT < model.preRoll;
-    const text = inside ? '▼ erstes Ereignis · noch im Vorlauf' : '▼ erstes Ereignis';
+    const text = inside ? 'erstes Ereignis · noch im Vorlauf' : 'erstes Ereignis';
+    // THE POINTER AND THE WORDS ARE TWO ELEMENTS, because on a phone only
+    // the first one earns its space: „nehm den Text raus für erstes
+    // Ereignis, nur n Symbol!" A ▼ sitting on the moment IS the
+    // statement; the words repeat what the white marker on the rail
+    // already shows. `title` keeps them reachable at any width.
     parts.push(
-      `<span class="vp-tl-cap vp-tl-cap--first" style="left:${_pct(at)}">${text}</span>`,
+      `<span class="vp-tl-cap vp-tl-cap--first" style="left:${_pct(at)}" title="${text}">` +
+        `<span class="vp-tl-cap-mark" aria-hidden="true">▼</span>` +
+        `<span class="vp-tl-cap-word">${text}</span></span>`,
     );
   }
   if (model.postRoll > 0) {

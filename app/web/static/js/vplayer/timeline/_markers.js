@@ -14,10 +14,10 @@
 // markup and nothing else. Positions come from _model.js's `pctOf`, so
 // a bead and the lane bar it belongs to cannot drift apart.
 
+import { clockLabel } from '../../core/clock-format.js';
 import { esc } from '../../core/dom.js';
 import { subjectLabel } from '../../core/clip-species.js';
 import { liveTrackColor } from '../../core/track-color.js';
-import { spanLabel } from '../_helpers.js';
 import { pctOf } from './_model.js';
 
 const _pct = (v) => `${(v * 100).toFixed(3)}%`;
@@ -67,7 +67,20 @@ export function buildMarkers(model) {
       kind: 'event',
       t: lane.dotT,
       label: `${num}${name}`,
-      tip: `${num}${name} · erkannt ${spanLabel(lane.barT0, lane.barT1)}`,
+      // A MOMENT, because a bead IS a moment. It used to carry the whole
+      // span — „erkannt 0:00–0:10" — and that produced a flat
+      // contradiction with the object row three lines below it, which
+      // said 0:00–0:07 for the same subject: „Wieso Person erkannt 00:00
+      // bis 00:10??"
+      //
+      // Both numbers were true of their own pass. The lane is the
+      // SIDECAR's walk, which holds a track through misses and so ends
+      // later; the row is the live pipeline's aggregate. Neither said
+      // which it was, so together they read as one claim contradicting
+      // itself. The extent is already drawn — that is what the bar is —
+      // and a point marker has no business restating it in numbers it
+      // does not own.
+      tip: `${num}${name} · ab ${clockLabel(lane.dotT)}`,
       colour: lane.colour || liveTrackColor(lane.trackNum),
     });
   }

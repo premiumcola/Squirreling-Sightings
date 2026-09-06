@@ -233,7 +233,11 @@ def test_the_recorder_announces_every_transition():
         (base / name).read_text(encoding="utf-8") for name in ("_ffmpeg_clip.py", "_finalize.py")
     )
     assert '"stage": STAGE_RECORDING' in src, "the stub must be born knowing its stage"
-    assert "_set_clip_stage(event_id, STAGE_QUEUED)" in src
+    # Der `queued`-Aufruf trägt seit der Bilanz-Reparatur eine Fracht
+    # (`clip_aggregate_fields(meta)`), deshalb hier ohne die schliessende
+    # Klammer: die Zusage ist „jeder Übergang wird von genau einer Stelle
+    # angekündigt", nicht „der Aufruf hat zwei Argumente".
+    assert "_set_clip_stage(event_id, STAGE_QUEUED" in src
     assert "_set_clip_stage(event_id, STAGE_ENCODING)" in src
     assert "STAGE_READY if video_url else STAGE_FAILED" in src
 

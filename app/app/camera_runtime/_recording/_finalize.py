@@ -30,6 +30,7 @@ from pathlib import Path
 
 import cv2
 
+from .._clip_tally import clip_aggregate_fields
 from .._consts import log
 from ...media_encode import build_reencode_cmd
 from ._stages import (
@@ -425,14 +426,12 @@ class FinalizeClipMixin:
         ev: dict = {}
         try:
             ev = self.store.get_event(self.camera_id, event_id) or {}
-            if meta is not None:
-                if meta.get("whole_clip") is not None:
-                    ev["whole_clip"] = meta["whole_clip"]
-                # The headline the whole clip decided, which the stub
-                # predates in exactly the case that matters: a species
-                # only identifiable seconds into the clip.
-                if meta.get("bird_species"):
-                    ev["bird_species"] = meta["bird_species"]
+            # Dieselben Felder, die der ffmpeg-Pfad schon beim Aufnahme-
+            # ende anhängt — eine Funktion, damit die beiden Schreiber
+            # nicht auseinanderlaufen können. Hier nochmal, weil die
+            # Bilanz zwischen `queued` und dem Ende weitergewachsen sein
+            # kann: der letzte Stand gewinnt.
+            ev.update(clip_aggregate_fields(meta))
             ev["video_url"] = video_url
             ev["video_relpath"] = video_relpath
             ev["duration_s"] = duration_s

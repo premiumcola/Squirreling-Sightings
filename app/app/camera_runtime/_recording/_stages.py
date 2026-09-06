@@ -106,7 +106,9 @@ def stall_ceiling_s(stage: str, clip_max_s: int = DEFAULT_CLIP_MAX_S) -> int:
     return 0
 
 
-def set_clip_stage(store, camera_id: str, event_id: str, stage: str) -> None:
+def set_clip_stage(
+    store, camera_id: str, event_id: str, stage: str, extra: dict | None = None
+) -> None:
     """Move an in-flight clip to ``stage`` and stamp when it got there.
 
     One event-JSON write per transition — three per clip in total, which
@@ -115,11 +117,20 @@ def set_clip_stage(store, camera_id: str, event_id: str, stage: str) -> None:
     values so every consumer that predates ``stage`` sees exactly what
     it saw before.
 
+    ``extra`` rides along on that same write. It exists so a caller can
+    persist what it already knows without paying for a second read-
+    modify-write — see `_clip_tally.clip_aggregate_fields`, whose result
+    the ffmpeg path attaches at ``queued`` so the clip's own tally
+    survives a re-encode that never finishes. Applied BEFORE the stage
+    fields, so an ``extra`` can never overwrite stage/status/stage_since.
+
     Best-effort by design: a clip that fails to advertise its stage must
     still finish encoding.
     """
     try:
         ev = store.get_event(camera_id, event_id) or {}
+        if extra:
+            ev.update(extra)
         ev["stage"] = stage
         ev["status"] = STAGE_STATUS.get(stage, ev.get("status") or "processing")
         ev["stage_since"] = datetime.now().isoformat(timespec="seconds")

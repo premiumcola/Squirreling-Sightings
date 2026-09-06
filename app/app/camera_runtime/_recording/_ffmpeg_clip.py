@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 
+from .._clip_tally import clip_aggregate_fields
 from .._consts import log
 
 # camera_runtime/_recording/ is two levels under app/app/, so
@@ -35,9 +36,9 @@ class FfmpegClipMixin(FinalizeClipMixin):
     live on the concrete class.
     """
 
-    def _set_clip_stage(self, event_id: str, stage: str) -> None:
+    def _set_clip_stage(self, event_id: str, stage: str, extra: dict | None = None) -> None:
         """Announce which phase this clip is in. See ``_stages.py``."""
-        set_clip_stage(self.store, self.camera_id, event_id, stage)
+        set_clip_stage(self.store, self.camera_id, event_id, stage, extra)
 
     def _write_recording_event_stub(
         self, event_id: str, meta: dict, start_time: datetime, status: str = "recording"
@@ -231,7 +232,16 @@ class FfmpegClipMixin(FinalizeClipMixin):
         # Stream-copy is on disk, the re-encode thread is about to spawn.
         # Short-lived by design (each clip gets its own thread, there is
         # no shared worker pool), but it is the honest state right here.
-        self._set_clip_stage(event_id, STAGE_QUEUED)
+        #
+        # Und der Moment, in dem die Clip-Bilanz auf die Platte gehört.
+        # Bis hierher stand sie nur im Arbeitsspeicher und wurde erst am
+        # ENDE der Re-Encode-Kette geschrieben — kam die nicht an, blieb
+        # der Auslöse-Platzhalter als Ergebnis stehen (31 von 37 fertigen
+        # Clips auf der Anlage). Die Aufnahme ist hier nachweislich
+        # geschlossen: die Zeile „Recording stopped, queuing re-encode"
+        # steht auch für jeden hängenden Clip im Log. Kostet nichts —
+        # diese Schreibung findet ohnehin statt.
+        self._set_clip_stage(event_id, STAGE_QUEUED, clip_aggregate_fields(meta))
         threading.Thread(
             target=self._reencode_motion_clip,
             args=(raw_path, event_id, meta, start_time, preroll_frames),

@@ -329,6 +329,43 @@ def single_frame_summary(detections) -> dict:
     return tally.summary()
 
 
+def clip_aggregate_fields(meta: dict | None) -> dict:
+    """Die Felder, die der ganze Clip entschieden hat — für die Platte.
+
+    WARUM ES DIESE FUNKTION GIBT. Die Bilanz wuchs Bild für Bild im
+    Arbeitsspeicher und erreichte die Platte an genau EINER Stelle: ganz
+    am Ende der Re-Encode-Kette. Kommt die Kette nicht an — bei 4K der
+    Normalfall — bleibt im Ereignis der Platzhalter vom Auslöse-Moment
+    stehen: ein Bild, Sekunde 0, ohne Artnamen. Der Hänger-Sweep stempelt
+    den Clip 15 Minuten später auf „fertig" und fasst die Bilanz nicht
+    an, also wird der Platzhalter als Ergebnis konserviert.
+
+    Gemessen an der laufenden Anlage: von 37 fertigen Clips trugen 31 den
+    Platzhalter. Die Trennung ist scharf — die 6 ordentlich abgeschlossenen
+    hatten ausnahmslos Vorlauf > 0 und benannten den Vogel 5-mal; die 31
+    hatten ausnahmslos Vorlauf 0 und benannten ihn 2-mal. „Wie kann es
+    sein dass in einem so klarem video mit elster diese nicht erkannt
+    wird sondern nur grob vogel???" — sie WURDE erkannt, auf 7 Bildern.
+    Das Ergebnis kam nur nie an.
+
+    Deshalb hier: die zwei Schlüssel, die der Clip besitzt, als Anhang an
+    eine Schreibung, die ohnehin stattfindet (die `queued`-Stufe beim
+    Aufnahmeende). Nur nicht-leere Werte, damit ein Anhang niemals einen
+    schon geschriebenen Wert durch None ersetzt.
+    """
+    if not meta:
+        return {}
+    out = {}
+    if meta.get("whole_clip") is not None:
+        out["whole_clip"] = meta["whole_clip"]
+    # Die Überschrift, die der ganze Clip entschieden hat — der Stub kann
+    # sie nicht kennen, genau im Fall der zählt: eine Art, die erst
+    # Sekunden nach dem Auslöser bestimmbar ist.
+    if meta.get("bird_species"):
+        out["bird_species"] = meta["bird_species"]
+    return out
+
+
 def _round_opt(value) -> float | None:
     if value is None:
         return None

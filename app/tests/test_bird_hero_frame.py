@@ -42,9 +42,9 @@ def test_the_subject_layer_is_not_cropped_by_any_rule():
     """No later rule may quietly put `cover` back on the subject."""
     for block in re.findall(r"\.sd-hero-subject[^{]*\{([^}]*)\}", CSS):
         assert "object-fit: cover" not in block
-        assert "object-position" not in block, (
-            "object-position only matters when something is being cropped"
-        )
+        assert (
+            "object-position" not in block
+        ), "object-position only matters when something is being cropped"
 
 
 def test_the_old_blanket_image_rule_is_gone():
@@ -83,7 +83,9 @@ def test_the_fill_sits_under_the_subject():
 
 
 def test_the_caption_stays_on_top_of_both():
-    caption = re.search(r"\.sd-hero-scrim,\s*\.sd-hero-caption,\s*\.sd-hero-play\s*\{([^}]*)\}", CSS)
+    caption = re.search(
+        r"\.sd-hero-scrim,\s*\.sd-hero-caption,\s*\.sd-hero-play\s*\{([^}]*)\}", CSS
+    )
     assert caption, "the caption group lost its stacking rule"
     z = int(re.search(r"z-index:\s*(\d+)", caption.group(1)).group(1))
     assert z > 1
@@ -115,7 +117,7 @@ def test_the_photo_url_is_escaped_for_css():
     style attribute — two nested contexts, so esc() alone is wrong."""
     assert "cssUrl(src)" in HERO_JS
     dom = (WEB / "static" / "js" / "core" / "dom.js").read_text(encoding="utf-8")
-    body = dom[dom.index("export const cssUrl"):]
+    body = dom[dom.index("export const cssUrl") :]
     body = body[: body.index("\n};")]
     for hostile in ("\\\\", "(", ")", ";", '"', "'"):
         assert hostile in body, f"the allowlist does not mention {hostile!r}"

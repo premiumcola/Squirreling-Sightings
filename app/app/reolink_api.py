@@ -75,7 +75,7 @@ def _post_with_retry(
             if attempt < retries:
                 # 0.5 s, 1 s — capped so a fully-offline cam doesn't
                 # block the caller for >3 s total.
-                time.sleep(0.5 * (2 ** attempt))
+                time.sleep(0.5 * (2**attempt))
                 continue
         except requests.HTTPError as e:
             status = getattr(e.response, "status_code", None)
@@ -107,6 +107,7 @@ def _devinfo_cache_get(key: str) -> dict | None:
 
 def _devinfo_cache_put(key: str, payload: dict) -> None:
     _DEVINFO_CACHE[key] = (time.time(), payload)
+
 
 # Module-level session reused across calls in the same worker thread so
 # that overriding many cams in sequence doesn't re-handshake TCP each

@@ -1,4 +1,5 @@
 """Unit tests for the validate_and_coerce input validator."""
+
 import sys
 from pathlib import Path
 
@@ -20,8 +21,13 @@ from app.schema import (  # noqa: E402
 class TestValidateAndCoerce:
     # ── 1. Valid input passes through ────────────────────────────────────────
     def test_valid_input_passes(self):
-        data = {"id": "cam1", "name": "Camera 1", "enabled": True,
-                "rtsp_url": "rtsp://1.2.3.4", "frame_interval_ms": 200}
+        data = {
+            "id": "cam1",
+            "name": "Camera 1",
+            "enabled": True,
+            "rtsp_url": "rtsp://1.2.3.4",
+            "frame_interval_ms": 200,
+        }
         out = validate_and_coerce(data, CAMERA_SCHEMA)
         assert out["id"] == "cam1"
         assert out["name"] == "Camera 1"
@@ -69,8 +75,7 @@ class TestValidateAndCoerce:
 
     # ── 5. Unknown extra keys pass through unchanged ─────────────────────────
     def test_unknown_key_passes_through(self):
-        data = {"id": "cam1", "name": "Cam", "future_field": "some-value",
-                "another_unknown": 42}
+        data = {"id": "cam1", "name": "Cam", "future_field": "some-value", "another_unknown": 42}
         out = validate_and_coerce(data, CAMERA_SCHEMA)
         assert out["future_field"] == "some-value"
         assert out["another_unknown"] == 42

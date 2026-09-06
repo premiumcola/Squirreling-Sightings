@@ -21,6 +21,7 @@ the encoder, the source-text assertion fails loudly.
 
 IPs in fixtures (none here, but consistent with sibling tests) use
 RFC 5737 documentation addresses (192.0.2.0/24)."""
+
 from __future__ import annotations
 import re
 import sys
@@ -51,10 +52,10 @@ def _daytime(seed: int) -> np.ndarray:
     img[: h // 2, :, 0] = np.clip(160 + (h // 2 - yy) * 0.3 + xx * 0.05, 0, 255).astype(np.uint8)
     img[: h // 2, :, 1] = np.clip(170 + (h // 2 - yy) * 0.2, 0, 255).astype(np.uint8)
     img[: h // 2, :, 2] = np.clip(150 + (h // 2 - yy) * 0.15, 0, 255).astype(np.uint8)
-    img[160:320, 80:240] = (40, 110, 70)     # bush
-    img[200:480, 380:640] = (90, 130, 165)   # path
-    img[200:300, 280:360] = (60, 75, 95)     # building
-    img[380:470, 50:200] = (200, 180, 150)   # contrast object
+    img[160:320, 80:240] = (40, 110, 70)  # bush
+    img[200:480, 380:640] = (90, 130, 165)  # path
+    img[200:300, 280:360] = (60, 75, 95)  # building
+    img[380:470, 50:200] = (200, 180, 150)  # contrast object
     noise = rng.integers(-12, 13, size=img.shape, dtype=np.int16)
     return np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
 
@@ -205,10 +206,7 @@ _WS_DIR = Path(__file__).parent.parent / "app" / "weather_service"
 
 
 def _ws_source() -> str:
-    return "\n".join(
-        p.read_text(encoding="utf-8")
-        for p in sorted(_WS_DIR.rglob("*.py"))
-    )
+    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(_WS_DIR.rglob("*.py")))
 
 
 def test_weather_service_imports_timelapsebuilder():
@@ -246,9 +244,7 @@ def test_sun_timelapse_routes_through_write_video():
     timelapse during boot."""
     src = _ws_source()
     # Two distinct lazy imports of TimelapseBuilder, one per render path.
-    lazy_imports = list(re.finditer(
-        r"from\s+\.{1,3}timelapse\s+import\s+TimelapseBuilder", src
-    ))
+    lazy_imports = list(re.finditer(r"from\s+\.{1,3}timelapse\s+import\s+TimelapseBuilder", src))
     assert len(lazy_imports) >= 2, (
         f"weather_service has only {len(lazy_imports)} import(s) of "
         f"TimelapseBuilder. Both the sun render and the event-TL render "
@@ -296,6 +292,4 @@ def test_write_video_is_callable_with_empty_and_invalid_input(tmp_path, monkeypa
     # — but if the latter, the file must NOT exist (encoder bailed).
     if result is not None:
         assert not out_path.exists() or out_path.stat().st_size == 0
-    assert call_count["n"] >= 3, (
-        f"is_valid_frame called {call_count['n']}× — expected at least 3."
-    )
+    assert call_count["n"] >= 3, f"is_valid_frame called {call_count['n']}× — expected at least 3."

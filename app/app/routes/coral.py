@@ -625,5 +625,3 @@ def api_coral_models_select():
     except Exception as e:
         log.warning("[coral] model switch: rebuild_runtimes failed: %s", e)
     return jsonify({"ok": True, "path": str(target), "category": category})
-
-

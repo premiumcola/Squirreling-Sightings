@@ -10,6 +10,7 @@ migration:
   - is idempotent (second invocation is a no-op)
 
 IPs in fixtures are RFC 5737 documentation addresses (192.0.2.0/24)."""
+
 from __future__ import annotations
 import json
 import sys
@@ -45,19 +46,29 @@ def _make_storage(tmp_path: Path) -> Path:
     md = storage / "motion_detection"
     (md / "cam-192-0-2-172" / "2026-04-25").mkdir(parents=True)
     (md / "cam-192-0-2-172" / "2026-04-25" / "evt_a.jpg").write_bytes(b"a")
-    (md / "cam-192-0-2-172" / "2026-04-25" / "evt_a.json").write_text(json.dumps({
-        "event_id": "a",
-        "camera_id": "cam-192-0-2-172",
-        "video_relpath": "timelapse/cam-192-0-2-172/foo.mp4",
-        "snapshot_relpath": "motion_detection/cam-192-0-2-172/2026-04-25/evt_a.jpg",
-    }), encoding="utf-8")
+    (md / "cam-192-0-2-172" / "2026-04-25" / "evt_a.json").write_text(
+        json.dumps(
+            {
+                "event_id": "a",
+                "camera_id": "cam-192-0-2-172",
+                "video_relpath": "timelapse/cam-192-0-2-172/foo.mp4",
+                "snapshot_relpath": "motion_detection/cam-192-0-2-172/2026-04-25/evt_a.jpg",
+            }
+        ),
+        encoding="utf-8",
+    )
     (md / "cam-Werkstatt.rechts.oben" / "2026-04-26").mkdir(parents=True)
     (md / "cam-Werkstatt.rechts.oben" / "2026-04-26" / "evt_b.jpg").write_bytes(b"b")
-    (md / "cam-Werkstatt.rechts.oben" / "2026-04-26" / "evt_b.json").write_text(json.dumps({
-        "event_id": "b",
-        "camera_id": "cam-Werkstatt.rechts.oben",
-        "snapshot_relpath": "motion_detection/cam-Werkstatt.rechts.oben/2026-04-26/evt_b.jpg",
-    }), encoding="utf-8")
+    (md / "cam-Werkstatt.rechts.oben" / "2026-04-26" / "evt_b.json").write_text(
+        json.dumps(
+            {
+                "event_id": "b",
+                "camera_id": "cam-Werkstatt.rechts.oben",
+                "snapshot_relpath": "motion_detection/cam-Werkstatt.rechts.oben/2026-04-26/evt_b.jpg",
+            }
+        ),
+        encoding="utf-8",
+    )
     (md / "cam-192-0-2-183" / "2026-04-26").mkdir(parents=True)
     (md / "cam-192-0-2-183" / "2026-04-26" / "evt_c.jpg").write_bytes(b"c")
     # timelapse_frames + timelapse — only the Werkstatt-named variant exists
@@ -99,8 +110,7 @@ def _make_cams() -> list[dict]:
 class TestMigrate:
     def test_dual_folder_collapse(self, tmp_path):
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         summary = migrate(store, storage)
         assert summary["noop"] is False
         # Werkstatt → unknown_unknown_werkstatt_172
@@ -115,8 +125,7 @@ class TestMigrate:
 
     def test_canonical_camera_renamed(self, tmp_path):
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         migrate(store, storage)
         # Squirrel → reolink_rlc810a_squirreltown_183 (manufacturer + model set)
         new_squirrel = "reolink_rlc810a_squirreltown_183"
@@ -126,23 +135,25 @@ class TestMigrate:
 
     def test_event_jsons_rewritten(self, tmp_path):
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         migrate(store, storage)
         new_werk = "unknown_unknown_werkstatt_172"
-        evt_a = (storage / "motion_detection" / new_werk / "2026-04-25" / "evt_a.json").read_text(encoding="utf-8")
+        evt_a = (storage / "motion_detection" / new_werk / "2026-04-25" / "evt_a.json").read_text(
+            encoding="utf-8"
+        )
         meta = json.loads(evt_a)
         assert "cam-192-0-2-172" not in evt_a
         assert meta["video_relpath"] == f"timelapse/{new_werk}/foo.mp4"
         assert meta["snapshot_relpath"] == f"motion_detection/{new_werk}/2026-04-25/evt_a.jpg"
-        evt_b = (storage / "motion_detection" / new_werk / "2026-04-26" / "evt_b.json").read_text(encoding="utf-8")
+        evt_b = (storage / "motion_detection" / new_werk / "2026-04-26" / "evt_b.json").read_text(
+            encoding="utf-8"
+        )
         assert "cam-Werkstatt.rechts.oben" not in evt_b
         assert new_werk in evt_b
 
     def test_settings_id_updated(self, tmp_path):
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         migrate(store, storage)
         ids = {c["id"] for c in store.data["cameras"]}
         assert "unknown_unknown_werkstatt_172" in ids
@@ -154,33 +165,30 @@ class TestMigrate:
 
     def test_object_detection_placeholder_removed(self, tmp_path):
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         migrate(store, storage)
         assert not (storage / "object_detection").exists()
 
     def test_idempotent(self, tmp_path):
         """Second invocation must report noop=True and change nothing."""
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         first = migrate(store, storage)
         assert first["noop"] is False
         # Snapshot disk + settings, then run again.
-        before = sorted(p.relative_to(storage).as_posix()
-                        for p in storage.rglob("*") if p.is_file())
+        before = sorted(
+            p.relative_to(storage).as_posix() for p in storage.rglob("*") if p.is_file()
+        )
         before_settings = store.path.read_text(encoding="utf-8")
         second = migrate(store, storage)
         assert second["noop"] is True, f"second run was not noop: {second}"
-        after = sorted(p.relative_to(storage).as_posix()
-                       for p in storage.rglob("*") if p.is_file())
+        after = sorted(p.relative_to(storage).as_posix() for p in storage.rglob("*") if p.is_file())
         assert before == after
         assert before_settings == store.path.read_text(encoding="utf-8")
 
     def test_settings_backup_created(self, tmp_path):
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         summary = migrate(store, storage)
         assert summary["backup"] is not None
         bak = Path(summary["backup"])
@@ -221,6 +229,7 @@ class TestBackupRetentionAndPrune:
         # that round mtime to the second.
         import os as _os
         import time as _t
+
         base_t = _t.time() - 86400
         # Real migration backups carry exactly 8 digits (YYYYMMDD)
         # and 6 digits (HHMMSS); the prune regex requires that.
@@ -236,6 +245,7 @@ class TestBackupRetentionAndPrune:
 
     def test_prune_skips_rotation_files(self, tmp_path):
         from app.storage_migration import _prune_old_settings_backups
+
         store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
         seeded = self._seed_history(store.path, n=3)
         # keep=10 — nothing to prune yet.
@@ -249,6 +259,7 @@ class TestBackupRetentionAndPrune:
 
     def test_prune_caps_timestamped_to_keep(self, tmp_path):
         from app.storage_migration import _prune_old_settings_backups
+
         store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
         seeded = self._seed_history(store.path, n=12)
         pruned = _prune_old_settings_backups(store, keep=5)
@@ -266,6 +277,7 @@ class TestBackupRetentionAndPrune:
         """A malformed ``settings.server.settings_backup_keep`` value
         must clamp to the [1, 100] range, not wipe history."""
         from app.storage_migration import _prune_old_settings_backups
+
         store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
         seeded = self._seed_history(store.path, n=4)
         # keep=0 → clamped to 1 (newest survives, rest pruned).
@@ -279,8 +291,7 @@ class TestBackupRetentionAndPrune:
         """An idempotent re-run does not create a new timestamped
         backup, but it DOES prune any leftover history beyond keep."""
         storage = _make_storage(tmp_path)
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": _make_cams()})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": _make_cams()})
         # First run: real migration → one backup is promoted.
         summary1 = migrate(store, storage)
         assert summary1["backup_retained"] is True
@@ -313,10 +324,7 @@ class TestBackupRetentionAndPrune:
         nor a final should appear."""
         storage = tmp_path / "storage"
         storage.mkdir()
-        store = _FakeSettingsStore(tmp_path / "settings.json",
-                                   {"cameras": []})
+        store = _FakeSettingsStore(tmp_path / "settings.json", {"cameras": []})
         migrate(store, storage)
         for p in store.path.parent.iterdir():
-            assert not p.name.endswith(".partial"), (
-                f"unexpected partial file left behind: {p.name}"
-            )
+            assert not p.name.endswith(".partial"), f"unexpected partial file left behind: {p.name}"

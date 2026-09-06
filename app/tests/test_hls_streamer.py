@@ -5,6 +5,7 @@ The full ffmpeg lifecycle isn't exercised here — that needs a real
 RTSP source, which lives outside CI. The pieces we CAN test in
 isolation are the playlist rewriter (string-in, string-out) and
 the segment-name validator (string-in, bool-out)."""
+
 from __future__ import annotations
 
 import sys
@@ -53,11 +54,7 @@ class TestRewritePlaylist:
         assert b"hls/live0.ts" in out
 
     def test_absolute_urls_pass_through(self):
-        playlist = (
-            b"#EXTM3U\n"
-            b"https://cdn.example/live0.ts\n"
-            b"/abs/path/live1.ts\n"
-        )
+        playlist = b"#EXTM3U\n" b"https://cdn.example/live0.ts\n" b"/abs/path/live1.ts\n"
         out = rewrite_playlist(playlist)
         assert b"hls/https://" not in out
         assert b"hls//abs/" not in out

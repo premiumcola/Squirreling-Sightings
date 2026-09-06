@@ -11,7 +11,11 @@ from __future__ import annotations
 import pytest
 
 from app import net_archive
-from app.telegram_bot._outbound._question import DAILY_BUDGET, QuestionMixin
+from app.telegram_bot._outbound._question import (
+    CLASS_SHARE_MAX,
+    DAILY_BUDGET,
+    QuestionMixin,
+)
 
 
 class _Store:
@@ -131,7 +135,7 @@ def test_below_spawn_produces_nothing_at_all(bot):
 
 
 def test_a_burst_of_events_does_not_send_a_burst_of_questions(bot):
-    """One squirrel visit is one question, not six. The 10-minute gap is
+    """One squirrel visit is one question, not six. The per-class gap is
     per (camera, class) and runs on the monotonic clock."""
     for i in range(6):
         bot.send_question(_meta(f"burst-{i}", 0.62), "cam_werkstatt")
@@ -141,17 +145,70 @@ def test_a_burst_of_events_does_not_send_a_burst_of_questions(bot):
     assert len(bot.sent) == 2
 
 
-def test_the_thirteenth_question_of_the_day_is_not_sent(bot):
+def _class_cap() -> int:
+    return max(1, int(DAILY_BUDGET * CLASS_SHARE_MAX))
+
+
+def test_the_question_past_the_day_budget_is_not_sent(bot):
     """MANDATORY #7 — and the record is still written, with asked=false,
     so the surplus surfaces in the archive under "Noch nicht beurteilt"
-    instead of vanishing."""
+    instead of vanishing.
+
+    Spread over TWO classes, because one class alone can no longer reach
+    the day budget — see the class share below.
+    """
+    labels = ("person", "cat", "bird", "dog")
     for i in range(DAILY_BUDGET):
         bot._question_last = {}  # let the per-class gap through
-        assert bot.send_question(_meta(f"q-{i}", 0.62), "cam_werkstatt") is None
+        label = labels[i % len(labels)]
+        assert bot.send_question(_meta(f"q-{i}", 0.62, label=label), "cam_werkstatt") is None
     bot._question_last = {}
-    assert bot.send_question(_meta("q-over", 0.62), "cam_werkstatt") == "budget"
+    assert bot.send_question(_meta("q-over", 0.62, label="squirrel"), "cam_werkstatt") == "budget"
     assert len(bot.sent) == DAILY_BUDGET
     rec = net_archive.get_record(bot._root, "q-over")
+    assert rec is not None and rec["asked"] is False
+
+
+def test_one_class_cannot_spend_the_whole_day(bot):
+    """THE POINT OF THE SHARE. The archive held 43 questions: 36 person,
+    4 bird, 2 car, 1 cat — and on the day the old budget ran out, all 19
+    were person. A bigger total alone would have bought more of the same;
+    the share is what leaves room for the class nobody has asked about
+    yet."""
+    cap = _class_cap()
+    assert cap < DAILY_BUDGET, "a share that reaches the whole day is not a share"
+    for i in range(cap):
+        bot._question_last = {}
+        assert bot.send_question(_meta(f"p-{i}", 0.62, label="person"), "cam_werkstatt") is None
+    bot._question_last = {}
+    assert bot.send_question(_meta("p-over", 0.62, label="person"), "cam_werkstatt") == (
+        "class_budget"
+    )
+    # …and the room it did not get is still there for a bird.
+    bot._question_last = {}
+    assert bot.send_question(_meta("bird-1", 0.62, label="bird"), "cam_werkstatt") is None
+
+
+def test_a_class_over_its_share_is_still_archived(bot):
+    """Blocked is not silent: it lands under „Noch nicht beurteilt", the
+    same treatment the day budget gives its surplus."""
+    for i in range(_class_cap()):
+        bot._question_last = {}
+        bot.send_question(_meta(f"p-{i}", 0.62, label="person"), "cam_werkstatt")
+    bot._question_last = {}
+    bot.send_question(_meta("p-blocked", 0.62, label="person"), "cam_werkstatt")
+    rec = net_archive.get_record(bot._root, "p-blocked")
+    assert rec is not None and rec["asked"] is False
+
+
+def test_a_gap_blocked_question_is_archived_too(bot):
+    """The gap branch used to return BEFORE the archive write, so a
+    gap-blocked question left no card anywhere. With the budget raised
+    the gap is the binding limit — without this the raise would have
+    bought more questions and LESS visibility."""
+    assert bot.send_question(_meta("gap-1", 0.62), "cam_werkstatt") is None
+    assert bot.send_question(_meta("gap-2", 0.62), "cam_werkstatt") == "gap"
+    rec = net_archive.get_record(bot._root, "gap-2")
     assert rec is not None and rec["asked"] is False
 
 

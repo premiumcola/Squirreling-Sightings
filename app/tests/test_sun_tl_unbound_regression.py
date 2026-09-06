@@ -12,6 +12,7 @@ runtime + filesystem so the ordering invariant is checked
 mechanically. If a future refactor moves the assignment back below
 a stats reference, this test fails fast.
 """
+
 from __future__ import annotations
 
 import sys
@@ -42,6 +43,7 @@ def test_run_sun_capture_inner_does_not_raise(tmp_path, monkeypatch):
         """Returns a mid-grey JPEG for every snapshot call. Mid-grey
         is enough to drive the picker into TWILIGHT (the same path
         the live crash exercised) without needing a real camera."""
+
         def snapshot_jpeg_hires(self, quality: int = 85):
             grey = np.full((480, 640, 3), 80, dtype=np.uint8)
             ok, buf = cv2.imencode(".jpg", grey, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
@@ -78,6 +80,7 @@ def test_run_sun_capture_inner_does_not_raise(tmp_path, monkeypatch):
     # Drop the 0.5 s baseline-sample sleeps so the test runs in well
     # under a second.
     import app.weather_service._sun_tl as sun_tl_mod  # noqa: E402
+
     monkeypatch.setattr(sun_tl_mod.time, "sleep", lambda *_a, **_kw: None)
 
     ws = FakeWS()
@@ -99,7 +102,9 @@ def test_run_sun_capture_inner_does_not_raise(tmp_path, monkeypatch):
 
     # Must not raise.
     ws._run_sun_capture_inner(
-        "cam1", "sunset", sun_dt,
+        "cam1",
+        "sunset",
+        sun_dt,
         {"interval_s": 3, "fps": 25},
         test_session=session,
     )

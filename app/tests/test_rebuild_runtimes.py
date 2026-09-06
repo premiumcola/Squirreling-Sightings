@@ -12,6 +12,7 @@ module-scope autouse fixture below so they're torn down after this
 file finishes. Earlier versions installed them at import time, which
 leaked into every test_*.py loaded afterwards in the same session.
 """
+
 import sys
 import copy
 import tempfile
@@ -27,9 +28,12 @@ _BASE_CFG = {
     "storage": {"root": _tmpdir, "retention_days": 14},
     "server": {"host": "0.0.0.0", "port": 8099},
     "cameras": [],
-    "processing": {"detection": {"mode": "none"}, "bird_species": {"enabled": False},
-                   "cat_identity": {"match_threshold": 10},
-                   "person_identity": {"match_threshold": 10}},
+    "processing": {
+        "detection": {"mode": "none"},
+        "bird_species": {"enabled": False},
+        "cat_identity": {"match_threshold": 10},
+        "person_identity": {"match_threshold": 10},
+    },
     "telegram": {},
     "mqtt": {},
     "app": {},
@@ -40,11 +44,21 @@ _BASE_CFG = {
 # install + restore loops below stay in sync; adding a stub in the
 # future means appending here only.
 _STUB_NAMES = [
-    "cv2", "requests", "numpy", "flask",
-    "app.config_loader", "app.settings_store", "app.storage",
-    "app.camera_runtime", "app.telegram_bot", "app.cat_identity",
-    "app.timelapse", "app.discovery", "app.mqtt_service",
-    "app.detectors", "app.event_logic",
+    "cv2",
+    "requests",
+    "numpy",
+    "flask",
+    "app.config_loader",
+    "app.settings_store",
+    "app.storage",
+    "app.camera_runtime",
+    "app.telegram_bot",
+    "app.cat_identity",
+    "app.timelapse",
+    "app.discovery",
+    "app.mqtt_service",
+    "app.detectors",
+    "app.event_logic",
 ]
 
 # Set inside the module-scope fixture; tests reference this module
@@ -101,7 +115,10 @@ def _stub_sys_modules():
     _cr_mod = _make_stub("app.camera_runtime")
     _cr_mod._PROFILES = ("daily", "weekly", "monthly", "custom")
     _cr_mod._PROFILE_PERIOD_DEFAULTS = {
-        "daily": 86400, "weekly": 604800, "monthly": 2592000, "custom": 600,
+        "daily": 86400,
+        "weekly": 604800,
+        "monthly": 2592000,
+        "custom": 600,
     }
     sys.modules["app.camera_runtime"] = _cr_mod
 
@@ -155,6 +172,7 @@ def _stub_sys_modules():
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _fake_runtime(cam_id: str) -> MagicMock:
     rt = MagicMock()
     rt.camera_id = cam_id
@@ -200,6 +218,7 @@ def _setup(monkeypatch, existing: dict[str, dict], new_cameras: list[dict]):
 # ─────────────────────────────────────────────────────────────────────────────
 # Tests for _compute_camera_diff (pure logic)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestComputeCameraDiff:
     def test_remove(self):
@@ -247,6 +266,7 @@ class TestComputeCameraDiff:
 # ─────────────────────────────────────────────────────────────────────────────
 # Integration tests: rebuild_runtimes() orchestration
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestRebuildRuntimes:
     def test_remove_stops_runtime(self, monkeypatch):
@@ -311,6 +331,7 @@ class TestRebuildRuntimes:
 # ─────────────────────────────────────────────────────────────────────────────
 # Integration tests: restart_single_camera()
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestRestartSingleCamera:
     def test_stops_existing_and_starts_new(self, monkeypatch):

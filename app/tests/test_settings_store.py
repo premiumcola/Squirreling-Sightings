@@ -9,6 +9,7 @@ id must be rebuilt and the legacy entry must be gone.
 
 IPs in fixtures are RFC 5737 documentation addresses
 (``192.0.2.0/24``)."""
+
 from __future__ import annotations
 import importlib
 import sys
@@ -27,6 +28,7 @@ if _pkg_root not in sys.path:
 # these tests see the actual upsert_camera behaviour.
 sys.modules.pop("app.settings_store", None)
 import app.settings_store  # noqa: E402
+
 importlib.reload(app.settings_store)
 
 from app.settings_store import SettingsStore  # noqa: E402
@@ -39,7 +41,7 @@ def _make_store(tmp_path: Path) -> SettingsStore:
     storage = tmp_path / "storage"
     storage.mkdir()
     base_config = {
-        "app":    {"name": "Squirreling · Sightings"},
+        "app": {"name": "Squirreling · Sightings"},
         "server": {
             "host": "0.0.0.0",
             "port": 8099,
@@ -57,11 +59,11 @@ def test_upsert_keeps_unknown_id_when_manufacturer_empty(tmp_path: Path):
     a clean delta."""
     store = _make_store(tmp_path)
     cam = {
-        "id":           "unknown_unknown_squirreltownnutbar_183",
-        "name":         "Squirrel Town Nut Bar",
+        "id": "unknown_unknown_squirreltownnutbar_183",
+        "name": "Squirrel Town Nut Bar",
         "manufacturer": "",
-        "model":        "",
-        "rtsp_url":     "rtsp://user:pass@192.0.2.183/h265Preview_01_main",
+        "model": "",
+        "rtsp_url": "rtsp://user:pass@192.0.2.183/h265Preview_01_main",
     }
     returned_id = store.upsert_camera(dict(cam))
     assert returned_id == "unknown_unknown_squirreltownnutbar_183"
@@ -75,11 +77,11 @@ def test_upsert_rebuilds_id_after_manufacturer_filled(tmp_path: Path):
     'unknown_unknown_*' entry may remain in settings.cameras."""
     store = _make_store(tmp_path)
     cam_v1 = {
-        "id":           "unknown_unknown_squirreltownnutbar_183",
-        "name":         "Squirrel Town Nut Bar",
+        "id": "unknown_unknown_squirreltownnutbar_183",
+        "name": "Squirrel Town Nut Bar",
         "manufacturer": "",
-        "model":        "",
-        "rtsp_url":     "rtsp://user:pass@192.0.2.183/h265Preview_01_main",
+        "model": "",
+        "rtsp_url": "rtsp://user:pass@192.0.2.183/h265Preview_01_main",
     }
     store.upsert_camera(dict(cam_v1))
 

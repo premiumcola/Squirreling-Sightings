@@ -7,6 +7,7 @@ Usage from repo root::
 
 Real implementation lives in ``app/app/css_builder.py`` so the same code runs
 both inside the container (called from server boot) and on the host."""
+
 from __future__ import annotations
 
 import logging

@@ -22,6 +22,7 @@ Keep this in lockstep with the JS:
        x = (box.w - w) / 2
        y = (box.h - h) / 2
 """
+
 from __future__ import annotations
 
 
@@ -36,9 +37,9 @@ def _fitted_rect(box_w: float, box_h: float, src_w: float, src_h: float):
     return (x, y, w, h)
 
 
-def _map_point(src_x: float, src_y: float,
-               src_w: float, src_h: float,
-               fitted) -> tuple[float, float]:
+def _map_point(
+    src_x: float, src_y: float, src_w: float, src_h: float, fitted
+) -> tuple[float, float]:
     fx, fy, fw, fh = fitted
     sx = fw / src_w
     sy = fh / src_h

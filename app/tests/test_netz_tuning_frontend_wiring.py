@@ -19,9 +19,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_CAMERAS_PY = (
-    Path(__file__).resolve().parents[1] / "app" / "routes" / "cameras.py"
-).read_text(encoding="utf-8")
+_CAMERAS_PY = (Path(__file__).resolve().parents[1] / "app" / "routes" / "cameras.py").read_text(
+    encoding="utf-8"
+)
 _SETTINGS_AXES_JS = (
     Path(__file__).resolve().parents[1] / "web" / "static" / "js" / "netz" / "_settings_axes.js"
 ).read_text(encoding="utf-8")
@@ -73,7 +73,9 @@ def test_every_backend_tuning_field_is_either_a_spoke_or_explicitly_excluded():
     assert field_dict
     backend_fields = set(re.findall(r'"([a-z_]+)":', field_dict.group(1)))
     unaccounted = backend_fields - spoke_fields - _NON_SPOKE_TUNING_FIELDS
-    assert not unaccounted, f"reachable from neither the chart nor the exclusion list: {unaccounted}"
+    assert (
+        not unaccounted
+    ), f"reachable from neither the chart nor the exclusion list: {unaccounted}"
 
 
 def test_the_netz_state_payload_backs_every_spoke_and_the_ghost_toggle():

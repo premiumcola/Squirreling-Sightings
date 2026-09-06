@@ -69,14 +69,31 @@ def candidates() -> list[str]:
     return [forced] if forced else default_gateways()
 
 
-def fetch(path: str, post: bool = False) -> tuple[str, str]:
-    """``(body, base)`` from the first host that answers. Raises on none."""
+def fetch(path: str, post: bool = False, body: str = "") -> tuple[str, str]:
+    """``(body, base)`` from the first host that answers. Raises on none.
+
+    ``body`` is a JSON string for the few settings endpoints that take
+    one. It forces POST, and it is deliberately awkward to reach: this
+    tool is a diagnostic, and a diagnostic that can rewrite the running
+    configuration in one keystroke is a diagnostic nobody should run
+    casually. Every settings route it can reach deep-merges
+    (``SettingsStore.update_section``), so a partial payload changes the
+    keys it names and nothing else — but that is the route's property,
+    not this script's, and it holds only as long as that stays true.
+    """
     if not path.startswith("/"):
         path = "/" + path
     errors = []
+    data = body.encode("utf-8") if body else None
     for host in candidates():
         base = f"http://{host}:{PORT}"
-        req = urllib.request.Request(base + path, method="POST" if post else "GET")
+        req = urllib.request.Request(
+            base + path,
+            data=data,
+            method="POST" if (post or data) else "GET",
+        )
+        if data:
+            req.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
                 return r.read().decode("utf-8", errors="replace"), base
@@ -89,11 +106,17 @@ def fetch(path: str, post: bool = False) -> tuple[str, str]:
 
 
 def main() -> int:
-    args = [a for a in sys.argv[1:] if a != "--post"]
+    argv = sys.argv[1:]
+    json_body = ""
+    if "--json" in argv:
+        i = argv.index("--json")
+        json_body = argv[i + 1] if i + 1 < len(argv) else ""
+        argv = argv[:i] + argv[i + 2 :]
+    args = [a for a in argv if a != "--post"]
     if not args:
         print(__doc__)
         return 2
-    body, base = fetch(args[0], post="--post" in sys.argv[1:])
+    body, base = fetch(args[0], post="--post" in argv, body=json_body)
     print(f"# {base}{args[0]}", file=sys.stderr)
     print(body)
     return 0

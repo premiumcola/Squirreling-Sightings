@@ -78,7 +78,9 @@ def _load_bird_latin_to_de(path: str | None) -> dict[str, str]:
             if isinstance(k, str) and isinstance(v, str) and not k.startswith("_")
         }
     except FileNotFoundError:
-        log.info("[det] Bird latin→de map: %s not found — species will show Latin names only.", use_path)
+        log.info(
+            "[det] Bird latin→de map: %s not found — species will show Latin names only.", use_path
+        )
     except Exception as e:
         log.warning("[det] Bird latin→de map: failed to parse %s: %s", use_path, e)
     _bird_latin_to_de_cache = data

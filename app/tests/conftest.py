@@ -9,6 +9,7 @@ The fixtures intentionally stay minimal — each test pulls only the
 slice it needs and overrides defaults per-test. The goal is "less
 boilerplate" not "leak shared state across tests".
 """
+
 from __future__ import annotations
 
 import sys

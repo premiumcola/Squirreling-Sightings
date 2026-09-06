@@ -11,6 +11,7 @@ when this suite stays green for every fixture. If you can't get a
 clean/corrupt separation, surface which fixture is the holdout
 rather than relaxing the test.
 """
+
 from __future__ import annotations
 
 import sys
@@ -59,8 +60,7 @@ def _pick_profile_for(img):
     return pick_profile_from_baseline([img])
 
 
-@pytest.mark.parametrize("path", _load_corrupt(),
-                         ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _load_corrupt(), ids=lambda p: p.name)
 def test_corrupt_frame_rejected(path):
     """The corruption fixtures must be rejected by is_valid_frame
     under the profile the picker would have chosen for that frame.
@@ -75,8 +75,7 @@ def test_corrupt_frame_rejected(path):
     )
 
 
-@pytest.mark.parametrize("path", _load_clean(),
-                         ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _load_clean(), ids=lambda p: p.name)
 def test_clean_frame_accepted(path):
     """The clean fixtures (genuine night IR scenes, including the
     00120 yellow-lamp false-positive trap) must pass validation

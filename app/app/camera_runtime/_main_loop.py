@@ -361,9 +361,7 @@ class MainLoopMixin:
                             # the clip replay runs the same second stage over
                             # archived footage and must produce a detection
                             # shaped identically to this one.
-                            stamp_species(
-                                self.bird_classifier, self._crop(proc_frame, d.bbox), d
-                            )
+                            stamp_species(self.bird_classifier, self._crop(proc_frame, d.bbox), d)
                 # Wildlife second-stage (fox / squirrel / hedgehog — none of
                 # which exist as a COCO class). Lives in _wildlife_stage.py;
                 # it classifies a CROP around the motion box rather than the

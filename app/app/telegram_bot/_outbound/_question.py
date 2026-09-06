@@ -41,39 +41,20 @@ from ...thresholds import resolve_effective
 from ...thresholds._apply import AXIS_ORDER, adapted_layer, rails
 from .._consts import log
 
-#: Questions per day, GLOBAL across every camera.
-#:
-#: WAS 12, ON AN ASSUMPTION THE ARCHIVE CONTRADICTS. The old comment read
-#: "Seven events a day are expected, so this is 1.7x headroom" — measured
-#: over the real timeline of this installation (GET /api/timeline?days=7,
-#: 2026-08-30..09-06) the seven days carried 118 events: 15 · 3 · 14 · 1 ·
-#: 0 · 6 · 64 · 15. A mean of 17 a day and a peak of 64. The budget was
-#: therefore below the average day, not 1.7x above it, and on the busy day
-#: it silenced four questions out of five.
-#:
-#: Raised on the operator's own request — „Ich will öfter gefragt werden
-#: mit Bild zur Bestätigung ob was ok ist". 40 is a little over twice the
-#: measured average and still a hard ceiling: a runaway night cannot bury
-#: the phone, which is the only thing this number was ever for. Only
-#: sightings in the dead zone ask at all, so the real count stays well
-#: under it on an ordinary day.
-DAILY_BUDGET = 40
-
-#: Minimum seconds between two questions for the same (camera, class).
-#: One squirrel visit is one question, not six. Monotonic clock, the
-#: `_TICKER_MIN_GAP_S` pattern from `_recording/_publish.py`.
-#:
-#: Halved with the budget: ten minutes meant a bird feeder busy all
-#: morning produced six questions before lunch, and the operator has
-#: asked to be asked more. Five still collapses one visit into one
-#: question, which is the point of the gap.
-PER_CLASS_GAP_S = 300.0
+# Re-exported: the counters moved next door when this file crossed the
+# 500-line ceiling, but they are part of this module's public face —
+# the tests and the decision trace both name DAILY_BUDGET.
+from ._question_budget import (  # noqa: F401
+    CLASS_SHARE_MAX,
+    DAILY_BUDGET,
+    PER_CLASS_GAP_S,
+    QuestionBudgetMixin,
+)
 
 #: Night queue depth. Bounded and drop-oldest: a queue that grows without
 #: limit turns one bad night into a morning of scrolling.
 NIGHT_QUEUE_MAX = 20
 
-_BUDGET_KEY = "netz_question_budget"
 _QUEUE_KEY = "netz_question_queue"
 
 
@@ -142,52 +123,12 @@ def _caption(cam_name: str, label: str, score: float) -> str:
     )
 
 
-class QuestionMixin:
-    """The question path for TelegramService. Mixin — state via ``self.*``."""
+class QuestionMixin(QuestionBudgetMixin):
+    """The question path for TelegramService. Mixin — state via ``self.*``.
 
-    # ── budget + spacing ──────────────────────────────────────────────
-    def _question_budget_left(self) -> int:
-        """Questions remaining today. Resets at local midnight.
-
-        Counted in ``runtime`` and keyed by the date, so the reset needs
-        no scheduled job and survives a restart — a counter that only a
-        cron resets is a counter that a 23:59 restart doubles.
-        """
-        ss = self.settings_store
-        if not ss:
-            return 0
-        today = datetime.now().strftime("%Y-%m-%d")
-        state = ss.runtime_get(_BUDGET_KEY) or {}
-        if not isinstance(state, dict) or state.get("day") != today:
-            return DAILY_BUDGET
-        return max(0, DAILY_BUDGET - int(state.get("n") or 0))
-
-    def _question_budget_spend(self) -> None:
-        ss = self.settings_store
-        if not ss:
-            return
-        today = datetime.now().strftime("%Y-%m-%d")
-        state = ss.runtime_get(_BUDGET_KEY) or {}
-        if not isinstance(state, dict) or state.get("day") != today:
-            state = {"day": today, "n": 0}
-        state["n"] = int(state.get("n") or 0) + 1
-        ss.runtime_set(_BUDGET_KEY, state)
-
-    def _question_gap_ok(self, cam_id: str, label: str) -> bool:
-        gaps = getattr(self, "_question_last", None)
-        if gaps is None:
-            gaps = {}
-            self._question_last = gaps
-        now = time.monotonic()
-        last = gaps.get((cam_id, label), 0.0)
-        return not (last and now - last < PER_CLASS_GAP_S)
-
-    def _question_gap_mark(self, cam_id: str, label: str) -> None:
-        gaps = getattr(self, "_question_last", None)
-        if gaps is None:
-            gaps = {}
-            self._question_last = gaps
-        gaps[(cam_id, label)] = time.monotonic()
+    The three counters that decide HOW OFTEN live next door in
+    ``_question_budget.py``; everything here decides WHAT is said.
+    """
 
     # ── the archive record ────────────────────────────────────────────
     def _question_net_state(self, cam_cfg: dict, cam_id: str) -> dict:
@@ -394,7 +335,7 @@ class QuestionMixin:
             return self.send_question(meta, camera_id) or "frage"
         finally:
             # Here and not inside `send_question`: a question the mute or
-            # the 10-minute gap swallowed is still a candidate the corpus
+            # the per-class gap swallowed is still a candidate the corpus
             # has to count, or the answer rate is computed against a
             # denominator that quietly excludes them. LAST, because
             # `archive_event` reads the corpus to snapshot the net and
@@ -419,7 +360,23 @@ class QuestionMixin:
             return "muted"
         label, _score = event_subject(meta)
         if not self._question_gap_ok(camera_id, label):
+            # ARCHIVED TOO, and this line is the whole reason the budget
+            # could be raised safely. The gap branch used to return
+            # before `archive_event`, so a gap-blocked question left no
+            # card at all — while a budget-blocked one left one under
+            # „Noch nicht beurteilt". With the budget at 40 the gap is
+            # the binding limit, so without this the raise would have
+            # bought more questions and LESS visibility: the surplus
+            # would simply have stopped existing anywhere.
+            self.archive_event(meta, camera_id, kind=net_archive.KIND_FRAGE, asked=False)
             return "gap"
+        if self._class_budget_left(label) <= 0:
+            # Same treatment as the day budget: recorded, not sent. The
+            # class that has had its share does not go silent, it goes
+            # into the archive where it can still be judged.
+            self.archive_event(meta, camera_id, kind=net_archive.KIND_FRAGE, asked=False)
+            log.info("[tg] Frage über Klassen-Anteil: cam=%s label=%s", camera_id, label)
+            return "class_budget"
         if self._question_budget_left() <= 0:
             # Recorded anyway, asked=False — the surplus surfaces in the
             # archive under "Noch nicht beurteilt", where the operator
@@ -433,7 +390,7 @@ class QuestionMixin:
             self._question_hold(meta, camera_id)
             return "quiet_hold"
         self._question_gap_mark(camera_id, label)
-        self._question_budget_spend()
+        self._question_budget_spend(label)
         self.archive_event(meta, camera_id, kind=net_archive.KIND_FRAGE, asked=True)
         self._push_question(meta, camera_id, cam_cfg, label)
         return None

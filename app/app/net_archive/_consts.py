@@ -56,12 +56,22 @@ SCOPE_POOLED = "pooled"
 
 # ── retention ─────────────────────────────────────────────────────────
 #
-# 400 records or 24 months, whichever bites first, evicting UNJUDGED
+# N records or 24 months, whichever bites first, evicting UNJUDGED
 # records before judged ones — the same policy shape
 # ``detection_feedback._retention.select_retained`` applies to the
 # ledger. Two retention rules that disagree produce an archive that
 # looks complete and is not.
-MAX_RECORDS = 400
+#
+# RAISED WITH THE QUESTION BUDGET, and the two numbers have to move
+# together. The daily budget went from 12 to 40 (see
+# ``telegram_bot/_outbound/_question_budget.py``), and every question —
+# sent, over budget, over its class share or inside the gap — writes a
+# record here. At 400 the archive filled in roughly ten days instead of
+# a month, and because eviction takes UNJUDGED records first, the
+# „Noch nicht beurteilt" queue would have eaten itself: exactly the
+# records the operator has not got round to judging are the ones that
+# vanish. 1200 restores the old month of headroom at the new rate.
+MAX_RECORDS = 1200
 MAX_AGE_DAYS = 730
 
 #: Long edge of the archived frame. ~60 kB at this size; 400 x 60 kB is

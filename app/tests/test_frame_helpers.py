@@ -4,6 +4,7 @@ Covers the three real-world corruption patterns we keep seeing in
 storage/timelapse_frames/ as well as the genuine-frame cases that must keep
 passing. Synthetic fixtures are generated in-test so the suite has no on-disk
 dependency."""
+
 import sys
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from app.frame_helpers import (  # noqa: E402
 # ── Synthetic fixtures ──────────────────────────────────────────────────────
 # Frame size matches Reolink substream (640×480 typical). Random noise is
 # seeded so failures are reproducible.
+
 
 def _rng(seed: int) -> np.random.Generator:
     return np.random.default_rng(seed)
@@ -78,7 +80,7 @@ def _ir_night_frame(seed: int = 2) -> np.ndarray:
     yy, xx = np.meshgrid(np.arange(h), np.arange(w), indexing="ij")
     cy, cx = h // 2, w // 2
     radius2 = (yy - cy) ** 2 + (xx - cx) ** 2
-    illum = np.clip(60 - (radius2 / (200 ** 2)) * 60, 0, 60).astype(np.int16)
+    illum = np.clip(60 - (radius2 / (200**2)) * 60, 0, 60).astype(np.int16)
     base = base + illum
     # Building silhouette (darker than illuminated ground)
     base[80 : h - 60, 420 : w - 30] = np.clip(base[80 : h - 60, 420 : w - 30] - 25, 5, 255)
@@ -260,9 +262,9 @@ class TestLocalMacroblockAnomaly:
         target = np.array([40.0, 180.0, 240.0], dtype=np.float32)
         for c in range(3):
             img[:, :, c] = np.clip(
-                img[:, :, c].astype(np.float32) * (1.0 - falloff)
-                + falloff * target[c],
-                0, 255,
+                img[:, :, c].astype(np.float32) * (1.0 - falloff) + falloff * target[c],
+                0,
+                255,
             ).astype(np.uint8)
         return img
 
@@ -277,17 +279,16 @@ class TestLocalMacroblockAnomaly:
         y0, x0, ph, pw = 96, 192, 48, 64
         for by in range(0, ph, 16):
             for bx in range(0, pw, 16):
-                dc = np.clip(np.array([30, 60, 220]) + rng.integers(-30, 31, size=3),
-                             0, 255)
-                img[y0 + by:y0 + by + 16, x0 + bx:x0 + bx + 16] = dc.astype(np.uint8)
-                blk = img[y0 + by:y0 + by + 16, x0 + bx:x0 + bx + 16].astype(np.int16)
-                blk = np.clip(blk + rng.integers(-80, 81, size=blk.shape),
-                              0, 255).astype(np.uint8)
-                img[y0 + by:y0 + by + 16, x0 + bx:x0 + bx + 16] = blk
+                dc = np.clip(np.array([30, 60, 220]) + rng.integers(-30, 31, size=3), 0, 255)
+                img[y0 + by : y0 + by + 16, x0 + bx : x0 + bx + 16] = dc.astype(np.uint8)
+                blk = img[y0 + by : y0 + by + 16, x0 + bx : x0 + bx + 16].astype(np.int16)
+                blk = np.clip(blk + rng.integers(-80, 81, size=blk.shape), 0, 255).astype(np.uint8)
+                img[y0 + by : y0 + by + 16, x0 + bx : x0 + bx + 16] = blk
         return img
 
     def test_smooth_warm_blob_passes(self):
         from app.frame_helpers._macroblock import is_local_macroblock_anomaly
+
         ok, reason = is_local_macroblock_anomaly(self._warm_lamp_frame())
         assert not ok, f"smooth warm-light blob wrongly flagged as corruption: {reason}"
 
@@ -300,6 +301,7 @@ class TestLocalMacroblockAnomaly:
 
     def test_noisy_slice_loss_patch_rejects(self):
         from app.frame_helpers._macroblock import is_local_macroblock_anomaly
+
         ok, reason = is_local_macroblock_anomaly(self._slice_loss_patch_frame())
         assert ok, "synthetic slice-loss corruption patch was not detected"
         assert "macroblock_anomaly" in reason
@@ -345,8 +347,10 @@ class TestGrabValidFrameOnReject:
         """Every retry that ends in a rejected frame must invoke the
         callback once with the right attempt index."""
         from app import frame_helpers as _fh
-        monkeypatch.setattr(_fh, "is_valid_frame",
-                            lambda *a, **kw: (False, "grey_uniform(std_sum=4.2)"))
+
+        monkeypatch.setattr(
+            _fh, "is_valid_frame", lambda *a, **kw: (False, "grey_uniform(std_sum=4.2)")
+        )
         flat = self._grey_frame()
         calls: list[tuple[object, str, int]] = []
 
@@ -357,7 +361,10 @@ class TestGrabValidFrameOnReject:
             calls.append((frame, reason, attempt_idx))
 
         result, attempts_used, last_reason = grab_valid_frame(
-            grab, attempts=4, sleep_s=0, on_reject=cb,
+            grab,
+            attempts=4,
+            sleep_s=0,
+            on_reject=cb,
         )
         assert result is None
         assert attempts_used == 4
@@ -372,8 +379,10 @@ class TestGrabValidFrameOnReject:
         """A raising callback must never abort the retry loop — the
         diagnostic save path is documented as best-effort."""
         from app import frame_helpers as _fh
-        monkeypatch.setattr(_fh, "is_valid_frame",
-                            lambda *a, **kw: (False, "grey_uniform(std_sum=4.2)"))
+
+        monkeypatch.setattr(
+            _fh, "is_valid_frame", lambda *a, **kw: (False, "grey_uniform(std_sum=4.2)")
+        )
         flat = self._grey_frame()
 
         def grab():
@@ -383,7 +392,10 @@ class TestGrabValidFrameOnReject:
             raise RuntimeError("disk full")
 
         result, attempts_used, last_reason = grab_valid_frame(
-            grab, attempts=3, sleep_s=0, on_reject=cb,
+            grab,
+            attempts=3,
+            sleep_s=0,
+            on_reject=cb,
         )
         assert result is None
         assert attempts_used == 3
@@ -402,12 +414,12 @@ class TestRetryFailFast:
             return flat
 
         result, attempts_used, last_reason = grab_valid_frame(
-            grab, attempts=6, sleep_s=0,
+            grab,
+            attempts=6,
+            sleep_s=0,
         )
         assert result is None
-        assert attempts_used == 2, (
-            f"scene reject should cap at 2 attempts, got {attempts_used}"
-        )
+        assert attempts_used == 2, f"scene reject should cap at 2 attempts, got {attempts_used}"
         assert "too_dark" in last_reason
 
 
@@ -447,7 +459,8 @@ class TestPickProfileFromBaseline:
         night = np.clip(
             np.full((240, 320, 3), 30, dtype=np.int16)
             + rng.integers(-15, 16, size=(240, 320, 3), dtype=np.int16),
-            0, 255,
+            0,
+            255,
         ).astype(np.uint8)
         prof = pick_profile_from_baseline([corrupt, night])
         assert prof is NIGHT_PROFILE, f"got {prof.name}"
@@ -489,13 +502,13 @@ class TestHorizontalAnomalyBand:
         img = np.clip(
             np.full((h, w, 3), 16, dtype=np.int16)
             + rng.integers(-3, 4, size=(h, w, 3), dtype=np.int16),
-            0, 255,
+            0,
+            255,
         ).astype(np.uint8)
         # Replace the band with rows of independently random luma —
         # that's what makes row_delta spike inside the band.
-        band = (rng.integers(80, 220, size=(band_h, w, 3))
-                .astype(np.uint8))
-        img[band_y0:band_y0 + band_h] = band
+        band = rng.integers(80, 220, size=(band_h, w, 3)).astype(np.uint8)
+        img[band_y0 : band_y0 + band_h] = band
         return img
 
     def test_mid_band_corruption_rejected(self):
@@ -539,9 +552,9 @@ class TestHorizontalAnomalyBand:
         # Three solid coloured regions stacked vertically with
         # noise — real-world-ish, no abrupt random-row cluster.
         img = np.zeros((h, w, 3), dtype=np.uint8)
-        img[:h // 3] = 180
-        img[h // 3:2 * h // 3] = 130
-        img[2 * h // 3:] = 90
+        img[: h // 3] = 180
+        img[h // 3 : 2 * h // 3] = 130
+        img[2 * h // 3 :] = 90
         noise = rng.integers(-5, 6, size=img.shape, dtype=np.int16)
         img = np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
         ok, reason = is_horizontal_anomaly_band(img)
@@ -559,8 +572,7 @@ class TestHorizontalAnomalyBand:
         # Either the location-agnostic head OR (when stage A's z
         # placement maps to bottom %) the legacy head. Both indicate
         # the band detector fired, which is what we care about.
-        assert ("horizontal_anomaly_band" in reason
-                or "bottom_strip_" in reason)
+        assert "horizontal_anomaly_band" in reason or "bottom_strip_" in reason
 
 
 class TestFlatGrayFullFrame:
@@ -581,7 +593,8 @@ class TestFlatGrayFullFrame:
         img = np.clip(
             np.full((h, w, 3), 30, dtype=np.int16)
             + rng.integers(-15, 16, size=(h, w, 3), dtype=np.int16),
-            0, 255,
+            0,
+            255,
         ).astype(np.uint8)
         ok, _ = is_flat_gray_full_frame(img)
         assert not ok
@@ -597,7 +610,8 @@ class TestFlatGrayFullFrame:
         img = np.clip(
             np.full((h, w, 3), 130, dtype=np.int16)
             + rng.integers(-35, 36, size=(h, w, 3), dtype=np.int16),
-            0, 255,
+            0,
+            255,
         ).astype(np.uint8)
         ok, _ = is_flat_gray_full_frame(img)
         assert not ok
@@ -673,6 +687,7 @@ class TestBrightOutlierDarkScene:
         NOT fire under DAY — bright daytime scenes legitimately
         produce 255 from sun, snow, lamps."""
         from app.frame_helpers._bright_outlier import is_bright_outlier_dark_scene
+
         img = self._dark_scene_with_bright_patch()
         ok, reason = is_bright_outlier_dark_scene(img, DAY_PROFILE)
         assert not ok, f"bright_outlier wrongly fired under DAY: {reason}"
@@ -692,43 +707,41 @@ class TestBrightOutlierDarkScene:
 # Picks up the real captures described in the prompt when the user
 # populates the directory. Empty otherwise — pytest handles an empty
 # parametrize by emitting a single SKIPPED placeholder.
-_FIXTURE_DIR = (Path(__file__).parent.parent.parent
-                / "testdata" / "sunrise_2026-05-12")
+_FIXTURE_DIR = Path(__file__).parent.parent.parent / "testdata" / "sunrise_2026-05-12"
 
 
 def _load_corrupt_fixtures():
     if not _FIXTURE_DIR.exists():
         return []
-    return sorted(_FIXTURE_DIR.glob("f001[0-9].jpg")) \
-         + sorted(_FIXTURE_DIR.glob("f002[0-3].jpg"))
+    return sorted(_FIXTURE_DIR.glob("f001[0-9].jpg")) + sorted(_FIXTURE_DIR.glob("f002[0-3].jpg"))
 
 
 def _load_clean_fixtures():
     if not _FIXTURE_DIR.exists():
         return []
-    return [p for p in (_FIXTURE_DIR / "f0040.jpg", _FIXTURE_DIR / "f0080.jpg")
-            if p.exists()]
+    return [p for p in (_FIXTURE_DIR / "f0040.jpg", _FIXTURE_DIR / "f0080.jpg") if p.exists()]
 
 
-@pytest.mark.parametrize("path", _load_corrupt_fixtures(),
-                         ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _load_corrupt_fixtures(), ids=lambda p: p.name)
 def test_real_corrupt_fixture_rejects(path):
     """Each real corrupt fixture must reject under TWILIGHT with the
     ``bright_outlier_dark_scene`` head."""
     import cv2
+
     img = cv2.imread(str(path))
     assert img is not None, f"failed to read {path}"
     ok, reason = is_valid_frame(img, profile=TWILIGHT_PROFILE)
     assert not ok, f"real corrupt fixture {path.name} passed: {reason}"
-    assert "bright_outlier_dark_scene" in reason, \
-        f"real corrupt fixture {path.name} rejected under wrong head: {reason}"
+    assert (
+        "bright_outlier_dark_scene" in reason
+    ), f"real corrupt fixture {path.name} rejected under wrong head: {reason}"
 
 
-@pytest.mark.parametrize("path", _load_clean_fixtures(),
-                         ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _load_clean_fixtures(), ids=lambda p: p.name)
 def test_real_clean_fixture_passes(path):
     """Each real clean dark fixture passes under TWILIGHT + NIGHT."""
     import cv2
+
     img = cv2.imread(str(path))
     assert img is not None, f"failed to read {path}"
     for prof in (TWILIGHT_PROFILE, NIGHT_PROFILE):
@@ -766,9 +779,9 @@ class TestTimestampOverlayExclusion:
         y0 = int(h * y_pct / 100)
         band_h = max(1, int(h * h_pct / 100))
         band_gray = rng.integers(0, 255, size=(band_h, w), dtype=np.uint8)
-        img[y0:y0 + band_h, :, 0] = band_gray
-        img[y0:y0 + band_h, :, 1] = band_gray
-        img[y0:y0 + band_h, :, 2] = band_gray
+        img[y0 : y0 + band_h, :, 0] = band_gray
+        img[y0 : y0 + band_h, :, 1] = band_gray
+        img[y0 : y0 + band_h, :, 2] = band_gray
         return img
 
     def test_band_inside_default_zone_suppressed(self):
@@ -800,9 +813,7 @@ class TestTimestampOverlayExclusion:
         # Per-camera ``{"enabled": false}`` turns the exclusion off
         # — even a clock-shaped band gets flagged.
         img = self._scene_with_grey_band(y_pct=68, h_pct=4)
-        ok, reason = is_horizontal_anomaly_band(
-            img, timestamp_zone={"enabled": False}
-        )
+        ok, reason = is_horizontal_anomaly_band(img, timestamp_zone={"enabled": False})
         assert ok is True, f"expected reject with zone disabled, got {ok}/{reason!r}"
 
     def test_user_override_relocates_zone(self):
@@ -810,9 +821,7 @@ class TestTimestampOverlayExclusion:
         # zone; the new location suppresses there but the default
         # location no longer applies.
         img = self._scene_with_grey_band(y_pct=85, h_pct=4)
-        ok, reason = is_horizontal_anomaly_band(
-            img, timestamp_zone={"y_pct": 85, "h_pct": 6}
-        )
+        ok, reason = is_horizontal_anomaly_band(img, timestamp_zone={"y_pct": 85, "h_pct": 6})
         assert ok is False, f"expected suppression with custom zone, got {reason!r}"
 
 
@@ -826,9 +835,10 @@ class TestReasonFamily:
     sanitised folder name — must collapse to the same family."""
 
     def test_strips_paren_tail(self):
-        assert reason_family(
-            "horizontal_anomaly_band(y=68%,h=4%,score=2.5)"
-        ) == "horizontal_anomaly_band"
+        assert (
+            reason_family("horizontal_anomaly_band(y=68%,h=4%,score=2.5)")
+            == "horizontal_anomaly_band"
+        )
 
     def test_strips_legacy_yh_suffix(self):
         assert reason_family("horizontal_anomaly_band_y68_h4") == "horizontal_anomaly_band"
@@ -841,9 +851,7 @@ class TestReasonFamily:
     def test_paren_then_yh_does_not_double_strip(self):
         # The raw reason carries (y=…) — once parens go, no _yNN_hNN
         # remains, so the regex doesn't bite a second time.
-        assert reason_family(
-            "bottom_strip_bright(y=90%,h=3%,score=4.0)"
-        ) == "bottom_strip_bright"
+        assert reason_family("bottom_strip_bright(y=90%,h=3%,score=4.0)") == "bottom_strip_bright"
 
     def test_dead_area_param_variant_collapses(self):
         # dead_area(7/16=44%) → "dead_area" — the slash/equals/% chars
@@ -858,6 +866,7 @@ class TestReasonFamily:
         # ``grab_valid_frame`` appends "|budget_exceeded(…)" to the
         # last reason when the wall-clock cap fires. The family must
         # still be the original head.
-        assert reason_family(
-            "horizontal_anomaly_band(y=68%,h=4%,score=2.5)|budget_exceeded(5.0s)"
-        ) == "horizontal_anomaly_band"
+        assert (
+            reason_family("horizontal_anomaly_band(y=68%,h=4%,score=2.5)|budget_exceeded(5.0s)")
+            == "horizontal_anomaly_band"
+        )

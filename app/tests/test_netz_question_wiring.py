@@ -272,7 +272,7 @@ def test_an_answer_reaches_the_corpus_for_every_class_with_an_axis(
 
 def test_a_question_the_gap_swallowed_still_counts_as_a_candidate(rig, tmp_storage_root):
     """Otherwise the answer rate is computed against a denominator that
-    silently excludes every event the 10-minute spacing dropped."""
+    silently excludes every event the per-class spacing dropped."""
     _rt, _svc, sent = rig
     _publish(rig, _meta("gap-1", "person", 0.62))
     _publish(rig, _meta("gap-2", "person", 0.63))

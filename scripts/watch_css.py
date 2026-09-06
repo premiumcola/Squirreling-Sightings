@@ -4,6 +4,7 @@
 Polls ``app/web/static/css/`` for mtime changes and rebuilds ``app.css`` on
 change. Plain stdlib polling — no inotify dependency, works on every host.
 Interval is 0.5 s which is responsive enough for live editing."""
+
 from __future__ import annotations
 
 import logging

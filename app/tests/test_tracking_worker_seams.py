@@ -197,9 +197,7 @@ class TestSpawnThresholdLadder:
         """Ladder order, not max(): `label_thresholds` and
         `track_spawn_min_score` are both the CAMERA layer and the more
         specific of the two wins."""
-        fn = spawn_threshold_fn(
-            {"label_thresholds": {"person": 0.3}, "track_spawn_min_score": 0.6}
-        )
+        fn = spawn_threshold_fn({"label_thresholds": {"person": 0.3}, "track_spawn_min_score": 0.6})
         assert fn("person") == 0.3
 
     def test_the_learners_value_ranks_below_a_manual_one(self):
@@ -221,9 +219,7 @@ class TestGhostPrune:
     def test_confident_track_survives(self):
         st = self._state(_track(samples=_walk(4, score=0.8)))
         assert (
-            prune_ghost_tracks(
-                st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam"
-            )
+            prune_ghost_tracks(st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam")
             == 0
         )
         assert len(st.closed) == 1
@@ -241,9 +237,7 @@ class TestGhostPrune:
         the live confirmer would have promoted it."""
         st = self._state(_track(samples=_walk(5, score=0.25, dt=1.0)))
         assert (
-            prune_ghost_tracks(
-                st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam"
-            )
+            prune_ghost_tracks(st, cam_cfg={"label_thresholds": {"person": 0.6}}, camera_id="cam")
             == 0
         )
         assert len(st.closed) == 1

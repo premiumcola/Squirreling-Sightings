@@ -8,6 +8,7 @@ rely on:
   4. predicted_bbox falls back to last bbox with < 2 detect samples.
   5. Miss-window aging closes a track after exactly N missed frames.
 """
+
 from __future__ import annotations
 
 import sys
@@ -38,6 +39,7 @@ from app.tracker_core import (  # noqa: E402
 class FakeDet:
     """Minimal stand-in for Detection — associate_detections only reads
     .label, .score, .bbox so we keep the test fixture tiny."""
+
     label: str
     score: float
     bbox: tuple[int, int, int, int]
@@ -53,15 +55,19 @@ def test_spawn_only_on_confirmed_score():
     # Tentative-tier detection (score between FLOOR and SPAWN). No
     # existing track → drops, no spawn.
     associate_detections(
-        state, [FakeDet("person", 0.30, (100, 100, 200, 200))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("person", 0.30, (100, 100, 200, 200))],
+        frame_idx=0,
+        t_s=0.0,
     )
     assert len(state.active) == 0, "tentative det should NOT spawn a track"
 
     # Confirmed-tier detection → spawn.
     associate_detections(
-        state, [FakeDet("person", 0.80, (100, 100, 200, 200))],
-        frame_idx=1, t_s=1.0,
+        state,
+        [FakeDet("person", 0.80, (100, 100, 200, 200))],
+        frame_idx=1,
+        t_s=1.0,
     )
     assert len(state.active) == 1
     assert state.active[0].label == "person"
@@ -74,8 +80,10 @@ def test_tentative_extends_existing_track():
     state = _new_state()
     # First frame: confirmed → spawn.
     associate_detections(
-        state, [FakeDet("cat", 0.80, (100, 100, 200, 200))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("cat", 0.80, (100, 100, 200, 200))],
+        frame_idx=0,
+        t_s=0.0,
     )
     assert len(state.active) == 1
     track_id = state.active[0].track_id
@@ -84,8 +92,10 @@ def test_tentative_extends_existing_track():
     # Should NOT spawn a new track AND should extend the existing one
     # so its sample count goes from 1 → 2 with the same track id.
     associate_detections(
-        state, [FakeDet("cat", 0.30, (102, 102, 200, 200))],
-        frame_idx=1, t_s=1.0,
+        state,
+        [FakeDet("cat", 0.30, (102, 102, 200, 200))],
+        frame_idx=1,
+        t_s=1.0,
     )
     assert len(state.active) == 1, "tentative extends, never spawns"
     assert state.active[0].track_id == track_id
@@ -102,8 +112,10 @@ def test_iou_below_threshold_no_match():
     state = _new_state()
     # Seed track at top-left.
     associate_detections(
-        state, [FakeDet("dog", 0.80, (0, 0, 100, 100))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("dog", 0.80, (0, 0, 100, 100))],
+        frame_idx=0,
+        t_s=0.0,
     )
     assert len(state.active) == 1
     seeded_id = state.active[0].track_id
@@ -111,8 +123,10 @@ def test_iou_below_threshold_no_match():
     # Confirmed det far from existing track → IoU = 0 → SPAWN a new
     # track. Existing one keeps its id but ages (no IoU match).
     associate_detections(
-        state, [FakeDet("dog", 0.80, (500, 500, 600, 600))],
-        frame_idx=1, t_s=1.0,
+        state,
+        [FakeDet("dog", 0.80, (500, 500, 600, 600))],
+        frame_idx=1,
+        t_s=1.0,
     )
     assert len(state.active) == 2, "non-overlapping confirmed → new track"
     ids = {tr.track_id for tr in state.active}
@@ -121,13 +135,17 @@ def test_iou_below_threshold_no_match():
     # Reset to single-track baseline for the tentative case.
     state = _new_state()
     associate_detections(
-        state, [FakeDet("dog", 0.80, (0, 0, 100, 100))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("dog", 0.80, (0, 0, 100, 100))],
+        frame_idx=0,
+        t_s=0.0,
     )
     # Tentative det far from existing track → DROP (no spawn, no extend).
     associate_detections(
-        state, [FakeDet("dog", 0.30, (500, 500, 600, 600))],
-        frame_idx=1, t_s=1.0,
+        state,
+        [FakeDet("dog", 0.30, (500, 500, 600, 600))],
+        frame_idx=1,
+        t_s=1.0,
     )
     # Still exactly one track, and the seeded track aged one window.
     assert len(state.active) == 1
@@ -141,8 +159,10 @@ def test_predicted_bbox_fallback_with_few_samples():
     verbatim instead of extrapolating from zero."""
     state = _new_state()
     associate_detections(
-        state, [FakeDet("person", 0.80, (10, 20, 110, 220))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("person", 0.80, (10, 20, 110, 220))],
+        frame_idx=0,
+        t_s=0.0,
     )
     tr = state.active[0]
     # One detect sample so far — prediction at frame 50 must still
@@ -152,12 +172,18 @@ def test_predicted_bbox_fallback_with_few_samples():
     # Add a second detect sample → velocity now resolves; the third
     # prediction should advance, NOT be the verbatim last bbox.
     associate_detections(
-        state, [FakeDet("person", 0.80, (20, 30, 120, 230))],
-        frame_idx=1, t_s=1.0,
+        state,
+        [FakeDet("person", 0.80, (20, 30, 120, 230))],
+        frame_idx=1,
+        t_s=1.0,
     )
     pred = predicted_bbox(tr, frame_idx=2)
-    assert pred != (20, 30, 120, 230), \
-        "with 2 detect samples a non-zero velocity should advance the bbox"
+    assert pred != (
+        20,
+        30,
+        120,
+        230,
+    ), "with 2 detect samples a non-zero velocity should advance the bbox"
 
 
 # ── Invariant 5 ────────────────────────────────────────────────────────────
@@ -167,8 +193,10 @@ def test_miss_window_aging_closes_after_n_misses():
     (N+1)th."""
     state = _new_state()
     associate_detections(
-        state, [FakeDet("bird", 0.80, (100, 100, 200, 200))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("bird", 0.80, (100, 100, 200, 200))],
+        frame_idx=0,
+        t_s=0.0,
     )
     assert len(state.active) == 1
 
@@ -177,16 +205,20 @@ def test_miss_window_aging_closes_after_n_misses():
     grace = 3
     for f in range(1, grace):
         associate_detections(
-            state, [],  # empty dets — nothing matches
-            frame_idx=f, t_s=float(f),
+            state,
+            [],  # empty dets — nothing matches
+            frame_idx=f,
+            t_s=float(f),
             miss_grace_samples=grace,
         )
         assert len(state.active) == 1, f"track aged too early on frame {f}"
 
     # One more miss — N total — closes the track.
     associate_detections(
-        state, [],
-        frame_idx=grace, t_s=float(grace),
+        state,
+        [],
+        frame_idx=grace,
+        t_s=float(grace),
         miss_grace_samples=grace,
     )
     assert len(state.active) == 0
@@ -204,16 +236,20 @@ def test_per_label_spawn_callable():
     # Person 0.55 below per-label 0.72 → tentative → drop (no
     # existing track to extend).
     associate_detections(
-        state, [FakeDet("person", 0.55, (0, 0, 100, 100))],
-        frame_idx=0, t_s=0.0,
+        state,
+        [FakeDet("person", 0.55, (0, 0, 100, 100))],
+        frame_idx=0,
+        t_s=0.0,
         spawn_for=spawn_for,
     )
     assert len(state.active) == 0
 
     # Cat 0.55 above the default 0.50 spawn → confirmed → spawns.
     associate_detections(
-        state, [FakeDet("cat", 0.55, (200, 200, 300, 300))],
-        frame_idx=1, t_s=1.0,
+        state,
+        [FakeDet("cat", 0.55, (200, 200, 300, 300))],
+        frame_idx=1,
+        t_s=1.0,
         spawn_for=spawn_for,
     )
     assert len(state.active) == 1
@@ -265,12 +301,18 @@ def test_predicted_sample_emitted_during_miss_grace():
     state = _new_state()
     # Two detect frames so predicted_bbox has a velocity signal.
     associate_detections(
-        state, [FakeDet("person", 0.80, (100, 100, 200, 200))],
-        frame_idx=0, t_s=0.0, miss_grace_samples=4,
+        state,
+        [FakeDet("person", 0.80, (100, 100, 200, 200))],
+        frame_idx=0,
+        t_s=0.0,
+        miss_grace_samples=4,
     )
     associate_detections(
-        state, [FakeDet("person", 0.80, (110, 100, 210, 200))],
-        frame_idx=1, t_s=1.0, miss_grace_samples=4,
+        state,
+        [FakeDet("person", 0.80, (110, 100, 210, 200))],
+        frame_idx=1,
+        t_s=1.0,
+        miss_grace_samples=4,
     )
     tr = state.active[0]
     n_before = len(tr.samples)
@@ -300,13 +342,20 @@ def test_predicted_samples_do_not_block_aging():
     never trigger."""
     state = _new_state()
     associate_detections(
-        state, [FakeDet("cat", 0.80, (50, 50, 150, 150))],
-        frame_idx=0, t_s=0.0, miss_grace_samples=3,
+        state,
+        [FakeDet("cat", 0.80, (50, 50, 150, 150))],
+        frame_idx=0,
+        t_s=0.0,
+        miss_grace_samples=3,
     )
     # 3 empty frames in a row → closes on the third miss.
     for f in range(1, 4):
         associate_detections(
-            state, [], frame_idx=f, t_s=float(f), miss_grace_samples=3,
+            state,
+            [],
+            frame_idx=f,
+            t_s=float(f),
+            miss_grace_samples=3,
         )
     assert len(state.active) == 0
     assert len(state.closed) == 1
@@ -330,12 +379,18 @@ def test_reacquisition_after_predicted_clears_miss_counter():
     state = _new_state()
     # Two detects to seed velocity.
     associate_detections(
-        state, [FakeDet("person", 0.80, (100, 100, 200, 200))],
-        frame_idx=0, t_s=0.0, miss_grace_samples=4,
+        state,
+        [FakeDet("person", 0.80, (100, 100, 200, 200))],
+        frame_idx=0,
+        t_s=0.0,
+        miss_grace_samples=4,
     )
     associate_detections(
-        state, [FakeDet("person", 0.80, (110, 100, 210, 200))],
-        frame_idx=1, t_s=1.0, miss_grace_samples=4,
+        state,
+        [FakeDet("person", 0.80, (110, 100, 210, 200))],
+        frame_idx=1,
+        t_s=1.0,
+        miss_grace_samples=4,
     )
     track_id_before = state.active[0].track_id
     # Two empty frames → predicted samples.
@@ -344,8 +399,11 @@ def test_reacquisition_after_predicted_clears_miss_counter():
     # A detection lands near the predicted position — same track id
     # should pick it up.
     associate_detections(
-        state, [FakeDet("person", 0.85, (130, 100, 230, 200))],
-        frame_idx=4, t_s=4.0, miss_grace_samples=4,
+        state,
+        [FakeDet("person", 0.85, (130, 100, 230, 200))],
+        frame_idx=4,
+        t_s=4.0,
+        miss_grace_samples=4,
     )
     assert len(state.active) == 1
     assert state.active[0].track_id == track_id_before

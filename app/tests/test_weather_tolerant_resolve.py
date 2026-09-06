@@ -9,6 +9,7 @@ the same directory whose stem shares the date-prefix portion of
 the stored name and serves it. This test pins that behaviour so
 the fallback doesn't silently regress.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

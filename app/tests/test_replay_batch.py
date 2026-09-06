@@ -64,8 +64,10 @@ def _species_block(gained=(), kept=(), before=()):
         "after": list(gained) + list(kept),
         "gained": list(gained),
         "kept": list(kept),
-        "detail": [{"species": n, "species_latin": None, "best_score": 0.9, "frames": 1}
-                   for n in list(gained) + list(kept)],
+        "detail": [
+            {"species": n, "species_latin": None, "best_score": 0.9, "frames": 1}
+            for n in list(gained) + list(kept)
+        ],
     }
 
 

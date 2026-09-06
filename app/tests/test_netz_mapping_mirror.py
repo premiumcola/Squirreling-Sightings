@@ -58,9 +58,7 @@ def test_js_mapping_matches_python_on_every_value(tmp_path):
         _HARNESS.format(mod=MAPPING_JS.as_posix(), fixture=FIXTURE.as_posix()),
         encoding="utf-8",
     )
-    proc = subprocess.run(
-        [_node(), str(harness)], capture_output=True, text=True, timeout=120
-    )
+    proc = subprocess.run([_node(), str(harness)], capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, proc.stderr
     mismatches = json.loads(proc.stdout or "[]")
     assert mismatches == [], f"JS/Python mapping drift: {mismatches}"

@@ -38,7 +38,11 @@ import urllib.error
 import urllib.request
 
 PORT = int(os.environ.get("SQ_PORT", "8099"))
-TIMEOUT_S = 10
+# Zehn Sekunden reichen für jedes GET. Sie reichen NICHT für einen
+# Replay: der rechnet einen ganzen Clip nochmal durch und braucht auf
+# der CPU eine Minute. Der Abbruch sah aus wie „kein erreichbarer Host",
+# also wie ein Netzproblem — deshalb hier verstellbar statt fest.
+TIMEOUT_S = float(os.environ.get("SQ_TIMEOUT", "10"))
 
 
 def default_gateways() -> list[str]:

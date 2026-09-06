@@ -271,6 +271,25 @@
   color: var(--text, #edf4fb);
 }
 
+/* ON A PHONE IT GOES AWAY, and the row goes back to one line.
+   „Was machen diese Elemente hier, der Text nervt am Handy" — three
+   stacked lines of caption above a six-second clip, two of which were
+   added today. The moment this one names is already on the rail TWICE:
+   the white marker sits exactly on it, and a bead sits there too with
+   the same sentence as its tip. A third telling, in words, over the
+   playhead, is chrome — and on 393 px it was the widest thing in the
+   strip. The words stay on desktop, where the row is not the scarce
+   thing. */
+@media (max-width: 560px) {
+  .vp-tl-cap--first {
+    display: none;
+  }
+
+  .vp-tl-caps {
+    min-height: 0;
+  }
+}
+
 /* The rolls could not be laid on this clip, so no band was drawn. This
    caption is the reason, and it is deliberately louder than the two it
    replaces: it reports a contradiction between what was configured and

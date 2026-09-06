@@ -31,42 +31,12 @@ if not _FFMPEG_AVAILABLE:
         "(playback speed may be incorrect)"
     )
 
-# Species name → achievement ID mapping (German species names → normalised IDs)
-# Birds: LBV Stunde der Gartenvögel 2025 Bayern — Top 20.
-_SPECIES_TO_ACH_ID = {
-    # Vögel (Top 20 Bayern)
-    "haussperling": "haussperling",
-    "amsel": "amsel",
-    "kohlmeise": "kohlmeise",
-    "star": "star",
-    "feldsperling": "feldsperling",
-    "blaumeise": "blaumeise",
-    "ringeltaube": "ringeltaube",
-    "mauersegler": "mauersegler",
-    "elster": "elster",
-    "mehlschwalbe": "mehlschwalbe",
-    "buchfink": "buchfink",
-    "rotkehlchen": "rotkehlchen",
-    "grünfink": "gruenfink",
-    "gruenfink": "gruenfink",
-    "rabenkrähe": "rabenkraehe",
-    "rabenkraehe": "rabenkraehe",
-    "hausrotschwanz": "hausrotschwanz",
-    "mönchsgrasmücke": "moenchsgrasmucke",
-    "moenchsgrasmucke": "moenchsgrasmucke",
-    "stieglitz": "stieglitz",
-    "buntspecht": "buntspecht",
-    "kleiber": "kleiber",
-    "eichelhäher": "eichelhaher",
-    "eichelhaher": "eichelhaher",
-    # Säugetiere
-    "eichhörnchen": "eichhoernchen",
-    "eichhoernchen": "eichhoernchen",
-    "igel": "igel",
-    "feldhase": "feldhase",
-    "reh": "reh",
-    "fuchs": "fuchs",
-}
+# Die Zuordnung Artname → Achievement-ID wohnt bei der Freischaltung
+# selbst (`app.species_unlock`), damit die nachträgliche Artbestimmung
+# sie erreicht, ohne die halbe Kamera-Laufzeit zu importieren. Hier nur
+# noch weitergereicht, damit die bestehenden Importeure unverändert
+# bleiben.
+from ..species_unlock import _SPECIES_TO_ACH_ID  # noqa: F401
 
 # Logger names are pinned to the legacy module path so log filters and
 # external grepping still match (the package split moved this code into

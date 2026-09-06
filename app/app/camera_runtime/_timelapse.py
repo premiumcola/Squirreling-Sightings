@@ -14,16 +14,15 @@ function ceiling.
 
 from __future__ import annotations
 
-import json as _json_mod
 import time
 from datetime import datetime
 from pathlib import Path
 
 import cv2
 
-from ..io_utils import atomic_write_json
+from ..species_unlock import unlock_species
 from ..timelapse_windows import FIXED_FPS, capture_interval_s
-from ._consts import _SPECIES_TO_ACH_ID, log, log_tl
+from ._consts import log_tl
 from ._timelapse_capture import CaptureState, TimelapseCaptureMixin
 from ._timelapse_encode import TimelapseEncodeMixin
 
@@ -132,28 +131,12 @@ class TimelapseMixin(TimelapseEncodeMixin, TimelapseCaptureMixin):
                 time.sleep(1)
 
     def _try_unlock_achievement(self, species_name: str, species_label: str) -> bool:
-        """Unlock achievement for a bird/animal species. Returns True if newly unlocked."""
-        ach_id = _SPECIES_TO_ACH_ID.get(species_name.lower().strip())
-        if not ach_id:
-            return False
-        try:
-            with self._ach_lock:
-                data: dict = {}
-                if self._ach_path.exists():
-                    try:
-                        data = _json_mod.loads(self._ach_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        data = {}
-                if ach_id in data:
-                    return False  # already unlocked
-                data[ach_id] = {
-                    "date": datetime.now().isoformat(timespec="seconds"),
-                    "camera_id": self.camera_id,
-                    "species": species_label,
-                }
-                atomic_write_json(self._ach_path, data)
-            log.info("[%s] Achievement unlocked: %s (%s)", self.camera_id, ach_id, species_label)
-            return True
-        except Exception as e:
-            log.warning("[%s] Achievement unlock failed: %s", self.camera_id, e)
-            return False
+        """Eine Art als gesichtet eintragen. True nur, wenn sie neu war.
+
+        Der Rumpf steht in `app.species_unlock`, weil die NACHTRÄGLICHE
+        Artbestimmung dieselbe Tür braucht und keine Kamera hat. Hier
+        bleibt nur der Weg vom Laufzeitobjekt zu seinem Speicherpfad.
+        """
+        return unlock_species(
+            self._ach_path.parent, species_label or species_name, camera_id=self.camera_id
+        )

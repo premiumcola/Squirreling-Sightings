@@ -423,7 +423,10 @@ def test_sweep_stamps_the_store_and_fires_the_dossier_hook_once(tmp_path):
         ["cam1"],
         dossier_hook=lambda latin, common, eid, cid: hook_calls.append((latin, common, eid, cid)),
     )
-    assert result == {"examined": 1, "changed": 1}
+    # `unlocked` ist der zweite Weg ins Sichtungs-Raster: eine
+    # nachträglich bestimmte Art trug bis dahin ihren Namen ins
+    # Ereignis und blieb im Raster gesperrt.
+    assert result == {"examined": 1, "changed": 1, "unlocked": 1}
     stored = store.get_event("cam1", "e1")
     assert stored["bird_species"] == "Rotkehlchen"
     assert stored["detections"][0]["species_latin"] == "Erithacus rubecula"
@@ -472,7 +475,10 @@ def test_sweep_threads_dossier_lookup_through_to_pick_the_rarest_species(tmp_pat
         ["cam1"],
         dossier_lookup=_dossier_lookup({"Turdus merula": 9, "Erithacus rubecula": 1}),
     )
-    assert result == {"examined": 1, "changed": 1}
+    # `unlocked` ist der zweite Weg ins Sichtungs-Raster: eine
+    # nachträglich bestimmte Art trug bis dahin ihren Namen ins
+    # Ereignis und blieb im Raster gesperrt.
+    assert result == {"examined": 1, "changed": 1, "unlocked": 1}
     assert store.get_event("cam1", "e1")["bird_species"] == "Rotkehlchen"
 
 

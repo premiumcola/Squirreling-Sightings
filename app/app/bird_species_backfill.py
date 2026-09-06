@@ -39,6 +39,7 @@ import cv2
 import numpy as np
 
 from .bird_species_rank import DossierLookup, pick_headline_species
+from .species_unlock import unlock_species
 
 log = logging.getLogger(__name__)
 
@@ -293,6 +294,46 @@ def find_backfill_candidates(
             yield camera_id, event.get("event_id") or jf.stem, event
 
 
+def reconcile_species_unlocks(store, storage_root: Path) -> dict:
+    """Jede Art, die IRGENDWO im Archiv steht, ins Sichtungs-Raster holen.
+
+    Der eigentliche Riss war, dass die nachträgliche Artbestimmung die
+    Freischaltung nicht kannte. Der ist oben geflickt — aber nur für
+    KÜNFTIGE Durchläufe: ein Ereignis, das seinen `bird_species` schon
+    trägt, kommt an `_needs_backfill` nicht mehr vorbei und wird nie
+    wieder angefasst. Genau in diesem Zustand standen die sechs
+    Kohlmeisen-Aufnahmen — benannt, im Steckbrief gezählt, im Raster
+    gesperrt.
+
+    Deshalb einmal die Gegenrichtung: über dieselben Dateien laufen und
+    jede bereits vergebene Art eintragen. Idempotent — `unlock_species`
+    lässt eine ID, die schon dasteht, unberührt samt Erstsichtungsdatum,
+    also kostet ein zweiter Lauf nichts und ändert nichts.
+    """
+    events_dir = getattr(store, "events_dir", None)
+    if events_dir is None or not Path(events_dir).exists():
+        return {"seen": 0, "unlocked": 0}
+    seen: dict[str, str] = {}
+    for cam_dir in (d for d in Path(events_dir).iterdir() if d.is_dir()):
+        for jf in cam_dir.rglob("*.json"):
+            if jf.name.endswith(".tracks.json"):
+                continue
+            try:
+                species = (json.loads(jf.read_text(encoding="utf-8")) or {}).get("bird_species")
+            except Exception:
+                continue
+            if species:
+                seen.setdefault(species, cam_dir.name)
+    unlocked = sum(1 for sp, cam in seen.items() if unlock_species(storage_root, sp, camera_id=cam))
+    if unlocked:
+        log.info(
+            "[migration] Sichtungen nachgetragen: %d von %d Arten im Archiv",
+            unlocked,
+            len(seen),
+        )
+    return {"seen": len(seen), "unlocked": unlocked}
+
+
 def _run_dossier_hook(dossier_hook, event: dict, event_id: str, camera_id: str) -> None:
     """Fire `dossier_hook(latin, common_de, event_id, camera_id)` once
     per distinct species_latin newly present on `event` — mirrors
@@ -351,6 +392,7 @@ def sweep_bird_species_backfill(
 
     examined = 0
     changed = 0
+    unlocked = 0
     for camera_id, event_id, event in find_backfill_candidates(store, cam_ids):
         if examined >= budget:
             break
@@ -370,6 +412,13 @@ def sweep_bird_species_backfill(
             log.warning("[det] bird backfill: write failed for event=%s: %s", event_id, e)
             continue
         changed += 1
+        # Dieselben zwei Folgen wie beim LIVE-Weg, in derselben Reihenfolge
+        # wie in _recording/_publish.py: erst die Sichtung eintragen, dann
+        # das Dossier wachsen lassen. Ohne den ersten Schritt bekam eine
+        # nachträglich bestimmte Art ihren Namen im Ereignis-JSON und im
+        # Steckbrief — und blieb im Sichtungs-Raster trotzdem gesperrt.
+        if unlock_species(storage_root, event.get("bird_species") or "", camera_id=camera_id):
+            unlocked += 1
         if dossier_hook:
             _run_dossier_hook(dossier_hook, event, event_id, camera_id)
-    return {"examined": examined, "changed": changed}
+    return {"examined": examined, "changed": changed, "unlocked": unlocked}

@@ -41,15 +41,33 @@ from ...thresholds import resolve_effective
 from ...thresholds._apply import AXIS_ORDER, adapted_layer, rails
 from .._consts import log
 
-#: Questions per day, GLOBAL across every camera. Seven events a day are
-#: expected, so this is 1.7x headroom — enough that a busy afternoon is
-#: not silently dropped, low enough that a phone is never buried.
-DAILY_BUDGET = 12
+#: Questions per day, GLOBAL across every camera.
+#:
+#: WAS 12, ON AN ASSUMPTION THE ARCHIVE CONTRADICTS. The old comment read
+#: "Seven events a day are expected, so this is 1.7x headroom" — measured
+#: over the real timeline of this installation (GET /api/timeline?days=7,
+#: 2026-08-30..09-06) the seven days carried 118 events: 15 · 3 · 14 · 1 ·
+#: 0 · 6 · 64 · 15. A mean of 17 a day and a peak of 64. The budget was
+#: therefore below the average day, not 1.7x above it, and on the busy day
+#: it silenced four questions out of five.
+#:
+#: Raised on the operator's own request — „Ich will öfter gefragt werden
+#: mit Bild zur Bestätigung ob was ok ist". 40 is a little over twice the
+#: measured average and still a hard ceiling: a runaway night cannot bury
+#: the phone, which is the only thing this number was ever for. Only
+#: sightings in the dead zone ask at all, so the real count stays well
+#: under it on an ordinary day.
+DAILY_BUDGET = 40
 
 #: Minimum seconds between two questions for the same (camera, class).
 #: One squirrel visit is one question, not six. Monotonic clock, the
 #: `_TICKER_MIN_GAP_S` pattern from `_recording/_publish.py`.
-PER_CLASS_GAP_S = 600.0
+#:
+#: Halved with the budget: ten minutes meant a bird feeder busy all
+#: morning produced six questions before lunch, and the operator has
+#: asked to be asked more. Five still collapses one visit into one
+#: question, which is the point of the gap.
+PER_CLASS_GAP_S = 300.0
 
 #: Night queue depth. Bounded and drop-oldest: a queue that grows without
 #: limit turns one bad night into a morning of scrolling.

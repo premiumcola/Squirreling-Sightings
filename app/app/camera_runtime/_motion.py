@@ -66,6 +66,31 @@ def _resolve_bird_species(detections: list) -> str | None:
     )
 
 
+def _resolve_species_candidates(detections: list) -> list:
+    """The runner-up species of the best-scoring classified bird.
+
+    EVENT-LEVEL, deliberately, and not on the detections. `Detection.
+    to_dict()` is the event JSON's `detections` contract and archived
+    events keep it byte-for-byte — the same reason `track_id` is absent
+    from it. This sits beside `bird_species`, which is already the
+    event-level answer to "which bird was this", and answers the
+    follow-up: "and what else might it have been".
+
+    One list per event, from the detection that supplied the headline —
+    three candidates from three different birds in one frame would be a
+    choice nobody can make.
+    """
+    best = None
+    for d in detections or []:
+        cands = getattr(d, "species_candidates", None)
+        if not cands:
+            continue
+        score = float(getattr(d, "species_score", 0.0) or 0.0)
+        if best is None or score > best[0]:
+            best = (score, cands)
+    return list(best[1]) if best else []
+
+
 def _refresh_bird_species(meta: dict, detections: list, tally=None) -> None:
     """Re-derive `meta["bird_species"]` after `_upgrade_event_meta` has
     replaced the detections it was originally computed from.
@@ -454,6 +479,8 @@ class MotionMixin:
             # have no clip and keep exactly this.
             "whole_clip": _first_frame_clip_block(detections),
             "bird_species": bird_species,
+            # What else it might have been — see _resolve_species_candidates.
+            "species_candidates": _resolve_species_candidates(detections),
             "cat_name": cat_match,
             "person_name": person_match,
             "whitelisted": whitelisted,

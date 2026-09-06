@@ -8,7 +8,7 @@ move the classes into their own modules without touching this file.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # COCO classes that are physically implausible for a residential / garden /
 # workshop camera in central Europe. When the object detector emits one of
@@ -77,6 +77,14 @@ class Detection:
     species: str | None = None  # display name (German when mapped, else raw iNat)
     species_latin: str | None = None  # "Genus species" binomial from the iNat label
     species_score: float | None = None
+    #: The runner-up species for this crop, best first — the two the
+    #: classifier already ranked and used to discard. Deliberately ABSENT
+    #: from `to_dict()`, for the same reason `track_id` is: that dict is
+    #: the event JSON's `detections` contract and archived events keep it
+    #: byte-for-byte. The event-level copy lives beside `bird_species`
+    #: (see `_motion._resolve_species_candidates`), which is where a
+    #: consumer asking "what else could it have been" already looks.
+    species_candidates: list = field(default_factory=list)
     identity: str | None = None
     raw_cls_id: int = -1  # unmapped class id as emitted by the model
     # Trigger flags inherited from the zone this detection passed through.

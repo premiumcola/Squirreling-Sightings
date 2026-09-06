@@ -57,14 +57,31 @@ def stamp_species(classifier, crop, det):
     """
     if classifier is None or not getattr(classifier, "available", False):
         return None
-    species, species_latin, species_score = classifier.classify_crop(crop)
-    if not species:
+    # Prefer the ranked form, fall back to the triple. A classifier
+    # without `classify_crop_ranked` is not an error — it is every stub
+    # in the test suite and any implementation written before the
+    # candidates existed, and one of them going silent because a method
+    # was added is precisely the failure this shape avoids.
+    ranked_fn = getattr(classifier, "classify_crop_ranked", None)
+    if callable(ranked_fn):
+        ranked = ranked_fn(crop)
+    else:
+        name, latin, score = classifier.classify_crop(crop)
+        ranked = [{"name": name, "latin": latin, "score": score}] if name else []
+    if not ranked:
         return None
-    det.species = species
-    det.species_latin = species_latin
-    det.species_score = float(species_score) if species_score is not None else None
+    best = ranked[0]
+    det.species = best["name"]
+    det.species_latin = best["latin"]
+    det.species_score = float(best["score"]) if best["score"] is not None else None
+    # THE RUNNERS-UP TRAVEL WITH IT. The model was already asked for three
+    # and the walk above already looked at all three; until now only the
+    # winner survived the function. They are what turns „ist das ein
+    # Vogel?" into „Elster, oder eher die zweite?" — the second question
+    # the operator asked for, at no inference cost.
+    det.species_candidates = list(ranked)
     det.model = STAGE_BIRD
-    return species, species_latin, det.species_score
+    return best["name"], best["latin"], det.species_score
 
 
 class BirdSpeciesClassifier(InferenceTimingMixin):
@@ -181,20 +198,46 @@ class BirdSpeciesClassifier(InferenceTimingMixin):
         self.reason = f"classifier unavailable: {coral_error}"
         log.warning("[det] Bird species classifier nicht verfügbar")
 
-    def classify_crop(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
-        """Return (display_name, latin_binomial, score).
+    def classify_crop_ranked(self, crop: np.ndarray) -> list:
+        """Every named candidate for this crop, best first.
 
-        display_name is the German common name when the species is in the
-        latin_to_de map, otherwise the raw iNat label. latin_binomial is
-        always the clean "Genus species" form.
+        ``[{"name", "latin", "score"}, …]`` — at most three, because the
+        model is asked for three. THE CANDIDATES ALWAYS EXISTED: both
+        backends already pulled the top three and walked them looking for
+        one with a German name, then returned that one and dropped the
+        rest. Keeping them costs no inference at all.
+
+        They are what lets a question ask a second question — „Frage
+        Vogel und dann wenn ja: Elster, oder 2., oder 3.?" — instead of
+        offering the operator a single guess to accept or reject.
         """
         if not self.available or crop is None or crop.size == 0:
-            return None, None, None
+            return []
         if self._cpu_mode:
             return self._classify_cpu(crop)
         return self._classify_coral(crop)
 
-    def _classify_coral(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
+    def classify_crop(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
+        """Return (display_name, latin_binomial, score) — the best candidate.
+
+        display_name is the German common name when the species is in the
+        latin_to_de map, otherwise the raw iNat label. latin_binomial is
+        always the clean "Genus species" form.
+
+        A THIN WRAPPER, and deliberately still a 3-tuple: five call sites
+        unpack exactly three values, and four of the five sit inside a
+        broad ``except Exception`` that would have swallowed the
+        ValueError from a widened return without a word — the species
+        stage would simply have gone quiet. Adding a method costs
+        nothing; changing this one's shape costs a silent outage.
+        """
+        ranked = self.classify_crop_ranked(crop)
+        if not ranked:
+            return None, None, None
+        best = ranked[0]
+        return best["name"], best["latin"], best["score"]
+
+    def _classify_coral(self, crop: np.ndarray) -> list:
         t_pre = time.perf_counter()
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         width, height = self.common.input_size(self.interpreter)
@@ -211,18 +254,20 @@ class BirdSpeciesClassifier(InferenceTimingMixin):
             self.interpreter, top_k=3, score_threshold=self.min_score
         )
         if not classes:
-            return None, None, None
-        # Walk top-3 and return the first candidate that has a German mapping.
+            return []
+        # ALL top-3 candidates that have a German mapping, best first.
         # iNat's #1 is sometimes a North-American species while a European
-        # cousin we know sits at #2/#3 — pick the one we can name.
+        # cousin we know sits at #2/#3 — the walk was always here, it just
+        # returned on the first hit and dropped the rest on the floor.
+        out = []
         for c in classes:
             raw = self.labels.get(int(c.id), str(c.id))
             display, latin = _pretty_bird_label(raw, self.latin_to_de)
             if display:
-                return display, latin, float(c.score)
-        return None, None, None
+                out.append({"name": display, "latin": latin, "score": float(c.score)})
+        return out
 
-    def _classify_cpu(self, crop: np.ndarray) -> tuple[str | None, str | None, float | None]:
+    def _classify_cpu(self, crop: np.ndarray) -> list:
         t_pre = time.perf_counter()
         input_details = self.interpreter.get_input_details()
         output_details = self.interpreter.get_output_details()
@@ -260,6 +305,7 @@ class BirdSpeciesClassifier(InferenceTimingMixin):
             return raw_score
 
         top_ids = np.argsort(scores)[::-1][:3]
+        out = []
         for cid in top_ids:
             cid = int(cid)
             prob = _to_prob(float(scores[cid]))
@@ -268,5 +314,5 @@ class BirdSpeciesClassifier(InferenceTimingMixin):
             raw = self.labels.get(cid, str(cid))
             display, latin = _pretty_bird_label(raw, self.latin_to_de)
             if display:
-                return display, latin, prob
-        return None, None, None
+                out.append({"name": display, "latin": latin, "score": prob})
+        return out

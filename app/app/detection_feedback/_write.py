@@ -78,6 +78,7 @@ def record_verdict(
     corrected_label: str | None = None,
     source: str = "unknown",
     cam_id: str | None = None,
+    species: str | None = None,
 ) -> bool:
     """Record the user's judgement on an event.
 
@@ -86,6 +87,13 @@ def record_verdict(
     `corrected_label` carries "it was actually a dog" when the user says
     so — that is the signal a per-camera label veto is built from, and
     it is useful even when no alert record exists to join to.
+
+    `species` is the bird species this verdict is ABOUT, when there is
+    one — orthogonal to `corrected_label`: "it really was a bird, just
+    the wrong species" changes neither `correct` (the class guess stood)
+    nor `corrected_label` (still "bird"), only which species the ledger
+    counts a confirmed sample for. See
+    `detection_feedback.confirmed_species_count`.
     """
     return append(
         storage_root,
@@ -97,5 +105,6 @@ def record_verdict(
             "correct": bool(correct),
             "corrected_label": corrected_label,
             "source": source,
+            "species": species,
         },
     )

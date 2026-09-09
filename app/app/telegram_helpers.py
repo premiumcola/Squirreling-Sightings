@@ -87,6 +87,23 @@ def most_specific_label(labels: list[str] | tuple[str, ...] | None) -> str:
     return next(iter(label_set))
 
 
+def species_caption_label(label: str, meta: dict) -> str:
+    """What a Telegram caption should call this detection.
+
+    "Vogel · 72 %" answers a different question than the operator is
+    actually asking — the Mediathek already carries `bird_species` on
+    the event, computed before the message goes out
+    (`_motion._build_event_meta`), and until now no caption ever read
+    it. For anything but a bird with a known species this is just
+    `LABEL_DE`, unchanged.
+    """
+    if label == "bird":
+        species = (meta.get("bird_species") or "").strip()
+        if species:
+            return species
+    return LABEL_DE.get(label, label)
+
+
 from .time_utils import parse_hhmm as _parse_hhmm  # noqa: F401
 
 

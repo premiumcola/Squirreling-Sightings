@@ -35,8 +35,14 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from .. import net_archive
 from ..detection_feedback import record_verdict
 from ..event_relabel import apply_label_change, labels_after_correction
+from ..species_video_count import record_confirmed_video
 from ..telegram_helpers import LABEL_DE
-from ._outbound._question import question_class_markup, question_markup
+from ._outbound._event_alert import _event_buttons
+from ._outbound._question import (
+    question_class_markup,
+    question_markup,
+    species_correction_markup,
+)
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +137,29 @@ class EventCallbackMixin:
             apply_label_change(event, new_labels)
             self.store.update_event(cam_id, eid, event)
 
-    def _book_verdict(self, eid: str, *, correct: bool, source: str, corrected: str | None = None):
+    def _bird_species_of(self, eid: str, ctx: dict) -> str | None:
+        """The event's `bird_species`, or None when this isn't a bird
+        event / the field is empty. Needs a store round-trip because
+        `_event_context` (the LRU/archive lookup used everywhere else)
+        only carries `{cam, label, score}`."""
+        cam = ctx.get("cam")
+        if not (cam and self.store and ctx.get("label") == "bird"):
+            return None
+        with contextlib.suppress(Exception):
+            event = self.store.get_event(cam, eid)
+            species = (event or {}).get("bird_species") or ""
+            return species.strip() or None
+        return None
+
+    def _book_verdict(
+        self,
+        eid: str,
+        *,
+        correct: bool,
+        source: str,
+        corrected: str | None = None,
+        species: str | None = None,
+    ):
         """Both durable writes, in one place so no branch can skip one."""
         ctx = self._event_context(eid)
         with contextlib.suppress(Exception):
@@ -143,6 +171,7 @@ class EventCallbackMixin:
                 corrected_label=corrected,
                 source=source,
                 cam_id=ctx.get("cam"),
+                species=species,
             )
         value = net_archive.VERDICT_RIGHT if correct else net_archive.VERDICT_WRONG
         if corrected:
@@ -193,6 +222,8 @@ class EventCallbackMixin:
             await self._cb_back(q, eid)
         elif verb == "c" and len(parts) >= 4:
             await self._cb_corrected(q, eid, parts[3])
+        elif verb == "sp":
+            await self._handle_species_cb(q, eid, parts[3] if len(parts) >= 4 else None)
         elif verb == "m1h":
             await self._cb_mute(q, eid)
         elif verb == "siren":
@@ -211,7 +242,15 @@ class EventCallbackMixin:
         # apart. The archive prints the difference too.
         source = _SOURCE_QUESTION if self._is_question(eid) else "telegram"
         self._mark_judged(eid, verdict, source)
-        self._book_verdict(eid, correct=(verdict == "ok"), source=source)
+        ctx = self._event_context(eid)
+        # "Ja" on a bird question confirms the caption's species guess
+        # too — that IS what the caption showed. A "Nein" disputes the
+        # whole detection, not just which bird, so nothing is counted.
+        species = self._bird_species_of(eid, ctx) if verdict == "ok" else None
+        self._book_verdict(eid, correct=(verdict == "ok"), source=source, species=species)
+        if species:
+            with contextlib.suppress(Exception):
+                record_confirmed_video(self._storage_root(), species)
         ts_str = datetime.now().strftime("%H:%M")
         badge = f"✅ Ja · {ts_str}" if verdict == "ok" else f"❌ Nein · {ts_str}"
         await self._set_badge(q, badge)
@@ -263,6 +302,118 @@ class EventCallbackMixin:
         badge = f"🐿 {LABEL_DE.get(label, label)} · {ts_str}"
         await self._set_badge(q, badge)
         await q.answer(badge)
+
+    # ── species correction ───────────────────────────────────────────
+    async def _handle_species_cb(self, q, eid: str, arg: str | None):
+        """``ev:<eid>:sp[:<arg>]`` — the whole species sub-flow.
+
+        No 4th part opens the picker; ``back``/``none`` are reserved
+        words (see `species_correction_markup`); anything else is a
+        species name to record.
+        """
+        if arg is None:
+            await self._cb_species_menu(q, eid)
+        elif arg == "back":
+            await self._cb_species_back(q, eid)
+        elif arg == "none":
+            await self._cb_species_unsure(q, eid)
+        else:
+            await self._cb_species_pick(q, eid, arg)
+
+    def _event_species_candidates(self, eid: str, cam: str | None) -> list:
+        if not (cam and self.store):
+            return []
+        with contextlib.suppress(Exception):
+            event = self.store.get_event(cam, eid)
+            return list((event or {}).get("species_candidates") or [])
+        return []
+
+    async def _cb_species_menu(self, q, eid: str):
+        """Swap the keyboard for the species picker — edit in place, same
+        reasoning as `_cb_alt`: the photo/caption stay the context."""
+        ctx = self._event_context(eid)
+        current = self._bird_species_of(eid, ctx)
+        candidates = self._event_species_candidates(eid, ctx.get("cam"))
+        try:
+            await q.edit_message_reply_markup(
+                reply_markup=self._build_markup(species_correction_markup(eid, candidates, current))
+            )
+        except Exception as e:
+            log.debug("[tg] species markup edit failed: %s", e)
+        await q.answer("Welche Art war es wirklich?")
+
+    async def _cb_species_back(self, q, eid: str):
+        """Restore whichever keyboard sent this message, species row and
+        all — the operator can still answer Ja/Nein/Gültig/Falsch.
+
+        The alarm path's siren button cannot be reconstructed here (it
+        depended on the send-time armed/night-wakeup check, not stored
+        anywhere retrievable by event id) — a minor loss on the rare
+        path where a species picker was opened on an armed night alarm
+        and then backed out of.
+        """
+        if self._already_judged(eid):
+            await q.answer("Bereits bewertet")
+            return
+        ctx = self._event_context(eid)
+        try:
+            if self._is_question(eid):
+                markup = question_markup(eid, self._event_deep_link_url(eid), species_known=True)
+            else:
+                markup = _event_buttons(
+                    eid,
+                    ctx.get("cam") or "",
+                    False,
+                    self._event_deep_link_url(eid),
+                    species_known=True,
+                )
+            await q.edit_message_reply_markup(reply_markup=self._build_markup(markup))
+        except Exception as e:
+            log.debug("[tg] species back edit failed: %s", e)
+        await q.answer()
+
+    async def _cb_species_pick(self, q, eid: str, species: str):
+        """The caption's guess was a bird, just the wrong species — the
+        class verdict stands (still "correct"), only the species this
+        confirms changes. Also fixes the event's own `bird_species` so
+        the Mediathek badge and the species-tally agree with what the
+        operator just said."""
+        if self._already_judged(eid):
+            await q.answer("Bereits bewertet")
+            return
+        self._mark_judged(eid, f"sp:{species}", _SOURCE_QUESTION)
+        ctx = self._book_verdict(eid, correct=True, source=_SOURCE_QUESTION, species=species)
+        with contextlib.suppress(Exception):
+            record_confirmed_video(self._storage_root(), species)
+        self._correct_bird_species(eid, ctx.get("cam"), species)
+        ts_str = datetime.now().strftime("%H:%M")
+        badge = f"🐦 {species} · {ts_str}"
+        await self._set_badge(q, badge)
+        await q.answer(badge)
+
+    async def _cb_species_unsure(self, q, eid: str):
+        """Still a bird — the operator just cannot tell which one.
+        Confirms the class, records no species, counts nothing toward
+        any species cap."""
+        if self._already_judged(eid):
+            await q.answer("Bereits bewertet")
+            return
+        self._mark_judged(eid, "sp:none", _SOURCE_QUESTION)
+        self._book_verdict(eid, correct=True, source=_SOURCE_QUESTION, species=None)
+        ts_str = datetime.now().strftime("%H:%M")
+        badge = f"✅ Ja (Art unsicher) · {ts_str}"
+        await self._set_badge(q, badge)
+        await q.answer(badge)
+
+    def _correct_bird_species(self, eid: str, cam_id: str | None, species: str) -> None:
+        if not (cam_id and self.store):
+            return
+        with contextlib.suppress(Exception):
+            event = self.store.get_event(cam_id, eid)
+            if not event:
+                return
+            event["bird_species"] = species
+            self.store.update_event(cam_id, eid, event)
 
     async def _cb_mute(self, q, eid: str):
         ss = self.settings_store

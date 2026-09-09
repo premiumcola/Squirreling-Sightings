@@ -36,7 +36,7 @@ from ... import net_archive
 from ...detection_feedback import corpus_stats, resolve_stratum
 from ...detection_feedback._io import ledger_index
 from ...detection_feedback._write import record_alert
-from ...telegram_helpers import LABEL_DE, most_specific_label
+from ...telegram_helpers import LABEL_DE, most_specific_label, species_caption_label
 from ...thresholds import resolve_effective
 from ...thresholds._apply import AXIS_ORDER, adapted_layer, rails
 from .._consts import log
@@ -58,14 +58,23 @@ NIGHT_QUEUE_MAX = 20
 _QUEUE_KEY = "netz_question_queue"
 
 
-def question_markup(eid: str, deep_link: str = "") -> list:
-    """The four buttons. `ev:<eid>:alt` is 22 + 8 = 30 bytes, well inside
-    the 64-byte callback_data limit `_send._build_markup` truncates at."""
+def question_markup(eid: str, deep_link: str = "", *, species_known: bool = False) -> list:
+    """The buttons. `ev:<eid>:alt` is 22 + 8 = 30 bytes, well inside
+    the 64-byte callback_data limit `_send._build_markup` truncates at.
+
+    `species_known` adds one more row for a bird caption that named a
+    species — "Ja"/"Nein" keep meaning exactly "is this a bird", the
+    threshold learner's whole vocabulary; the species row is orthogonal
+    and only ever changes which species a confirmation counts for (see
+    `_inbound_event._cb_species_menu`).
+    """
     rows = [
         [("✅ Ja", f"ev:{eid}:ok")],
         [("❌ Nein", f"ev:{eid}:no")],
-        [("🐿 War etwas anderes", f"ev:{eid}:alt")],
     ]
+    if species_known:
+        rows.append([("🐦 War eine andere Art", f"ev:{eid}:sp")])
+    rows.append([("🐿 War etwas anderes", f"ev:{eid}:alt")])
     if deep_link:
         rows.append([("🌐 In App öffnen", deep_link)])
     return rows
@@ -79,6 +88,38 @@ def question_class_markup(eid: str, classes) -> list:
     """
     rows = [[(f"{LABEL_DE.get(c, c)}", f"ev:{eid}:c:{c}")] for c in classes]
     rows.append([("← zurück", f"ev:{eid}:back")])
+    return rows
+
+
+def species_correction_markup(eid: str, candidates: list, current_species: str | None) -> list:
+    """One row per alternative species, plus "unsicher" and a way back.
+
+    ``candidates`` is the event's own ``species_candidates`` — the
+    classifier's own runners-up, already computed at no extra inference
+    cost (see ``detectors/bird_species.py``) — so the operator picks
+    from what the model actually considered instead of a generic list.
+    The current guess is filtered out: correcting it to itself is not a
+    correction, and it is already the "✅ Ja" button one tap over.
+
+    Capped at 5 rows — Telegram renders each as its own line, and a
+    picker longer than the screen is worse than an incomplete one; a
+    species that never shows up here is still reachable by first
+    disagreeing on the class via "🐿 War etwas anderes".
+    """
+    cur = (current_species or "").strip().lower()
+    seen = {cur} if cur else set()
+    rows = []
+    for cand in candidates or []:
+        name = (cand.get("name") or "").strip() if isinstance(cand, dict) else ""
+        key = name.lower()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        rows.append([(name, f"ev:{eid}:sp:{name}")])
+        if len(rows) >= 5:
+            break
+    rows.append([("❓ unsicher, welche genau", f"ev:{eid}:sp:none")])
+    rows.append([("← zurück", f"ev:{eid}:sp:back")])
     return rows
 
 
@@ -115,10 +156,10 @@ def event_subject(meta: dict) -> tuple:
     return label, score
 
 
-def _caption(cam_name: str, label: str, score: float) -> str:
+def _caption(cam_name: str, label: str, score: float, meta: dict) -> str:
     return (
         f"❓ <b>Unsicher</b> · {cam_name} · {datetime.now().strftime('%H:%M')}\n"
-        f"Vermutung: {LABEL_DE.get(label, label)} · {int(round(float(score) * 100))} %\n"
+        f"Vermutung: {species_caption_label(label, meta)} · {int(round(float(score) * 100))} %\n"
         f"War das richtig?"
     )
 
@@ -406,10 +447,13 @@ class QuestionMixin(QuestionBudgetMixin):
             self.settings_store.runtime_alert_index_set(
                 eid, {"cam": camera_id, "label": label, "ts": time.time()}
             )
+        species_known = label == "bird" and bool((meta.get("bird_species") or "").strip())
         self.send(
-            _caption(cam_cfg.get("name") or camera_id, label, score),
+            _caption(cam_cfg.get("name") or camera_id, label, score, meta),
             photo=photo,
-            buttons=question_markup(eid, self._event_deep_link_url(eid)),
+            buttons=question_markup(
+                eid, self._event_deep_link_url(eid), species_known=species_known
+            ),
             # ALWAYS silent, day or night. A question must never buzz —
             # only an alarm earns that.
             silent=True,

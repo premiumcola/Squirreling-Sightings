@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ...detection_feedback import record_alert
-from ...telegram_helpers import LABEL_DE, most_specific_label
+from ...telegram_helpers import most_specific_label, species_caption_label
 from ...thresholds import resolve_effective
 from ...thresholds._apply import adapted_layer
 from .._consts import _NOTIFY_COOLDOWN_DEFAULTS, log
@@ -76,32 +76,44 @@ def _event_caption(meta: dict, primary: str, cam_name: str, score_pct: int) -> s
     different label than `primary` (e.g. the event has "person" +
     "squirrel" but only squirrel crossed its 12 h threshold) — the
     marker's label wins so the user sees the actually-anomalous class.
-    is_new_record adds a sparkle so the rarity is noticeable."""
+    is_new_record adds a sparkle so the rarity is noticeable.
+
+    `species_caption_label` swaps in the species name for a bird with a
+    known guess (e.g. "Elster" instead of "Vogel") — everything else is
+    unchanged."""
     first_since = meta.get("first_since") if isinstance(meta.get("first_since"), dict) else None
     if not first_since:
-        return f"<b>{LABEL_DE.get(primary, primary)}</b> · {score_pct}% · {cam_name}"
+        return f"<b>{species_caption_label(primary, meta)}</b> · {score_pct}% · {cam_name}"
     fs_label = first_since.get("label") or primary
-    fs_label_de = LABEL_DE.get(fs_label, fs_label)
+    fs_label_de = species_caption_label(fs_label, meta)
     gap_h = float(first_since.get("gap_hours") or 0.0)
     gap_str = f"{int(round(gap_h))} h" if gap_h >= 1 else f"{int(round(gap_h * 60))} min"
     record_tag = " ✨ (neuer Rekord)" if first_since.get("is_new_record") else ""
     return f"<b>Erstes {fs_label_de} seit {gap_str}{record_tag}</b>\n{cam_name} · {score_pct}%"
 
 
-def _event_buttons(eid: str, camera_id: str, siren: bool, deep_link: str) -> list:
+def _event_buttons(
+    eid: str, camera_id: str, siren: bool, deep_link: str, *, species_known: bool = False
+) -> list:
     """Verdict row, mute row (+ siren on an armed night wakeup), live
     actions, and the deep link when public_base_url is configured.
 
     The live row re-uses the same cam:<id>:livebild / cam:<id>:clip:5
     callbacks the /menu picker already routes — single source of truth,
     no parallel dispatcher. URL buttons are recognised by their http(s)
-    prefix in _build_markup, so they need no callback_data."""
+    prefix in _build_markup, so they need no callback_data.
+
+    `species_known` mirrors `_question.question_markup` — see there for
+    why the species row is additive and never changes what "Gültig"/
+    "Falsch" mean."""
     buttons = [
         [("✅ Gültig", f"ev:{eid}:ok"), ("❌ Falsch", f"ev:{eid}:no")],
-        [("🔇 1 h still", f"ev:{eid}:m1h")],
     ]
+    if species_known:
+        buttons.append([("🐦 War eine andere Art", f"ev:{eid}:sp")])
+    buttons.append([("🔇 1 h still", f"ev:{eid}:m1h")])
     if siren:
-        buttons[1].append(("🚨 Sirene", f"ev:{eid}:siren"))
+        buttons[-1].append(("🚨 Sirene", f"ev:{eid}:siren"))
     buttons.append(
         [
             ("📷 Livebild", f"cam:{camera_id}:livebild"[:64]),
@@ -353,8 +365,13 @@ class EventAlertMixin:
         silent, is_night_now, night_wakeup = self._resolve_silence(ctx, severity, is_armed)
         eid = meta.get("event_id") or datetime.now().strftime("%Y%m%d-%H%M%S")
         caption = _event_caption(meta, ctx.primary, cam_name, int(round(ctx.top_score * 100)))
+        species_known = ctx.primary == "bird" and bool((meta.get("bird_species") or "").strip())
         buttons = _event_buttons(
-            eid, camera_id, night_wakeup and is_armed, self._event_deep_link_url(eid)
+            eid,
+            camera_id,
+            night_wakeup and is_armed,
+            self._event_deep_link_url(eid),
+            species_known=species_known,
         )
         if self.settings_store:
             self.settings_store.runtime_alert_index_set(

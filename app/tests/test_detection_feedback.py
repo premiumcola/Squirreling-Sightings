@@ -93,6 +93,26 @@ def test_corrected_label_survives(tmp_path):
     assert list(iter_records(tmp_path))[0]["corrected_label"] == "dog"
 
 
+def test_species_rides_along_orthogonally_to_the_class_correction(tmp_path):
+    """ "It really was a bird, just the wrong species" changes neither
+    `correct` nor `corrected_label` — only which species the confirmed-
+    video counter reads this row as being about."""
+    record_verdict(
+        tmp_path, event_id="e1", correct=True, ts=2.0, source="telegram_q", species="Elster"
+    )
+    rec = list(iter_records(tmp_path))[0]
+    assert rec["correct"] is True
+    assert rec["corrected_label"] is None
+    assert rec["species"] == "Elster"
+
+
+def test_species_defaults_to_none_for_every_existing_caller(tmp_path):
+    """Every call site written before species existed must keep working
+    unchanged."""
+    record_verdict(tmp_path, event_id="e1", correct=True, ts=2.0, source="web")
+    assert list(iter_records(tmp_path))[0]["species"] is None
+
+
 def test_ledger_lives_outside_the_event_folders(tmp_path):
     """cleanup_old deletes events by age; the corpus must not live there."""
     _alert(tmp_path, "e1")

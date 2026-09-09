@@ -16,6 +16,7 @@
 import { esc, hexToRgba } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { speciesChipText, subjectLabel } from '../core/clip-species.js';
+import { speciesIconSvg } from '../core/species-icon.js';
 import { colors, objIconSvg, objBubble } from '../core/icons.js';
 import { primaryLabel } from '../core/primary-label.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
@@ -59,6 +60,22 @@ export function getMediaAccentColor(labels) {
   }
   return colors.motion || '#93c5fd';
 }
+/** The badge's own glyph: the SPECIES silhouette once the cascade has
+ *  named the bird — „Setz hier die vektor grafik der erkannten und
+ *  zugewisen spezies hin!" — and the plain class icon otherwise. Same
+ *  lookup the picker and the achievement board use (core/species-icon.js),
+ *  so one bird wears one drawing everywhere it appears. A species with no
+ *  drawing falls back to the class icon rather than to the 🐦 emoji: at
+ *  12 px inside a pill, an emoji sits on a different baseline and reads
+ *  as a rendering fault. */
+function _badgeIcon(label, species) {
+  if (label === 'bird' && species) {
+    const svg = speciesIconSvg(species);
+    if (svg) return `<span class="mmc-tl-species-icon">${svg}</span>`;
+  }
+  return objIconSvg(label, 12);
+}
+
 export function fmtMediaDate(ts) {
   if (!ts) return '';
   try {
@@ -198,7 +215,7 @@ function _motionCtx(item) {
     // node it could not, and the badge grew past `.mmc-badges`' own
     // clearance until it ran under the confirm/delete buttons — the
     // reported „Grafik kollision", on every long species name.
-    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}<span class="mmc-tl-name">${esc(badgeText)}</span>${speciesEditBtn}</span>${speciesChip}</div>`,
+    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${_badgeIcon(badgeLabel, item.bird_species)}<span class="mmc-tl-name">${esc(badgeText)}</span>${speciesEditBtn}</span>${speciesChip}</div>`,
   };
 }
 

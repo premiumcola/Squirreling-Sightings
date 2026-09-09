@@ -15,20 +15,24 @@
 // 3 s band onto clips containing no pre-roll at all, and then my own
 // „passt nicht in diesen Clip" caption fired on top of it.
 //
-// A source-text check, because the precedence lives in the composition
-// file: index.js wires a live <video>, a fetch and a shell at import, so
-// what is pinned here is the CONTRACT — the measurement is read first.
+// A source-text check, because the precedence lives in the wiring file:
+// it wires a live <video>, a fetch and a shell at import, so what is
+// pinned here is the CONTRACT — the measurement is read first.
+//
+// The file is `_wire-recorded.js` since the recorded-clip wiring was
+// split out of index.js for CLAUDE.md's 400-line ceiling. The assertion
+// did not change with the move; only where it looks.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const SRC = readFileSync(fileURLToPath(new URL('../index.js', import.meta.url)), 'utf8');
+const SRC = readFileSync(fileURLToPath(new URL('../_wire-recorded.js', import.meta.url)), 'utf8');
 
 /** Source with comments stripped — this file's own subject matter is
- *  quoted inside index.js's comments, so scanning them would pass on the
- *  documentation rather than on the code. */
+ *  quoted inside the wiring file's comments, so scanning them would pass
+ *  on the documentation rather than on the code. */
 function code(src) {
   return src
     .replace(/\/\*[\s\S]*?\*\//g, '')

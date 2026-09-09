@@ -38,10 +38,16 @@ import { renderReplay } from './_replay.js';
  * @param {object|null} objects  the object-list handle
  * @param {object|null} details  the provenance-fold handle
  * @param {{item: object, tracks: object|null, models: object|null}} st
+ * @param {{keepSheet?: boolean}} opts  `keepSheet` skips the row list —
+ *   the correction sheet is mounted INSIDE a row, so rebuilding the list
+ *   under it tears the open sheet off the page mid-edit. Every other
+ *   part still repaints, and the list catches up when the sheet closes.
  */
-function _paintPanel(parts, st) {
-  const rows = objectRowsFor(st.item, st.tracks);
-  parts.objects?.update(rows, st.models, objectsNote(rows, st.item));
+function _paintPanel(parts, st, opts = {}) {
+  if (!opts.keepSheet) {
+    const rows = objectRowsFor(st.item, st.tracks);
+    parts.objects?.update(rows, st.models, objectsNote(rows, st.item));
+  }
   // `st.fetched` distinguishes "the sidecar request has not come back"
   // from "there is none" — collapsing those two is exactly what made an
   // empty picture unreadable.
@@ -87,6 +93,13 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
         request: deps.request,
         onSaved: saved,
         onError: deps.onError,
+        // The list was skipped while the sheet was up (see _paintPanel's
+        // `keepSheet`) — now that the sheet is gone it has to catch up,
+        // or the row headings keep showing the pre-correction class.
+        onClosed: () => {
+          sheet = null;
+          paint();
+        },
       });
     },
   });
@@ -106,7 +119,7 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
   });
 
   const parts = { objects, note, replay, details };
-  const paint = () => _paintPanel(parts, st);
+  const paint = (opts) => _paintPanel(parts, st, opts);
 
   // A correction came back. The reply is authoritative — `top_label` is
   // the backend's own derivation and `bird_species` may just have been
@@ -116,7 +129,13 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
   // still hold the old verdict until it does.
   const saved = (res, labels) => {
     applyLabelPatch(st.item, res);
-    paint();
+    // Every tap in the sheet IS the save — one toggle, one POST (see
+    // _reclassify.js's header). The repaint used to take the sheet down
+    // with it on every one of them, which read as "it cancelled": „Nach
+    // jeder Änderung schliesst sich das edit menü — muss ich speichern
+    // oder fertig drücken damits übernommen wird?!". It stays up now,
+    // and "Fertig" only closes it.
+    paint({ keepSheet: !!sheet });
     deps.onSaved?.(res, labels);
   };
 

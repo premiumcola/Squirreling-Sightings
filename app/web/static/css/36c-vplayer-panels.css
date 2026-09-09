@@ -233,6 +233,16 @@
   margin-bottom: 8px;
 }
 
+/* One quiet line under the correction sheet's title, saying that every
+   tap in it has already been saved — „muss ich speichern oder fertig
+   drücken damits übernommen wird?!". Muted and small on purpose: it
+   answers a question, it is not a second heading. */
+.vp-sheet-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0 8px;
+}
+
 .vp-pnl-btn {
   flex: 1 1 auto;
   min-height: var(--vp-tap);

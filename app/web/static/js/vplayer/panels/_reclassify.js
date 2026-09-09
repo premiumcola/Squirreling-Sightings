@@ -60,12 +60,14 @@ export function labelsRequestFor(item, labels) {
 
 function _sheetHtml(active) {
   const set = new Set(active || []);
-  const chips = _CHOICES.map(
-    (c) =>
-      `<button type="button" class="vp-seg" data-label="${esc(c)}" ` +
-      `aria-pressed="${set.has(c) ? 'true' : 'false'}">` +
-      `<span class="vp-seg-label">${esc(OBJ_LABEL[c] || c)}</span></button>`,
-  ).join('');
+  const chips = _CHOICES
+    .map(
+      (c) =>
+        `<button type="button" class="vp-seg" data-label="${esc(c)}" ` +
+        `aria-pressed="${set.has(c) ? 'true' : 'false'}">` +
+        `<span class="vp-seg-label">${esc(OBJ_LABEL[c] || c)}</span></button>`,
+    )
+    .join('');
   return (
     // The sheet edits the CLIP's label set, not the row it was opened
     // from — POST …/events/<id>/labels has no per-detection form and the
@@ -73,6 +75,10 @@ function _sheetHtml(active) {
     // headed "Erkennung korrigieren" reads as a promise to change one
     // row out of four and would quietly break it for the others.
     `<div class="vp-sheet-title">Erkennungen dieser Aufnahme</div>` +
+    // One toggle = one POST, already saved by the time the chip flips.
+    // Said out loud because the operator could not tell: „muss ich
+    // speichern oder fertig drücken damits übernommen wird?!"
+    `<div class="vp-sheet-hint">Jede Änderung wird sofort gespeichert.</div>` +
     `<div class="vp-segbar vp-segbar--wrap">${chips}</div>` +
     // Clearing every label is how an operator says "nothing was here".
     // The backend deliberately books NO correction for an emptied list,
@@ -88,7 +94,11 @@ function _sheetHtml(active) {
  *
  * @param {HTMLElement} host
  * @param {object} item
- * @param {object} deps  { request, onSaved(result), onError }
+ * @param {object} deps  { request, onSaved(result), onError, onClosed }
+ *   `onClosed` fires once the sheet is off the page — the caller holds
+ *   back the row-list repaint while it is open (a repaint would remove
+ *   this element, which is a child of a row) and needs to know when it
+ *   may catch up.
  * @returns {{teardown: () => void}|null}
  */
 export function openReclassify(host, item, deps = {}) {
@@ -100,6 +110,11 @@ export function openReclassify(host, item, deps = {}) {
   sheet.innerHTML = _sheetHtml(labels);
   host.appendChild(sheet);
 
+  // Plain removal. `onClosed` is NOT fired here: the two programmatic
+  // callers (opening a second sheet, tearing the whole panel down) are
+  // the owner itself, which already knows — and firing it there would
+  // repaint the row list out from under the sheet about to be opened on
+  // one of its rows. Only the operator's own "Fertig" announces a close.
   const close = () => sheet.remove();
 
   const post = async (next) => {
@@ -129,7 +144,10 @@ export function openReclassify(host, item, deps = {}) {
     }
     const act = ev.target.closest?.('[data-act]')?.dataset.act;
     if (act === 'none') post([]);
-    else if (act === 'close') close();
+    else if (act === 'close') {
+      close();
+      deps.onClosed?.();
+    }
   };
   sheet.addEventListener('click', onClick);
 

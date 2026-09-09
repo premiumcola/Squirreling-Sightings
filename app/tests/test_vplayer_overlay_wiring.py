@@ -45,10 +45,15 @@ from pathlib import Path
 _JS = Path(__file__).resolve().parents[2] / "app" / "web" / "static" / "js" / "vplayer"
 _INDEX = _JS / "index.js"
 _PAINT = _JS / "_overlay-paint.js"
+#: The recorded-clip wiring moved out of index.js when that file crossed
+#: CLAUDE.md's 400-line ceiling. Same wiring, same assertions — the pins
+#: below read whichever of the two files now holds the call, so a future
+#: split cannot pass by relocating a call site out from under them.
+_WIRE_RECORDED = _JS / "_wire-recorded.js"
 
 
 def _index() -> str:
-    return _INDEX.read_text(encoding="utf-8")
+    return _INDEX.read_text(encoding="utf-8") + _WIRE_RECORDED.read_text(encoding="utf-8")
 
 
 def test_the_overlay_switches_reach_the_painter() -> None:

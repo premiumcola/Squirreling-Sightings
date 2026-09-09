@@ -34,14 +34,13 @@ import {
   VP_MENU_NATIVE,
 } from './_overflow-menu.js';
 import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
-import { timelineBasis } from './timeline/_basis.js';
 import { makeLiveTrackBuffer } from './timeline/_live-buffer.js';
 import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
+import { wireRecorded } from './_wire-recorded.js';
 import { mountOverlayPainter } from './_overlay-paint.js';
 import { subscribeLive } from './_data/live.js';
 import { liveStatus, resetLiveStatus } from './_data/status.js';
-import { loadRecorded } from './_data/recorded.js';
 
 /** The single open player, or null. One at a time, by construction. */
 let _open = null;
@@ -128,76 +127,6 @@ function _wireLive(cfg, stage, panel, timeline, overlays) {
     history.push(frame, nowS);
     timeline?.render(history.tracks(), { now: nowS, item: cfg.item });
   }, source);
-}
-
-/**
- * Load a recorded clip's data and paint the panel and the timeline
- * with it. Fire-and-forget: the shell is already up, so the picture
- * plays while the sidecar is still in flight.
- */
-function _wireRecorded(cfg, stage, panel, timeline, overlays) {
-  if (cfg.flags.live) return;
-  loadRecorded(cfg.item)
-    .then((data) => {
-      panel?.update(data);
-      const p = data.provenance || {};
-      const rs = cfg.item.recording_settings || {};
-      const timing = p.timing || {};
-      // The boxes come from the same sidecar the lanes do, so a lane and
-      // the box it explains are one subject in one colour. The sidecar's
-      // own gate wins over the caller's threshold inside setTracks.
-      overlays?.setTracks(data.tracks, {
-        threshold: p.effective?.spawn_default,
-        item: data.item || cfg.item,
-      });
-      // The WIDENED item, not cfg.item: loadRecorded folds a `whole_clip`
-      // recovered from /api/event/<id> into its copy, and a clip opened
-      // from a narrow route would otherwise be told it has no aggregate
-      // by the very object that just fetched one.
-      const item = data.item || cfg.item;
-      // ONE basis per render, chosen once — the sidecar's tracks when it
-      // has any, else lanes synthesised from the clip aggregate. Never
-      // both: see timeline/_basis.js for why merging them would lie.
-      // THE MEASUREMENT WINS OVER THE INTENTION, and the order used to be
-      // the other way round — which is the whole of „wieso kein Vor- und
-      // Nachlauf!???".
-      //
-      // `provenance.timing.pre_roll_s` is what the pre-roll was CONFIGURED
-      // as (3 s on every camera here). `recording_settings.pre_motion_seconds`
-      // is what the splice actually ACHIEVED — _finalize.py writes
-      // `round(achieved_pre_s, 2)` into it after the ring has been spliced
-      // onto the clip. Reading the configured number first meant the rail
-      // drew a 3 s band onto clips that contain no pre-roll at all: every
-      // clip in this archive reports an achieved pre-roll of 0.0.
-      //
-      // The details fold keeps showing the configured value, correctly —
-      // there it is labelled as the setting. Here the rail is a picture of
-      // the clip, so it may only draw what the clip has.
-      const preRoll = rs.pre_motion_seconds ?? timing.pre_roll_s;
-      // The trigger frame sits at the END of the pre-roll — that is what
-      // a pre-roll IS. Only the third basis uses it, and only when the
-      // sidecar and the aggregate are both empty.
-      const { basis, tracks } = timelineBasis(item, data.tracks, { triggerT: preRoll });
-      const render = () =>
-        timeline?.render(tracks, {
-          duration: stage.video.duration,
-          preRoll,
-          // Same rule, same reason: the clip's own number first.
-          postRoll: rs.post_motion_seconds ?? timing.post_roll_s,
-          threshold: p.effective?.spawn_default ?? rs.conf_thresh_general,
-          basis,
-          item,
-          tracks: data.tracks,
-        });
-      render();
-      // Duration arrives with the metadata, which on first open lands
-      // after this render — without the second pass every lane would be
-      // laid out against a duration of 0.
-      stage.video.addEventListener('loadedmetadata', render);
-    })
-    .catch(() => {
-      /* the clip still plays; the panel simply stays empty */
-    });
 }
 
 /**
@@ -432,13 +361,29 @@ function _mountAll(cfg) {
     stage.img.src = cfg.source.url;
   }
 
-  const panel = renderContextPanel(shell.slot('panel'), cfg, null, cfg.deps || {});
+  // A mutable slot rather than a callback chain: the panel is built now,
+  // the timeline's repainter only exists once loadRecorded has answered
+  // (async), and the panel looks the slot up at save time — by then it is
+  // filled. Empty stays harmless: a live/sim player never fills it.
+  const relanes = { run: () => {} };
+  const panelDeps = {
+    ...(cfg.deps || {}),
+    onSaved: (res, labels) => {
+      // The rail is drawn from the same detection rows the correction
+      // just rewrote — repaint it BEFORE handing the reply outward, so
+      // the player the operator is looking at is never the last surface
+      // to catch up.
+      relanes.run();
+      cfg.deps?.onSaved?.(res, labels);
+    },
+  };
+  const panel = renderContextPanel(shell.slot('panel'), cfg, null, panelDeps);
   const live = _wireLive(cfg, stage, panel, timeline, overlays);
   if (!cfg.flags.live && cfg.source?.url) {
     stage.video.src = cfg.source.url;
     _autoplay(stage.video);
   }
-  _wireRecorded(cfg, stage, panel, timeline, overlays);
+  wireRecorded(cfg, stage, panel, timeline, overlays, relanes);
 
   return {
     cfg,

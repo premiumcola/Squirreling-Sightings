@@ -16,6 +16,8 @@
 // notch.
 
 import { esc } from '../core/dom.js';
+import { getCameraIcon } from '../core/icons.js';
+import { clockLabel } from '../core/clock-format.js';
 import { overflowTriggerHtml } from './_overflow-menu.js';
 
 const _CLOSE =
@@ -23,17 +25,54 @@ const _CLOSE =
   'stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
   '<path d="M6 6l12 12M18 6L6 18"/></svg>';
 
+/** German date + time for an event timestamp, or '' when there is none.
+ *  Own formatter rather than mediathek/_cards.js's: importing that would
+ *  pull the whole card builder — and its colour tables and icon sets —
+ *  into the player shell for two `toLocaleString` calls. */
+function _stamp(ts) {
+  if (!ts) return '';
+  const d = new Date(String(ts).replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return '';
+  return (
+    d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+    ' · ' +
+    d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  );
+}
+
 /**
- * PURE: the title the bar shows for this config. Camera name when there
- * is one, then the item's own label, then a mode fallback — never an
- * empty bar and never the literal "undefined".
+ * PURE: the title the bar shows for this config.
+ *
+ * WHEN the clip is, not WHERE it is from — „Titel also date und time und
+ * duration im titel davor reicht das logo der kamera als kamera-hinweis!
+ * Der name muss nicht drüber also von der kamera!". The camera is
+ * already named twice on the way in (the tile you tapped, the drilldown
+ * you were in) and once more here, in the icon beside this text; what
+ * the bar could not tell you before is which recording you are looking
+ * at.
+ *
+ * Falls back through the item's own label to a mode word, so the bar is
+ * never empty and never reads "undefined".
  */
 export function titleFor(cfg) {
   const item = cfg.item || {};
+  if (cfg.flags.live) return 'Live';
+  const parts = [_stamp(item.time)];
+  const dur = Number(item.duration_s);
+  if (Number.isFinite(dur) && dur > 0) parts.push(clockLabel(dur));
+  const text = parts.filter(Boolean).join(' · ');
+  if (text) return text;
+  return item.label ? String(item.label) : 'Aufnahme';
+}
+
+/** PURE: the camera glyph that replaces the camera NAME in the bar. */
+export function cameraIconHtml(cfg) {
+  const item = cfg.item || {};
   const name = item.camera_name || item.cam_name || '';
-  if (name) return String(name);
-  if (item.label) return String(item.label);
-  return cfg.flags.live ? 'Live' : 'Aufnahme';
+  return (
+    `<span class="vp-top-cam" role="img" aria-label="${esc(name || 'Kamera')}">` +
+    `${getCameraIcon(name)}</span>`
+  );
 }
 
 /**
@@ -48,6 +87,7 @@ export function titleFor(cfg) {
 export function mountTopbar(host, cfg, handlers = {}) {
   if (!host) return null;
   host.innerHTML =
+    cameraIconHtml(cfg) +
     `<span class="vp-top-title">${esc(titleFor(cfg))}</span>` +
     overflowTriggerHtml() +
     `<button type="button" class="vp-top-btn vp-top-close" aria-label="Schließen">${_CLOSE}</button>`;

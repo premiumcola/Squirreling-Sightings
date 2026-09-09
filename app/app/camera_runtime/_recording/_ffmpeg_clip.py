@@ -278,7 +278,10 @@ class FfmpegClipMixin(FinalizeClipMixin):
                 tail = ffmpeg_stderr_tail(proc)
                 if tail:
                     log.warning(
-                        "[%s] ffmpeg recorder rc=%s: %s", self.camera_id, proc.returncode, tail[-400:]
+                        "[%s] ffmpeg recorder rc=%s: %s",
+                        self.camera_id,
+                        proc.returncode,
+                        tail[-400:],
                     )
         except Exception as e:
             log.warning("[%s] ffmpeg stop error: %s", self.camera_id, e)

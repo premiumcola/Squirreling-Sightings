@@ -126,12 +126,35 @@
   background: var(--vp-chrome);
 }
 
+/* The camera, as a glyph. It replaced the camera NAME, which the bar
+   used to spend its whole width on — „reicht das logo der kamera als
+   kamera-hinweis! Der name muss nicht drüber". Decorative in the layout
+   sense only: it carries the name as its aria-label, so the bar still
+   announces which camera this is. */
+.vp-top-cam {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--muted);
+}
+.vp-top-cam svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* WHEN, not where: date · time · duration. Left-aligned beside the
+   camera glyph rather than centred — centred, a growing string drifts
+   under the two buttons on the right at 375 px. */
 .vp-top-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  text-align: center;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -241,6 +264,37 @@
   height: 100%;
   object-fit: contain;
   background: var(--vp-ground);
+}
+
+/* WHILE A SCRUB IS RUNNING, the picture steps back — „blurre bei hin und
+   herchoosen am time/play slider das hauptvideo im hintergrund und
+   blende das thumb darüber ein!". The frame on screen is wherever the
+   playhead USED to be (the video itself only catches up on release, see
+   timeline/_scrub.js), so next to a sharp filmstrip thumbnail of where
+   it is going it competes with the answer. Blurred and dimmed it stops
+   competing, and the one sharp image left is the one being chosen.
+
+   The class rides on <body> because the shell, the stage and the
+   timeline are siblings; the overlays go with it so a box does not sit
+   crisply on top of a blurred frame it no longer describes. */
+body.vp-is-scrubbing .vp-video,
+body.vp-is-scrubbing .vp-stage .vp-layer {
+  filter: blur(7px) saturate(0.85);
+  opacity: 0.62;
+  transition:
+    filter 0.12s linear,
+    opacity 0.12s linear;
+}
+.vp-video {
+  transition:
+    filter 0.18s linear,
+    opacity 0.18s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.vp-is-scrubbing .vp-video,
+  body.vp-is-scrubbing .vp-stage .vp-layer {
+    transition: none;
+  }
 }
 
 /* Overlay layers. Positioned entirely from JS with the four longhands

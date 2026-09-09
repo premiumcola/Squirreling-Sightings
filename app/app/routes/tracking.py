@@ -13,13 +13,13 @@ byte the originals, with state references rewritten to go through
 
 from __future__ import annotations
 
-import json
 import logging
 
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
 from ..tracking_worker import TRACKS_SCHEMA, TrackingJob, singleton, tracks_path_for
+from ..tracking_worker._backfill import sweep_missing_tracks
 
 bp = Blueprint("tracking", __name__)
 
@@ -63,75 +63,35 @@ def api_tracking_reindex(event_id):
 
 @bp.post('/api/tracking/reindex-all')
 def api_tracking_reindex_all():
-    """Enqueue every event in scope that has a video_relpath but no
-    tracks.json — or whose tracks.json predates the current schema.
-    Optional ?camera_id=… narrows the scan to a single camera."""
+    """Enqueue every event in scope whose fine track is missing or stale.
+    Optional ?camera_id=… narrows the scan to a single camera.
+
+    The scan itself lives in ``tracking_worker._backfill`` because the
+    NIGHTLY job runs the same one (see maintenance.py::
+    _sweep_tracking_backfill) — an operator pressing this button and the
+    app keeping itself tidy must not be two scans that can disagree. No
+    budget here: pressing the button asks for all of it.
+    """
     cam_filter = request.args.get("camera_id")
     worker = singleton()
     if worker is None:
         return jsonify({"ok": False, "error": "Tracking-Worker nicht aktiv"}), 503
-    store = app_state.store
-    storage_root = app_state.storage_root
-    queued = 0
-    skipped_uptodate = 0
-    skipped_missing = 0
-    cam_dirs = []
-    if cam_filter:
-        d = store.events_dir / cam_filter
-        if d.exists():
-            cam_dirs.append(d)
-    else:
-        if store.events_dir.exists():
-            cam_dirs = [d for d in store.events_dir.iterdir() if d.is_dir()]
-    for cam_dir in cam_dirs:
-        cam_id = cam_dir.name
-        for jf in cam_dir.rglob("*.json"):
-            # Skip our own sidecars.
-            if jf.name.endswith(".tracks.json"):
-                continue
-            try:
-                ev = json.loads(jf.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            video_rel = ev.get("video_relpath")
-            if not video_rel:
-                continue
-            vid = storage_root / video_rel
-            if not vid.exists():
-                skipped_missing += 1
-                continue
-            tp = tracks_path_for(vid)
-            if tp.exists():
-                # Already indexed — only re-queue when schema is older.
-                try:
-                    existing = json.loads(tp.read_text(encoding="utf-8"))
-                    if existing.get("schema") == TRACKS_SCHEMA:
-                        skipped_uptodate += 1
-                        continue
-                except Exception:
-                    pass  # corrupt sidecar → re-queue below
-            worker.enqueue(
-                TrackingJob(
-                    event_id=ev.get("event_id", jf.stem),
-                    video_path=vid,
-                    snapshot_path=None,
-                    camera_id=cam_id,
-                )
-            )
-            queued += 1
+    result = sweep_missing_tracks(
+        app_state.store, app_state.storage_root, worker, cam_filter=cam_filter
+    )
     logging.getLogger(__name__).info(
         "[tracking] reindex-all cam=%s queued=%d up_to_date=%d missing=%d",
         cam_filter or "*",
-        queued,
-        skipped_uptodate,
-        skipped_missing,
+        result["queued"],
+        result["up_to_date"],
+        result["missing_video"],
     )
     return jsonify(
         {
             "ok": True,
-            "queued": queued,
-            "skipped_up_to_date": skipped_uptodate,
-            "skipped_missing_video": skipped_missing,
+            "queued": result["queued"],
+            "skipped_up_to_date": result["up_to_date"],
+            "skipped_missing_video": result["missing_video"],
         }
     )
 

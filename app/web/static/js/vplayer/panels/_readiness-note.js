@@ -46,18 +46,27 @@ const _TICK_MS = 1000;
  * the clip is genuinely what fetches the new answer; the sentence just
  * has to admit that plainly and say roughly how long.
  */
+// NOBODY SHOULD HAVE TO PRESS THIS. The app queues the detailed analysis
+// for every clip that lacks one, on its own schedule (maintenance.py::
+// _sweep_tracking_backfill) — „Ich will wenn ichs anschau dass alles
+// bereit und fertig ist!". So the button is no longer the headline offer:
+// it says the pass is already scheduled, and stays tappable only as a
+// "do it now instead of tonight" shortcut for a clip somebody is looking
+// at this minute.
 function _actionHTML(st) {
-  if (st.failed) return `<span class="vp-rn-state">Nachbau fehlgeschlagen</span>`;
+  if (st.failed) return `<span class="vp-rn-state">Analyse fehlgeschlagen</span>`;
   // Short enough to fit beside the chips it shares a row with. The first
   // attempt at explaining this properly ran off the right edge and was
   // clipped mid-word — the row wraps now, but a status line still has no
   // business being a paragraph.
   if (st.done) {
-    return `<span class="vp-rn-state">Feinspur wird neu berechnet — danach neu öffnen</span>`;
+    return `<span class="vp-rn-state">Läuft — beim nächsten Öffnen ist sie da</span>`;
   }
-  if (st.busy) return `<span class="vp-rn-state">Auftrag wird abgeschickt …</span>`;
+  if (st.busy) return `<span class="vp-rn-state">Wird gestartet …</span>`;
   if (st.readiness?.rebuildable) {
-    return `<button type="button" class="vp-rn-btn" data-act="reindex">Feinspur nachbauen</button>`;
+    return (
+      `<button type="button" class="vp-rn-btn" data-act="reindex">Jetzt genauer auswerten</button>`
+    );
   }
   return '';
 }

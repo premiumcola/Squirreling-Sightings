@@ -91,7 +91,7 @@ test('nur Erkennungen MIT Kasten zählen als zeichenbar', () => {
 test('ein leerer Sidecar ohne Auslöse-Kasten ist eine Antwort, keine Lücke', () => {
   const r = clipReadiness({ video_relpath: 'a/b.mp4' }, { tracks: [] });
   assert.equal(r.state, CLIP_EMPTY);
-  assert.match(r.note, /keine Spur bestätigt/);
+  assert.match(r.note, /nichts zu verfolgen/);
   assert.equal(r.geometry, GEOM_NONE);
   // Derselbe Lauf mit denselben Schwellen liefert dasselbe Nichts.
   assert.equal(r.rebuildable, false);
@@ -240,9 +240,9 @@ test('nichts gefunden bietet keinen Nachbau an — solange nichts widerspricht',
 
 test('die grobe Spur beziffert, was an ihr grob ist', () => {
   const r = clipReadiness(TRIGGER_ITEM, null);
-  assert.equal(factValue(r, 'Kästen'), '2');
-  assert.equal(factValue(r, 'sichtbar'), 'nur pausiert');
-  assert.equal(factValue(r, 'bester Wert'), '57 %');
+  assert.equal(factValue(r, 'Erkannt'), '2');
+  assert.equal(factValue(r, 'Rahmen'), 'nur im Standbild');
+  assert.equal(factValue(r, 'Sicherheit'), '57 %');
   assert.equal(r.rebuildable, true);
 });
 

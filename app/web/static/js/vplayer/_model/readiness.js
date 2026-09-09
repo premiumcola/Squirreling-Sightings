@@ -140,11 +140,11 @@ export function clipReadiness(item, tracks) {
     return {
       ...base,
       state: CLIP_BUILDING,
-      note: 'Der Clip wird noch erzeugt — die Feinspur entsteht erst danach.',
+      note: 'Das Video wird noch fertig gemacht. Die genaue Auswertung kommt danach.',
     };
   }
   if (tracks === undefined) {
-    return { ...base, state: CLIP_PENDING, note: 'Die Feinspur wird geladen …' };
+    return { ...base, state: CLIP_PENDING, note: 'Auswertung wird geladen …' };
   }
   const list = tracks && Array.isArray(tracks.tracks) ? tracks.tracks : null;
   if (list && list.length) {
@@ -182,7 +182,7 @@ export function clipReadiness(item, tracks) {
       return {
         ...base,
         state: CLIP_EMPTY,
-        note: 'Die Nachanalyse ist durchgelaufen und hat keine Spur bestätigt.',
+        note: 'Genau ausgewertet — in diesem Video war nichts zu verfolgen.',
         facts: _emptyFacts(gate),
         gate,
       };
@@ -206,13 +206,13 @@ export function clipReadiness(item, tracks) {
       // and read as the clip's single verdict, which is why the question
       // had to be asked at all.
       note: contradicts
-        ? 'Die Nachanalyse fand keine Spur — obwohl der Auslöser über der Schwelle lag.'
-        : 'Die Nachanalyse fand keine Spur. Die Erkennung im Auslöse-Bild bleibt bestehen.',
+        ? 'Genau ausgewertet: nichts gefunden — obwohl der Auslöser über der Schwelle lag.'
+        : 'Genau ausgewertet: nichts gefunden. Was im Auslöse-Bild erkannt wurde, gilt weiter.',
       contradicts,
       facts: [
         ..._emptyFacts(gate),
-        _fact('Auslöse-Kästen', String(trigger.length)),
-        _fact('sichtbar', 'nur pausiert'),
+        _fact('Erkannt', String(trigger.length)),
+        _fact('Rahmen', 'nur im Standbild'),
       ].filter(Boolean),
       gate,
       // A walk that contradicts its own trigger frame is worth running
@@ -228,11 +228,11 @@ export function clipReadiness(item, tracks) {
       state: CLIP_COARSE,
       geometry: GEOM_TRIGGER,
       trigger,
-      note: 'Nur das Auslöse-Bild: ein einziger Augenblick, keine Geometrie pro Bild.',
+      note: 'Bisher nur das Auslöse-Bild. Die genaue Auswertung Bild für Bild holt die App automatisch nach — dann bewegen sich die Rahmen mit.',
       facts: [
-        _fact('Kästen', String(trigger.length)),
-        _fact('sichtbar', 'nur pausiert'),
-        _fact('bester Wert', best == null ? null : pctLabel(best)),
+        _fact('Erkannt', String(trigger.length)),
+        _fact('Rahmen', 'nur im Standbild'),
+        _fact('Sicherheit', best == null ? null : pctLabel(best)),
       ].filter(Boolean),
       rebuildable: hasVideo(item),
     };

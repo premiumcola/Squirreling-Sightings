@@ -239,6 +239,44 @@ def _sweep_bird_dossier_prebuild(log) -> None:
         log.info("[dossiers] photo backfill: %d dossiers re-fetched", photos["pending"])
 
 
+def _sweep_tracking_backfill(log) -> None:
+    """Queue the fine track (`tracks.json`) for every clip still missing
+    one — the job that makes the player's own "Feinspur nachbauen" button
+    unnecessary.
+
+    That button, and POST /api/tracking/reindex-all behind it, were the
+    ONLY way a clip that missed its sidecar ever got one: the worker
+    being busy, a restart mid-encode, or a clip older than the sidecar
+    itself all left the operator to notice a note in the player and press
+    a button. „Ich will wenn ichs anschau dass alles bereit und fertig
+    ist!" — so the app does it on its own schedule instead, and opening a
+    clip is only ever the moment to LOOK at a finished one.
+
+    Bounded per tick (see DEFAULT_BACKFILL_BUDGET): each job decodes a
+    clip, and an un-indexed archive must not turn one nightly tick into
+    hours of CPU. The backlog drains over a few nights; steady state is
+    zero, because every finalised clip already enqueues itself.
+    """
+    from .tracking_worker import singleton as _tw_singleton
+    from .tracking_worker._backfill import DEFAULT_BACKFILL_BUDGET, sweep_missing_tracks
+
+    worker = _tw_singleton()
+    if worker is None:
+        return
+    result = sweep_missing_tracks(
+        app_state.store,
+        app_state.storage_root,
+        worker,
+        budget=DEFAULT_BACKFILL_BUDGET,
+    )
+    if result["queued"]:
+        log.info(
+            "[tracking] Feinspur-Nachlauf: %d Clips eingereiht, %d noch offen",
+            result["queued"],
+            result["remaining"],
+        )
+
+
 def _run_daily_cleanup():
     log = logging.getLogger(__name__)
     if not auto_cleanup_enabled():
@@ -261,6 +299,10 @@ def _run_daily_cleanup():
         _sweep_bird_dossier_prebuild(log)
     except Exception as e:
         log.warning("[dossiers] prebuild sweep failed: %s", e)
+    try:
+        _sweep_tracking_backfill(log)
+    except Exception as e:
+        log.warning("[tracking] Feinspur-Nachlauf fehlgeschlagen: %s", e)
     t = threading.Timer(86400, _run_daily_cleanup)
     t.daemon = True
     t.start()

@@ -155,13 +155,17 @@ test('grobe Spur sagt, was an ihr grob ist', () => {
   const html = render(COARSE_ITEM, null);
   assert.match(html, /is-coarse/);
   assert.match(html, /Auslöse-Bild/);
-  assert.match(html, /2<\/b><span>Kästen/);
+  assert.match(html, /2<\/b><span>Erkannt/);
   assert.match(
     html,
-    /nur pausiert<\/b><span>sichtbar/,
+    /nur im Standbild<\/b><span>Rahmen/,
     'die Regel aus triggerBoxVisible, ausgesprochen',
   );
-  assert.match(html, /data-act="reindex"/, 'hier lohnt der Nachbau — es gibt ein Video');
+  // Der Knopf bleibt — aber nur als Abkürzung: der nächtliche Lauf
+  // (maintenance.py::_sweep_tracking_backfill) holt denselben Clip von
+  // selbst nach. „Ich will wenn ichs anschau dass alles bereit ist!"
+  assert.match(html, /data-act="reindex"/, 'die Sofort-Abkürzung bleibt tappbar');
+  assert.match(html, /automatisch nach/, 'der Text muss sagen, dass die App das selbst macht');
 });
 
 test('keine Quelle nennt den Grund und verschweigt den Knopf', () => {

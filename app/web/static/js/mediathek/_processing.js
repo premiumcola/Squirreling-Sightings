@@ -13,14 +13,67 @@
 //   * the strip  — one line above the grid summing up all of them
 // The strip counts and names; the tile carries the per-clip detail.
 //
-// There is no percentage anywhere. ffmpeg could emit one, but only by
-// rewriting the per-camera event JSON at ~1 Hz per clip for a job that
-// usually finishes in seconds. Elapsed-in-stage is free and true.
-//
-// `queued` is NOT a position in a line: each clip re-encodes in its own
-// thread. Never render "2 von 3" — say how many are running, not where
-// any of them sits.
+// There is no fabricated percentage anywhere. ffmpeg could emit one, but
+// only by rewriting the per-camera event JSON at ~1 Hz per clip for a
+// job that usually finishes in seconds. Elapsed-in-stage is free and
+// true — and since `_encode_queue.py` started admitting only
+// `ENCODE_SLOTS` re-encodes at a time, `queued` genuinely IS a FIFO
+// position, so `/api/media/queue-status` (the encoder's own in-memory
+// state, not a derived guess) can name it and an ETA built from the
+// last few REAL encode durations. A clip the live queue still owns gets
+// that honest "Platz X von Y" instead of the scarier "hängt" — the two
+// mean different things: one is waiting its turn, the other has no
+// thread left working on it at all.
 import { byId, esc } from '../core/dom.js';
+
+// ── the global encode queue, polled independently of the per-camera list ──
+// A clip queued behind another camera's burst never shows up in THIS
+// camera's `stage_stalled` reasoning, so this is a separate fetch
+// against the one place that knows the real, cross-camera FIFO.
+let _globalQueue = null; // last /api/media/queue-status body, or null
+let _queuePoll = null;
+let _lastPending = []; // what the strip last painted, for the poll's own repaint
+
+function _repaintQueueStrip() {
+  const host = byId('mediaProcessingQueue');
+  if (host) host.innerHTML = processingQueueHTML(_lastPending);
+}
+
+async function _refreshGlobalQueue() {
+  try {
+    const res = await fetch('/api/media/queue-status');
+    if (res.ok) {
+      _globalQueue = await res.json();
+      _repaintQueueStrip();
+    }
+  } catch (_) {
+    // Stale data beats none — keep whatever the last successful poll had.
+  }
+}
+
+function _globalQueueInfo(eventId) {
+  if (!eventId || !_globalQueue) return null;
+  const row = _globalQueue.queued.find((q) => q.event_id === eventId);
+  if (!row) return null;
+  return { position: row.position, total: _globalQueue.queued.length, etaS: row.eta_s };
+}
+
+/** Start polling the global queue while the strip has something to show;
+ * stop the moment it empties out, so an idle Mediathek tab costs nothing.
+ * Separate from `_ensureProcessingPoll` in `_paging.js`, which only
+ * reloads the FULL per-camera item list and stops for a stalled-only
+ * page — this one has to keep running exactly then, or the operator
+ * never sees a queue drain. */
+function _ensureQueueStatusPoll(hasPending) {
+  if (hasPending && !_queuePoll) {
+    _refreshGlobalQueue();
+    _queuePoll = setInterval(_refreshGlobalQueue, 5000);
+  } else if (!hasPending && _queuePoll) {
+    clearInterval(_queuePoll);
+    _queuePoll = null;
+    _globalQueue = null;
+  }
+}
 
 // ── vocabulary ──────────────────────────────────────────────────────────────
 const STAGE_LABEL = {
@@ -81,20 +134,35 @@ export function fmtElapsed(seconds) {
 
 /**
  * One item's in-flight state, normalised for both surfaces.
- * `kind` is what the UI branches on: busy | stalled | failed.
+ * `kind` is what the UI branches on: busy | waiting | stalled | failed.
+ *
+ * `waiting` is `stalled` with an alibi: the live encode queue (fetched
+ * separately, see `_globalQueueInfo`) still owns this event_id, so it is
+ * not abandoned — it is third in a real line. That distinction is the
+ * whole reason `stage_stalled` alone must not drive the icon: it fires
+ * the moment `queued` outlasts its 2-minute ceiling, which a busy
+ * feeder trips in minutes on a queue that is working exactly as
+ * designed.
  */
 export function procStateOf(item) {
   const stage = item.stage || item.status || '';
   const failed = item.status === 'error' || stage === 'failed';
   const stalled = !failed && !!item.stage_stalled;
   const age = item.stage_age_s;
+  const queueInfo = !failed && stage === 'queued' ? _globalQueueInfo(item.event_id) : null;
+  const waiting = stalled && !!queueInfo;
+  const kind = failed ? 'failed' : waiting ? 'waiting' : stalled ? 'stalled' : 'busy';
+  let label = failed ? 'fehlgeschlagen' : STAGE_LABEL[stage] || 'wird verarbeitet';
+  if (waiting) label = `Platz ${queueInfo.position} von ${queueInfo.total}`;
+  else if (stalled) label = 'hängt';
   return {
-    kind: failed ? 'failed' : stalled ? 'stalled' : 'busy',
+    kind,
     stage,
     step: STAGE_STEP[stage] ?? 1,
     age,
     elapsed: fmtElapsed(age),
-    label: failed ? 'fehlgeschlagen' : stalled ? 'hängt' : STAGE_LABEL[stage] || 'wird verarbeitet',
+    label,
+    eta: waiting && queueInfo.etaS != null ? `ca. ${fmtElapsed(queueInfo.etaS)}` : '',
     error: item.encode_error || '',
   };
 }
@@ -105,11 +173,17 @@ export function procStateOf(item) {
 // "in progress" rather than going blank.
 const _SPIN = '<span class="mvp-spin" aria-hidden="true"></span>';
 const _WARN = `<svg class="mvp-warn" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 4.5 2.8 20h18.4z"/><path d="M12 10v4.4"/><circle cx="12" cy="17.4" r=".9" fill="currentColor" stroke="none"/></svg>`;
+// Clock face — "waiting its honest turn", never the alarming triangle.
+const _WAIT = `<svg class="mvp-wait" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>`;
 
 function _chainHTML(st) {
+  // `waiting` is still moving toward `encoding`, just not there yet — the
+  // chain must not read "halted" for a clip a real thread is about to
+  // pick up.
+  const halted = st.kind === 'stalled' || st.kind === 'failed';
   return CHAIN.map((name, i) => {
     const cls =
-      st.kind !== 'busy' && i >= st.step
+      halted && i >= st.step
         ? 'is-halted'
         : i < st.step
           ? 'is-done'
@@ -132,15 +206,17 @@ export function processingTileHTML(item, badgeHTML = '') {
   const st = procStateOf(item);
   const id = esc(item.event_id || '');
   const open = _openTiles.has(item.event_id) ? ' is-open' : '';
-  const mark = st.kind === 'busy' ? _SPIN : _WARN;
+  const mark = st.kind === 'busy' ? _SPIN : st.kind === 'waiting' ? _WAIT : _WARN;
   const note =
     st.kind === 'failed'
       ? st.error
         ? esc(st.error)
         : 'Die Umwandlung ist fehlgeschlagen.'
-      : st.kind === 'stalled'
-        ? 'Seit dem letzten Schritt ist nichts mehr passiert — vermutlich ein Neustart mitten in der Verarbeitung.'
-        : '';
+      : st.kind === 'waiting'
+        ? `Ein Umwandlungs-Platz wird frei, sobald die davor fertig sind${st.eta ? ` — ${esc(st.eta)}` : ''}.`
+        : st.kind === 'stalled'
+          ? 'Seit dem letzten Schritt ist nichts mehr passiert — vermutlich ein Neustart mitten in der Verarbeitung.'
+          : '';
   return `<button type="button" class="mvp-tile${open}" data-kind="${st.kind}" data-event-id="${id}"
       aria-expanded="${open ? 'true' : 'false'}"
       onclick="event.stopPropagation();window._toggleProcTile(this)">
@@ -173,31 +249,47 @@ const _CHEV = `<svg class="mvq-chev" viewBox="0 0 16 16" width="14" height="14" 
 
 function _rowHTML(item) {
   const st = procStateOf(item);
+  // Remaining time beats elapsed time whenever the queue can honestly
+  // say one — "noch 4 min" answers what the operator is actually
+  // asking, "seit 4 min" does not.
+  const age = st.eta || st.elapsed;
   return `<li class="mvq-row" data-kind="${st.kind}">
     <span class="mvq-dot"></span>
     <span class="mvq-cam">${esc(item.camera_name || item.camera_id || '')}</span>
     <span class="mvq-stage">${esc(st.label)}</span>
-    <span class="mvq-age">${esc(st.elapsed)}</span>
+    <span class="mvq-age">${esc(age)}</span>
   </li>`;
 }
 
-/** `"2 Videos werden verarbeitet"` — the one line the user asked for. */
-export function queueTitle(busy, stuck) {
-  if (busy && stuck) return `${busy + stuck} Videos in Arbeit`;
+/** `"2 Videos werden verarbeitet"` — the one line the user asked for.
+ * `stuck` counts ONLY clips with no live owner at all — a clip the
+ * queue confirms it still owns is `waiting`, not `stuck`, no matter how
+ * long its wait: it is going to finish, `stuck` is not.
+ */
+export function queueTitle({ busy = 0, waiting = 0, stuck = 0 } = {}) {
   if (stuck) return stuck === 1 ? '1 Video hängt' : `${stuck} Videos hängen`;
+  const active = busy + waiting;
+  if (busy && waiting) return `${active} Videos in Arbeit`;
+  if (waiting)
+    return waiting === 1 ? '1 Video wartet in der Reihe' : `${waiting} Videos warten in der Reihe`;
   return busy === 1 ? '1 Video wird verarbeitet' : `${busy} Videos werden verarbeitet`;
 }
 
 export function processingQueueHTML(pending) {
   if (!pending.length) return '';
-  const stuck = pending.filter((i) => procStateOf(i).kind !== 'busy').length;
-  const busy = pending.length - stuck;
+  const kinds = pending.map((i) => procStateOf(i).kind);
+  const counts = {
+    busy: kinds.filter((k) => k === 'busy').length,
+    waiting: kinds.filter((k) => k === 'waiting').length,
+    stuck: kinds.filter((k) => k === 'stalled' || k === 'failed').length,
+  };
+  const mark = counts.stuck ? _WARN : counts.busy ? _SPIN : _WAIT;
   const open = _queueOpen ? ' is-open' : '';
   return `<div class="mvq${open}">
     <button type="button" class="mvq-head" aria-expanded="${_queueOpen ? 'true' : 'false'}"
         aria-controls="mediaProcessingList" onclick="window._toggleProcQueue()">
-      ${busy ? _SPIN : _WARN}
-      <span class="mvq-title">${esc(queueTitle(busy, stuck))}</span>
+      ${mark}
+      <span class="mvq-title">${esc(queueTitle(counts))}</span>
       ${_CHEV}
     </button>
     <ul class="mvq-list" id="mediaProcessingList">${pending.map(_rowHTML).join('')}</ul>
@@ -219,7 +311,9 @@ export function renderProcessingQueue(items) {
     grid.parentNode.insertBefore(host, grid);
   }
   const pending = (items || []).filter(isPendingItem);
+  _lastPending = pending;
   host.innerHTML = processingQueueHTML(pending);
+  _ensureQueueStatusPoll(pending.length > 0);
 }
 
 export function toggleProcQueue() {

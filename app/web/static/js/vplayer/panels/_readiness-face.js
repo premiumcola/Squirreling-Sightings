@@ -82,8 +82,13 @@ const _MARK = {
  * for a job that usually takes seconds. Elapsed-in-stage is free and true.
  */
 function _steps(step, kind) {
+  // 'waiting' (a clip the live encode queue still owns, see
+  // mediathek/_processing.js::procStateOf) is still moving toward
+  // `encoding`, not halted — only 'stalled'/'failed' mean nothing is
+  // coming.
+  const halted = kind === 'stalled' || kind === 'failed';
   const cls = (i) =>
-    kind !== 'busy' && i >= step ? 'is-halted' : i < step ? 'is-done' : i === step ? 'is-now' : '';
+    halted && i >= step ? 'is-halted' : i < step ? 'is-done' : i === step ? 'is-now' : '';
   const seg = (i) => `<i class="${cls(i)}"></i>`;
   return `<span class="vp-rn-steps" aria-hidden="true">${seg(0)}${seg(1)}${seg(2)}</span>`;
 }

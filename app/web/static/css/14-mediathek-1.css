@@ -732,10 +732,12 @@ body.media-select-mode .media-grid .mmc-img-wrap {
   height: 18px;
   border-width: 2px;
 }
-.mvp-warn {
+.mvp-warn,
+.mvp-wait {
   flex: none;
 }
-.mvq-head .mvp-warn {
+.mvq-head .mvp-warn,
+.mvq-head .mvp-wait {
   width: 18px;
   height: 18px;
 }

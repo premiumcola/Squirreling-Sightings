@@ -15,11 +15,14 @@
 // thumb. On a log track every doubling gets equal travel, which is how
 // the choice actually feels.
 //
-// NO TEXT. „ohne text elemente nur symbole" — the two end glyphs carry
-// the meaning instead: each fades in as the window moves toward its end
-// of the scale, so the control shows where it stands without spelling
-// anything out. The chosen span is already written along the chart's own
-// x-axis directly underneath, so a readout here would only say it twice.
+// THE VALUE RIDES ON THE BAR. A first pass put a symbol at each end and
+// no text at all; on a narrow screen the two stacked up on the left and
+// read as a riddle — „Was sollen die symbole zeichen beide links???".
+// They are gone. What the control shows instead is the one thing it is
+// actually choosing, written across the middle of the track („in der
+// mitte irgendwo schon der aktuell gewählte zeitraum! In h day
+// months!") and scaled to the unit that fits: hours, then days, then
+// months.
 //
 // The extent comes from the payload (`_history.py::history` reports the
 // buffer's own oldest/newest/count) rather than being inferred from the
@@ -76,18 +79,19 @@ export function tickAtHours(hours, bounds) {
 }
 
 /**
- * PURE: how strongly each end glyph reads, for a handle at `tick`.
+ * PURE: the window as the operator reads it, in the unit that fits.
  *
- * Both stay faintly visible at every position — an end that vanished
- * would take the scale's own shape with it — and the one the window is
- * moving toward comes up to full. Returned as a pair so the caller
- * writes two opacities and nothing else.
+ * Hours up to two days, then days, then months — „In h day months!". A
+ * month is 30.44 days (365.25/12), so „12 Mon." means a year rather
+ * than eleven-and-a-bit. Rounded, never truncated: this is a label on a
+ * fluid control, not an exact quantity to compute with.
  */
-export function glyphOpacity(tick) {
-  const t = Math.max(0, Math.min(1, (Number(tick) || 0) / TICKS));
-  const FLOOR = 0.28;
-  const span = 1 - FLOOR;
-  return { near: FLOOR + span * (1 - t), far: FLOOR + span * t };
+export function formatRangeHours(hours) {
+  if (!Number.isFinite(hours) || hours <= 0) return '—';
+  if (hours < 48) return `${Math.round(hours)} h`;
+  const days = hours / 24;
+  if (days < 60) return `${Math.round(days)} d`;
+  return `${Math.round(days / 30.4375)} Mon.`;
 }
 
 // The chart re-fetches itself every 60 s while the section is on screen,
@@ -106,17 +110,15 @@ function _boundsOf(input, extent) {
   return rangeBounds(archiveSpanHours(extent), input.dataset.minHours, input.dataset.maxHours);
 }
 
-/** Paint the two end glyphs for the handle's current position. */
-// Optional chaining throughout, deliberately: the node tests stub
-// `document` with plain objects that carry no `style`, the same
-// convention every other module here is tested under. Painting is
-// decoration — it must never be the reason a render throws.
-function _paintGlyphs(tick) {
-  const o = glyphOpacity(tick);
-  const near = byId('weatherRangeGlyphNear');
-  const far = byId('weatherRangeGlyphFar');
-  if (near?.style) near.style.opacity = String(o.near);
-  if (far?.style) far.style.opacity = String(o.far);
+/** Paint the readout and the fill for the handle's current position.
+ *
+ * Optional chaining throughout, deliberately: the node tests stub
+ * `document` with plain objects that carry no `style`, the same
+ * convention every other module here is tested under. Painting is
+ * decoration — it must never be the reason a render throws. */
+function _paintRange(tick, bounds) {
+  const out = byId('weatherRangeValue');
+  if (out) out.textContent = formatRangeHours(hoursAtTick(tick, bounds));
   // The filled part of the track, as a percentage — the "slide to
   // unlock" fill behind the thumb, painted by CSS off this one variable.
   byId('weatherRangeSlider')?.style?.setProperty?.('--ws-range-fill', `${(tick / TICKS) * 100}%`);
@@ -140,8 +142,8 @@ export function applyRangeSlider(extent, currentHours, _zoomed = false) {
   // An archive with nothing to choose between: a dead handle is honest,
   // a live one that snaps back is not.
   input.disabled = !(bounds.max > bounds.min);
-  input.setAttribute('aria-valuetext', `${hours} h`);
-  _paintGlyphs(Number(input.value));
+  input.setAttribute('aria-valuetext', formatRangeHours(hours));
+  _paintRange(Number(input.value), bounds);
   return hours;
 }
 
@@ -156,7 +158,9 @@ export function applyRangeSlider(extent, currentHours, _zoomed = false) {
 export function bindRangeSlider(onPick, getExtent = () => null) {
   const input = byId('weatherRangeSlider');
   if (!input || input.dataset.wired) return;
-  input.addEventListener('input', () => _paintGlyphs(Number(input.value)));
+  input.addEventListener('input', () =>
+    _paintRange(Number(input.value), _boundsOf(input, getExtent())),
+  );
   input.addEventListener('change', () => {
     input.dataset.dragging = '0';
     onPick(hoursAtTick(Number(input.value), _boundsOf(input, getExtent())));

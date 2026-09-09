@@ -16,7 +16,7 @@ import {
   rangeBounds,
   hoursAtTick,
   tickAtHours,
-  glyphOpacity,
+  formatRangeHours,
 } from '../_range-slider.js';
 
 const ext = (oldest, newest, count = 99) => ({ oldest, newest, count });
@@ -119,31 +119,36 @@ test('junk positions resolve to the near end rather than NaN', () => {
   assert.equal(hoursAtTick(undefined, b), 1);
 });
 
-// ── the two end glyphs, which are the whole readout ─────────────────────
-// „ohne text elemente nur symbole" — so the only thing that can say
-// where the handle stands is how strongly each end is drawn.
+// ── the readout, which rides on the bar ────────────────────────────────
+// „in der mitte irgendwo schon der aktuell gewählte zeitraum! In h day
+// months!" — so the one label this control has must pick the unit that
+// fits, at every point of a scale spanning three orders of magnitude.
 
-test('the near end is brightest at the near end, and vice versa', () => {
-  const near = glyphOpacity(0);
-  const far = glyphOpacity(1000);
-  assert.ok(near.near > near.far, 'a closed-in window must light the near glyph');
-  assert.ok(far.far > far.near, 'a wide window must light the far glyph');
+test('hours below two days, days above, months above two', () => {
+  assert.equal(formatRangeHours(1), '1 h');
+  assert.equal(formatRangeHours(6), '6 h');
+  assert.equal(formatRangeHours(47), '47 h');
+  assert.equal(formatRangeHours(48), '2 d');
+  assert.equal(formatRangeHours(168), '7 d');
+  assert.equal(formatRangeHours(720), '30 d');
 });
 
-test('neither end ever disappears — the scale would lose its shape', () => {
-  for (const tick of [0, 250, 500, 750, 1000]) {
-    const o = glyphOpacity(tick);
-    assert.ok(o.near >= 0.25 && o.far >= 0.25, `tick ${tick} hid an end: ${JSON.stringify(o)}`);
-    assert.ok(o.near <= 1 && o.far <= 1);
+test('a month is a real month, so twelve of them are a year', () => {
+  assert.equal(formatRangeHours(24 * 61), '2 Mon.');
+  assert.equal(formatRangeHours(24 * 365.25), '12 Mon.');
+});
+
+test('an unusable range reads as a dash, never as "NaN h"', () => {
+  assert.equal(formatRangeHours(0), '—');
+  assert.equal(formatRangeHours(-5), '—');
+  assert.equal(formatRangeHours(null), '—');
+  assert.equal(formatRangeHours('nonsense'), '—');
+});
+
+test('every position on the scale produces a readable label', () => {
+  const b = rangeBounds(null, 1, 720);
+  for (let tick = 0; tick <= 1000; tick += 50) {
+    const text = formatRangeHours(hoursAtTick(tick, b));
+    assert.match(text, /^\d+ (h|d|Mon\.)$/, `tick ${tick} read as "${text}"`);
   }
-});
-
-test('the midpoint reads as balanced', () => {
-  const o = glyphOpacity(500);
-  assert.ok(Math.abs(o.near - o.far) < 0.02);
-});
-
-test('junk positions still produce drawable opacities', () => {
-  const o = glyphOpacity('nope');
-  assert.ok(Number.isFinite(o.near) && Number.isFinite(o.far));
 });

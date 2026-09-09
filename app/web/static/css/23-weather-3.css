@@ -87,16 +87,17 @@
    Depth from a tinted track, no border, matching every other control in
    this panel. */
 /* ── The time zoom ────────────────────────────────────────────────────────
-   A "slide to unlock" bar, not a boxed control: one pill-shaped track
-   whose FILLED part grows with the window, a large round handle, and an
-   end glyph on either side. No container ground behind it („kein
-   background grau!"), no text of any kind („ohne text elemente nur
-   symbole") — the glyphs carry the scale and the chart's own x-axis
-   directly below already spells out the span. */
+   A "slide to unlock" bar: one pill-shaped track whose FILLED part grows
+   with the window, a large round handle riding in it, and the chosen
+   span written across the middle. No container ground behind it („kein
+   background grau!"), and no end symbols — a first pass flanked the
+   track with two glyphs which, on a narrow screen, stacked up on the
+   left and read as a riddle („Was sollen die symbole zeichen beide
+   links???"). */
 .ws-range {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 1 1 240px;
   min-width: 0;
   max-width: 420px;
@@ -104,83 +105,84 @@
   background: none;
 }
 
-/* The ends of the scale. Each fades in as the window moves toward it —
-   the opacity is written by weather/_range-slider.js::glyphOpacity, so
-   the pair reads as "where am I on this" without a word. */
-.ws-range-glyph {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #cfe1ee;
-  transition: opacity 0.12s linear;
+/* The track and its readout share one positioning context. `min-width: 0`
+   is what lets the bar shrink inside the flex row rather than pushing the
+   ✕ chip onto a line of its own. */
+.ws-range-track {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* THE FILL IS PAINTED ON THE TRACK, not with a second element: a range
-   input cannot hold children, and `--ws-range-fill` (set per drag by the
-   same module) is all a gradient needs. The accent is the app's own
-   green — the default handle was the browser's blue, which belongs to no
-   palette here („Chooser nicht blau"). */
+   input cannot hold children, and `--ws-range-fill` (set per drag by
+   weather/_range-slider.js) is all a gradient needs. The accent is the
+   app's own green — the default handle was the browser's blue, which
+   belongs to no palette here („Chooser nicht blau"). `accent-color`
+   covers the browsers that ignore the ::-webkit- pseudo-elements. */
 .ws-range-input {
   -webkit-appearance: none;
   appearance: none;
-  flex: 1 1 auto;
-  min-width: 64px;
-  /* iOS HIG tap area around the visual bar — this is the panel's primary
-     control and it is dragged with a thumb. */
-  height: 44px;
+  display: block;
+  width: 100%;
+  /* iOS HIG tap area: the visual bar is 34 px and the input is the same,
+     so the whole pill is the target. */
+  height: 34px;
   margin: 0;
+  padding: 0;
   background: transparent;
   cursor: pointer;
   --ws-range-fill: 50%;
   --ws-range-accent: #6ee7a8;
+  accent-color: #6ee7a8;
 }
 .ws-range-input::-webkit-slider-runnable-track {
-  height: 26px;
+  height: 34px;
   border-radius: 999px;
   background:
     linear-gradient(
         to right,
-        color-mix(in srgb, var(--ws-range-accent) 62%, transparent) 0 var(--ws-range-fill),
-        transparent var(--ws-range-fill) 100%
+        rgba(110, 231, 168, 0.55) 0 var(--ws-range-fill),
+        rgba(255, 255, 255, 0) var(--ws-range-fill) 100%
       )
       no-repeat,
-    rgba(255, 255, 255, 0.09);
+    rgba(255, 255, 255, 0.08);
 }
 .ws-range-input::-moz-range-track {
-  height: 26px;
+  height: 34px;
   border-radius: 999px;
   background:
     linear-gradient(
         to right,
-        color-mix(in srgb, var(--ws-range-accent) 62%, transparent) 0 var(--ws-range-fill),
-        transparent var(--ws-range-fill) 100%
+        rgba(110, 231, 168, 0.55) 0 var(--ws-range-fill),
+        rgba(255, 255, 255, 0) var(--ws-range-fill) 100%
       )
       no-repeat,
-    rgba(255, 255, 255, 0.09);
+    rgba(255, 255, 255, 0.08);
 }
-/* The handle sits ON the bar, slide-to-unlock style: as tall as the
-   track it rides in, so it reads as the thing being pushed rather than a
-   dot on a wire. -1px centres it on the 26 px track; Firefox centres its
-   own. */
+/* The handle sits IN the bar, slide-to-unlock style — a disc nearly as
+   tall as the track it rides in, so it reads as the thing being pushed
+   rather than a dot on a wire. The 4 px inset centres it on the 34 px
+   track; Firefox centres its own. */
 .ws-range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 24px;
-  height: 24px;
-  margin-top: 1px;
+  width: 26px;
+  height: 26px;
+  margin-top: 4px;
   border: 0;
   border-radius: 50%;
   background: #f6fbff;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
 }
 .ws-range-input::-moz-range-thumb {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 50%;
   background: #f6fbff;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
 }
 .ws-range-input:focus-visible {
   outline: 2px solid var(--ws-range-accent);
@@ -192,6 +194,24 @@
 .ws-range-input:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* The chosen span, centred ON the bar. `pointer-events: none` is
+   load-bearing: every tap and drag has to reach the input underneath it,
+   including the ones that land on the text. The shadow keeps it legible
+   where the white handle passes behind it. */
+.ws-range-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #eaf6ff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 /* Chart svg fills its wrapper. Height is fixed on desktop, slightly

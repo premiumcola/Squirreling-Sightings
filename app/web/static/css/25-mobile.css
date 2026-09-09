@@ -641,13 +641,13 @@ body.sidebar-locked {
   #weatherStatsRange {
     flex: 1 1 100%;
     max-width: 100%;
-    /* Safety valve at 375 px: „eigener Zeitraum" plus the ✕ chip is the
-       widest this row ever gets, and it may need a second line rather
-       than squeezing the handle's travel to nothing. A stadium radius
-       over two lines reads as a blob, so square it off to a large-but-
-       finite corner instead. */
-    flex-wrap: wrap;
-    border-radius: 22px;
+    /* NO WRAP. It used to be allowed to break onto a second line as a
+       safety valve for a long readout beside the track — and that is
+       exactly what stacked the row's own children on top of each other
+       once they were more than a bare slider („Was sollen die symbole
+       zeichen beide links???"). The readout rides ON the bar now, so the
+       row holds one shrinkable track plus a 44 px chip and always fits. */
+    flex-wrap: nowrap;
   }
   #weatherStatsRange button {
     min-height: 44px;

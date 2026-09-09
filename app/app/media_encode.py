@@ -182,37 +182,30 @@ def encode_jpeg_frames_to_mp4(
         log.warning("%s ffmpeg unavailable — cannot encode jpeg-frame clip", log_tag)
         return False
     cmd = build_jpeg_frames_cmd(out_path, fps, crf=crf, preset=preset, silent_audio=silent_audio)
+    # The whole pre-roll is a handful of stills (a few seconds at a few
+    # fps), so building the stdin payload in memory first and handing it
+    # to run()'s own communicate() is both simpler and safe — unlike a
+    # manual proc.stdin.write() loop run BEFORE communicate(), which
+    # deadlocks the moment the combined JPEG bytes overrun the OS pipe
+    # buffer: the write blocks on a full stdin pipe while ffmpeg blocks
+    # writing to an undrained stdout/stderr pipe, and nothing here ever
+    # times out. Measured cause of clips stuck at `encoding` for hours —
+    # see camera_runtime/_recording/_encode_queue.py.
+    stdin_bytes = b"".join(jpg for _ts, jpg in frames)
     try:
-        proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        write_failed = False
-        for _ts, jpg in frames:
-            try:
-                proc.stdin.write(jpg)
-            except Exception:
-                write_failed = True
-                break
-        # Don't proc.stdin.close() here — communicate() does it for us, and
-        # a manual close before communicate raises "flush of closed file"
-        # on the next communicate() call.
-        try:
-            _out, err = proc.communicate(timeout=30)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            log.warning("%s ffmpeg timeout — killed", log_tag)
-            return False
-        if proc.returncode != 0:
-            log.warning(
-                "%s ffmpeg rc=%s stderr=%s",
-                log_tag,
-                proc.returncode,
-                (err or b"").decode("utf-8", "replace")[-300:],
-            )
-            return False
-        if write_failed:
-            log.debug("%s partial frame write — clip may be short", log_tag)
-        return out_path.exists() and out_path.stat().st_size > 1024
+        r = subprocess.run(cmd, input=stdin_bytes, capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        log.warning("%s ffmpeg timeout — killed", log_tag)
+        return False
     except Exception as e:
         log.warning("%s ffmpeg pipe error: %s", log_tag, e)
         return False
+    if r.returncode != 0:
+        log.warning(
+            "%s ffmpeg rc=%s stderr=%s",
+            log_tag,
+            r.returncode,
+            (r.stderr or b"").decode("utf-8", "replace")[-300:],
+        )
+        return False
+    return out_path.exists() and out_path.stat().st_size > 1024

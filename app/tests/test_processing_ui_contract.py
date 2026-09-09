@@ -159,9 +159,13 @@ def test_no_invented_progress_percentage(js):
         ), f"{token!r} in the in-flight UI — where would the number come from?"
 
 
-def test_the_queue_never_claims_a_position_in_a_line(js):
-    """Each clip re-encodes in its own thread — there is no queue order
-    to report. Counting is true; "2 von 3" is not."""
+def test_the_aggregate_title_never_claims_a_position_in_a_line(js):
+    """`_encode_queue.py` genuinely is a FIFO now (see `queue-status`), and
+    a per-item label/row is allowed to say "Platz 3 von 12". The ONE-LINE
+    summary above the grid must not: it counts several different clips at
+    once, so a position there would answer "who's #3" for a strip that
+    has no single #3. Counting is true; "2 von 3" in the summary is not.
+    """
     titles = js[js.index("export function queueTitle") :]
     titles = titles[: titles.index("\n}")]
     assert " von " not in titles
@@ -170,8 +174,19 @@ def test_the_queue_never_claims_a_position_in_a_line(js):
 
 
 def test_a_stalled_or_failed_clip_stops_spinning(js):
-    """The whole point: a tile that spins forever is a lie."""
-    assert "st.kind === 'busy' ? _SPIN : _WARN" in js
+    """The whole point: a tile that spins forever is a lie. `waiting`
+    (a clip the live queue confirms it still owns, see `procStateOf`)
+    gets its own honest clock icon, `stalled`/`failed` the warning
+    triangle — every USE of the spinner (not its own `const _SPIN = `
+    definition) must be conditioned on a "busy" check on the same line."""
+    uses = [
+        line
+        for line in js.splitlines()
+        if "_SPIN" in line and not line.lstrip().startswith("const _SPIN")
+    ]
+    assert uses, "no use of _SPIN found at all"
+    for line in uses:
+        assert "busy" in line, f"_SPIN used without a busy guard on its line: {line.strip()!r}"
 
 
 def test_a_terminal_failure_is_kept_out_of_the_queue_strip(js):

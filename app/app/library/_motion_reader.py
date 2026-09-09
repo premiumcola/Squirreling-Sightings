@@ -187,11 +187,11 @@ def motion_candidate(cam_id: str, cam_name: str, obj: dict) -> dict | None:
             "/media/{}".format(obj.get("snapshot_relpath")) if obj.get("snapshot_relpath") else ""
         ),
         "missing_media": not obj.get("video_relpath"),
-        "extra": _with_scrub_url(dict(obj)),
+        "extra": with_scrub_url(dict(obj)),
     }
 
 
-def _with_scrub_url(obj: dict) -> dict:
+def with_scrub_url(obj: dict) -> dict:
     """Attach the scrub filmstrip's URL, when the clip has geometry for it.
 
     The sheet has been built since the filmstrip landed and its geometry
@@ -202,6 +202,13 @@ def _with_scrub_url(obj: dict) -> dict:
     Only when ``scrub`` is present: geometry is what says a sheet was
     actually produced, and a URL without it would point the player at a
     404 for every clip recorded before the filmstrip existed.
+
+    PUBLIC, and applied by BOTH readers. It lived here as a private
+    helper of the merged /api/library feed, so a clip opened from there
+    had a filmstrip and the SAME clip opened from a camera's own
+    Mediathek grid had none — „Das thumb is grad gar nicht mehr da!".
+    The player never knew the difference; it simply got geometry with no
+    address and drew nothing. See routes/media.py::api_camera_media.
     """
     if not isinstance(obj.get("scrub"), dict):
         return obj

@@ -26,6 +26,7 @@ from .. import app_state
 from .. import migrations as _migrations
 from ..camera_runtime._recording._encode_queue import queue_snapshot
 from ..camera_runtime._recording._stages import DEFAULT_CLIP_MAX_S
+from ..library._motion_reader import with_scrub_url
 from ..media_index import (
     build_report,
     camera_stats,
@@ -428,6 +429,11 @@ def api_camera_media(cam_id):
         review = settings.get_review(f"{cam_id}:{item['event_id']}")
         if review:
             item["review"] = review
+        # The scrub sheet's ADDRESS. Its geometry has always been on the
+        # event; the URL was added only by the merged library feed, so the
+        # player's drag preview worked from there and silently did nothing
+        # from here. One helper, both readers.
+        with_scrub_url(item)
     return jsonify({"items": items, "total_count": total_count})
 
 

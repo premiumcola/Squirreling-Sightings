@@ -16,6 +16,13 @@ import { wireBeads } from './_markers.js';
 import { railHtml, setPlayhead } from './_rail.js';
 import { renderRolling } from './_rolling.js';
 import { mountScrubPreview } from './_preview.js';
+
+/** Mark a scrub gesture on the document root, for the CSS that blurs the
+ *  picture behind the filmstrip. Guarded because the node tests mount
+ *  this module against plain-object stubs with no classList. */
+function _setScrubbing(on) {
+  globalThis.document?.body?.classList?.toggle?.('vp-is-scrubbing', !!on);
+}
 import { attachScrub } from './_scrub.js';
 import { buildTimelineModel } from './_model.js';
 
@@ -127,6 +134,16 @@ export function mountTimeline(host, cfg, deps = {}) {
         // backlog this replaced.
         onPreview: (t, x, phase) => {
           setPlayhead(host, t, model.duration);
+          // THE PICTURE STEPS BACK WHILE THE FILMSTRIP IS UP. „blurre bei
+          // hin und herchoosen am time/play slider das hauptvideo im
+          // hintergrund und blende das thumb darüber ein!" — the video
+          // behind is a frozen frame from wherever the playhead used to
+          // be, and next to a sharp thumbnail of where it is GOING it
+          // reads as the current one. Blurred, there is no competition:
+          // one sharp image on screen, and it is the one being chosen.
+          // The class goes on <body> because the player shell, the stage
+          // and the timeline are siblings — see 36a's own rule.
+          _setScrubbing(phase !== 'end');
           if (phase === 'end') preview?.hide();
           else if (phase === 'start') preview?.show(x, t);
           else preview?.moveTo(x, t);

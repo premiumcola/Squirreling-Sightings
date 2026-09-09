@@ -62,14 +62,84 @@
    scroll that carried "Abbrechen" off the bottom would leave the sheet
    with no visible way out on a phone. */
 .sp-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 8px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 2px;
 }
+
+/* A ROUND BUBBLE WITH THE NAME UNDER IT, not a boxed tile: the silhouette
+   is the thing being chosen and the circle is what makes a row of them
+   read as a set of subjects rather than a grid of buttons. The tile
+   itself carries no ground — the bubble is the visual object, the label
+   belongs to it, and a second box around both only fought with the
+   sheet's own. */
 .sp-pick-tile {
-  padding: 10px 6px 8px;
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sp-pick-bubble {
+  width: 62px;
+  height: 62px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+  transition: background 0.15s;
+}
+/* The silhouettes are drawn on an 80×80 viewBox with the bird sitting on
+   a perch line near the bottom edge; at 100% inside a CIRCLE the perch
+   and the tail clip against the curve. Slightly inset, it sits in the
+   bubble instead of fighting it. */
+.sp-pick-bubble svg {
+  width: 86%;
+  height: 86%;
+}
+.sp-pick-bubble .species-icon-emoji {
+  font-size: 30px;
+  line-height: 1;
+}
+
+/* Two lines, then ellipsis — Mönchsgrasmücke and Hausrotschwanz do not
+   fit one line in a third of a 375 px sheet, and truncating them to
+   "Mönchs…" would make two species indistinguishable. */
+.sp-pick-name {
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (hover: hover) {
+  .sp-pick-tile:hover .sp-pick-bubble {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+.sp-pick-tile:active .sp-pick-bubble {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 /* Flat rows, depth from background contrast — no hairline borders

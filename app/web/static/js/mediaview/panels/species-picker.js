@@ -118,11 +118,17 @@ export async function submitSpeciesCorrection(item, species, deps = {}) {
   }
 }
 
+// Round bubble, name underneath — „Bird vectors in round bubbles! With
+// name below". Its own classes rather than the Vogelarten grid's
+// `.species-grid-tile`: that one is a boxed tile built for a browsing
+// grid with a count chip, and borrowing it here left the picker as a
+// field of unlabelled boxes. One shape per surface, each saying what it
+// is.
 function _speciesTileHtml(name) {
   return (
-    `<button type="button" class="species-grid-tile sp-pick-tile" data-act="pick" data-species="${esc(name)}">` +
-    `<span class="sgt-icon">${speciesIconMarkup(name)}</span>` +
-    `<span class="sgt-name">${esc(name)}</span></button>`
+    `<button type="button" class="sp-pick-tile" data-act="pick" data-species="${esc(name)}">` +
+    `<span class="sp-pick-bubble">${speciesIconMarkup(name)}</span>` +
+    `<span class="sp-pick-name">${esc(name)}</span></button>`
   );
 }
 

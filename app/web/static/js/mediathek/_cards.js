@@ -194,7 +194,11 @@ function _motionCtx(item) {
     vidDur: _fmtDur(item.duration_s),
     vidSize: _fmtByt(item.file_size_bytes),
     // Inline overrides only border-color and text color; .mmc-tl-badge supplies dark bg + blur + shadow
-    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}${esc(badgeText)}${speciesEditBtn}</span>${speciesChip}</div>`,
+    // The NAME is its own element so it can ellipsize. As a bare text
+    // node it could not, and the badge grew past `.mmc-badges`' own
+    // clearance until it ran under the confirm/delete buttons — the
+    // reported „Grafik kollision", on every long species name.
+    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}<span class="mmc-tl-name">${esc(badgeText)}</span>${speciesEditBtn}</span>${speciesChip}</div>`,
   };
 }
 

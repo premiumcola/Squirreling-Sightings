@@ -90,6 +90,31 @@
   padding: 2px 0;
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
+  /* A PRESS MUST STAY A PRESS. iOS treats a long press on an element
+     holding an image as the start of a system drag: it lifts a floating
+     ghost of the tile, and the gesture that follows is a drag, so the
+     click never fires. On screen that is exactly „lässt sich nicht
+     abwählen, ist nur abgewählt solange ich den finger auf das display
+     halte" — the tile shows its :active state under the finger and
+     springs back on release with nothing saved. `touch-callout` stops
+     the drag/callout, `user-select` stops the text selection that comes
+     with it, and `touch-action: manipulation` drops the 300 ms
+     double-tap wait. Same rule .ws-stats-chart-wrap already documents
+     for the weather chart. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+/* The tile is the target; nothing inside it is. Without this the tap
+   lands on a <path> of the silhouette and every handler has to climb
+   back out to the button — and an <svg> is also what iOS offers to
+   drag in the first place. */
+.sp-pick-tile > *,
+.sp-pick-tile svg,
+.sp-pick-tile img {
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 .sp-pick-bubble {

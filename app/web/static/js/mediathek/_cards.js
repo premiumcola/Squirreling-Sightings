@@ -196,12 +196,17 @@ function _motionCtx(item) {
   // into pointer-events despite `.mmc-badges`' own pointer-events:none
   // (see 39-species-picker.css); stopPropagation keeps the tap from
   // also opening the player via the wrap's own onclick.
-  const speciesEditBtn =
-    badgeLabel === 'bird'
-      ? `<button type="button" class="mmc-species-edit" title="Art korrigieren" ` +
-        `aria-label="Art korrigieren" onclick="event.stopPropagation();` +
-        `window.openSpeciesPickerForCard(this)">${_SPECIES_EDIT_SVG}</button>`
-      : '';
+  // THE WHOLE PILL IS THE TARGET, not the pencil inside it. „Auswahl-
+  // bereiche am handy sind schlecht man trifft sehr oft play selten das
+  // edit für die spezies!" — and that is what the markup asked for: a
+  // ~110 px labelled pill that did nothing, with an 11 px glyph in the
+  // corner of it that did. A finger aimed at the obvious thing landed on
+  // the card behind it and opened the player instead. The pencil stays,
+  // as the sign that the pill is editable; it is no longer the target.
+  const editable = badgeLabel === 'bird';
+  const speciesEditBtn = editable
+    ? `<span class="mmc-species-edit">${_SPECIES_EDIT_SVG}</span>`
+    : '';
   return {
     accent,
     subBadge: `${_SUB_BADGE_BASE};color:${accent}`,
@@ -215,7 +220,17 @@ function _motionCtx(item) {
     // node it could not, and the badge grew past `.mmc-badges`' own
     // clearance until it ran under the confirm/delete buttons — the
     // reported „Grafik kollision", on every long species name.
-    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${_badgeIcon(badgeLabel, item.bird_species)}<span class="mmc-tl-name">${esc(badgeText)}</span>${speciesEditBtn}</span>${speciesChip}</div>`,
+    motionBadge:
+      `<div class="mmc-badges">` +
+      (editable
+        ? `<button type="button" class="mmc-tl-badge mmc-tl-badge--edit" ` +
+          `title="Art korrigieren" aria-label="Art korrigieren" ` +
+          `style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}" ` +
+          `onclick="event.stopPropagation();window.openSpeciesPickerForCard(this)">`
+        : `<span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">`) +
+      `${_badgeIcon(badgeLabel, item.bird_species)}<span class="mmc-tl-name">${esc(badgeText)}</span>${speciesEditBtn}` +
+      (editable ? `</button>` : `</span>`) +
+      `${speciesChip}</div>`,
   };
 }
 

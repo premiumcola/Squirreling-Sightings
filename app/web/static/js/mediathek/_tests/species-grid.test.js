@@ -20,7 +20,7 @@ import {
 function resetState() {
   state.mediaLabels = new Set();
   state.mediaSpecies = null;
-  state.mediaSpeciesOptions = null;
+  state.mediaStats = [];
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
@@ -29,10 +29,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
 
 test('renders one tile per dossier entry with sighting_count > 0', () => {
   resetState();
-  state.mediaSpeciesOptions = [
-    { name: 'Elster', count: 5 },
-    { name: 'Amsel', count: 2 },
-  ];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Elster']: 5, ['Amsel']: 2 } }];
   const html = speciesGridTilesHTML();
   assert.match(html, /data-species="Elster"/);
   assert.match(html, /data-species="Amsel"/);
@@ -42,10 +39,7 @@ test('renders one tile per dossier entry with sighting_count > 0', () => {
 
 test('excludes species with sighting_count === 0', () => {
   resetState();
-  state.mediaSpeciesOptions = [
-    { name: 'Elster', count: 5 },
-    { name: 'Nieuwvogel', count: 0 },
-  ];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Elster']: 5, ['Nieuwvogel']: 0 } }];
   const html = speciesGridTilesHTML();
   assert.match(html, /data-species="Elster"/);
   assert.doesNotMatch(html, /data-species="Nieuwvogel"/);
@@ -56,23 +50,20 @@ test('renders most-sighted first, in the order mediaSpeciesOptions provides', ()
   // loadBirdSpeciesOptions() already sorts count-desc before this ever
   // sees the list — this only pins that the tile builder preserves
   // that order rather than re-sorting (or worse, reversing) it.
-  state.mediaSpeciesOptions = [
-    { name: 'Elster', count: 5 },
-    { name: 'Amsel', count: 2 },
-  ];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Elster']: 5, ['Amsel']: 2 } }];
   const html = speciesGridTilesHTML();
   assert.ok(html.indexOf('Elster') < html.indexOf('Amsel'));
 });
 
 test('no tiles when nothing has been sighted yet', () => {
   resetState();
-  state.mediaSpeciesOptions = [];
+  state.mediaStats = [];
   assert.equal(speciesGridTilesHTML(), '');
 });
 
 test('species names are HTML-escaped in the tile markup', () => {
   resetState();
-  state.mediaSpeciesOptions = [{ name: '<script>alert(1)</script>', count: 1 }];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['<script>alert(1)</script>']: 1 } }];
   assert.doesNotMatch(speciesGridTilesHTML(), /<script>/);
 });
 
@@ -80,7 +71,7 @@ test('species names are HTML-escaped in the tile markup', () => {
 
 test('a known species (Elster) renders its real SVG icon', () => {
   resetState();
-  state.mediaSpeciesOptions = [{ name: 'Elster', count: 3 }];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Elster']: 3 } }];
   const html = speciesGridTilesHTML();
   assert.match(html, /<svg/);
   assert.doesNotMatch(html, /species-icon-emoji/);
@@ -88,7 +79,7 @@ test('a known species (Elster) renders its real SVG icon', () => {
 
 test('an unmapped species falls back to the emoji icon', () => {
   resetState();
-  state.mediaSpeciesOptions = [{ name: 'Voglus Incognitus', count: 1 }];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Voglus Incognitus']: 1 } }];
   const html = speciesGridTilesHTML();
   assert.match(html, /species-icon-emoji/);
 });
@@ -139,49 +130,44 @@ test('selecting a different species from the grid replaces the previous one, not
 
 test('the entry tile counts only sighted species', () => {
   resetState();
-  state.mediaSpeciesOptions = [
-    { name: 'Elster', count: 5 },
-    { name: 'Amsel', count: 2 },
-  ];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Elster']: 5, ['Amsel']: 2 } }];
   assert.match(speciesGridEntryTileHTML(), /2 Arten gesichtet/);
 });
 
 test('the entry tile uses the singular form for exactly one species', () => {
   resetState();
-  state.mediaSpeciesOptions = [{ name: 'Elster', count: 5 }];
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { ['Elster']: 5 } }];
   assert.match(speciesGridEntryTileHTML(), /1 Art gesichtet/);
 });
 
 test('the entry tile shows an empty-state hint when nothing has been sighted', () => {
   resetState();
-  state.mediaSpeciesOptions = [];
+  state.mediaStats = [];
   assert.match(speciesGridEntryTileHTML(), /Noch keine Sichtung/);
 });
 
-// ── bindSpeciesGridEntryTile — self-corrects a cold-load `null` ─────────
-// state.mediaSpeciesOptions is still null on the Mediathek's very first
-// paint (filters.js's own loadBirdSpeciesOptions() call only fires once
-// "bird" is active inside a drilldown, which the overview never reaches
-// — see _species-grid.js::_primeSpeciesGridEntryTile's own comment).
-// Without priming, the entry tile would misreport "Noch keine Sichtung"
-// on every operator's first look, even with sightings on file.
+// ── bindSpeciesGridEntryTile — nothing to wait for any more ─────────────
+// The tile used to read "Noch keine Sichtung" on every operator's first
+// look and patch itself once GET /api/bird-dossiers came back. The list
+// is derived from `state.mediaStats` now (the stats the Mediathek loads
+// for its class pills anyway), so the first paint is already the right
+// one and there is no fetch, no null sentinel and no patch cycle left.
 
-test('bindSpeciesGridEntryTile patches the tile once options load, from a cold null state', async () => {
+test('the entry tile is correct on its FIRST paint, with no fetch at all', () => {
   resetState();
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: { Elster: 5 } }];
+  let fetched = 0;
+  globalThis.fetch = async () => {
+    fetched += 1;
+    return { ok: true, json: async () => ({}) };
+  };
   const tile = { outerHTML: speciesGridEntryTileHTML(), addEventListener() {} };
   globalThis.document = {
     getElementById: (id) => (id === 'mocSpeciesGridEntry' ? tile : null),
   };
-  globalThis.fetch = async () => ({
-    ok: true,
-    json: async () => ({
-      dossiers: [{ common_name_de: 'Elster', latin: 'pica pica', sighting_count: 5 }],
-    }),
-  });
-  assert.match(tile.outerHTML, /Noch keine Sichtung/);
 
   bindSpeciesGridEntryTile();
-  await flush();
 
   assert.match(tile.outerHTML, /1 Art gesichtet/);
+  assert.equal(fetched, 0, 'the species row must not cost a request of its own');
 });

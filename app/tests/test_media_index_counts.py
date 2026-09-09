@@ -252,3 +252,40 @@ def test_rescan_does_not_mint_ghost_events_from_raw_and_best_files(tmp_storage_r
 
     assert store.scan_media_files([CAM]) == 0
     assert _stats(tmp_storage_root, store)["event_count"] == 1
+
+
+# ── 5 · the number beside the species filter is that filter's own answer ───
+def test_species_counts_tally_the_clips_the_filter_would_return(tmp_storage_root, store):
+    """The Mediathek's species pills used to print the DOSSIER's lifetime
+    `sighting_count` beside a control that filters the ARCHIVE — „Ich
+    wähle Filter Kohlmeise mit (1) und erhalte 31 Seiten andere Vögel".
+    These counts come off the same visible list the grid renders and key
+    on the same field `storage._filter_events` matches, so the pill and
+    the fetch behind it cannot disagree."""
+    for i, species in enumerate(["Elster", "Elster", "Kohlmeise"]):
+        clip = _clip(tmp_storage_root, f"20260430-1000{i}0-000000")
+        _event(
+            tmp_storage_root,
+            clip["event_id"],
+            labels=["motion", "bird"],
+            bird_species=species,
+            video_relpath=clip["video_relpath"],
+            snapshot_relpath=clip["snapshot_relpath"],
+        )
+
+    counts = _stats(tmp_storage_root, store)["species_counts"]
+
+    assert counts == {"Elster": 2, "Kohlmeise": 1}
+
+
+def test_a_clip_without_a_species_never_enters_the_species_counts(tmp_storage_root, store):
+    clip = _clip(tmp_storage_root, "20260430-110000-000000")
+    _event(
+        tmp_storage_root,
+        clip["event_id"],
+        labels=["motion", "bird"],
+        video_relpath=clip["video_relpath"],
+        snapshot_relpath=clip["snapshot_relpath"],
+    )
+
+    assert _stats(tmp_storage_root, store)["species_counts"] == {}

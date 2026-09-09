@@ -26,12 +26,12 @@ export const state = {
   mediaDrillOpen: false,
   mediaStats: [],
   mediaLabels: new Set(),
-  // Species sub-filter, meaningful only while 'bird' is in mediaLabels
-  // (see mediathek/_species-filter.js). mediaSpecies is the selected
-  // name, or null; mediaSpeciesOptions is the fetched species list
-  // (null = not fetched yet, [] = fetched, none sighted).
+  // Species sub-filter, meaningful only while 'bird' is in mediaLabels:
+  // the selected species name, or null. The OPTIONS have no state of
+  // their own — they are derived from mediaStats on every render (see
+  // mediathek/_species-filter.js::birdSpeciesOptions), so there is no
+  // second copy to go stale against the counts beside them.
   mediaSpecies: null,
-  mediaSpeciesOptions: null,
   tlHours: 168,
   mediaPage: 0,
   mediaTotalPages: 1,

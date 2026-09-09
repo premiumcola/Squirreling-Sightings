@@ -41,17 +41,17 @@ import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { speciesIconMarkup } from '../core/species-icon.js';
 import { objIconSvg } from '../core/icons.js';
-import { loadBirdSpeciesOptions, selectSpecies } from './_species-filter.js';
+import { birdSpeciesOptions, selectSpecies } from './_species-filter.js';
 import { showMediathekView } from './_view-toggle.js';
 
-// ── pure: the species list ──────────────────────────────────────────────
-// Defensive filter even though loadBirdSpeciesOptions() already drops
-// sighting_count === 0 entries before they ever reach
-// state.mediaSpeciesOptions — belt-and-braces against whatever else
-// might populate that field later, same spirit as _species-filter.js's
-// own `sighting_count > 0` guard.
+// ── the species list ────────────────────────────────────────────────────
+// Derived, not fetched — `birdSpeciesOptions()` counts the clips the
+// Mediathek's own stats already describe, so a tile's number is what
+// tapping it actually yields. It used to be the dossier's lifetime
+// `sighting_count`, which is a different question; see
+// _species-filter.js's header.
 function _sightedOptions() {
-  return (state.mediaSpeciesOptions || []).filter((o) => (o.count || 0) > 0);
+  return birdSpeciesOptions();
 }
 
 function _speciesTileHTML({ name, count }) {
@@ -64,8 +64,8 @@ function _speciesTileHTML({ name, count }) {
 }
 
 /** PURE: one tile per sighted species, most-sighted first — the order
- * state.mediaSpeciesOptions already comes sorted in
- * (_species-filter.js::loadBirdSpeciesOptions). Most-sighted-first fits
+ * `birdSpeciesOptions()` already sorts in
+ * (_species-filter.js). Most-sighted-first fits
  * a "browse what I actually have" grid better than the achievements
  * grid's own order (ACH_DEFS.rank, a NATIONAL frequency table —
  * sichtungen/_ach-defs.js — unrelated to what this installation has
@@ -128,17 +128,12 @@ export function renderMediaSpeciesGrid() {
   _wireTileClicks(body);
 }
 
-/** The "Vogelarten" overview tile's own click target. Reuses
- * state.mediaSpeciesOptions if _species-filter.js (or an earlier open
- * of this same grid) already fetched it — never a second
- * GET /api/bird-dossiers. */
+/** The "Vogelarten" overview tile's own click target. The list is
+ * derived from stats the Mediathek has already loaded, so there is
+ * nothing to wait for and nothing to fetch. */
 export function openMediaSpeciesGridView() {
   showMediathekView('mediaSpeciesGrid');
-  if (state.mediaSpeciesOptions === null) {
-    loadBirdSpeciesOptions().then(renderMediaSpeciesGrid);
-  } else {
-    renderMediaSpeciesGrid();
-  }
+  renderMediaSpeciesGrid();
 }
 
 // The grid's own "← Übersicht" back button (data-action="closeMediaSpeciesGrid",
@@ -147,31 +142,10 @@ export function closeMediaSpeciesGrid() {
   showMediathekView('mediaOverview');
 }
 
-/** The entry tile's count is only accurate once
- * state.mediaSpeciesOptions has been fetched. On the FIRST Mediathek
- * paint it is still null — filters.js's own loadBirdSpeciesOptions()
- * call only fires once the "bird" pill is active inside a drilldown
- * (see filters.js), which the overview never reaches — so without
- * this, every operator's very first look at the tile would read
- * "Noch keine Sichtung" even on an installation with dozens of
- * sightings. Same singleton fetch every other caller here shares (see
- * loadBirdSpeciesOptions's own header); patches just this one tile
- * in place once it resolves rather than re-rendering the whole grid. */
-function _primeSpeciesGridEntryTile() {
-  if (state.mediaSpeciesOptions !== null) return;
-  loadBirdSpeciesOptions().then(() => {
-    const el = byId('mocSpeciesGridEntry');
-    if (!el) return; // overview moved on before the fetch resolved
-    el.outerHTML = speciesGridEntryTileHTML();
-    bindSpeciesGridEntryTile();
-  });
-}
-
 /** Wired from renderMediaOverview() after every re-render, mirroring
  * _overview.js's own _bindQuickLabelTiles() re-wiring pattern — the
  * previous listener goes with the DOM node innerHTML replacement
  * discards, so this never double-fires. */
 export function bindSpeciesGridEntryTile() {
   byId('mocSpeciesGridEntry')?.addEventListener('click', openMediaSpeciesGridView);
-  _primeSpeciesGridEntryTile();
 }

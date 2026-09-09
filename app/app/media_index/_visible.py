@@ -102,10 +102,23 @@ def camera_stats(index, visible, name_hint: str = "") -> dict:
     counts timelapse events only — both from the same list the grid
     renders. ``label_counts['motion']`` is authoritative; the frontend no
     longer subtracts object counts from a total that never matched.
+
+    ``species_counts`` is the same idea one level down: how many clips
+    carry each ``bird_species``. It exists because the Mediathek's
+    species pills used to print the DOSSIER's lifetime ``sighting_count``
+    (``bird_dossiers.json``) beside a control that filters the ARCHIVE,
+    and the two answer different questions — a species whose clips have
+    since aged out of retention still counts in the dossier, and a
+    dossier that missed a sighting undercounts clips that are right
+    there. „Ich wähle Filter Kohlmeise mit (1) und erhalte 31 Seiten
+    andere Vögel": the pill promised one clip for a filter that had none
+    to give. Counted from ``visible`` — the very list the grid renders —
+    so the number beside the filter IS what the filter returns.
     """
     camera_id = index.camera_id
     resolved_name = name_hint or camera_id
     label_counts: dict = {}
+    species_counts: dict = {}
     event_count = 0
     timelapse_count = 0
     latest_snap_url = None
@@ -133,6 +146,13 @@ def camera_stats(index, visible, name_hint: str = "") -> dict:
         primary = primary_label(event.get("labels"))
         if primary in COUNTED_LABELS:
             label_counts[primary] = label_counts.get(primary, 0) + 1
+        # The raw stored string, not a normalised one: `storage.
+        # _filter_events` matches `bird_species` by exact value through
+        # its `extras` set, so anything else here would count clips the
+        # filter cannot find.
+        species = (event.get("bird_species") or "").strip()
+        if species:
+            species_counts[species] = species_counts.get(species, 0) + 1
     # Raw timelapse frames are walked (they are in MEDIA_TREES) but were
     # not in COUNTED_TREES, so a yearly profile's ~4 GB of jpgs per camera
     # sat on the disk and appeared nowhere in the storage overview. Report
@@ -152,4 +172,5 @@ def camera_stats(index, visible, name_hint: str = "") -> dict:
         "latest_snap_url": latest_snap_url,
         "latest_object_snap_url": latest_object_snap_url,
         "label_counts": label_counts,
+        "species_counts": species_counts,
     }

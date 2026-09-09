@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 
 import { state } from '../../core/state.js';
 import {
-  loadBirdSpeciesOptions,
+  birdSpeciesOptions,
   selectSpecies,
   clearSpeciesIfBirdInactive,
   effectiveMediaLabels,
@@ -21,38 +21,42 @@ import {
 function resetState() {
   state.mediaLabels = new Set();
   state.mediaSpecies = null;
-  state.mediaSpeciesOptions = null;
+  state.mediaCamera = null;
+  state.mediaStats = [];
+}
+
+/** One camera's stats row, in the shape media_index/_visible.py::
+ *  camera_stats returns. */
+function cam(id, species_counts) {
+  return { camera_id: id, id, name: id, label_counts: { bird: 1 }, species_counts };
 }
 
 // ── speciesPillsHtml — the row only appears when "bird" is active ───────
 
 test('no species row when "bird" is not an active class filter', () => {
   resetState();
-  state.mediaSpeciesOptions = [{ name: 'Elster', count: 3 }];
+  state.mediaStats = [cam('cam1', { Elster: 3 })];
   assert.equal(speciesPillsHtml(), '');
 });
 
 test('no species row while options have not loaded yet, even with bird active', () => {
   resetState();
   state.mediaLabels = new Set(['bird']);
-  assert.equal(state.mediaSpeciesOptions, null);
+  assert.deepEqual(state.mediaStats, []);
   assert.equal(speciesPillsHtml(), '');
 });
 
 test('no species row when bird is active but nothing has ever been sighted', () => {
   resetState();
   state.mediaLabels = new Set(['bird']);
-  state.mediaSpeciesOptions = [];
+  state.mediaStats = [];
   assert.equal(speciesPillsHtml(), '');
 });
 
 test('bird active + species sighted renders one pill per species', () => {
   resetState();
   state.mediaLabels = new Set(['bird']);
-  state.mediaSpeciesOptions = [
-    { name: 'Elster', count: 5 },
-    { name: 'Amsel', count: 2 },
-  ];
+  state.mediaStats = [cam('cam1', { Elster: 5, Amsel: 2 })];
   const html = speciesPillsHtml();
   assert.match(html, /data-species="Elster"/);
   assert.match(html, /data-species="Amsel"/);
@@ -63,10 +67,7 @@ test('bird active + species sighted renders one pill per species', () => {
 test('the selected species pill carries the active class, others do not', () => {
   resetState();
   state.mediaLabels = new Set(['bird']);
-  state.mediaSpeciesOptions = [
-    { name: 'Elster', count: 5 },
-    { name: 'Amsel', count: 2 },
-  ];
+  state.mediaStats = [cam('cam1', { Elster: 5, Amsel: 2 })];
   state.mediaSpecies = 'Elster';
   const html = speciesPillsHtml();
   const elsterBtn = html.match(/<button[^>]*data-species="Elster"[^>]*>/)[0];
@@ -78,7 +79,7 @@ test('the selected species pill carries the active class, others do not', () => 
 test('species names are HTML-escaped in the pill markup', () => {
   resetState();
   state.mediaLabels = new Set(['bird']);
-  state.mediaSpeciesOptions = [{ name: '<script>alert(1)</script>', count: 1 }];
+  state.mediaStats = [cam('cam1', { '<script>alert(1)</script>': 1 })];
   assert.doesNotMatch(speciesPillsHtml(), /<script>/);
 });
 
@@ -156,29 +157,48 @@ test('a cleared species filter narrows nothing — effectiveMediaLabels back to 
   assert.deepEqual(effectiveMediaLabels(), []);
 });
 
-// ── loadBirdSpeciesOptions — the data source ─────────────────────────────
-// GET /api/bird-dossiers already backs the Sichtungen dossier panel;
-// reused here filtered to sighting_count > 0 so a species the daily
-// prebuild sweep pre-created as a locked, never-sighted placeholder
-// (bird_dossiers.py::sweep_prebuild) never shows up as a pill.
+// ── birdSpeciesOptions — the data source ────────────────────────────────
+// It used to fetch GET /api/bird-dossiers and print `sighting_count`.
+// That is the dossier's LIFETIME tally beside a control that filters the
+// ARCHIVE — the two drift apart in both directions (retention prunes
+// clips the dossier still counts; a sighting the dossier missed is still
+// a clip the filter finds), which is „Ich wähle Filter Kohlmeise mit (1)
+// und erhalte 31 Seiten andere Vögel". Now it counts the same events the
+// grid renders, from stats the Mediathek already has.
 
-test('loadBirdSpeciesOptions keeps only sighted species, sorted by count desc', async () => {
+test('counts are summed across cameras, most-clips first', () => {
   resetState();
-  globalThis.fetch = async () => ({
-    ok: true,
-    json: async () => ({
-      dossiers: [
-        { common_name_de: 'Rotkehlchen', latin: 'erithacus rubecula', sighting_count: 0 },
-        { common_name_de: 'Amsel', latin: 'turdus merula', sighting_count: 2 },
-        { common_name_de: 'Elster', latin: 'pica pica', sighting_count: 5 },
-        { latin: 'no de name', sighting_count: 9 },
-      ],
-    }),
-  });
-  const options = await loadBirdSpeciesOptions();
-  assert.deepEqual(options, [
-    { name: 'Elster', count: 5 },
+  state.mediaStats = [cam('cam1', { Elster: 5, Amsel: 2 }), cam('cam2', { Elster: 3 })];
+  assert.deepEqual(birdSpeciesOptions(), [
+    { name: 'Elster', count: 8 },
     { name: 'Amsel', count: 2 },
   ]);
-  assert.deepEqual(state.mediaSpeciesOptions, options);
+});
+
+test('a selected camera scopes the counts, like the class pills above', () => {
+  resetState();
+  state.mediaStats = [cam('cam1', { Elster: 5 }), cam('cam2', { Amsel: 2 })];
+  state.mediaCamera = 'cam2';
+  assert.deepEqual(birdSpeciesOptions(), [{ name: 'Amsel', count: 2 }]);
+});
+
+test('a species with no clips never becomes a pill', () => {
+  resetState();
+  state.mediaStats = [cam('cam1', { Elster: 0, Amsel: 1 })];
+  assert.deepEqual(birdSpeciesOptions(), [{ name: 'Amsel', count: 1 }]);
+});
+
+test('stats without a species_counts map are simply empty, not a throw', () => {
+  resetState();
+  state.mediaStats = [{ camera_id: 'cam1', label_counts: { bird: 4 } }];
+  assert.deepEqual(birdSpeciesOptions(), []);
+});
+
+test('equal counts fall back to a stable German-alphabetical order', () => {
+  resetState();
+  state.mediaStats = [cam('cam1', { Zaunkönig: 2, Amsel: 2 })];
+  assert.deepEqual(
+    birdSpeciesOptions().map((o) => o.name),
+    ['Amsel', 'Zaunkönig'],
+  );
 });

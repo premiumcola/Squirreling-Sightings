@@ -11,12 +11,10 @@ import { CAT_COLORS } from '../timeline.js';
 import { loadMedia } from './media-loader.js';
 import { renderMediaGrid, renderMediaPagination } from './_paging.js';
 import { openAllMediaDrilldown } from './_drilldown.js';
-import {
-  loadBirdSpeciesOptions,
-  selectSpecies,
-  speciesPillsHtml,
-  clearSpeciesIfBirdInactive,
-} from './_species-filter.js';
+import { selectSpecies, speciesPillsHtml, clearSpeciesIfBirdInactive } from './_species-filter.js';
+// Using a filter up HERE releases the Wetterdaten time chooser at the
+// foot of the section — see weather/_time-binding.js for the rule.
+import { noteFilterUse } from '../weather/_time-binding.js';
 
 // ── Filter pill bar ─────────────────────────────────────────────────────────
 // Sort happens at render time (by count desc); this list seeds the
@@ -115,6 +113,7 @@ function _wireClassPillClicks(bar, mode) {
         openAllMediaDrilldown(val);
         return;
       }
+      noteFilterUse('label');
       if (state.mediaLabels.has(val)) state.mediaLabels.delete(val);
       else state.mediaLabels.add(val);
       // Deselecting "bird" (or any other pill, harmlessly) drops a
@@ -135,12 +134,11 @@ function _wireClassPillClicks(bar, mode) {
 }
 
 // Species sub-row lives in its own bar, below the class-level one (see
-// partials/mediathek.html#mediaSpeciesFilterBar) — fetched lazily, once,
-// the first time "bird" is active and no fetch has been made yet.
+// partials/mediathek.html#mediaSpeciesFilterBar). No fetch of its own any
+// more: it is derived from the same `state.mediaStats` this file's own
+// `_aggregateMediaCounts` reads for the class pills, so both rows are one
+// number from one source — see _species-filter.js's header.
 function _syncSpeciesRow() {
-  if (state.mediaLabels.has('bird') && state.mediaSpeciesOptions === null) {
-    loadBirdSpeciesOptions().then(renderSpeciesFilterPills);
-  }
   renderSpeciesFilterPills();
 }
 
@@ -187,6 +185,7 @@ export function renderSpeciesFilterPills() {
   bar.querySelectorAll('.media-pill').forEach((p) => {
     const name = p.dataset.species;
     p.addEventListener('click', () => {
+      noteFilterUse('species');
       selectSpecies(name);
       state.mediaPage = 0;
       renderSpeciesFilterPills();

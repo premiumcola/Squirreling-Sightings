@@ -13,57 +13,50 @@
 // document/fetch, import, assert. filters.js does the DOM wiring
 // (querySelector + addEventListener) that actually needs a real page.
 //
-// Data source: GET /api/bird-dossiers, filtered to sighting_count > 0.
-// That endpoint already exists for the Sichtungen dossier panel and
-// already hands out the exact value (`common_name_de`) this codebase
-// uses as a `labels=` filter value elsewhere (see
-// sichtungen/_dossier-panel.js's own clips-gallery fetch:
-// `/api/library?labels=<name>&kinds=motion`) — so reusing it needs no
-// new backend route and no new value shape to keep in sync.
+// DATA SOURCE: `state.mediaStats` — the per-camera stats the Mediathek
+// has already fetched for the class-level pills above this row (see
+// chrome/storage-stats.js and filters.js::_aggregateMediaCounts). Each
+// camera carries a `species_counts` map, built by
+// `media_index/_visible.py::camera_stats` from the very list of events
+// the grid renders.
 //
-// It is NOT scoped to the currently selected camera: bird-dossiers is
-// installation-wide. The alternative, storage_stats.top_bird_species
-// (via GET /api/camera/<id>/stats_range), IS camera-scoped but only
-// per single camera — the Mediathek "Alle Kameras" view (the default
-// drilldown, see _drilldown.js::openAllMediaDrilldown) has no camera id
-// to call it with, and merging N per-camera Counters into one ranked
-// list is a fan-out this codebase doesn't do anywhere yet. Given this
-// is a small self-hosted install (a handful of cameras, a handful of
-// species actually seen), the installation-wide list is close enough,
-// and sighting_count > 0 already excludes every never-seen species the
-// daily dossier prebuild sweep pre-creates as a locked placeholder (see
-// bird_dossiers.py::sweep_prebuild) — this pill row only ever shows
-// species the operator has actually had on camera.
+// IT USED TO READ GET /api/bird-dossiers' `sighting_count`, and that is
+// the whole of „Ich wähle Filter Kohlmeise mit (1) und erhalte 31 Seiten
+// andere Vögel". The dossier counts LIFETIME sightings and is never
+// pruned; this row sits on a control that filters the ARCHIVE, which
+// retention does prune. The two numbers answer different questions and
+// drift apart in both directions — a species whose clips have aged out
+// still counts in the dossier, and a sighting the dossier missed is
+// still a clip the filter finds. A count printed beside a filter has to
+// be that filter's own answer, so it is now counted from the same
+// events, matched on the same field (`bird_species`), as the fetch the
+// pill triggers.
+//
+// It also inherits the camera scoping for free: the same
+// `state.mediaCamera` rule the class pills use, where the dossier list
+// was installation-wide however narrow the view.
 import { state } from '../core/state.js';
 import { esc } from '../core/dom.js';
 import { objIconSvg } from '../core/icons.js';
-import { j } from '../core/api.js';
 
-let _optionsFetch = null;
-
-/** Species actually sighted, ranked most-sighted first. Resets
- * state.mediaSpeciesOptions to `[]` on any fetch failure — same
- * fail-quiet contract loadBirdDossiers() in _dossier-panel.js uses, so
- * one flaky request degrades to "no species row" rather than an error
- * state atop the otherwise-working class-level filter bar. Concurrent
- * callers (renderMediaFilterPills firing on every re-render while the
- * first request is still in flight) share the one in-flight promise
- * instead of each starting their own fetch. */
-export function loadBirdSpeciesOptions() {
-  if (_optionsFetch) return _optionsFetch;
-  // j(), not apiGet() — the same fetch helper _dossier-panel.js's own
-  // loadBirdDossiers() already uses for this exact endpoint.
-  _optionsFetch = j('/api/bird-dossiers')
-    .then((r) => (r && r.dossiers) || [])
-    .catch(() => [])
-    .then((dossiers) => {
-      state.mediaSpeciesOptions = dossiers
-        .filter((d) => (d.sighting_count || 0) > 0 && d.common_name_de)
-        .sort((a, b) => (b.sighting_count || 0) - (a.sighting_count || 0))
-        .map((d) => ({ name: d.common_name_de, count: d.sighting_count || 0 }));
-      return state.mediaSpeciesOptions;
-    });
-  return _optionsFetch;
+/** Species with at least one clip in the currently-scoped view, ranked
+ * most-clips first — derived, not fetched. `[]` while the stats have not
+ * loaded, which renders no species row at all (same quiet degradation
+ * the previous fetch-failure path had). */
+export function birdSpeciesOptions() {
+  const counts = {};
+  for (const cam of state.mediaStats || []) {
+    // Same scoping rule as filters.js::_aggregateMediaCounts — one
+    // camera when one is selected, all of them otherwise.
+    if (state.mediaCamera && (cam.camera_id || cam.id || cam.name) !== state.mediaCamera) continue;
+    for (const [name, n] of Object.entries(cam.species_counts || {})) {
+      if (name) counts[name] = (counts[name] || 0) + (n || 0);
+    }
+  }
+  return Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'))
+    .map(([name, count]) => ({ name, count }));
 }
 
 // Toggle: selecting the already-selected species clears it — the same
@@ -113,8 +106,8 @@ export function effectiveMediaLabels() {
 // class-level pills.
 export function speciesPillsHtml() {
   if (!state.mediaLabels.has('bird')) return '';
-  const options = state.mediaSpeciesOptions;
-  if (!options || !options.length) return '';
+  const options = birdSpeciesOptions();
+  if (!options.length) return '';
   return options
     .map(({ name, count }) => {
       const active = state.mediaSpecies === name;

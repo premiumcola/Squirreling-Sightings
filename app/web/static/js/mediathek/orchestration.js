@@ -47,8 +47,18 @@ export {
   _MEDIA_TITLE_SVG,
 } from './_drilldown.js';
 
-import { deleteMediaCard, deleteTLCard, confirmMediaCard } from './_actions.js';
-export { deleteMediaCard, deleteTLCard, confirmMediaCard } from './_actions.js';
+import {
+  deleteMediaCard,
+  deleteTLCard,
+  confirmMediaCard,
+  openSpeciesPickerForCard,
+} from './_actions.js';
+export {
+  deleteMediaCard,
+  deleteTLCard,
+  confirmMediaCard,
+  openSpeciesPickerForCard,
+} from './_actions.js';
 
 export {
   mediaCardHTML,
@@ -91,3 +101,4 @@ window._goToPage = _goToPage;
 window.deleteMediaCard = deleteMediaCard;
 window.deleteTLCard = deleteTLCard;
 window.confirmMediaCard = confirmMediaCard;
+window.openSpeciesPickerForCard = openSpeciesPickerForCard;

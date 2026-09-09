@@ -20,9 +20,16 @@ import { colors, OBJ_LABEL, OBJ_SVG, TL_LABELS, objBubble } from '../../core/ico
 import { applyLabelPatch } from '../../core/label-patch.js';
 import { lbState } from '../../mediathek/state.js';
 import { refreshTimelineAndStats } from '../../chrome/storage-stats.js';
+import { openSpeciesPicker } from './species-picker.js';
 
 // One bubble's markup — active state controls fill/opacity/border; the
-// bird bubble additionally grows a species caption underneath while active.
+// bird bubble additionally grows a species caption underneath while
+// active. The caption is itself a tap target that opens the species
+// picker (see _renderLbLabels) — the visible pill (inner span) keeps
+// its original size, an invisible padding ring on the outer span (data-
+// act="species-edit") pads that up toward a 44px touch target without
+// growing the caption's own footprint; `top` is pulled up by exactly
+// that padding so the visible pill's position doesn't shift.
 function _labelBubbleHtml(l, active, species, birdColor) {
   const isActive = active.has(l);
   const rawSvg = OBJ_SVG[l] || OBJ_SVG.alarm;
@@ -31,7 +38,9 @@ function _labelBubbleHtml(l, active, species, birdColor) {
   const c = colors[l] || colors.unknown;
   const speciesSub =
     l === 'bird' && species && isActive
-      ? `<span style="position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:${birdColor};font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap;border:1px solid ${birdColor}55;pointer-events:none">${esc(species)}</span>`
+      ? `<span data-act="species-edit" title="Art korrigieren" style="position:absolute;top:calc(100% - 9px);left:50%;transform:translateX(-50%);padding:13px;cursor:pointer;pointer-events:auto">` +
+        `<span style="display:block;background:rgba(0,0,0,0.72);color:${birdColor};font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap;border:1px solid ${birdColor}55;pointer-events:none">${esc(species)}</span>` +
+        `</span>`
       : '';
   return `<span data-label="${l}" title="${title}" style="position:relative;width:54px;height:54px;border-radius:50%;background:${isActive ? c + '30' : 'rgba(0,0,0,0.60)'};filter:drop-shadow(0 2px 8px rgba(0,0,0,0.8));display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;pointer-events:auto;transition:background .15s,opacity .15s,border-color .15s;opacity:${isActive ? '1' : '0.6'};border:2px solid ${isActive ? c + 'cc' : 'rgba(255,255,255,0.08)'}">${svg}${speciesSub}</span>`;
 }
@@ -67,10 +76,16 @@ function _syncGridBubbles(eventId, labels) {
  * its own panel and then calls this, so one save updates one set of
  * caches whichever editor made it.
  *
+ * `item` defaults to the open player's `lbState.item` — every existing
+ * caller (the bubble row below, the correction sheet in recorded-mode.js)
+ * is inside the player and means that one. The Mediathek tile's species
+ * picker (mediathek/_actions.js) is the first caller with NO open player
+ * to default to, so it passes its own tile item explicitly instead.
+ *
  * @param {object} res  the endpoint's `{ok, labels, top_label, …}` reply
+ * @param {object} [item]  the cached event object to patch
  */
-export function applyLabelSaveResult(res) {
-  const item = lbState.item;
+export function applyLabelSaveResult(res, item = lbState.item) {
   if (!item || !res) return;
   applyLabelPatch(item, res);
   const idx = (state.media || []).findIndex((x) => x.event_id === item.event_id);
@@ -120,5 +135,19 @@ export function _renderLbLabels(host) {
   el.innerHTML = `<div class="mv-labels-row">${_buildLabelBubblesHtml(lbState.item)}</div>`;
   el.querySelectorAll('[data-label]').forEach((btn) => {
     btn.onclick = () => _toggleLabel(btn.dataset.label, host);
+  });
+  // The species caption sits INSIDE the bird bubble's own element, so a
+  // tap on it also bubbles to the [data-label] handler above (the
+  // Falscherkennung untoggle) unless stopped here first.
+  el.querySelectorAll('[data-act="species-edit"]').forEach((node) => {
+    node.onclick = (ev) => {
+      ev.stopPropagation();
+      openSpeciesPicker(lbState.item, {
+        onSaved: (res) => {
+          applyLabelSaveResult(res);
+          _renderLbLabels(host);
+        },
+      });
+    };
   });
 }

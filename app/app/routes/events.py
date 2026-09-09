@@ -25,16 +25,25 @@ from flask import Blueprint, jsonify, request
 from .. import app_state, trash as _trash
 from ..detection_feedback import record_verdict
 from ..event_relabel import apply_label_change
+from ..species_video_count import record_confirmed_video
 
 bp = Blueprint("events", __name__)
 
 
-def _ledger_verdict(cam_id, event_id, *, correct, source, corrected_label=None):
+def _ledger_verdict(cam_id, event_id, *, correct, source, corrected_label=None, species=None):
     """Best-effort verdict write. A ledger failure must never turn a
     successful user action into a 500 — the module's own contract is
     that every write is swallowed and logged, and this keeps the same
     promise for the exception the caller could still raise (a missing
-    storage root, a bad argument)."""
+    storage root, a bad argument).
+
+    ``species`` forwards straight to ``record_verdict`` — orthogonal to
+    ``corrected_label``, see that function's own docstring. Optional so
+    every existing call site (none of which judge a species) is
+    unaffected; the web species-correction route below is the first
+    caller that passes one, mirroring the Telegram path
+    (`telegram_bot._inbound_event._book_verdict`), which already does.
+    """
     with contextlib.suppress(Exception):
         record_verdict(
             app_state.storage_root,
@@ -44,6 +53,7 @@ def _ledger_verdict(cam_id, event_id, *, correct, source, corrected_label=None):
             corrected_label=corrected_label,
             source=source,
             cam_id=cam_id,
+            species=species,
         )
 
 
@@ -205,6 +215,52 @@ def api_event_labels(cam_id, event_id):
             "detections": event.get("detections"),
         }
     )
+
+
+@bp.post('/api/camera/<cam_id>/events/<event_id>/species')
+def api_event_species(cam_id, event_id):
+    """Event-level bird species correction — the web analogue of the
+    Telegram species picker (``telegram_bot._outbound._question.
+    species_correction_markup`` builds the choices this endpoint answers
+    a tap on; ``telegram_bot._inbound_event._cb_species_pick`` /
+    ``_cb_species_unsure`` are the mutation this mirrors exactly).
+
+    ONE ``bird_species`` PER EVENT — deliberately, not per detection row.
+    See ``vplayer/panels/_objects-list.js``'s header for the three
+    incompatible numbering schemes a per-row control would have to
+    reconcile, and the fact that the verdict ledger is keyed by
+    ``event_id`` alone.
+
+    A picked species (``species`` a non-empty string) sets
+    ``bird_species``, counts one more confirmed video for it
+    (``species_video_count.record_confirmed_video`` — the same counter
+    a Telegram "Ja"/species-pick feeds, so a class recorded from either
+    surface is not double-counted or under-counted from the other), and
+    books a ``correct=True`` verdict naming the species.
+
+    ``species`` null/empty is "unsicher, welche genau" — mirrors
+    ``_cb_species_unsure`` exactly: still confirms the class (a
+    ``correct=True`` verdict, just with no species), leaves
+    ``bird_species`` at whatever best-effort guess is already on the
+    event (⁠``_cb_species_unsure`` never calls the Telegram path's
+    ``_correct_bird_species`` either), and counts no video — a species
+    the operator could not name must not inflate that species' cap.
+    """
+    store = app_state.store
+    event = store.get_event(cam_id, event_id)
+    if not event:
+        return jsonify({"ok": False, "error": "Event nicht gefunden"}), 404
+    payload = request.get_json(force=True, silent=True) or {}
+    raw = payload.get("species")
+    species = raw.strip() if isinstance(raw, str) else None
+    species = species or None
+    if species:
+        event["bird_species"] = species
+        with contextlib.suppress(Exception):
+            record_confirmed_video(app_state.storage_root, species)
+    store.update_event(cam_id, event_id, event)
+    _ledger_verdict(cam_id, event_id, correct=True, source="web", species=species)
+    return jsonify({"ok": True, "bird_species": event.get("bird_species")})
 
 
 @bp.post('/api/camera/<cam_id>/review/<event_id>')

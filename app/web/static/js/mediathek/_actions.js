@@ -14,6 +14,8 @@ import { j } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 import { refreshTimelineAndStats } from '../chrome/storage-stats.js';
 import { renderMediaGrid, renderMediaPagination, _dropEventAndReslice } from './_paging.js';
+import { openSpeciesPicker } from '../mediaview/panels/species-picker.js';
+import { applyLabelSaveResult } from '../mediaview/panels/labels.js';
 
 export async function deleteMediaCard(btn) {
   const card = btn.closest('.media-card');
@@ -71,6 +73,33 @@ export async function deleteTLCard(camId, filename, eventId) {
   } catch (e) {
     showToast('Löschen fehlgeschlagen: ' + e.message, 'error');
   }
+}
+
+// Open the species picker straight off a tile's badge — no player open.
+// Finds the SAME cached object the grid rendered from (state.media /
+// state._allMedia — the two arrays applyLabelSaveResult already knows
+// how to patch) so patching it in place is visible on the very next
+// renderMediaGrid() call without a re-fetch.
+export function openSpeciesPickerForCard(btn) {
+  const card = btn.closest('.media-card');
+  const eventId = card?.dataset.eventId;
+  const camId = card?.dataset.cameraId;
+  if (!eventId || !camId) return;
+  const item =
+    (state.media || []).find((x) => x.event_id === eventId) ||
+    (state._allMedia || []).find((x) => x.event_id === eventId);
+  if (!item) return;
+  openSpeciesPicker(item, {
+    onSaved: (res) => {
+      // `item` may not be the SAME object reference as state.media's
+      // entry when only state._allMedia matched above — applyLabelSaveResult
+      // re-resolves both arrays by event_id, so passing `item` explicitly
+      // (rather than relying on its lbState.item default) still reaches
+      // whichever of the two, or both, hold this event.
+      applyLabelSaveResult(res, item);
+      renderMediaGrid();
+    },
+  });
 }
 
 export async function confirmMediaCard(camId, eventId, btn) {

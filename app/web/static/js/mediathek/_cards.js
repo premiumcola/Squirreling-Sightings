@@ -21,6 +21,14 @@ import { primaryLabel } from '../core/primary-label.js';
 import { _LB_TRASH_ICON_ONLY } from '../mediaview/panels/lb-helpers.js';
 import { needsProcessingTile, processingTileHTML } from './_processing.js';
 
+// Small pencil trigger for the species-edit control on a bird tile's
+// badge (see `_motionCtx` below) — a flat outline icon, same family as
+// the confirm/delete glyphs on this card, sized for an 11px badge pill.
+const _SPECIES_EDIT_SVG =
+  '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
 // ── Per-camera tints + helpers ──────────────────────────────────────────────
 export const CAM_COLORS = [
   '#3b82f6',
@@ -166,6 +174,17 @@ function _motionCtx(item) {
   const speciesChip = moreSpecies
     ? `<span class="mmc-species-more">${esc(moreSpecies)}</span>`
     : '';
+  // Species correction straight off the tile, no player open — only a
+  // bird event has a species to correct. `.mmc-species-edit` opts back
+  // into pointer-events despite `.mmc-badges`' own pointer-events:none
+  // (see 39-species-picker.css); stopPropagation keeps the tap from
+  // also opening the player via the wrap's own onclick.
+  const speciesEditBtn =
+    badgeLabel === 'bird'
+      ? `<button type="button" class="mmc-species-edit" title="Art korrigieren" ` +
+        `aria-label="Art korrigieren" onclick="event.stopPropagation();` +
+        `window.openSpeciesPickerForCard(this)">${_SPECIES_EDIT_SVG}</button>`
+      : '';
   return {
     accent,
     subBadge: `${_SUB_BADGE_BASE};color:${accent}`,
@@ -175,7 +194,7 @@ function _motionCtx(item) {
     vidDur: _fmtDur(item.duration_s),
     vidSize: _fmtByt(item.file_size_bytes),
     // Inline overrides only border-color and text color; .mmc-tl-badge supplies dark bg + blur + shadow
-    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}${esc(badgeText)}</span>${speciesChip}</div>`,
+    motionBadge: `<div class="mmc-badges"><span class="mmc-tl-badge" style="border-color:${hexToRgba(badgeColor, 0.7)};color:${badgeColor}">${objIconSvg(badgeLabel, 12)}${esc(badgeText)}${speciesEditBtn}</span>${speciesChip}</div>`,
   };
 }
 

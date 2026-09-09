@@ -54,6 +54,7 @@ round, byte-identity wins.
 | 27 | `27-coral-test-modes.css` | — | Coral test panel mode selector + per-detection model badges |
 | 28 | `28-quests.css` | — | Quest pinboard (F09) — saisonale Quests in Sichtungen |
 | 29 | `29-birds.css` | — | Vogel-Dossier-Galerie + Modal mit Audio-Player (F08) |
+| 39 | `39-species-picker.css` | — | Event-level species-correction sheet (`mediaview/panels/species-picker.js`) — player Labels tab + Mediathek tile, both entry points |
 
 Total: 3486 lines from the pre-split `app.css`, plus per-file additions.
 

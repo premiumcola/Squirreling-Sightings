@@ -1,0 +1,130 @@
+/* ── Species-correction sheet (mediaview/panels/species-picker.js) ──────────
+   Event-level bird-species correction, reachable from the player's own
+   Labels tab AND straight off a Mediathek tile with no player open —
+   see that module's header. Mounted straight onto document.body as its
+   own fixed layer, exactly like 35-mediaview-shortcut-help.css's panel:
+   sits ABOVE #lightboxModal (var(--z-modal) = 1100) when opened from
+   inside the player, and above nothing in particular (there is no other
+   fixed layer at that z-index) when opened from a bare Mediathek tile —
+   the same rule works for both entry points without a mode flag.
+
+   Bottom sheet on purpose, not a centred dialog: it is the mobile-first
+   surface (see CLAUDE.md's iOS section) and a source of touch targets,
+   not prose — a sheet sliding up from the thumb is the natural place to
+   tap one of up to seven rows (5 candidates + unsicher + Abbrechen). */
+
+.sp-pick {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-action, 1200);
+}
+
+.sp-pick-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.62);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.sp-pick-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* dvh, not vh — iOS Safari's collapsing address bar must not clip the
+     bottom row behind the home-indicator area. */
+  max-height: min(72dvh, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #1c1c22;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  padding: 16px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+}
+
+.sp-pick-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.sp-pick-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Flat rows, depth from background contrast — no hairline borders
+   (CLAUDE.md design principles). 44px minimum touch target. */
+.sp-pick-row {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .sp-pick-row:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+.sp-pick-row:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+.sp-pick-row--unsure {
+  color: var(--muted, #94a3b8);
+}
+
+.sp-pick-cancel {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted, #94a3b8);
+  font-size: 14px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .sp-pick-cancel:hover {
+    color: #e2e8f0;
+  }
+}
+
+/* The small pencil trigger on a Mediathek tile's bird badge
+   (mediathek/_cards.js) — sibling of .mmc-badges' inert stack, but this
+   one child opts back into pointer-events so a tap reaches it despite
+   the stack's own pointer-events:none. 20px visual / generous inline
+   padding for the tap slop; matches the 30px .mmc-btn scale used by the
+   confirm/delete pair without competing with them for the same corner. */
+.mmc-species-edit {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 2px 0 2px 4px;
+  margin: -2px 0 -2px -2px;
+  color: inherit;
+  opacity: 0.85;
+  cursor: pointer;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .mmc-species-edit:hover {
+    opacity: 1;
+  }
+}

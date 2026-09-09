@@ -146,6 +146,11 @@ LOAD_ORDER = [
     # rest of the page is from an older build, because that is exactly
     # when it appears.
     "38-version-bar.css",
+    # The species-correction sheet (mediaview/panels/species-picker.js) —
+    # mounted straight onto document.body like 35's shortcut-help panel,
+    # so it only needs to sit near the end of the cascade, not inside
+    # the mediaview/mediathek slabs it is reachable from.
+    "39-species-picker.css",
 ]
 
 

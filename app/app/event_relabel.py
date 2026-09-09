@@ -44,14 +44,61 @@ def sync_top_label(event: dict, labels: list) -> str:
     return labels[0]
 
 
+#: Detection lists this module also walks, keyed by where they live on
+#: the event. `whole_clip.detections` is the one the player's object
+#: list actually prefers (`vplayer/_data/_map.js::objectRowsFor` reads
+#: it before the tracks.json sidecar or the trigger frame) — without
+#: this, "Person raus editieren" left every per-object heading still
+#: reading "Person" forever, on this load AND every one after, because
+#: nothing had ever corrected the ONE place that heading is drawn from.
+_DETECTION_LIST_PATHS: tuple[tuple[str, ...], ...] = (
+    ("whole_clip", "detections"),
+    ("detections",),
+)
+
+
+def _neutralize_disproven_detections(event: dict, removed: set) -> None:
+    """A detection entry whose label just left `labels` is disproven —
+    same verdict as the identity fields above, applied to the per-
+    object rows instead of the event-level badge.
+
+    Relabelled to "motion", not dropped: the entry's timing/bbox/track
+    still describes something real that moved in frame, only the CLASS
+    guess was wrong — exactly the residual bucket `sync_top_label`
+    already falls back to for the event itself. Species/identity on the
+    same entry go stale together with the label that pinned them, for
+    the same reason `IDENTITY_FIELDS` clears them at the event level.
+    """
+    if not removed:
+        return
+    for path in _DETECTION_LIST_PATHS:
+        node = event
+        for key in path[:-1]:
+            node = node.get(key) if isinstance(node, dict) else None
+            if not isinstance(node, dict):
+                node = None
+                break
+        dets = node.get(path[-1]) if isinstance(node, dict) else None
+        if not isinstance(dets, list):
+            continue
+        for d in dets:
+            if isinstance(d, dict) and d.get("label") in removed:
+                d["label"] = "motion"
+                d["species"] = None
+                d["species_latin"] = None
+                d["species_score"] = None
+                d["identity"] = None
+
+
 def apply_label_change(event: dict, labels: list) -> dict:
     """Mutate `event` in place for a new `labels` list. Returns `event`.
 
-    Keeps `top_label` in sync and clears any identity field
-    (`cat_name`, `bird_species`) whose label just left the list — a
-    disproven "cat" must not leave a cat identity name standing, or a
-    label filter still matches the event through `extras` even after
-    the badge stops showing it.
+    Keeps `top_label` in sync, clears any identity field (`cat_name`,
+    `bird_species`) whose label just left the list, and neutralizes any
+    per-detection row that carried it — a disproven "cat" must not
+    leave a cat identity name standing (the badge/filters would still
+    match it through `extras`), and a disproven "person" detection must
+    not keep telling the object-list panel it is still a person.
     """
     removed = set(event.get("labels") or []) - set(labels)
     event["top_label"] = sync_top_label(event, labels)
@@ -59,6 +106,7 @@ def apply_label_change(event: dict, labels: list) -> dict:
     for label, field in IDENTITY_FIELDS.items():
         if label in removed and event.get(field):
             event[field] = None
+    _neutralize_disproven_detections(event, removed)
     return event
 
 

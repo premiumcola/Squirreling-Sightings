@@ -195,6 +195,14 @@ def api_event_labels(cam_id, event_id):
             # stale identity chip without a full reload.
             "cat_name": event.get("cat_name"),
             "bird_species": event.get("bird_species"),
+            # apply_label_change() also neutralized any per-detection row
+            # that carried a disproven label — without handing the result
+            # back, the player's object-list panel keeps reading its OWN
+            # stale copy of whole_clip/detections until the next full
+            # reload, and the heading a "Person raus editieren" tap was
+            # just supposed to fix would still say "Person".
+            "whole_clip": event.get("whole_clip"),
+            "detections": event.get("detections"),
         }
     )
 

@@ -1,8 +1,13 @@
 // ─── core/_tests/label-patch.test.js ───────────────────────────────────────
-// The four fields a label save hands back, and the three ways a naive
-// copy of them goes wrong: blanking a field the reply never mentioned,
+// The fields a label save hands back, and the three ways a naive copy
+// of them goes wrong: blanking a field the reply never mentioned,
 // dropping a null that MEANS something, and sharing one array between
 // the caches so a later edit to one rewrites the rest.
+//
+// whole_clip/detections joined the reply later, for a different bug:
+// the object-list panel's per-row heading reads THOSE, never
+// labels/top_label, so a save that patched only the first four fields
+// left every heading stuck on its pre-edit class forever.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -74,4 +79,28 @@ test('a missing target or reply is a no-op, not a throw', () => {
   const item = { labels: ['cat'] };
   assert.equal(applyLabelPatch(item, null), item);
   assert.deepEqual(applyLabelPatch(item, 'nope').labels, ['cat']);
+});
+
+test('whole_clip lands so the object-list heading stops reading a stale label', () => {
+  const item = {
+    whole_clip: { detections: [{ label: 'person', score: 0.8 }], frames: 5 },
+  };
+  applyLabelPatch(item, {
+    labels: ['bird'],
+    whole_clip: { detections: [{ label: 'motion', score: 0.8 }], frames: 5 },
+  });
+  assert.equal(item.whole_clip.detections[0].label, 'motion');
+});
+
+test('detections (the trigger-frame fallback) lands the same way', () => {
+  const item = { detections: [{ label: 'person' }] };
+  applyLabelPatch(item, { labels: [], detections: [{ label: 'motion' }] });
+  assert.equal(item.detections[0].label, 'motion');
+});
+
+test('whole_clip/detections absent from the reply leave the cached copy alone', () => {
+  const item = { whole_clip: { detections: [{ label: 'bird' }] }, detections: [{ label: 'cat' }] };
+  applyLabelPatch(item, { labels: ['bird'] });
+  assert.equal(item.whole_clip.detections[0].label, 'bird');
+  assert.equal(item.detections[0].label, 'cat');
 });

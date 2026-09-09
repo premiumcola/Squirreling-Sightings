@@ -51,5 +51,12 @@ export function applyLabelPatch(target, res) {
   if ('top_label' in res) target.top_label = res.top_label;
   if ('cat_name' in res) target.cat_name = res.cat_name;
   if ('bird_species' in res) target.bird_species = res.bird_species;
+  // `event_relabel.apply_label_change` also neutralizes any per-object
+  // detection row that carried a disproven label (see its own docstring)
+  // — without patching these two in too, `vplayer/_data/_map.js::
+  // objectRowsFor` keeps reading THIS cached copy's stale label and the
+  // object-list heading never catches up until a full reload.
+  if ('whole_clip' in res) target.whole_clip = res.whole_clip;
+  if ('detections' in res) target.detections = res.detections;
   return target;
 }

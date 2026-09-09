@@ -70,6 +70,93 @@ def test_top_label_falls_back_to_first_remaining_label():
     assert ev["top_label"] == "squirrel"
 
 
+# ── per-detection neutralization ────────────────────────────────────────
+# "auch wenn ich person raus editiere heisst die spur immernoch person??"
+# — the object-list heading is drawn from whole_clip.detections[i].label
+# (vplayer/_data/_map.js::objectRowsFor), which apply_label_change never
+# touched before. It only ever cleared the EVENT-level cat_name/
+# bird_species, never the per-object rows the panel actually renders.
+
+
+def test_a_disproven_label_is_neutralized_in_whole_clip_detections():
+    ev = _event(
+        labels=["person", "bird"],
+        top_label="person",
+        whole_clip={
+            "detections": [
+                {"label": "person", "score": 0.8, "identity": None},
+                {"label": "bird", "score": 0.6, "species": "Elster"},
+            ],
+            "frames": 10,
+        },
+    )
+    apply_label_change(ev, ["bird"])
+    dets = ev["whole_clip"]["detections"]
+    assert dets[0]["label"] == "motion"
+    assert dets[1]["label"] == "bird"  # untouched — its label survived
+
+
+def test_neutralizing_a_detection_also_drops_its_species_and_identity():
+    """A disproven "person" detection that happened to carry a stale cat
+    identity or species guess must not keep either — same reasoning as
+    the event-level IDENTITY_FIELDS clear, applied per row."""
+    ev = _event(
+        labels=["person", "bird"],
+        top_label="person",
+        whole_clip={
+            "detections": [
+                {
+                    "label": "person",
+                    "score": 0.6,
+                    "identity": "Whiskers",
+                    "species": "Elster",
+                    "species_latin": "Pica pica",
+                    "species_score": 0.5,
+                }
+            ]
+        },
+    )
+    apply_label_change(ev, ["bird"])
+    d = ev["whole_clip"]["detections"][0]
+    assert d["label"] == "motion"
+    assert d["identity"] is None
+    assert d["species"] is None
+    assert d["species_latin"] is None
+    assert d["species_score"] is None
+
+
+def test_the_trigger_frame_detections_are_neutralized_too():
+    """The third and last fallback objectRowsFor reads when neither
+    whole_clip nor a tracks.json sidecar has anything."""
+    ev = _event(labels=["person"], top_label="person", detections=[{"label": "person"}])
+    apply_label_change(ev, [])
+    assert ev["detections"][0]["label"] == "motion"
+
+
+def test_a_detection_whose_label_survives_is_left_alone():
+    ev = _event(
+        labels=["person", "bird"],
+        top_label="person",
+        whole_clip={"detections": [{"label": "bird", "score": 0.7, "species": "Kohlmeise"}]},
+    )
+    apply_label_change(ev, ["bird"])
+    d = ev["whole_clip"]["detections"][0]
+    assert d["label"] == "bird"
+    assert d["species"] == "Kohlmeise"
+
+
+def test_no_detections_at_all_is_not_an_error():
+    ev = _event()
+    apply_label_change(ev, [])  # must not raise
+    assert "whole_clip" not in ev or ev.get("whole_clip") is None
+
+
+def test_a_malformed_whole_clip_is_not_an_error():
+    ev = _event(labels=["person"], top_label="person", whole_clip={"detections": "kaputt"})
+    apply_label_change(ev, [])  # must not raise
+    assert ev["whole_clip"]["detections"] == "kaputt"
+
+
 # ── labels_after_correction ─────────────────────────────────────────────
 
 

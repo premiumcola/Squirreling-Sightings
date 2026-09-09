@@ -22,9 +22,14 @@
 // that (the player, both grid arrays, the tile's bubble row, the
 // timeline/stats) and both entry points reuse it rather than each
 // growing a parallel copy — see labels.js and mediathek/_actions.js.
+//
+// ROW ICONS come from core/species-icon.js (real SVG silhouette, or
+// the same 🐦 fallback sichtungen/_achievements.js uses) — see
+// _sheetHtml below.
 import { esc } from '../../core/dom.js';
 import { apiPost } from '../../core/api.js';
 import { showToast } from '../../core/toast.js';
+import { speciesIconMarkup } from '../../core/species-icon.js';
 
 /**
  * PURE: the picker's rows for one event — mirrors
@@ -87,7 +92,9 @@ function _sheetHtml(rows) {
   const pickRows = rows
     .map(
       (name) =>
-        `<button type="button" class="sp-pick-row" data-act="pick" data-species="${esc(name)}">${esc(name)}</button>`,
+        `<button type="button" class="sp-pick-row" data-act="pick" data-species="${esc(name)}">` +
+        `<span class="sp-pick-row-icon">${speciesIconMarkup(name)}</span>` +
+        `<span class="sp-pick-row-label">${esc(name)}</span></button>`,
     )
     .join('');
   return (

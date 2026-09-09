@@ -27,39 +27,57 @@ globalThis.fetch = async (url, init) => {
   return fetchResponse;
 };
 
-const { speciesPickerRows, submitSpeciesCorrection } = await import('../species-picker.js');
+const { allBirdPickerNames, submitSpeciesCorrection } = await import('../species-picker.js');
+const { ACH_DEFS } = await import('../../../sichtungen/_ach-defs.js');
 const { applyLabelPatch } = await import('../../../core/label-patch.js');
 
-// ── speciesPickerRows — mirrors species_correction_markup ──────────────
+const CATALOGUE_SIZE = ACH_DEFS.filter((d) => d.cat === 'birds').length;
 
-test('candidates are deduped, the current guess is dropped, order kept', () => {
-  const candidates = [
-    { name: 'Elster', latin: 'Pica pica', score: 0.59 },
-    { name: 'Kohlmeise', latin: 'Parus major', score: 0.31 },
-    { name: 'Elster', latin: 'Pica pica', score: 0.59 }, // duplicate
-    { name: null, latin: 'sp.', score: 0.1 }, // untranslated, dropped
-  ];
-  assert.deepEqual(speciesPickerRows(candidates, 'Elster'), ['Kohlmeise']);
+// ── allBirdPickerNames — candidates first, then the whole catalogue ─────
+// The picker used to render event.species_candidates alone, capped at 5.
+// That list is frequently empty, which left the sheet with nothing to
+// tap but "unsicher" — the operator's report: "Spezies wechseln gibt
+// keine sinnvollen Auswahlmöglichkeiten".
+
+test('the achievement-board bird catalogue is always offered', () => {
+  const names = allBirdPickerNames([], null);
+  assert.equal(names.length, CATALOGUE_SIZE);
+  assert.ok(names.includes('Kohlmeise'));
+  assert.ok(names.includes('Elster'));
 });
 
-test('the current-guess exclusion is case-insensitive', () => {
-  const candidates = [{ name: 'elster' }, { name: 'Kohlmeise' }];
-  assert.deepEqual(speciesPickerRows(candidates, 'ELSTER'), ['Kohlmeise']);
+test('mammal achievements never leak into a bird-species picker', () => {
+  const names = allBirdPickerNames([], null);
+  assert.ok(!names.some((n) => n.startsWith('Eichhörnchen')));
+  assert.ok(!names.includes('Igel'));
 });
 
-test('caps at 5 rows even with more candidates', () => {
-  const candidates = Array.from({ length: 9 }, (_, i) => ({ name: `Art${i}` }));
-  assert.equal(speciesPickerRows(candidates, null).length, 5);
+test("this event's own candidates come first, in order", () => {
+  const candidates = [{ name: 'Stieglitz' }, { name: 'Buchfink' }];
+  const names = allBirdPickerNames(candidates, null);
+  assert.deepEqual(names.slice(0, 2), ['Stieglitz', 'Buchfink']);
+  assert.equal(names.length, CATALOGUE_SIZE, 'a catalogue species must not be listed twice');
 });
 
-test('no candidates and no current species is an empty row list', () => {
-  assert.deepEqual(speciesPickerRows([], null), []);
-  assert.deepEqual(speciesPickerRows(undefined, undefined), []);
+test('a candidate outside the catalogue is still offered', () => {
+  const names = allBirdPickerNames([{ name: 'Stockente' }], null);
+  assert.equal(names[0], 'Stockente');
+  assert.equal(names.length, CATALOGUE_SIZE + 1);
 });
 
-test('a blank/whitespace name is skipped like an untranslated one', () => {
-  const candidates = [{ name: '   ' }, { name: 'Kohlmeise' }];
-  assert.deepEqual(speciesPickerRows(candidates, null), ['Kohlmeise']);
+test('the current guess is dropped, case-insensitively', () => {
+  const names = allBirdPickerNames([{ name: 'elster' }], 'ELSTER');
+  assert.ok(!names.some((n) => n.toLowerCase() === 'elster'));
+  assert.equal(names.length, CATALOGUE_SIZE - 1);
+});
+
+test('blank and untranslated candidate names are skipped', () => {
+  const names = allBirdPickerNames([{ name: '   ' }, { name: null }], null);
+  assert.equal(names.length, CATALOGUE_SIZE);
+});
+
+test('a missing candidate list is not an empty picker', () => {
+  assert.equal(allBirdPickerNames(undefined, undefined).length, CATALOGUE_SIZE);
 });
 
 // ── submitSpeciesCorrection — the network + patch step ──────────────────

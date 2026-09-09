@@ -26,24 +26,46 @@
 // ROW ICONS come from core/species-icon.js (real SVG silhouette, or
 // the same 🐦 fallback sichtungen/_achievements.js uses) — see
 // _sheetHtml below.
+//
+// THE GRID BELOW `speciesPickerRows`' OWN CANDIDATES (allBirdPickerNames)
+// exists because `species_candidates` is frequently empty or near-empty
+// — it is only "the runner-up species of the best-scoring classified
+// bird" (see this event's own `_resolve_species_candidates` on the
+// Python side), nothing at all when the clip only ever resolved to one
+// species. A sheet with zero rows below the guess is not a correction
+// tool ("wieso kanns ich nicht anklicken" energy, one release earlier,
+// for a different control) — the operator's own ask: "Spezies wechseln
+// gibt keine sinnvollen Auswahlmöglichkeiten, ich möchte ein Popup
+// aller Spezies mit den Icons aus dem Achievement Board". So the grid
+// is ACH_DEFS' bird roster (the same ~20-species catalogue the
+// Sichtungen achievement board tracks) — real candidates first
+// (deduped, dropped if it's the current guess), the rest of the
+// catalogue after, every tile using the SAME icon lookup
+// (speciesIconMarkup) _achievements.js's own medal falls back to. A
+// species outside that catalogue (a genuine rarity) is still reachable
+// via "unsicher" → the Telegram/backfill correction path, same as
+// before this existed.
 import { esc } from '../../core/dom.js';
 import { apiPost } from '../../core/api.js';
 import { showToast } from '../../core/toast.js';
 import { speciesIconMarkup } from '../../core/species-icon.js';
+import { ACH_DEFS } from '../../sichtungen/_ach-defs.js';
 
 /**
- * PURE: the picker's rows for one event — mirrors
- * `species_correction_markup` exactly (same rules, same cap). Dedupe by
- * lowercased name, drop the current guess (correcting it to itself is
- * not a correction — that is the bird bubble already being active),
- * cap at 5: a picker longer than the screen is worse than an
- * incomplete one.
+ * PURE: every pickable bird species for the grid — this event's own
+ * candidates first (real classifier evidence, most useful when
+ * present), then the rest of ACH_DEFS' bird catalogue, alphabetically.
+ * Deduped case-insensitively; the current guess is dropped for the same
+ * reason `speciesPickerRows` drops it — correcting a guess to itself is
+ * not a correction. Unlike `speciesPickerRows` this is NOT capped: the
+ * whole point is "all of them", and ACH_DEFS' ~20 bird entries plus a
+ * handful of candidates comfortably fit the sheet's own scroll area.
  *
  * @param {Array<{name?: string}>} candidates  event.species_candidates
  * @param {string|null|undefined} currentSpecies  event.bird_species
  * @returns {string[]}
  */
-export function speciesPickerRows(candidates, currentSpecies) {
+export function allBirdPickerNames(candidates, currentSpecies) {
   const cur = String(currentSpecies || '')
     .trim()
     .toLowerCase();
@@ -55,7 +77,15 @@ export function speciesPickerRows(candidates, currentSpecies) {
     if (!name || seen.has(key)) continue;
     seen.add(key);
     rows.push(name);
-    if (rows.length >= 5) break;
+  }
+  const catalogue = ACH_DEFS.filter((d) => d.cat === 'birds')
+    .map((d) => d.name)
+    .sort((a, b) => a.localeCompare(b, 'de'));
+  for (const name of catalogue) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(name);
   }
   return rows;
 }
@@ -88,23 +118,23 @@ export async function submitSpeciesCorrection(item, species, deps = {}) {
   }
 }
 
-function _sheetHtml(rows) {
-  const pickRows = rows
-    .map(
-      (name) =>
-        `<button type="button" class="sp-pick-row" data-act="pick" data-species="${esc(name)}">` +
-        `<span class="sp-pick-row-icon">${speciesIconMarkup(name)}</span>` +
-        `<span class="sp-pick-row-label">${esc(name)}</span></button>`,
-    )
-    .join('');
+function _speciesTileHtml(name) {
+  return (
+    `<button type="button" class="species-grid-tile sp-pick-tile" data-act="pick" data-species="${esc(name)}">` +
+    `<span class="sgt-icon">${speciesIconMarkup(name)}</span>` +
+    `<span class="sgt-name">${esc(name)}</span></button>`
+  );
+}
+
+function _sheetHtml(names) {
+  const tiles = names.map(_speciesTileHtml).join('');
   return (
     `<div class="sp-pick-backdrop" data-act="cancel"></div>` +
     `<div class="sp-pick-sheet" role="dialog" aria-modal="true" aria-label="Art korrigieren">` +
     `<div class="sp-pick-title">Welche Art war es wirklich?</div>` +
-    `<div class="sp-pick-rows">${pickRows}` +
+    `<div class="species-grid sp-pick-grid">${tiles}</div>` +
     `<button type="button" class="sp-pick-row sp-pick-row--unsure" data-act="unsure">` +
     `❓ unsicher, welche genau</button>` +
-    `</div>` +
     `<button type="button" class="sp-pick-cancel" data-act="cancel">Abbrechen</button>` +
     `</div>`
   );
@@ -125,9 +155,9 @@ function _close() {
 /**
  * Open the species-correction sheet for `item`.
  *
- * @param {object} item  a cached event object — needs camera_id,
- *   event_id, and (to render any rows at all) species_candidates +
- *   bird_species.
+ * @param {object} item  a cached event object — needs camera_id and
+ *   event_id; species_candidates + bird_species only order/filter the
+ *   grid, they are no longer what makes it non-empty.
  * @param {object} deps  { onSaved(res) } — called after a successful
  *   POST with the endpoint's `{ok, bird_species}` reply, so the caller
  *   can patch whichever caches and re-render whichever badge it owns.
@@ -136,7 +166,7 @@ function _close() {
 export function openSpeciesPicker(item, deps = {}) {
   if (!item || !item.camera_id || !item.event_id) return null;
   _close();
-  const rows = speciesPickerRows(item.species_candidates, item.bird_species);
+  const rows = allBirdPickerNames(item.species_candidates, item.bird_species);
   const sheet = document.createElement('div');
   sheet.className = 'sp-pick';
   sheet.innerHTML = _sheetHtml(rows);

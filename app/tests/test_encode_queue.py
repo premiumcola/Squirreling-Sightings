@@ -31,12 +31,16 @@ def _reset():
         q._running = 0
         q._wartend.clear()
         q._inflight.clear()
+        q._camera_of.clear()
+        q._recent_s.clear()
         q._lfd = 0
     yield
     with q._CV:
         q._running = 0
         q._wartend.clear()
         q._inflight.clear()
+        q._camera_of.clear()
+        q._recent_s.clear()
 
 
 def test_die_voreinstellung_ist_kleiner_als_der_gemessene_schaden():
@@ -162,3 +166,68 @@ def test_ein_fehler_gibt_den_platz_trotzdem_frei():
             raise RuntimeError("ffmpeg explodiert")
     assert q.queue_depth() == (0, 0)
     assert q.inflight_event_ids() == frozenset()
+
+
+def test_snapshot_ist_leer_und_ohne_mittelwert_am_anfang():
+    snap = q.queue_snapshot()
+    assert snap == {
+        "slots": q.ENCODE_SLOTS,
+        "running": 0,
+        "queued": [],
+        "avg_encode_s": None,
+    }
+
+
+def test_snapshot_nennt_kamera_und_reihenfolge_der_wartenden():
+    blocker_frei = threading.Event()
+    waiters_done = threading.Event()
+
+    def _blocker():
+        with q.encode_slot("cam_blocker", "00000000-000000-000000"):
+            blocker_frei.wait(5)
+
+    def _waiter(cam, eid):
+        with q.encode_slot(cam, eid):
+            waiters_done.wait(5)
+
+    blockers = [threading.Thread(target=_blocker) for _ in range(q.ENCODE_SLOTS)]
+    for t in blockers:
+        t.start()
+    for _ in range(500):
+        if q.queue_depth()[0] == q.ENCODE_SLOTS:
+            break
+        threading.Event().wait(0.01)
+
+    waiters = [
+        threading.Thread(target=_waiter, args=("cam_a", "20260906-100000-000000")),
+        threading.Thread(target=_waiter, args=("cam_b", "20260906-110000-000000")),
+    ]
+    for t in waiters:
+        t.start()
+    for _ in range(500):
+        if len(q._wartend) == 2:
+            break
+        threading.Event().wait(0.01)
+
+    snap = q.queue_snapshot()
+    assert snap["running"] == q.ENCODE_SLOTS
+    assert [item["event_id"] for item in snap["queued"]] == [
+        "20260906-100000-000000",
+        "20260906-110000-000000",
+    ]
+    assert [item["camera_id"] for item in snap["queued"]] == ["cam_a", "cam_b"]
+
+    waiters_done.set()
+    blocker_frei.set()
+    for t in blockers + waiters:
+        t.join(5)
+
+
+def test_snapshot_mittelt_die_letzten_abgeschlossenen_umwandlungen():
+    with q.encode_slot("cam_a", "20260906-160000-000001"):
+        pass
+    with q.encode_slot("cam_a", "20260906-160000-000002"):
+        pass
+    snap = q.queue_snapshot()
+    assert snap["avg_encode_s"] is not None
+    assert snap["avg_encode_s"] >= 0

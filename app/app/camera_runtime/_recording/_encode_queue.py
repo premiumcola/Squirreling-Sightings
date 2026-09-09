@@ -37,6 +37,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 
 log = logging.getLogger("app.camera_runtime")
 
@@ -67,12 +68,40 @@ _wartend: list[tuple[str, int]] = []
 _lfd = 0
 #: Ereignis-IDs, hinter denen JETZT ein lebender Thread steht.
 _inflight: set[str] = set()
+#: Kamera je wartendem/laufendem Ereignis — fürs Status-Panel, das ohne
+#: eine zweite Anfrage sagen soll WESSEN Clip an welcher Stelle steht.
+_camera_of: dict[str, str] = {}
+#: Dauer der letzten paar abgeschlossenen Umwandlungen, in Sekunden.
+#: Begrenzt auf 20 — genug zum Glätten, klein genug, dass ein einzelner
+#: Ausreisser (ein 4K-Clip nach vielen kurzen) die Schätzung nicht kippt.
+_recent_s: list[float] = []
+_RECENT_CAP = 20
 
 
 def queue_depth() -> tuple[int, int]:
     """(laufend, wartend) — für Log und Statusanzeige."""
     with _CV:
         return _running, len(_wartend)
+
+
+def queue_snapshot() -> dict:
+    """Der ganze Stand der globalen Reihe — für das Queue-Panel im UI.
+
+    ``queued`` ist bereits in Warteposition sortiert (``_wartend`` ist es
+    immer). ``avg_encode_s`` ist der Mittelwert der letzten
+    :data:`_RECENT_CAP` abgeschlossenen Umwandlungen, ``None`` bis die
+    erste durch ist — eine Schätzung aus null Messungen wäre erfunden,
+    nicht gerundet.
+    """
+    with _CV:
+        avg = round(sum(_recent_s) / len(_recent_s), 1) if _recent_s else None
+        queued = [{"event_id": eid, "camera_id": _camera_of.get(eid, "")} for eid, _seq in _wartend]
+        return {
+            "slots": ENCODE_SLOTS,
+            "running": _running,
+            "queued": queued,
+            "avg_encode_s": avg,
+        }
 
 
 def inflight_event_ids() -> frozenset[str]:
@@ -104,12 +133,13 @@ class encode_slot:
     länger als gut fünf Minuten belegt bleiben.
     """
 
-    __slots__ = ("camera_id", "event_id", "_ticket")
+    __slots__ = ("camera_id", "event_id", "_ticket", "_started")
 
     def __init__(self, camera_id: str = "", event_id: str = ""):
         self.camera_id = camera_id
         self.event_id = event_id
         self._ticket: tuple[str, int] | None = None
+        self._started: float = 0.0
 
     def __enter__(self):
         global _running, _lfd
@@ -121,6 +151,8 @@ class encode_slot:
             _wartend.append(self._ticket)
             _wartend.sort()
             _inflight.add(self.event_id)
+            if self.event_id:
+                _camera_of[self.event_id] = self.camera_id
             if _running >= ENCODE_SLOTS:
                 log.info(
                     "[%s] Umwandlung wartet — %d laufen, %d in der Schlange (%s)",
@@ -133,6 +165,7 @@ class encode_slot:
                 _CV.wait()
             _wartend.remove(self._ticket)
             _running += 1
+            self._started = time.monotonic()
         return self
 
     def __exit__(self, *_exc):
@@ -140,6 +173,10 @@ class encode_slot:
         with _CV:
             _running -= 1
             _inflight.discard(self.event_id)
+            _camera_of.pop(self.event_id, None)
+            if self._started:
+                _recent_s.append(time.monotonic() - self._started)
+                del _recent_s[:-_RECENT_CAP]
             # Alle wecken, damit der neue Kopf der Reihe sich meldet —
             # nur er kommt durch die Schleifenbedingung.
             _CV.notify_all()

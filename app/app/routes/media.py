@@ -17,12 +17,14 @@ import json as _json
 import logging
 import threading as _threading_fix
 from datetime import datetime as _dt
+from math import ceil
 
 import cv2
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
 from .. import migrations as _migrations
+from ..camera_runtime._recording._encode_queue import queue_snapshot
 from ..camera_runtime._recording._stages import DEFAULT_CLIP_MAX_S
 from ..media_index import (
     build_report,
@@ -363,6 +365,47 @@ def api_media_cleanup():
     if override is not None:
         acknowledge_window(retention)
     return jsonify({"ok": True, "removed": removed, "retention_days": retention})
+
+
+@bp.get('/api/media/queue-status')
+def api_media_queue_status():
+    """The global re-encode queue, live — what the ``encode_slot`` line in
+    ``camera_runtime/_recording/_encode_queue.py`` actually holds right
+    now, across every camera. The per-camera media list can only ever
+    show its OWN "hängt" tiles; a clip queued behind another camera's
+    burst is invisible there. This is the one place that tells the truth
+    about position and gives an honest, measured ETA instead of a guess —
+    ``None`` until at least one clip has actually finished since boot.
+    """
+    names = {
+        c.get("id"): c.get("name") or c.get("id")
+        for c in app_state.get_effective_config().get("cameras", [])
+    }
+    snap = queue_snapshot()
+    avg = snap["avg_encode_s"]
+    slots = max(1, snap["slots"])
+    queued = []
+    for i, item in enumerate(snap["queued"]):
+        position = i + 1
+        eta_s = ceil(position / slots) * avg if avg else None
+        cam_id = item["camera_id"]
+        queued.append(
+            {
+                "event_id": item["event_id"],
+                "camera_id": cam_id,
+                "camera_name": names.get(cam_id, cam_id),
+                "position": position,
+                "eta_s": eta_s,
+            }
+        )
+    return jsonify(
+        {
+            "slots": slots,
+            "running": snap["running"],
+            "avg_encode_s": avg,
+            "queued": queued,
+        }
+    )
 
 
 @bp.get('/api/camera/<cam_id>/media')

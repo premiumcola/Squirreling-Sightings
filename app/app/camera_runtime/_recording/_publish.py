@@ -170,7 +170,26 @@ class PublishMixin:
             log.debug("[%s] quest re-eval skipped: %s", self.camera_id, e)
 
     def _publish_dossiers(self, meta: dict, event_id: str) -> None:
-        """F08 · register every species_latin in this event."""
+        """F08 · register every species_latin in this event.
+
+        Reads ``meta["whole_clip"]["species"]`` (``_clip_tally.ClipTally
+        .summary()`` — every distinct species anywhere in the WHOLE clip,
+        kept live on ``meta`` across every tick by ``_absorb_clip_frame``,
+        see ``_recording_step.py``), not ``meta["detections"]``. That key
+        is one frame's detections — the trigger frame at event-open, or
+        whichever tick last upgraded the event — and motion confirms
+        (~0.7 s) before the bird classifier does (~1.05 s), so a bird
+        event routinely opens with no bird detection at all yet. Reading
+        it here silently under-counted every species whose only detection
+        landed on a frame other than the one caught mid-flight, which is
+        the common case, not a corner one: the same gap
+        ``_motion.py::_refresh_bird_species`` was written to close for
+        ``event["bird_species"]`` (the field this dossier count is
+        supposed to explain) — that fix never reached this sibling
+        counter, so the Mediathek species pill's count (this counter, via
+        GET /api/bird-dossiers) drifted arbitrarily far below the actual
+        number of clips filterable by that same species.
+        """
         try:
             from ... import app_state as _app_state
 
@@ -178,12 +197,13 @@ class PublishMixin:
             if svc is None:
                 return
             seen: set[str] = set()
-            for det in meta.get("detections") or []:
-                latin = (det.get("species_latin") or "").strip()
+            species_rows = (meta.get("whole_clip") or {}).get("species") or []
+            for row in species_rows:
+                latin = (row.get("species_latin") or "").strip()
                 if not latin or latin in seen:
                     continue
                 seen.add(latin)
-                svc.on_new_species(latin, det.get("species") or None, event_id, self.camera_id)
+                svc.on_new_species(latin, row.get("species") or None, event_id, self.camera_id)
         except Exception as e:
             log.debug("[%s] dossier hook skipped: %s", self.camera_id, e)
 

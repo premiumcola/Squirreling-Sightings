@@ -24,6 +24,19 @@ for the same reason — a class set to ``severity: off`` or ``push:
 false`` is exactly the class with no corpus, and asking about it is the
 entire point. It respects ``telegram_enabled``, ``armed``, the two mutes
 and its own budget. Nothing else.
+
+A SECOND, more severe blind spot lives one band up. ``on_finalized_event``
+used to treat every ``KIND_ALARM`` event as handled: archived — meaning
+only "recorded as if asked", never "sent". The actual notification is a
+separate call, ``_event_alert.send_event_alert``, gated by
+``push.labels[<class>].push`` — several classes, ``bird`` included, ship
+that ``False`` by default. A CONFIDENT first-ever sighting was therefore
+the one case reaching NOBODY: not the alarm (push off), not even the
+quiet question a less-confident sighting of the same species would have
+earned (the FRAGE band, above). ``_question_species.QuestionSpeciesMixin``
+closes this for the one axis it can reason about safely — a bird species
+with too few operator-CONFIRMED videos — by forcing the event through
+``send_question`` instead of letting the ALARM band swallow it silently.
 """
 
 from __future__ import annotations
@@ -50,6 +63,11 @@ from ._question_budget import (  # noqa: F401
     PER_CLASS_GAP_S,
     QuestionBudgetMixin,
 )
+
+# Moved out for the same ceiling: the rare-species force-ask decision.
+# Decides WHETHER a question is forced through; the gates below decide
+# HOW OFTEN one goes out ordinarily.
+from ._question_species import QuestionSpeciesMixin
 
 #: Night queue depth. Bounded and drop-oldest: a queue that grows without
 #: limit turns one bad night into a morning of scrolling.
@@ -164,11 +182,13 @@ def _caption(cam_name: str, label: str, score: float, meta: dict) -> str:
     )
 
 
-class QuestionMixin(QuestionBudgetMixin):
+class QuestionMixin(QuestionBudgetMixin, QuestionSpeciesMixin):
     """The question path for TelegramService. Mixin — state via ``self.*``.
 
     The three counters that decide HOW OFTEN live next door in
-    ``_question_budget.py``; everything here decides WHAT is said.
+    ``_question_budget.py``; the rare-species force-ask decision lives in
+    ``_question_species.py``; everything here decides WHAT is said and
+    ties the two together.
     """
 
     # ── the archive record ────────────────────────────────────────────
@@ -365,15 +385,21 @@ class QuestionMixin(QuestionBudgetMixin):
         archived here so the record exists for BOTH bands, which is what
         makes the archive a complete account of the net rather than a
         log of questions.
+
+        A rare-species ALARM is the one exception: ``rare`` routes it
+        through ``send_question(..., force=True)`` instead, because the
+        ALARM branch alone is silent for a class shipping ``push:
+        false`` by default (see the module docstring).
         """
         band = self.band_for(meta, camera_id)
         if band is None:
             return None
+        rare = self._species_rare_override(meta, camera_id)
         try:
-            if band == net_archive.KIND_ALARM:
+            if band == net_archive.KIND_ALARM and not rare:
                 self.archive_event(meta, camera_id, kind=net_archive.KIND_ALARM, asked=True)
                 return "alarm"
-            return self.send_question(meta, camera_id) or "frage"
+            return self.send_question(meta, camera_id, force=rare) or "frage"
         finally:
             # Here and not inside `send_question`: a question the mute or
             # the per-class gap swallowed is still a candidate the corpus
@@ -385,12 +411,22 @@ class QuestionMixin(QuestionBudgetMixin):
             with contextlib.suppress(Exception):
                 self._corpus_row(meta, camera_id, kind=band)
 
-    def send_question(self, meta: dict, camera_id: str) -> str | None:
+    def send_question(self, meta: dict, camera_id: str, *, force: bool = False) -> str | None:
         """Ask about one uncertain detection. Returns the blocking reason.
 
         ``None`` means a question went out. Every other return value
         names the gate, so the caller and the decision trace can say why
         one did not.
+
+        ``force=True`` is the rare-species override: it skips ONLY the
+        per-class gap and the two budgets. ``camera_off``, ``muted`` and
+        the quiet-hours hold still apply exactly as for any other
+        question — a forced question still queues to 07:00 rather than
+        buzzing at night, still respects an explicit mute, still
+        respects the camera being off. The gap/budget bookkeeping still
+        runs on the forced path (`_question_gap_mark` /
+        `_question_budget_spend`) so later analysis is not corrupted by
+        invisible spend.
         """
         if not self.enabled:
             return "disabled"
@@ -400,7 +436,7 @@ class QuestionMixin(QuestionBudgetMixin):
         if self._mute_reason(camera_id):
             return "muted"
         label, _score = event_subject(meta)
-        if not self._question_gap_ok(camera_id, label):
+        if not force and not self._question_gap_ok(camera_id, label):
             # ARCHIVED TOO, and this line is the whole reason the budget
             # could be raised safely. The gap branch used to return
             # before `archive_event`, so a gap-blocked question left no
@@ -411,14 +447,14 @@ class QuestionMixin(QuestionBudgetMixin):
             # would simply have stopped existing anywhere.
             self.archive_event(meta, camera_id, kind=net_archive.KIND_FRAGE, asked=False)
             return "gap"
-        if self._class_budget_left(label) <= 0:
+        if not force and self._class_budget_left(label) <= 0:
             # Same treatment as the day budget: recorded, not sent. The
             # class that has had its share does not go silent, it goes
             # into the archive where it can still be judged.
             self.archive_event(meta, camera_id, kind=net_archive.KIND_FRAGE, asked=False)
             log.info("[tg] Frage über Klassen-Anteil: cam=%s label=%s", camera_id, label)
             return "class_budget"
-        if self._question_budget_left() <= 0:
+        if not force and self._question_budget_left() <= 0:
             # Recorded anyway, asked=False — the surplus surfaces in the
             # archive under "Noch nicht beurteilt", where the operator
             # judges at their own pace and the web verdict writes the

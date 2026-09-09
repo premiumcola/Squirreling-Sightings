@@ -42,6 +42,7 @@ import logging
 from dataclasses import dataclass
 
 from .settings._consts import (
+    BIRD_SPECIES_ASK_UNTIL_DEFAULT,
     BIRD_SPECIES_VIDEO_CAP_DEFAULT,
     CAMERA_TIMELAPSE_RETENTION_DAYS_DEFAULT,
     TRASH_DEFAULTS,
@@ -263,6 +264,21 @@ RETENTION_GROUPS: tuple[RetentionGroup, ...] = (
                 # Not a deletion window — nothing already on disk is
                 # touched when this changes, only future recording
                 # decisions. No widening guard needed.
+                runtime_key="",
+                unit="Videos",
+            ),
+            RetentionRow(
+                key="bird_species_ask_until_count",
+                section="storage",
+                field="bird_species_ask_until_count",
+                label="Arten-Nachfrage bis",
+                hint="Wie viele bestätigte Videos einer Art nötig sind, bevor nicht mehr immer nachgefragt wird",
+                group="arten",
+                default=BIRD_SPECIES_ASK_UNTIL_DEFAULT,
+                minimum=0,
+                maximum=50,
+                # Same reasoning as the row above — a live question-time
+                # decision, not a deletion window, so no widening guard.
                 runtime_key="",
                 unit="Videos",
             ),

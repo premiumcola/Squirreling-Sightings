@@ -324,9 +324,22 @@ CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT = 50
 # Operator's own numbers: "wenn man zwanzig zwanzig von einem hat, dann
 # nur noch eins" — 25 sits in the middle of the 20-30 range given.
 BIRD_SPECIES_VIDEO_CAP_DEFAULT = 25
+
+# How many operator-CONFIRMED videos of one bird species are needed
+# before the quiet Telegram "Frage" stops ALWAYS forcing a question
+# through for that species (see telegram_bot/_outbound/_question.py::
+# QuestionMixin._species_rare_override). Below this count, a sighting
+# of the species is asked about regardless of the class-level daily
+# budget / per-class gap / and even a confident ALARM-band score — the
+# same never-pruned counter `bird_species_video_cap` above reads from
+# (`species_video_count.confirmed_video_count`). 0 turns the override
+# off entirely (see the `n <= 0` check next to it — a `cap <= 0` style
+# None-check, not an `or` fallback).
+BIRD_SPECIES_ASK_UNTIL_DEFAULT = 5
 STORAGE_DEFAULTS: dict = {
     "corpus_quota_per_label_day": CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT,
     "bird_species_video_cap": BIRD_SPECIES_VIDEO_CAP_DEFAULT,
+    "bird_species_ask_until_count": BIRD_SPECIES_ASK_UNTIL_DEFAULT,
 }
 
 # Kamera-Timelapses. 0 is not "delete immediately" here — it is the
@@ -353,6 +366,10 @@ STORAGE_RETENTION_DEFAULTS: dict = {
     # shipped default rather than an absent key silently reading as
     # "uncapped" until the operator happens to open the panel.
     "bird_species_video_cap": BIRD_SPECIES_VIDEO_CAP_DEFAULT,
+    # Same reasoning: an install from before the rare-species override
+    # existed gets the shipped default rather than an absent key
+    # silently reading as "0 = off".
+    "bird_species_ask_until_count": BIRD_SPECIES_ASK_UNTIL_DEFAULT,
 }
 
 #: Soft-delete grace period. `trash._DEFAULT_GRACE_DAYS` imports this so

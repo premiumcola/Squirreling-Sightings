@@ -397,6 +397,10 @@ SECTION_SCHEMAS: dict = {
         # Lifetime cap on confirmed video clips per bird species — see
         # settings/_consts.py::BIRD_SPECIES_VIDEO_CAP_DEFAULT.
         "bird_species_video_cap": int,
+        # How many confirmed videos of a bird species are needed before
+        # the Telegram question stops being forced through regardless
+        # of budget — see settings/_consts.py::BIRD_SPECIES_ASK_UNTIL_DEFAULT.
+        "bird_species_ask_until_count": int,
     },
     # Soft-delete grace period. `trash._grace_days` has always read this
     # key, but it was missing from the section schema, so an

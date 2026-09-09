@@ -46,6 +46,7 @@ from app.retention_catalog import (  # noqa: E402
     rows_for_section,
 )
 from app.settings._consts import (  # noqa: E402
+    BIRD_SPECIES_ASK_UNTIL_DEFAULT,
     BIRD_SPECIES_VIDEO_CAP_DEFAULT,
     STORAGE_RETENTION_DEFAULTS,
     TRASH_DEFAULTS,
@@ -83,7 +84,10 @@ def test_the_panel_carries_every_category_that_deletes_something():
     sweep, and the Papierkorb-Frist was settable only by hand-editing
     settings.json. `bird_species_video_cap` joined later — it governs a
     live record-time decision, not a sweep, which is why it carries no
-    `runtime_key` (see the acknowledge-on-save section below)."""
+    `runtime_key` (see the acknowledge-on-save section below).
+    `bird_species_ask_until_count` joined the same "arten" group for the
+    same reason — it governs a live Telegram-question decision, not a
+    sweep."""
     assert {row.key for row in RETENTION_ROWS} == {
         "motion_clips",
         "camera_timelapses",
@@ -93,6 +97,7 @@ def test_the_panel_carries_every_category_that_deletes_something():
         "weather_recaps",
         "weather_manual_events",
         "bird_species_video_cap",
+        "bird_species_ask_until_count",
         "trash_grace",
     }
 
@@ -134,27 +139,40 @@ def test_defaults_are_imported_not_restated():
         == STORAGE_RETENTION_DEFAULTS["retention_camera_timelapses_days"]
     )
     assert by_key["bird_species_video_cap"].default == BIRD_SPECIES_VIDEO_CAP_DEFAULT
+    assert by_key["bird_species_ask_until_count"].default == BIRD_SPECIES_ASK_UNTIL_DEFAULT
     for row in rows_for_section("weather"):
         assert row.default == WEATHER_RETENTION_DEFAULTS[row.field]
 
 
-def test_only_the_species_cap_row_counts_something_other_than_days():
-    """Every retention window is measured in days; this one row measures
-    clips. `panel_groups()` must carry that unit through so the template
-    does not print "25 Tage" for a video cap."""
+def test_only_the_species_rows_count_something_other_than_days():
+    """Every retention window is measured in days; the two "arten" rows
+    measure video clips instead. `panel_groups()` must carry that unit
+    through so the template does not print "25 Tage" for a video cap."""
     by_key = {row.key: row for row in RETENTION_ROWS}
-    assert [row.key for row in RETENTION_ROWS if row.unit != "Tage"] == ["bird_species_video_cap"]
+    assert [row.key for row in RETENTION_ROWS if row.unit != "Tage"] == [
+        "bird_species_video_cap",
+        "bird_species_ask_until_count",
+    ]
     assert by_key["bird_species_video_cap"].unit == "Videos"
-    row_view = next(
-        r for g in panel_groups() for r in g["rows"] if r["field"] == "bird_species_video_cap"
-    )
-    assert row_view["unit"] == "Videos"
+    assert by_key["bird_species_ask_until_count"].unit == "Videos"
+    for field in ("bird_species_video_cap", "bird_species_ask_until_count"):
+        row_view = next(r for g in panel_groups() for r in g["rows"] if r["field"] == field)
+        assert row_view["unit"] == "Videos"
 
 
 def test_each_row_is_bounded_and_its_default_is_inside_its_bounds():
+    """The sweep floor (`MIN_RETENTION_DAYS`) only means something for a
+    row measured in days — `off_at_zero` is how a days-row opts out of
+    it (see `camera_timelapses`). A row measured in something else (the
+    two "arten" video-count rows) is not a deletion window at all, so
+    zero is a legitimate lower bound without needing that flag."""
     for row in RETENTION_ROWS:
         assert row.minimum <= row.default <= row.maximum, row.key
-        assert row.minimum >= storage_retention.MIN_RETENTION_DAYS or row.off_at_zero, row.key
+        assert (
+            row.minimum >= storage_retention.MIN_RETENTION_DAYS
+            or row.off_at_zero
+            or row.unit != "Tage"
+        ), row.key
 
 
 def test_only_the_camera_timelapse_row_treats_zero_as_off():
@@ -367,6 +385,7 @@ def test_the_migration_seeds_the_new_keys():
     migrate_retention_defaults(data)
     assert data["storage"]["retention_camera_timelapses_days"] == 0
     assert data["storage"]["bird_species_video_cap"] == BIRD_SPECIES_VIDEO_CAP_DEFAULT
+    assert data["storage"]["bird_species_ask_until_count"] == BIRD_SPECIES_ASK_UNTIL_DEFAULT
     assert data["trash"]["grace_days"] == 7
 
 
@@ -381,12 +400,17 @@ def test_the_migration_never_seeds_retention_days():
 
 def test_the_migration_never_clobbers_a_configured_value():
     data = {
-        "storage": {"retention_camera_timelapses_days": 30, "bird_species_video_cap": 60},
+        "storage": {
+            "retention_camera_timelapses_days": 30,
+            "bird_species_video_cap": 60,
+            "bird_species_ask_until_count": 12,
+        },
         "trash": {"grace_days": 21},
     }
     migrate_retention_defaults(data)
     assert data["storage"]["retention_camera_timelapses_days"] == 30
     assert data["storage"]["bird_species_video_cap"] == 60
+    assert data["storage"]["bird_species_ask_until_count"] == 12
     assert data["trash"]["grace_days"] == 21
 
 

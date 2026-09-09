@@ -48,6 +48,7 @@ _PANEL_SAVE = {
     "storage": {
         "retention_days": 21,
         "retention_camera_timelapses_days": 60,
+        "bird_species_video_cap": 40,
         "auto_cleanup_enabled": True,
     },
     "weather": {
@@ -117,10 +118,14 @@ def test_the_save_leaves_sibling_settings_alone(client):
 
 def test_every_saved_window_is_confirmed_against_the_guard(client):
     """THE regression. A section the save path forgets is a category
-    that can never be lowered again."""
+    that can never be lowered again. `bird_species_video_cap` carries no
+    `runtime_key` on purpose — it gates a live recording decision, not
+    an unattended sweep — so it has nothing to confirm here."""
     c, _, runtime = client
     c.post("/api/settings/app", json=_PANEL_SAVE)
     for row in RETENTION_ROWS:
+        if not row.runtime_key:
+            continue
         expected = _PANEL_SAVE[row.section][row.field]
         assert runtime.get(row.runtime_key) == expected, (
             f"{row.key} was persisted but not acknowledged — nightly_window will keep "

@@ -313,8 +313,20 @@ CAMERA_NET_KEY_DEFAULTS: dict = {
 # THR-1 · CORP-2's per-label daily cap on retained corpus samples.
 # Lives in the storage section next to retention_days.
 CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT = 50
+
+# How many CONFIRMED clips of one bird species are worth keeping in full
+# before the next sighting of that species stops being recorded as video
+# at all (see camera_runtime/_recording_step.py::_start_clip and
+# detection_feedback.species_sample_count). Deliberately NOT the same
+# knob as corpus_quota_per_label_day above — that one is a daily rate
+# for the (unbuilt) CORP-2 training corpus and is per LABEL; this is a
+# lifetime cap, per SPECIES, that gates the Mediathek archive itself.
+# Operator's own numbers: "wenn man zwanzig zwanzig von einem hat, dann
+# nur noch eins" — 25 sits in the middle of the 20-30 range given.
+BIRD_SPECIES_VIDEO_CAP_DEFAULT = 25
 STORAGE_DEFAULTS: dict = {
     "corpus_quota_per_label_day": CORPUS_QUOTA_PER_LABEL_DAY_DEFAULT,
+    "bird_species_video_cap": BIRD_SPECIES_VIDEO_CAP_DEFAULT,
 }
 
 # Kamera-Timelapses. 0 is not "delete immediately" here — it is the
@@ -337,6 +349,10 @@ CAMERA_TIMELAPSE_RETENTION_DAYS_DEFAULT = 0
 #: which config layer wins.
 STORAGE_RETENTION_DEFAULTS: dict = {
     "retention_camera_timelapses_days": CAMERA_TIMELAPSE_RETENTION_DAYS_DEFAULT,
+    # Additive too: an install from before this cap existed gets the
+    # shipped default rather than an absent key silently reading as
+    # "uncapped" until the operator happens to open the panel.
+    "bird_species_video_cap": BIRD_SPECIES_VIDEO_CAP_DEFAULT,
 }
 
 #: Soft-delete grace period. `trash._DEFAULT_GRACE_DAYS` imports this so

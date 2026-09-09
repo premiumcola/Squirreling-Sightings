@@ -34,11 +34,17 @@ function _clamp(input) {
 // not a zero-day window. The backend short-circuits on it before it
 // computes a cutoff; the label has to say so or the number reads as
 // "delete everything tonight", which is the opposite.
+//
+// The unit word itself comes from `data-unit` (stamped by the same
+// catalog row the value/bounds already come from) rather than being
+// hardcoded — "Tage" for every retention window, but a row that counts
+// something else (clips, say) names its own. Falls back to "Tage" so a
+// control that predates this attribute keeps reading exactly as before.
 function _paintRow(input) {
   const unit = byId(input.id + '_unit');
   if (!unit) return;
   const off = input.dataset.offAtZero === '1' && Number(input.value) === 0;
-  unit.textContent = off ? '= nie löschen' : 'Tage';
+  unit.textContent = off ? '= nie löschen' : input.dataset.unit || 'Tage';
   unit.classList.toggle('ret-unit--off', off);
 }
 

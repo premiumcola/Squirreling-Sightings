@@ -263,7 +263,7 @@ def test_the_context_processor_reaches_every_template(monkeypatch):
     app.register_blueprint(bp)
     with app.test_request_context("/"):
         out = flask.render_template_string("{{ retention_groups | length }}")
-    assert out == "3"
+    assert out == "4"
 
 
 def test_the_blueprint_is_registered():

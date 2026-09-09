@@ -122,11 +122,12 @@ retention=None) %}
                 value="{{ row.current }}"
                 data-section="{{ row.section }}"
                 data-field="{{ row.field }}"
+                data-unit="{{ row.unit }}"
                 {% if row.off_at_zero %}data-off-at-zero="1"{% endif %}
-                aria-label="{{ row.label }} — Aufbewahrung in Tagen"
+                aria-label="{{ row.label }} — {{ row.min }} bis {{ row.max }} {{ row.unit }}"
               />
               <span class="ret-unit" id="{{ row.input_id }}_unit"
-                >{% if row.off_at_zero and row.current == 0 %}= nie löschen{% else %}Tage{% endif
+                >{% if row.off_at_zero and row.current == 0 %}= nie löschen{% else %}{{ row.unit }}{% endif
                 %}</span
               >
             </span>

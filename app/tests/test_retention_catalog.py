@@ -46,6 +46,7 @@ from app.retention_catalog import (  # noqa: E402
     rows_for_section,
 )
 from app.settings._consts import (  # noqa: E402
+    BIRD_SPECIES_VIDEO_CAP_DEFAULT,
     STORAGE_RETENTION_DEFAULTS,
     TRASH_DEFAULTS,
     WEATHER_RETENTION_DEFAULTS,
@@ -80,7 +81,9 @@ def test_the_panel_carries_every_category_that_deletes_something():
     """One panel, and it is not allowed to be a subset. Two of these had
     no control anywhere before: camera timelapses were exempt from every
     sweep, and the Papierkorb-Frist was settable only by hand-editing
-    settings.json."""
+    settings.json. `bird_species_video_cap` joined later — it governs a
+    live record-time decision, not a sweep, which is why it carries no
+    `runtime_key` (see the acknowledge-on-save section below)."""
     assert {row.key for row in RETENTION_ROWS} == {
         "motion_clips",
         "camera_timelapses",
@@ -89,14 +92,16 @@ def test_the_panel_carries_every_category_that_deletes_something():
         "weather_sun_timelapses",
         "weather_recaps",
         "weather_manual_events",
+        "bird_species_video_cap",
         "trash_grace",
     }
 
 
 def test_every_row_has_its_own_runtime_key():
     """Two categories sharing a guard key means confirming one silently
-    confirms the other."""
-    keys = [row.runtime_key for row in RETENTION_ROWS]
+    confirms the other. Rows with no sweep behind them (empty
+    `runtime_key`) are exempt from this — there is nothing to collide."""
+    keys = [row.runtime_key for row in RETENTION_ROWS if row.runtime_key]
     assert len(set(keys)) == len(keys)
 
 
@@ -128,8 +133,22 @@ def test_defaults_are_imported_not_restated():
         by_key["camera_timelapses"].default
         == STORAGE_RETENTION_DEFAULTS["retention_camera_timelapses_days"]
     )
+    assert by_key["bird_species_video_cap"].default == BIRD_SPECIES_VIDEO_CAP_DEFAULT
     for row in rows_for_section("weather"):
         assert row.default == WEATHER_RETENTION_DEFAULTS[row.field]
+
+
+def test_only_the_species_cap_row_counts_something_other_than_days():
+    """Every retention window is measured in days; this one row measures
+    clips. `panel_groups()` must carry that unit through so the template
+    does not print "25 Tage" for a video cap."""
+    by_key = {row.key: row for row in RETENTION_ROWS}
+    assert [row.key for row in RETENTION_ROWS if row.unit != "Tage"] == ["bird_species_video_cap"]
+    assert by_key["bird_species_video_cap"].unit == "Videos"
+    row_view = next(
+        r for g in panel_groups() for r in g["rows"] if r["field"] == "bird_species_video_cap"
+    )
+    assert row_view["unit"] == "Videos"
 
 
 def test_each_row_is_bounded_and_its_default_is_inside_its_bounds():
@@ -154,8 +173,13 @@ def test_the_two_auto_cleanup_switches_stay_separate():
 
 # ── acknowledge on save ────────────────────────────────────────────────
 
+#: Rows an unattended sweep actually enforces — the ones the widening
+#: guard exists for. `bird_species_video_cap` is deliberately outside
+#: this set; see `test_a_row_with_no_sweep_behind_it_is_never_acknowledged`.
+_SWEPT_ROWS = tuple(row for row in RETENTION_ROWS if row.runtime_key)
 
-@pytest.mark.parametrize("row", RETENTION_ROWS, ids=lambda r: r.key)
+
+@pytest.mark.parametrize("row", _SWEPT_ROWS, ids=lambda r: r.key)
 def test_every_row_is_acknowledged_when_it_is_saved(row, runtime):
     """THE property. Without it the row can only ever be raised."""
     store, _ = runtime
@@ -167,7 +191,7 @@ def test_every_row_is_acknowledged_when_it_is_saved(row, runtime):
     )
 
 
-@pytest.mark.parametrize("row", RETENTION_ROWS, ids=lambda r: r.key)
+@pytest.mark.parametrize("row", _SWEPT_ROWS, ids=lambda r: r.key)
 def test_a_saved_row_can_actually_be_lowered_afterwards(row, runtime):
     """End to end through the guard itself: save 30, save 10, and the
     unattended sweep must be allowed to act on 10."""
@@ -179,6 +203,19 @@ def test_a_saved_row_can_actually_be_lowered_afterwards(row, runtime):
     assert (
         storage_retention.nightly_window(low, high, key=row.runtime_key) == low
     ), f"{row.key} stayed pinned at the wider window after an explicit save"
+
+
+def test_a_row_with_no_sweep_behind_it_is_never_acknowledged(runtime):
+    """`bird_species_video_cap` changes what gets recorded NEXT, not what
+    an unattended sweep may delete — there is no stale wide window to
+    guard against, so saving it must not write anything into the
+    runtime store at all."""
+    store, _ = runtime
+    row = next(r for r in RETENTION_ROWS if r.key == "bird_species_video_cap")
+    assert row.runtime_key == ""
+    acknowledged = acknowledge_payload(row.section, {row.field: 40})
+    assert row.key not in acknowledged
+    assert store == {}
 
 
 def test_a_row_absent_from_the_payload_stays_deferred(runtime):
@@ -329,6 +366,7 @@ def test_the_migration_seeds_the_new_keys():
     data: dict = {}
     migrate_retention_defaults(data)
     assert data["storage"]["retention_camera_timelapses_days"] == 0
+    assert data["storage"]["bird_species_video_cap"] == BIRD_SPECIES_VIDEO_CAP_DEFAULT
     assert data["trash"]["grace_days"] == 7
 
 
@@ -342,9 +380,13 @@ def test_the_migration_never_seeds_retention_days():
 
 
 def test_the_migration_never_clobbers_a_configured_value():
-    data = {"storage": {"retention_camera_timelapses_days": 30}, "trash": {"grace_days": 21}}
+    data = {
+        "storage": {"retention_camera_timelapses_days": 30, "bird_species_video_cap": 60},
+        "trash": {"grace_days": 21},
+    }
     migrate_retention_defaults(data)
     assert data["storage"]["retention_camera_timelapses_days"] == 30
+    assert data["storage"]["bird_species_video_cap"] == 60
     assert data["trash"]["grace_days"] == 21
 
 

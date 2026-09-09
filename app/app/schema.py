@@ -394,6 +394,9 @@ SECTION_SCHEMAS: dict = {
         # computes a cutoff. Coerced like its siblings so the slider's
         # string value lands as an int.
         "retention_camera_timelapses_days": int,
+        # Lifetime cap on confirmed video clips per bird species — see
+        # settings/_consts.py::BIRD_SPECIES_VIDEO_CAP_DEFAULT.
+        "bird_species_video_cap": int,
     },
     # Soft-delete grace period. `trash._grace_days` has always read this
     # key, but it was missing from the section schema, so an

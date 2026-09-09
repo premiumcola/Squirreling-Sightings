@@ -42,6 +42,7 @@ import logging
 from dataclasses import dataclass
 
 from .settings._consts import (
+    BIRD_SPECIES_VIDEO_CAP_DEFAULT,
     CAMERA_TIMELAPSE_RETENTION_DAYS_DEFAULT,
     TRASH_DEFAULTS,
     WEATHER_RETENTION_DEFAULTS,
@@ -77,11 +78,20 @@ class RetentionRow:
     default: int
     minimum: int
     maximum: int
+    #: The nightly-sweep widening-guard key this row is enforced under.
+    #: Empty for a row that governs something OTHER than an unattended
+    #: deletion window (e.g. a live record-time cap) — ``acknowledge_payload``
+    #: skips those, since the guard exists only to stop a sweep from
+    #: silently deleting more than the operator last confirmed.
     runtime_key: str
     fallback_field: str | None = None
     #: True when ``0`` is a legitimate value meaning "nie löschen" rather
     #: than the "delete everything" hazard ``MIN_RETENTION_DAYS`` refuses.
     off_at_zero: bool = False
+    #: Unit word shown after the number. "Tage" for every existing
+    #: retention window; a row measuring something else (clip counts,
+    #: say) names its own.
+    unit: str = "Tage"
 
 
 @dataclass(frozen=True)
@@ -233,6 +243,32 @@ RETENTION_GROUPS: tuple[RetentionGroup, ...] = (
         ),
     ),
     RetentionGroup(
+        key="arten",
+        title="Vogel-Arten",
+        note="Zählt Videos, die als eine Art bestätigt wurden ("
+        "✅ in Telegram). Ab dieser Zahl bekommt die Art weiterhin einen "
+        "leichten Sichtungs-Eintrag (Zeitpunkt, Bild, Art), aber kein "
+        "eigenes Video mehr — seltene Arten werden davon nie erreicht.",
+        rows=(
+            RetentionRow(
+                key="bird_species_video_cap",
+                section="storage",
+                field="bird_species_video_cap",
+                label="Videos je Vogelart",
+                hint="Wie viele bestätigte Videos einer Art gesammelt werden, bevor nur noch die Sichtung selbst gezählt wird",
+                group="arten",
+                default=BIRD_SPECIES_VIDEO_CAP_DEFAULT,
+                minimum=1,
+                maximum=200,
+                # Not a deletion window — nothing already on disk is
+                # touched when this changes, only future recording
+                # decisions. No widening guard needed.
+                runtime_key="",
+                unit="Videos",
+            ),
+        ),
+    ),
+    RetentionGroup(
         key="system",
         title="Papierkorb",
         note="Läuft immer — auch wenn Auto-Cleanup oben aus ist. Der Papierkorb hält "
@@ -342,7 +378,7 @@ def acknowledge_payload(section: str, payload: dict) -> list[str]:
         return []
     done: list[str] = []
     for row in rows_for_section(section):
-        if row.field not in payload:
+        if row.field not in payload or not row.runtime_key:
             continue
         try:
             days = int(payload[row.field])
@@ -375,6 +411,7 @@ def _row_view(row: RetentionRow) -> dict:
         "max": row.maximum,
         "current": max(row.minimum, min(row.maximum, current)),
         "off_at_zero": row.off_at_zero,
+        "unit": row.unit,
         "input_id": f"ret_{row.key}",
         "range_id": f"ret_{row.key}_range",
     }

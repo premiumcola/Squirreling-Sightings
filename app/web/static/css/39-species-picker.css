@@ -131,10 +131,16 @@
 /* The small pencil trigger on a Mediathek tile's bird badge
    (mediathek/_cards.js) — sibling of .mmc-badges' inert stack, but this
    one child opts back into pointer-events so a tap reaches it despite
-   the stack's own pointer-events:none. 20px visual / generous inline
-   padding for the tap slop; matches the 30px .mmc-btn scale used by the
-   confirm/delete pair without competing with them for the same corner. */
+   the stack's own pointer-events:none. The icon itself stays tiny (11px,
+   fits an 11px badge pill) but the TAPPABLE area is pulled out to
+   CLAUDE.md's 44px floor via an invisible ::after hit-slop, the same
+   trick labels.js's species caption uses — measured broken on a real
+   phone before this existed (~15×19px real target, "ich kanns nicht
+   anklicken"): the icon's own padding alone never gets there on a
+   pill this small, so the extra hit area has to come from OUTSIDE the
+   badge's visual box instead of inflating it. */
 .mmc-species-edit {
+  position: relative;
   appearance: none;
   border: none;
   background: none;
@@ -147,6 +153,23 @@
   display: inline-flex;
   align-items: center;
   -webkit-tap-highlight-color: transparent;
+}
+.mmc-species-edit::after {
+  content: '';
+  position: absolute;
+  /* Asymmetric, not a uniform inset: .mmc-img-wrap and .media-card both
+     clip with overflow:hidden, and the badge sits inches from the
+     card's own top-left corner (.mmc-badges: top 6px, left 6px) — an
+     equal expansion in every direction gets silently clipped on the
+     top/left sides right where it matters least (there is nothing to
+     mis-tap into up there) and wasted. Bias the extra hit area into
+     open space instead: down into the thumbnail, right toward the
+     74px .mmc-actions already keeps clear, minimal top/left so the
+     card edge never eats it. */
+  top: -6px;
+  right: -10px;
+  bottom: -18px;
+  left: -6px;
 }
 @media (hover: hover) {
   .mmc-species-edit:hover {

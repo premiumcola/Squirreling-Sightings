@@ -60,6 +60,7 @@ import time
 from pathlib import Path
 
 from .._consts import log
+from ._ffmpeg_clip import drain_ffmpeg_stderr
 
 
 #: Requested segment length. See module docstring — actual segments run
@@ -209,6 +210,14 @@ class StreamRingBufferMixin:
                 stdout=_subprocess.DEVNULL,
                 stderr=_subprocess.PIPE,
             )
+            # THIS ONE RUNS FOR EVER, so an undrained stderr pipe is not a
+            # risk here, it is a certainty: ~64 KB of warnings and ffmpeg
+            # blocks on the write and stops segmenting, leaving the ring
+            # frozen at whatever it had. That is exactly what truncated
+            # every recording on two cameras — see
+            # `_ffmpeg_clip.drain_ffmpeg_stderr`, which this reuses rather
+            # than repeating.
+            drain_ffmpeg_stderr(proc, self.camera_id)
         except FileNotFoundError:
             return  # no ffmpeg on this box — _start_ffmpeg_recording already logs this loudly
         except Exception as e:

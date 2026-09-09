@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import subprocess as _subprocess
 import threading
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +20,63 @@ from ._stages import (
     STAGE_RECORDING,
     set_clip_stage,
 )
+
+
+#: Stderr lines kept per recording. Enough to explain a failure, small
+#: enough that a chatty stream cannot grow the process's memory.
+_STDERR_KEEP = 40
+
+
+def drain_ffmpeg_stderr(proc, camera_id: str, *, keep: int = _STDERR_KEEP) -> None:
+    """Read the recording subprocess's stderr, continuously, on its own
+    daemon thread — and keep the last few lines for the exit log.
+
+    THE BUG THIS CLOSES, measured on the live archive: every clip on two
+    of three cameras stopped at ~23-32 s, while the clip's own frame
+    tally (a Python-side aggregate, on a different clock) ran the full
+    120 s `clip_max_duration_s` window. 361 recordings on one camera, not
+    one of them longer than 32.1 s; a third camera, quieter on stderr,
+    reached 234 s. The operator saw the two halves disagree — „Wieso wird
+    unten ein objekt bis 2:xx mins erkannt wenn der clip nur knapp 30s
+    hat???" — and the answer was that the clip, not the tally, was wrong.
+
+    The process was spawned with `stderr=PIPE` and NOTHING ever read it.
+    A pipe holds ~64 KB; ffmpeg's progress line plus a Reolink feed's
+    steady "Non-monotonous DTS" warnings fill that in well under a
+    minute. Once full, the next write blocks — and a blocked ffmpeg
+    stops muxing packets. The recording freezes at whatever it had
+    already written, the runtime keeps analysing on its own thread until
+    `clip_max`, and then `q`/terminate/kill ends a process that has been
+    stuck for a minute and a half. Python's own subprocess docs warn
+    about exactly this and say to use `communicate()`; this path cannot,
+    because it must not block the capture loop, so it drains instead.
+
+    Same failure class as the stdin deadlock fixed earlier in this file's
+    history — that one was the write side of the same lesson.
+
+    Never raises: a recording must not fail because its logging did.
+    """
+    if getattr(proc, "stderr", None) is None:
+        return
+    tail: deque = deque(maxlen=keep)
+    proc.sq_stderr_tail = tail
+
+    def _pump():
+        try:
+            for line in iter(proc.stderr.readline, b""):
+                tail.append(line.decode("utf-8", "replace").rstrip())
+        except Exception:
+            pass
+        finally:
+            with contextlib.suppress(Exception):
+                proc.stderr.close()
+
+    threading.Thread(target=_pump, daemon=True, name=f"ffmpeg-stderr-{camera_id}").start()
+
+
+def ffmpeg_stderr_tail(proc) -> str:
+    """The kept stderr lines as one string — '' when there are none."""
+    return "\n".join(getattr(proc, "sq_stderr_tail", None) or ())
 
 
 class FfmpegClipMixin(FinalizeClipMixin):
@@ -115,6 +174,13 @@ class FfmpegClipMixin(FinalizeClipMixin):
         cmd = [
             'ffmpeg',
             '-y',
+            # `-nostats` kills the progress line ffmpeg otherwise writes to
+            # stderr several times a second for the whole recording. It is
+            # unreadable in a pipe and it was the bulk of what filled that
+            # pipe — see `drain_ffmpeg_stderr` for what filling it did.
+            '-nostats',
+            '-loglevel',
+            'warning',
             '-rtsp_transport',
             'tcp',
             '-i',
@@ -142,6 +208,9 @@ class FfmpegClipMixin(FinalizeClipMixin):
         except Exception as e:
             log.error("[%s] ffmpeg spawn failed: %s", self.camera_id, e)
             return False
+        # MUST happen before anything else can block: an undrained stderr
+        # pipe stops the recording dead. See drain_ffmpeg_stderr.
+        drain_ffmpeg_stderr(proc, self.camera_id)
         self._ffmpeg_proc = proc
         self._ffmpeg_out_path = raw_path
         self._ffmpeg_start_time = start_time
@@ -201,6 +270,16 @@ class FfmpegClipMixin(FinalizeClipMixin):
                     proc.wait(timeout=3)
                 except _subprocess.TimeoutExpired:
                     proc.kill()
+            # WHY IT ENDED BADLY, in the log, once. The recorder's stderr
+            # is drained all along (drain_ffmpeg_stderr) but never read
+            # out — so a clip that died mid-stream used to leave no trace
+            # at all beyond a short file.
+            if proc.returncode not in (0, None):
+                tail = ffmpeg_stderr_tail(proc)
+                if tail:
+                    log.warning(
+                        "[%s] ffmpeg recorder rc=%s: %s", self.camera_id, proc.returncode, tail[-400:]
+                    )
         except Exception as e:
             log.warning("[%s] ffmpeg stop error: %s", self.camera_id, e)
 

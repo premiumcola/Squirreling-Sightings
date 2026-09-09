@@ -25,7 +25,7 @@
 // the corpus records.
 
 import { esc } from '../../core/dom.js';
-import { OBJ_LABEL } from '../../core/icons.js';
+import { colors, OBJ_LABEL, objIconSvg } from '../../core/icons.js';
 
 /** The classes an operator can correct to. */
 const _CHOICES = ['person', 'cat', 'dog', 'bird', 'squirrel', 'fox', 'hedgehog', 'car'];
@@ -58,16 +58,31 @@ export function labelsRequestFor(item, labels) {
   };
 }
 
+// THE SAME BUBBLES THE SPECIES SHEET USES — „Mach den chooser im video
+// auch so cool mit den Bubbles für alle arten von objekten und den
+// spezies genauso wie in der vorhandenen edit maske!". One shape for
+// both corrections, so the classes and the species read as the same kind
+// of choice; the tile classes are defined once in 39-species-picker.css.
+//
+// COLOUR IS THE STATE. „Alle objekte sind bunt wenn angewählt und
+// schwarz-weis / grautöne wenn nicht angewählt!" — an active class wears
+// its own palette colour (core/icons.js::colors, the same one its badge,
+// its lane and its box use everywhere else), an inactive one is greyed
+// out. Nothing else marks the state: no ring, no border, no second cue.
+function _classTileHtml(label, on) {
+  const colour = colors[label] || colors.motion || '#93c5fd';
+  return (
+    `<button type="button" class="sp-pick-tile${on ? ' is-on' : ''}" ` +
+    `data-label="${esc(label)}" aria-pressed="${on ? 'true' : 'false'}" ` +
+    `style="--cb:${esc(colour)}">` +
+    `<span class="sp-pick-bubble">${objIconSvg(label, 30)}</span>` +
+    `<span class="sp-pick-name">${esc(OBJ_LABEL[label] || label)}</span></button>`
+  );
+}
+
 function _sheetHtml(active) {
   const set = new Set(active || []);
-  const chips = _CHOICES
-    .map(
-      (c) =>
-        `<button type="button" class="vp-seg" data-label="${esc(c)}" ` +
-        `aria-pressed="${set.has(c) ? 'true' : 'false'}">` +
-        `<span class="vp-seg-label">${esc(OBJ_LABEL[c] || c)}</span></button>`,
-    )
-    .join('');
+  const tiles = _CHOICES.map((c) => _classTileHtml(c, set.has(c))).join('');
   return (
     // The sheet edits the CLIP's label set, not the row it was opened
     // from — POST …/events/<id>/labels has no per-detection form and the
@@ -79,7 +94,7 @@ function _sheetHtml(active) {
     // Said out loud because the operator could not tell: „muss ich
     // speichern oder fertig drücken damits übernommen wird?!"
     `<div class="vp-sheet-hint">Jede Änderung wird sofort gespeichert.</div>` +
-    `<div class="vp-segbar vp-segbar--wrap">${chips}</div>` +
+    `<div class="sp-pick-grid">${tiles}</div>` +
     // Clearing every label is how an operator says "nothing was here".
     // The backend deliberately books NO correction for an emptied list,
     // so this is a data fix, not a judgement — the copy says so.

@@ -133,6 +133,38 @@
   overflow: hidden;
 }
 
+/* COLOUR IS THE STATE, and the only one — „Alle objekte sind bunt wenn
+   angewählt und schwarz-weis / grautöne wenn nicht angewählt!". An
+   unchosen subject is drawn in grey; a chosen one wears its own colour
+   over a tint of it. No ring, no border, no second cue.
+
+   `--cb` is the class palette colour, set inline per tile by
+   vplayer/panels/_reclassify.js. The species sheet sets none — a
+   silhouette is already its own colour, so `is-on` there only has to
+   stop greying it and lift the bubble. */
+.sp-pick-bubble {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+.sp-pick-tile.is-on .sp-pick-bubble {
+  filter: none;
+  opacity: 1;
+  background: color-mix(in srgb, var(--cb, #6ee7a8) 26%, rgba(255, 255, 255, 0.09));
+  color: var(--cb, inherit);
+}
+.sp-pick-name {
+  color: var(--muted);
+}
+.sp-pick-tile.is-on .sp-pick-name {
+  color: var(--text);
+}
+/* The species this clip is filed under right now. It is already marked
+   `is-on`; the weight is what separates "this is the headline" from
+   "this was also in the clip" without adding a colour of its own. */
+.sp-pick-tile.is-current .sp-pick-name {
+  font-weight: 800;
+}
+
 @media (hover: hover) {
   .sp-pick-tile:hover .sp-pick-bubble {
     background: rgba(255, 255, 255, 0.16);

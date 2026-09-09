@@ -27,7 +27,8 @@ globalThis.fetch = async (url, init) => {
   return fetchResponse;
 };
 
-const { allBirdPickerNames, submitSpeciesCorrection } = await import('../species-picker.js');
+const { allBirdPickerNames, speciesMarks, submitSpeciesCorrection } =
+  await import('../species-picker.js');
 const { ACH_DEFS } = await import('../../../sichtungen/_ach-defs.js');
 const { applyLabelPatch } = await import('../../../core/label-patch.js');
 
@@ -65,10 +66,50 @@ test('a candidate outside the catalogue is still offered', () => {
   assert.equal(names.length, CATALOGUE_SIZE + 1);
 });
 
-test('the current guess is dropped, case-insensitively', () => {
-  const names = allBirdPickerNames([{ name: 'elster' }], 'ELSTER');
-  assert.ok(!names.some((n) => n.toLowerCase() === 'elster'));
-  assert.equal(names.length, CATALOGUE_SIZE - 1);
+test('the current guess is SHOWN, first, and only once', () => {
+  // It used to be dropped — correcting a species to itself is not a
+  // correction — but hiding it also hid what the clip already is:
+  // „Wenn 2 spezies drin sind dann zeig die auch".
+  const names = allBirdPickerNames([{ name: 'elster' }], 'Elster');
+  assert.equal(names[0], 'Elster');
+  assert.equal(names.filter((n) => n.toLowerCase() === 'elster').length, 1);
+  assert.equal(names.length, CATALOGUE_SIZE);
+});
+
+test('a second species from the same clip is listed right behind the headline', () => {
+  const names = allBirdPickerNames([], 'Elster', ['Elster', 'Höckerschwan']);
+  assert.deepEqual(names.slice(0, 2), ['Elster', 'Höckerschwan']);
+});
+
+// ── which tiles the sheet marks ─────────────────────────────────────────
+
+test('the headline and every other species in the clip are marked', () => {
+  const marks = speciesMarks({
+    bird_species: 'Elster',
+    whole_clip: { species: [{ species: 'Elster' }, { species: 'Höckerschwan' }] },
+  });
+  assert.equal(marks.current, 'elster');
+  assert.deepEqual([...marks.inClip], ['höckerschwan']);
+});
+
+test('the headline is never also listed as a secondary mark', () => {
+  const marks = speciesMarks({
+    bird_species: 'Elster',
+    whole_clip: { species: [{ species: 'Elster' }] },
+  });
+  assert.equal(marks.inClip.size, 0);
+});
+
+test('a clip with no aggregate marks nothing but its own headline', () => {
+  const marks = speciesMarks({ bird_species: 'Amsel' });
+  assert.equal(marks.current, 'amsel');
+  assert.equal(marks.inClip.size, 0);
+});
+
+test('an event with nothing at all marks nothing, and does not throw', () => {
+  const marks = speciesMarks(null);
+  assert.equal(marks.current, '');
+  assert.equal(marks.inClip.size, 0);
 });
 
 test('blank and untranslated candidate names are skipped', () => {

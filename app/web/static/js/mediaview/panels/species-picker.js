@@ -49,45 +49,69 @@ import { esc } from '../../core/dom.js';
 import { apiPost } from '../../core/api.js';
 import { showToast } from '../../core/toast.js';
 import { speciesIconMarkup } from '../../core/species-icon.js';
+import { clipSpeciesNames } from '../../core/clip-species.js';
 import { ACH_DEFS } from '../../sichtungen/_ach-defs.js';
 
 /**
- * PURE: every pickable bird species for the grid — this event's own
- * candidates first (real classifier evidence, most useful when
- * present), then the rest of ACH_DEFS' bird catalogue, alphabetically.
- * Deduped case-insensitively; the current guess is dropped for the same
- * reason `speciesPickerRows` drops it — correcting a guess to itself is
- * not a correction. Unlike `speciesPickerRows` this is NOT capped: the
- * whole point is "all of them", and ACH_DEFS' ~20 bird entries plus a
- * handful of candidates comfortably fit the sheet's own scroll area.
+ * PURE: every pickable bird species for the grid, best-known first.
  *
- * @param {Array<{name?: string}>} candidates  event.species_candidates
- * @param {string|null|undefined} currentSpecies  event.bird_species
- * @returns {string[]}
+ * Order: the species this clip actually holds (`clipSpecies`, headline
+ * first), then the classifier's runner-up candidates, then the rest of
+ * ACH_DEFS' bird catalogue alphabetically. Deduped case-insensitively.
+ *
+ * THE CURRENT GUESS IS NOT DROPPED any more. It used to be — correcting
+ * a species to itself is not a correction — but that also hid it, and a
+ * clip that held two birds then showed neither of them in the sheet
+ * that is supposed to be about them: „Wenn 2 spezies drin sind dann zeig
+ * die auch und markiere die auch beim choosen!". They are listed, and
+ * `speciesMarks` below is what makes them read as already-present.
+ *
+ * Not capped: the whole point is „ein popup aller spezies", and ~20
+ * catalogue entries plus a handful of candidates fit the sheet's scroll.
  */
-export function allBirdPickerNames(candidates, currentSpecies) {
-  const cur = String(currentSpecies || '')
-    .trim()
-    .toLowerCase();
-  const seen = new Set(cur ? [cur] : []);
+export function allBirdPickerNames(candidates, currentSpecies, clipSpecies = []) {
+  const seen = new Set();
   const rows = [];
-  for (const cand of candidates || []) {
-    const name = String((cand && cand.name) || '').trim();
+  const push = (raw) => {
+    const name = String(raw || '').trim();
     const key = name.toLowerCase();
-    if (!name || seen.has(key)) continue;
+    if (!name || seen.has(key)) return;
     seen.add(key);
     rows.push(name);
-  }
-  const catalogue = ACH_DEFS.filter((d) => d.cat === 'birds')
+  };
+  push(currentSpecies);
+  for (const name of clipSpecies || []) push(name);
+  for (const cand of candidates || []) push(cand && cand.name);
+  ACH_DEFS.filter((d) => d.cat === 'birds')
     .map((d) => d.name)
-    .sort((a, b) => a.localeCompare(b, 'de'));
-  for (const name of catalogue) {
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push(name);
-  }
+    .sort((a, b) => a.localeCompare(b, 'de'))
+    .forEach(push);
   return rows;
+}
+
+/**
+ * PURE: which names the sheet marks, and how.
+ *
+ * `current` is the headline this clip carries now; `inClip` is every
+ * other species the whole-clip tally saw. Both are drawn in colour while
+ * everything else is greyed — „Alle objekte sind bunt wenn angewählt und
+ * schwarz-weis / grautöne wenn nicht angewählt!" — so the sheet opens
+ * already showing what this clip is, rather than as a flat catalogue.
+ *
+ * @returns {{current: string, inClip: Set<string>}} lowercased keys
+ */
+export function speciesMarks(item) {
+  const lower = (v) =>
+    String(v || '')
+      .trim()
+      .toLowerCase();
+  const current = lower(item?.bird_species);
+  const inClip = new Set();
+  for (const name of clipSpeciesNames(item)) {
+    const key = lower(name);
+    if (key && key !== current) inClip.add(key);
+  }
+  return { current, inClip };
 }
 
 /**
@@ -124,21 +148,25 @@ export async function submitSpeciesCorrection(item, species, deps = {}) {
 // grid with a count chip, and borrowing it here left the picker as a
 // field of unlabelled boxes. One shape per surface, each saying what it
 // is.
-function _speciesTileHtml(name) {
+function _speciesTileHtml(name, marks) {
+  const key = name.trim().toLowerCase();
+  const on = key === marks.current || marks.inClip.has(key);
+  const cls = 'sp-pick-tile' + (on ? ' is-on' : '') + (key === marks.current ? ' is-current' : '');
   return (
-    `<button type="button" class="sp-pick-tile" data-act="pick" data-species="${esc(name)}">` +
+    `<button type="button" class="${cls}" data-act="pick" data-species="${esc(name)}"` +
+    ` aria-pressed="${on ? 'true' : 'false'}">` +
     `<span class="sp-pick-bubble">${speciesIconMarkup(name)}</span>` +
     `<span class="sp-pick-name">${esc(name)}</span></button>`
   );
 }
 
-function _sheetHtml(names) {
-  const tiles = names.map(_speciesTileHtml).join('');
+function _sheetHtml(names, marks) {
+  const tiles = names.map((n) => _speciesTileHtml(n, marks)).join('');
   return (
     `<div class="sp-pick-backdrop" data-act="cancel"></div>` +
     `<div class="sp-pick-sheet" role="dialog" aria-modal="true" aria-label="Art korrigieren">` +
     `<div class="sp-pick-title">Welche Art war es wirklich?</div>` +
-    `<div class="species-grid sp-pick-grid">${tiles}</div>` +
+    `<div class="sp-pick-grid">${tiles}</div>` +
     `<button type="button" class="sp-pick-row sp-pick-row--unsure" data-act="unsure">` +
     `❓ unsicher, welche genau</button>` +
     `<button type="button" class="sp-pick-cancel" data-act="cancel">Abbrechen</button>` +
@@ -172,10 +200,15 @@ function _close() {
 export function openSpeciesPicker(item, deps = {}) {
   if (!item || !item.camera_id || !item.event_id) return null;
   _close();
-  const rows = allBirdPickerNames(item.species_candidates, item.bird_species);
+  const marks = speciesMarks(item);
+  const rows = allBirdPickerNames(
+    item.species_candidates,
+    item.bird_species,
+    clipSpeciesNames(item),
+  );
   const sheet = document.createElement('div');
   sheet.className = 'sp-pick';
-  sheet.innerHTML = _sheetHtml(rows);
+  sheet.innerHTML = _sheetHtml(rows, marks);
   document.body.appendChild(sheet);
 
   const submit = async (species) => {

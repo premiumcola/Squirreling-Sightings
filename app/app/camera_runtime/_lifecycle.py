@@ -279,6 +279,11 @@ class LifecycleMixin:
 
     def stop(self):
         self.running = False
+        # Stop the ring buffer's ffmpeg process + janitor thread — it
+        # holds its own RTSP connection and outlives self.capture on
+        # purpose (see _capture.py), so it needs its own shutdown call.
+        with contextlib.suppress(Exception):
+            self._stop_ring_buffer()
         # Release main capture (only _loop touches this, so safe after running=False)
         if self.capture is not None:
             with contextlib.suppress(Exception):

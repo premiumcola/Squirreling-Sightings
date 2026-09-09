@@ -40,17 +40,25 @@ independent bound so a run of unusually detailed frames or a
 misconfigured (very low) frame_interval_ms cannot outgrow the budget —
 mirrors ``EventTLRing``'s two-bound eviction.
 
-Playback trade-off (log this so nobody re-discovers it as a bug)
-──────────────────────────────────────────────────────────────
+Playback trade-off — SUPERSEDED, kept as the fallback's own history
+──────────────────────────────────────────────────────────────────
 The spliced pre-roll segment plays back at the loop's detection cadence
 (≈3 fps by default), not the camera's native stream fps (typically
-15-25 fps) that the ffmpeg stream-copy segment carries. The splice is a
-visible frame-rate step at the boundary. This is an inherent limit of
+15-25 fps) that the ffmpeg stream-copy segment carries — a visible
+frame-rate step at the splice boundary. That was an inherent limit of
 building pre-roll from detection-sample stills instead of a second
-continuous high-fps decode of the main stream (which would cost as
-much CPU as the primary detection loop, per camera, permanently) — a
-choppier few seconds of real lead-in is judged strictly better than
-the 0 s the ffmpeg path shipped with.
+continuous high-fps DECODE of the main stream, which would have cost as
+much CPU as the primary detection loop, per camera, permanently.
+
+The operator's own pushback on this — "wieso kein Loop-Stream?!" — named
+the actual way out: a continuous STREAM COPY (remux, no decode, no
+per-frame CPU cost at all) instead of a continuous decode. See
+``_ring_buffer.py`` and ``_ring_splice.py`` — real, full-fps pre-roll
+footage, tried FIRST by ``_splice_preroll_onto_clip`` below. This
+stills-based ring is now the FALLBACK for a camera whose ring buffer
+has not filled yet (just (re)connected) or never started one — the
+trade-off above is the reason that fallback still choppy-but-better-
+than-nothing, not the reason there is no better path any more.
 """
 
 from __future__ import annotations
@@ -271,20 +279,37 @@ class MotionPrerollMixin:
     def _splice_preroll_onto_clip(
         self,
         vid_path: Path,
-        preroll_frames: list[tuple[float, bytes]],
+        preroll_frames: list[tuple[float, bytes]] | None,
         event_id: str,
         day_dir: Path,
+        ring_segments: list[Path] | None = None,
     ) -> float:
-        """Encode the buffered pre-trigger stills into their own short mp4
-        and concat them onto the front of ``vid_path`` IN PLACE.
+        """Splice a pre-roll onto the front of ``vid_path`` IN PLACE.
+        Returns the achieved duration in seconds — 0.0 on any failure or
+        when there is nothing worth splicing, in which case ``vid_path``
+        is left byte-for-byte untouched. The caller reports this number
+        verbatim in the event's recording_settings, so it must never
+        overstate what actually landed on disk.
 
-        Returns the pre-roll duration actually spliced in, in seconds —
-        0.0 on ANY failure or when there is nothing worth splicing, in
-        which case ``vid_path`` is left byte-for-byte untouched. The
-        caller reports this number verbatim in the event's
-        recording_settings, so it must never overstate what actually
-        landed on disk.
+        ``ring_segments`` — real stream-copied footage from the
+        continuous ring buffer (see ``_ring_buffer.py``) — is tried
+        FIRST: genuine full-fps video, not the ~3 fps stills
+        ``preroll_frames`` is built from (see this module's own header
+        on why that gap exists). Falls back to the stills-based splice
+        below when the ring has nothing usable — a camera whose buffer
+        hasn't filled yet, or that never started one.
         """
+        if ring_segments:
+            achieved = self._splice_ring_preroll_onto_clip(
+                vid_path, ring_segments, event_id, day_dir
+            )
+            if achieved > 0:
+                return achieved
+            log.debug(
+                "[%s] ring pre-roll unusable for %s — falling back to stills",
+                self.camera_id,
+                event_id,
+            )
         # A single frame carries no time span to derive an fps from, and
         # is not worth a splice on its own merits either.
         if not preroll_frames or len(preroll_frames) < 2:
@@ -382,7 +407,20 @@ class MotionPrerollMixin:
         out_path: Path,
         want_audio: bool = False,
     ) -> bool:
-        """ffmpeg concat-demuxer join: preroll THEN main clip, as one mp4.
+        """The stills-splice's own call shape — preroll THEN main clip —
+        kept as a thin, unchanged entry point over ``_concat_segments``
+        so that call site (and its tests) never had to move. See
+        ``_concat_segments`` for the actual mechanics."""
+        return cls._concat_segments([preroll_path, main_path], out_path, want_audio=want_audio)
+
+    @classmethod
+    def _concat_segments(
+        cls,
+        paths: list[Path],
+        out_path: Path,
+        want_audio: bool = False,
+    ) -> bool:
+        """ffmpeg concat-demuxer join of ``paths``, in order, as one mp4.
 
         STREAM COPY FIRST, re-encode only if that fails. It used to
         re-encode unconditionally, and the reasoning was sound but rested
@@ -393,34 +431,33 @@ class MotionPrerollMixin:
         every spliced recording paid for a second full encode of the whole
         clip to glue three seconds onto the front of it.
 
-        The original worry is real and is kept: two independently encoded
-        segments can disagree on SPS/PPS, pixel format or frame rate, and
-        a copied concat then writes a file ffmpeg is perfectly happy with
-        and no decoder will play. That is why the copy is not trusted on
-        its return code — the result is opened and decoded before it is
+        The original worry is real and is kept: independently produced
+        segments can disagree on SPS/PPS, pixel format, frame rate or even
+        stream layout (a video-only pre-roll joined to an audio+video main
+        clip, for the ring-buffer path — see ``_splice_ring_preroll_onto_clip``),
+        and a copied concat then writes a file ffmpeg is perfectly happy
+        with and no decoder will play. That is why the copy is not trusted
+        on its return code — the result is opened and decoded before it is
         accepted, and anything short of playable falls through to the
         re-encode that always worked.
 
         ``want_audio`` (default False = the historical ``-an`` behaviour)
-        says both inputs carry a matching AAC track and the join must keep
-        it. Note the sharp edge: ``_is_playable`` decodes VIDEO only, so it
-        cannot catch a copy that mangled the audio — the protection is that
-        both segments were encoded to ``media_encode``'s pinned parameters,
-        not the playability check. See ``preroll_audio_wanted``.
+        says every input carries a matching AAC track and the join must
+        keep it. Note the sharp edge: ``_is_playable`` decodes VIDEO only,
+        so it cannot catch a copy that mangled the audio — the protection
+        is that the segments were encoded to ``media_encode``'s pinned
+        parameters, not the playability check. See ``preroll_audio_wanted``.
         """
-        if not preroll_path.exists() or not main_path.exists():
+        if len(paths) < 2:
             return False
-        if preroll_path.stat().st_size < 1024 or main_path.stat().st_size < 1024:
+        if any(not p.exists() or p.stat().st_size < 1024 for p in paths):
             return False
         if not shutil.which("ffmpeg"):
             return False
         list_file = out_path.with_suffix(".txt")
         try:
             list_file.write_text(
-                "\n".join(
-                    f"file '{str(p).replace(chr(39), chr(92) + chr(39))}'"
-                    for p in (preroll_path, main_path)
-                ),
+                "\n".join(f"file '{str(p).replace(chr(39), chr(92) + chr(39))}'" for p in paths),
                 encoding="utf-8",
             )
             copy_tail = build_concat_tail(out_path, reencode=False, want_audio=want_audio)

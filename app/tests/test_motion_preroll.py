@@ -51,6 +51,7 @@ from app.camera_runtime._recording._preroll import (
     MotionPrerollMixin,
     resolve_pre_motion_seconds,
 )
+from app.camera_runtime._recording._ring_splice import RingPrerollSpliceMixin
 
 
 def _tiny_frame():
@@ -319,6 +320,75 @@ def test_splice_falls_back_when_the_result_is_unreadable(tmp_path, monkeypatch):
     assert achieved == 0.0
     assert vid_path.read_bytes() == b"ORIGINAL"
     assert not (tmp_path / "evt6.spliced.mp4").exists(), "the bad spliced file left on disk"
+
+
+# ── The splice: ring buffer tried first ─────────────────────────────────
+
+
+class _SplicerWithRing(RingPrerollSpliceMixin, MotionPrerollMixin):
+    """Mirrors production's mixin order (see ``_recording/__init__.py``'s
+    ``RecordingMixin``) so ``self._splice_ring_preroll_onto_clip`` resolves
+    the same way it does at runtime."""
+
+    def __init__(self, camera_id="cam1", cfg=None):
+        self.camera_id = camera_id
+        self.cfg = cfg or {}
+
+
+def test_splice_uses_the_ring_segments_and_never_touches_stills(tmp_path, monkeypatch):
+    vid_path = tmp_path / "evt7.mp4"
+    vid_path.write_bytes(b"ORIGINAL" * 100)
+    seg = tmp_path / "1000.mp4"
+    seg.write_bytes(b"RING" * 500)
+    encode_calls = []
+    monkeypatch.setattr(
+        preroll_mod, "encode_jpeg_frames_to_mp4", lambda *a, **k: encode_calls.append(1) or True
+    )
+    monkeypatch.setattr(
+        RingPrerollSpliceMixin,
+        "_splice_ring_preroll_onto_clip",
+        lambda self, vp, segs, eid, dd: 4.2,
+    )
+    splicer = _SplicerWithRing()
+
+    achieved = splicer._splice_preroll_onto_clip(
+        vid_path, [(1.0, b"x"), (1.5, b"x")], "evt7", tmp_path, ring_segments=[seg]
+    )
+
+    assert achieved == 4.2
+    assert encode_calls == [], "the stills fallback must not run when the ring splice succeeds"
+
+
+def test_splice_falls_back_to_stills_when_the_ring_is_unusable(tmp_path, monkeypatch):
+    vid_path = tmp_path / "evt8.mp4"
+    vid_path.write_bytes(b"ORIGINAL" * 100)
+    seg = tmp_path / "1000.mp4"
+    seg.write_bytes(b"RING" * 500)
+    monkeypatch.setattr(
+        RingPrerollSpliceMixin,
+        "_splice_ring_preroll_onto_clip",
+        lambda self, vp, segs, eid, dd: 0.0,
+    )
+    monkeypatch.setattr(
+        preroll_mod,
+        "encode_jpeg_frames_to_mp4",
+        lambda frames, out_path, fps, **kw: Path(out_path).write_bytes(b"PREROLL" * 200) or True,
+    )
+    monkeypatch.setattr(
+        MotionPrerollMixin,
+        "_concat_preroll_and_clip",
+        staticmethod(lambda pre, main, out, **kw: Path(out).write_bytes(b"SPLICED" * 200) or True),
+    )
+    monkeypatch.setattr(preroll_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=30, fps=10.0))
+    splicer = _SplicerWithRing()
+
+    frames = [(1000.0, b"x"), (1000.6, b"x")]
+    achieved = splicer._splice_preroll_onto_clip(
+        vid_path, frames, "evt8", tmp_path, ring_segments=[seg]
+    )
+
+    assert achieved == pytest.approx(0.6, abs=0.01)
+    assert vid_path.read_bytes() == b"SPLICED" * 200
 
 
 # ── _concat_preroll_and_clip's own guard clauses (no mocking) ───────────

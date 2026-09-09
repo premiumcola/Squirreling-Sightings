@@ -8,11 +8,17 @@ from ._opencv_fallback import OpenCVFallbackMixin
 from ._preroll import MotionPrerollMixin
 from ._provenance import ProvenanceMixin
 from ._publish import PublishMixin
+from ._ring_splice import RingPrerollSpliceMixin
 from .._consts import _FFMPEG_AVAILABLE, log
 
 
 class RecordingMixin(
-    PublishMixin, FfmpegClipMixin, OpenCVFallbackMixin, MotionPrerollMixin, ProvenanceMixin
+    PublishMixin,
+    FfmpegClipMixin,
+    OpenCVFallbackMixin,
+    MotionPrerollMixin,
+    RingPrerollSpliceMixin,
+    ProvenanceMixin,
 ):
     """Motion-clip lifecycle: ffmpeg start/stop + reencode + finalize + adhoc.
 

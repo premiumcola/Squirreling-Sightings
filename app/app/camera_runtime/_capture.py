@@ -214,6 +214,13 @@ class CaptureMixin:
                     with self._preview_cap_lock:
                         self.preview_cap = None
 
+            # ── Ring buffer: continuous stream-copy for real pre-roll ────
+            # See _ring_buffer.py for why a THIRD always-on connection is
+            # cheaper than it sounds — it's a remux, not a decode, and
+            # _start_ffmpeg_recording already opens a third connection
+            # briefly on every trigger anyway.
+            self._start_ring_buffer()
+
             self.connect_time = time.time()
             self.prev_gray = None  # reset motion state on reconnect
         else:
@@ -269,7 +276,10 @@ class CaptureMixin:
                 time.sleep(0.2)
 
     def _close_capture(self) -> None:
-        """Retire the current main-stream handle, if any."""
+        """Retire the current main-stream handle, if any — and the ring
+        buffer with it, since a stale ring segmenter pointed at a
+        connection this runtime no longer owns is worse than none."""
+        self._stop_ring_buffer()
         cap = self.capture
         self.capture = None
         if cap is None:

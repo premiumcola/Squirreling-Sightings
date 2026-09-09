@@ -59,6 +59,7 @@ class FinalizeClipMixin:
         preroll_frames: list | None = None,
         *,
         proc=None,
+        ring_segments: list | None = None,
     ):
         """The whole post-recording chain, in order. See this module's
         header for what that order is and why.
@@ -93,7 +94,14 @@ class FinalizeClipMixin:
         with encode_slot(self.camera_id, event_id):
             video_url, video_relpath, duration_s, file_size_bytes, encode_error, achieved_pre_s = (
                 self._produce_playable_clip(
-                    raw_path, vid_path, event_id, day_dir, storage_root, public_base, preroll_frames
+                    raw_path,
+                    vid_path,
+                    event_id,
+                    day_dir,
+                    storage_root,
+                    public_base,
+                    preroll_frames,
+                    ring_segments,
                 )
             )
 
@@ -152,6 +160,7 @@ class FinalizeClipMixin:
         storage_root: Path,
         public_base: str,
         preroll_frames: list | None,
+        ring_segments: list | None = None,
     ) -> tuple[str | None, str | None, float, int, str | None, float]:
         """Turn the raw stream copy into the file the operator receives.
 
@@ -161,14 +170,26 @@ class FinalizeClipMixin:
         the splice runs ONLY on a clip already confirmed playable, and
         every failure inside it leaves that clip untouched. Footage that
         is known good is never risked to chase a few seconds of lead-in.
+
+        ``ring_segments`` (real stream-copied footage, see
+        ``_ring_buffer.py``) is tried FIRST when present — it is
+        genuine full-fps video, not the ~3 fps stills ``preroll_frames``
+        is built from. ``preroll_frames`` stays the fallback for a
+        camera whose ring buffer hasn't filled yet, or has none.
         """
         video_url, video_relpath, duration_s, file_size_bytes, encode_error = (
             self._transcode_raw_to_mp4(raw_path, vid_path, event_id, storage_root, public_base)
         )
         achieved_pre_s = 0.0
-        if video_url and vid_path.exists() and preroll_frames:
+        if video_url and vid_path.exists() and (preroll_frames or ring_segments):
             achieved_pre_s, duration_s, file_size_bytes = self._apply_preroll_splice(
-                vid_path, preroll_frames, event_id, day_dir, duration_s, file_size_bytes
+                vid_path,
+                preroll_frames,
+                event_id,
+                day_dir,
+                duration_s,
+                file_size_bytes,
+                ring_segments,
             )
         return video_url, video_relpath, duration_s, file_size_bytes, encode_error, achieved_pre_s
 
@@ -377,18 +398,21 @@ class FinalizeClipMixin:
     def _apply_preroll_splice(
         self,
         vid_path: Path,
-        preroll_frames: list,
+        preroll_frames: list | None,
         event_id: str,
         day_dir: Path,
         duration_s: float,
         file_size_bytes: int,
+        ring_segments: list | None = None,
     ) -> tuple[float, float, int]:
         """Splice the pre-roll ring onto ``vid_path`` and re-probe on
         success so the caller's duration/size describe the spliced file,
         not the trigger-only segment. Returns
         ``(achieved_pre_s, duration_s, file_size_bytes)`` — the latter two
         unchanged when there was nothing to splice or the splice failed."""
-        achieved_pre_s = self._splice_preroll_onto_clip(vid_path, preroll_frames, event_id, day_dir)
+        achieved_pre_s = self._splice_preroll_onto_clip(
+            vid_path, preroll_frames, event_id, day_dir, ring_segments
+        )
         if achieved_pre_s <= 0:
             return achieved_pre_s, duration_s, file_size_bytes
         try:

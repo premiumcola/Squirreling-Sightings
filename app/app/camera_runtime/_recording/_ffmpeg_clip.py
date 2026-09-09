@@ -12,6 +12,7 @@ from .._consts import log
 # camera_runtime/_recording/ is two levels under app/app/, so
 # ``...media_encode`` resolves to app.app.media_encode.
 from ._finalize import FinalizeClipMixin
+from ._preroll import resolve_pre_motion_seconds
 from ._stages import (
     STAGE_QUEUED,
     STAGE_RECORDING,
@@ -152,6 +153,20 @@ class FfmpegClipMixin(FinalizeClipMixin):
         # step at finalize time already treats as "nothing to splice".
         ring = getattr(self, "motion_preroll", None)
         self._rec_preroll_frames = ring.snapshot() if ring is not None else []
+        # The REAL pre-roll, if the stream-copy ring buffer has one —
+        # see _ring_buffer.py. Snapshot the covering segments now, same
+        # reasoning as the stills ring above: everything in it right now
+        # is genuinely BEFORE this trigger, and a camera that just
+        # started (buffer not filled yet) or has no ring running hands
+        # back [] here, which _splice_preroll_onto_clip already treats
+        # as "fall back to the stills-based splice".
+        pre_s = resolve_pre_motion_seconds(self.cfg, self.global_cfg)
+        trigger_ts = start_time.timestamp()
+        self._rec_ring_segments = (
+            self._ring_segments_covering(trigger_ts - pre_s, trigger_ts)
+            if pre_s > 0 and hasattr(self, "_ring_segments_covering")
+            else []
+        )
         # Persist a 'recording' stub so the dashboard can show the clip immediately
         try:
             self._write_recording_event_stub(event_id, meta, start_time, status="recording")
@@ -211,12 +226,14 @@ class FfmpegClipMixin(FinalizeClipMixin):
         meta = self._rec_event_meta
         start_time = self._ffmpeg_start_time
         preroll_frames = self._rec_preroll_frames
+        ring_segments = getattr(self, "_rec_ring_segments", [])
         # Reset state so a new recording can start immediately
         self._ffmpeg_proc = None
         self._ffmpeg_out_path = None
         self._ffmpeg_start_time = None
         self._rec_event_id = None
         self._rec_preroll_frames = []
+        self._rec_ring_segments = []
         if proc is None:
             return
         log.info(
@@ -245,6 +262,6 @@ class FfmpegClipMixin(FinalizeClipMixin):
         threading.Thread(
             target=self._reencode_motion_clip,
             args=(raw_path, event_id, meta, start_time, preroll_frames),
-            kwargs={"proc": proc},
+            kwargs={"proc": proc, "ring_segments": ring_segments},
             daemon=True,
         ).start()

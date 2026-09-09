@@ -35,6 +35,7 @@ from ._main_loop import MainLoopMixin
 from ._motion import MotionMixin
 from ._recording import RecordingMixin
 from ._recording._preroll import MotionPreroll, resolve_pre_motion_seconds
+from ._recording._ring_buffer import StreamRingBufferMixin
 from ._recording_step import RecordingStepMixin
 from ._rescue import RescueMixin
 from ._status import StatusMixin
@@ -122,6 +123,7 @@ class WeatherPrebuffer:
 class CameraRuntime(
     LifecycleMixin,
     CaptureMixin,
+    StreamRingBufferMixin,
     ZonesMixin,
     MotionMixin,
     RecordingMixin,

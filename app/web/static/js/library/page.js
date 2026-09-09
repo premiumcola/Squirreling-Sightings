@@ -18,7 +18,7 @@ import {
   getLibraryFacetsTotal,
 } from './_filter-bar.js';
 import { bindLibraryGrid } from './_bind.js';
-import { isZoomActive } from '../weather/_zoom.js';
+import { noteFilterUse } from '../weather/_time-binding.js';
 import { showMediathekView } from '../mediathek/_view-toggle.js';
 
 const _filter = createLibraryFilterState();
@@ -60,13 +60,9 @@ function _paint() {
   renderLibraryGrid(grid, _items);
   bindLibraryGrid(grid, _items);
   _repaintPagination();
-  // Stage 7: the only visible hint that this page is scoped to the
-  // chart's drag-zoom rather than "Alles gemischt" — an empty result
-  // already reads distinctly (see _grid.js), this covers the non-empty
-  // case, where a shorter-than-usual list could otherwise read as a
-  // silently broken feed instead of a deliberate narrowing.
-  const note = byId('libraryZoomNote');
-  if (note) note.hidden = !isZoomActive();
+  // Stage 7 also toggled a "Gefiltert auf den im Chart gewählten
+  // Zeitraum." note here. Both the note and the narrowing it announced
+  // are gone — see the markup comment in partials/mediathek.html.
 }
 
 /** One `/api/library` fetch, replacing `_items` outright — never
@@ -134,6 +130,11 @@ function _syncMediathekView() {
 }
 
 function _onFilterChange() {
+  // Every chip in #libraryFilterBar and every quick tile funnels through
+  // here, which makes this the one place that has to tell the time
+  // chooser at the foot of the section that it is no longer the last
+  // thing the operator touched — see weather/_time-binding.js.
+  noteFilterUse('library-chip');
   // Not awaited — repainting the count badges is not on the critical
   // path for the grid's own reload (renderLibraryFilterBar's own
   // header) — but its facets fetch is also the ONLY source for the

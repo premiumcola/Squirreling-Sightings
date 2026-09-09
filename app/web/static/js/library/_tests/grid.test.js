@@ -42,13 +42,17 @@ test('an empty page renders the empty-state message, not a blank grid', () => {
   assert.match(host.innerHTML, /Keine Einträge vorhanden/);
 });
 
-test('an empty page while zoomed renders a distinct message, not the generic empty state', () => {
+test('the Wetterdaten chart-zoom does not change what an empty page says', () => {
+  // Stage 7 had a second empty state here ("Keine Einträge im gewählten
+  // Zeitraum") for a grid narrowed by the chart's drag-zoom. The grid is
+  // not narrowed by it any more (library/_filter-state.js), so blaming a
+  // range the operator cannot see from up here would be a lie.
   const host = _fakeHost();
   setZoomRange('2026-08-20T00:00:00', '2026-08-20T12:00:00');
   try {
     renderLibraryGrid(host, [], {});
-    assert.match(host.innerHTML, /gewählten Zeitraum/);
-    assert.equal(/Keine Einträge vorhanden\./.test(host.innerHTML), false);
+    assert.match(host.innerHTML, /Keine Einträge vorhanden/);
+    assert.doesNotMatch(host.innerHTML, /gewählten Zeitraum/);
   } finally {
     clearZoomRange();
   }

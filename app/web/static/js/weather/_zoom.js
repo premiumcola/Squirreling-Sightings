@@ -1,16 +1,18 @@
 // ─── weather/_zoom.js ───────────────────────────────────────────────────
 // Shared drag-to-zoom range state for the Wetterdaten-chart. Lives in
 // its own leaf module — outside stats.js (which drives the chart) and
-// library/ (which narrows the merged grid by the same range as of
-// Stage 7, plus weather/_manual-event-save.js's "als Ereignis
-// speichern" flow) — so all of them can read/write it without
-// importing one another. stats.js also needs to trigger a grid
-// re-render when the range changes; it does that through the
-// `window.reloadLibraryPage` bridge (the same one every other mutation
-// in the merged section already uses) rather than importing library/
-// directly — library/_filter-state.js is the one importing FROM this
-// file, never the other way, which is exactly the cross-import cycle
-// this module's leaf-ness exists to avoid.
+// weather/_manual-event-save.js (the "als Ereignis speichern" flow) —
+// so both can read/write it without importing one another.
+//
+// It narrows the CHART and nothing else. The merged Mediathek grid once
+// narrowed by the same range (Stage 7) and no longer does anywhere:
+// query params (library/_filter-state.js), the empty-state wording
+// (library/_grid.js) and the "gefiltert" banner (library/page.js) have
+// all been unhooked. weather/_time-binding.js goes one step further and
+// CLEARS this range as soon as a filter up in the Mediathek is used, so
+// a span dragged down here cannot outlive the operator's attention. It
+// imports from this file, never the other way round — the cross-import
+// cycle this module's leaf-ness exists to avoid.
 //
 // Boundaries are the RAW `ts` string of whichever sample the drag
 // snapped to (see stats-chart/_hover.js's brush handler), never a
@@ -47,13 +49,11 @@ export function zoomedSamples(samples) {
 }
 
 // Whether an ISO timestamp falls inside the active zoom range; always
-// true when no zoom is active. Stage 7 (the merged library grid finally
-// narrowing by this range) reached for `getZoomRange`/`isZoomActive`
-// instead — the grid's own `since`/`until` clipping happens server-side
-// now (GET /api/library), so nothing needs a client-side per-item
-// membership test. Still not called by anything; kept as this module's
-// public contract for whichever future consumer DOES need one (a
-// client-side list that isn't already server-filtered), same as
+// true when no zoom is active. Not called by anything — the merged grid
+// that Stage 7 briefly narrowed by this range never used it either
+// (server-side `since`/`until` did that job, and that whole coupling is
+// gone now). Kept as this module's public contract for whichever future
+// consumer DOES need a client-side per-item membership test, same as
 // sightings.js's old grid filter used to.
 export function withinZoom(tsIso) {
   if (!_range) return true;

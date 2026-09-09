@@ -182,14 +182,11 @@
         ← Übersicht
       </button>
     </div>
-    {# Shown only while the Wetterdaten-chart's drag-zoom (further down this section) is active —
-    library/page.js toggles it, not CSS, because it depends on JS-only state (weather/_zoom.js). The
-    chart's own "Zeitraum ausgewählt" hint (#weatherZoomActions, below) says the CHART is zoomed;
-    this one says the LIST above it is too — two different facts, not a duplicate of the same one.
-    #}
-    <div class="lib-zoom-note" id="libraryZoomNote" hidden>
-      Gefiltert auf den im Chart gewählten Zeitraum.
-    </div>
+    {# A #libraryZoomNote banner used to sit here, announcing that the grid was scoped to the span
+    dragged in the Wetterdaten-chart. It is gone with the coupling it described: the chart's time
+    chooser lives at the FOOT of this section and no longer reaches the grid at all (see
+    library/_filter-state.js, and weather/_time-binding.js for the release rule). A banner explaining
+    a filter the operator cannot see from here was the confusion, not the cure. #}
     <div class="media-grid" id="libraryGrid"></div>
     <div id="libraryPagination" class="media-pagination"></div>
   </div>
@@ -197,9 +194,10 @@
   {# Wetterdaten & Prognose: persisted history of all numeric Open-Meteo parameters + sun altitude,
   rendered as a single multi-line SVG chart with per-line normalisation. Fetches
   /api/weather/history on visibility (IntersectionObserver) and refreshes every 60 s while the
-  section is in view. Unchanged from the old #weather section, moved here verbatim — its drag-zoom
-  also narrows the merged grid above now (Stage 7, weather/stats.js's onWeatherChartRangeSelect /
-  resetWeatherChartZoom), on top of the "als Ereignis speichern" flow it always drove. #}
+  section is in view. Unchanged from the old #weather section, moved here verbatim. Its drag-zoom
+  drives the "als Ereignis speichern" flow and nothing else: it narrows THIS chart, never the grid
+  above (weather/stats.js's onWeatherChartRangeSelect / resetWeatherChartZoom), and a filter used up
+  there releases it outright (weather/_time-binding.js). #}
   <div class="ws-stats-block" id="weatherStatsBlock">
     <div class="ws-stats-head">
       <span class="ws-title">
@@ -208,17 +206,32 @@
         </svg>
         Wetterdaten &amp; Prognose
       </span>
-      <div class="ws-stats-pills" id="weatherStatsPills" role="tablist" aria-label="Zeitfenster">
-        <button type="button" class="ws-stats-pill" data-hours="1">1 h</button>
-        <button type="button" class="ws-stats-pill" data-hours="6">6 h</button>
-        <button type="button" class="ws-stats-pill is-active" data-hours="24">24 h</button>
-        <button type="button" class="ws-stats-pill" data-hours="168">7 d</button>
-        <button type="button" class="ws-stats-pill" data-hours="720">30 d</button>
-        <!-- A custom drag-zoom on the chart below matches none of the five
-                   presets above — every ws-stats-pill.is-active class then comes
-                   off (weather/stats.js::_renderWeatherStatsPillState) and this
-                   chip is the discoverable way back. Clicking any preset again
-                   resets the zoom just as well; this is the explicit affordance. -->
+      {# One slider instead of the five fixed steps that used to sit here — „nicht diese festen
+      Zeiträume, sondern son Slider von links nach rechts, nah und fern". The ladder behind it is
+      unchanged (data-steps, in hours); weather/_range-slider.js maps a handle position onto one of
+      those values and trims the far end to what the archive can actually fill, so the track simply
+      stops short on a young install instead of offering a month of nothing. #}
+      <div class="ws-range" id="weatherStatsRange">
+        <span class="ws-range-cap" aria-hidden="true">nah</span>
+        <input
+          type="range"
+          class="ws-range-input"
+          id="weatherRangeSlider"
+          data-steps="1,6,24,168,720"
+          min="0"
+          max="4"
+          step="1"
+          value="2"
+          aria-label="Zeitfenster – nah bis fern"
+        />
+        <span class="ws-range-cap" aria-hidden="true">fern</span>
+        {# Never a mystery control: the chosen step is always spelled out next to the handle. #}
+        <output class="ws-range-value" id="weatherRangeValue" for="weatherRangeSlider">24 h</output>
+        <!-- A custom drag-zoom on the chart below matches no step on the
+                   ladder — the readout then says „eigener Zeitraum"
+                   (weather/stats.js::_renderWeatherRangeState) and this chip is
+                   the discoverable way back. Moving the handle resets the zoom
+                   just as well; this is the explicit affordance. -->
         <button
           type="button"
           class="ws-stats-pill ws-stats-pill--reset"

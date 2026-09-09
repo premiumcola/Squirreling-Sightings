@@ -19,7 +19,8 @@ import { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-s
 import { apiGet } from '../core/api.js';
 import { setZoomRange, clearZoomRange, isZoomActive } from './_zoom.js';
 import { resetChartAnnotations } from './_chart-annotations.js';
-import { applyRangePills } from './_range-pills.js';
+import { applyRangeSlider, bindRangeSlider } from './_range-slider.js';
+import { onTimeBindingRelease } from './_time-binding.js';
 
 // ── Wetterdaten & Prognose chart (Phase 4) ──────────────────────────────────
 // Single-source palette for the multi-line history chart. Re-uses the
@@ -143,7 +144,7 @@ export async function loadWeatherStats() {
 async function _autoPickRange() {
   if (_wsStatsState.rangeAutoPicked) return;
   _wsStatsState.rangeAutoPicked = true;
-  const want = applyRangePills(_wsStatsState.data?.extent, _wsStatsState.hours);
+  const want = applyRangeSlider(_wsStatsState.data?.extent, _wsStatsState.hours, isZoomActive());
   if (!Number.isFinite(want) || want === _wsStatsState.hours) return;
   _wsStatsState.hours = want;
   await loadWeatherStats();
@@ -193,27 +194,21 @@ export function renderWeatherStats() {
   renderWeatherStatsChart();
   renderWeatherStatsLegend();
   renderWeatherStatsExplainer();
-  _renderWeatherStatsPillState();
+  _renderWeatherRangeState();
 }
 
-// Preset pills read "active" off _wsStatsState.hours ONLY while no
-// custom drag-zoom is in effect — a custom range matches none of the
-// five fixed windows, so every pill must go dark and the reset chip
-// (the discoverable way back to a preset) must show instead.
-function _renderWeatherStatsPillState() {
-  const bar = byId('weatherStatsPills');
-  if (!bar) return;
+// The slider's handle, its readout and the reset chip. The readout shows
+// a step off _wsStatsState.hours ONLY while no custom drag-zoom is in
+// effect — a dragged span matches no step on the ladder, so it reads
+// „eigener Zeitraum" instead and the ✕ chip (the discoverable way back
+// to a step) shows next to it.
+function _renderWeatherRangeState() {
   const zoomed = isZoomActive();
-  bar.querySelectorAll('.ws-stats-pill[data-hours]').forEach((b) => {
-    b.classList.toggle(
-      'is-active',
-      !zoomed && parseInt(b.dataset.hours, 10) === _wsStatsState.hours,
-    );
-  });
-  // Which steps the archive can actually fill — recomputed here rather
-  // than once at load, because the buffer grows under a panel that stays
-  // open and a step that was dark at boot should light up on its own.
-  applyRangePills(_wsStatsState.data?.extent, _wsStatsState.hours);
+  // How far the ladder reaches is recomputed here rather than once at
+  // load, because the buffer grows under a panel that stays open and a
+  // step that was out of reach at boot should become reachable on its
+  // own.
+  applyRangeSlider(_wsStatsState.data?.extent, _wsStatsState.hours, zoomed);
   const resetBtn = byId('weatherStatsZoomReset');
   if (resetBtn) resetBtn.hidden = !zoomed;
   const zoomActions = byId('weatherZoomActions');
@@ -241,23 +236,26 @@ function _closeZoomSavePanel() {
 
 // Fired by the chart's drag-to-zoom (stats-chart/_hover.js's
 // opts.onRangeSelect, wired in stats-chart/index.js). Overrides whatever
-// preset is selected — none of the five pills matches a custom range.
-// The zoom is the CHART'S. It used to narrow the Mediathek grid to the
-// same window as well, and that coupling is gone: the grid sits in a
-// different section of the page, so a span dragged down here left
-// „Keine Einträge im gewählten Zeitraum" up there with nothing on
-// screen to explain it. See library/_filter-state.js.
+// step the slider is on — no step on the ladder matches a dragged span.
+// The zoom is the CHART'S and only the chart's. It used to narrow the
+// Mediathek grid to the same window as well, and that coupling is gone
+// root and branch: the grid sits in a different section of the page, so
+// a span dragged down here left „Keine Einträge im gewählten Zeitraum"
+// up there with nothing on screen to explain it. See
+// library/_filter-state.js, and weather/_time-binding.js for the rule
+// that now also drops the zoom itself once a filter up there is used.
 export function onWeatherChartRangeSelect(startTs, endTs) {
   setZoomRange(startTs, endTs);
   renderWeatherStats();
   _closeZoomSavePanel();
 }
 
-// The reset chip, and clicking ANY preset (even the one already
-// active) — both documented, discoverable ways back to a preset per
-// the brief. Exported so weather.html's inline wiring (none currently)
-// or a future affordance could call it directly; today only the reset
-// button and _bindWeatherStatsPills below use it.
+// The reset chip, and moving the slider to ANY step (even the one it is
+// already on) — both documented, discoverable ways back to a step on the
+// ladder per the brief. Exported so weather.html's inline wiring (none
+// currently) or a future affordance could call it directly; today the
+// reset button, _bindWeatherRange below and the time-binding release
+// subscriber at the foot of this file use it.
 export function resetWeatherChartZoom() {
   clearZoomRange();
   // Closed (and mark-mode cleared) BEFORE the redraw below — unlike
@@ -268,34 +266,26 @@ export function resetWeatherChartZoom() {
   renderWeatherStats();
 }
 
-function _bindWeatherStatsPills() {
-  const bar = byId('weatherStatsPills');
-  if (!bar || bar.dataset.wired) return;
-  bar.querySelectorAll('.ws-stats-pill[data-hours]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const h = parseInt(btn.dataset.hours, 10) || 24;
-      const hadZoom = isZoomActive();
-      // A preset click always clears a custom range, even when it picks
-      // the same hours value the panel was already showing — that's the
-      // "clicking a preset again resets zoom" affordance from the brief.
-      clearZoomRange();
-      if (hadZoom) {
-        _closeZoomSavePanel();
-        // Same grid-reload bridge resetWeatherChartZoom uses below — a
-        // preset click clears zoom exactly like the reset chip does, so
-        // the grid has to un-narrow here too, on every branch below.
-      }
-      if (h === _wsStatsState.hours) {
-        if (hadZoom) renderWeatherStats();
-        return;
-      }
-      _wsStatsState.hours = h;
-      loadWeatherStats();
-    });
+function _bindWeatherRange() {
+  bindRangeSlider((h) => {
+    const hadZoom = isZoomActive();
+    // Settling the handle always clears a custom range, even when it
+    // lands back on the step the panel was already showing — that's the
+    // "picking a step again resets the zoom" affordance from the brief.
+    clearZoomRange();
+    if (hadZoom) _closeZoomSavePanel();
+    if (h === _wsStatsState.hours) {
+      if (hadZoom) renderWeatherStats();
+      return;
+    }
+    _wsStatsState.hours = h;
+    loadWeatherStats();
   });
   const resetBtn = byId('weatherStatsZoomReset');
-  if (resetBtn) resetBtn.addEventListener('click', resetWeatherChartZoom);
-  bar.dataset.wired = '1';
+  if (resetBtn && !resetBtn.dataset.wired) {
+    resetBtn.addEventListener('click', resetWeatherChartZoom);
+    resetBtn.dataset.wired = '1';
+  }
 }
 
 function _startWeatherStatsRefresh() {
@@ -314,7 +304,7 @@ function _stopWeatherStatsRefresh() {
 function initWeatherStats() {
   const block = byId('weatherStatsBlock');
   if (!block) return;
-  _bindWeatherStatsPills();
+  _bindWeatherRange();
   if (_wsStatsObserver) return; // already initialised
   // Pause polling while the section is off-screen — the chart is a
   // dashboard for the Wetter section, not a background task.
@@ -370,7 +360,20 @@ export { initWeatherStats };
 export { renderWeatherStatsChart } from './stats-chart/index.js';
 export { renderWeatherStatsLegend, renderWeatherStatsExplainer } from './stats-summary.js';
 
+// The time chooser only ever narrows while it is the last thing the
+// operator touched — a class / species / camera / library-chip filter up
+// the page releases it (weather/_time-binding.js owns that rule). The
+// release is a pure state change over in _zoom.js; redrawing the chart
+// at full range, and closing a save panel that was describing the window
+// just dropped, is this module's half of it. Registered at module scope
+// rather than in initWeatherStats() so a release that lands before the
+// section has ever scrolled into view still leaves the chart honest.
+onTimeBindingRelease(() => {
+  _closeZoomSavePanel();
+  renderWeatherStats();
+});
+
 // ── window.* bridge ─────────────────────────────────────────────────────────
 // loadAll() in live-update.js calls this by global name to wire the
-// chart's IntersectionObserver + pill-bar listeners.
+// chart's IntersectionObserver + range-slider listeners.
 window.initWeatherStats = initWeatherStats;

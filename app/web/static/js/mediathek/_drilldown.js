@@ -19,6 +19,7 @@ import { renderProcessingQueue } from './_processing.js';
 import { _setActiveMocCard } from './_overview.js';
 import { renderMediaGrid, _reflowPageAfterLayout } from './_paging.js';
 import { showMediathekView } from './_view-toggle.js';
+import { noteFilterUse } from '../weather/_time-binding.js';
 
 const _LOADING_HTML =
   '<div style="padding:32px;text-align:center;color:var(--muted)">Lade Medien…</div>';
@@ -39,6 +40,13 @@ function _showDrilldown() {
 // pre-seeded label that ended up with zero matches so the pill bar
 // doesn't show stale highlights.
 async function _loadAndRender(what) {
+  // All four openers land here, and all four are the operator choosing a
+  // camera / category / species — i.e. a filter that is NOT the time
+  // chooser at the foot of the section, which therefore releases its own
+  // narrowing (weather/_time-binding.js). One call here instead of four
+  // in the openers above, for the same reason the openers share this
+  // function at all.
+  noteFilterUse(what);
   try {
     await loadMedia();
   } catch (err) {

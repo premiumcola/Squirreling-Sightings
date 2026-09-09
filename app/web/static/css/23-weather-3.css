@@ -72,18 +72,103 @@
     color: var(--text);
   }
 }
-/* A window the archive cannot fill yet. Dimmed rather than hidden: the
-   ladder is a fixed set of five and a gap in it is harder to read than a
-   step that is visibly not available yet. Still well clear of the
-   background — a disabled control must be legible, not invisible. */
-.ws-stats-pill.is-unavailable {
-  color: var(--muted);
-  opacity: 0.4;
-  cursor: default;
-}
 .ws-stats-pill.is-active {
   background: rgba(127, 174, 201, 0.22);
   color: #cfe1ee;
+}
+
+/* ── Zeitfenster-Slider (nah → fern) ───────────────────────────────────
+   Replaces the five fixed steps that used to live in .ws-stats-pills up
+   here. Same ladder of hour values behind it — see
+   weather/_range-slider.js — but one continuous left-to-right handle
+   says "näher / ferner" the way five separate words never did, and a
+   window the archive cannot fill is simply off the end of the track
+   instead of being an unreachable notch in the middle of it.
+   Depth from a tinted track, no border, matching every other control in
+   this panel. */
+.ws-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 420px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.ws-range-cap {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+/* Fixed width so the row does not twitch as the readout goes
+   "6 h" → "30 d" → "eigener Zeitraum". */
+.ws-range-value {
+  flex-shrink: 0;
+  min-width: 92px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #cfe1ee;
+}
+/* 44 px of tap area around a 4 px visual track — this is the panel's
+   primary control and it is dragged with a thumb (iOS HIG), same reason
+   .ws-stats-pill carries a 44 px min-height. */
+.ws-range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 64px;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.ws-range-input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(127, 174, 201, 0.3);
+}
+.ws-range-input::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(127, 174, 201, 0.3);
+}
+/* -9px centres the 22 px thumb on the 4 px track; Firefox centres its
+   own thumb, so no margin there. */
+.ws-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+  border: 0;
+  border-radius: 50%;
+  background: #cfe1ee;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.ws-range-input::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: #cfe1ee;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.ws-range-input:focus-visible {
+  outline: 2px solid rgba(127, 174, 201, 0.9);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+/* An archive with a single reachable step has nothing to choose
+   between. A dead handle is honest; one that snaps back is not. */
+.ws-range-input:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Chart svg fills its wrapper. Height is fixed on desktop, slightly

@@ -86,11 +86,27 @@ def test_the_three_states_are_still_all_present_and_still_siblings():
 
 def test_library_grid_markup_itself_is_unchanged():
     """The operator asked for the ALWAYS-VISIBLE FRAMING gone, not the
-    grid — #libraryGrid / #libraryPagination / #libraryZoomNote still
-    render, just under the toggle instead of a permanent heading."""
+    grid — #libraryGrid / #libraryPagination still render, just under the
+    toggle instead of a permanent heading."""
     mediathek = _read(_MEDIATHEK)
-    for needle in ('id="libraryGrid"', 'id="libraryPagination"', 'id="libraryZoomNote"'):
+    for needle in ('id="libraryGrid"', 'id="libraryPagination"'):
         assert needle in mediathek
+
+
+def test_no_banner_claims_the_grid_follows_the_weather_time_chooser():
+    """The Wetterdaten time chooser sits at the FOOT of this section and
+    controls its own chart only. The "Gefiltert auf den im Chart
+    gewählten Zeitraum." note that used to sit above the grid described a
+    coupling that no longer exists — a filter whose control is off-screen
+    is the confusion, and a banner about it is not the cure."""
+    mediathek = _read(_MEDIATHEK)
+    assert 'id="libraryZoomNote"' not in mediathek
+    assert "Gefiltert auf den im Chart" not in mediathek
+    # …and the same coupling is gone from the two JS surfaces that read
+    # the chart's zoom directly: the banner toggle and the empty state.
+    for module in ("page.js", "_grid.js"):
+        src = _read(_JS / "library" / module)
+        assert "isZoomActive" not in src, f"library/{module} still follows the weather chart"
 
 
 # ── a way back to the tile overview ───────────────────────────────────────

@@ -633,26 +633,23 @@ body.sidebar-locked {
     flex-shrink: 0;
   }
 
-  /* Time-range pills above the chart — 44 px tap-targets per iOS HIG, and
-     allow horizontal scroll-snap so the 5-pill row (1h/6h/24h/7d/30d)
-     never wraps awkwardly on a 375 px viewport. */
-  #weatherStatsPills {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    scroll-snap-type: x proximity;
+  /* Time-range slider above the chart. .ws-stats-head already wraps, so
+     giving this its own full-width row leaves the handle real travel at
+     375 px instead of the ~60 px stub it would get sharing a line with
+     the title. The five-pill row this replaced needed horizontal
+     scroll-snap to survive that width; a slider does not. */
+  #weatherStatsRange {
+    flex: 1 1 100%;
     max-width: 100%;
+    /* Safety valve at 375 px: „eigener Zeitraum" plus the ✕ chip is the
+       widest this row ever gets, and it may need a second line rather
+       than squeezing the handle's travel to nothing. A stadium radius
+       over two lines reads as a blob, so square it off to a large-but-
+       finite corner instead. */
+    flex-wrap: wrap;
+    border-radius: 22px;
   }
-  #weatherStatsPills::-webkit-scrollbar {
-    display: none;
-  }
-  #weatherStatsPills > * {
-    scroll-snap-align: start;
-    flex-shrink: 0;
-  }
-  #weatherStatsPills .ws-pill,
-  #weatherStatsPills button {
+  #weatherStatsRange button {
     min-height: 44px;
     padding: 10px 14px;
   }

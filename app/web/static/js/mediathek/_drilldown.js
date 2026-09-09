@@ -1,9 +1,10 @@
 // ─── mediathek/_drilldown.js ───────────────────────────────────────────────
-// R23 split of orchestration.js — Level 2 of the Mediathek: the three ways
-// into the filtered grid (one camera / all cameras / one category) and the
-// way back out. Each opener owns the same sequence — reset filter state,
-// swap the two wrappers, load, prune dead pills, render — so they live
-// together and share _reflowPageAfterLayout() from _paging.js.
+// R23 split of orchestration.js — Level 2 of the Mediathek: the four ways
+// into the filtered grid (one camera / all cameras / one category / one
+// bird species) and the way back out. Each opener owns the same sequence —
+// reset filter state, swap the two wrappers, load, prune dead pills, render
+// — so they live together and share _reflowPageAfterLayout() from
+// _paging.js.
 //
 // The section heading belongs here too: it is a pure function of
 // state.mediaDrillOpen + state.mediaCamera, which only these four
@@ -109,6 +110,33 @@ export async function openMediaDrilldown(camId) {
   _updateMediaSelectToggle();
   updateMediaSectionTitle();
   await _loadAndRender('cam');
+  _reflowPageAfterLayout();
+}
+
+// Fourth way into the drilldown — the "Vogelarten" species grid tile tap
+// (mediathek/_species-grid.js) has already put mediaLabels/mediaSpecies
+// into the state it wants, via the SAME selectSpecies()
+// _species-filter.js's own pill click uses (see
+// _species-grid.js::selectSpeciesFromGrid), before calling this — so
+// unlike the three openers above, this one must NOT touch
+// mediaLabels/mediaSpecies itself. It only does the "reveal the
+// all-cameras drilldown + load" half every entrypoint here already
+// shares. Reached via window.openMediaSpeciesDrilldown (orchestration.js)
+// rather than a direct import: _species-grid.js stays a leaf module
+// (see its own header) and cannot pull in this file's loadMedia/
+// renderMediaGrid/lightbox chain.
+export async function openMediaSpeciesDrilldown() {
+  state.mediaDrillOpen = true;
+  state.mediaCamera = null;
+  state.mediaPage = 0;
+  if (state.mediaSelectMode) _exitMediaSelectMode();
+  _clearLoadedLibrary();
+  renderMediaFilterPills('drilldown');
+  showMediathekView('mediaDrilldown');
+  _setActiveMocCard(null);
+  _updateMediaSelectToggle();
+  updateMediaSectionTitle();
+  await _loadAndRender('species');
   _reflowPageAfterLayout();
 }
 

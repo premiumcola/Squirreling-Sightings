@@ -102,12 +102,25 @@
     <span>Kamera-Ansicht &amp; Auswahl</span>
   </div>
   <div id="mediaStorageBar" class="media-storage-bar"></div>
-  {# Three mutually-exclusive states, one toggle — mediathek/_view-toggle.js::showMediathekView is
-  the single place that flips between them, called from mediathek/_drilldown.js (states 1+2) and
-  library/page.js (state 3). Exactly one of the three is ever visible. #}
+  {# Four mutually-exclusive states, one toggle — mediathek/_view-toggle.js::showMediathekView is
+  the single place that flips between them, called from mediathek/_drilldown.js (states 1+3),
+  mediathek/_species-grid.js (state 2) and library/page.js (state 4). Exactly one of the four is
+  ever visible. #}
   <!-- State 1: camera-tile overview (default) -->
   <div id="mediaOverview"></div>
-  <!-- State 2: per-camera drill-down (filter bar lives here, hidden until camera selected) -->
+  {# State 2: the "Vogelarten" species grid (mediathek/_species-grid.js) — one tile per bird
+  species this installation has actually sighted (icon + German name + sighting count), reached
+  from the "Vogelarten" card in the overview above. Tapping a tile opens state 3 below, already
+  filtered to that species (openMediaSpeciesDrilldown). #}
+  <div id="mediaSpeciesGrid" style="display: none">
+    <div class="media-drill-head">
+      <button type="button" class="media-drill-back" data-action="closeMediaSpeciesGrid">
+        ← Übersicht
+      </button>
+    </div>
+    <div id="mediaSpeciesGridBody" class="species-grid"></div>
+  </div>
+  <!-- State 3: per-camera drill-down (filter bar lives here, hidden until camera selected) -->
   <div id="mediaDrilldown" style="display: none">
     <div class="media-drill-head">
       <button type="button" class="media-drill-back" data-action="closeMediaDrilldown">
@@ -148,7 +161,7 @@
       </button>
     </div>
   </div>
-  {# State 3: the merged /api/library results — GET /api/library, "Alles gemischt" (no `kinds`
+  {# State 4: the merged /api/library results — GET /api/library, "Alles gemischt" (no `kinds`
   filter) is the default when reached with no quick tile pre-selected: motion clips, sightings,
   recaps, storm episodes, manual events and daily timelapses render side by side, newest first.
   Mounted by library/page.js; shown instead of the tile overview while a quick tile

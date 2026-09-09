@@ -12,6 +12,7 @@ import { state } from '../core/state.js';
 import { getCameraIcon, getCameraColor, objIconSvg } from '../core/icons.js';
 import { _buildMocChips } from './_chips.js';
 import { renderMediaFilterPills } from './filters.js';
+import { speciesGridEntryTileHTML, bindSpeciesGridEntryTile } from './_species-grid.js';
 
 // Quick-jump tiles into the MERGED grid (library/page.js), not the
 // per-camera drilldown the tiles above open — "Tiere" and "Menschen"
@@ -199,7 +200,11 @@ export function renderMediaOverview() {
   // top of those two was the thing being asked to disappear.
   const ts = Date.now();
   const camCards = cams.map((c) => _camCardHTML(c, statsByid[c.id] || {}, ts)).join('');
-  const quickTiles = _QUICK_LABEL_TILES.map(_quickLabelTileHTML).join('');
+  // "Vogelarten" (mediathek/_species-grid.js) sits after the three
+  // label/kind quick tiles — a fourth quick-jump card, own concern
+  // module, same .moc-card/.moc-quick visual family.
+  const quickTiles =
+    _QUICK_LABEL_TILES.map(_quickLabelTileHTML).join('') + speciesGridEntryTileHTML();
   const archivedHtml = _archivedSectionHTML(state.mediaArchived || []);
 
   // Category filter bar — populated dynamically (see renderMediaFilterPills('overview') below)
@@ -209,6 +214,7 @@ export function renderMediaOverview() {
     catSection + `<div class="media-overview-grid">${camCards}${quickTiles}</div>` + archivedHtml;
   renderMediaFilterPills('overview');
   _bindQuickLabelTiles();
+  bindSpeciesGridEntryTile();
 }
 
 // Single source of truth for which moc-card is highlighted. data-cam-id is

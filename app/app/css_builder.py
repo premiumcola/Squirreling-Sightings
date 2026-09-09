@@ -151,6 +151,11 @@ LOAD_ORDER = [
     # so it only needs to sit near the end of the cascade, not inside
     # the mediaview/mediathek slabs it is reachable from.
     "39-species-picker.css",
+    # The "Vogelarten" species grid (mediathek/_species-grid.js) — a new
+    # Mediathek overview state (#mediaSpeciesGrid), so it needs to load
+    # after 25-mobile.css like every other late partial to keep its own
+    # 480px override authoritative.
+    "40-species-grid.css",
 ]
 
 

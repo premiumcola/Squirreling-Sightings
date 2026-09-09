@@ -35,6 +35,7 @@ import {
   openMediaDrilldown,
   openAllMediaDrilldown,
   openCategoryDrilldown,
+  openMediaSpeciesDrilldown,
   closeMediaDrilldown,
   updateMediaSectionTitle,
 } from './_drilldown.js';
@@ -42,10 +43,19 @@ export {
   openMediaDrilldown,
   openAllMediaDrilldown,
   openCategoryDrilldown,
+  openMediaSpeciesDrilldown,
   closeMediaDrilldown,
   updateMediaSectionTitle,
   _MEDIA_TITLE_SVG,
 } from './_drilldown.js';
+
+// The "Vogelarten" species grid (mediathek/_species-grid.js) — only the
+// half that needs a window.* bridge (the drilldown opener above, its
+// own back button's data-action). openMediaSpeciesGridView/
+// bindSpeciesGridEntryTile are consumed by a direct import inside
+// _overview.js itself, same as renderMediaFilterPills below.
+import { closeMediaSpeciesGrid } from './_species-grid.js';
+export { closeMediaSpeciesGrid } from './_species-grid.js';
 
 import {
   deleteMediaCard,
@@ -87,7 +97,9 @@ export { _buildMocChips, _mocChip } from './_chips.js';
 window.openMediaDrilldown = openMediaDrilldown;
 window.openAllMediaDrilldown = openAllMediaDrilldown;
 window.openCategoryDrilldown = openCategoryDrilldown;
+window.openMediaSpeciesDrilldown = openMediaSpeciesDrilldown;
 window.closeMediaDrilldown = closeMediaDrilldown;
+window.closeMediaSpeciesGrid = closeMediaSpeciesGrid;
 window.loadMedia = loadMedia;
 window.renderMediaGrid = renderMediaGrid;
 window.renderMediaPagination = renderMediaPagination;

@@ -1,0 +1,94 @@
+/* ── Vogelarten species grid (mediathek/_species-grid.js) ────────────────
+   One tile per bird species this installation has actually sighted —
+   icon, German name, sighting count. The "← Übersicht" back row above
+   the grid (partials/mediathek.html#mediaSpeciesGrid) reuses
+   .media-drill-head/.media-drill-back verbatim (04-coral-1.css) — no
+   new back-button chrome invented here.
+
+   Flat design, depth via background contrast (no hairline borders),
+   rounded corners >= 8px, per CLAUDE.md's design principles — the same
+   language .moc-card (03-dashboard.css) and .ach-card (12-sichtungen.css)
+   already use. The whole tile is the tap target, comfortably over the
+   44 x 44px iOS floor at every column count below. */
+.species-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+}
+.species-grid-tile {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  min-height: 44px;
+  padding: 14px 8px 10px;
+  border-radius: 12px;
+  background: #2a2a2c;
+  color: var(--text);
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .species-grid-tile:hover {
+    background: #34343a;
+  }
+}
+.species-grid-tile:active {
+  background: #3a3a40;
+}
+.sgt-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.sgt-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.sgt-icon .species-icon-emoji {
+  font-size: 32px;
+  line-height: 1;
+}
+.sgt-name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.sgt-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.07);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.species-grid-empty {
+  grid-column: 1/-1;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+/* iPhone SE (375px) / iPhone 14 (393px) — a fixed 3-column layout so a
+   half-filled trailing row never happens, matching .ach-cards-grid's
+   own mobile override in 12-sichtungen.css. */
+@media (max-width: 480px) {
+  .species-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .sgt-icon {
+    width: 38px;
+    height: 38px;
+  }
+}

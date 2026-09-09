@@ -696,11 +696,16 @@ body.sidebar-locked {
      than stretched. The min-height:44px touch-target floor on
      .ws-stats-chip (set above) is kept — each chip is still tappable
      to isolate its metric. */
+  /* ROWS ALMOST TOUCHING — „Legende deutlich deutlich näher zusammen!!!".
+     Seven series stacked at 32 px apiece plus a row gap turned a legend
+     into half a screen of mostly empty space. The row gap is gone and
+     the chips themselves are only as tall as their own line; the tap
+     target is restored below without spending vertical room on it. */
   .ws-stats-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 6px;
-    margin-top: 8px;
+    gap: 0 6px;
+    margin-top: 6px;
   }
   /* TWO per row, not four. Four fitted the seven series into two rows
      and cost every one of them its name: at ~90 px a chip holds a dot, a
@@ -710,9 +715,22 @@ body.sidebar-locked {
      lesbar gestalten!". Two per row gives ~180 px, which fits the
      longest label this set has. */
   .ws-stats-chip {
+    position: relative;
     flex: 0 0 calc(50% - 3px);
-    padding: 2px 4px;
+    min-height: 0;
+    padding: 1px 4px;
     font-size: 11.5px;
+    line-height: 1.25;
+  }
+  /* The 44 px target lives in a transparent ::after instead of in the
+     chip's own height — the same trick .mmc-species-edit and
+     .vp-pnl-iconbtn already use. Only the vertical half is stretched, and
+     only to the midpoint of the neighbouring row, so two chips never
+     claim the same pixel. */
+  .ws-stats-chip::after {
+    content: '';
+    position: absolute;
+    inset: -7px 0;
   }
   /* Drop the label's flex:1 expansion so the value chip sits next to
      the label rather than at the far right of the cell — much less

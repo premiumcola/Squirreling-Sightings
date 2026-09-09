@@ -206,32 +206,42 @@
         </svg>
         Wetterdaten &amp; Prognose
       </span>
-      {# One slider instead of the five fixed steps that used to sit here — „nicht diese festen
-      Zeiträume, sondern son Slider von links nach rechts, nah und fern". The ladder behind it is
-      unchanged (data-steps, in hours); weather/_range-slider.js maps a handle position onto one of
-      those values and trims the far end to what the archive can actually fill, so the track simply
-      stops short on a young install instead of offering a month of nothing. #}
+      {# A CONTINUOUS time zoom, symbols only — „Flüssiger slider nicht mit festen marken […]
+      ohne text elemente nur symbole". The two glyphs are the ends of the scale, not labels: the
+      near one brightens as the window closes in, the far one as it opens up, so the control says
+      where it stands without a word of text. The value itself is on the chart's own axis right
+      below, which is why no readout is needed here. Hours are derived in
+      weather/_range-slider.js — the markup only carries the ends of the range. #}
       <div class="ws-range" id="weatherStatsRange">
-        <span class="ws-range-cap" aria-hidden="true">nah</span>
+        <span class="ws-range-glyph ws-range-glyph--near" id="weatherRangeGlyphNear" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round">
+            <path d="M9 5 L5 12 L9 19" />
+            <path d="M15 5 L19 12 L15 19" />
+          </svg>
+        </span>
         <input
           type="range"
           class="ws-range-input"
           id="weatherRangeSlider"
-          data-steps="1,6,24,168,720"
+          data-min-hours="1"
+          data-max-hours="720"
           min="0"
-          max="4"
+          max="1000"
           step="1"
-          value="2"
+          value="600"
           aria-label="Zeitfenster – nah bis fern"
         />
-        <span class="ws-range-cap" aria-hidden="true">fern</span>
-        {# Never a mystery control: the chosen step is always spelled out next to the handle. #}
-        <output class="ws-range-value" id="weatherRangeValue" for="weatherRangeSlider">24 h</output>
-        <!-- A custom drag-zoom on the chart below matches no step on the
-                   ladder — the readout then says „eigener Zeitraum"
-                   (weather/stats.js::_renderWeatherRangeState) and this chip is
-                   the discoverable way back. Moving the handle resets the zoom
-                   just as well; this is the explicit affordance. -->
+        <span class="ws-range-glyph ws-range-glyph--far" id="weatherRangeGlyphFar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round">
+            <path d="M5 5 L1 12 L5 19" />
+            <path d="M19 5 L23 12 L19 19" />
+          </svg>
+        </span>
+        <!-- A custom drag-zoom on the chart below sets a window the slider
+                   cannot express; this chip is the discoverable way back.
+                   Moving the handle resets the zoom just as well. -->
         <button
           type="button"
           class="ws-stats-pill ws-stats-pill--reset"

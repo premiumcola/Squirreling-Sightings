@@ -267,20 +267,26 @@ export function resetWeatherChartZoom() {
 }
 
 function _bindWeatherRange() {
-  bindRangeSlider((h) => {
-    const hadZoom = isZoomActive();
-    // Settling the handle always clears a custom range, even when it
-    // lands back on the step the panel was already showing — that's the
-    // "picking a step again resets the zoom" affordance from the brief.
-    clearZoomRange();
-    if (hadZoom) _closeZoomSavePanel();
-    if (h === _wsStatsState.hours) {
-      if (hadZoom) renderWeatherStats();
-      return;
-    }
-    _wsStatsState.hours = h;
-    loadWeatherStats();
-  });
+  // The extent is read at COMMIT time, not captured now: the buffer
+  // grows under a panel that stays open, so the far end of the scale a
+  // drag lands on must be the one that is reachable at that moment.
+  bindRangeSlider(
+    (h) => {
+      const hadZoom = isZoomActive();
+      // Settling the handle always clears a custom range, even when it
+      // lands back on the step the panel was already showing — that's the
+      // "picking a step again resets the zoom" affordance from the brief.
+      clearZoomRange();
+      if (hadZoom) _closeZoomSavePanel();
+      if (h === _wsStatsState.hours) {
+        if (hadZoom) renderWeatherStats();
+        return;
+      }
+      _wsStatsState.hours = h;
+      loadWeatherStats();
+    },
+    () => _wsStatsState.data?.extent,
+  );
   const resetBtn = byId('weatherStatsZoomReset');
   if (resetBtn && !resetBtn.dataset.wired) {
     resetBtn.addEventListener('click', resetWeatherChartZoom);

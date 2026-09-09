@@ -1,23 +1,27 @@
-// Node tests for weather/_range-slider.js — the „nah → fern" time
-// chooser that replaced the five fixed range pills. Same ladder of hour
-// values behind it, so the archive-extent rules these tests pin are the
-// pill bar's own rules, carried over: the slider must only reach as far
-// as the buffer can actually fill, plus exactly one step of headroom.
+// Node tests for weather/_range-slider.js — the continuous time zoom.
+//
+// It began as five fixed range pills, became a slider that still snapped
+// to those five, and is now free of them entirely: „Flüssiger slider
+// nicht mit festen marken!". What survived the change is the rule the
+// pills already had — the control may only reach as far as the buffer
+// can actually fill — and what replaced them is a log scale, because the
+// useful range spans 1 h to 720 h and on a linear track the whole first
+// day would be unhittable with a thumb.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   archiveSpanHours,
-  parseSteps,
-  rangeSliderPlan,
-  hoursAtIndex,
-  formatRangeHours,
-  rangeReadoutText,
+  rangeBounds,
+  hoursAtTick,
+  tickAtHours,
+  glyphOpacity,
 } from '../_range-slider.js';
 
-const STEPS = [1, 6, 24, 168, 720]; // 1 h / 6 h / 24 h / 7 d / 30 d
 const ext = (oldest, newest, count = 99) => ({ oldest, newest, count });
+
+// ── the archive's own reach ─────────────────────────────────────────────
 
 test('archiveSpanHours reads the buffer extent', () => {
   assert.equal(archiveSpanHours(ext('2026-08-30T00:00:00', '2026-08-30T06:00:00')), 6);
@@ -26,116 +30,120 @@ test('archiveSpanHours reads the buffer extent', () => {
 
 test('an extent that cannot say anything reads as unknown', () => {
   assert.equal(archiveSpanHours(null), null);
-  assert.equal(archiveSpanHours(undefined), null);
-  assert.equal(archiveSpanHours(ext(null, null, 0)), null);
-  // One sample is a point, not a span.
-  assert.equal(archiveSpanHours(ext('2026-08-30T00:00:00', '2026-08-30T00:00:00', 1)), null);
-  assert.equal(archiveSpanHours(ext('nonsense', '2026-08-30T06:00:00')), null);
-  // Clock skew: newest before oldest is not a negative span, it is junk.
+  assert.equal(archiveSpanHours(ext('2026-08-30T00:00:00', '2026-08-30T06:00:00', 1)), null);
+  assert.equal(archiveSpanHours(ext('nonsense', 'also nonsense')), null);
   assert.equal(archiveSpanHours(ext('2026-08-30T06:00:00', '2026-08-30T00:00:00')), null);
 });
 
-// ── the slider's domain ─────────────────────────────────────────────────
+// ── the reachable window ────────────────────────────────────────────────
 
-test('a fresh install stops the track short instead of offering empty months', () => {
-  // Three hours of history: 1 h is real, 6 h is the "everything I have"
-  // view, and a 30 d axis over 3 h of data is the defect.
-  const plan = rangeSliderPlan(3, STEPS, 24);
-  assert.deepEqual(plan.steps, [1, 6]);
-  assert.equal(plan.hours, 6);
-  assert.equal(plan.index, 1, 'the handle sits at the far end of what is reachable');
+test('a young archive stops the track short instead of offering empty months', () => {
+  const b = rangeBounds(3, 1, 720);
+  assert.equal(b.min, 1);
+  assert.ok(b.max < 24, `a 3 h archive must not reach a day, got ${b.max}`);
 });
 
-test('the step that covers the whole archive stays reachable', () => {
-  // Otherwise the operator cannot see their own full history.
-  assert.ok(rangeSliderPlan(3, STEPS, 24).steps.includes(6));
+test('the far end always covers everything the archive holds', () => {
+  const b = rangeBounds(100, 1, 720);
+  assert.ok(b.max >= 100, `the widest window must include all 100 h, got ${b.max}`);
 });
 
-test('a full archive changes nothing', () => {
-  const plan = rangeSliderPlan(24 * 400, STEPS, 24);
-  assert.deepEqual(plan.steps, STEPS);
-  assert.equal(plan.hours, 24, 'the panel keeps its own default');
-  assert.equal(plan.index, 2);
-});
-
-test('an archive longer than every step reaches all the way to „fern"', () => {
-  const plan = rangeSliderPlan(99999, STEPS, 168);
-  assert.deepEqual(plan.steps, STEPS);
-  assert.equal(plan.hours, 168);
+test('an archive longer than the configured maximum stops at that maximum', () => {
+  assert.equal(rangeBounds(5000, 1, 720).max, 720);
 });
 
 test('an unknown span is not treated as an empty archive', () => {
-  // A payload with no extent must never collapse the track.
-  for (const span of [null, undefined, NaN]) {
-    const plan = rangeSliderPlan(span, STEPS, 24);
-    assert.deepEqual(plan.steps, STEPS, `span ${span} trimmed the track`);
-    assert.equal(plan.hours, 24);
+  assert.deepEqual(rangeBounds(null, 1, 720), { min: 1, max: 720 });
+});
+
+test('junk bounds still produce a usable, non-inverted range', () => {
+  const b = rangeBounds(NaN, 'x', 'y');
+  assert.ok(b.max >= b.min && b.min >= 1);
+});
+
+// ── the log scale ───────────────────────────────────────────────────────
+
+test('the ends of the track are the ends of the range', () => {
+  const b = rangeBounds(null, 1, 720);
+  assert.equal(hoursAtTick(0, b), 1);
+  assert.equal(hoursAtTick(1000, b), 720);
+});
+
+test('every doubling gets equal travel — that is the point of the log scale', () => {
+  const b = rangeBounds(null, 1, 1024); // ten doublings
+  const travel = (h) => tickAtHours(h, b);
+  const first = travel(2) - travel(1);
+  const last = travel(1024) - travel(512);
+  assert.ok(
+    Math.abs(first - last) <= 2,
+    `1→2 h and 512→1024 h must cost the same travel, got ${first} vs ${last}`,
+  );
+});
+
+test('a linear scale would have buried the first day; this one does not', () => {
+  const b = rangeBounds(null, 1, 720);
+  // 24 h sits past a third of the track rather than in the leftmost 3 %.
+  assert.ok(tickAtHours(24, b) > 300, `24 h landed at ${tickAtHours(24, b)}`);
+});
+
+test('hours → tick → hours is exact: the handle never drifts off a window', () => {
+  // The round trip is pinned on HOURS, not on ticks. Hours are whole
+  // numbers, and low on a log track many ticks share one hour — so
+  // tick→hours→tick legitimately moves the handle to that hour's own
+  // position. What must not happen is the reverse: re-rendering a panel
+  // showing 24 h must come back as 24 h, not 23 h.
+  const b = rangeBounds(null, 1, 720);
+  for (const hours of [1, 2, 6, 24, 72, 168, 336, 720]) {
+    const back = hoursAtTick(tickAtHours(hours, b), b);
+    assert.equal(back, hours, `${hours} h came back as ${back} h`);
   }
 });
 
-test('the handle only moves when its step went off the end', () => {
-  // 30 minutes of data: only "1 h" survives, so that is where it lands.
-  const plan = rangeSliderPlan(0.5, STEPS, 720);
-  assert.deepEqual(plan.steps, [1]);
-  assert.equal(plan.hours, 1);
-  // …and a step that is still reachable is left exactly where it was.
-  assert.equal(rangeSliderPlan(0.5, STEPS, 1).hours, 1);
+test('hours outside the range are clamped, never extrapolated', () => {
+  const b = rangeBounds(null, 6, 48);
+  assert.equal(tickAtHours(1, b), 0);
+  assert.equal(tickAtHours(9999, b), 1000);
+  assert.equal(hoursAtTick(-50, b), 6);
+  assert.equal(hoursAtTick(99999, b), 48);
 });
 
-test('exactly-covering spans keep their own step', () => {
-  const plan = rangeSliderPlan(24, STEPS, 24);
-  assert.deepEqual(plan.steps, [1, 6, 24]);
-  assert.equal(plan.hours, 24);
+test('a range with nothing to choose between never divides by zero', () => {
+  const b = { min: 24, max: 24 };
+  assert.equal(hoursAtTick(500, b), 24);
+  assert.equal(tickAtHours(24, b), 0);
 });
 
-test('the step list is normalised, not trusted', () => {
-  assert.deepEqual(parseSteps('24,1,6,6,x,0,-5,168'), [1, 6, 24, 168]);
-  assert.deepEqual(rangeSliderPlan(3, [24, 1, 6, 6, NaN, 0, -5, 168], 24).steps, [1, 6]);
-  assert.deepEqual(parseSteps(undefined), []);
+test('junk positions resolve to the near end rather than NaN', () => {
+  const b = rangeBounds(null, 1, 720);
+  assert.equal(hoursAtTick('nonsense', b), 1);
+  assert.equal(hoursAtTick(undefined, b), 1);
 });
 
-test('no steps at all is survivable', () => {
-  const plan = rangeSliderPlan(3, [], 24);
-  assert.deepEqual(plan.steps, []);
-  assert.equal(plan.hours, 24);
+// ── the two end glyphs, which are the whole readout ─────────────────────
+// „ohne text elemente nur symbole" — so the only thing that can say
+// where the handle stands is how strongly each end is drawn.
+
+test('the near end is brightest at the near end, and vice versa', () => {
+  const near = glyphOpacity(0);
+  const far = glyphOpacity(1000);
+  assert.ok(near.near > near.far, 'a closed-in window must light the near glyph');
+  assert.ok(far.far > far.near, 'a wide window must light the far glyph');
 });
 
-// ── handle position → hours ─────────────────────────────────────────────
-
-test('hoursAtIndex maps a handle position onto its step', () => {
-  assert.equal(hoursAtIndex(STEPS, 0), 1);
-  assert.equal(hoursAtIndex(STEPS, '4'), 720, 'input.value arrives as a string');
-});
-
-test('hoursAtIndex clamps rather than reading off the end of the ladder', () => {
-  assert.equal(hoursAtIndex(STEPS, -3), 1);
-  assert.equal(hoursAtIndex(STEPS, 99), 720);
-});
-
-test('hoursAtIndex refuses to guess at junk', () => {
-  assert.equal(hoursAtIndex(STEPS, 'nonsense'), null);
-  assert.equal(hoursAtIndex([], 0), null);
-  assert.equal(hoursAtIndex(null, 0), null);
-});
-
-// ── the readout — the slider must never be a mystery control ────────────
-
-test('the chosen range is always spelled out, hours below two days, days above', () => {
-  assert.equal(formatRangeHours(1), '1 h');
-  assert.equal(formatRangeHours(6), '6 h');
-  // "1 d" would be a second name for the step this whole app calls 24 h.
-  assert.equal(formatRangeHours(24), '24 h');
-  assert.equal(formatRangeHours(168), '7 d');
-  assert.equal(formatRangeHours(720), '30 d');
-});
-
-test('an unusable range reads as a dash, never as "NaN h"', () => {
-  for (const bad of [null, undefined, NaN, 0, -5]) {
-    assert.equal(formatRangeHours(bad), '—');
+test('neither end ever disappears — the scale would lose its shape', () => {
+  for (const tick of [0, 250, 500, 750, 1000]) {
+    const o = glyphOpacity(tick);
+    assert.ok(o.near >= 0.25 && o.far >= 0.25, `tick ${tick} hid an end: ${JSON.stringify(o)}`);
+    assert.ok(o.near <= 1 && o.far <= 1);
   }
 });
 
-test('a dragged chart span matches no step, so the readout stops claiming one', () => {
-  assert.equal(rangeReadoutText(24, false), '24 h');
-  assert.equal(rangeReadoutText(24, true), 'eigener Zeitraum');
+test('the midpoint reads as balanced', () => {
+  const o = glyphOpacity(500);
+  assert.ok(Math.abs(o.near - o.far) < 0.02);
+});
+
+test('junk positions still produce drawable opacities', () => {
+  const o = glyphOpacity('nope');
+  assert.ok(Number.isFinite(o.near) && Number.isFinite(o.far));
 });

@@ -1,19 +1,25 @@
 // ─── weather/_range-slider.js ──────────────────────────────────────────────
-// The Wetterdaten time chooser: ONE slider, „nah" on the left, „fern" on
-// the right, told what the archive can actually fill.
+// The Wetterdaten time zoom: ONE continuous slider, near on the left,
+// far on the right, told what the archive can actually fill.
 //
-// It replaces the five fixed steps (1 h / 6 h / 24 h / 7 d / 30 d) that
-// used to sit here as a pill row — „mach unten am besten nicht diese
-// festen Zeiträume, sondern son Slider von links nach rechts […] von
-// nahe […] zu maximalen Zeitraum". The ladder BEHIND it is unchanged:
-// the same hour values, the same `/api/weather/history?hours=` fetch,
-// the same extent handling. This is a new input surface over the
-// existing range concept, not a new data model — so a slider notch and
-// the old pill mean bit-for-bit the same thing downstream.
+// FLUID, NOT NOTCHED. It began as five fixed steps (1 h / 6 h / 24 h /
+// 7 d / 30 d) in a pill row, then as a slider that still snapped to
+// those five — „Flüssiger slider nicht mit festen marken!". Any window
+// between one hour and the archive's own span is reachable now; the
+// ladder is gone, and `hours=` has always accepted an arbitrary number,
+// so nothing downstream had to learn anything.
 //
-// The offered steps still come from the markup (`data-steps` on the
-// input) rather than a constant in here, exactly the way the pill bar
-// used to read them off its own buttons.
+// LOGARITHMIC, because the useful range spans three orders of magnitude
+// (1 h … 720 h). On a linear track the entire first day would live in
+// the leftmost 3 % and "yesterday afternoon" would be unhittable with a
+// thumb. On a log track every doubling gets equal travel, which is how
+// the choice actually feels.
+//
+// NO TEXT. „ohne text elemente nur symbole" — the two end glyphs carry
+// the meaning instead: each fades in as the window moves toward its end
+// of the scale, so the control shows where it stands without spelling
+// anything out. The chosen span is already written along the chart's own
+// x-axis directly underneath, so a readout here would only say it twice.
 //
 // The extent comes from the payload (`_history.py::history` reports the
 // buffer's own oldest/newest/count) rather than being inferred from the
@@ -21,6 +27,10 @@
 // indistinguishable, client-side, from a service that only kept 3 h.
 
 import { byId } from '../core/dom.js';
+
+/** Track resolution. Fine enough to read as continuous, coarse enough
+ *  that a stray pixel does not refetch a different window. */
+const TICKS = 1000;
 
 /** Hours the archive spans, or null when it cannot say. */
 export function archiveSpanHours(extent) {
@@ -31,149 +41,130 @@ export function archiveSpanHours(extent) {
   return (last - first) / 3_600_000;
 }
 
-/** `"1,6,24"` → `[1, 6, 24]` — deduped, sorted, junk dropped. */
-export function parseSteps(csv) {
-  const raw = String(csv ?? '')
-    .split(',')
-    .map((s) => parseInt(s, 10))
-    .filter((h) => Number.isFinite(h) && h > 0);
-  return [...new Set(raw)].sort((a, b) => a - b);
+/**
+ * PURE: the reachable window, in hours.
+ *
+ * The floor is the shortest window worth drawing; the ceiling is the
+ * archive's own span, capped by the configured maximum — offering "30
+ * days" over three hours of data draws a month-wide axis of flat weather
+ * that reads as a broken service rather than a young archive. A little
+ * headroom over the span is deliberate, so the far end always means
+ * „everything I have" rather than stopping just short of it.
+ */
+export function rangeBounds(spanHours, minHours, maxHours) {
+  const lo = Math.max(1, Number(minHours) || 1);
+  const hard = Math.max(lo, Number(maxHours) || lo);
+  const span = Number.isFinite(spanHours) && spanHours > 0 ? spanHours * 1.05 : hard;
+  return { min: lo, max: Math.max(lo, Math.min(hard, Math.ceil(span))) };
+}
+
+/** PURE: slider position (0…TICKS) → hours, on the log scale. */
+export function hoursAtTick(tick, bounds) {
+  const { min, max } = bounds;
+  if (!(max > min)) return min;
+  const t = Math.max(0, Math.min(1, (Number(tick) || 0) / TICKS));
+  return Math.max(min, Math.round(Math.exp(Math.log(min) + t * (Math.log(max) - Math.log(min)))));
+}
+
+/** PURE: hours → slider position (0…TICKS). The inverse of the above. */
+export function tickAtHours(hours, bounds) {
+  const { min, max } = bounds;
+  if (!(max > min)) return 0;
+  const h = Math.max(min, Math.min(max, Number(hours) || min));
+  const t = (Math.log(h) - Math.log(min)) / (Math.log(max) - Math.log(min));
+  return Math.round(Math.max(0, Math.min(1, t)) * TICKS);
 }
 
 /**
- * The slider's domain, and where the handle sits on it.
+ * PURE: how strongly each end glyph reads, for a handle at `tick`.
  *
- * A step is DROPPED when a smaller step already covers the whole
- * archive — it would show nothing the smaller one does not, and „30 d"
- * over three hours of data draws a month-wide axis of flat weather that
- * reads as a broken service rather than a young archive. One step of
- * headroom is deliberate: the first step at or above the archive's span
- * stays, because that is the „show me everything I have" position.
- *
- * Dropping rather than disabling is what the slider makes possible in
- * the first place: an unreachable notch in the middle of a track has no
- * affordance at all, while a track that simply ends short of „fern" is
- * self-explanatory.
- *
- * The handle only moves when it has to — with plenty of history the
- * panel keeps its 24 h; it falls back to the widest step that still has
- * data only when the current one has gone off the end.
+ * Both stay faintly visible at every position — an end that vanished
+ * would take the scale's own shape with it — and the one the window is
+ * moving toward comes up to full. Returned as a pair so the caller
+ * writes two opacities and nothing else.
  */
-export function rangeSliderPlan(spanHours, offered, current) {
-  const steps = Array.isArray(offered) ? parseSteps(offered.join(',')) : parseSteps(offered);
-  if (!steps.length) return { steps: [], index: 0, hours: current };
-  // `undefined` when the span is unknown, or longer than every step —
-  // in both cases nothing is dropped.
-  const covering = Number.isFinite(spanHours) ? steps.find((h) => h >= spanHours) : undefined;
-  const usable = covering === undefined ? steps : steps.filter((h) => h <= covering);
-  const at = usable.indexOf(current);
-  const index = at >= 0 ? at : usable.length - 1;
-  return { steps: usable, index, hours: usable[index] };
+export function glyphOpacity(tick) {
+  const t = Math.max(0, Math.min(1, (Number(tick) || 0) / TICKS));
+  const FLOOR = 0.28;
+  const span = 1 - FLOOR;
+  return { near: FLOOR + span * (1 - t), far: FLOOR + span * t };
 }
 
-/** The step a handle position names, or null when it names none. */
-export function hoursAtIndex(steps, index) {
-  if (!Array.isArray(steps) || !steps.length) return null;
-  const n = Number(index);
-  if (!Number.isFinite(n)) return null;
-  return steps[Math.max(0, Math.min(steps.length - 1, Math.trunc(n)))];
-}
-
-/**
- * The chosen range as the operator reads it — „24 h", „7 d". Days only
- * from two days up: „1 d" would be a second name for the step everyone
- * in this app (and the old pill bar) already calls 24 h.
- */
-export function formatRangeHours(hours) {
-  if (!Number.isFinite(hours) || hours <= 0) return '—';
-  if (hours < 48) return `${hours} h`;
-  const days = hours / 24;
-  return Number.isInteger(days) ? `${days} d` : `${hours} h`;
-}
-
-// A drag-zoom on the chart matches no step on the ladder, so the
-// readout must not keep claiming one — same reason every pill used to go
-// dark. The ✕ chip next to the slider is the way back.
-const CUSTOM_RANGE = 'eigener Zeitraum';
-
-/** What the readout next to the handle says right now. */
-export function rangeReadoutText(hours, zoomed) {
-  return zoomed ? CUSTOM_RANGE : formatRangeHours(hours);
-}
-
-// The chart re-fetches itself every 60 s while the section is on
-// screen, and each of those renders lands here. Writing `value` back
-// onto a handle the operator is still holding would yank it out from
-// under their thumb, so a render that arrives mid-interaction updates
+// The chart re-fetches itself every 60 s while the section is on screen,
+// and each of those renders lands here. Writing `value` back onto a
+// handle the operator is still holding would yank it out from under
+// their thumb, so a render that arrives mid-interaction updates
 // everything EXCEPT the handle position — the next `change` writes the
-// real choice anyway. Focus covers the keyboard case (arrow keys hold
-// focus for as long as the operator wants), `data-dragging` the pointer
-// one, since not every browser focuses a range input on pointerdown.
+// real choice anyway. Focus covers the keyboard case, `data-dragging`
+// the pointer one, since not every browser focuses a range input on
+// pointerdown.
 function _isBeingHeld(input) {
   return input.dataset.dragging === '1' || globalThis.document?.activeElement === input;
 }
 
-/**
- * Apply the plan to the live slider. Returns the range the panel should
- * be on, so the caller can switch to it if the current one went off the
- * end. Idempotent — safe to run on every render.
- *
- * The usable subset is parked back on the element (`data-usable`) so the
- * change handler can map a handle index onto an hours value without this
- * module holding mutable state of its own.
- */
-export function applyRangeSlider(extent, currentHours, zoomed = false) {
-  const input = byId('weatherRangeSlider');
-  if (!input) return null;
-  const plan = rangeSliderPlan(
-    archiveSpanHours(extent),
-    parseSteps(input.dataset.steps),
-    currentHours,
-  );
-  if (!plan.steps.length) return null;
-  input.dataset.usable = plan.steps.join(',');
-  input.min = '0';
-  input.max = String(plan.steps.length - 1);
-  input.step = '1';
-  if (!_isBeingHeld(input)) input.value = String(plan.index);
-  // A one-step archive has nothing to choose between; a dead handle is
-  // honest, a live one that snaps back is not.
-  input.disabled = plan.steps.length < 2;
-  const text = rangeReadoutText(plan.hours, zoomed);
-  input.setAttribute('aria-valuetext', text);
-  const out = byId('weatherRangeValue');
-  if (out && !_isBeingHeld(input)) out.textContent = text;
-  return plan.hours;
+function _boundsOf(input, extent) {
+  return rangeBounds(archiveSpanHours(extent), input.dataset.minHours, input.dataset.maxHours);
+}
+
+/** Paint the two end glyphs for the handle's current position. */
+// Optional chaining throughout, deliberately: the node tests stub
+// `document` with plain objects that carry no `style`, the same
+// convention every other module here is tested under. Painting is
+// decoration — it must never be the reason a render throws.
+function _paintGlyphs(tick) {
+  const o = glyphOpacity(tick);
+  const near = byId('weatherRangeGlyphNear');
+  const far = byId('weatherRangeGlyphFar');
+  if (near?.style) near.style.opacity = String(o.near);
+  if (far?.style) far.style.opacity = String(o.far);
+  // The filled part of the track, as a percentage — the "slide to
+  // unlock" fill behind the thumb, painted by CSS off this one variable.
+  byId('weatherRangeSlider')?.style?.setProperty?.('--ws-range-fill', `${(tick / TICKS) * 100}%`);
 }
 
 /**
- * Wire the slider once. `onPick(hours)` fires when the operator settles
- * on a step.
+ * Apply the archive's extent to the live slider. Returns the range the
+ * panel should be on, so the caller can switch to it if the current one
+ * no longer fits. Idempotent — safe to run on every render.
+ */
+export function applyRangeSlider(extent, currentHours, _zoomed = false) {
+  const input = byId('weatherRangeSlider');
+  if (!input) return null;
+  const bounds = _boundsOf(input, extent);
+  const hours = Math.max(bounds.min, Math.min(bounds.max, Number(currentHours) || bounds.max));
+  input.min = '0';
+  input.max = String(TICKS);
+  input.step = '1';
+  const tick = tickAtHours(hours, bounds);
+  if (!_isBeingHeld(input)) input.value = String(tick);
+  // An archive with nothing to choose between: a dead handle is honest,
+  // a live one that snaps back is not.
+  input.disabled = !(bounds.max > bounds.min);
+  input.setAttribute('aria-valuetext', `${hours} h`);
+  _paintGlyphs(Number(input.value));
+  return hours;
+}
+
+/**
+ * Wire the slider once. `onPick(hours)` fires when the operator settles.
  *
  * Two listeners on purpose: `input` fires per pixel while dragging and
- * only moves the readout, so the handle is never a blind control;
- * `change` is the commit (pointer-up on desktop, touch-end on iOS) and
- * is the only one that costs a history fetch.
+ * only repaints the glyphs and the fill, so the handle is never a blind
+ * control; `change` is the commit (pointer-up on desktop, touch-end on
+ * iOS) and is the only one that costs a history fetch.
  */
-export function bindRangeSlider(onPick) {
+export function bindRangeSlider(onPick, getExtent = () => null) {
   const input = byId('weatherRangeSlider');
   if (!input || input.dataset.wired) return;
-  const hoursNow = () =>
-    hoursAtIndex(parseSteps(input.dataset.usable || input.dataset.steps), input.value);
-  input.addEventListener('input', () => {
-    const h = hoursNow();
-    const out = byId('weatherRangeValue');
-    if (out && h != null) out.textContent = formatRangeHours(h);
-  });
+  input.addEventListener('input', () => _paintGlyphs(Number(input.value)));
   input.addEventListener('change', () => {
     input.dataset.dragging = '0';
-    const h = hoursNow();
-    if (h != null) onPick(h);
+    onPick(hoursAtTick(Number(input.value), _boundsOf(input, getExtent())));
   });
   // See _isBeingHeld: a 60 s auto-refresh must not move a handle that is
-  // currently under a thumb. `pointercancel` matters on iOS, where a
-  // drag that turns into a page scroll ends that way and never fires
-  // `change` — without it the flag would latch on forever.
+  // currently under a thumb. `pointercancel` matters on iOS, where a drag
+  // that turns into a page scroll ends that way and never fires `change`
+  // — without it the flag would latch on for ever.
   input.addEventListener('pointerdown', () => (input.dataset.dragging = '1'));
   for (const done of ['pointerup', 'pointercancel']) {
     input.addEventListener(done, () => (input.dataset.dragging = '0'));

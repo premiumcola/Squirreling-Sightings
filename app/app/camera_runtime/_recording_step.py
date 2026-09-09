@@ -3,7 +3,10 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+from pathlib import Path
 
+from ..settings._consts import BIRD_SPECIES_VIDEO_CAP_DEFAULT
+from ..species_video_count import confirmed_video_count
 from ._clip_tally import ClipTally, rank_headline_species
 from ._consts import _FFMPEG_AVAILABLE, log
 
@@ -114,13 +117,102 @@ class RecordingStepMixin:
         if species:
             meta["bird_species"] = species
 
+    def _species_over_cap(self, rec_meta: dict) -> str | None:
+        """The confirmed species this event is about, when it has already
+        collected enough VIDEO samples that another one is not worth an
+        ffmpeg launch — else None.
+
+        "Confirmed" is `species_video_count.confirmed_video_count`, an
+        operator-confirmed lifetime count (a Telegram "Ja"), never the
+        raw detection count — an unconfirmed misfire must not be able to
+        cap a species on its own. A rare species that never crosses the
+        cap simply never triggers this; that is the whole design.
+        """
+        if "bird" not in (rec_meta.get("labels") or []):
+            return None
+        species = (rec_meta.get("bird_species") or "").strip()
+        if not species:
+            return None
+        # `or` would read an explicit 0 as "unset" and silently fall back
+        # to the default — the exact bug this codebase has been bitten
+        # by before on `post_motion_tail_s` (see CLAUDE.md's own note on
+        # `resolve_pre_motion_seconds`). `None`-check instead.
+        cap_raw = (self.global_cfg.get("storage") or {}).get("bird_species_video_cap")
+        cap = int(cap_raw) if cap_raw is not None else BIRD_SPECIES_VIDEO_CAP_DEFAULT
+        if cap <= 0:  # operator turned the cap fully off
+            return None
+        storage_root = self.global_cfg["storage"]["root"]
+        if confirmed_video_count(storage_root, species) >= cap:
+            return species
+        return None
+
+    def _persist_capped_sighting(
+        self, now_dt, event_id: str, species: str, rec_meta: dict, drawn, effective_bbox
+    ) -> None:
+        """The species is already well-documented on video — keep the
+        SIGHTING (so the Sichtungen grid and the species tally still
+        count today's magpie) without another full recording.
+
+        Mirrors `_loop_stages._save_snapshot_event`'s event shape (a
+        snapshot camera's event has no video either) closely enough to
+        reuse its JPEG writer, rather than a third copy of the same
+        cv2.imwrite call. Deliberately quiet: no Telegram, no MQTT — the
+        whole point of the cap is fewer notifications about a species
+        the operator has already confirmed plenty of times.
+        """
+        day_dir = (
+            Path(self.global_cfg["storage"]["root"])
+            / "motion_detection"
+            / self.camera_id
+            / now_dt.strftime("%Y-%m-%d")
+        )
+        day_dir.mkdir(parents=True, exist_ok=True)
+        snap_path = day_dir / f"{event_id}.jpg"
+        rel = snap_path.relative_to(Path(self.global_cfg["storage"]["root"]))
+        public_base = (self.global_cfg.get("server", {}).get("public_base_url") or "").rstrip("/")
+        snapshot_url = self._write_snapshot_jpeg(snap_path, rel, drawn, effective_bbox, public_base)
+        event = {
+            "event_id": event_id,
+            "camera_id": self.camera_id,
+            "camera_name": self.cfg.get("name", self.camera_id),
+            "armed": bool(self.cfg.get("armed", True)),
+            "after_hours": rec_meta["after_hours"],
+            "alarm_level": rec_meta["alarm_level"],
+            "time": now_dt.isoformat(timespec="seconds"),
+            "labels": rec_meta["labels"],
+            "top_label": rec_meta["top_label"],
+            "bird_species": species,
+            "cat_name": rec_meta["cat_name"],
+            "person_name": rec_meta["person_name"],
+            "whitelisted": rec_meta["whitelisted"],
+            "detections": rec_meta["detections"],
+            "whole_clip": rec_meta.get("whole_clip"),
+            "snapshot_url": snapshot_url,
+            "snapshot_relpath": rel.as_posix() if snapshot_url else None,
+            "video_url": None,
+            "video_relpath": None,
+            "provenance": self._build_provenance_snapshot(),
+            # Not read by anything yet — a trail for the operator/UI to
+            # explain "why is there no video here" without guessing.
+            "capped_species_sighting": True,
+        }
+        self.store.add_event(self.camera_id, event)
+        log.info(
+            "[cam:%s] %s: Art bereits gut dokumentiert (%s) — nur Sichtung, kein Video",
+            self.camera_id,
+            event_id,
+            species,
+        )
+
     def _start_clip(
         self, now_dt, labels: list, detections: list, drawn, effective_bbox, cooldown: int
     ) -> bool:
         """Open a new recording session if the cooldown allows it.
 
-        Returns True when the caller must ``continue`` — every detection
-        landed in a ``save_video: false`` zone, so no clip is worth an
+        Returns True when the caller must ``continue`` — either every
+        detection landed in a ``save_video: false`` zone, or this
+        species already has enough confirmed video and only got a
+        lightweight sighting instead. Either way, no clip is worth an
         ffmpeg launch.
         """
         has_person = "person" in labels
@@ -141,6 +233,19 @@ class RecordingStepMixin:
                 # last_error reset AND the inter-frame sleep, so the
                 # next grab happens immediately. Signalled rather than
                 # performed, because this is a method now.
+                return True
+            capped_species = self._species_over_cap(rec_meta)
+            if capped_species:
+                self._persist_capped_sighting(
+                    now_dt, rec_meta["event_id"], capped_species, rec_meta, drawn, effective_bbox
+                )
+                # Bookkeeping a full clip would have done — WITHOUT this
+                # the cooldown never resets and the next motion frame
+                # (often milliseconds later, the same bird still in
+                # frame) re-enters here and writes ANOTHER sighting,
+                # which is the exact flood the cap exists to prevent.
+                self.last_event_at = now_dt
+                self.event_counter_today += 1
                 return True
             # One tally per clip, opened before either backend starts so
             # the trigger frame is inside the aggregate rather than a
@@ -166,22 +271,28 @@ class RecordingStepMixin:
                 # which are often what is being tested.
                 self.notify_recording_started(rec_meta.get("labels"), rec_meta.get("event_id"))
             else:
-                # OpenCV fallback (legacy path)
-                self._recording = True
-                self._rec_start_time = now_dt
-                self._rec_corrupt_frames = 0
-                pre_cutoff = time.time() - 3.0
-                self._rec_frames = [f for f, ts in self._pre_buffer if ts >= pre_cutoff]
-                self._rec_event_meta = rec_meta
-                self.last_event_at = now_dt
-                self.event_counter_today += 1
-                log.info(
-                    "[%s] Motion recording started (OpenCV, labels=%s, prebuf=%d frames)",
-                    self.camera_id,
-                    labels,
-                    len(self._rec_frames),
-                )
+                self._start_opencv_fallback_recording(now_dt, rec_meta, labels)
         return False
+
+    def _start_opencv_fallback_recording(self, now_dt, rec_meta: dict, labels: list) -> None:
+        """The legacy path: no ffmpeg, so the clip comes from the frame
+        buffer this loop has been filling all along. Split out of
+        `_start_clip` to keep that method inside CLAUDE.md's 80-line
+        ceiling."""
+        self._recording = True
+        self._rec_start_time = now_dt
+        self._rec_corrupt_frames = 0
+        pre_cutoff = time.time() - 3.0
+        self._rec_frames = [f for f, ts in self._pre_buffer if ts >= pre_cutoff]
+        self._rec_event_meta = rec_meta
+        self.last_event_at = now_dt
+        self.event_counter_today += 1
+        log.info(
+            "[%s] Motion recording started (OpenCV, labels=%s, prebuf=%d frames)",
+            self.camera_id,
+            labels,
+            len(self._rec_frames),
+        )
 
     def _advance_clip(
         self, proc_frame, now_dt, labels: list, detections: list, post_tail: float, clip_max: int

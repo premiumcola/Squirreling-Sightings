@@ -84,17 +84,23 @@ export function clearSpeciesIfBirdInactive() {
 }
 
 // The effective label list media-loader.js's loadMedia() sends as
-// `label=`/`labels=`. A selected species REPLACES the generic "bird"
-// entry rather than being OR'd alongside it: the backend filter
-// (storage.py::_filter_events) is OR-of-filter-set, so `{"bird",
-// "Elster"}` would match every bird event (bird already matches all of
-// them) unioned with the Elster ones — i.e. no narrowing at all. Every
-// other active class pill (cat, person, ...) passes through untouched,
-// so a species-narrowed bird filter still combines correctly with them.
+// `label=`/`labels=`. A selected species is an EXCLUSIVE narrow, not one
+// more value OR'd into the set: the backend filter (storage.py::
+// _filter_events) only ever does OR-of-filter-set, with no AND — so
+// `{"cat", "Elster"}` would not mean "Elster birds, plus any cat", it
+// would mean "every cat event, UNION the Elster ones", which is a wider
+// result than "cat" alone, not a narrower one. A sibling class pill
+// (person, cat, ...) staying visibly "active" while a species is picked
+// is cosmetic only; the fetch itself must drop them, or picking a rare
+// species surfaces mostly unrelated person/cat cards sorted in ahead of
+// it — exactly the "Vogelartenfilter funktionieren nicht" report this
+// fixed (a species pick was OR-widening the result set instead of
+// narrowing it whenever another class pill was still checked, which the
+// default "seed every available class" behaviour makes the common case,
+// not an edge case).
 export function effectiveMediaLabels() {
-  return [...state.mediaLabels].map((l) =>
-    l === 'bird' && state.mediaSpecies ? state.mediaSpecies : l,
-  );
+  if (state.mediaSpecies) return [state.mediaSpecies];
+  return [...state.mediaLabels];
 }
 
 // Pure HTML-string builder for the species pill row — empty string

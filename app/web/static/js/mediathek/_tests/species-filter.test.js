@@ -109,11 +109,17 @@ test('effectiveMediaLabels replaces "bird" with the selected species, not alongs
   assert.deepEqual(effectiveMediaLabels(), ['Elster']);
 });
 
-test('effectiveMediaLabels leaves other active class pills untouched', () => {
+test('effectiveMediaLabels drops other active class pills — a species is an exclusive narrow', () => {
+  // storage.py::_filter_events is OR-of-filter-set with no AND, so
+  // keeping 'cat' alongside 'Elster' would widen the result (every cat
+  // event, plus every Elster one) instead of narrowing it. This was the
+  // "Vogelartenfilter funktionieren nicht" bug: a species pick under the
+  // default seed-every-class-pill state OR-matched unrelated classes in
+  // ahead of the species narrowing.
   resetState();
   state.mediaLabels = new Set(['cat', 'bird']);
   selectSpecies('Elster');
-  assert.deepEqual(effectiveMediaLabels(), ['cat', 'Elster']);
+  assert.deepEqual(effectiveMediaLabels(), ['Elster']);
 });
 
 test('no species selected: effectiveMediaLabels is the plain class-label list', () => {

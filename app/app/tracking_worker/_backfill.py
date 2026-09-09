@@ -16,12 +16,11 @@ The scan therefore lives here, called by BOTH the route and
 implementation, per CLAUDE.md's no-parallel-implementations rule; the
 route keeps its own reply shape and simply reports what this returns.
 
-BOUNDED ON THE UNATTENDED PATH. Each job decodes a clip, so an archive
-that has never been indexed must not turn one nightly tick into hours of
-CPU. ``budget`` caps how many are queued per call and the next tick picks
-up where this one stopped — the same shape ``bird_dossiers.sweep_prebuild``
-already uses for its own catch-up pass. The route passes no budget: an
-operator who presses the button asked for all of it.
+``budget`` exists for a caller that wants a bounded pass, but neither
+caller uses one today: the route was always unbounded, and the nightly
+job became unbounded on the operator's own instruction — „rechne alle
+videos heute nacht nach!!". The worker is one queued thread, so an
+unbounded pass costs wall-clock, not load.
 """
 
 from __future__ import annotations
@@ -34,12 +33,6 @@ from ._consts import TRACKS_SCHEMA
 from ._job import TrackingJob, tracks_path_for
 
 log = logging.getLogger("app.tracking")
-
-#: Clips queued per unattended sweep. Sized so a full nightly tick stays
-#: minutes rather than hours on this hardware; the backlog drains over a
-#: few nights and steady state is zero (every finalised clip enqueues
-#: itself, see camera_runtime/_recording/__init__.py).
-DEFAULT_BACKFILL_BUDGET = 40
 
 
 def _needs_tracks(tracks_file: Path) -> bool:

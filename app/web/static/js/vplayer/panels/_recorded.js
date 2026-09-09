@@ -20,10 +20,8 @@
 
 import { applyLabelPatch } from '../../core/label-patch.js';
 import { objectRowsFor, objectsNote } from '../_data/_map.js';
-import { clipReadiness } from '../_model/readiness.js';
 import { renderObjectsList } from './_objects-list.js';
 import { renderProvenance } from './_provenance.js';
-import { renderReadinessNote } from './_readiness-note.js';
 import { openReclassify } from './_reclassify.js';
 import { renderReplay } from './_replay.js';
 
@@ -48,15 +46,6 @@ function _paintPanel(parts, st, opts = {}) {
     const rows = objectRowsFor(st.item, st.tracks);
     parts.objects?.update(rows, st.models, objectsNote(rows, st.item));
   }
-  // `st.fetched` distinguishes "the sidecar request has not come back"
-  // from "there is none" — collapsing those two is exactly what made an
-  // empty picture unreadable.
-  //
-  // The ITEM travels with the verdict: the note's building face reads the
-  // stage vocabulary and the seconds-in-stage off it, and `st.item` is
-  // the only reference that survives both a correction (patched in place)
-  // and a widening (replaced by loadRecorded).
-  parts.note?.update(clipReadiness(st.item, st.fetched ? st.tracks : undefined), st.item);
   parts.replay?.update(st.item);
   parts.details?.update(st.item);
 }
@@ -71,14 +60,17 @@ function _paintPanel(parts, st, opts = {}) {
  */
 export function renderRecordedPanel(host, cfg, deps = {}) {
   if (!host) return null;
-  // The readiness note sits ABOVE the rows: it says how much to trust
-  // what follows, which is worthless underneath it.
-  // Order is the argument. First why the picture looks like this, then
-  // WHAT was detected, then the actions that change it, and only then the
-  // record of how the clip was made. The replay used to sit last, inside
-  // the collapsed fold and under fifteen rows.
+  // Order is the argument: WHAT was detected, then the actions that
+  // change it, then the record of how the clip was made.
+  //
+  // THE READINESS NOTE IS GONE — „Nehm diese meldung grundsätzlich raus".
+  // It existed to explain a clip whose fine track had not been built yet
+  // and to offer a button that built it. Both halves are obsolete: every
+  // clip is indexed the moment it finishes recording, and the nightly
+  // pass (maintenance.py::_sweep_tracking_backfill) catches up anything
+  // that ever slips through. A panel that explains a state the app no
+  // longer leaves you in is just noise above the rows.
   host.innerHTML =
-    `<div class="vp-pnl-readiness"></div>` +
     `<div class="vp-pnl-objects"></div>` +
     `<div class="vp-pnl-replay"></div>` +
     `<div class="vp-pnl-details"></div>`;
@@ -104,11 +96,6 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
     },
   });
 
-  const note = renderReadinessNote(host.querySelector('.vp-pnl-readiness'), cfg, {
-    request: deps.request,
-    onError: deps.onError,
-  });
-
   const replay = renderReplay(host.querySelector('.vp-pnl-replay'), {
     request: deps.request,
     onError: deps.onError,
@@ -118,7 +105,7 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
     tier: deps.tier,
   });
 
-  const parts = { objects, note, replay, details };
+  const parts = { objects, replay, details };
   const paint = (opts) => _paintPanel(parts, st, opts);
 
   // A correction came back. The reply is authoritative — `top_label` is
@@ -151,7 +138,6 @@ export function renderRecordedPanel(host, cfg, deps = {}) {
     teardown: () => {
       sheet?.teardown();
       objects?.teardown();
-      note?.teardown();
       replay?.teardown();
       details?.teardown();
       host.innerHTML = '';

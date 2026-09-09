@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.tracking_worker._backfill import DEFAULT_BACKFILL_BUDGET, sweep_missing_tracks
+from app.tracking_worker._backfill import sweep_missing_tracks
 from app.tracking_worker._consts import TRACKS_SCHEMA
 
 CAM = "reolink_cx810_squirreltownnutbar_181"
@@ -139,7 +139,15 @@ def test_an_empty_archive_is_a_safe_no_op(tmp_path):
     assert _sweep(tmp_path, _FakeWorker())["queued"] == 0
 
 
-def test_the_unattended_budget_is_bounded():
-    """A guard on the constant itself: an unbounded nightly pass over a
-    large archive is the failure mode this budget exists to prevent."""
-    assert 0 < DEFAULT_BACKFILL_BUDGET <= 200
+def test_the_nightly_pass_is_unbounded():
+    """„rechne alle videos heute nacht nach!!" — the nightly job must
+    queue the WHOLE backlog, not a slice of it. Source-text, because the
+    alternative is asserting on a maintenance timer."""
+    from pathlib import Path as _P
+
+    src = (_P(__file__).resolve().parent.parent / "app" / "maintenance.py").read_text(
+        encoding="utf-8"
+    )
+    call = src[src.index("def _sweep_tracking_backfill") : src.index("def _run_daily_cleanup")]
+    assert "sweep_missing_tracks(" in call
+    assert "budget=" not in call, "the nightly catch-up must not cap itself"

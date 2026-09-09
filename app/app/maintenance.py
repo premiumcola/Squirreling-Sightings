@@ -252,28 +252,25 @@ def _sweep_tracking_backfill(log) -> None:
     ist!" — so the app does it on its own schedule instead, and opening a
     clip is only ever the moment to LOOK at a finished one.
 
-    Bounded per tick (see DEFAULT_BACKFILL_BUDGET): each job decodes a
-    clip, and an un-indexed archive must not turn one nightly tick into
-    hours of CPU. The backlog drains over a few nights; steady state is
-    zero, because every finalised clip already enqueues itself.
+    Unbounded on purpose — see the call below.
     """
     from .tracking_worker import singleton as _tw_singleton
-    from .tracking_worker._backfill import DEFAULT_BACKFILL_BUDGET, sweep_missing_tracks
+    from .tracking_worker._backfill import sweep_missing_tracks
 
     worker = _tw_singleton()
     if worker is None:
         return
-    result = sweep_missing_tracks(
-        app_state.store,
-        app_state.storage_root,
-        worker,
-        budget=DEFAULT_BACKFILL_BUDGET,
-    )
+    # NO BUDGET. It was capped per tick so an un-indexed archive could not
+    # turn one night into hours of CPU — and the operator's answer to that
+    # was „rechne alle videos heute nacht nach!!". The worker is a single
+    # queued thread, so an unbounded pass costs time, not load: it works
+    # through the backlog and the queue drains. Steady state is zero
+    # anyway, because every finished clip enqueues itself.
+    result = sweep_missing_tracks(app_state.store, app_state.storage_root, worker)
     if result["queued"]:
         log.info(
-            "[tracking] Feinspur-Nachlauf: %d Clips eingereiht, %d noch offen",
+            "[tracking] Feinspur-Nachlauf: %d Clips eingereiht",
             result["queued"],
-            result["remaining"],
         )
 
 

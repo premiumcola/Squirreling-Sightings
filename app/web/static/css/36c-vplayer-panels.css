@@ -26,7 +26,6 @@
   --vp-pnl-chip-bg: rgba(59, 130, 246, 0.16);
   --vp-pnl-chip-fg: #bfdbfe;
 }
-
 /* ── Panel body ────────────────────────────────────────────────────────────
    The last thing on the page, so it carries the home-indicator inset —
    without it the final row sits under the bar on an iPhone and the
@@ -34,7 +33,6 @@
 .vp-panel {
   padding: 8px 10px calc(10px + var(--vp-safe-bottom));
 }
-
 /* ── Rows ──────────────────────────────────────────────────────────────────
    A row is a touch target. Depth comes from the ground/row colour
    difference, never from a hairline border. */
@@ -54,19 +52,16 @@
   background: var(--vp-pnl-row);
   font-size: 14px;
 }
-
 /* A discarded detection is the pipeline WORKING, not an error — so it
    is de-emphasised, not coloured like a failure. */
 .vp-pnl-row[data-discarded='1'] {
   opacity: 0.72;
 }
-
 .vp-pnl-num {
   flex: 0 0 auto;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-
 .vp-pnl-cls {
   flex: 1 1 auto;
   min-width: 0;
@@ -74,13 +69,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .vp-pnl-score {
   flex: 0 0 auto;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-
 /* The reason a detection was dropped, and — on a live or simulation
    track row — which model produced the label. On a 375 px screen it
    cannot share the row with the class and the score, so it wraps
@@ -99,7 +92,6 @@
   color: var(--muted);
   font-size: 12px;
 }
-
 /* ── Chips ─────────────────────────────────────────────────────────────── */
 .vp-pnl-chip {
   display: inline-flex;
@@ -111,14 +103,12 @@
   font-size: 12px;
   white-space: nowrap;
 }
-
 .vp-pnl-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 8px;
 }
-
 /* The tick ran on a profile that is NOT the camera's own. Warm rather
    than alarming: it is a deliberate diagnostic state, not a fault —
    but it must never read as the ordinary case, because every number
@@ -127,7 +117,6 @@
   background: rgba(245, 158, 11, 0.18);
   color: var(--warn);
 }
-
 /* ── Profile-revision picker (simulation only) ─────────────────────────────
    A native <select>: already a 44 px target on iOS, already scrolls a
    long list inside the viewport, already announced to VoiceOver. The
@@ -141,7 +130,6 @@
   min-height: var(--vp-tap);
   margin-bottom: 8px;
 }
-
 .vp-pnl-rev-k {
   flex: 0 0 auto;
   color: var(--muted);
@@ -149,7 +137,6 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-
 .vp-pnl-rev-sel {
   /* Grows to the row, wraps to its own line when the German label and
      the key cannot share 375 px. Never a fixed width. */
@@ -163,13 +150,11 @@
   color: var(--text);
   font-size: 16px;
 }
-
 @media (hover: hover) {
   .vp-pnl-rev-sel:hover {
     background: var(--surface-2, var(--vp-pnl-row));
   }
 }
-
 /* ── Folds ─────────────────────────────────────────────────────────────── */
 .vp-fold-root {
   margin-top: 8px;
@@ -177,7 +162,6 @@
   background: var(--vp-pnl-fold-bg);
   overflow: hidden;
 }
-
 .vp-fold-header {
   display: flex;
   align-items: center;
@@ -192,16 +176,13 @@
   text-align: left;
   cursor: pointer;
 }
-
 .vp-fold-chevron {
   display: inline-flex;
   transition: transform 0.15s ease;
 }
-
 .vp-fold-root[data-open='1'] .vp-fold-chevron {
   transform: rotate(180deg);
 }
-
 .vp-fold-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -209,22 +190,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .vp-fold-sub {
   color: var(--muted);
   font-size: 12px;
 }
-
 .vp-fold-body {
   padding: 4px 10px 10px;
 }
-
 @media (hover: hover) {
   .vp-fold-header:hover {
     background: rgba(255, 255, 255, 0.04);
   }
 }
-
 /* ── Buttons ───────────────────────────────────────────────────────────── */
 .vp-pnl-debug-bar {
   display: flex;
@@ -232,7 +209,6 @@
   gap: 8px;
   margin-bottom: 8px;
 }
-
 /* ── The correction sheet ──────────────────────────────────────────────────
    It had no ground of its own: it inherited the object row's
    `--vp-pnl-row` (= --surface) while its own chips and buttons are ALSO
@@ -250,13 +226,11 @@
   border-radius: 12px;
   background: color-mix(in srgb, #000 32%, var(--surface));
 }
-
 .vp-sheet-title {
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
 }
-
 /* The sheet's own action row: two real buttons, side by side, each over
    the 44 px floor. `.vp-pnl-btn` already paints on --surface, which now
    stands a clear step above the sheet's darker ground. */
@@ -264,7 +238,6 @@
   gap: 10px;
   margin-bottom: 0;
 }
-
 /* One quiet line under the correction sheet's title, saying that every
    tap in it has already been saved — „muss ich speichern oder fertig
    drücken damits übernommen wird?!". Muted and small on purpose: it
@@ -274,7 +247,6 @@
   font-size: 12px;
   margin: -6px 0 0;
 }
-
 .vp-pnl-btn {
   flex: 1 1 auto;
   min-height: var(--vp-tap);
@@ -286,18 +258,15 @@
   font-size: 14px;
   cursor: pointer;
 }
-
 .vp-pnl-btn[disabled] {
   opacity: 0.6;
   cursor: default;
 }
-
 @media (hover: hover) {
   .vp-pnl-btn:not([disabled]):hover {
     background: #2e2e2e;
   }
 }
-
 /* ── Nachsimulieren ────────────────────────────────────────────────────────
    The two replay actions carry full German sentences, which do not fit
    side by side at 375 px. One per row at every width — the debug bar's
@@ -314,7 +283,6 @@
   gap: 8px;
   margin-bottom: 8px;
 }
-
 .vp-pnl-replay-bar .vp-pnl-btn {
   flex: 0 0 auto;
   height: auto;
@@ -322,7 +290,6 @@
   line-height: 1.35;
   text-align: left;
 }
-
 /* The simulation buttons carry the player's own green — „simulations
    icon in der grün farbe des players!". Icon only: a fully green button
    would compete with the playhead for the one accent on the surface. */
@@ -331,36 +298,30 @@
   align-items: center;
   gap: 9px;
 }
-
 .vp-pnl-btn--sim .vp-pnl-btn-icon {
   display: inline-flex;
   flex: 0 0 auto;
   color: var(--vp-accent);
 }
-
 .vp-pnl-btn--sim[disabled] .vp-pnl-btn-icon {
   color: var(--muted);
 }
-
 /* Turning while the run is in flight. The glyph IS the arrow going
    round again, so the rotation says what the run is doing rather than
    parking a generic spinner beside a label. */
 .vp-pnl-btn--sim.is-running .vp-pnl-btn-icon {
   animation: vp-sim-spin 1.15s linear infinite;
 }
-
 @keyframes vp-sim-spin {
   to {
     transform: rotate(360deg);
   }
 }
-
 .vp-pnl-replay-busy {
   padding: 6px 0;
   color: var(--muted);
   font-size: 13px;
 }
-
 /* Indeterminate sweep. The replay reports once, at the end — there is
    no honest percentage to draw, and this claims none. */
 .vp-pnl-replay-sweep {
@@ -371,7 +332,6 @@
   background: color-mix(in srgb, var(--vp-accent) 16%, transparent);
   overflow: hidden;
 }
-
 .vp-pnl-replay-sweep i {
   position: absolute;
   top: 0;
@@ -381,7 +341,6 @@
   background: var(--vp-accent);
   animation: vp-sim-sweep 1.25s ease-in-out infinite;
 }
-
 @keyframes vp-sim-sweep {
   0% {
     left: -38%;
@@ -390,7 +349,6 @@
     left: 100%;
   }
 }
-
 /* Someone who asked for less motion gets the state, not the travel: the
    bar stays, filled and still, and the icon stops turning. */
 @media (prefers-reduced-motion: reduce) {
@@ -398,14 +356,12 @@
   .vp-pnl-replay-sweep i {
     animation: none;
   }
-
   .vp-pnl-replay-sweep i {
     left: 0;
     width: 100%;
     opacity: 0.5;
   }
 }
-
 .vp-pnl-replay-verdict {
   padding: 6px 0 8px;
   font-size: 14px;
@@ -414,32 +370,26 @@
      appearing — „nach simulieren mit schöner animation bitte". */
   animation: vp-sim-land 220ms ease both;
 }
-
 @keyframes vp-sim-land {
   from {
     opacity: 0;
     transform: translateY(4px);
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .vp-pnl-replay-verdict {
     animation: none;
   }
 }
-
 .vp-pnl-replay-verdict.is-ok {
   color: var(--good);
 }
-
 .vp-pnl-replay-verdict.is-warn {
   color: var(--warn);
 }
-
 .vp-pnl-replay-verdict.is-muted {
   color: var(--muted);
 }
-
 /* ── Trace log ─────────────────────────────────────────────────────────────
    Monospace on a darker ground; scrolls inside itself so a long trace
    cannot stretch the page. */
@@ -454,23 +404,18 @@
   font-size: 12px;
   line-height: 1.5;
 }
-
 .vp-pnl-trace-line[data-kind='pass'] {
   color: var(--good);
 }
-
 .vp-pnl-trace-line[data-kind='reject'] {
   color: var(--warn);
 }
-
 .vp-pnl-trace-line[data-kind='no-detection'] {
   color: var(--danger);
 }
-
 .vp-pnl-trace-line[data-kind='info'] {
   color: var(--muted);
 }
-
 /* ── Detected-object rows ──────────────────────────────────────────────────
    The row wraps: identity and score on the first line, the span and the
    model underneath. At 375 px they cannot share one line, and the model
@@ -505,7 +450,6 @@
   font-size: 12px;
   line-height: 1.45;
 }
-
 /* Icon buttons paint at 32 px and carry the 44 px target as a
    transparent ::before, the same trick the top bar uses — four full-size
    discs in a row would leave no width for the label they act on. */
@@ -524,7 +468,6 @@
   color: var(--muted);
   cursor: pointer;
 }
-
 .vp-pnl-iconbtn::before {
   content: '';
   position: absolute;
@@ -534,14 +477,12 @@
   height: var(--vp-tap);
   transform: translate(-50%, -50%);
 }
-
 @media (hover: hover) {
   .vp-pnl-iconbtn:hover {
     color: var(--text);
     background: rgba(255, 255, 255, 0.06);
   }
 }
-
 /* ── Key/value rows in the details fold ────────────────────────────────── */
 .vp-pnl-kv {
   display: flex;
@@ -550,7 +491,6 @@
   padding: 5px 0;
   font-size: 13px;
 }
-
 /* The sentence that stands in for the rows this clip has no values for
    — see _provenance.js::_gapNoteHtml. Quiet: it explains an absence, and
    an absence should not out-shout the values printed above it. */
@@ -560,377 +500,23 @@
   font-size: 12.5px;
   line-height: 1.4;
 }
-
 .vp-pnl-k {
   flex: 0 0 40%;
   color: var(--muted);
 }
-
 .vp-pnl-v {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
 .vp-pnl-v.is-ok {
   color: var(--good);
 }
-
 /* The replay summary marks every row that MOVED, so the eye lands on
    the difference rather than reading nine rows to find it. */
 .vp-pnl-v.is-warn {
   color: var(--warn);
 }
-
-/* ── Readiness note ────────────────────────────────────────────────────────
-   The banner above the object rows saying how much to trust them, and —
-   when the answer is "a file is missing" — the button that makes it.
-
-   It exists because an empty picture is ambiguous: "no sidecar", "the
-   indexer found nothing" and "still loading" all rendered as nothing at
-   all, and the operator's question was the obvious one — „wo ist die
-   katze, also die bbox??". A clip whose rows come from the whole-clip
-   aggregate knows WHEN a subject was there and never WHERE, so no box can
-   follow it, and that fact belongs on screen rather than being inferred.
-
-   FIVE FACES, not two tones. The states used to share `is-partial` /
-   `is-quiet` and differ only in their sentence, which is a label rather
-   than a design. Each one now carries the shape of what it knows:
-   `is-building` a three-segment stage chain, `is-pending` one
-   indeterminate bar, `is-empty` the score gate drawn to scale,
-   `is-coarse` a frame holding a pause, `is-missing` a struck-through
-   frame. A ready clip gets NO banner at all — the sixth face is the
-   absence of one.
-
-   Depth is colour contrast on a filled block, never a hairline. */
-.vp-rn {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 11px;
-  margin: 0 0 10px;
-  padding: 12px 14px;
-  border-radius: var(--vp-radius-sm);
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text);
-}
-
-.vp-rn:empty {
-  display: none;
-}
-
-/* The text column. Everything the state has to say stacks here, so the
-   glyph / meter on the left never has to align with more than one line. */
-.vp-rn-body {
-  display: flex;
-  flex: 1 1 240px;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.vp-rn-head {
-  font-size: 13.5px;
-  font-weight: 700;
-}
-
-.vp-rn-sub {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.vp-rn-mark {
-  display: flex;
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
-
-/* ── The five grounds ──────────────────────────────────────────────────── */
-
-/* Work in flight — the same blue the rest of the chrome uses for
-   "something is happening", not the warning amber of a gap. */
-.vp-rn.is-building {
-  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
-}
-
-/* …unless it has stopped moving. `stage_stalled` is derived on read
-   (camera_runtime/_recording/_stages.py), because a container restart
-   mid-encode leaves a clip frozen with no process behind it. */
-.vp-rn.is-building.is-stalled,
-.vp-rn.is-building.is-failed {
-  background: color-mix(in srgb, var(--warn) 15%, var(--panel));
-}
-
-/* A request in flight. Quiet on purpose: nothing is wrong, we simply do
-   not know yet — but it is VISIBLE, which is the whole fix. This state
-   used to render as nothing and was therefore identical to a healthy
-   clip. */
-.vp-rn.is-pending {
-  background: var(--surface);
-  color: var(--muted);
-}
-
-/* The two full-width meters claim their own line by BASIS, not by a
-   column direction on the banner itself. `.vp-rn-body`'s `flex-basis:
-   240px` is a WIDTH only while the main axis is horizontal; flipping the
-   banner to a column turned that basis into a 240 px minimum HEIGHT and
-   left half a screen of empty ground under two lines of text. The
-   harness photographed it, which is what it is for. */
-.vp-rn-steps,
-.vp-rn-shimmer {
-  flex: 0 0 100%;
-}
-
-/* The indexer ran and confirmed nothing.
-
-   IT USED TO WEAR THE ACCENT GREEN OF A COMPLETED PASS, on the argument
-   that finishing and finding nothing is an answer rather than a fault.
-   That reasoning ignored what the answer sits next to: „wieso steht das
-   da so dominant, wieso ist das Video überhaupt noch bei Personen
-   gelistet dann??" — a green tick reading „keine Spur bestätigt"
-   directly above a row that says „Person 67 %" claims the louder of two
-   verdicts, and it is the weaker one. The live pipeline is what
-   triggered the recording and what the archive files the clip under; the
-   sidecar is a second opinion taken later.
-
-   So: the quietest tone in the set. It is a footnote to the row below
-   it, not a headline over it. */
-.vp-rn.is-empty {
-  background: var(--panel-2, color-mix(in srgb, var(--text) 6%, var(--panel)));
-}
-
-.vp-rn.is-empty .vp-rn-mark,
-.vp-rn.is-empty .vp-rn-text {
-  color: var(--muted);
-}
-
-/* …unless it contradicts its own trigger frame, which is not a footnote.
-   readiness.js sets this only when the trigger scored at or above the
-   very threshold the sidecar says it applied. */
-.vp-rn.is-empty.is-contradiction {
-  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
-}
-
-.vp-rn.is-empty.is-contradiction .vp-rn-mark {
-  color: var(--warn);
-}
-
-.vp-rn.is-empty.is-contradiction .vp-rn-text {
-  color: var(--text);
-}
-
-/* Boxes exist, but only for one instant. Improvable, hence amber. */
-.vp-rn.is-coarse {
-  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
-}
-
-.vp-rn.is-coarse .vp-rn-mark {
-  color: var(--warn);
-}
-
-/* No source at all. */
-.vp-rn.is-missing {
-  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
-}
-
-.vp-rn.is-missing .vp-rn-mark {
-  color: var(--danger);
-}
-
-/* ── Stage chain (building) ────────────────────────────────────────────────
-   Three segments — Aufnahme, Umwandlung, fertig — driven by
-   mediathek/_processing.js's own `step`, so the player and the library
-   card cannot disagree about how far along a clip is. Deliberately not a
-   percentage: ffmpeg can only report one by rewriting the event JSON at
-   ~1 Hz per clip. */
-.vp-rn-steps {
-  display: flex;
-  gap: 4px;
-}
-
-.vp-rn-steps i {
-  flex: 1 1 0;
-  height: 5px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 12%);
-}
-
-.vp-rn-steps i.is-done {
-  background: color-mix(in srgb, var(--accent) 60%, transparent);
-}
-
-.vp-rn-steps i.is-now {
-  background: var(--accent);
-  animation: vp-rn-breathe 1.6s ease-in-out infinite;
-}
-
-.vp-rn-steps i.is-halted {
-  background: color-mix(in srgb, var(--warn) 45%, transparent);
-}
-
-@keyframes vp-rn-breathe {
-  50% {
-    opacity: 0.45;
-  }
-}
-
-/* ── Indeterminate bar (pending) ───────────────────────────────────────────
-   One bar, not three: the counterpart to the chain above says "we cannot
-   number this" rather than pretending to a position. */
-.vp-rn-shimmer {
-  position: relative;
-  height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
-}
-
-.vp-rn-shimmer::after {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 38%;
-  border-radius: 999px;
-  background: var(--muted);
-  animation: vp-rn-sweep 1.4s ease-in-out infinite;
-  content: '';
-}
-
-@keyframes vp-rn-sweep {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(300%);
-  }
-}
-
-/* A stopped animation must still read as its state, so the segment and
-   the bar keep their colour — they simply stop moving. */
-@media (prefers-reduced-motion: reduce) {
-  .vp-rn-steps i.is-now,
-  .vp-rn-shimmer::after {
-    animation: none;
-  }
-}
-
-/* ── The gate, drawn (empty) ───────────────────────────────────────────────
-   Fill = the best score this clip ever produced, tick = the spawn
-   threshold the indexer applied (tracks.json `gates.min_confidence`,
-   sidecar schema 4). A fill stopping short of the tick IS the reason the
-   walk confirmed nothing; a fill past it says the score was not the
-   blocker — both are answers the sentence alone could never give. */
-.vp-rn-gate {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 8px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
-}
-
-.vp-rn-gate-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
-  background: var(--muted);
-}
-
-.vp-rn-gate-fill.is-over {
-  background: var(--vp-accent);
-}
-
-.vp-rn-gate-tick {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--text);
-  transform: translateX(-50%);
-}
-
-/* ── Fact chips ────────────────────────────────────────────────────────────
-   Value first, label under it. The numbers are the point; the words are
-   what makes them readable. */
-.vp-rn-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.vp-rn-facts li {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 6px 10px;
-  border-radius: var(--vp-radius-sm);
-  background: rgb(255 255 255 / 7%);
-}
-
-.vp-rn-facts b {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.vp-rn-facts span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-/* A real 44px target: this is the one control in the panel that starts
-   work on the box, and it must not be a 28px strip on a phone.
-
-   `flex: 1 0 auto` and no `margin-left: auto`. Once the text column has
-   claimed its 240px basis the button wraps to its own line on a phone
-   and fills it, which is the widest target the row can give it; the auto
-   margin that would have pushed it right instead is the exact pairing
-   CLAUDE.md names as the recurring iOS layout fault. */
-.vp-rn-btn {
-  flex: 1 0 auto;
-  min-width: 160px;
-  min-height: var(--vp-tap);
-  padding: 0 16px;
-  border: 0;
-  border-radius: var(--vp-radius-sm);
-  background: var(--vp-accent);
-  color: var(--vp-on-accent);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .vp-rn-btn:hover {
-    filter: brightness(1.08);
-  }
-}
-
-/* While the rebuild is in flight or has been queued. Muted rather than
-   coloured — it is a status, not an action, and it replaces the button
-   so the same request cannot be fired twice by an impatient tap. */
-/* THE STATUS LINE MAY WRAP. `flex: 0 0 auto` refused to shrink it, so a
-   sentence longer than the space left over ran straight off the right
-   edge and was clipped mid-word — which is what happened the moment the
-   rebuild notice grew from four words into one that actually explains
-   itself. A status that cannot be read is not a status.
-
-   `min-width: 0` is the half that does the work: a flex item's automatic
-   minimum size is its content, so without it the shrink factor has
-   nothing to shrink into. */
-.vp-rn-state {
-  flex: 0 1 auto;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  font-style: italic;
-  text-wrap: pretty;
-}
-
 /* A SPECIES, not just a class. When the cascade names the bird, that row
    answers a harder question than "Vogel" does — and until now both sat
    in the same grey with nothing to tell them apart. The leaf marker and
@@ -944,7 +530,6 @@
   color: var(--vp-accent);
   font-weight: 600;
 }
-
 .vp-pnl-cls.is-species::before {
   content: '🌿';
   margin-right: 5px;
@@ -953,7 +538,6 @@
      screen reader announcing "herb" before every bird helps nobody. */
   speak: never;
 }
-
 /* ── Reading order on the live + simulation panel ──────────────────────────
    A diagnostic screen is read top-down ONCE, so it has to be ordered by
    what answers the question first. It was not: the mode chips, the track
@@ -979,37 +563,30 @@
   display: flex;
   flex-direction: column;
 }
-
 .vp-root[data-mode='sim'] .vp-panel > #mvSimVerdict,
 .vp-root[data-mode='live'] .vp-panel > #mvSimVerdict {
   order: 0;
 }
-
 .vp-root[data-mode='sim'] .vp-panel > .vp-pnl-head,
 .vp-root[data-mode='live'] .vp-panel > .vp-pnl-head {
   order: 1;
 }
-
 .vp-root[data-mode='sim'] .vp-panel > .vp-pnl-revpick,
 .vp-root[data-mode='live'] .vp-panel > .vp-pnl-revpick {
   order: 2;
 }
-
 .vp-root[data-mode='sim'] .vp-panel > .vp-pnl-tracks,
 .vp-root[data-mode='live'] .vp-panel > .vp-pnl-tracks {
   order: 3;
 }
-
 .vp-root[data-mode='sim'] .vp-panel > .vp-pnl-raw,
 .vp-root[data-mode='live'] .vp-panel > .vp-pnl-raw {
   order: 4;
 }
-
 .vp-root[data-mode='sim'] .vp-panel > .vp-pnl-debug,
 .vp-root[data-mode='live'] .vp-panel > .vp-pnl-debug {
   order: 5;
 }
-
 /* The two raw folds are the DUMP, and a dump that shouts is a dump that
    gets read instead of the answer. Pushed down and quietened as a group:
    one gap above the pair, the second sitting tight under the first. */
@@ -1017,7 +594,6 @@
 .vp-root[data-mode='live'] .vp-panel > .vp-pnl-raw {
   margin-top: 6px;
 }
-
 .vp-root[data-mode='sim'] .vp-pnl-raw .vp-fold-header,
 .vp-root[data-mode='live'] .vp-pnl-raw .vp-fold-header,
 .vp-root[data-mode='sim'] .vp-pnl-debug .vp-fold-header,
@@ -1025,7 +601,6 @@
   color: var(--muted);
   font-size: 13px;
 }
-
 /* A fold title carries its own count ("2 übernommen · 1 verworfen") and
    at 375 px that count was the half being ellipsed away — which is the
    half worth reading. Let it wrap onto a second line instead. */
@@ -1036,7 +611,6 @@
   text-overflow: clip;
   line-height: 1.35;
 }
-
 /* ── The mode chips, demoted to a caption ──────────────────────────────────
    They are conditions, not findings: TPU/CPU, the ROI mode, the busy
    ratio. Full-weight chips made them compete with the verdict directly
@@ -1047,7 +621,6 @@
   gap: 4px;
   margin-bottom: 10px;
 }
-
 .vp-root[data-mode='sim'] .vp-pnl-chips .vp-pnl-chip,
 .vp-root[data-mode='live'] .vp-pnl-chips .vp-pnl-chip {
   padding: 2px 7px;
@@ -1055,7 +628,6 @@
   color: var(--muted);
   font-size: 11.5px;
 }
-
 /* …except the one that says this tick did NOT run the camera's profile.
    That changes how every number below is read, so it keeps its warmth. */
 .vp-root[data-mode='sim'] .vp-pnl-chips .vp-pnl-chip.is-revision,
@@ -1063,7 +635,6 @@
   background: color-mix(in srgb, var(--warn) 20%, var(--panel));
   color: var(--warn);
 }
-
 /* ── Verdict band ──────────────────────────────────────────────────────────
    The first thing in the panel and the only thing with weight: whether
    the simulation is working, and if it is not, which failure it is and
@@ -1090,12 +661,10 @@
   font-size: 13px;
   line-height: 1.45;
 }
-
 .vp-sv[data-tone='ok'] {
   --vp-sv-bg: color-mix(in srgb, var(--good) 13%, var(--panel));
   --vp-sv-fg: var(--good);
 }
-
 /* BLUE, not the player's green accent. "Analyse läuft noch" and
    "Simulation läuft" are the two states an operator most needs to tell
    apart at a glance — one means wait, the other means read on — and in
@@ -1105,17 +674,14 @@
   --vp-sv-bg: color-mix(in srgb, var(--accent) 16%, var(--panel));
   --vp-sv-fg: #93c5fd;
 }
-
 .vp-sv[data-tone='warn'] {
   --vp-sv-bg: color-mix(in srgb, var(--warn) 16%, var(--panel));
   --vp-sv-fg: var(--warn);
 }
-
 .vp-sv[data-tone='bad'] {
   --vp-sv-bg: color-mix(in srgb, var(--danger) 18%, var(--panel));
   --vp-sv-fg: var(--danger);
 }
-
 .vp-sv-icon {
   flex: 0 0 auto;
   width: 20px;
@@ -1123,14 +689,12 @@
   margin-top: 1px;
   color: var(--vp-sv-fg, var(--muted));
 }
-
 /* The waiting glyph is a clock, and a clock that does not move reads as a
    frozen screen — which is the exact misreading this band exists to
    prevent. Slow enough not to nag. */
 .vp-sv[data-tone='wait'] .vp-sv-icon {
   animation: vp-sv-pulse 1.6s ease-in-out infinite;
 }
-
 @keyframes vp-sv-pulse {
   0%,
   100% {
@@ -1140,24 +704,20 @@
     opacity: 0.42;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
   .vp-sv[data-tone='wait'] .vp-sv-icon {
     animation: none;
   }
 }
-
 .vp-sv-body {
   flex: 1 1 200px;
   min-width: 0;
 }
-
 .vp-sv-title {
   color: var(--vp-sv-fg, var(--text));
   font-size: 14.5px;
   font-weight: 700;
 }
-
 /* `anywhere`, for the same reason .vp-pnl-reason has it: a quoted backend
    message can carry a model file name or a URL with nothing to break at,
    and the panel must never gain a horizontal scroll. */
@@ -1166,14 +726,12 @@
   overflow-wrap: anywhere;
   color: var(--text);
 }
-
 .vp-sv-hint {
   margin-top: 5px;
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 12.5px;
 }
-
 /* The one action a verdict offers. Light on the tinted ground — never
    dark-on-dark, and a full 44 px target. Its own line at phone widths so
    the label never competes with the text for the same 375 px.
@@ -1194,26 +752,22 @@
   font-weight: 700;
   cursor: pointer;
 }
-
 @media (min-width: 560px) {
   .vp-sv-btn {
     flex: 0 0 auto;
     align-self: center;
   }
 }
-
 @media (hover: hover) {
   .vp-sv-btn:hover {
     filter: brightness(1.08);
   }
 }
-
 .vp-pnl-empty {
   padding: 12px 2px;
   color: var(--muted);
   font-size: 13px;
 }
-
 .vp-pnl-subhead {
   padding: 10px 2px 4px;
   color: var(--muted);

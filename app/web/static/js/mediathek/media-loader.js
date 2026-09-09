@@ -9,15 +9,19 @@ import { state } from '../core/state.js';
 import { j } from '../core/api.js';
 import { calcItemsPerPage } from './_paging.js';
 import { syncMediaPills } from './filters.js';
+import { effectiveMediaLabels } from './_species-filter.js';
 
 // ── loadMedia ───────────────────────────────────────────────────────────────
 export async function loadMedia() {
-  const labels = state.mediaLabels;
   const ps = calcItemsPerPage();
   window._cachedPageSize = ps;
   const cams = state.mediaCamera ? [state.mediaCamera] : state.cameras.map((c) => c.id);
   // Unified filter — EventStore now holds both motion and timelapse events.
-  const allLabels = [...labels];
+  // A selected species (_species-filter.js::effectiveMediaLabels)
+  // replaces the generic "bird" entry rather than adding to it, so the
+  // OR-of-labels backend filter actually narrows instead of matching
+  // every bird event again.
+  const allLabels = effectiveMediaLabels();
   const labelParam =
     allLabels.length === 1
       ? `&label=${encodeURIComponent(allLabels[0])}`

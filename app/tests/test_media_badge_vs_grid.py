@@ -82,12 +82,22 @@ def _write(path: Path, payload: bytes) -> Path:
     return path
 
 
-def _clip(root: Path, event_id: str, labels: list, *, cam: str = CAM, tree: str = None) -> dict:
+def _clip(
+    root: Path,
+    event_id: str,
+    labels: list,
+    *,
+    cam: str = CAM,
+    tree: str = None,
+    bird_species: str = None,
+) -> dict:
     """A motion event whose clip and thumbnail really are on disk.
 
     ``tree`` puts the media somewhere other than motion_detection/ while
     the manifest stays where the store looks for it — the shape that
-    separated the badge lookup from the grid lookup.
+    separated the badge lookup from the grid lookup. ``bird_species``
+    stamps the species classifier field alongside ``labels`` — see
+    test_a_species_name_narrows_the_grid_via_labels below.
     """
     media_dir = f"{tree or 'motion_detection'}/{cam}" + ("" if tree else f"/{DATE}")
     _write(root / media_dir / f"{event_id}.mp4", _REAL_MP4)
@@ -101,6 +111,8 @@ def _clip(root: Path, event_id: str, labels: list, *, cam: str = CAM, tree: str 
         "video_relpath": f"{media_dir}/{event_id}.mp4",
         "snapshot_relpath": f"{media_dir}/{event_id}.jpg",
     }
+    if bird_species:
+        payload["bird_species"] = bird_species
     day = root / "motion_detection" / cam / DATE
     day.mkdir(parents=True, exist_ok=True)
     (day / f"{event_id}.json").write_text(json.dumps(payload), encoding="utf-8")
@@ -234,6 +246,27 @@ def test_rolling_previews_are_never_registered_as_archive_tiles(client, tmp_stor
     codes = {f["code"]: f for f in kam["befunde"]}
     assert codes["rolling_vorschauen"]["anzahl"] == 2
     assert "timelapse_ohne_eintrag" not in codes
+
+
+# ── species-name narrowing (Mediathek species sub-filter) ──────────────────
+def test_a_species_name_narrows_the_grid_via_labels(client, tmp_storage_root):
+    """The Mediathek pill bar's species sub-filter (mediathek/
+    _species-filter.js) needs no dedicated route: `labels=<species>`
+    already narrows here the same way it does on /api/library — both
+    read the same OR-of-filter-set match against `labels` plus the
+    `cat_name`/`bird_species` extras (storage.py::_filter_events,
+    mirrored bit-for-bit by library/_motion_reader.py). A bare species
+    name, with no "bird" alongside it, must match only that species —
+    not fall through to "no filter" or catch every bird event."""
+    _clip(tmp_storage_root, "20260430-170000-000000", ["bird"], bird_species="Elster")
+    _clip(tmp_storage_root, "20260430-180000-000000", ["bird"], bird_species="Amsel")
+    _clip(tmp_storage_root, "20260430-190000-000000", ["person"])
+
+    items = _grid(client, cam_id=CAM)
+    assert len(items) == 3, "sanity: all three clips visible with no filter"
+
+    narrowed = client.get(f'/api/camera/{CAM}/media?labels=Elster').get_json()["items"]
+    assert [i["event_id"] for i in narrowed] == ["20260430-170000-000000"]
 
 
 def test_rolling_stems_are_recognised_by_shape_not_by_a_list():

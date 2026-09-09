@@ -217,6 +217,16 @@
   margin-bottom: 0;
   padding-bottom: 0;
 }
+/* [hidden] opt-out — the UA stylesheet's `[hidden] { display: none }`
+   loses to this rule's own `display: flex` regardless of specificity
+   (author origin outranks user-agent origin), so a bar toggled via
+   `.hidden = true` (the species sub-row, mediathek/filters.js::
+   renderSpeciesFilterPills) would otherwise stay on screen. See
+   test_weather_zoom_panel_css.py for the repo-wide sweep this pattern
+   satisfies. */
+.media-filter-bar[hidden] {
+  display: none;
+}
 /* The gap above the filter pills read as larger than the one below
    them, which is what made the block look lopsided. Two things add to
    it: .section-head's own 12 px, and the fact that the head is a

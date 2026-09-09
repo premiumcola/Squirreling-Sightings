@@ -11,6 +11,12 @@ import { CAT_COLORS } from '../timeline.js';
 import { loadMedia } from './media-loader.js';
 import { renderMediaGrid, renderMediaPagination } from './_paging.js';
 import { openAllMediaDrilldown } from './_drilldown.js';
+import {
+  loadBirdSpeciesOptions,
+  selectSpecies,
+  speciesPillsHtml,
+  clearSpeciesIfBirdInactive,
+} from './_species-filter.js';
 
 // ── Filter pill bar ─────────────────────────────────────────────────────────
 // Sort happens at render time (by count desc); this list seeds the
@@ -75,47 +81,27 @@ export function _pruneEmptyMediaFilters() {
   return before > 0 && state.mediaLabels.size === 0;
 }
 
-// mode: 'overview' (all pills, no counts, click → openAllMediaDrilldown(label))
-//       'drilldown' (only pills with count>0, with counts, toggles state.mediaLabels)
-export function renderMediaFilterPills(mode) {
-  const id = mode === 'overview' ? 'mediaFilterBarOverview' : 'mediaFilterBar';
-  const bar = byId(id);
-  if (!bar) return;
-  const counts = _aggregateMediaCounts();
-  const sorted = MEDIA_FILTER_LABELS.slice().sort((a, b) => {
-    const d = (counts[b] || 0) - (counts[a] || 0);
-    if (d) return d;
-    return MEDIA_FILTER_LABELS.indexOf(a) - MEDIA_FILTER_LABELS.indexOf(b);
-  });
-  // L3 · render the SAME chips in both modes — categories with zero
-  // available items are surfaced as greyed/disabled (`media-pill--empty`
-  // + non-tappable), not removed entirely, so the operator sees the
-  // full taxonomy at a glance and knows what is/isn't available right
-  // now. Recomputed from the same `_aggregateMediaCounts()` source as
-  // the badge counts in L2 (single source of truth); the post-delete
-  // refresh in chrome/storage-stats.js re-fetches + re-renders.
-  const labels = sorted;
-  let html = labels
-    .map((l) => {
-      const cnt = counts[l] || 0;
-      const empty = cnt === 0;
-      const active = mode === 'drilldown' && state.mediaLabels.has(l);
-      const cls = `media-pill cat-filter-btn${active ? ' active' : ''}${empty ? ' media-pill--empty' : ''}`;
-      const cb = CAT_COLORS[l] || '#94a3b8';
-      const cntChip =
-        mode === 'drilldown' && cnt > 0
-          ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>`
-          : '';
-      return `<button type="button" class="${cls}" data-type="label" data-val="${l}" style="--cb:${cb}"${empty ? ' tabindex="-1" aria-disabled="true"' : ''}><span class="cfb-icon" style="pointer-events:none">${objIconSvg(l, 18)}</span><span style="pointer-events:none">${OBJ_LABEL[l] || l}</span>${cntChip}</button>`;
-    })
-    .join('');
-  // Status hint when the user has deselected every filter — the grid then
-  // falls back to "show everything", and this pill keeps the state
-  // visible so the user knows nothing is being hidden.
-  if (mode === 'drilldown' && state.mediaLabels.size === 0 && labels.length > 0) {
-    html += `<span class="media-pill media-pill--status" aria-disabled="true">alle Filter aus</span>`;
-  }
-  bar.innerHTML = html;
+// One class-level pill's markup. L3 · render the SAME chips in both modes —
+// categories with zero available items are surfaced as greyed/disabled
+// (`media-pill--empty` + non-tappable), not removed entirely, so the
+// operator sees the full taxonomy at a glance and knows what is/isn't
+// available right now.
+function _classPillHtml(l, cnt, mode) {
+  const empty = cnt === 0;
+  const active = mode === 'drilldown' && state.mediaLabels.has(l);
+  const cls = `media-pill cat-filter-btn${active ? ' active' : ''}${empty ? ' media-pill--empty' : ''}`;
+  const cb = CAT_COLORS[l] || '#94a3b8';
+  const cntChip =
+    mode === 'drilldown' && cnt > 0
+      ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>`
+      : '';
+  return `<button type="button" class="${cls}" data-type="label" data-val="${l}" style="--cb:${cb}"${empty ? ' tabindex="-1" aria-disabled="true"' : ''}><span class="cfb-icon" style="pointer-events:none">${objIconSvg(l, 18)}</span><span style="pointer-events:none">${OBJ_LABEL[l] || l}</span>${cntChip}</button>`;
+}
+
+// Click wiring for the class-level pills, split out of
+// renderMediaFilterPills to keep that one under the file's own 60-line
+// function ceiling.
+function _wireClassPillClicks(bar, mode) {
   bar.querySelectorAll('.media-pill').forEach((p) => {
     if (p.classList.contains('media-pill--empty')) return;
     const val = p.dataset.val;
@@ -131,8 +117,79 @@ export function renderMediaFilterPills(mode) {
       }
       if (state.mediaLabels.has(val)) state.mediaLabels.delete(val);
       else state.mediaLabels.add(val);
+      // Deselecting "bird" (or any other pill, harmlessly) drops a
+      // species narrowing that would otherwise keep filtering the grid
+      // on a value the operator can no longer see or clear — see
+      // _species-filter.js::clearSpeciesIfBirdInactive.
+      clearSpeciesIfBirdInactive();
       state.mediaPage = 0;
       renderMediaFilterPills('drilldown');
+      if (byId('mediaDrilldown')?.style.display !== 'none') {
+        loadMedia().then(() => {
+          renderMediaGrid();
+          renderMediaPagination();
+        });
+      }
+    });
+  });
+}
+
+// Species sub-row lives in its own bar, below the class-level one (see
+// partials/mediathek.html#mediaSpeciesFilterBar) — fetched lazily, once,
+// the first time "bird" is active and no fetch has been made yet.
+function _syncSpeciesRow() {
+  if (state.mediaLabels.has('bird') && state.mediaSpeciesOptions === null) {
+    loadBirdSpeciesOptions().then(renderSpeciesFilterPills);
+  }
+  renderSpeciesFilterPills();
+}
+
+// mode: 'overview' (all pills, no counts, click → openAllMediaDrilldown(label))
+//       'drilldown' (only pills with count>0, with counts, toggles state.mediaLabels)
+export function renderMediaFilterPills(mode) {
+  const id = mode === 'overview' ? 'mediaFilterBarOverview' : 'mediaFilterBar';
+  const bar = byId(id);
+  if (!bar) return;
+  const counts = _aggregateMediaCounts();
+  // Sort happens here (by count desc, MEDIA_FILTER_LABELS order as
+  // tie-break) — recomputed from the same _aggregateMediaCounts() source
+  // as the badge counts elsewhere (single source of truth); the
+  // post-delete refresh in chrome/storage-stats.js re-fetches + re-renders.
+  const labels = MEDIA_FILTER_LABELS.slice().sort((a, b) => {
+    const d = (counts[b] || 0) - (counts[a] || 0);
+    if (d) return d;
+    return MEDIA_FILTER_LABELS.indexOf(a) - MEDIA_FILTER_LABELS.indexOf(b);
+  });
+  let html = labels.map((l) => _classPillHtml(l, counts[l] || 0, mode)).join('');
+  // Status hint when the user has deselected every filter — the grid then
+  // falls back to "show everything", and this pill keeps the state
+  // visible so the user knows nothing is being hidden.
+  if (mode === 'drilldown' && state.mediaLabels.size === 0 && labels.length > 0) {
+    html += `<span class="media-pill media-pill--status" aria-disabled="true">alle Filter aus</span>`;
+  }
+  bar.innerHTML = html;
+  _wireClassPillClicks(bar, mode);
+  // 'overview' mode's pills are one-shot "jump into drilldown" shortcuts
+  // (openAllMediaDrilldown above), not a live toggle — the species row
+  // only means something once mediaLabels is actually driving a fetch.
+  if (mode === 'drilldown') _syncSpeciesRow();
+}
+
+// Species pill row — separate render entry point from
+// renderMediaFilterPills so a species click only repaints this one bar,
+// not the whole class-level row above it.
+export function renderSpeciesFilterPills() {
+  const bar = byId('mediaSpeciesFilterBar');
+  if (!bar) return;
+  const html = speciesPillsHtml();
+  bar.innerHTML = html;
+  bar.hidden = !html;
+  bar.querySelectorAll('.media-pill').forEach((p) => {
+    const name = p.dataset.species;
+    p.addEventListener('click', () => {
+      selectSpecies(name);
+      state.mediaPage = 0;
+      renderSpeciesFilterPills();
       if (byId('mediaDrilldown')?.style.display !== 'none') {
         loadMedia().then(() => {
           renderMediaGrid();

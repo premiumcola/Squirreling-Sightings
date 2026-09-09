@@ -65,6 +65,7 @@ export async function openCategoryDrilldown(label) {
   state.mediaDrillOpen = true;
   state.mediaCamera = null;
   state.mediaLabels = new Set(label ? [label] : []);
+  state.mediaSpecies = null;
   state.mediaPage = 0;
   if (state.mediaSelectMode) _exitMediaSelectMode();
   if (state.mediaLabels.size === 0) _seedTopMediaLabel();
@@ -77,6 +78,7 @@ export async function openAllMediaDrilldown(preFilterLabel) {
   state.mediaDrillOpen = true;
   state.mediaCamera = null;
   state.mediaLabels = preFilterLabel ? new Set([preFilterLabel]) : new Set();
+  state.mediaSpecies = null;
   state.mediaPage = 0;
   if (state.mediaSelectMode) _exitMediaSelectMode();
   _clearLoadedLibrary();
@@ -94,6 +96,7 @@ export async function openMediaDrilldown(camId) {
   state.mediaDrillOpen = true;
   state.mediaCamera = camId;
   state.mediaLabels = new Set();
+  state.mediaSpecies = null;
   state.mediaPage = 0;
   if (state.mediaSelectMode) _exitMediaSelectMode();
   _clearLoadedLibrary();
@@ -112,6 +115,7 @@ export async function openMediaDrilldown(camId) {
 export function closeMediaDrilldown() {
   state.mediaDrillOpen = false;
   state.mediaCamera = null;
+  state.mediaSpecies = null;
   state.media = [];
   if (state.mediaSelectMode) _exitMediaSelectMode();
   showMediathekView('mediaOverview');

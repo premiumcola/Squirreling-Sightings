@@ -115,6 +115,10 @@
       </button>
       <div class="media-filter-bar" id="mediaFilterBar"></div>
     </div>
+    {# Species sub-row (filters.js::renderSpeciesFilterPills) — only unhidden
+    while "Vogel" is the active class pill above, populated from species this
+    installation has actually had on camera (mediathek/_species-filter.js). #}
+    <div class="media-filter-bar media-species-bar" id="mediaSpeciesFilterBar" hidden></div>
     <div id="mediaGrid" class="media-grid"></div>
     <div id="mediaPagination" class="media-pagination"></div>
     <div id="mediaSelectBar" class="media-select-bar" style="display: none">

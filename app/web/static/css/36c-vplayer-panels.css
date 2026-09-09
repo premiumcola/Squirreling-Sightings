@@ -233,6 +233,38 @@
   margin-bottom: 8px;
 }
 
+/* ── The correction sheet ──────────────────────────────────────────────────
+   It had no ground of its own: it inherited the object row's
+   `--vp-pnl-row` (= --surface) while its own chips and buttons are ALSO
+   drawn on --surface, so chips, buttons and sheet were one flat field of
+   #222 and the whole thing read as loose text — „Die edit ansicht ist
+   hässlich". Depth by contrast, per the design rules: the sheet steps
+   DOWN from the row it opens in, which lifts the chips and the two
+   actions without a single border line. */
+.vp-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 2px;
+  padding: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #000 32%, var(--surface));
+}
+
+.vp-sheet-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The sheet's own action row: two real buttons, side by side, each over
+   the 44 px floor. `.vp-pnl-btn` already paints on --surface, which now
+   stands a clear step above the sheet's darker ground. */
+.vp-sheet .vp-pnl-debug-bar {
+  gap: 10px;
+  margin-bottom: 0;
+}
+
 /* One quiet line under the correction sheet's title, saying that every
    tap in it has already been saved — „muss ich speichern oder fertig
    drücken damits übernommen wird?!". Muted and small on purpose: it
@@ -240,7 +272,7 @@
 .vp-sheet-hint {
   color: var(--muted);
   font-size: 12px;
-  margin: 2px 0 8px;
+  margin: -6px 0 0;
 }
 
 .vp-pnl-btn {
@@ -448,11 +480,14 @@
   flex-wrap: wrap;
   padding-top: 6px;
   padding-bottom: 6px;
-  /* A left edge in the object's own colour ties the row to its lane on
-     the timeline and its box on the picture. Depth by colour, not by a
-     hairline border. */
-  box-shadow: inset 3px 0 0 0 var(--vp-lane-colour, transparent);
 }
+/* NO LEFT EDGE STRIPE. It used to carry an `inset 3px 0 0 0` shadow in
+   the object's lane colour to tie the row to its lane. On a row whose
+   colour never resolved it painted a pale grey rule down the side of the
+   whole block instead — „ich verbiete dieses design mit dem komischen
+   strich an der seite!". It was a hairline border in all but name, which
+   the design rules forbid outright; the row already has its own ground,
+   and the lane on the timeline already carries the colour. */
 
 /* One quiet line under the list saying what the rows are drawn from and
    whether a cap cut them short. It renders only for the whole-clip

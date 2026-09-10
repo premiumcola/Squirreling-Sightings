@@ -41,24 +41,33 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+_BLOCK_COMMENTS = {".css": ("/*", "*/"), ".html": ("{#", "#}")}
+
+
+def _strip_blocks(src: str, open_tag: str, close_tag: str) -> str:
+    out, rest = [], src
+    while open_tag in rest:
+        head, _, rest = rest.partition(open_tag)
+        out.append(head)
+        _, _, rest = rest.partition(close_tag)
+    out.append(rest)
+    return "".join(out)
+
+
 def _code(path: Path) -> str:
-    """The file without its `//` comment lines.
+    """The file without its comments.
 
     „X kommt nicht mehr vor" ist sonst keine Aussage über den Code: in
     diesem Projekt erklärt jede Entfernung sich selbst an Ort und Stelle,
-    und der Kommentar, der sagt WARUM es weg ist, nennt es beim Namen.
-    Ein Test, der über den Kommentar stolpert, verbietet die Erklärung.
-    Gleiches gilt für die CSS-Variante mit `/* … */`.
+    und der Kommentar, der sagt WARUM etwas weg ist, nennt es beim Namen.
+    Ein Test, der über diesen Kommentar stolpert, verbietet die
+    Erklärung — also liest er den Code ohne sie: `//` in JS, `/* … */` in
+    CSS, `{# … #}` in den Jinja-Vorlagen.
     """
     src = _read(path)
-    if path.suffix == ".css":
-        out, rest = [], src
-        while "/*" in rest:
-            head, _, rest = rest.partition("/*")
-            out.append(head)
-            _, _, rest = rest.partition("*/")
-        out.append(rest)
-        return "".join(out)
+    tags = _BLOCK_COMMENTS.get(path.suffix)
+    if tags:
+        return _strip_blocks(src, *tags)
     return "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
 
 
@@ -72,13 +81,21 @@ def test_alle_ereignisse_heading_is_gone_from_the_template():
     assert "Alle Ereignisse" not in _read(_MEDIATHEK)
 
 
-def test_library_block_no_longer_carries_its_own_permanent_subsection_head():
-    """Exactly one `.lib-subsection-head` remains — "Kamera-Ansicht &
-    Auswahl" — not two. The second one used to frame #libraryBlock as
-    its own always-visible section."""
-    mediathek = _read(_MEDIATHEK)
-    assert mediathek.count("lib-subsection-head") == 1
-    assert "Kamera-Ansicht" in mediathek
+def test_the_section_carries_exactly_one_heading():
+    """No `.lib-subsection-head` at all any more.
+
+    There were two: one framing #libraryBlock as its own always-visible
+    section (dropped first), and „Kamera-Ansicht & Auswahl", which sat
+    one line under #media's own H3 — with the same camera glyph — and
+    named a section the content already announced: „doppel titel raus!".
+    It had separated the filter bar from the camera tiles; the bar is not
+    even on screen during a drilldown any more (mediathek/
+    _view-toggle.js), so it separated nothing."""
+    mediathek = _code(_MEDIATHEK)
+    assert "lib-subsection-head" not in mediathek
+    assert "Kamera-Ansicht" not in mediathek
+    # And the rule went with the markup rather than lingering unused.
+    assert "lib-subsection-head" not in _code(_CSS / "26-library-merge.css")
 
 
 # ── #libraryBlock is the toggle's third state, not a permanent section ───
@@ -287,3 +304,48 @@ def test_media_drill_back_meets_the_44px_touch_target_floor():
     rule = css[css.index(".media-drill-back {") :]
     rule = rule[: rule.index("}")]
     assert "min-height: 44px" in rule
+
+
+# ── „Abstände filter bitte gleich" + a back control the width of its own
+#     words ─────────────────────────────────────────────────────────────
+
+
+def test_every_junction_in_the_mediathek_stack_uses_the_one_gap():
+    """Title → back button → class pills → species pills → grid. Five
+    things, four junctions, ONE number — a stack where each seam carries
+    its own hand-tuned margin is exactly what reads as uneven on a
+    phone."""
+    coral = _code(_CSS / "04-coral-1.css")
+    mobile = _code(_CSS / "25-mobile.css")
+    settings = _code(_CSS / "08-settings.css")
+    assert "--media-stack-gap: 10px;" in coral
+    for block, css in (
+        ("#media > .section-head {", coral),
+        (".media-drill-head {", coral),
+        (".media-species-bar {", coral),
+        (".media-storage-bar {", settings),
+    ):
+        rule = css[css.index(block) :]
+        rule = rule[: rule.index("}")]
+        assert "var(--media-stack-gap)" in rule, f"{block} must not carry its own number"
+    # The mobile column stack is a junction too: its internal gap is the
+    # one between the back button and the class pills.
+    rule = mobile[mobile.index(".media-drill-head {") :]
+    rule = rule[: rule.index("}")]
+    assert "gap: var(--media-stack-gap);" in rule
+
+
+def test_the_back_control_is_as_wide_as_its_words():
+    """`align-items: stretch` on the mobile column made „← Alle Kameras"
+    a full-width slab for four words: „aktuell gehts komplett von links
+    nach rechts". A back control is the smallest thing on the page."""
+    mobile = _code(_CSS / "25-mobile.css")
+    rule = mobile[mobile.index(".media-drill-head {") :]
+    rule = rule[: rule.index("}")]
+    assert "align-items: flex-start;" in rule
+    assert "stretch" not in rule
+    # The filter bar beside it still spans the row — it is the thing that
+    # scrolls sideways, and a content-width filter row would be a stub.
+    bar = mobile[mobile.index(".media-drill-head .media-filter-bar {") :]
+    bar = bar[: bar.index("}")]
+    assert "width: 100%;" in bar

@@ -94,7 +94,10 @@
 }
 /* ── Task 2: Media storage bar ──────────────────────────────────────────────── */
 .media-storage-bar {
-  margin-bottom: 10px;
+  /* The Mediathek stack's one gap — see .media-drill-head in
+     04-coral-1.css. This sits in the same column as the filter rows, so
+     it may not carry a number of its own. */
+  margin-bottom: var(--media-stack-gap);
 }
 /* Collapse to 0 when the bar has no rendered content. storage-stats.js
    sets innerHTML='' between loads but the element's margin still

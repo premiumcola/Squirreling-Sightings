@@ -252,12 +252,24 @@ body.sidebar-locked {
     font-size: 14px;
   }
 
-  /* Drilldown header on mobile — back-button + counter on row 1, the
-     filter bar (which already scrolls horizontally) on row 2. */
+  /* Drilldown header on mobile — the back button on row 1, the filter
+     bar (which already scrolls horizontally) on row 2.
+
+     `flex-start`, NOT `stretch`. Stretch is what made „← Alle Kameras"
+     a full-width slab running the whole screen for four words — „Filter
+     um zurück zu kommen möglichst in breite anpassen aktuell gehts
+     komplett von links nach rechts". A back control is not the widest
+     thing on the page; it is the smallest. The filter bar below keeps
+     its own explicit width: 100 %.
+
+     And the gap is the SAME variable every other junction in this stack
+     uses, so back-button → pills → species row → grid are four evenly
+     spaced things rather than three different spacings („Abstände
+     filter bitte gleich"). */
   .media-drill-head {
     flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    align-items: flex-start;
+    gap: var(--media-stack-gap);
   }
   .media-drill-head .media-filter-bar {
     flex: initial;

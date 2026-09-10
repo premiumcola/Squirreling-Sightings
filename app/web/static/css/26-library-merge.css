@@ -45,19 +45,8 @@
    Zeitraum.") lived here. Both it and the narrowing it announced are
    gone — the Wetterdaten time chooser controls its own chart and
    nothing else now. See partials/mediathek.html. */
-/* .lib-subsection-head — demotes to a sub-section label under #media's
-   own H3, same 14 px demotion .ws-stats-head .ws-title already uses for
-   "Wetterdaten & Prognose" below it. */
-.lib-subsection-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 4px 0 10px;
-}
-.lib-subsection-head svg {
-  flex-shrink: 0;
-  color: var(--muted);
-}
+/* A .lib-subsection-head lived here — a 14 px sub-section label with a
+   camera glyph, which on screen landed one line under the section's own
+   H3 and its camera glyph. „doppel titel raus!". It is gone from the
+   markup, and so is its rule; there is no second sub-section left in
+   #media to label. */

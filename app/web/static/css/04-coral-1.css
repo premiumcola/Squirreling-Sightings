@@ -258,15 +258,19 @@
 .media-filter-bar[hidden] {
   display: none;
 }
-/* The gap above the filter pills read as larger than the one below
-   them, which is what made the block look lopsided. Two things add to
-   it: .section-head's own 12 px, and the fact that the head is a
-   centred flex row whose height is set by the 44 px trash button, not
-   by the title — so the h3 floats in a taller box and donates the
-   difference downwards. Trimming the margin brings the two gaps to
-   roughly the same size without shrinking the touch target. */
+/* The section title is the first thing in the same stack, so it uses the
+   same gap as every junction below it. It was trimmed to 4 px back when
+   a „Kamera-Ansicht & Auswahl" sub-heading sat underneath and donated
+   its own margin to the space; with that heading gone („doppel titel
+   raus!") 4 px would glue the back button straight onto the title.
+
+   The head is a centred flex row whose height comes from the 44 px trash
+   button rather than the title, so the h3 already floats in a taller box
+   and gives a little of the difference downwards — which is why this
+   junction looks right at the same number as the others rather than
+   needing a larger one. */
 #media > .section-head {
-  margin-bottom: 4px;
+  margin-bottom: var(--media-stack-gap);
 }
 .media-drill-head .media-filter-bar {
   flex: 1;

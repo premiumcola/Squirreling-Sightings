@@ -110,24 +110,11 @@
   mediathek/_overview.js, neither of which assumes a DOM position. #}
   <div id="libraryFilterBar"></div>
 
-  <div class="lib-subsection-head">
-    <svg
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="6" width="18" height="14" rx="2" />
-      <path d="M7 6V4h10v2" />
-      <circle cx="12" cy="13" r="3" />
-    </svg>
-    <span>Kamera-Ansicht &amp; Auswahl</span>
-  </div>
+  {# A „Kamera-Ansicht & Auswahl"-Zwischentitel stand hier, mit demselben Kamera-Glyph wie die
+  Überschrift 100 Zeilen weiter oben — und direkt darunter. Zwei Titel übereinander, von denen der
+  zweite nichts sagt, was der Inhalt nicht selbst zeigt: „doppel titel raus!". Er trennte einst die
+  Filterleiste von den Kamera-Kacheln; die Leiste ist im Drilldown gar nicht mehr da (siehe
+  mediathek/_view-toggle.js), also trennt er nichts mehr. #}
   <div id="mediaStorageBar" class="media-storage-bar"></div>
   {# Four mutually-exclusive states, one toggle — mediathek/_view-toggle.js::showMediathekView is
   the single place that flips between them, called from mediathek/_drilldown.js (states 1+3),

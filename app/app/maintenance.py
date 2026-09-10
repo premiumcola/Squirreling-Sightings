@@ -200,6 +200,30 @@ def _sweep_bird_species(log) -> None:
         )
 
 
+def _sweep_species_headlines(log) -> None:
+    """Re-decide which species headlines each archived clip.
+
+    The ranking rule changed under the archive: it used to promote the
+    rarest candidate however thin its support, so a single 29 % frame of
+    a never-recorded bird could outrank 110 frames at 70 % and the clip
+    went in under the wrong name. A rule only decides NEW events; this
+    carries the correction back over what is already on disk.
+
+    Reads only what the live tally already stored (`whole_clip.species`
+    with frames + best score) — no video is opened, so an unbounded pass
+    over the whole archive is a file walk, not a decode.
+    """
+    from .bird_species_backfill import dossier_lookup_for, resettle_headline_species
+
+    result = resettle_headline_species(app_state.store, dossier_lookup_for(app_state.bird_dossiers))
+    if result["changed"]:
+        log.info(
+            "[det] Art-Überschriften neu entschieden: %d von %d Clips",
+            result["changed"],
+            result["examined"],
+        )
+
+
 def _sweep_bird_dossier_prebuild(log) -> None:
     """Sibling to `_sweep_bird_species` above: bounded catch-up pass
     that warms the reference-dossier cache (Wikipedia + Xeno-canto) for
@@ -299,6 +323,10 @@ def _run_daily_cleanup():
         _sweep_bird_dossier_prebuild(log)
     except Exception as e:
         log.warning("[dossiers] prebuild sweep failed: %s", e)
+    try:
+        _sweep_species_headlines(log)
+    except Exception as e:
+        log.warning("[det] Art-Überschriften-Lauf fehlgeschlagen: %s", e)
     try:
         _sweep_tracking_backfill(log)
     except Exception as e:

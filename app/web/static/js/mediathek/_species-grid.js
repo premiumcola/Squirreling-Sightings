@@ -54,6 +54,14 @@ function _sightedOptions() {
   return birdSpeciesOptions();
 }
 
+/** True while the per-camera stats this list is derived from have not
+ *  arrived yet. „Noch keine Vogelart erkannt" on a box with 320 bird
+ *  clips is not an empty state, it is a wrong one — the difference
+ *  between "nothing to show" and "nothing yet" is worth one check. */
+function _statsPending() {
+  return !(state.mediaStats || []).length;
+}
+
 function _speciesTileHTML({ name, count }) {
   return (
     `<button type="button" class="species-grid-tile" data-species="${esc(name)}">` +
@@ -98,7 +106,9 @@ export function selectSpeciesFromGrid(name) {
 // it inherits .moc-card/.moc-all-thumb exactly like those three do.
 export function speciesGridEntryTileHTML() {
   const n = _sightedOptions().length;
-  const desc = n > 0 ? `${n} Art${n === 1 ? '' : 'en'} gesichtet` : 'Noch keine Sichtung';
+  let desc = 'Noch keine Sichtung';
+  if (n > 0) desc = `${n} Art${n === 1 ? '' : 'en'} gesichtet`;
+  else if (_statsPending()) desc = 'Wird geladen …';
   return `<div class="moc-card moc-quick" id="mocSpeciesGridEntry">
     <div class="moc-all-thumb moc-quick-thumb">${objIconSvg('bird', 48)}</div>
     <div class="moc-body">
@@ -124,7 +134,8 @@ export function renderMediaSpeciesGrid() {
   const body = byId('mediaSpeciesGridBody');
   if (!body) return;
   const html = speciesGridTilesHTML();
-  body.innerHTML = html || `<div class="species-grid-empty">Noch keine Vogelart erkannt.</div>`;
+  const empty = _statsPending() ? 'Vogelarten werden geladen …' : 'Noch keine Vogelart erkannt.';
+  body.innerHTML = html || `<div class="species-grid-empty">${empty}</div>`;
   _wireTileClicks(body);
 }
 

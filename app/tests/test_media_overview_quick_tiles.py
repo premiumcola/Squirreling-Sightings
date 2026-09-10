@@ -91,18 +91,27 @@ def test_set_library_label_filter_replaces_rather_than_merges_the_filter():
     assert "_filter.labels = new Set(" in fn
 
 
-def test_set_library_label_filter_scrolls_the_now_filtered_grid_into_view():
+def test_switching_the_visible_state_scrolls_it_into_view():
     """The merged grid renders BELOW the camera overview these tiles live
-    in (see the Stage-6 reorder) — without a scroll, tapping a tile would
-    silently change something off-screen below the fold."""
-    src = _read(_PAGE)
-    fn = src[src.index("export function setLibraryLabelFilter") :]
-    fn = fn[: fn.index("\n}") + 2]
-    assert "scrollIntoView" in fn
+    in (see the Stage-6 reorder), and so does the Vogelarten grid —
+    without a scroll, tapping a tile silently changes something
+    off-screen and the page answers with whatever happened to be under
+    the finger: „Das ist die screen ansicht wenn ich auf vogelarten
+    klicke?!".
+
+    The guarantee moved from library/page.js's own two call sites into
+    the ONE place that knows a state changed at all, so it now covers all
+    four states instead of one.
+    """
+    toggle = _read(_JS / "mediathek" / "_view-toggle.js")
+    assert "scrollIntoView" in toggle
+    assert "block: 'start'" in toggle
 
 
-# ── "Wetterereignisse" — the third tile, a `kinds` filter not `labels` ──
-
+def test_no_surface_scrolls_the_merged_grid_on_its_own_any_more():
+    """A second, private implementation is how the two drift apart —
+    one animating, one jumping, one forgetting the reduced-motion case."""
+    assert "scrollIntoView" not in _read(_PAGE)
 
 def test_the_weather_tile_maps_to_kinds_not_labels():
     """A weather sighting/recap/episode/manual-event carries no object

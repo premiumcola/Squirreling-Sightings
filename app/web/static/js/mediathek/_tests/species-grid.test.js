@@ -142,8 +142,19 @@ test('the entry tile uses the singular form for exactly one species', () => {
 
 test('the entry tile shows an empty-state hint when nothing has been sighted', () => {
   resetState();
-  state.mediaStats = [];
+  // Stats HAVE arrived, they just hold no species — that is a real
+  // empty state, unlike the one below.
+  state.mediaStats = [{ camera_id: 'cam1', species_counts: {} }];
   assert.match(speciesGridEntryTileHTML(), /Noch keine Sichtung/);
+});
+
+test('before the stats arrive the tile says loading, not "none"', () => {
+  // „Noch keine Vogelart erkannt" on a box with 320 bird clips is not an
+  // empty state, it is a wrong one.
+  resetState();
+  state.mediaStats = [];
+  assert.match(speciesGridEntryTileHTML(), /geladen/);
+  assert.doesNotMatch(speciesGridEntryTileHTML(), /Noch keine Sichtung/);
 });
 
 // ── bindSpeciesGridEntryTile — nothing to wait for any more ─────────────

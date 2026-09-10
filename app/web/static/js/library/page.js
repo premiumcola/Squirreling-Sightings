@@ -192,7 +192,6 @@ export function setLibraryLabelFilter(labels) {
   _filter.labels = new Set(labels || []);
   _kinds = null;
   const done = _onFilterChange();
-  byId('libraryBlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return done;
 }
 
@@ -214,7 +213,6 @@ export function setLibraryKindFilter(kinds) {
   _filter.labels.clear();
   _kinds = Array.isArray(kinds) && kinds.length ? [...kinds] : null;
   const done = _onFilterChange();
-  byId('libraryBlock')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   return done;
 }
 

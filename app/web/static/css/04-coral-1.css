@@ -101,6 +101,23 @@
   align-items: center;
   flex-shrink: 0;
 }
+/* A species silhouette is drawn on an 80×80 viewBox with no intrinsic
+   size, unlike the class glyphs which carry their own width/height — so
+   the box has to give it one. 18px: a touch larger than the 16px class
+   icons, because a silhouette holds more detail and reads worse at the
+   same height. */
+.cat-filter-btn .cfb-icon--species {
+  width: 18px;
+  height: 18px;
+}
+.cat-filter-btn .cfb-icon--species svg {
+  width: 100%;
+  height: 100%;
+}
+.cat-filter-btn .cfb-icon--species .species-icon-emoji {
+  font-size: 15px;
+  line-height: 1;
+}
 .cat-filter-btn.active {
   background: color-mix(in srgb, var(--cb, #8888aa) 38%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cb, #8888aa) 55%, transparent);

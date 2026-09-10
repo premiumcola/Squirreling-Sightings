@@ -37,7 +37,7 @@
 // was installation-wide however narrow the view.
 import { state } from '../core/state.js';
 import { esc } from '../core/dom.js';
-import { objIconSvg } from '../core/icons.js';
+import { speciesIconMarkup } from '../core/species-icon.js';
 
 /** Species with at least one clip in the currently-scoped view, ranked
  * most-clips first — derived, not fetched. `[]` while the stats have not
@@ -114,7 +114,14 @@ export function speciesPillsHtml() {
       const cls = `media-pill cat-filter-btn media-pill--species${active ? ' active' : ''}`;
       return (
         `<button type="button" class="${cls}" data-species="${esc(name)}">` +
-        `<span class="cfb-icon" style="pointer-events:none">${objIconSvg('bird', 16)}</span>` +
+        // THE SPECIES' OWN SILHOUETTE, not the generic bird glyph — the
+        // same drawing its tiles, its picker bubble and the achievement
+        // board use („Icon der spezies auch im filter!"). A row of
+        // identical bird outlines told the eye nothing; these are
+        // distinguishable at a glance, which is the whole job of a
+        // filter row you scroll sideways.
+        `<span class="cfb-icon cfb-icon--species" style="pointer-events:none">` +
+        `${speciesIconMarkup(name)}</span>` +
         `<span style="pointer-events:none">${esc(name)}</span>` +
         `<span class="mp-count" style="pointer-events:none">${count}</span></button>`
       );

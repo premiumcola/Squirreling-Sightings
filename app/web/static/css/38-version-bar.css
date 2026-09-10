@@ -93,21 +93,47 @@
 }
 
 /* Below ~430 px the sentence plus a 44 px button no longer fit on one
-   line without the text going to three words per row. */
+   line without the text going to three words per row.
+
+   A GRID, NOT AN OVERLAY. The narrow layout used to stack the three
+   children and then pull the × out of the flow onto the top-right
+   corner — straight over the centred sentence, which on a 393 px screen
+   wraps to three lines and reaches that corner: „das x oben überschneidet
+   blöd". Two columns give it a cell of its own: the text and the × share
+   the first row, the reload button spans the second. Nothing overlaps
+   anything, and the action still gets the full width. */
 @media (max-width: 430px) {
   .version-bar {
-    flex-direction: column;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     gap: 10px;
-    padding: 14px;
-    text-align: center;
+    padding: 12px 10px 14px 16px;
+    text-align: left;
+  }
+  .version-bar-text {
+    grid-column: 1;
+    align-self: center;
   }
   .version-bar-close {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+  /* 32 px of paint in the corner, CLAUDE.md's 44 px of target around it
+     — the same transparent-::after trick the tile badge and the panel
+     icon buttons use, so the small glyph stays hittable without pushing
+     the row taller. */
+  .version-bar-close::after {
+    content: '';
     position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 36px;
-    height: 36px;
+    inset: -6px;
+  }
+  .version-bar-btn {
+    grid-column: 1 / -1;
   }
 }
 

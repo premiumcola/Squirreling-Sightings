@@ -125,6 +125,18 @@ function _dateTimeBadges(date, time, subBadge) {
 }
 
 // ── Timelapse branch ────────────────────────────────────────────────────────
+//
+// THE GLYPH IS THE WORD. The badge read „⧗ Timelapse", which is the
+// hourglass saying it twice — and the word alongside it made a wide pill
+// on a 160 px card carrying no information the icon did not: „Das sollte
+// einfach nicht Timelapse stehen. Da sollte diese Sanduhr drin sein."
+// The round bubble is the same one the species badges wear, so every
+// kind of card carries one shape; the name lives on in the title/
+// aria-label, where it costs no pixels.
+const _TL_BADGE_HTML =
+  `<span class="mmc-tl-badge mmc-tl-badge--glyph" title="Timelapse" aria-label="Timelapse">` +
+  `${objIconSvg('timelapse', 18)}</span>`;
+
 function _tlCardHTML(item) {
   const wk = item.window_key || item.day || '';
   const datePart = wk.substring(0, 10);
@@ -162,7 +174,7 @@ function _tlCardHTML(item) {
         </div>`
             : ''
         }
-        <div style="position:absolute;top:6px;left:6px;z-index:2"><span class="mmc-tl-badge">${objIconSvg('timelapse', 12)}Timelapse</span></div>
+        <div style="position:absolute;top:6px;left:6px;z-index:2">${_TL_BADGE_HTML}</div>
         <div class="mmc-actions" style="z-index:3">
           <button class="mmc-btn mmc-delete" title="Löschen" onclick="event.stopPropagation();window.deleteTLCard('${esc(item.camera_id || '')}','${esc(item.filename || '')}','${esc(item.event_id || '')}')">${_LB_TRASH_ICON_ONLY}</button>
         </div>

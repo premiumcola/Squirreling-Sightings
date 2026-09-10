@@ -113,6 +113,7 @@ def test_no_surface_scrolls_the_merged_grid_on_its_own_any_more():
     one animating, one jumping, one forgetting the reduced-motion case."""
     assert "scrollIntoView" not in _read(_PAGE)
 
+
 def test_the_weather_tile_maps_to_kinds_not_labels():
     """A weather sighting/recap/episode/manual-event carries no object
     label at all — filtering it by `labels` would always match zero, so

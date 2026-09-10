@@ -23,6 +23,12 @@ One function, both callers — CLAUDE.md forbids a second copy of this.
 
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
+
+log = logging.getLogger(__name__)
+
 #: label -> event field a species/identity classifier stamps IN
 #: ADDITION to (or instead of) `labels`. Mirrors the match set
 #: `library._motion_reader._matches_label` / `storage._filter_events`
@@ -131,3 +137,67 @@ def labels_after_correction(
     if corrected_label:
         out.insert(0, corrected_label)
     return out
+
+
+#: Track fields a disproven class takes down with it — the same set
+#: `_neutralize_disproven_detections` clears on the event's own rows.
+_TRACK_SPECIES_FIELDS = ("species", "species_latin", "species_score")
+
+
+def neutralize_sidecar_tracks(sidecar: dict, removed: set) -> bool:
+    """Relabel every track in a `tracks.json` payload that carried a
+    class the operator just disproved. Returns True when anything moved.
+
+    WHY THE SIDECAR TOO. `apply_label_change` rewrites the event's own
+    detection rows, and that was enough while the player drew its lanes
+    from them. It does not any more: `timeline/_basis.js` prefers the
+    SIDECAR whenever one exists, and the fine-track pass now builds one
+    for every clip. So a corrected clip kept a rail full of lanes still
+    labelled with the class that had just been taken off it — „das
+    editieren hier, dass ich ein Element raus editiere, muss auch
+    funktionieren. Dann müssen die Spuren [...] als unbekannt oder als
+    Vogel einfach nur beschriftet werden."
+
+    Relabelled to "motion", not deleted, for the same reason the event's
+    own rows are: the track's timing and geometry still describe
+    something that really moved through the frame — only the CLASS guess
+    was wrong. "motion" is this codebase's residual bucket and renders as
+    „Bewegung" (see `labels.primary_label`).
+    """
+    if not removed or not isinstance(sidecar, dict):
+        return False
+    tracks = sidecar.get("tracks")
+    if not isinstance(tracks, list):
+        return False
+    changed = False
+    for track in tracks:
+        if not isinstance(track, dict) or track.get("label") not in removed:
+            continue
+        track["label"] = "motion"
+        for field in _TRACK_SPECIES_FIELDS:
+            if field in track:
+                track[field] = None
+        changed = True
+    return changed
+
+
+def neutralize_sidecar_file(tracks_path, removed: set) -> bool:
+    """`neutralize_sidecar_tracks` against the file on disk. Returns True
+    when the sidecar was rewritten.
+
+    Never raises: a correction must land on the event even when its
+    sidecar is missing, unreadable or read-only — the rail is then one
+    repaint behind, which the nightly re-index corrects on its own.
+    """
+    path = Path(tracks_path)
+    try:
+        if not path.exists():
+            return False
+        sidecar = json.loads(path.read_text(encoding="utf-8"))
+        if not neutralize_sidecar_tracks(sidecar, removed):
+            return False
+        path.write_text(json.dumps(sidecar), encoding="utf-8")
+        return True
+    except Exception as e:
+        log.debug("[storage] sidecar relabel skipped for %s: %s", tracks_path, e)
+        return False

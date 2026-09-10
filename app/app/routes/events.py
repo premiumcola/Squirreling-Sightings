@@ -24,7 +24,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import app_state, trash as _trash
 from ..detection_feedback import record_verdict
-from ..event_relabel import apply_label_change
+from ..event_relabel import apply_label_change, neutralize_sidecar_file
 from ..species_video_count import record_confirmed_video
 
 bp = Blueprint("events", __name__)
@@ -159,6 +159,20 @@ def api_event_confirm(cam_id, event_id):
     return jsonify({"ok": True})
 
 
+def _relabel_sidecar(event: dict, removed: set) -> None:
+    """Carry a label correction into the clip's tracks.json, if it has
+    one. Best-effort by construction — see neutralize_sidecar_file."""
+    if not removed:
+        return
+    rel = event.get("video_relpath")
+    if not rel:
+        return
+    with contextlib.suppress(Exception):
+        from ..tracking_worker import tracks_path_for
+
+        neutralize_sidecar_file(tracks_path_for(app_state.storage_root / rel), removed)
+
+
 @bp.post('/api/camera/<cam_id>/events/<event_id>/labels')
 def api_event_labels(cam_id, event_id):
     store = app_state.store
@@ -171,8 +185,14 @@ def api_event_labels(cam_id, event_id):
     # and drop cat_name/bird_species when the class they pin just left
     # the list — see event_relabel for why both matter.
     prev_top = event.get("top_label")
+    removed = set(event.get("labels") or []) - set(labels)
     apply_label_change(event, labels)
     store.update_event(cam_id, event_id, event)
+    # The rail draws its lanes from the tracks.json sidecar whenever one
+    # exists, so a correction that only rewrote the event left the
+    # timeline still labelled with the class just taken off it. See
+    # event_relabel.neutralize_sidecar_tracks.
+    _relabel_sidecar(event, removed)
     # Only a changed top_label is a correction. Adding a secondary label
     # leaves the detector's verdict standing — recording that as "wrong"
     # would poison the corpus with events the user never disputed.

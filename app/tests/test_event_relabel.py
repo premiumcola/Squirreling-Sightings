@@ -182,3 +182,100 @@ def test_correction_end_to_end_relabels_the_event():
     assert ev["labels"] == ["squirrel"]
     assert ev["top_label"] == "squirrel"
     assert ev.get("cat_name") is None
+
+
+# ── The sidecar carries the correction too ──────────────────────────────
+# `apply_label_change` rewrites the event's own detection rows, and that
+# was enough while the player drew its lanes from them. It is not any
+# more: timeline/_basis.js prefers the tracks.json SIDECAR whenever one
+# exists, and every clip has one now. So a corrected clip kept a rail
+# full of lanes wearing the class that had just been taken off it —
+# „das editieren hier, dass ich ein Element raus editiere, muss auch
+# funktionieren. Dann müssen die Spuren [...] als unbekannt oder als
+# Vogel einfach nur beschriftet werden."
+
+import json as _json  # noqa: E402
+
+from app.event_relabel import (  # noqa: E402
+    neutralize_sidecar_file,
+    neutralize_sidecar_tracks,
+)
+
+
+def _sidecar(*labels):
+    return {
+        "schema": 4,
+        "tracks": [
+            {
+                "label": lab,
+                "species": "Elster" if lab == "bird" else None,
+                "species_latin": "Pica pica" if lab == "bird" else None,
+                "species_score": 0.7 if lab == "bird" else None,
+                "samples": [{"t": 0.0}],
+            }
+            for lab in labels
+        ],
+    }
+
+
+def test_a_disproven_class_relabels_its_tracks_to_motion():
+    sc = _sidecar("bird", "bird")
+    assert neutralize_sidecar_tracks(sc, {"bird"}) is True
+    assert [t["label"] for t in sc["tracks"]] == ["motion", "motion"]
+
+
+def test_the_species_on_a_disproven_track_goes_with_it():
+    sc = _sidecar("bird")
+    neutralize_sidecar_tracks(sc, {"bird"})
+    t = sc["tracks"][0]
+    assert t["species"] is None and t["species_latin"] is None and t["species_score"] is None
+
+
+def test_tracks_of_a_class_that_survived_are_untouched():
+    sc = _sidecar("bird", "person")
+    neutralize_sidecar_tracks(sc, {"bird"})
+    assert [t["label"] for t in sc["tracks"]] == ["motion", "person"]
+
+
+def test_the_track_itself_survives_the_correction():
+    """Relabelled, never dropped: the timing and geometry still describe
+    something that really moved — only the class guess was wrong."""
+    sc = _sidecar("bird")
+    neutralize_sidecar_tracks(sc, {"bird"})
+    assert len(sc["tracks"]) == 1
+    assert sc["tracks"][0]["samples"] == [{"t": 0.0}]
+
+
+def test_nothing_removed_is_a_no_op():
+    sc = _sidecar("bird")
+    assert neutralize_sidecar_tracks(sc, set()) is False
+    assert sc["tracks"][0]["label"] == "bird"
+
+
+def test_a_malformed_sidecar_is_survivable():
+    assert neutralize_sidecar_tracks({}, {"bird"}) is False
+    assert neutralize_sidecar_tracks({"tracks": "nope"}, {"bird"}) is False
+    assert neutralize_sidecar_tracks(None, {"bird"}) is False
+
+
+def test_the_file_round_trip_rewrites_only_what_changed(tmp_path):
+    path = tmp_path / "clip.tracks.json"
+    path.write_text(_json.dumps(_sidecar("bird", "person")), encoding="utf-8")
+
+    assert neutralize_sidecar_file(path, {"bird"}) is True
+
+    back = _json.loads(path.read_text(encoding="utf-8"))
+    assert [t["label"] for t in back["tracks"]] == ["motion", "person"]
+    assert back["schema"] == 4, "the rest of the payload must survive verbatim"
+
+
+def test_a_missing_sidecar_is_not_an_error(tmp_path):
+    """A clip whose fine track has not been built yet still has to accept
+    a correction — the rail simply has nothing to relabel."""
+    assert neutralize_sidecar_file(tmp_path / "nope.tracks.json", {"bird"}) is False
+
+
+def test_an_unreadable_sidecar_never_breaks_the_correction(tmp_path):
+    path = tmp_path / "clip.tracks.json"
+    path.write_text("{not json", encoding="utf-8")
+    assert neutralize_sidecar_file(path, {"bird"}) is False

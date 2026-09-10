@@ -23,6 +23,9 @@ from .storage_retention import nightly_window
 #: Fallback when neither layer carries a usable ``retention_days``.
 DEFAULT_RETENTION_DAYS = 14
 
+#: Local wall-clock time the daily maintenance pass re-arms for.
+DAILY_MAINTENANCE_AT = (3, 0)
+
 
 def _storage_layer(source, key):
     """``storage.<key>`` out of one config layer, or None."""
@@ -300,7 +303,17 @@ def _run_daily_cleanup():
         _sweep_tracking_backfill(log)
     except Exception as e:
         log.warning("[tracking] Feinspur-Nachlauf fehlgeschlagen: %s", e)
-    t = threading.Timer(86400, _run_daily_cleanup)
+    # AT NIGHT, not "86400 s after boot". It re-armed on a plain 24 h
+    # interval from whenever the process started, so a container brought
+    # up at 22:00 ran its "nightly" retention sweep, its bird backfill and
+    # its Feinspur catch-up at 22:00 every day — during the evening the
+    # cameras are busiest — and every redeploy moved the slot again. The
+    # quest rollover next door has always used a wall-clock target; this
+    # now uses the same helper. 03:00 is past the 00:05 rollover and well
+    # clear of both dusk and dawn activity.
+    delay = seconds_until_local(*DAILY_MAINTENANCE_AT)
+    log.info("[storage] nächster Wartungslauf in %.1f h", delay / 3600)
+    t = threading.Timer(delay, _run_daily_cleanup)
     t.daemon = True
     t.start()
 
@@ -326,32 +339,50 @@ def _run_hourly_quest_eval():
     t.start()
 
 
-def _seconds_until_rollover_check() -> float:
-    """Seconds from now until the next 00:05 local-time tick. The
-    rollover timer fires once per day at that offset (5 min past
-    midnight) so the date has fully advanced before we check whether
-    today is Monday / day-of-month-1."""
+def seconds_until_local(hour: int, minute: int) -> float:
+    """Seconds from now until the next local-time ``hour:minute``.
+
+    Today's slot when it is still ahead, tomorrow's otherwise — a timer
+    armed with this lands on a WALL CLOCK rather than N hours after
+    whenever the process happened to start. Local time on purpose: the
+    operator means their own night, and the host runs in their zone.
+
+    Never returns less than a minute, so a re-arm that computes a slot
+    it is already standing on cannot spin.
+    """
     import time as _time
 
-    now = _time.localtime()
-    # Build a struct_time for tomorrow at 00:05.
-    tomorrow_secs = _time.mktime(now) + 86400
-    target = _time.localtime(tomorrow_secs)
-    target_t = _time.struct_time(
-        (
-            target.tm_year,
-            target.tm_mon,
-            target.tm_mday,
-            0,
-            5,
-            0,
-            target.tm_wday,
-            target.tm_yday,
-            target.tm_isdst,
+    now_secs = _time.time()
+    now = _time.localtime(now_secs)
+
+    def _slot(day_struct) -> float:
+        return _time.mktime(
+            _time.struct_time(
+                (
+                    day_struct.tm_year,
+                    day_struct.tm_mon,
+                    day_struct.tm_mday,
+                    hour,
+                    minute,
+                    0,
+                    day_struct.tm_wday,
+                    day_struct.tm_yday,
+                    -1,  # let mktime resolve DST for the TARGET day
+                )
+            )
         )
-    )
-    target_secs = _time.mktime(target_t)
-    return max(60.0, target_secs - _time.mktime(now))
+
+    target = _slot(now)
+    if target - now_secs < 60:
+        target = _slot(_time.localtime(now_secs + 86400))
+    return max(60.0, target - now_secs)
+
+
+def _seconds_until_rollover_check() -> float:
+    """Seconds until the next 00:05 local tick — 5 min past midnight, so
+    the date has fully advanced before we check whether today is Monday /
+    day-of-month-1."""
+    return seconds_until_local(0, 5)
 
 
 def _run_daily_quest_rollover_check():

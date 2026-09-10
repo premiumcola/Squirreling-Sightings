@@ -17,18 +17,17 @@
 //
 // THE LABEL LIVES IN THE FREE PART OF THE TRACK. It sat centred over the
 // middle at first, where the handle kept colliding with it. Now each end
-// carries a marker that fades in as the handle moves AWAY from it, so
-// whatever is on screen is always in the space the handle just vacated:
+// carries a copy of the readout that fades in as the handle moves AWAY
+// from it, so the span is always in the space the handle just vacated.
 //
-//   handle far left  → the RIGHT side shows a small mark: a short window
-//   handle far right → the LEFT side shows a large one: a wide window
-//
-// „wenn ich links schiebe, dann will ich auf der Rechtsseite [...] irgend
-// 'n Symbol haben, was für klein sein steht und langsam kräftiger wird
-// [...] und wenn ich's nach rechts schiebe, verschwindet das Symbol
-// rechts [...] und links taucht dann das große Symbol auf [...] oder der
-// Text, wie viel wie weit eben der Zeitraum reicht." Both — the mark
-// says which end of the scale, the text says the actual span.
+// EVERYTHING VISIBLE IS DRAWN, NOT NATIVE. The bar, its fill and its
+// handle are ordinary elements positioned off one custom property this
+// module writes (`--ws-range-pos`); the range input itself is an
+// invisible overlay that only contributes the drag, the arrow keys and
+// the accessibility role. Two earlier passes styled the input's own
+// ::-webkit-/::-moz- pseudo-elements and came back from the operator's
+// phone as a hairline with the system handle on it — see the long note
+// in 23-weather-3.css for why that path is gone for good.
 //
 // The extent comes from the payload (`_history.py::history` reports the
 // buffer's own oldest/newest/count) rather than being inferred from the
@@ -123,12 +122,13 @@ function _boundsOf(input, extent) {
 const _CROSSFADE = [0.34, 0.66];
 
 /**
- * PURE: how strongly each end marker reads for a handle at `tick`.
+ * PURE: how strongly each end's readout reads for a handle at `tick`.
  *
- * `near` is the SMALL mark on the right — full while the handle sits
- * left, gone once it has travelled past the band. `far` is the large one
- * on the left and does the opposite. Each is only ever shown in the part
- * of the track the handle is not occupying.
+ * `near` is the copy on the right — full while the handle sits left,
+ * gone once it has travelled past the band. `far` is the copy on the
+ * left and does the opposite. Each is only ever shown in the part of the
+ * track the handle is not occupying, which is what keeps the span
+ * legible without ever putting text under the handle.
  */
 export function zoneOpacity(tick) {
   const t = Math.max(0, Math.min(1, (Number(tick) || 0) / TICKS));
@@ -156,9 +156,11 @@ function _paintRange(tick, bounds) {
     const label = zone.querySelector?.('.ws-range-zone-text');
     if (label) label.textContent = text;
   }
-  // The filled part of the track, as a percentage — the "slide to
-  // unlock" fill behind the thumb, painted by CSS off this one variable.
-  byId('weatherRangeSlider')?.style?.setProperty?.('--ws-range-fill', `${(tick / TICKS) * 100}%`);
+  // THE one number the drawn slider reads. The fill's width and the
+  // handle's offset are both `calc()`s off this 0…1 position, so a drag
+  // writes a single property and CSS moves everything that has to move —
+  // see 23-weather-3.css for why none of it is browser chrome any more.
+  byId('weatherStatsRange')?.style?.setProperty?.('--ws-range-pos', String(tick / TICKS));
 }
 
 /**
@@ -177,8 +179,10 @@ export function applyRangeSlider(extent, currentHours, _zoomed = false) {
   const tick = tickAtHours(hours, bounds);
   if (!_isBeingHeld(input)) input.value = String(tick);
   // An archive with nothing to choose between: a dead handle is honest,
-  // a live one that snaps back is not.
+  // a live one that snaps back is not. The class is what the drawn parts
+  // read — `:disabled` only reaches the invisible input.
   input.disabled = !(bounds.max > bounds.min);
+  byId('weatherStatsRange')?.classList?.toggle?.('is-locked', input.disabled);
   input.setAttribute('aria-valuetext', formatRangeHours(hours));
   _paintRange(Number(input.value), bounds);
   return hours;

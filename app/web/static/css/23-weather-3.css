@@ -87,151 +87,179 @@
    Depth from a tinted track, no border, matching every other control in
    this panel. */
 /* ── The time zoom ────────────────────────────────────────────────────────
-   A "slide to unlock" bar: one pill-shaped track whose FILLED part grows
-   with the window, a large round handle riding in it, and the chosen
-   span written across the middle. No container ground behind it („kein
-   background grau!"), and no end symbols — a first pass flanked the
-   track with two glyphs which, on a narrow screen, stacked up on the
-   left and read as a riddle („Was sollen die symbole zeichen beide
-   links???"). */
+   A WIDE "slide to unlock" bar („mach so einen breiten slide to unlock
+   slider daraus!!!"): one tall pill, a filled part that grows with the
+   window, a chunky handle riding inside it, and the chosen span written
+   in whichever half the handle is not occupying. No container ground
+   behind it („kein background grau!").
+
+   NOTHING HERE IS BROWSER CHROME. Two earlier passes styled the range
+   input's own ::-webkit-slider-runnable-track / ::-moz-range-track and
+   ::-…-thumb, and on the operator's phone the result kept coming back as
+   a hairline with the system's default blue disc on it — the pseudo-
+   element heights simply were not honoured, and a rule that is dropped
+   leaves the UA stylesheet in charge. CLAUDE.md's own iOS section says a
+   component patched twice for the same symptom gets rewritten instead of
+   patched a third time, so the visible slider is now four ordinary
+   elements laid out off `--ws-range-pos`, and the input is an invisible
+   overlay that contributes the drag, the arrow keys and the a11y role
+   and nothing else. There is no engine-specific path left to fail. */
 .ws-range {
+  /* THE handle position, 0…1, written on THIS element by
+     weather/_range-slider.js::_paintRange. It lives on the outer box
+     rather than the track because #weatherStatsRange is the one id the
+     markup already carries here, and a custom property inherits down to
+     the fill and the handle from wherever it is set. */
+  --ws-range-pos: 0.5;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 240px;
+  flex: 1 1 260px;
   min-width: 0;
-  max-width: 420px;
+  max-width: 460px;
   padding: 0;
   background: none;
 }
 
-/* The track and its readout share one positioning context. `min-width: 0`
-   is what lets the bar shrink inside the flex row rather than pushing the
-   ✕ chip onto a line of its own. */
+/* The pill itself. Everything inside is absolutely positioned against
+   it, and `--ws-range-pos` (0…1, written per drag by
+   weather/_range-slider.js) is the single number all of it reads.
+   `min-width: 0` is what lets the bar shrink inside the flex row rather
+   than pushing the ✕ chip onto a line of its own. */
 .ws-range-track {
+  --ws-range-accent: #6ee7a8;
+  --ws-range-h: 48px;
+  --ws-range-thumb-size: 40px;
   position: relative;
   display: block;
   flex: 1 1 auto;
   min-width: 0;
+  height: var(--ws-range-h);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+/* The input is invisible but still the real control, so the focus ring
+   has to be drawn on the pill instead. :has() lets the ring follow
+   :focus-visible (keyboard only) rather than :focus-within, which would
+   also light up on every tap. */
+.ws-range-track:has(.ws-range-input:focus-visible) {
+  box-shadow: 0 0 0 2px var(--ws-range-accent);
 }
 
-/* THE FILL IS PAINTED ON THE TRACK, not with a second element: a range
-   input cannot hold children, and `--ws-range-fill` (set per drag by
-   weather/_range-slider.js) is all a gradient needs. The accent is the
-   app's own green — the default handle was the browser's blue, which
-   belongs to no palette here („Chooser nicht blau"). `accent-color`
-   covers the browsers that ignore the ::-webkit- pseudo-elements. */
+/* The filled part ends exactly at the handle's trailing edge — the two
+   are one object being pushed, which is the whole slide-to-unlock read.
+   4 px inset all round, so handle and fill sit IN the pill. */
+.ws-range-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(4px + var(--ws-range-thumb-size) + var(--ws-range-pos) * (100% - var(--ws-range-h)));
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(110, 231, 168, 0.14), rgba(110, 231, 168, 0.4));
+  pointer-events: none;
+}
+
+/* The handle. Light on the tinted track — CLAUDE.md forbids dark-on-dark
+   — and a rounded square rather than a disc, so it reads as a key in a
+   slot instead of a dot on a wire. */
+.ws-range-thumb {
+  position: absolute;
+  top: 4px;
+  left: calc(4px + var(--ws-range-pos) * (100% - var(--ws-range-h)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ws-range-thumb-size);
+  height: var(--ws-range-thumb-size);
+  border-radius: 15px;
+  background: #f6fbff;
+  color: #33465a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* THE INVISIBLE CONTROL. Inset by the same 4 px as the handle, so the
+   native thumb's travel and the drawn handle's travel are the same
+   interval and the disc lands exactly under the finger. `opacity: 0`
+   rather than `visibility`/`display`, which would take the element out
+   of the hit-testing and the accessibility tree along with it. */
 .ws-range-input {
   -webkit-appearance: none;
   appearance: none;
-  display: block;
-  width: 100%;
-  /* iOS HIG tap area: the visual bar is 34 px and the input is the same,
-     so the whole pill is the target. */
-  height: 34px;
+  position: absolute;
+  top: 0;
+  left: 4px;
+  right: 4px;
+  width: auto;
+  height: 100%;
   margin: 0;
   padding: 0;
   background: transparent;
+  opacity: 0;
   cursor: pointer;
-  --ws-range-fill: 50%;
-  --ws-range-accent: #6ee7a8;
-  accent-color: #6ee7a8;
 }
-.ws-range-input::-webkit-slider-runnable-track {
-  height: 34px;
-  border-radius: 999px;
-  background:
-    linear-gradient(
-        to right,
-        rgba(110, 231, 168, 0.55) 0 var(--ws-range-fill),
-        rgba(255, 255, 255, 0) var(--ws-range-fill) 100%
-      )
-      no-repeat,
-    rgba(255, 255, 255, 0.08);
-}
-.ws-range-input::-moz-range-track {
-  height: 34px;
-  border-radius: 999px;
-  background:
-    linear-gradient(
-        to right,
-        rgba(110, 231, 168, 0.55) 0 var(--ws-range-fill),
-        rgba(255, 255, 255, 0) var(--ws-range-fill) 100%
-      )
-      no-repeat,
-    rgba(255, 255, 255, 0.08);
-}
-/* The handle sits IN the bar, slide-to-unlock style — a disc nearly as
-   tall as the track it rides in, so it reads as the thing being pushed
-   rather than a dot on a wire. The 4 px inset centres it on the 34 px
-   track; Firefox centres its own. */
+/* The native thumb is never seen, but its WIDTH still sets where the
+   value-to-pixel mapping puts each end of the travel — it has to match
+   the drawn handle or the two drift apart across the track. */
 .ws-range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 26px;
-  height: 26px;
-  margin-top: 4px;
+  width: var(--ws-range-thumb-size, 40px);
+  height: var(--ws-range-thumb-size, 40px);
   border: 0;
   border-radius: 50%;
-  background: #f6fbff;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+  background: #fff;
 }
 .ws-range-input::-moz-range-thumb {
-  width: 26px;
-  height: 26px;
+  width: var(--ws-range-thumb-size, 40px);
+  height: var(--ws-range-thumb-size, 40px);
   border: 0;
   border-radius: 50%;
-  background: #f6fbff;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
-}
-.ws-range-input:focus-visible {
-  outline: 2px solid var(--ws-range-accent);
-  outline-offset: 2px;
-  border-radius: 999px;
+  background: #fff;
 }
 /* An archive with nothing to choose between. A dead handle is honest;
-   one that snaps back is not. */
+   one that snaps back is not. The class comes from
+   weather/_range-slider.js rather than a `:has(:disabled)` selector,
+   because the disabled state must never depend on an engine feature —
+   that dependency is the whole reason this control was rewritten. */
 .ws-range-input:disabled {
-  opacity: 0.4;
   cursor: default;
 }
+.ws-range.is-locked .ws-range-thumb,
+.ws-range.is-locked .ws-range-fill {
+  opacity: 0.4;
+}
 
-/* THE TWO END MARKERS. Each sits in one half of the track and fades as
-   the handle travels toward it, so what is on screen is always in the
-   space the handle has just vacated — the left one for a wide window,
-   the right one for a short one, and the size of its dot is the meaning.
-   Written by weather/_range-slider.js::zoneOpacity.
+/* THE READOUT, at both ends. Each fades as the handle travels toward it,
+   so the span is always in the space the handle has just vacated and
+   never sits under the disc — written by
+   weather/_range-slider.js::zoneOpacity.
 
    `pointer-events: none` is load-bearing: every tap and drag has to
-   reach the input underneath, including the ones that land on a marker.
-   The shadow keeps the text legible where the white handle passes
-   behind it. */
+   reach the input underneath, including the ones that land on the text.
+   The shadow keeps it legible where the light handle passes behind. */
 .ws-range-zone {
   position: absolute;
   top: 0;
   bottom: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
   pointer-events: none;
   color: #eaf6ff;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   transition: opacity 0.12s linear;
 }
-/* Inset by the handle's own radius plus a little, so a marker never
-   sits half under the disc at the end of its travel. */
+/* Inset past the handle's own travel stop, so a readout never sits half
+   under the disc at either end. */
 .ws-range-zone--far {
-  left: 14px;
+  left: 18px;
 }
 .ws-range-zone--near {
-  right: 14px;
-}
-.ws-range-zone svg {
-  flex: 0 0 auto;
-  opacity: 0.9;
+  right: 18px;
 }
 @media (prefers-reduced-motion: reduce) {
   .ws-range-zone {

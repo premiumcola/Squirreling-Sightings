@@ -9,16 +9,17 @@ also ein eigenes Modul — nicht die Grenze weggeschoben.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import threading
 import time as _time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Die Kachelbreite, auf die das Archiv geschnitten sein soll. Steht auf
 # Modulebene statt im Durchlauf: sie IST die Versionsnummer, gegen die
 # `_has_scrub` prüft, und eine Versionsprüfung hinter einem faulen Import
 # findet niemand.
-from .scrub_sprite import TILE_W
+from .scrub_sprite import SPRITE_DIR, TILE_W
 
 log = logging.getLogger(__name__)
 
@@ -178,3 +179,50 @@ def _attach_scrub(store, camera_id: str, event_id: str, geo: dict) -> None:
         store.update_event(camera_id, event_id, ev)
     except Exception as e:
         log.debug("[scrub] manifest update failed for %s: %s", event_id, e)
+
+
+def purge_scrub_ghost_events(*, storage_root: Path) -> int:
+    """Die Geisterkarten wegräumen, die der Medien-Scan angelegt hat.
+
+    Der Filmstreifen heißt genau wie ein Schnappschuss — Ereignis-ID
+    plus ``.jpg`` — und unterschied sich nur durch sein Verzeichnis. Der
+    „Neu scannen"-Lauf lief mit ``rglob`` durch den ganzen Baum, fand
+    also ``<Tag>/scrub/<id>.jpg`` ohne zugehöriges Manifest (weil das
+    Manifest gelöscht, in den Papierkorb gelegt oder ausgelaufen war,
+    während den Filmstreifen nie jemand mit weggeräumt hat) und trug ihn
+    als brandneues Bewegungsereignis ein. Auf der Karte lag dann die
+    Kontaktbogen-Kachelung aus vierzig Miniaturen desselben Bildes:
+    „Das sind diese gestapelten Bilder. Das sollte grundsätzlich nicht
+    passieren."
+
+    `storage_scan.is_derived_media` schließt die Tür für künftige Läufe.
+    Die Karten, die schon auf der Platte liegen, verschwinden davon
+    nicht — im Gegenteil, sie sind gegen jede Aufräumhilfe immun: ihr
+    „Schnappschuss" existiert wirklich, also lässt `purge_orphans` sie
+    stehen. Also einmal gezielt: jedes Manifest, dessen
+    ``snapshot_relpath`` im Filmstreifen-Verzeichnis liegt, ist per
+    Konstruktion so ein Geist und wird gelöscht. Der Filmstreifen selbst
+    bleibt liegen — er gehört seinem Clip, nicht diesem Manifest.
+
+    Gibt die Anzahl entfernter Manifeste zurück. Idempotent.
+    """
+    events_dir = Path(storage_root) / "motion_detection"
+    if not events_dir.exists():
+        return 0
+    removed = 0
+    for jf in events_dir.rglob("*.json"):
+        if jf.name.endswith(".tracks.json"):
+            continue
+        try:
+            event = json.loads(jf.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        rel = str(event.get("snapshot_relpath") or "")
+        if SPRITE_DIR not in PurePosixPath(rel).parts:
+            continue
+        with contextlib.suppress(OSError):
+            jf.unlink()
+            removed += 1
+    if removed:
+        log.info("[migration] %d Geisterkarten aus dem Filmstreifen-Ordner entfernt", removed)
+    return removed

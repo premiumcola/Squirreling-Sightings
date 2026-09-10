@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from ..scrub_sprite import SPRITE_DIR
 from ._types import size_lookup_fs
 
 #: Trees that hold per-camera media. ``motion_detection`` and
@@ -120,7 +121,17 @@ def _classify_motion(rel: str, index: CameraIndex) -> None:
     recognised before the generic ``.json`` / ``.jpg`` rules, otherwise a
     sidecar is counted as an event — the defect that made ``stats_range``
     report twice the events it had.
+
+    The scrub filmstrip is the same defect one level worse, because it is
+    told apart by its DIRECTORY and not its name: ``<day>/scrub/<id>.jpg``
+    is byte-for-byte an event snapshot as far as a basename goes. Bucketed
+    as media, it made the integrity report list the sheet under „Dateien
+    ohne Eintrag — ‚Neu scannen' registriert sie nach", i.e. it invited
+    the very adoption that put a contact sheet on a card. See
+    ``storage_scan.is_derived_media``.
     """
+    if SPRITE_DIR in PurePosixPath(rel).parts:
+        return
     name = PurePosixPath(rel).name
     if name.endswith(".tracks.json"):
         index.tracks[name[: -len(".tracks.json")]] = rel

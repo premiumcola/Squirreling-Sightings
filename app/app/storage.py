@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import storage_retention
+from .scrub_sprite import SPRITE_DIR
 
 # The judgement helpers and the retention sweep live in
 # `storage_retention` together — this file only owns the store. They stay
@@ -374,6 +375,20 @@ class EventStore:
                     bp.unlink()
                 except Exception:
                     log.debug("[storage] best.jpg unlink %s failed", bp, exc_info=True)
+        # `<day>/scrub/<event_id>.jpg` — the player's filmstrip. It goes
+        # with the event WHETHER OR NOT the event JSON was readable,
+        # which is why it sits outside the `if event` block above: a
+        # sprite that outlives its manifest is not merely wasted disk,
+        # it is a future ghost card. The media scan walks this tree, and
+        # the sprite's name is indistinguishable from a snapshot, so an
+        # orphan gets adopted as a snapshot-only motion event on the next
+        # boot and shows a contact sheet of forty thumbnails. See
+        # storage_scan.is_derived_media for the other half of the fix.
+        for sp in list(cam_dir.rglob(f"{SPRITE_DIR}/{event_id}.jpg")):
+            try:
+                sp.unlink()
+            except Exception:
+                log.debug("[storage] scrub sprite unlink %s failed", sp, exc_info=True)
         return {
             "json_deleted": event is not None,
             "snap_deleted": snap_deleted,

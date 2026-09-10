@@ -11,6 +11,9 @@ The rules it encodes are unchanged:
 * An mp4 below :data:`~.media_index.MIN_VIDEO_BYTES` is a crashed
   encode, not a clip. It is skipped, not registered as a tile that
   plays nothing.
+* Everything under ``<day>/scrub/`` is a filmstrip belonging to a clip,
+  not a clip — see :func:`is_derived_media` for the ghost cards that
+  cost.
 """
 
 from __future__ import annotations
@@ -18,6 +21,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+
+from .scrub_sprite import SPRITE_DIR
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +106,35 @@ def _build_event(store_root: Path, cam_id: str, media_file: Path, base: str) -> 
     return event
 
 
+def is_derived_media(media_file: Path) -> bool:
+    """True for a file that BELONGS to an event rather than being one.
+
+    Two shapes, one rule. The suffix companions (``<id>.raw.mp4`` /
+    ``<id>.best.jpg``) sit beside the clip and are caught by name. The
+    scrub filmstrip sits one directory down, in ``<day>/scrub/``, and is
+    caught by that directory — because its FILE NAME is indistinguishable
+    from a real snapshot: same event id, same ``.jpg``.
+
+    That indistinguishability is the whole bug. The scan walks the tree
+    with ``rglob``, so it descended into ``scrub/`` and found a ``.jpg``
+    whose stem no manifest claimed — the manifest having been deleted,
+    trashed or aged out, while nothing has ever deleted the sprite — and
+    dutifully registered it as a brand-new snapshot-only motion event.
+    The card then rendered the sprite full-bleed: a contact sheet of
+    forty postage stamps of the same frame, dated, with no duration and
+    no size, and impossible to get rid of because the next scan invented
+    it again. „Das sind diese gestapelten Bilder. Das sollte grundsätzlich
+    nicht passieren."
+
+    ``scrub_sprite.py``'s own docstring already argued that a separate
+    directory was the safe place to put these ("a directory they do not
+    walk cannot be got wrong"). This is the walk that did.
+    """
+    if media_file.name.endswith(_COMPANION_SUFFIXES):
+        return True
+    return SPRITE_DIR in Path(media_file).parts
+
+
 def _candidates(cam_dir: Path, existing_ids: set) -> list:
     """Media files under ``cam_dir`` (any depth) with no manifest yet."""
     from .media_index import MIN_VIDEO_BYTES
@@ -112,7 +146,7 @@ def _candidates(cam_dir: Path, existing_ids: set) -> list:
     for media_file in sorted(files):
         if media_file.suffix.lower() not in _MEDIA_SUFFIXES:
             continue
-        if media_file.name.endswith(_COMPANION_SUFFIXES):
+        if is_derived_media(media_file):
             continue
         if media_file.stem in existing_ids:
             continue

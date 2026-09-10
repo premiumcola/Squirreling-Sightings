@@ -30,6 +30,7 @@ from .migrations_scrub import (  # noqa: F401
     _attach_scrub,
     _has_scrub,
     generate_missing_scrub_sprites,
+    purge_scrub_ghost_events,
 )
 from .storage import event_date_subdir
 

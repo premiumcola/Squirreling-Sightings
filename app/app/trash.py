@@ -37,6 +37,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import app_state
+from .scrub_sprite import SPRITE_DIR
 from .settings._consts import TRASH_DEFAULTS
 
 log = logging.getLogger("trash")
@@ -144,6 +145,19 @@ def move_to_trash(cam_id: str, event_id: str) -> dict:
                 shutil.move(str(bp), str(trash_dir / bp.name))
             except Exception:
                 log.debug("[trash] %s best move failed", bp, exc_info=True)
+    # The scrub filmstrip is DELETED, not moved. Every other companion
+    # here is moved so a restore can put the event back whole, but this
+    # one cannot be: the trash entry is a flat directory keyed by
+    # basename, and `<day>/scrub/<id>.jpg` collides there with the real
+    # `<id>.jpg` snapshot — one would silently overwrite the other and a
+    # restore would hand back a contact sheet as the event's picture.
+    # Nothing is lost by dropping it: the sprite is derived from the mp4
+    # and the boot sweep rebuilds it if the clip comes back.
+    for sp in list(cam_root.rglob(f"{SPRITE_DIR}/{event_id}.jpg")):
+        try:
+            sp.unlink()
+        except Exception:
+            log.debug("[trash] %s scrub unlink failed", sp, exc_info=True)
     meta = {
         "cam_id": cam_id,
         "event_id": event_id,

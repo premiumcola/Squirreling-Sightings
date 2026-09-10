@@ -109,3 +109,37 @@ test('a selected category with zero matches stays visible', () => {
   const html = categoryChipsHTML(filter, {});
   assert.match(html, /data-val="fog"/);
 });
+
+// ── Der Name ist ein eigenes Element ────────────────────────────────────
+// „Nur icon in video von vogel spezies und kameras auch nur mit icon!"
+// Auf dem Telefon blendet 25-mobile.css den Namen der Kamera-Chips aus —
+// dafür muss er ein eigenes Element sein, und er darf dabei nicht
+// verloren gehen: title und aria-label tragen ihn weiter.
+
+test('der Kamera-Name steht in einem eigenen, ausblendbaren Element', () => {
+  const html = cameraChipsHTML(
+    [{ id: 'cam1', name: "Squirrel Town 'Nut Bar'" }],
+    { cameraIds: new Set() },
+    { cam1: 452 },
+  );
+  assert.match(html, /class="mp-name"/);
+});
+
+test('und bleibt fuer Zeiger und Screenreader lesbar', () => {
+  const html = cameraChipsHTML(
+    [{ id: 'cam1', name: 'Werkstatt' }],
+    { cameraIds: new Set() },
+    { cam1: 38 },
+  );
+  assert.match(html, /title="Werkstatt"/);
+  assert.match(html, /aria-label="Werkstatt"/);
+});
+
+test('ein Name mit Anfuehrungszeichen bleibt maskiert', () => {
+  const html = cameraChipsHTML(
+    [{ id: 'cam1', name: '<script>"x"' }],
+    { cameraIds: new Set() },
+    { cam1: 1 },
+  );
+  assert.doesNotMatch(html, /<script>/);
+});

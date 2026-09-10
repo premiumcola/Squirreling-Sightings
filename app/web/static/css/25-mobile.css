@@ -743,6 +743,59 @@ body.sidebar-locked {
   }
 }
 
+/* ── Mediathek auf dem Telefon: Icons statt Namen ─────────────────────────
+   Two rows of the filter block spent their whole width on words the
+   icons already say, and the tile badge spent so much of the picture on
+   an ellipsised species name that the play button was hard to hit.
+   „Nur icon in video von vogel spezies und kameras auch nur mit icon!"
+
+   Nothing is deleted — the name stays in the DOM, carried by `title` and
+   `aria-label`, so a pointer and a screen reader both still get it. */
+@media (max-width: 480px) {
+  /* CAMERA CHIPS. Only this row: the class chips („Person", „Bewegung")
+     keep their words, because their icons are a paw and a squiggle and
+     nobody reads those as a class. A camera icon is a picture of THAT
+     camera and needs no caption. */
+  .media-filter-bar[data-group='camera'] .mp-name {
+    display: none;
+  }
+  .media-filter-bar[data-group='camera'] .media-pill {
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  /* THE TILE BADGE IS A BUBBLE. Round, the species silhouette inside it,
+     nothing else — the name was ellipsised to „Kohl…" anyway, so it
+     bought nothing and cost the play button. The whole bubble stays the
+     edit target (see .mmc-tl-badge--edit in 06b), which is why the
+     pencil can go: the badge itself is the control. */
+  .mmc-tl-badge {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    gap: 0;
+    border-radius: 50%;
+    justify-content: center;
+  }
+  .mmc-tl-badge .mmc-tl-name,
+  .mmc-tl-badge .mmc-species-edit {
+    display: none;
+  }
+  .mmc-tl-species-icon {
+    width: 24px;
+    height: 24px;
+  }
+  .mmc-tl-badge > svg {
+    width: 18px;
+    height: 18px;
+  }
+  /* The badge stack no longer needs to clear a wide pill, so the
+     secondary species line may use the width the name gave up. */
+  .mmc-badges {
+    max-width: calc(100% - 74px);
+  }
+}
+
 /* ── Geräte / cam-edit mobile ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   /* Object-filter pill bar inside cam-edit — same horizontal-scroll

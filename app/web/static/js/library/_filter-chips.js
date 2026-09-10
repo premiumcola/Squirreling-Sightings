@@ -39,10 +39,18 @@ function _chipHTML(group, val, active, iconHtml, label, color, count) {
   const cls = `media-pill cat-filter-btn${active ? ' active' : ''}`;
   const cntChip =
     count > 0 ? `<span class="mp-count" style="pointer-events:none">${count}</span>` : '';
+  // The NAME is its own element, and the camera row hides it on a phone.
+  // „Squirrel Town 'Nut Bar'" is most of a 393 px screen for a chip whose
+  // icon already says which camera it is — „für die Kameras nur die drei
+  // Icons verwenden ohne Text, um den ganzen Filterbereich zusammen zu
+  // schieben". The title carries the name for a pointer, and the
+  // aria-label carries it for a screen reader, so nothing is lost but
+  // the width. See 04-coral-1.css.
   return (
-    `<button type="button" class="${cls}" data-group="${group}" data-val="${esc(val)}" style="--cb:${color}">` +
+    `<button type="button" class="${cls}" data-group="${group}" data-val="${esc(val)}" ` +
+    `style="--cb:${color}" title="${esc(label)}" aria-label="${esc(label)}">` +
     `<span class="cfb-icon" style="pointer-events:none">${iconHtml}</span>` +
-    `<span style="pointer-events:none">${esc(label)}</span>${cntChip}</button>`
+    `<span class="mp-name" style="pointer-events:none">${esc(label)}</span>${cntChip}</button>`
   );
 }
 

@@ -180,14 +180,23 @@
     gap: 8px;
   }
 }
+/* ONE GAP, EVERYWHERE. The drilldown stacks three things — the class
+   pills, the species pills, the grid — and each junction had its own
+   spacing: this head carried 8 px of margin PLUS 8 px of padding PLUS a
+   rule, while the species row below it had none at all. „mach die
+   Abstände zwischen den Filtern und dem Video bitte überall gleich."
+   One variable, used at each junction, and the rule is gone: a hairline
+   border is the thing CLAUDE.md's design rules single out, and it was
+   drawing a line across the middle of the filter block. */
 .media-drill-head {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: var(--media-stack-gap);
+}
+.media-species-bar {
+  margin-bottom: var(--media-stack-gap);
 }
 .media-drill-back {
   display: inline-flex;
@@ -209,6 +218,11 @@
 .media-drill-back:hover {
   background: var(--panel);
 }
+/* The vertical rhythm of the drilldown stack. See .media-drill-head. */
+:root {
+  --media-stack-gap: 10px;
+}
+
 .media-filter-bar {
   display: flex;
   align-items: center;

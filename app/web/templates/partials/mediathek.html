@@ -1,5 +1,33 @@
 <section id="media" class="panel section">
   <div class="section-head">
+    {# THE ONE WAY BACK, an arrow and nothing else, riding beside the title instead of eating a row
+    of its own below the filters („'n Zurückpfeil ist ohne Übersicht […] nicht als einzelne Zeile,
+    sondern oben neben dem Mediathek-Titel"). Which of the three exits it performs is decided by
+    whatever state is showing — mediathek/_view-toggle.js writes data-action and unhides it; the
+    global click delegator (core/action-registry.js) dispatches whatever it finds there. #}
+    <button
+      type="button"
+      id="mediaBackBtn"
+      class="media-back-btn"
+      hidden
+      data-action="closeMediaDrilldown"
+      title="Zurück"
+      aria-label="Zurück"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="20"
+        height="20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+    </button>
     <h3 id="mediaSectionTitle" class="media-section-title">
       <svg
         viewBox="0 0 24 24"
@@ -127,19 +155,14 @@
   from the "Vogelarten" card in the overview above. Tapping a tile opens state 3 below, already
   filtered to that species (openMediaSpeciesDrilldown). #}
   <div id="mediaSpeciesGrid" style="display: none">
-    <div class="media-drill-head">
-      <button type="button" class="media-drill-back" data-action="closeMediaSpeciesGrid">
-        ← Übersicht
-      </button>
-    </div>
     <div id="mediaSpeciesGridBody" class="species-grid"></div>
   </div>
   <!-- State 3: per-camera drill-down (filter bar lives here, hidden until camera selected) -->
   <div id="mediaDrilldown" style="display: none">
+    {# The „← Alle Kameras" bar that used to open this head is gone: the way back is the one arrow
+    beside the section title, which #mediaBackBtn above points at whichever state is showing. What
+    is left here is the class-filter row alone. #}
     <div class="media-drill-head">
-      <button type="button" class="media-drill-back" data-action="closeMediaDrilldown">
-        ← Alle Kameras
-      </button>
       <div class="media-filter-bar" id="mediaFilterBar"></div>
     </div>
     {# Species sub-row (filters.js::renderSpeciesFilterPills) — only unhidden
@@ -181,7 +204,7 @@
   Mounted by library/page.js; shown instead of the tile overview while a quick tile
   (mediathek/_overview.js's Tiere/Menschen/Wetterereignisse) or any #libraryFilterBar chip is active
   (library/page.js::_hasActiveLibraryFilter), hidden again — back to the tile overview — once
-  resetLibraryView (the "← Übersicht" button below) or the last active chip clears every filter
+  resetLibraryView (the back arrow in the section head) or the last active chip clears every filter
   dimension. The permanently-visible summary heading that used to sit above this block is gone per
   operator feedback; the grid markup itself (#libraryGrid, #libraryPagination) is unchanged, only
   its visibility. Filter chips (camera / object-class / weather-category) by library/_filter-bar.js
@@ -191,11 +214,9 @@
   #mediaPagination's own .media-pagination/.page-pill markup; see library/_pagination.js for the
   client-held cursor-stack mechanics behind it. #}
   <div id="libraryBlock" style="display: none">
-    <div class="media-drill-head" id="libraryResultsHead">
-      <button type="button" class="media-drill-back" data-action="resetLibraryView">
-        ← Übersicht
-      </button>
-    </div>
+    {# A #libraryResultsHead with its own „← Übersicht" button used to open this block. Gone with
+    the other two: one arrow beside the section title is the way back out of all three states —
+    see mediathek/_view-toggle.js. #}
     {# A #libraryZoomNote banner used to sit here, announcing that the grid was scoped to the span
     dragged in the Wetterdaten-chart. It is gone with the coupling it described: the chart's time
     chooser lives at the FOOT of this section and no longer reaches the grid at all (see

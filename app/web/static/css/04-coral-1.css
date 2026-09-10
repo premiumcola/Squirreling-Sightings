@@ -206,34 +206,57 @@
    border is the thing CLAUDE.md's design rules single out, and it was
    drawing a line across the middle of the filter block. */
 .media-drill-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
   margin-bottom: var(--media-stack-gap);
 }
 .media-species-bar {
   margin-bottom: var(--media-stack-gap);
 }
-.media-drill-back {
+
+/* THE ONE WAY BACK, beside the title.
+   Each of the three states used to open with its own full-width bar
+   reading „← Alle Kameras" or „← Übersicht" — a whole row of a phone
+   screen spent restating what the arrow already says, pushed the grid
+   further down, and on top of that three separate controls for one idea.
+   Now: an arrow in the section head, whose action mediathek/
+   _view-toggle.js points at whatever state is showing.
+   36 px of paint with CLAUDE.md's 44 px of target around it — the same
+   transparent-::after trick the tile badge and the stale-build close
+   use, so a small glyph stays hittable without making the head taller. */
+.media-back-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  /* min-height, not a fixed height: iOS touch-target floor (>=44px) for
-     both this button's own drilldown use and the results-grid "←
-     Übersicht" affordance (mediathek.html#libraryResultsHead) that
-     reuses this class unchanged. */
-  min-height: 44px;
-  background: var(--surface);
-  border: none;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  margin-right: 2px;
+  border: 0;
   border-radius: 10px;
+  background: var(--surface);
   color: var(--text);
-  padding: 8px 14px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
 }
-.media-drill-back:hover {
-  background: var(--panel);
+.media-back-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+/* The UA's `[hidden] { display: none }` loses to the rule above on
+   origin, not specificity — same opt-out .media-filter-bar[hidden]
+   needs, see 04-coral-1.css's own note there. */
+.media-back-btn[hidden] {
+  display: none;
+}
+@media (hover: hover) {
+  .media-back-btn:hover {
+    background: var(--panel);
+  }
+}
+/* Arrow and title stay together on the left; the head's own
+   space-between then pushes the select/trash controls to the right. */
+.media-section-title {
+  margin-right: auto;
 }
 /* The vertical rhythm of the drilldown stack. See .media-drill-head. */
 :root {
@@ -271,9 +294,6 @@
    needing a larger one. */
 #media > .section-head {
   margin-bottom: var(--media-stack-gap);
-}
-.media-drill-head .media-filter-bar {
-  flex: 1;
 }
 .media-pill {
   border-radius: 12px;

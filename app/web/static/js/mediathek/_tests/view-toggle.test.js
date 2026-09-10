@@ -38,6 +38,20 @@ const els = Object.fromEntries(
 // has to be in the stub.
 els.libraryFilterBar = { id: 'libraryFilterBar', style: {} };
 
+// The section that frames all four states. It is the scroll anchor: the
+// title, the back arrow and the filter row live in it, above whichever
+// state is showing.
+els.media = {
+  id: 'media',
+  style: {},
+  scrollIntoView(opts) {
+    scrolled.push({ id: 'media', opts });
+  },
+};
+
+// The one back arrow, in the section head.
+els.mediaBackBtn = { id: 'mediaBackBtn', hidden: false, dataset: {} };
+
 globalThis.window = globalThis.window || {};
 globalThis.document = { getElementById: (id) => els[id] || null };
 
@@ -61,14 +75,32 @@ test('the first call does not scroll — that one is the initial paint', () => {
   assert.equal(scrolled.filter((s) => s.id === 'mediaOverview').length, 0);
 });
 
-test('switching states scrolls the new one into view', () => {
+// THE SECTION, NOT THE STATE. Anchoring on the state container put its
+// own first card at the top of the viewport and pushed the title, the
+// back arrow and the filter row off the top edge — „es zoomt mir
+// komplett zu weit runter. Ich seh die Mediathek oben den Titel und auch
+// die Filter nicht mehr."
+test('switching states scrolls the SECTION into view, not the state', () => {
   scrolled.length = 0;
   showMediathekView('mediaSpeciesGrid');
   assert.deepEqual(
     scrolled.map((s) => s.id),
-    ['mediaSpeciesGrid'],
+    ['media'],
   );
   assert.equal(scrolled[0].opts.block, 'start');
+});
+
+test('without a section to anchor on it still brings the state into view', () => {
+  const saved = els.media;
+  delete els.media;
+  showMediathekView('mediaOverview');
+  scrolled.length = 0;
+  showMediathekView('libraryBlock');
+  assert.deepEqual(
+    scrolled.map((s) => s.id),
+    ['libraryBlock'],
+  );
+  els.media = saved;
 });
 
 test('re-rendering the SAME state never scrolls', () => {
@@ -119,4 +151,30 @@ test('a missing filter bar is survivable', () => {
   delete els.libraryFilterBar;
   showMediathekView('mediaDrilldown'); // must not throw
   els.libraryFilterBar = saved;
+});
+
+// ── one back arrow, pointed at whichever exit belongs to the state ──────
+
+test('each state points the arrow at its own way out', () => {
+  for (const [which, action] of [
+    ['mediaDrilldown', 'closeMediaDrilldown'],
+    ['mediaSpeciesGrid', 'closeMediaSpeciesGrid'],
+    ['libraryBlock', 'resetLibraryView'],
+  ]) {
+    showMediathekView(which);
+    assert.equal(els.mediaBackBtn.hidden, false, `${which} must offer a way back`);
+    assert.equal(els.mediaBackBtn.dataset.action, action);
+  }
+});
+
+test('the overview is the root and shows no arrow at all', () => {
+  showMediathekView('mediaOverview');
+  assert.equal(els.mediaBackBtn.hidden, true);
+});
+
+test('a missing back button is survivable', () => {
+  const saved = els.mediaBackBtn;
+  delete els.mediaBackBtn;
+  showMediathekView('mediaDrilldown'); // must not throw
+  els.mediaBackBtn = saved;
 });

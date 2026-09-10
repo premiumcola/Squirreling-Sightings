@@ -150,14 +150,26 @@ def test_no_banner_claims_the_grid_follows_the_weather_time_chooser():
 # ── a way back to the tile overview ───────────────────────────────────────
 
 
-def test_a_reset_control_exists_inside_the_results_state():
-    mediathek = _read(_MEDIATHEK)
-    assert 'data-action="resetLibraryView"' in mediathek
-    # Reuses the existing drilldown "back" visual language rather than
-    # inventing a new control style.
-    block = mediathek[mediathek.index('data-action="resetLibraryView"') - 200 :]
-    block = block[: block.index('data-action="resetLibraryView"') + 40]
-    assert "media-drill-back" in block
+def test_one_back_control_serves_all_three_states():
+    """Each state used to open with its own full-width bar — „← Alle
+    Kameras", „← Übersicht", „← Übersicht" — three controls for one idea,
+    each eating a row of a phone screen to restate what the arrow already
+    says. There is one arrow now, in the section head, and the toggle
+    points it at whichever exit belongs to the state on screen."""
+    mediathek = _code(_MEDIATHEK)
+    assert mediathek.count("media-drill-back") == 0
+    assert mediathek.count('id="mediaBackBtn"') == 1
+    assert "← Alle Kameras" not in mediathek
+    assert "← Übersicht" not in mediathek
+    # It lives in the section head, beside the title — not inside any of
+    # the four state containers.
+    head = mediathek[mediathek.index('<div class="section-head">') :]
+    head = head[: head.index("</div>", head.index('id="mediathekTrashBtn"'))]
+    assert 'id="mediaBackBtn"' in head
+
+    toggle = _read(_JS / "mediathek" / "_view-toggle.js")
+    for action in ("closeMediaDrilldown", "closeMediaSpeciesGrid", "resetLibraryView"):
+        assert action in toggle, f"{action} must be reachable from the one arrow"
 
 
 def test_reset_library_view_is_exported_and_bridged():
@@ -299,24 +311,27 @@ def test_a_filter_that_can_only_return_nothing_is_not_drawn():
 # ── touch target: the new "← Übersicht" control reuses an audited class ──
 
 
-def test_media_drill_back_meets_the_44px_touch_target_floor():
+def test_the_back_arrow_meets_the_44px_touch_target_floor():
+    """36 px of paint, 44 px of target — the transparent-::after trick,
+    so a small glyph in a title row stays hittable without making the row
+    taller. `inset: -4px` is 36 + 2×4 = 44."""
     css = _read(_CSS / "04-coral-1.css")
-    rule = css[css.index(".media-drill-back {") :]
+    rule = css[css.index(".media-back-btn {") :]
     rule = rule[: rule.index("}")]
-    assert "min-height: 44px" in rule
+    assert "width: 36px" in rule and "height: 36px" in rule
+    after = css[css.index(".media-back-btn::after {") :]
+    after = after[: after.index("}")]
+    assert "inset: -4px" in after
 
 
-# ── „Abstände filter bitte gleich" + a back control the width of its own
-#     words ─────────────────────────────────────────────────────────────
+# ── „Abstände filter bitte gleich" ───────────────────────────────────────
 
 
 def test_every_junction_in_the_mediathek_stack_uses_the_one_gap():
-    """Title → back button → class pills → species pills → grid. Five
-    things, four junctions, ONE number — a stack where each seam carries
-    its own hand-tuned margin is exactly what reads as uneven on a
-    phone."""
+    """Title → class pills → species pills → grid. Four things, three
+    junctions, ONE number — a stack where each seam carries its own
+    hand-tuned margin is exactly what reads as uneven on a phone."""
     coral = _code(_CSS / "04-coral-1.css")
-    mobile = _code(_CSS / "25-mobile.css")
     settings = _code(_CSS / "08-settings.css")
     assert "--media-stack-gap: 10px;" in coral
     for block, css in (
@@ -328,24 +343,7 @@ def test_every_junction_in_the_mediathek_stack_uses_the_one_gap():
         rule = css[css.index(block) :]
         rule = rule[: rule.index("}")]
         assert "var(--media-stack-gap)" in rule, f"{block} must not carry its own number"
-    # The mobile column stack is a junction too: its internal gap is the
-    # one between the back button and the class pills.
-    rule = mobile[mobile.index(".media-drill-head {") :]
-    rule = rule[: rule.index("}")]
-    assert "gap: var(--media-stack-gap);" in rule
-
-
-def test_the_back_control_is_as_wide_as_its_words():
-    """`align-items: stretch` on the mobile column made „← Alle Kameras"
-    a full-width slab for four words: „aktuell gehts komplett von links
-    nach rechts". A back control is the smallest thing on the page."""
-    mobile = _code(_CSS / "25-mobile.css")
-    rule = mobile[mobile.index(".media-drill-head {") :]
-    rule = rule[: rule.index("}")]
-    assert "align-items: flex-start;" in rule
-    assert "stretch" not in rule
-    # The filter bar beside it still spans the row — it is the thing that
-    # scrolls sideways, and a content-width filter row would be a stub.
-    bar = mobile[mobile.index(".media-drill-head .media-filter-bar {") :]
-    bar = bar[: bar.index("}")]
-    assert "width: 100%;" in bar
+    # And the head that used to hold a back button beside the filter bar
+    # is now a plain wrapper around the filter bar alone — no column
+    # stack, no gap of its own to disagree with the one above.
+    assert ".media-drill-head {" not in _code(_CSS / "25-mobile.css")

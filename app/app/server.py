@@ -599,6 +599,11 @@ _migrations.cleanup_stale_timelapse_frames(storage_root=storage_root, settings=s
 # subfolders so the camera root stops collecting clutter. Reads use
 # rglob, so this is purely cosmetic for the on-disk layout.
 _migrations.relocate_root_event_jsons(storage_root=storage_root)
+# BEFORE the thumbnail and filmstrip passes, and before the media scan
+# in lifecycle: the ghost events those passes would otherwise process are
+# not events at all — they are scrub filmstrips the scan adopted as
+# snapshots, and they render as a tiled contact sheet on a card.
+_migrations.purge_scrub_ghost_events(storage_root=storage_root)
 _migrations.generate_missing_thumbnails(storage_root=storage_root)
 # The scrub filmstrip for clips recorded before it existed. Background
 # and paced — see the function's own note on why it must not race live

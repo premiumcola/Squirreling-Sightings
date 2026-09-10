@@ -37,6 +37,33 @@ function _syncFilterBar(which) {
   if (bar) bar.style.display = which === 'mediaDrilldown' ? 'none' : '';
 }
 
+/** The way out of each state that has one. `mediaOverview` is the root
+ *  and has none — from there the arrow is simply not there. */
+const _BACK_ACTION = {
+  mediaDrilldown: 'closeMediaDrilldown',
+  mediaSpeciesGrid: 'closeMediaSpeciesGrid',
+  libraryBlock: 'resetLibraryView',
+};
+
+/**
+ * ONE back arrow, in the section head beside the title.
+ *
+ * Each of the three states used to carry its own full-width „← Alle
+ * Kameras" / „← Übersicht" bar, which is a whole row of a phone screen
+ * spent on a word the arrow already says — „vielleicht könntest Du den
+ * so gestalten, dass der 'n Zurückpfeil ist ohne Übersicht […] nicht als
+ * einzelne Zeile, sondern oben neben dem Mediathek-Titel". The three
+ * actions differ, so the button takes the one belonging to whatever is
+ * showing; the toggle is the only place that already knows.
+ */
+function _syncBackButton(which) {
+  const btn = byId('mediaBackBtn');
+  if (!btn) return;
+  const action = _BACK_ACTION[which];
+  btn.hidden = !action;
+  if (action) btn.dataset.action = action;
+}
+
 /** The state currently shown, so a switch can be told from a re-render.
  *  `null` until the first call — the initial paint must not scroll. */
 let _shown = null;
@@ -64,8 +91,17 @@ export function showMediathekView(which) {
     if (el) el.style.display = id === which ? '' : 'none';
   });
   _syncFilterBar(which);
+  _syncBackButton(which);
   _shown = which;
   if (!changed) return;
   const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-  byId(which)?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  // THE SECTION, NOT THE STATE. Scrolling the state container to the top
+  // of the viewport put its own first card there — and pushed the
+  // section title, the back arrow and the filter row off the top edge:
+  // „es zoomt mir komplett zu weit runter. Ich seh die Mediathek oben den
+  // Titel und auch die Filter nicht mehr." What the operator needs in
+  // view after a filter is the filter they just used, with its result
+  // under it. #media is that frame; the state is only its lower half.
+  const anchor = byId('media') || byId(which);
+  anchor?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
 }

@@ -568,7 +568,10 @@ logging.getLogger("app.app.boot").info("[boot] ── inventory complete ──"
 _startup_media_scan()
 
 
-_run_daily_cleanup()
+# first_run=True: the boot pass is the one that clears backlogs over the
+# WHOLE archive (missing fine tracks, species headlines decided under an
+# older rule). Every later pass re-arms without it and stays short.
+_run_daily_cleanup(first_run=True)
 
 
 _run_hourly_quest_eval()

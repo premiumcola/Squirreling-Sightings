@@ -26,6 +26,12 @@ DEFAULT_RETENTION_DAYS = 14
 #: Local wall-clock time the daily maintenance pass re-arms for.
 DAILY_MAINTENANCE_AT = (3, 0)
 
+#: How far back the NIGHTLY fine-track catch-up looks. The boot pass
+#: covers the whole archive; after it, only clips from the last couple of
+#: days can still be missing a sidecar, because every finished recording
+#: enqueues its own.
+NIGHTLY_LOOKBACK_DAYS = 3
+
 
 def _storage_layer(source, key):
     """``storage.<key>`` out of one config layer, or None."""
@@ -201,7 +207,7 @@ def _sweep_bird_species(log) -> None:
 
 
 def _sweep_species_headlines(log) -> None:
-    """Re-decide which species headlines each archived clip.
+    """Re-decide which species headlines each archived clip. BOOT ONLY.
 
     The ranking rule changed under the archive: it used to promote the
     rarest candidate however thin its support, so a single 29 % frame of
@@ -210,8 +216,15 @@ def _sweep_species_headlines(log) -> None:
     carries the correction back over what is already on disk.
 
     Reads only what the live tally already stored (`whole_clip.species`
-    with frames + best score) — no video is opened, so an unbounded pass
-    over the whole archive is a file walk, not a decode.
+    with frames + best score) — no video is opened, so a pass over the
+    whole archive is a file walk, not a decode.
+
+    It runs at BOOT and nowhere else. This is a migration, not
+    maintenance: it exists to carry ONE rule change backwards, and a
+    deploy is exactly when a rule change arrives. Repeating it every
+    night would re-read every event in the archive to reach the same
+    verdict it reached the night before — „jede nacht brauchen wir danach
+    nicht mehr auf alle videos".
     """
     from .bird_species_backfill import dossier_lookup_for, resettle_headline_species
 
@@ -266,7 +279,7 @@ def _sweep_bird_dossier_prebuild(log) -> None:
         log.info("[dossiers] photo backfill: %d dossiers re-fetched", photos["pending"])
 
 
-def _sweep_tracking_backfill(log) -> None:
+def _sweep_tracking_backfill(log, *, first_run: bool) -> None:
     """Queue the fine track (`tracks.json`) for every clip still missing
     one — the job that makes the player's own "Feinspur nachbauen" button
     unnecessary.
@@ -287,13 +300,20 @@ def _sweep_tracking_backfill(log) -> None:
     worker = _tw_singleton()
     if worker is None:
         return
-    # NO BUDGET. It was capped per tick so an un-indexed archive could not
-    # turn one night into hours of CPU — and the operator's answer to that
-    # was „rechne alle videos heute nacht nach!!". The worker is a single
-    # queued thread, so an unbounded pass costs time, not load: it works
-    # through the backlog and the queue drains. Steady state is zero
-    # anyway, because every finished clip enqueues itself.
-    result = sweep_missing_tracks(app_state.store, app_state.storage_root, worker)
+    # NO BUDGET, and the whole archive ONCE. The boot pass clears whatever
+    # backlog a new install or a restart left — „rechne alle videos heute
+    # nacht nach!!" — and the nightly one only looks back a couple of
+    # days, because every finished clip enqueues its own fine track and
+    # anything still missing one went missing recently: „jede nacht
+    # brauchen wir danach nicht mehr auf alle videos weil die ja korrekt
+    # aufgenommen werden!". The worker is a single queued thread, so even
+    # the full pass costs wall-clock rather than load.
+    result = sweep_missing_tracks(
+        app_state.store,
+        app_state.storage_root,
+        worker,
+        since_days=None if first_run else NIGHTLY_LOOKBACK_DAYS,
+    )
     if result["queued"]:
         log.info(
             "[tracking] Feinspur-Nachlauf: %d Clips eingereiht",
@@ -301,7 +321,10 @@ def _sweep_tracking_backfill(log) -> None:
         )
 
 
-def _run_daily_cleanup():
+def _run_daily_cleanup(first_run: bool = False):
+    """The daily maintenance pass. `first_run` is the BOOT call — the one
+    that clears backlogs over the whole archive; the timer below re-arms
+    without it, so every later pass is the short nightly shape."""
     log = logging.getLogger(__name__)
     if not auto_cleanup_enabled():
         log.info("[storage] autoclean deaktiviert (storage.auto_cleanup_enabled) — übersprungen")
@@ -323,12 +346,13 @@ def _run_daily_cleanup():
         _sweep_bird_dossier_prebuild(log)
     except Exception as e:
         log.warning("[dossiers] prebuild sweep failed: %s", e)
+    if first_run:
+        try:
+            _sweep_species_headlines(log)
+        except Exception as e:
+            log.warning("[det] Art-Überschriften-Lauf fehlgeschlagen: %s", e)
     try:
-        _sweep_species_headlines(log)
-    except Exception as e:
-        log.warning("[det] Art-Überschriften-Lauf fehlgeschlagen: %s", e)
-    try:
-        _sweep_tracking_backfill(log)
+        _sweep_tracking_backfill(log, first_run=first_run)
     except Exception as e:
         log.warning("[tracking] Feinspur-Nachlauf fehlgeschlagen: %s", e)
     # AT NIGHT, not "86400 s after boot". It re-armed on a plain 24 h

@@ -151,3 +151,74 @@ def test_the_nightly_pass_is_unbounded():
     call = src[src.index("def _sweep_tracking_backfill") : src.index("def _run_daily_cleanup")]
     assert "sweep_missing_tracks(" in call
     assert "budget=" not in call, "the nightly catch-up must not cap itself"
+
+
+# ── The nightly pass is a look back, not a full sweep ───────────────────
+# „jede nacht brauchen wir danach nicht mehr auf alle videos weil die ja
+# korrekt aufgenommen werden!" — the boot pass clears the backlog once;
+# after that, anything still missing a sidecar went missing in the last
+# day or two, because every finished recording enqueues its own.
+
+from datetime import datetime, timedelta  # noqa: E402
+
+from app.tracking_worker._backfill import recent_day_dirs  # noqa: E402
+
+
+def _clip_on(root: Path, day: str, event_id: str) -> None:
+    d = root / "motion_detection" / CAM / day
+    d.mkdir(parents=True, exist_ok=True)
+    rel = f"motion_detection/{CAM}/{day}/{event_id}.mp4"
+    (root / rel).write_bytes(b"\x00" * 2048)
+    (d / f"{event_id}.json").write_text(
+        json.dumps({"event_id": event_id, "camera_id": CAM, "video_relpath": rel}),
+        encoding="utf-8",
+    )
+
+
+def _day(offset: int) -> str:
+    return (datetime.now() - timedelta(days=offset)).strftime("%Y-%m-%d")
+
+
+def test_the_nightly_window_skips_the_old_archive(tmp_path):
+    _clip_on(tmp_path, _day(0), "today")
+    _clip_on(tmp_path, _day(30), "last-month")
+    worker = _FakeWorker()
+
+    result = _sweep(tmp_path, worker, since_days=3)
+
+    assert result["queued"] == 1
+    assert [j.event_id for j in worker.jobs] == ["today"]
+
+
+def test_the_boot_pass_still_sees_everything(tmp_path):
+    _clip_on(tmp_path, _day(0), "today")
+    _clip_on(tmp_path, _day(30), "last-month")
+
+    worker = _FakeWorker()
+    assert _sweep(tmp_path, worker, since_days=None)["queued"] == 2
+
+
+def test_a_clip_right_on_the_edge_of_the_window_is_kept(tmp_path):
+    _clip_on(tmp_path, _day(3), "edge")
+    worker = _FakeWorker()
+
+    assert _sweep(tmp_path, worker, since_days=3)["queued"] == 1
+
+
+def test_a_folder_that_is_not_a_date_is_never_skipped(tmp_path):
+    """Cheaper to look than to be clever: an unparseable folder name is
+    always walked rather than silently dropped."""
+    cam = tmp_path / "motion_detection" / CAM
+    (cam / "irgendwas").mkdir(parents=True)
+
+    kept = [d.name for d in recent_day_dirs(cam, since_days=3)]
+
+    assert "irgendwas" in kept
+
+
+def test_no_window_means_every_folder(tmp_path):
+    cam = tmp_path / "motion_detection" / CAM
+    for day in (_day(0), _day(400)):
+        (cam / day).mkdir(parents=True, exist_ok=True)
+
+    assert len(recent_day_dirs(cam, since_days=None)) == 2

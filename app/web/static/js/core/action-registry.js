@@ -83,6 +83,7 @@ registerAction('openCamRecoveryModal', _shim('openCamRecoveryModal'));
 registerAction('loadCamRecoveryDiscovery', _shim('loadCamRecoveryDiscovery'));
 registerAction('closeCamRecoveryModal', _shim('closeCamRecoveryModal'));
 registerAction('toggleMediaSelectMode', _shim('toggleMediaSelectMode'));
+registerAction('toggleSelectAllOnPage', _shim('toggleSelectAllOnPage'));
 registerAction('closeMediaDrilldown', _shim('closeMediaDrilldown'));
 registerAction('closeMediaSpeciesGrid', _shim('closeMediaSpeciesGrid'));
 registerAction('resetLibraryView', _shim('resetLibraryView'));

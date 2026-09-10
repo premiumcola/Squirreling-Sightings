@@ -19,6 +19,33 @@ export function _updateMediaSelectToggle() {
   btn.classList.toggle('btn-action', state.mediaSelectMode);
   btn.classList.toggle('action-green', state.mediaSelectMode);
   btn.classList.toggle('btn-neutral', !state.mediaSelectMode);
+  _updateSelectAllButton();
+}
+
+/** PURE: the event ids on the page currently rendered. `state.media` is
+ *  the page slice (see mediathek/_paging.js), which is deliberately what
+ *  "select all" means here — the whole library is not something an
+ *  operator can look at before deleting it. */
+export function pageEventIds(media) {
+  return (media || []).map((m) => m && m.event_id).filter(Boolean);
+}
+
+/** PURE: does the page's selection already cover every id on it? */
+export function pageFullySelected(ids, selected) {
+  return ids.length > 0 && ids.every((id) => selected.has(id));
+}
+
+function _updateSelectAllButton() {
+  const btn = byId('mediaSelectAllBtn');
+  if (!btn) return;
+  btn.style.display = state.mediaSelectMode ? 'inline-flex' : 'none';
+  const label = byId('mediaSelectAllLabel');
+  if (!label) return;
+  // One button, both directions: once the page is fully selected the
+  // only thing left to want is to let it go again.
+  label.textContent = pageFullySelected(pageEventIds(state.media), state.mediaSelected)
+    ? 'Keine'
+    : 'Seite';
 }
 
 export function _exitMediaSelectMode() {
@@ -62,8 +89,27 @@ export function _toggleMediaSelected(eventId) {
   const card = document.querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`);
   if (card) card.classList.toggle('media-card--selected', state.mediaSelected.has(eventId));
   _refreshMediaSelectBar();
+  _updateSelectAllButton();
 }
 window._toggleMediaSelected = _toggleMediaSelected;
+
+/** Select every card on the current page — or, when they already all
+ *  are, clear them. Only the PAGE: see pageEventIds. */
+window.toggleSelectAllOnPage = function () {
+  if (!state.mediaSelectMode) return;
+  const ids = pageEventIds(state.media);
+  const clearing = pageFullySelected(ids, state.mediaSelected);
+  for (const id of ids) {
+    if (clearing) state.mediaSelected.delete(id);
+    else state.mediaSelected.add(id);
+  }
+  document.querySelectorAll('.media-card').forEach((card) => {
+    const id = card.dataset?.eventId;
+    if (id) card.classList.toggle('media-card--selected', state.mediaSelected.has(id));
+  });
+  _refreshMediaSelectBar();
+  _updateSelectAllButton();
+};
 
 window.toggleMediaSelectMode = function () {
   if (state.mediaSelectMode) _exitMediaSelectMode();

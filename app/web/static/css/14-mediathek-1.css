@@ -231,6 +231,19 @@ body.media-select-mode .media-grid .mmc-actions {
 body.media-select-mode .media-grid .mmc-play-btn {
   display: none !important;
 }
+/* THE BADGE STOPS BEING A CONTROL WHILE SELECTING. It is the species-edit
+   button (see .mmc-tl-badge--edit), and in select mode a tap on it opened
+   the species picker instead of ticking the card — „blende da das Edit
+   aus. Ich will ja nur die anmelden können, ohne zu Play abzuspielen,
+   ohne zu editen." pointer-events:none hands the tap down to the card,
+   which is what every other pixel of the tile does in this mode. */
+body.media-select-mode .media-grid .mmc-tl-badge {
+  pointer-events: none;
+  cursor: inherit;
+}
+body.media-select-mode .media-grid .mmc-species-edit {
+  display: none;
+}
 body.media-select-mode .media-grid .media-card {
   cursor: pointer;
 }

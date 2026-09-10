@@ -81,6 +81,10 @@ export async function deleteTLCard(camId, filename, eventId) {
 // how to patch) so patching it in place is visible on the very next
 // renderMediaGrid() call without a re-fetch.
 export function openSpeciesPickerForCard(btn) {
+  // Not while selecting. The CSS already makes the badge inert in that
+  // mode; this is the half that survives a stale render — a correction
+  // sheet opening mid-selection loses the selection behind it.
+  if (state.mediaSelectMode) return;
   const card = btn.closest('.media-card');
   const eventId = card?.dataset.eventId;
   const camId = card?.dataset.cameraId;

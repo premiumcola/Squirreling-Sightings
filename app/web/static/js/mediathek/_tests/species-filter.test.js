@@ -15,6 +15,7 @@ import {
   selectSpecies,
   clearSpeciesIfBirdInactive,
   effectiveMediaLabels,
+  speciesClipCount,
   speciesPillsHtml,
 } from '../_species-filter.js';
 
@@ -201,4 +202,35 @@ test('equal counts fall back to a stable German-alphabetical order', () => {
     birdSpeciesOptions().map((o) => o.name),
     ['Amsel', 'Zaunkönig'],
   );
+});
+
+// ── speciesClipCount — the number filters.js prints on the class row ────
+//
+// While a species narrows the grid, „Vogel" may only claim what that
+// species can actually return: with „Elster 150" picked, a „Vogel 330"
+// beside it is a number no reachable filter produces
+// („aktualisiere die angezeigte zahl in den filtern basierend auf der
+// aktuellen filterung!!"). It reads the pill's OWN count, so the two can
+// never disagree.
+
+test('speciesClipCount is the very number that species pill prints', () => {
+  resetState();
+  state.mediaStats = [cam('cam1', { Elster: 150, Kohlmeise: 64 })];
+  assert.equal(speciesClipCount('Elster'), 150);
+  assert.equal(speciesClipCount('Kohlmeise'), 64);
+});
+
+test('a species with no clips — or none at all — counts zero, never NaN', () => {
+  resetState();
+  state.mediaStats = [cam('cam1', { Elster: 3 })];
+  assert.equal(speciesClipCount('Zaunkönig'), 0);
+  assert.equal(speciesClipCount(null), 0);
+});
+
+test('speciesClipCount respects the camera scope the pills use', () => {
+  resetState();
+  state.mediaStats = [cam('cam1', { Elster: 150 }), cam('cam2', { Elster: 7 })];
+  assert.equal(speciesClipCount('Elster'), 157, 'all cameras when none is selected');
+  state.mediaCamera = 'cam2';
+  assert.equal(speciesClipCount('Elster'), 7);
 });

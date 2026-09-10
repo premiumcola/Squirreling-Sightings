@@ -41,6 +41,27 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _code(path: Path) -> str:
+    """The file without its `//` comment lines.
+
+    „X kommt nicht mehr vor" ist sonst keine Aussage über den Code: in
+    diesem Projekt erklärt jede Entfernung sich selbst an Ort und Stelle,
+    und der Kommentar, der sagt WARUM es weg ist, nennt es beim Namen.
+    Ein Test, der über den Kommentar stolpert, verbietet die Erklärung.
+    Gleiches gilt für die CSS-Variante mit `/* … */`.
+    """
+    src = _read(path)
+    if path.suffix == ".css":
+        out, rest = [], src
+        while "/*" in rest:
+            head, _, rest = rest.partition("/*")
+            out.append(head)
+            _, _, rest = rest.partition("*/")
+        out.append(rest)
+        return "".join(out)
+    return "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
+
+
 _MEDIATHEK = _TPL / "partials" / "mediathek.html"
 
 
@@ -185,14 +206,77 @@ def test_library_page_syncs_the_toggle_on_every_filter_change():
 
 
 def test_leaving_an_open_drilldown_reuses_its_own_close_bridge():
-    """A #libraryFilterBar chip click has to be able to override an
-    open per-camera drilldown (the bar stays reachable throughout) —
-    reusing window.closeMediaDrilldown (the exact function the
-    drilldown's own "← Alle Kameras" button already calls) keeps that
-    cleanup (state.mediaDrillOpen, the active moc-card, the section
-    title) in one place instead of re-derived here."""
+    """A programmatic filter change (a quick tile, resetLibraryView) has
+    to be able to override an open per-camera drilldown — reusing
+    window.closeMediaDrilldown (the exact function the drilldown's own
+    "← Alle Kameras" button already calls) keeps that cleanup
+    (state.mediaDrillOpen, the active moc-card, the section title) in one
+    place instead of re-derived here.
+
+    The bar itself is no longer TAPPABLE during a drilldown — it is
+    hidden with the grid it filters, see the dedup tests below — so this
+    path is now reached from code rather than a chip."""
     src = _read(_JS / "library" / "page.js")
     assert "window.closeMediaDrilldown" in src
+
+
+# ── „Filter sind doppelt drin!" — one class-filter row per state ─────────
+#
+# The class taxonomy (Katze/Vogel/Hund/…) was on screen twice in BOTH
+# states. In the overview: #libraryFilterBar's label chips, and a few
+# pixels below them a #mediaFilterBarOverview painted by the very same
+# vocabulary. In the drilldown: #libraryFilterBar again, over the
+# drilldown's own #mediaFilterBar — with the top one filtering a grid
+# that was not even visible, and each printing its own count for „Vogel".
+
+
+def test_the_camera_overview_paints_no_class_row_of_its_own():
+    """#mediaFilterBarOverview is gone, and with it renderMediaFilter-
+    Pills' 'overview' mode — the branch existed only to feed it."""
+    overview = _code(_JS / "mediathek" / "_overview.js")
+    filters = _code(_JS / "mediathek" / "filters.js")
+    assert "mediaFilterBarOverview" not in overview
+    assert "mediaFilterBarOverview" not in filters
+    assert "'overview'" not in filters
+
+
+def test_the_drilldown_hides_the_merged_feed_bar():
+    """The toggle owns it: whichever grid is on screen, only its own
+    filter row is. Behaviour covered by mediathek/_tests/
+    view-toggle.test.js — this pins that the toggle is where it lives,
+    rather than duplicated into each of the drilldown's four openers."""
+    src = _read(_JS / "mediathek" / "_view-toggle.js")
+    assert "libraryFilterBar" in src
+    assert "mediaDrilldown" in src
+
+
+# ── „aktualisiere die angezeigte zahl … basierend auf der aktuellen
+#     filterung!!" ───────────────────────────────────────────────────────
+
+
+def test_a_chosen_species_rewrites_every_class_count():
+    """Picking „Elster" makes effectiveMediaLabels send [Elster] and
+    nothing else, so every other class can only return nothing — while
+    the row above still printed „Person 151" from the whole archive.
+    The counts have to come down to what the active filter can actually
+    reach, and _aggregateMediaCounts is the one place they are made."""
+    src = _read(_JS / "mediathek" / "filters.js")
+    fn = src[src.index("export function _aggregateMediaCounts") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert "state.mediaSpecies" in fn
+    assert "speciesClipCount" in fn
+
+
+def test_a_filter_that_can_only_return_nothing_is_not_drawn():
+    """Zero-count pills used to render greyed and non-tappable so the
+    whole taxonomy stayed visible; on a 393 px phone each one cost a line
+    of the grid it was filtering („Diese filter masse ist zu viel!").
+    The rule is shared with the merged feed's chips, not written twice."""
+    src = _code(_JS / "mediathek" / "filters.js")
+    assert "media-pill--empty" not in src
+    assert "chipVisible" in src
+    # And the CSS for the state went with it.
+    assert "media-pill--empty" not in _code(_CSS / "18-telegram-2.css")
 
 
 # ── touch target: the new "← Übersicht" control reuses an audited class ──

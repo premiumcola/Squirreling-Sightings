@@ -18,6 +18,25 @@ import { byId } from '../core/dom.js';
 
 const _VIEW_IDS = ['mediaOverview', 'mediaSpeciesGrid', 'mediaDrilldown', 'libraryBlock'];
 
+/**
+ * ONE class-filter row on screen at a time — „Filter sind doppelt drin!".
+ *
+ * #libraryFilterBar sits above all four states and filters the merged
+ * feed (#libraryBlock). The drilldown brings its own bar (#mediaFilterBar,
+ * mediathek/filters.js) for the grid it actually shows. With the drilldown
+ * open both were visible: two rows of the same taxonomy, one of them
+ * filtering a grid that was not on screen, each with its own count for
+ * „Vogel". The bar whose grid is hidden goes with it.
+ *
+ * library/page.js keeps its own closeMediaDrilldown bridge for the
+ * programmatic path (a quick tile, a reset) — this only decides what the
+ * operator can see and tap.
+ */
+function _syncFilterBar(which) {
+  const bar = byId('libraryFilterBar');
+  if (bar) bar.style.display = which === 'mediaDrilldown' ? 'none' : '';
+}
+
 /** The state currently shown, so a switch can be told from a re-render.
  *  `null` until the first call — the initial paint must not scroll. */
 let _shown = null;
@@ -44,6 +63,7 @@ export function showMediathekView(which) {
     const el = byId(id);
     if (el) el.style.display = id === which ? '' : 'none';
   });
+  _syncFilterBar(which);
   _shown = which;
   if (!changed) return;
   const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;

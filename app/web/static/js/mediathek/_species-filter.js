@@ -59,6 +59,16 @@ export function birdSpeciesOptions() {
     .map(([name, count]) => ({ name, count }));
 }
 
+/** Clips carrying `name` in the currently-scoped view — the very number
+ * that species' own pill prints, read back by name. filters.js needs it
+ * to answer „wie viele Vögel" while a species is narrowing the grid: the
+ * class row's own source (`label_counts`) only knows the whole archive's
+ * bird total, which is the wrong number to print beside a filter that
+ * has already been narrowed past it. */
+export function speciesClipCount(name) {
+  return birdSpeciesOptions().find((o) => o.name === name)?.count || 0;
+}
+
 // Toggle: selecting the already-selected species clears it — the same
 // second-click-deselects convention the class-level pills
 // (filters.js::renderMediaFilterPills) already use.

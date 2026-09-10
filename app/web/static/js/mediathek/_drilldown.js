@@ -53,7 +53,7 @@ async function _loadAndRender(what) {
     console.warn(`[mediathek] loadMedia (${what}) failed:`, err);
   }
   _pruneEmptyMediaFilters();
-  renderMediaFilterPills('drilldown');
+  renderMediaFilterPills();
   renderMediaGrid();
 }
 
@@ -78,7 +78,7 @@ export async function openCategoryDrilldown(label) {
   state.mediaPage = 0;
   if (state.mediaSelectMode) _exitMediaSelectMode();
   if (state.mediaLabels.size === 0) _seedTopMediaLabel();
-  renderMediaFilterPills('drilldown');
+  renderMediaFilterPills();
   _showDrilldown();
   await _loadAndRender('category');
 }
@@ -92,7 +92,7 @@ export async function openAllMediaDrilldown(preFilterLabel) {
   if (state.mediaSelectMode) _exitMediaSelectMode();
   _clearLoadedLibrary();
   if (state.mediaLabels.size === 0) _seedTopMediaLabel();
-  renderMediaFilterPills('drilldown');
+  renderMediaFilterPills();
   showMediathekView('mediaDrilldown');
   _setActiveMocCard('__all__');
   _updateMediaSelectToggle();
@@ -112,7 +112,7 @@ export async function openMediaDrilldown(camId) {
   const pag = byId('mediaPagination');
   if (pag) pag.innerHTML = '';
   _seedTopMediaLabel();
-  renderMediaFilterPills('drilldown');
+  renderMediaFilterPills();
   showMediathekView('mediaDrilldown');
   _setActiveMocCard(camId);
   _updateMediaSelectToggle();
@@ -139,7 +139,7 @@ export async function openMediaSpeciesDrilldown() {
   state.mediaPage = 0;
   if (state.mediaSelectMode) _exitMediaSelectMode();
   _clearLoadedLibrary();
-  renderMediaFilterPills('drilldown');
+  renderMediaFilterPills();
   showMediathekView('mediaDrilldown');
   _setActiveMocCard(null);
   _updateMediaSelectToggle();

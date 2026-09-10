@@ -33,6 +33,11 @@ const els = Object.fromEntries(
   ]),
 );
 
+// The merged feed's filter bar. It is NOT one of the four states — it
+// sits above all of them — but the toggle owns its visibility too, so it
+// has to be in the stub.
+els.libraryFilterBar = { id: 'libraryFilterBar', style: {} };
+
 globalThis.window = globalThis.window || {};
 globalThis.document = { getElementById: (id) => els[id] || null };
 
@@ -88,4 +93,30 @@ test('a state whose element is missing is survivable', () => {
   delete els.libraryBlock;
   showMediathekView('libraryBlock'); // must not throw
   els.libraryBlock = saved;
+});
+
+// ── one class-filter row at a time — „Filter sind doppelt drin!" ────────
+//
+// #libraryFilterBar filters the merged feed. The drilldown brings its
+// own bar for the grid it actually shows. With the drilldown open both
+// were on screen: two rows of the same taxonomy, each with its own count
+// for „Vogel", and the top one filtering a grid that was not visible.
+
+test('the drilldown hides the merged feed’s filter bar', () => {
+  showMediathekView('mediaDrilldown');
+  assert.equal(els.libraryFilterBar.style.display, 'none');
+});
+
+test('every other state gives it back', () => {
+  for (const which of ['mediaOverview', 'libraryBlock', 'mediaSpeciesGrid']) {
+    showMediathekView(which);
+    assert.equal(els.libraryFilterBar.style.display, '', `${which} must show the bar`);
+  }
+});
+
+test('a missing filter bar is survivable', () => {
+  const saved = els.libraryFilterBar;
+  delete els.libraryFilterBar;
+  showMediathekView('mediaDrilldown'); // must not throw
+  els.libraryFilterBar = saved;
 });

@@ -10,8 +10,16 @@ import { OBJ_LABEL, objIconSvg } from '../core/icons.js';
 import { CAT_COLORS } from '../timeline.js';
 import { loadMedia } from './media-loader.js';
 import { renderMediaGrid, renderMediaPagination } from './_paging.js';
-import { openAllMediaDrilldown } from './_drilldown.js';
-import { selectSpecies, speciesPillsHtml, clearSpeciesIfBirdInactive } from './_species-filter.js';
+import {
+  selectSpecies,
+  speciesPillsHtml,
+  speciesClipCount,
+  clearSpeciesIfBirdInactive,
+} from './_species-filter.js';
+// ONE rule for "is this chip worth a row of screen", shared with the
+// merged feed's own chips rather than written twice — see
+// library/_filter-chips.js::chipVisible.
+import { chipVisible } from '../library/_filter-chips.js';
 // Using a filter up HERE releases the Wetterdaten time chooser at the
 // foot of the section — see weather/_time-binding.js for the rule.
 import { noteFilterUse } from '../weather/_time-binding.js';
@@ -44,6 +52,19 @@ export function _aggregateMediaCounts() {
     });
     counts.timelapse += s.timelapse_count || 0;
   });
+  // A CHOSEN SPECIES IS THE WHOLE FILTER, so it is also the whole count.
+  // `_species-filter.js::effectiveMediaLabels` sends exactly [species]
+  // and drops every class from the query — so while „Elster" is picked,
+  // every other class would return nothing, and the archive totals the
+  // block above just summed are numbers no reachable filter can produce.
+  // That is „Person 151" sitting next to „Elster 150" on a grid holding
+  // 150 magpies: „aktualisiere die angezeigte zahl in den filtern
+  // basierend auf der aktuellen filterung!!". Zeroed here, the pills
+  // themselves then disappear — see _classPillHtml.
+  if (state.mediaSpecies) {
+    MEDIA_FILTER_LABELS.forEach((l) => (counts[l] = 0));
+    counts.bird = speciesClipCount(state.mediaSpecies);
+  }
   return counts;
 }
 
@@ -79,29 +100,33 @@ export function _pruneEmptyMediaFilters() {
   return before > 0 && state.mediaLabels.size === 0;
 }
 
-// One class-level pill's markup. L3 · render the SAME chips in both modes —
-// categories with zero available items are surfaced as greyed/disabled
-// (`media-pill--empty` + non-tappable), not removed entirely, so the
-// operator sees the full taxonomy at a glance and knows what is/isn't
-// available right now.
-function _classPillHtml(l, cnt, mode) {
-  const empty = cnt === 0;
-  const active = mode === 'drilldown' && state.mediaLabels.has(l);
-  const cls = `media-pill cat-filter-btn${active ? ' active' : ''}${empty ? ' media-pill--empty' : ''}`;
+// One class-level pill's markup, or '' for a pill not worth its row.
+//
+// A ZERO-COUNT PILL IS GONE, NOT GREYED. It used to render as a
+// non-tappable `media-pill--empty` so the operator „sees the full
+// taxonomy at a glance" — but the taxonomy is eight words long and this
+// row sits above the grid on a 393 px phone, where every dead pill costs
+// a line of the thing it is filtering: „Diese filter masse ist zu viel!",
+// and „nehme wenn ein sub element gewählt alle anderen filter raus die
+// darauf basierend 0 einträge haben". The merged feed's chips above have
+// worked this way since Stage 10; `chipVisible` is that same rule, not a
+// second copy of it — a chip stays while it is the operator's own active
+// selection, so nothing ever vanishes out from under the tap that just
+// turned it on.
+function _classPillHtml(l, cnt) {
+  const active = state.mediaLabels.has(l);
+  if (!chipVisible(cnt, active)) return '';
+  const cls = `media-pill cat-filter-btn${active ? ' active' : ''}`;
   const cb = CAT_COLORS[l] || '#94a3b8';
-  const cntChip =
-    mode === 'drilldown' && cnt > 0
-      ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>`
-      : '';
-  return `<button type="button" class="${cls}" data-type="label" data-val="${l}" style="--cb:${cb}"${empty ? ' tabindex="-1" aria-disabled="true"' : ''}><span class="cfb-icon" style="pointer-events:none">${objIconSvg(l, 18)}</span><span style="pointer-events:none">${OBJ_LABEL[l] || l}</span>${cntChip}</button>`;
+  const cntChip = cnt > 0 ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>` : '';
+  return `<button type="button" class="${cls}" data-type="label" data-val="${l}" style="--cb:${cb}"><span class="cfb-icon" style="pointer-events:none">${objIconSvg(l, 18)}</span><span style="pointer-events:none">${OBJ_LABEL[l] || l}</span>${cntChip}</button>`;
 }
 
 // Click wiring for the class-level pills, split out of
 // renderMediaFilterPills to keep that one under the file's own 60-line
 // function ceiling.
-function _wireClassPillClicks(bar, mode) {
+function _wireClassPillClicks(bar) {
   bar.querySelectorAll('.media-pill').forEach((p) => {
-    if (p.classList.contains('media-pill--empty')) return;
     const val = p.dataset.val;
     // Belt-and-braces: re-set --cb via setProperty in addition to the
     // inline style attribute. The tinted-pill CSS reads var(--cb) for
@@ -109,10 +134,6 @@ function _wireClassPillClicks(bar, mode) {
     // head was rendering as if --cb were missing on some browsers.
     if (val && CAT_COLORS[val]) p.style.setProperty('--cb', CAT_COLORS[val]);
     p.addEventListener('click', () => {
-      if (mode === 'overview') {
-        openAllMediaDrilldown(val);
-        return;
-      }
       noteFilterUse('label');
       if (state.mediaLabels.has(val)) state.mediaLabels.delete(val);
       else state.mediaLabels.add(val);
@@ -122,7 +143,7 @@ function _wireClassPillClicks(bar, mode) {
       // _species-filter.js::clearSpeciesIfBirdInactive.
       clearSpeciesIfBirdInactive();
       state.mediaPage = 0;
-      renderMediaFilterPills('drilldown');
+      renderMediaFilterPills();
       if (byId('mediaDrilldown')?.style.display !== 'none') {
         loadMedia().then(() => {
           renderMediaGrid();
@@ -133,20 +154,17 @@ function _wireClassPillClicks(bar, mode) {
   });
 }
 
-// Species sub-row lives in its own bar, below the class-level one (see
-// partials/mediathek.html#mediaSpeciesFilterBar). No fetch of its own any
-// more: it is derived from the same `state.mediaStats` this file's own
-// `_aggregateMediaCounts` reads for the class pills, so both rows are one
-// number from one source — see _species-filter.js's header.
-function _syncSpeciesRow() {
-  renderSpeciesFilterPills();
-}
-
-// mode: 'overview' (all pills, no counts, click → openAllMediaDrilldown(label))
-//       'drilldown' (only pills with count>0, with counts, toggles state.mediaLabels)
-export function renderMediaFilterPills(mode) {
-  const id = mode === 'overview' ? 'mediaFilterBarOverview' : 'mediaFilterBar';
-  const bar = byId(id);
+// THE Mediathek's one class-filter row: #mediaFilterBar, inside the
+// drilldown, toggling state.mediaLabels against the grid right below it.
+//
+// It used to take a `mode`, because a second copy of this row also sat in
+// the camera overview (#mediaFilterBarOverview) whose pills were one-shot
+// jumps into the drilldown rather than live toggles. That copy is gone —
+// #libraryFilterBar shows the same taxonomy a few pixels above it and
+// filters the merged feed in place („Filter sind doppelt drin!") — and
+// with it the branch.
+export function renderMediaFilterPills() {
+  const bar = byId('mediaFilterBar');
   if (!bar) return;
   const counts = _aggregateMediaCounts();
   // Sort happens here (by count desc, MEDIA_FILTER_LABELS order as
@@ -158,19 +176,21 @@ export function renderMediaFilterPills(mode) {
     if (d) return d;
     return MEDIA_FILTER_LABELS.indexOf(a) - MEDIA_FILTER_LABELS.indexOf(b);
   });
-  let html = labels.map((l) => _classPillHtml(l, counts[l] || 0, mode)).join('');
+  let html = labels.map((l) => _classPillHtml(l, counts[l] || 0)).join('');
   // Status hint when the user has deselected every filter — the grid then
   // falls back to "show everything", and this pill keeps the state
   // visible so the user knows nothing is being hidden.
-  if (mode === 'drilldown' && state.mediaLabels.size === 0 && labels.length > 0) {
+  if (state.mediaLabels.size === 0 && labels.length > 0) {
     html += `<span class="media-pill media-pill--status" aria-disabled="true">alle Filter aus</span>`;
   }
   bar.innerHTML = html;
-  _wireClassPillClicks(bar, mode);
-  // 'overview' mode's pills are one-shot "jump into drilldown" shortcuts
-  // (openAllMediaDrilldown above), not a live toggle — the species row
-  // only means something once mediaLabels is actually driving a fetch.
-  if (mode === 'drilldown') _syncSpeciesRow();
+  _wireClassPillClicks(bar);
+  // The species sub-row lives in its own bar just below this one (see
+  // partials/mediathek.html#mediaSpeciesFilterBar) but is never painted
+  // on its own from here: it reads the same `state.mediaStats` this
+  // file's `_aggregateMediaCounts` does, so the two rows are one number
+  // from one source — see _species-filter.js's header.
+  renderSpeciesFilterPills();
 }
 
 // Species pill row — separate render entry point from
@@ -188,7 +208,16 @@ export function renderSpeciesFilterPills() {
       noteFilterUse('species');
       selectSpecies(name);
       state.mediaPage = 0;
-      renderSpeciesFilterPills();
+      // REPAINT THE ROW ABOVE TOO, not just this one. Picking a species
+      // rewrites every class count (_aggregateMediaCounts) and, with the
+      // zero ones now dropped rather than greyed, empties most of that
+      // row — the point of „nehme wenn ein sub element gewählt alle
+      // anderen filter raus". Pruning first is what makes the drop
+      // actually happen: a class still sitting in state.mediaLabels
+      // counts as the operator's own active selection and would stay on
+      // screen at zero until the next load pruned it.
+      _pruneEmptyMediaFilters();
+      renderMediaFilterPills();
       if (byId('mediaDrilldown')?.style.display !== 'none') {
         loadMedia().then(() => {
           renderMediaGrid();

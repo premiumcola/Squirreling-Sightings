@@ -17,9 +17,9 @@ export async function loadMediaStorageStats() {
     state.mediaStats = r.cameras || [];
     state.mediaArchived = r.archived || [];
     bar.innerHTML = '';
-    // renderMediaOverview rebuilds the overview cards AND calls
-    // renderMediaFilterPills('overview') internally. Both still live
-    // in legacy.js for now, reached via window.X.
+    // renderMediaOverview rebuilds the overview cards. It no longer
+    // paints a class-filter row of its own — #libraryFilterBar above it
+    // is the only one now (mediathek/_overview.js). Reached via window.X.
     if (typeof window.renderMediaOverview === 'function') window.renderMediaOverview();
     // Drilldown pill bar reads from the same state.mediaStats — keep
     // it in sync if the user is currently inside a drilldown.
@@ -32,7 +32,7 @@ export async function loadMediaStorageStats() {
         window._seedTopMediaLabel();
       }
       if (typeof window.renderMediaFilterPills === 'function') {
-        window.renderMediaFilterPills('drilldown');
+        window.renderMediaFilterPills();
       }
     }
   } catch {

@@ -11,7 +11,6 @@ import { byId, esc, safeHexColor } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { getCameraIcon, getCameraColor, objIconSvg } from '../core/icons.js';
 import { _buildMocChips } from './_chips.js';
-import { renderMediaFilterPills } from './filters.js';
 import { speciesGridEntryTileHTML, bindSpeciesGridEntryTile } from './_species-grid.js';
 
 // Quick-jump tiles into the MERGED grid (library/page.js), not the
@@ -207,12 +206,13 @@ export function renderMediaOverview() {
     _QUICK_LABEL_TILES.map(_quickLabelTileHTML).join('') + speciesGridEntryTileHTML();
   const archivedHtml = _archivedSectionHTML(state.mediaArchived || []);
 
-  // Category filter bar — populated dynamically (see renderMediaFilterPills('overview') below)
-  const catSection = `<div class="media-filter-bar moc-filter-bar" id="mediaFilterBarOverview"></div>`;
-
-  ov.innerHTML =
-    catSection + `<div class="media-overview-grid">${camCards}${quickTiles}</div>` + archivedHtml;
-  renderMediaFilterPills('overview');
+  // NO CLASS-FILTER ROW OF ITS OWN. A #mediaFilterBarOverview used to sit
+  // here — the same Katze/Vogel/Hund taxonomy #libraryFilterBar already
+  // shows a few pixels above it, with a second count for the same word
+  // („Filter sind doppelt drin!"). Its pills were one-shot jumps into the
+  // drilldown; the chip above filters the merged feed in place, which is
+  // the better answer to the same tap. One row survived.
+  ov.innerHTML = `<div class="media-overview-grid">${camCards}${quickTiles}</div>` + archivedHtml;
   _bindQuickLabelTiles();
   bindSpeciesGridEntryTile();
 }

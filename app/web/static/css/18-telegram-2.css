@@ -28,7 +28,8 @@
                leading ✓ glyph, inset shadow that says "pressed in".
                At-a-glance distinction from inactive even on a glare-lit
                iPhone screen.
-   empty     = greyed and non-interactive (.media-pill--empty rule below). */
+   empty     = not drawn at all — a filter that can only return nothing
+               costs a row of the grid it is filtering. */
 .media-pill.cat-filter-btn {
   border: none;
   padding: 6px 14px;
@@ -138,31 +139,16 @@
 .media-pill.cat-filter-btn.active .mp-count {
   background: rgba(0, 0, 0, 0.45);
 }
-.media-pill.cat-filter-btn.media-pill--empty {
-  background: rgba(15, 23, 42, 0.4) !important;
-  color: #94a3b8 !important;
-  opacity: 1;
-  pointer-events: none;
-  cursor: default;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
-}
-/* L4 · empty-chip icon stays visibly muted instead of being washed
-   to invisibility — grayscale + brightness-up so even the dark-
-   fill glyphs (dog/squirrel/car) remain clearly readable as a
-   "this category exists but is currently unavailable" cue. */
-.media-pill.cat-filter-btn.media-pill--empty .cfb-icon {
-  filter: grayscale(1) brightness(1.4) contrast(0.9);
-  opacity: 0.65;
-}
-/* Section-rhythm gap between the chip strip and the cards grid.
-   Tightened from 22 → 14 px so the gap below the filter row
-   roughly mirrors the gap above it (section-head 12 + collapsed
-   storage-bar). The strip still reads as a separate row from the
-   cards, just without the lopsided "lots of air below, glued
-   above" feel reported in the redesign brief. */
-.moc-filter-bar {
-  margin-bottom: 14px;
-}
+/* A .media-pill--empty state used to live here: a greyed, non-tappable
+   chip for a category with nothing in it, so the operator could see the
+   whole taxonomy at once. Both it and .moc-filter-bar (the camera
+   overview's own duplicate class row) are gone — a filter that can only
+   return nothing is now simply not drawn, the rule the merged feed's
+   chips have used since Stage 10 and the one the operator asked for
+   here too: „nehme wenn ein sub element gewählt alle anderen filter raus
+   die darauf basierend 0 einträge haben". See
+   library/_filter-chips.js::chipVisible, which mediathek/filters.js now
+   shares rather than copies. */
 /* motion / car / timelapse used to have hand-tuned dark/light backgrounds
    that fought the canonical active/inactive contract — they end up almost
    indistinguishable from the inactive state on a glare-lit phone. The

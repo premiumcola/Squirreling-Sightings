@@ -188,13 +188,82 @@ export function applyRangeSlider(extent, currentHours, _zoomed = false) {
   return hours;
 }
 
+/** The handle's own geometry, mirroring 23-weather-3.css exactly:
+ *  a 40 px handle inset 4 px, so its CENTRE can only ever reach from
+ *  24 px to `width - 24 px`. Positions outside that band are the ends of
+ *  the scale, not values beyond it. */
+const _THUMB = 40;
+const _INSET = 4;
+const _PAD = _INSET + _THUMB / 2;
+
+/** PURE: where a pointer at `clientX` puts the handle, in ticks. */
+export function tickAtClientX(clientX, rect) {
+  const width = rect?.width || 0;
+  const usable = width - 2 * _PAD;
+  const x = Number(clientX);
+  // A pointer event without usable coordinates is not a position of
+  // zero — but it must not become NaN either, which would sail straight
+  // through Math.max/min and end up written into the input's value.
+  if (!(usable > 0) || !Number.isFinite(x)) return 0;
+  const t = (x - (rect.left || 0) - _PAD) / usable;
+  return Math.round(Math.max(0, Math.min(1, t)) * TICKS);
+}
+
+/**
+ * THE TRACK IS THE CONTROL, not the handle.
+ *
+ * „man kriegt ihn beim ersten Mal schwer zu packen, so als wär er in
+ * einem ganz kleinen Bereich". That was real, and it was mine: a range
+ * input starts a drag only when the gesture BEGINS on its native thumb,
+ * and that thumb is invisible here — worse, with the input's own track
+ * pseudo-element unstyled, the thumb is only as tall as a default track,
+ * so the actual grab zone was a thin band across the middle of a 48 px
+ * bar. Everything outside it did nothing at all.
+ *
+ * So the gesture is ours now: a press ANYWHERE on the pill puts the
+ * handle under the finger and keeps it there until release. The input
+ * stays for the keyboard and the accessibility tree — the same division
+ * of labour the drawn slider already uses for its looks. `setPointer-
+ * Capture` is what keeps a fast drag that leaves the bar vertically from
+ * being dropped mid-gesture.
+ */
+function _wireTrackDrag(track, input, onPick, getExtent) {
+  let holding = false;
+  const at = (e) => {
+    const rect = track.getBoundingClientRect?.();
+    if (!rect) return;
+    input.value = String(tickAtClientX(e.clientX, rect));
+    _paintRange(Number(input.value), _boundsOf(input, getExtent()));
+  };
+  track.addEventListener('pointerdown', (e) => {
+    if (input.disabled) return;
+    holding = true;
+    input.dataset.dragging = '1';
+    track.setPointerCapture?.(e.pointerId);
+    at(e);
+    // The pill declares `touch-action: none`, so this only suppresses the
+    // text-selection drag a press-and-move would otherwise start.
+    e.preventDefault?.();
+  });
+  track.addEventListener('pointermove', (e) => holding && at(e));
+  for (const done of ['pointerup', 'pointercancel']) {
+    track.addEventListener(done, (e) => {
+      if (!holding) return;
+      holding = false;
+      input.dataset.dragging = '0';
+      at(e);
+      onPick(hoursAtTick(Number(input.value), _boundsOf(input, getExtent())));
+    });
+  }
+}
+
 /**
  * Wire the slider once. `onPick(hours)` fires when the operator settles.
  *
- * Two listeners on purpose: `input` fires per pixel while dragging and
- * only repaints the glyphs and the fill, so the handle is never a blind
- * control; `change` is the commit (pointer-up on desktop, touch-end on
- * iOS) and is the only one that costs a history fetch.
+ * Two paths reach it. The pointer one is `_wireTrackDrag` above and owns
+ * the whole pill. The keyboard one is the input's own `input`/`change`
+ * pair: `input` fires per arrow key and only repaints, `change` is the
+ * commit and the only one that costs a history fetch.
  */
 export function bindRangeSlider(onPick, getExtent = () => null) {
   const input = byId('weatherRangeSlider');
@@ -207,12 +276,9 @@ export function bindRangeSlider(onPick, getExtent = () => null) {
     onPick(hoursAtTick(Number(input.value), _boundsOf(input, getExtent())));
   });
   // See _isBeingHeld: a 60 s auto-refresh must not move a handle that is
-  // currently under a thumb. `pointercancel` matters on iOS, where a drag
-  // that turns into a page scroll ends that way and never fires `change`
-  // — without it the flag would latch on for ever.
-  input.addEventListener('pointerdown', () => (input.dataset.dragging = '1'));
-  for (const done of ['pointerup', 'pointercancel']) {
-    input.addEventListener(done, () => (input.dataset.dragging = '0'));
-  }
+  // currently under a thumb — for the keyboard that is focus, for the
+  // pointer it is the flag _wireTrackDrag sets.
+  const track = input.closest?.('.ws-range-track') || input.parentElement;
+  if (track) _wireTrackDrag(track, input, onPick, getExtent);
   input.dataset.wired = '1';
 }

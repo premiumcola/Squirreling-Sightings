@@ -18,6 +18,7 @@ import {
   tickAtHours,
   formatRangeHours,
   zoneOpacity,
+  tickAtClientX,
 } from '../_range-slider.js';
 
 const ext = (oldest, newest, count = 99) => ({ oldest, newest, count });
@@ -198,4 +199,47 @@ test('outside the crossfade band exactly one marker is up', () => {
 test('junk positions still produce drawable opacities', () => {
   const o = zoneOpacity('nope');
   assert.ok(Number.isFinite(o.near) && Number.isFinite(o.far));
+});
+
+// ── where a finger on the bar puts the handle ───────────────────────────
+//
+// The pointer gesture belongs to the TRACK now, not to the range input's
+// own invisible thumb: „man kriegt ihn beim ersten Mal schwer zu packen,
+// so als wär er in einem ganz kleiner Bereich" — because a range input
+// starts a drag only on its thumb, and that thumb, with the input's own
+// track pseudo-element unstyled, was a thin band across the middle of a
+// 48 px bar. This is the arithmetic that replaced it, and it has to
+// agree with the CSS: a 40 px handle inset 4 px, so its CENTRE travels
+// from 24 px to width − 24 px.
+
+const rect = (width, left = 0) => ({ width, left });
+
+test('the handle centre follows the finger across the usable span', () => {
+  // 448 px wide → the centre travels 24…424, i.e. 400 px for 1000 ticks.
+  assert.equal(tickAtClientX(24, rect(448)), 0);
+  assert.equal(tickAtClientX(224, rect(448)), 500);
+  assert.equal(tickAtClientX(424, rect(448)), 1000);
+});
+
+test('the caps are the ends of the scale, not values beyond them', () => {
+  assert.equal(tickAtClientX(0, rect(448)), 0);
+  assert.equal(tickAtClientX(-999, rect(448)), 0);
+  assert.equal(tickAtClientX(448, rect(448)), 1000);
+  assert.equal(tickAtClientX(99999, rect(448)), 1000);
+});
+
+test('a bar that does not start at the viewport edge still lands right', () => {
+  // Same geometry, shifted 100 px right: the midpoint moves with it.
+  assert.equal(tickAtClientX(324, rect(448, 100)), 500);
+});
+
+test('a bar too narrow to hold the handle never divides by zero', () => {
+  assert.equal(tickAtClientX(20, rect(40)), 0);
+  assert.equal(tickAtClientX(20, rect(0)), 0);
+  assert.equal(tickAtClientX(20, undefined), 0);
+});
+
+test('a junk coordinate resolves to an end, never to NaN', () => {
+  const t = tickAtClientX('nonsense', rect(448));
+  assert.ok(Number.isFinite(t));
 });

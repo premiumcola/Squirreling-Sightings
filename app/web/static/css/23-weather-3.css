@@ -137,6 +137,15 @@
   height: var(--ws-range-h);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  /* THE WHOLE PILL IS THE GRAB AREA — weather/_range-slider.js owns the
+     drag, and `none` is what lets a press that starts here become a drag
+     instead of the browser deciding after 10 px that it was a page
+     scroll. Without it the first touch is routinely swallowed. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 /* The input is invisible but still the real control, so the focus ring
    has to be drawn on the pill instead. :has() lets the ring follow
@@ -179,44 +188,28 @@
   pointer-events: none;
 }
 
-/* THE INVISIBLE CONTROL. Inset by the same 4 px as the handle, so the
-   native thumb's travel and the drawn handle's travel are the same
-   interval and the disc lands exactly under the finger. `opacity: 0`
-   rather than `visibility`/`display`, which would take the element out
-   of the hit-testing and the accessibility tree along with it. */
+/* THE KEYBOARD CONTROL, and nothing else.
+   `pointer-events: none` is the important line: the pointer gesture
+   belongs to the track (weather/_range-slider.js::_wireTrackDrag), and
+   a range input under the finger would fight it — it only ever starts a
+   drag from its own native thumb, which is invisible here and, with no
+   track pseudo-element styled, barely a few pixels tall. That thin band
+   in the middle of a 48 px bar was the entire grab area: „man kriegt ihn
+   beim ersten Mal schwer zu packen".
+   `opacity: 0` rather than `visibility`/`display`, which would take the
+   element out of the accessibility tree and off the tab order with it. */
 .ws-range-input {
   -webkit-appearance: none;
   appearance: none;
   position: absolute;
-  top: 0;
-  left: 4px;
-  right: 4px;
-  width: auto;
+  inset: 0;
+  width: 100%;
   height: 100%;
   margin: 0;
   padding: 0;
   background: transparent;
   opacity: 0;
-  cursor: pointer;
-}
-/* The native thumb is never seen, but its WIDTH still sets where the
-   value-to-pixel mapping puts each end of the travel — it has to match
-   the drawn handle or the two drift apart across the track. */
-.ws-range-input::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: var(--ws-range-thumb-size, 40px);
-  height: var(--ws-range-thumb-size, 40px);
-  border: 0;
-  border-radius: 50%;
-  background: #fff;
-}
-.ws-range-input::-moz-range-thumb {
-  width: var(--ws-range-thumb-size, 40px);
-  height: var(--ws-range-thumb-size, 40px);
-  border: 0;
-  border-radius: 50%;
-  background: #fff;
+  pointer-events: none;
 }
 /* An archive with nothing to choose between. A dead handle is honest;
    one that snaps back is not. The class comes from

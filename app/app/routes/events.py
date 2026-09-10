@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import threading
 import time
 from datetime import datetime
 
@@ -55,6 +56,32 @@ def _ledger_verdict(cam_id, event_id, *, correct, source, corrected_label=None, 
             cam_id=cam_id,
             species=species,
         )
+
+
+def _resync_species_board() -> None:
+    """Das Sichtungs-Raster gegen das Archiv nachziehen.
+
+    Jeder Aufruf hier folgt auf eine Änderung, die eine Art betreffen
+    kann: eine Umbenennung, eine Artkorrektur, eine Löschung. Bis
+    hierher hat KEINE davon das Raster angefasst, weil die Freischaltung
+    eine reine Sperrklinke war — also blieb eine Fehlerkennung
+    freigeschaltet, nachdem der Clip, der sie ausgelöst hat, längst
+    etwas anderes hieß: „Einmal freigeschaltet heißt anscheinend
+    freigeschaltet."
+
+    Im Hintergrund, weil ein Dateidurchlauf über das Archiv nichts in
+    einer Antwort auf einen Tap zu suchen hat; und best-effort, weil ein
+    misslungener Abgleich die Korrektur selbst nicht scheitern lassen
+    darf — der nächtliche Lauf holt ihn ohnehin nach.
+    """
+    with contextlib.suppress(Exception):
+        from ..species_board import resync_species_board
+
+        threading.Thread(
+            target=lambda: resync_species_board(app_state.store, app_state.storage_root),
+            name="species-board-resync",
+            daemon=True,
+        ).start()
 
 
 @bp.delete('/api/camera/<cam_id>/events/<event_id>')
@@ -98,6 +125,9 @@ def api_event_delete(cam_id, event_id):
     # every threshold this data will later be used to calibrate.
     if not event_id.startswith("tl_"):
         _ledger_verdict(cam_id, event_id, correct=False, source="web_delete")
+    # Der gelöschte Clip kann der einzige gewesen sein, der eine Art
+    # belegt hat — dann fällt ihr Abzeichen mit ihm.
+    _resync_species_board()
     return jsonify({"ok": True, "tl_cleaned": tl_cleaned, **result})
 
 
@@ -143,6 +173,11 @@ def api_event_delete_bulk(cam_id):
         deleted,
         len(failed),
     )
+    # Einmal für den ganzen Schwung, nicht einmal je Clip: der Abgleich
+    # liest ohnehin das gesamte Archiv, 500 Läufe wären 500-mal dieselbe
+    # Antwort.
+    if deleted:
+        _resync_species_board()
     return jsonify({"ok": True, "deleted": deleted, "failed": failed})
 
 
@@ -193,6 +228,10 @@ def api_event_labels(cam_id, event_id):
     # timeline still labelled with the class just taken off it. See
     # event_relabel.neutralize_sidecar_tracks.
     _relabel_sidecar(event, removed)
+    # „bird" aus den Labels zu nehmen löscht `bird_species` mit (siehe
+    # event_relabel.IDENTITY_FIELDS) — die Art verliert damit einen Beleg
+    # und womöglich ihren letzten.
+    _resync_species_board()
     # Only a changed top_label is a correction. Adding a secondary label
     # leaves the detector's verdict standing — recording that as "wrong"
     # would poison the corpus with events the user never disputed.
@@ -280,6 +319,11 @@ def api_event_species(cam_id, event_id):
             record_confirmed_video(app_state.storage_root, species)
     store.update_event(cam_id, event_id, event)
     _ledger_verdict(cam_id, event_id, correct=True, source="web", species=species)
+    # Die Korrektur gibt einer Art einen Beleg und nimmt der vorher
+    # eingetragenen genau diesen einen weg. Beides gehört ins Raster —
+    # der Abgleich sieht ohnehin beide Seiten in einem Lauf.
+    if species:
+        _resync_species_board()
     return jsonify({"ok": True, "bird_species": event.get("bird_species")})
 
 

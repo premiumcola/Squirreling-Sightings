@@ -346,6 +346,18 @@ def _run_daily_cleanup(first_run: bool = False):
         _sweep_bird_dossier_prebuild(log)
     except Exception as e:
         log.warning("[dossiers] prebuild sweep failed: %s", e)
+    # Das Sichtungs-Raster gegen das Archiv einnorden. Der Vogel-Nachlauf
+    # direkt darüber ist genau der Grund, warum es hier stehen muss: er
+    # benennt Clips über Nacht um, und bis dahin nahm das Raster nur an
+    # und gab nie etwas zurück. Der Lauf selbst schreibt sein Ergebnis
+    # (species_unlock.apply_species_tally loggt neu/zurückgenommen),
+    # deshalb hier nichts weiter als der Aufruf.
+    try:
+        from .species_board import resync_species_board
+
+        resync_species_board(app_state.store, app_state.storage_root)
+    except Exception as e:
+        log.warning("[sichtungen] Raster-Abgleich fehlgeschlagen: %s", e)
     if first_run:
         try:
             _sweep_species_headlines(log)

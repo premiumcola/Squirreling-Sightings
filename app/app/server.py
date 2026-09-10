@@ -591,8 +591,8 @@ _install_shutdown_hooks()
 
 # Boot-time migrations — see app/app/migrations.py. Each one spawns
 # its own daemon thread; safe to re-run; idempotent.
-from . import bird_species_backfill as _bird_backfill
 from . import migrations as _migrations
+from . import species_board as _species_board
 
 _migrations.cleanup_stale_timelapse_frames(storage_root=storage_root, settings=settings)
 # Tidy loose root-level <event_id>.json (+ .tracks.json) into their date
@@ -604,15 +604,16 @@ _migrations.generate_missing_thumbnails(storage_root=storage_root)
 # and paced — see the function's own note on why it must not race live
 # recording for cores.
 _migrations.generate_missing_scrub_sprites(storage_root=storage_root, store=app_state.store)
-# Arten, die im Archiv einen Namen tragen, aber nie ins Sichtungs-Raster
-# kamen: bis hierher trug NUR der Live-Weg ein, die nachträgliche
-# Artbestimmung nicht. Der Riss ist geflickt, aber ein Ereignis mit
-# fertigem `bird_species` wird nie wieder angefasst — also einmal die
-# Gegenrichtung. Idempotent: ein schon vergebenes Abzeichen bleibt samt
-# Erstsichtungsdatum unberührt.
+# Das Sichtungs-Raster gegen das Archiv einnorden: jede Art, die dort
+# steht, bekommt ihr Abzeichen und ihre echte Anzahl — und jede, die dort
+# NICHT mehr steht, verliert es wieder. Genau das fehlte: die Datei war
+# eine Sperrklinke, also blieb jede Fehlerkennung für immer
+# freigeschaltet, auch nachdem die Feinanalyse den Clip längst umbenannt
+# hatte. Idempotent; das Erstsichtungsdatum eines schon vergebenen
+# Abzeichens bleibt unberührt.
 threading.Thread(
-    target=lambda: _bird_backfill.reconcile_species_unlocks(app_state.store, storage_root),
-    name="species-unlock-reconcile",
+    target=lambda: _species_board.resync_species_board(app_state.store, storage_root),
+    name="species-board-resync",
     daemon=True,
 ).start()
 # Clips whose producer died mid-chain (restart, ffmpeg hang, power cut).

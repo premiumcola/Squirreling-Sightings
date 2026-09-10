@@ -299,44 +299,11 @@ def find_backfill_candidates(
             yield camera_id, event.get("event_id") or jf.stem, event
 
 
-def reconcile_species_unlocks(store, storage_root: Path) -> dict:
-    """Jede Art, die IRGENDWO im Archiv steht, ins Sichtungs-Raster holen.
-
-    Der eigentliche Riss war, dass die nachträgliche Artbestimmung die
-    Freischaltung nicht kannte. Der ist oben geflickt — aber nur für
-    KÜNFTIGE Durchläufe: ein Ereignis, das seinen `bird_species` schon
-    trägt, kommt an `_needs_backfill` nicht mehr vorbei und wird nie
-    wieder angefasst. Genau in diesem Zustand standen die sechs
-    Kohlmeisen-Aufnahmen — benannt, im Steckbrief gezählt, im Raster
-    gesperrt.
-
-    Deshalb einmal die Gegenrichtung: über dieselben Dateien laufen und
-    jede bereits vergebene Art eintragen. Idempotent — `unlock_species`
-    lässt eine ID, die schon dasteht, unberührt samt Erstsichtungsdatum,
-    also kostet ein zweiter Lauf nichts und ändert nichts.
-    """
-    events_dir = getattr(store, "events_dir", None)
-    if events_dir is None or not Path(events_dir).exists():
-        return {"seen": 0, "unlocked": 0}
-    seen: dict[str, str] = {}
-    for cam_dir in (d for d in Path(events_dir).iterdir() if d.is_dir()):
-        for jf in cam_dir.rglob("*.json"):
-            if jf.name.endswith(".tracks.json"):
-                continue
-            try:
-                species = (json.loads(jf.read_text(encoding="utf-8")) or {}).get("bird_species")
-            except Exception:
-                continue
-            if species:
-                seen.setdefault(species, cam_dir.name)
-    unlocked = sum(1 for sp, cam in seen.items() if unlock_species(storage_root, sp, camera_id=cam))
-    if unlocked:
-        log.info(
-            "[migration] Sichtungen nachgetragen: %d von %d Arten im Archiv",
-            unlocked,
-            len(seen),
-        )
-    return {"seen": len(seen), "unlocked": unlocked}
+# Der Gegenlauf über das Archiv — „welche Arten stehen dort JETZT?" —
+# wohnt in `species_board.py`. Er hieß hier `reconcile_species_unlocks`
+# und trug nur EIN: er konnte eine Art nachtragen, aber keine
+# zurücknehmen, und war damit blind für genau die Änderung, die
+# `resettle_headline_species` weiter unten am laufenden Band vornimmt.
 
 
 def _headline_candidates_from_event(event: dict) -> list[tuple]:

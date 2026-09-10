@@ -2,23 +2,24 @@
 
 Migrated from server.py during R01.2. The route bodies are byte-for-
 byte the originals; references to module-level state in server.py
-have been rewritten to flow through `app_state`. Achievement
-persistence (`_load_achievements`, `_save_achievements`) lives here
-because nothing else in the codebase reads or writes
-`achievements.json`.
+have been rewritten to flow through `app_state`.
+
+Achievement persistence (`_load_achievements`, `_save_achievements`)
+lives here, but this is no longer the only writer of
+`achievements.json`: `species_unlock.py` owns the species half of that
+file (eintragen, und seit dem Raster-Abgleich auch zurücknehmen). Beide
+teilen sich deshalb DAS Schloss dieser Datei — siehe `_ach_lock` unten.
 """
 
 from __future__ import annotations
 
 import json as _json_mod
 import logging
-import threading as _threading_mod
-from datetime import datetime
 
 import cv2
 from flask import Blueprint, jsonify, request
 
-from .. import app_state
+from .. import app_state, species_unlock as _species_unlock
 from ..cat_identity import IdentityRegistry
 from ..storage import _atomic_write_text
 
@@ -102,7 +103,16 @@ def api_person_flags(name):
 
 # ── Achievements ────────────────────────────────────────────────────────────
 
-_ach_lock = _threading_mod.Lock()
+# EIN Schloss über EINER Datei. `species_unlock` schreibt dieselbe
+# `achievements.json` — die Freischaltung einer Art und der nächtliche
+# Abgleich — und hielt dafür sein eigenes. Zwei Schlösser über einer
+# Datei sind kein Schloss: die Quest-Auswertung läuft nach JEDEM
+# Bewegungsereignis und schreibt die Datei komplett neu, also konnte sie
+# eine gerade eingetragene Art wieder wegschreiben. Seit der Abgleich
+# auch ZURÜCKNIMMT, ginge es auch andersherum — ein zurückgenommenes
+# Abzeichen käme aus dem Quest-Puffer wieder hoch, also genau der Fehler,
+# den der Abgleich beheben soll.
+_ach_lock = _species_unlock._LOCK
 
 
 def _ach_path():
@@ -156,26 +166,12 @@ def api_achievements_quests_reevaluate():
     return jsonify(result)
 
 
-@bp.post('/api/achievements/unlock')
-def api_achievements_unlock():
-    payload = request.get_json(force=True, silent=True) or {}
-    species_id = (payload.get("id") or "").strip().lower()
-    if not species_id:
-        return jsonify({"ok": False, "error": "id fehlt"}), 400
-    with _ach_lock:
-        data = _load_achievements()
-        already = species_id in data
-        if not already:
-            data[species_id] = {
-                "date": datetime.now().isoformat(timespec="seconds"),
-                "camera_id": payload.get("camera_id", ""),
-                "species": payload.get("species", species_id),
-                "count": 1,
-            }
-        else:
-            data[species_id]["count"] = data[species_id].get("count", 1) + 1
-        _save_achievements(data)
-    return jsonify({"ok": True, "already_had": already, "achievements": data})
+# Hier stand ein POST /api/achievements/unlock, das eine Art von Hand
+# freischaltete und ihren Zähler hochzählte. Es hatte im ganzen Projekt
+# keinen einzigen Aufrufer — und wäre seit dem Raster-Abgleich auch
+# falsch: die Zahl auf der Kachel ist ab jetzt eine Frage ans Archiv,
+# also hätte der nächste Lauf jede Freischaltung von Hand wieder
+# einkassiert. Wer eine Art eintragen will, gibt ihr einen Clip.
 
 
 # ── Bird-species backfill ────────────────────────────────────────────────

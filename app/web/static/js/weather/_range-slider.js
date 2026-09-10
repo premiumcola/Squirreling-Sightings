@@ -15,14 +15,20 @@
 // thumb. On a log track every doubling gets equal travel, which is how
 // the choice actually feels.
 //
-// THE VALUE RIDES ON THE BAR. A first pass put a symbol at each end and
-// no text at all; on a narrow screen the two stacked up on the left and
-// read as a riddle — „Was sollen die symbole zeichen beide links???".
-// They are gone. What the control shows instead is the one thing it is
-// actually choosing, written across the middle of the track („in der
-// mitte irgendwo schon der aktuell gewählte zeitraum! In h day
-// months!") and scaled to the unit that fits: hours, then days, then
-// months.
+// THE LABEL LIVES IN THE FREE PART OF THE TRACK. It sat centred over the
+// middle at first, where the handle kept colliding with it. Now each end
+// carries a marker that fades in as the handle moves AWAY from it, so
+// whatever is on screen is always in the space the handle just vacated:
+//
+//   handle far left  → the RIGHT side shows a small mark: a short window
+//   handle far right → the LEFT side shows a large one: a wide window
+//
+// „wenn ich links schiebe, dann will ich auf der Rechtsseite [...] irgend
+// 'n Symbol haben, was für klein sein steht und langsam kräftiger wird
+// [...] und wenn ich's nach rechts schiebe, verschwindet das Symbol
+// rechts [...] und links taucht dann das große Symbol auf [...] oder der
+// Text, wie viel wie weit eben der Zeitraum reicht." Both — the mark
+// says which end of the scale, the text says the actual span.
 //
 // The extent comes from the payload (`_history.py::history` reports the
 // buffer's own oldest/newest/count) rather than being inferred from the
@@ -110,15 +116,46 @@ function _boundsOf(input, extent) {
   return rangeBounds(archiveSpanHours(extent), input.dataset.minHours, input.dataset.maxHours);
 }
 
-/** Paint the readout and the fill for the handle's current position.
+/** Where the crossfade between the two end markers happens, as a
+ *  fraction of the track. Outside this band exactly one of them is up;
+ *  inside, they trade places. Narrow on purpose — two half-visible
+ *  markers is the muddy state worth passing through quickly. */
+const _CROSSFADE = [0.34, 0.66];
+
+/**
+ * PURE: how strongly each end marker reads for a handle at `tick`.
+ *
+ * `near` is the SMALL mark on the right — full while the handle sits
+ * left, gone once it has travelled past the band. `far` is the large one
+ * on the left and does the opposite. Each is only ever shown in the part
+ * of the track the handle is not occupying.
+ */
+export function zoneOpacity(tick) {
+  const t = Math.max(0, Math.min(1, (Number(tick) || 0) / TICKS));
+  const [lo, hi] = _CROSSFADE;
+  const far = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
+  return { near: 1 - far, far };
+}
+
+/** Paint the markers and the fill for the handle's current position.
  *
  * Optional chaining throughout, deliberately: the node tests stub
  * `document` with plain objects that carry no `style`, the same
  * convention every other module here is tested under. Painting is
  * decoration — it must never be the reason a render throws. */
 function _paintRange(tick, bounds) {
-  const out = byId('weatherRangeValue');
-  if (out) out.textContent = formatRangeHours(hoursAtTick(tick, bounds));
+  const text = formatRangeHours(hoursAtTick(tick, bounds));
+  const o = zoneOpacity(tick);
+  for (const [id, opacity] of [
+    ['weatherRangeNear', o.near],
+    ['weatherRangeFar', o.far],
+  ]) {
+    const zone = byId(id);
+    if (!zone) continue;
+    if (zone.style) zone.style.opacity = String(opacity);
+    const label = zone.querySelector?.('.ws-range-zone-text');
+    if (label) label.textContent = text;
+  }
   // The filled part of the track, as a percentage — the "slide to
   // unlock" fill behind the thumb, painted by CSS off this one variable.
   byId('weatherRangeSlider')?.style?.setProperty?.('--ws-range-fill', `${(tick / TICKS) * 100}%`);

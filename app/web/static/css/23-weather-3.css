@@ -196,22 +196,47 @@
   cursor: default;
 }
 
-/* The chosen span, centred ON the bar. `pointer-events: none` is
-   load-bearing: every tap and drag has to reach the input underneath it,
-   including the ones that land on the text. The shadow keeps it legible
-   where the white handle passes behind it. */
-.ws-range-value {
+/* THE TWO END MARKERS. Each sits in one half of the track and fades as
+   the handle travels toward it, so what is on screen is always in the
+   space the handle has just vacated — the left one for a wide window,
+   the right one for a short one, and the size of its dot is the meaning.
+   Written by weather/_range-slider.js::zoneOpacity.
+
+   `pointer-events: none` is load-bearing: every tap and drag has to
+   reach the input underneath, including the ones that land on a marker.
+   The shadow keeps the text legible where the white handle passes
+   behind it. */
+.ws-range-zone {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
   pointer-events: none;
+  color: #eaf6ff;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #eaf6ff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  transition: opacity 0.12s linear;
+}
+/* Inset by the handle's own radius plus a little, so a marker never
+   sits half under the disc at the end of its travel. */
+.ws-range-zone--far {
+  left: 14px;
+}
+.ws-range-zone--near {
+  right: 14px;
+}
+.ws-range-zone svg {
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-range-zone {
+    transition: none;
+  }
 }
 
 /* Chart svg fills its wrapper. Height is fixed on desktop, slightly

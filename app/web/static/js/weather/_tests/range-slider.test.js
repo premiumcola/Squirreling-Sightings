@@ -17,6 +17,7 @@ import {
   hoursAtTick,
   tickAtHours,
   formatRangeHours,
+  zoneOpacity,
 } from '../_range-slider.js';
 
 const ext = (oldest, newest, count = 99) => ({ oldest, newest, count });
@@ -151,4 +152,50 @@ test('every position on the scale produces a readable label', () => {
     const text = formatRangeHours(hoursAtTick(tick, b));
     assert.match(text, /^\d+ (h|d|Mon\.)$/, `tick ${tick} read as "${text}"`);
   }
+});
+
+// ── The two end markers ─────────────────────────────────────────────────
+// „wenn ich links schiebe, dann will ich auf der Rechtsseite [...] irgend
+// 'n Symbol haben, was für klein sein steht und langsam kräftiger wird
+// [...] und wenn ich's nach rechts schiebe, verschwindet das Symbol
+// rechts [...] und links taucht dann das große Symbol auf."
+//
+// So each marker lives in the half of the track the handle is NOT in,
+// and fades as the handle comes toward it.
+
+test('a handle at the near end lights the SMALL mark, on the right', () => {
+  const o = zoneOpacity(0);
+  assert.equal(o.near, 1);
+  assert.equal(o.far, 0);
+});
+
+test('a handle at the far end lights the LARGE mark, on the left', () => {
+  const o = zoneOpacity(1000);
+  assert.equal(o.far, 1);
+  assert.equal(o.near, 0);
+});
+
+test('the two always sum to one — never both solid, never both gone', () => {
+  for (let tick = 0; tick <= 1000; tick += 50) {
+    const o = zoneOpacity(tick);
+    assert.ok(Math.abs(o.near + o.far - 1) < 1e-9, `tick ${tick}: ${JSON.stringify(o)}`);
+  }
+});
+
+test('the change is gradual, not a switch', () => {
+  const a = zoneOpacity(400);
+  const b = zoneOpacity(500);
+  const c = zoneOpacity(600);
+  assert.ok(a.far > 0 && a.far < 1, 'mid-band must be part-way, not snapped');
+  assert.ok(b.far > a.far && c.far > b.far, 'it has to move in one direction');
+});
+
+test('outside the crossfade band exactly one marker is up', () => {
+  assert.equal(zoneOpacity(200).near, 1);
+  assert.equal(zoneOpacity(800).far, 1);
+});
+
+test('junk positions still produce drawable opacities', () => {
+  const o = zoneOpacity('nope');
+  assert.ok(Number.isFinite(o.near) && Number.isFinite(o.far));
 });

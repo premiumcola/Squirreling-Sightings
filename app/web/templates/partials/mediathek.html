@@ -226,9 +226,22 @@
             value="600"
             aria-label="Zeitfenster – nah bis fern"
           />
-          {# Rides ON the bar, never in the way of it: pointer-events:none, so every tap and
-          drag reaches the input underneath. #}
-          <output class="ws-range-value" id="weatherRangeValue" for="weatherRangeSlider">24 h</output>
+          {# The two end markers. Each rides in the part of the track the handle is NOT in
+          and fades as the handle comes toward it — see weather/_range-slider.js::zoneOpacity.
+          Left = a wide window, right = a short one; the size of the dot IS the meaning.
+          pointer-events:none throughout, so every tap and drag reaches the input under them. #}
+          <span class="ws-range-zone ws-range-zone--far" id="weatherRangeFar" aria-hidden="true">
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" fill="currentColor" />
+            </svg>
+            <span class="ws-range-zone-text">24 h</span>
+          </span>
+          <span class="ws-range-zone ws-range-zone--near" id="weatherRangeNear" aria-hidden="true">
+            <span class="ws-range-zone-text">24 h</span>
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+              <circle cx="10" cy="10" r="3" fill="currentColor" />
+            </svg>
+          </span>
         </span>
         <!-- A custom drag-zoom on the chart below sets a window the slider
                    cannot express; this chip is the discoverable way back.

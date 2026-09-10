@@ -394,3 +394,46 @@ def test_the_projection_reports_off_rather_than_omitting_the_key(client):
     row = _row(client({}))
     assert "record_audio" in row
     assert row["record_audio"] is False
+
+
+# ── The pre-roll's frame rate is a REAL number ──────────────────────────
+# `-framerate` was written as `max(1, int(fps))`, and the caller's own
+# rate is routinely fractional: the pre-roll is built from analysis-loop
+# stills at ~1.5 fps. Rounding that to 1 or 2 stretched or squeezed the
+# segment against the window it was cut from, so a pre-roll labelled 6 s
+# played for a fraction of it — „der Vorlauf ist gefühlt eine halbe
+# Sekunde, sollte aber ja sechs Sekunden sein".
+
+from app.media_encode import _framerate_arg  # noqa: E402
+
+
+def _framerate_of(cmd):
+    return cmd[cmd.index("-framerate") + 1]
+
+
+def test_a_fractional_rate_survives_into_the_command():
+    assert _framerate_of(build_jpeg_frames_cmd(Path("/s/pre.mp4"), 1.4881)) == "1.4881"
+
+
+def test_a_whole_rate_still_reads_as_a_whole_number():
+    assert _framerate_of(build_jpeg_frames_cmd(Path("/s/pre.mp4"), 3.0)) == "3"
+
+
+def test_the_rate_never_reaches_ffmpeg_as_zero():
+    """0 fps is not a rate — it is a division by zero one layer down."""
+    for bad in (0, -5, 0.0):
+        assert float(_framerate_arg(bad)) > 0
+
+
+def test_junk_falls_back_to_something_playable():
+    assert float(_framerate_arg("nonsense")) > 0
+    assert float(_framerate_arg(None)) > 0
+
+
+def test_nine_stills_over_six_seconds_encode_as_six_seconds():
+    """The arithmetic the operator actually saw go wrong: at 1.5 fps the
+    old floor produced 1 fps and nine seconds of pre-roll, or rounded up
+    to 2 and produced four and a half. The real rate produces six."""
+    frames, span = 9, 6.0
+    rate = float(_framerate_arg(frames / span))
+    assert abs(frames / rate - span) < 0.05

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import cv2
 
-import app.camera_runtime._recording._ring_splice as ring_splice_mod
+import app.camera_runtime._recording._preroll as preroll_mod
 from app.camera_runtime._recording._preroll import MotionPrerollMixin
 from app.camera_runtime._recording._ring_splice import RingPrerollSpliceMixin
 
@@ -45,16 +45,19 @@ class _FakeCap:
 
 
 # ── _probe_duration_s ────────────────────────────────────────────────────
+# It lives in _preroll.py now, beside the `_is_playable` probe it is a
+# variant of — both splice paths report what actually landed on disk, so
+# a second copy here was one probe too many.
 
 
 def test_probe_duration_s_computes_frames_over_fps(tmp_path, monkeypatch):
-    monkeypatch.setattr(ring_splice_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=60, fps=30.0))
-    assert RingPrerollSpliceMixin._probe_duration_s(tmp_path / "x.mp4") == 2.0
+    monkeypatch.setattr(preroll_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=60, fps=30.0))
+    assert MotionPrerollMixin._probe_duration_s(tmp_path / "x.mp4") == 2.0
 
 
 def test_probe_duration_s_is_zero_when_unreadable(tmp_path, monkeypatch):
-    monkeypatch.setattr(ring_splice_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=0, fps=0.0))
-    assert RingPrerollSpliceMixin._probe_duration_s(tmp_path / "x.mp4") == 0.0
+    monkeypatch.setattr(preroll_mod.cv2, "VideoCapture", lambda p: _FakeCap(fc=0, fps=0.0))
+    assert MotionPrerollMixin._probe_duration_s(tmp_path / "x.mp4") == 0.0
 
 
 # ── the splice: normal cases ─────────────────────────────────────────────
@@ -73,7 +76,7 @@ def test_a_single_segment_is_copied_then_spliced(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(MotionPrerollMixin, "_concat_segments", staticmethod(_fake_concat))
-    monkeypatch.setattr(RingPrerollSpliceMixin, "_probe_duration_s", staticmethod(lambda p: 2.5))
+    monkeypatch.setattr(MotionPrerollMixin, "_probe_duration_s", staticmethod(lambda p: 2.5))
     monkeypatch.setattr(MotionPrerollMixin, "_is_playable", staticmethod(lambda p: True))
     splicer = _RingSplicer()
 
@@ -104,7 +107,7 @@ def test_multiple_segments_are_joined_then_spliced(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(MotionPrerollMixin, "_concat_segments", staticmethod(_fake_concat))
-    monkeypatch.setattr(RingPrerollSpliceMixin, "_probe_duration_s", staticmethod(lambda p: 1.8))
+    monkeypatch.setattr(MotionPrerollMixin, "_probe_duration_s", staticmethod(lambda p: 1.8))
     monkeypatch.setattr(MotionPrerollMixin, "_is_playable", staticmethod(lambda p: True))
     splicer = _RingSplicer()
 
@@ -163,7 +166,7 @@ def test_falls_back_when_the_joined_preroll_is_unreadable(tmp_path, monkeypatch)
         "_concat_segments",
         staticmethod(lambda *a, **k: splice_calls.append(1) or True),
     )
-    monkeypatch.setattr(RingPrerollSpliceMixin, "_probe_duration_s", staticmethod(lambda p: 0.0))
+    monkeypatch.setattr(MotionPrerollMixin, "_probe_duration_s", staticmethod(lambda p: 0.0))
     splicer = _RingSplicer()
 
     achieved = splicer._splice_ring_preroll_onto_clip(vid_path, [seg], "evt5", tmp_path)
@@ -178,7 +181,7 @@ def test_falls_back_when_the_splice_onto_clip_fails(tmp_path, monkeypatch):
     vid_path.write_bytes(b"ORIGINAL")
     seg = tmp_path / "1000.mp4"
     seg.write_bytes(b"X" * 2000)
-    monkeypatch.setattr(RingPrerollSpliceMixin, "_probe_duration_s", staticmethod(lambda p: 3.0))
+    monkeypatch.setattr(MotionPrerollMixin, "_probe_duration_s", staticmethod(lambda p: 3.0))
     monkeypatch.setattr(MotionPrerollMixin, "_concat_segments", staticmethod(lambda *a, **k: False))
     splicer = _RingSplicer()
 
@@ -198,7 +201,7 @@ def test_falls_back_when_the_final_spliced_result_is_unreadable(tmp_path, monkey
         Path(out_path).write_bytes(b"CORRUPT" * 200)
         return True
 
-    monkeypatch.setattr(RingPrerollSpliceMixin, "_probe_duration_s", staticmethod(lambda p: 3.0))
+    monkeypatch.setattr(MotionPrerollMixin, "_probe_duration_s", staticmethod(lambda p: 3.0))
     monkeypatch.setattr(MotionPrerollMixin, "_concat_segments", staticmethod(_fake_concat))
     monkeypatch.setattr(MotionPrerollMixin, "_is_playable", staticmethod(lambda p: False))
     splicer = _RingSplicer()

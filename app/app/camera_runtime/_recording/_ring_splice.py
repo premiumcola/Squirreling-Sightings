@@ -14,8 +14,6 @@ import contextlib
 import shutil
 from pathlib import Path
 
-import cv2
-
 from .._consts import log
 from ._preroll import preroll_audio_wanted
 
@@ -93,16 +91,3 @@ class RingPrerollSpliceMixin:
             with contextlib.suppress(Exception):
                 if spliced_path.exists():
                     spliced_path.unlink()
-
-    @staticmethod
-    def _probe_duration_s(path: Path) -> float:
-        """Clip length in seconds, or 0.0 — the same frames/fps probe
-        ``_is_playable`` already runs, minus the pass/fail threshold."""
-        try:
-            cap = cv2.VideoCapture(str(path))
-            frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-            fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
-            cap.release()
-            return round(frames / fps, 2) if fps > 0 and frames > 0 else 0.0
-        except Exception:
-            return 0.0

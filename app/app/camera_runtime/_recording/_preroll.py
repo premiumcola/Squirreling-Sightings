@@ -325,10 +325,15 @@ class MotionPrerollMixin:
         # halves are required.
         want_audio = preroll_audio_wanted(self.cfg, vid_path)
         try:
+            # The REAL rate, unrounded. Rounding it to a whole number is
+            # what made a pre-roll play for a different length than the
+            # window it was cut from: the analysis loop runs at ~1.5 fps,
+            # and 1.5 rounded to 2 squeezes nine frames into 4.5 s of a
+            # 6 s window. See media_encode._framerate_arg.
             if not encode_jpeg_frames_to_mp4(
                 preroll_frames,
                 preroll_path,
-                int(round(pre_fps)),
+                pre_fps,
                 crf=22,
                 log_tag=f"[{self.camera_id}]",
                 silent_audio=want_audio,
@@ -361,9 +366,16 @@ class MotionPrerollMixin:
                     event_id,
                 )
                 return 0.0
-            # Atomic on the same filesystem (both paths share day_dir).
+            # WHAT LANDED, not what was asked for. This used to return
+            # `span` — the time the buffered stills covered — while the
+            # segment on disk was encoded at a rounded frame rate and so
+            # ran for a different length. The rail then drew a 6 s band
+            # over a pre-roll that plays a fraction of that. Measuring the
+            # file is the only answer that cannot drift from it; the ring
+            # path (`_ring_splice.py`) has always done exactly this.
+            measured = self._probe_duration_s(preroll_path)
             spliced_path.replace(vid_path)
-            return round(span, 2)
+            return measured if measured > 0 else round(span, 2)
         except Exception as e:
             log.warning("[%s] pre-roll splice error for %s: %s", self.camera_id, event_id, e)
             return 0.0
@@ -384,6 +396,25 @@ class MotionPrerollMixin:
         except Exception:
             return False
         return r.returncode == 0 and out_path.exists() and out_path.stat().st_size >= 1024
+
+    @staticmethod
+    def _probe_duration_s(path: Path) -> float:
+        """Clip length in seconds, or 0.0 — the same frames/fps probe
+        ``_is_playable`` runs, minus the pass/fail threshold.
+
+        Lives here, beside its twin, rather than in ``_ring_splice.py``
+        where it started: BOTH splice paths have to report what actually
+        landed on disk, so a second copy over there was one probe too
+        many and left this file reaching into a sibling mixin for it.
+        """
+        try:
+            cap = cv2.VideoCapture(str(path))
+            frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+            cap.release()
+            return round(frames / fps, 2) if fps > 0 and frames > 0 else 0.0
+        except Exception:
+            return 0.0
 
     @staticmethod
     def _is_playable(path: Path, min_frames: int = 3) -> bool:

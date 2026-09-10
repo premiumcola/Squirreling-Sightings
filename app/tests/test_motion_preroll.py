@@ -200,8 +200,12 @@ def test_splice_success_replaces_the_clip_and_reports_the_real_span(tmp_path, mo
     frames = [(1000.0 + i * 0.35, b"x") for i in range(9)]  # ~2.8s span
     achieved = _Splicer()._splice_preroll_onto_clip(vid_path, frames, "evt1", tmp_path)
 
-    expected_span = frames[-1][0] - frames[0][0]
-    assert achieved == pytest.approx(round(expected_span, 2), abs=0.01)
+    # THE MEASURED FILE, not the span of the timestamps. The stub above
+    # reports 30 frames at 10 fps = 3.0 s; the stills covered 2.8 s. It
+    # used to return the 2.8 and the rail drew a band the clip did not
+    # contain — „der Vorlauf ist gefühlt eine halbe Sekunde, sollte aber
+    # ja sechs Sekunden sein". Only the file can say what plays.
+    assert achieved == pytest.approx(3.0, abs=0.01)
     assert vid_path.read_bytes() == b"SPLICED-RESULT" * 100
     assert not (tmp_path / "evt1.preroll.mp4").exists(), "temp pre-roll segment left on disk"
     assert not (tmp_path / "evt1.spliced.mp4").exists(), "temp spliced file left on disk"
@@ -228,7 +232,9 @@ def test_splice_with_a_not_yet_full_ring_reports_the_shorter_real_span(tmp_path,
     frames = [(1000.0, b"x"), (1000.6, b"x")]  # only 0.6s buffered
     achieved = _Splicer()._splice_preroll_onto_clip(vid_path, frames, "evt2", tmp_path)
 
-    assert achieved == pytest.approx(0.6, abs=0.01)
+    # 10 frames at 15 fps, per the stub — the real length of what was
+    # written, which is the only number worth reporting.
+    assert achieved == pytest.approx(0.67, abs=0.01)
 
 
 # ── The splice: fallback / failure modes ────────────────────────────────
@@ -387,7 +393,9 @@ def test_splice_falls_back_to_stills_when_the_ring_is_unusable(tmp_path, monkeyp
         vid_path, frames, "evt8", tmp_path, ring_segments=[seg]
     )
 
-    assert achieved == pytest.approx(0.6, abs=0.01)
+    # The stills path ran and reported what IT produced (30 frames at
+    # 10 fps, per the stub) — not the 0.0 the ring handed back.
+    assert achieved == pytest.approx(3.0, abs=0.01)
     assert vid_path.read_bytes() == b"SPLICED" * 200
 
 

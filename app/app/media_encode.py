@@ -104,9 +104,24 @@ def build_reencode_cmd(raw_path: Path, vid_path: Path, *, record_audio: bool) ->
     return cmd
 
 
+def _framerate_arg(fps: float) -> str:
+    """ffmpeg's `-framerate`, as a real number with a sane floor.
+
+    Kept separate so the rounding rule is one thing in one place — and
+    so a test can state it without building a whole command line.
+    """
+    try:
+        rate = float(fps)
+    except (TypeError, ValueError):
+        rate = 1.0
+    if not (rate > 0.01):
+        rate = 0.01
+    return f"{rate:.4f}".rstrip("0").rstrip(".")
+
+
 def build_jpeg_frames_cmd(
     out_path: Path,
-    fps: int,
+    fps: float,
     *,
     crf: int = 23,
     preset: str = "fast",
@@ -131,7 +146,15 @@ def build_jpeg_frames_cmd(
         "-vcodec",
         "mjpeg",
         "-framerate",
-        str(max(1, int(fps))),
+        # A REAL rate, not a whole number. It used to be `max(1, int(fps))`,
+        # and the caller's own rate is routinely fractional: the motion
+        # pre-roll is built from analysis-loop stills at ~1.5 fps, so
+        # rounding it to 1 or 2 stretched or squeezed the segment against
+        # the span it was supposed to cover — a pre-roll labelled 6 s that
+        # plays for a fraction of that, „der Vorlauf ist gefühlt eine halbe
+        # Sekunde, sollte aber ja sechs Sekunden sein". ffmpeg takes a
+        # decimal here; the floor stays, because 0 fps is not a rate.
+        _framerate_arg(fps),
         "-i",
         "pipe:0",
     ]
@@ -157,7 +180,7 @@ def build_jpeg_frames_cmd(
 def encode_jpeg_frames_to_mp4(
     frames: list[tuple[float, bytes]],
     out_path: Path,
-    fps: int,
+    fps: float,
     *,
     crf: int = 23,
     preset: str = "fast",

@@ -54,9 +54,24 @@
   --vp-tl-label-w: 104px;
 }
 
+/* On a phone the gutter is pure overhead: it is right-aligned, so what
+   the narrow screen actually shows is a column of EMPTY space down the
+   left edge — „die Spuren sind links beschriftet, relativ viel Platz ist
+   links am Handy. Vielleicht kann man das reduzieren". „#1 Vogel" needs
+   about 52 px at this size; anything longer ellipsised at 74 px too, so
+   the width was buying whitespace rather than words. */
 @media (max-width: 460px) {
   :root {
-    --vp-tl-label-w: 74px;
+    --vp-tl-label-w: 58px;
+  }
+  .vp-tl-lane-label {
+    padding-right: 5px;
+    font-size: 10.5px;
+  }
+}
+@media (max-width: 380px) {
+  :root {
+    --vp-tl-label-w: 50px;
   }
 }
 

@@ -300,3 +300,53 @@ test('the rail records on itself which population it drew', () => {
   tl.teardown();
   assert.equal(host.dataset.basis, undefined, 'a torn-down rail claims nothing');
 });
+
+// ── A lane the list below never mentions ────────────────────────────────
+// The post-clip worker records everything above the detector's raw floor
+// on purpose, and writes the LIVE spawn threshold beside it as
+// `gates.min_confidence`. The rail drew all of it, so a clip whose
+// object list named two Kohlmeisen and a Vogel grew a lane labelled
+// „#2 Person" that nothing below it mentioned.
+
+const _gated = (gate, tracks) => ({ gates: { min_confidence: gate }, tracks });
+const _track = (label, best_score) => ({
+  label,
+  best_score,
+  samples: [{ t: 0 }, { t: 1 }],
+});
+
+test('a track that never reached the live threshold gets no lane', () => {
+  const tracks = _gated(0.5, [_track('bird', 0.77), _track('person', 0.21)]);
+  const { basis, tracks: lanes } = timelineBasis({}, tracks);
+  assert.equal(basis, TL_BASIS_SIDECAR);
+  assert.deepEqual(
+    lanes.map((t) => t.label),
+    ['bird'],
+  );
+});
+
+test('a track exactly on the threshold is kept — the gate is a floor', () => {
+  const lanes = timelineBasis({}, _gated(0.5, [_track('bird', 0.5)])).tracks;
+  assert.equal(lanes.length, 1);
+});
+
+test('nothing left after the gate falls through to the clip aggregate', () => {
+  const item = {
+    whole_clip: { detections: [{ label: 'bird', score: 0.8, first_s: 0, last_s: 2 }] },
+  };
+  const { basis } = timelineBasis(item, _gated(0.5, [_track('person', 0.1)]));
+  assert.equal(basis, TL_BASIS_CLIP, 'a rail of nothing is worse than the coarser basis');
+});
+
+test('a sidecar with no gate recorded is drawn exactly as before', () => {
+  const lanes = timelineBasis(
+    {},
+    { tracks: [_track('bird', 0.77), _track('person', 0.21)] },
+  ).tracks;
+  assert.equal(lanes.length, 2, 'older sidecars must render byte-for-byte as they always did');
+});
+
+test('a track carrying no score at all is kept rather than guessed away', () => {
+  const lanes = timelineBasis({}, _gated(0.5, [{ label: 'bird', samples: [{ t: 0 }] }])).tracks;
+  assert.equal(lanes.length, 1);
+});

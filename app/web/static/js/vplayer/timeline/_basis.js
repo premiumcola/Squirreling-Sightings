@@ -178,8 +178,39 @@ function _trackForTriggerDet(det, atT) {
  *   clip — the end of the pre-roll. Falls back to 0.
  * @returns {{basis: string, tracks: Array}}
  */
+/**
+ * PURE: sidecar tracks worth drawing a labelled lane for.
+ *
+ * The post-clip worker records EVERYTHING above the detector's raw
+ * floor, deliberately: its sidecar is a visualisation of what the model
+ * saw, and it says so by writing the LIVE spawn threshold into
+ * `gates.min_confidence` beside the tracks (see tracking_worker/
+ * _payload.py). The rail was drawing all of it, at a permissiveness
+ * nothing else in the app applies — so a clip whose object list named
+ * two Kohlmeisen and a Vogel grew a lane labelled „#2 Person" that
+ * nothing below it mentioned: „bei der Einvogelspur plötzlich eine
+ * Person beschriftet, die ist aber unten gar nicht erkannt".
+ *
+ * A track that never once reached the threshold the live pipeline would
+ * have required is not a subject of this clip. It stays in the sidecar
+ * — nothing is deleted — it simply does not get a name on the rail.
+ *
+ * No gate recorded (a sidecar from before schema 4) → nothing is
+ * filtered, and those clips draw exactly as they always did.
+ */
+export function confidentTracks(tracks) {
+  const list = tracks && Array.isArray(tracks.tracks) ? tracks.tracks : null;
+  if (!list) return null;
+  const gate = Number(tracks?.gates?.min_confidence);
+  if (!Number.isFinite(gate) || gate <= 0) return list;
+  return list.filter((tr) => {
+    const best = Number(tr?.best_score ?? tr?.score);
+    return !Number.isFinite(best) || best >= gate;
+  });
+}
+
 export function timelineBasis(item, tracks, opts = {}) {
-  const sidecar = tracks && Array.isArray(tracks.tracks) ? tracks.tracks : null;
+  const sidecar = confidentTracks(tracks);
   if (sidecar && sidecar.length) return { basis: TL_BASIS_SIDECAR, tracks: sidecar };
   const clip = item?.whole_clip?.detections;
   if (Array.isArray(clip) && clip.length) {

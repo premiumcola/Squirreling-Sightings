@@ -23,6 +23,7 @@
 import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
+import { copyText } from '../core/clipboard.js';
 import { apiGet } from '../core/api.js';
 import { qaCause, REJECT_REASON_DE } from './_qa-cause.js';
 
@@ -70,7 +71,7 @@ async function _fetchQA(relpath) {
   return promise;
 }
 
-function _renderPill(card, qa) {
+function _renderPill(card, qa, item) {
   if (card.dataset.qaPainted === '1') return;
   card.dataset.qaPainted = '1';
   // tx518 — n/a means "no QA sidecar exists" (legacy build before the
@@ -93,7 +94,7 @@ function _renderPill(card, qa) {
   // the same strip. A coloured dot cannot collide with anything, and
   // everything the word said is one tap away in the panel behind it —
   // where it can be said properly instead of in one English adjective.
-  const cause = qaCause(qa);
+  const cause = qaCause(qa, item);
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = `mmc-qa-pill ${meta.cls}`;
@@ -110,15 +111,18 @@ function _renderPill(card, qa) {
 function _paintIntoCard(card) {
   const item = _itemFor(card);
   if (!item) {
-    _renderPill(card, null);
+    _renderPill(card, null, null);
     return;
   }
   const rel = _relpathOf(item);
   if (!rel) {
-    _renderPill(card, null);
+    _renderPill(card, null, null);
     return;
   }
-  _fetchQA(rel).then((qa) => _renderPill(card, qa));
+  // The ITEM travels with the sidecar: the cause block compares the
+  // encoder's own frame_count against the capture counter, and only the
+  // item carries it. See _qa-cause.js.
+  _fetchQA(rel).then((qa) => _renderPill(card, qa, item));
 }
 
 // IntersectionObserver — lazy-paint pills only on cards that
@@ -214,8 +218,8 @@ function _openModal(card, qa) {
  * quarters thrown away as unusable. The numbers show neither; the
  * sentence shows both. See _qa-cause.js.
  */
-function _causeHtml(qa) {
-  const c = qaCause(qa);
+function _causeHtml(qa, item) {
+  const c = qaCause(qa, item);
   if (!c) return '';
   const nums = c.numbers
     .map(
@@ -272,7 +276,7 @@ function _renderModal(item, qa) {
       ${
         qa
           ? `
-        ${_causeHtml(qa)}
+        ${_causeHtml(qa, item)}
         <div class="tl-qa-stats">
           <div class="tl-qa-stat"><span class="tl-qa-stat-num">${pb.declared_fps || 0}</span><span class="tl-qa-stat-lbl">declared fps</span></div>
           <div class="tl-qa-stat"><span class="tl-qa-stat-num">${pb.effective_fps || 0}</span><span class="tl-qa-stat-lbl">effective fps</span></div>
@@ -307,14 +311,18 @@ function _renderModal(item, qa) {
   const close = () => modal.remove();
   modal.querySelector('.tl-qa-close').addEventListener('click', close);
   modal.querySelector('.tl-qa-backdrop').addEventListener('click', close);
-  modal.querySelector('.tl-qa-copy').addEventListener('click', async () => {
-    const md = _markdownReport(qa, item);
-    try {
-      await navigator.clipboard.writeText(md);
-      showToast('QA-Bericht in der Zwischenablage', 'success');
-    } catch {
-      showToast('Kopieren fehlgeschlagen — manuell aus dem Modal lesen', 'error');
-    }
+  // core/clipboard.js, not navigator.clipboard directly. That API only
+  // exists in a SECURE CONTEXT and this app is served over plain http://
+  // on the LAN, so on the phone it is simply absent and every press
+  // answered „Kopieren fehlgeschlagen". The shared helper starts with the
+  // textarea path for exactly that reason — and it must be called
+  // synchronously from the handler, because iOS grants the clipboard only
+  // inside the original gesture and an `await` before the write loses it.
+  modal.querySelector('.tl-qa-copy').addEventListener('click', () => {
+    copyText(_markdownReport(qa, item), {
+      onOk: () => showToast('QA-Bericht in der Zwischenablage', 'success'),
+      onFail: () => showToast('Kopieren fehlgeschlagen — manuell aus dem Modal lesen', 'error'),
+    });
   });
   const rb = modal.querySelector('.tl-qa-rebuild');
   if (rb) {

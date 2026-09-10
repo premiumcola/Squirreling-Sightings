@@ -112,3 +112,45 @@ test('eine leere Uebersicht ist null, keine Null-Zeile', () => {
   assert.equal(qaSummary([]), null);
   assert.equal(qaSummary(null), null);
 });
+
+// ── Der Encoder zählt, nicht die Buchführung ────────────────────────────
+// Ein Tagesvideo mit `frame_count: 388` wurde als „8 Bilder · nur 1 % der
+// geplanten" gemeldet, während es sichtbar durchläuft — „ich seh ja unten
+// die Zeit durchrennen [...] es wurden sehr viele Bilder aufgenommen,
+// nicht nur acht Stück". `frame_count` schreibt der Encoder über die
+// Bilder, die er ffmpeg gefüttert hat; `captured_frames` ist die
+// Buchführung der Aufnahme. Wo beides vorliegt, gilt die Messung.
+
+const MISCOUNTED = {
+  quality_grade: 'red',
+  capture: { expected_frames: 1350, captured_frames: 8, rejected_frames: 0, reject_reasons: {} },
+  playback: { duplicate_ratio: 0.63, duration_s: 90, frames_in_file: 2255 },
+};
+
+test('der Encoder-Zaehler schlaegt den Aufnahme-Zaehler', () => {
+  const c = qaCause(MISCOUNTED, { frame_count: 388 });
+  const bilder = c.numbers.find((n) => n.label === 'Bilder im Video');
+  assert.equal(bilder.value, '388', 'nicht die 8 aus _stats.json');
+});
+
+test('und der Prozentsatz rechnet mit der Messung', () => {
+  const c = qaCause(MISCOUNTED, { frame_count: 388 });
+  assert.match(c.headline, /29 %/, '388 von 1350, nicht 1 %');
+});
+
+test('der widersprechende Zaehler wird benannt, nicht verschwiegen', () => {
+  const c = qaCause(MISCOUNTED, { frame_count: 388 });
+  assert.match(c.detail, /8/);
+  assert.match(c.detail, /ignoriert/);
+});
+
+test('ohne frame_count bleibt alles wie bisher', () => {
+  const c = qaCause(STARVED, null);
+  assert.equal(c.kind, 'starved');
+  assert.match(c.headline, /9 %/);
+});
+
+test('ein plausibler Zaehler wird nicht kommentiert', () => {
+  const c = qaCause(STARVED, { frame_count: 120 });
+  assert.doesNotMatch(c.detail, /ignoriert/);
+});

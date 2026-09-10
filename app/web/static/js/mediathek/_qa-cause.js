@@ -56,7 +56,7 @@ function _pct(part, whole) {
  *            lever: string, numbers: Array<{value: string, label: string}>}|null}
  *   `null`, wenn es nichts zu erklären gibt (kein Sidecar, oder sauber).
  */
-export function qaCause(qa) {
+export function qaCause(qa, item) {
   if (!qa) return null;
   const grade = qa.quality_grade;
   if (!grade || grade === 'green' || grade === 'n/a' || grade === 'unknown') return null;
@@ -70,10 +70,23 @@ export function qaCause(qa) {
   const top = _topReason(cap.reject_reasons);
 
   // Alles, was den Bildprüfer überhaupt erreicht hat.
-  const reached = captured + rejected;
+  const reachedByCounter = captured + rejected;
+
+  // WIE VIELE BILDER WIRKLICH IN DAS VIDEO GINGEN. `frame_count` schreibt
+  // der Encoder selbst (camera_runtime/_timelapse_encode.py) und zählt
+  // die Bilder, die er ffmpeg gefüttert hat — eine Messung am Ergebnis.
+  // `captured_frames` kommt dagegen aus _stats.json, der Buchführung der
+  // Aufnahme, und die beiden können weit auseinanderliegen: ein Tag mit
+  // `frame_count: 388` wurde als „8 Bilder · nur 1 % der geplanten"
+  // gemeldet, während das Video sichtbar durchläuft — „ich seh ja unten
+  // die Zeit durchrennen [...] es wurden sehr viele Bilder aufgenommen,
+  // nicht nur acht Stück". Wo beides vorliegt, gilt die Messung.
+  const built = Number(item?.frame_count) || 0;
+  const reached = built || reachedByCounter;
+  const counterIsOff = built > 0 && reachedByCounter > 0 && built > reachedByCounter * 2;
 
   const numbers = [
-    { value: String(captured), label: 'Bilder im Video' },
+    { value: String(reached || '—'), label: 'Bilder im Video' },
     { value: String(expected || '—'), label: 'erwartet' },
     { value: String(rejected), label: 'verworfen' },
     { value: `${Math.round(dup * 100)} %`, label: 'Duplikate' },
@@ -105,7 +118,11 @@ export function qaCause(qa) {
       headline: `Nur ${_pct(reached, expected)} % der geplanten Bilder wurden überhaupt aufgenommen.`,
       detail:
         `Geplant waren ${expected}, angekommen sind ${reached}. ` +
-        'Der Encoder füllt die fehlende Zeit mit Wiederholungen — daher die Duplikate.',
+        'Der Encoder füllt die fehlende Zeit mit Wiederholungen — daher die Duplikate.' +
+        (counterIsOff
+          ? ` (Der Aufnahme-Zähler meldet nur ${reachedByCounter} — er passt nicht zum ` +
+            'Video und wird hier ignoriert.)'
+          : ''),
       lever:
         'Das Video neu zu bauen ändert nichts: die Bilder von damals fehlen. ' +
         'Zu prüfen ist, warum die Zeitraffer-Aufnahme so selten auslöst.',

@@ -504,7 +504,13 @@ class TestHeadlineOverTheWholeClip:
 
         candidates = tally.headline_candidates()
         assert len(candidates) == 2, "the ranking must see every species in the clip"
-        assert ("Blaumeise", "Cyanistes caeruleus") in candidates
+        # Each candidate now carries the evidence behind it as a third
+        # element (frames × best score) — see headline_candidates.
+        assert [(c[0], c[1]) for c in candidates] == [
+            ("Amsel", "Turdus merula"),
+            ("Blaumeise", "Cyanistes caeruleus"),
+        ]
+        assert all(c[2] > 0 for c in candidates), "the ranking needs the evidence, not just names"
 
     def test_the_headline_is_still_one_name(self):
         """Changing it to a list is a separate task with UI implications

@@ -605,3 +605,113 @@ def test_status_defaults_the_reason_when_bird_classifier_is_none():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ── Re-deciding the headline over an archive already on disk ────────────
+# The ranking rule changed underneath the archive: it used to promote the
+# rarest candidate however thin its support, so one 29 % frame of a
+# never-recorded bird outranked 110 frames at 70 % and the clip was filed
+# under a species that has never been in this garden. A rule only decides
+# NEW events; this is what carries the correction backwards.
+
+import json  # noqa: E402
+
+from app.bird_species_backfill import resettle_headline_species  # noqa: E402
+
+
+def _tallied(root, cam, event_id, headline, rows):
+    day = root / cam / "2026-09-07"
+    day.mkdir(parents=True, exist_ok=True)
+    (day / f"{event_id}.json").write_text(
+        json.dumps(
+            {
+                "event_id": event_id,
+                "camera_id": cam,
+                "bird_species": headline,
+                "whole_clip": {"species": rows},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return day / f"{event_id}.json"
+
+
+class _Store:
+    def __init__(self, root):
+        self.events_dir = root
+
+    def update_event(self, cam_id, event_id, event):
+        (self.events_dir / cam_id / "2026-09-07" / f"{event_id}.json").write_text(
+            json.dumps(event), encoding="utf-8"
+        )
+
+
+def _row(species, latin, frames, best):
+    return {"species": species, "species_latin": latin, "frames": frames, "best_score": best}
+
+
+def test_the_archive_case_is_corrected(tmp_path):
+    """The real clip 20260907-103617, with its real numbers."""
+    jf = _tallied(
+        tmp_path,
+        "cam1",
+        "20260907-103617-355700",
+        "Graureiher",
+        [_row("Elster", "Pica pica", 110, 0.6992), _row("Graureiher", "Ardea cinerea", 1, 0.2891)],
+    )
+
+    result = resettle_headline_species(_Store(tmp_path), lambda latin: None)
+
+    assert result["changed"] == 1
+    assert json.loads(jf.read_text(encoding="utf-8"))["bird_species"] == "Elster"
+
+
+def test_a_clip_the_rule_still_agrees_with_is_left_alone(tmp_path):
+    jf = _tallied(
+        tmp_path,
+        "cam1",
+        "20260907-110000-000000",
+        "Elster",
+        [_row("Elster", "Pica pica", 90, 0.8), _row("Amsel", "Turdus merula", 2, 0.3)],
+    )
+
+    result = resettle_headline_species(_Store(tmp_path), lambda latin: None)
+
+    assert result["changed"] == 0
+    assert json.loads(jf.read_text(encoding="utf-8"))["bird_species"] == "Elster"
+
+
+def test_a_second_run_changes_nothing(tmp_path):
+    _tallied(
+        tmp_path,
+        "cam1",
+        "20260907-103617-355700",
+        "Graureiher",
+        [_row("Elster", "Pica pica", 110, 0.7), _row("Graureiher", "Ardea cinerea", 1, 0.29)],
+    )
+    store = _Store(tmp_path)
+
+    assert resettle_headline_species(store, lambda latin: None)["changed"] == 1
+    assert resettle_headline_species(store, lambda latin: None)["changed"] == 0
+
+
+def test_a_single_species_clip_is_never_reconsidered(tmp_path):
+    """Nothing to decide between — and touching it would rewrite the
+    whole archive for no reason."""
+    _tallied(
+        tmp_path, "cam1", "20260907-120000-000000", "Elster", [_row("Elster", "Pica pica", 9, 0.8)]
+    )
+
+    assert resettle_headline_species(_Store(tmp_path), lambda latin: None)["examined"] == 0
+
+
+def test_tracks_sidecars_are_not_mistaken_for_events(tmp_path):
+    day = tmp_path / "cam1" / "2026-09-07"
+    day.mkdir(parents=True)
+    (day / "evt.tracks.json").write_text(json.dumps({"schema": 4, "tracks": []}), encoding="utf-8")
+
+    assert resettle_headline_species(_Store(tmp_path), lambda latin: None)["examined"] == 0
+
+
+def test_an_empty_archive_is_a_safe_no_op(tmp_path):
+    assert resettle_headline_species(_Store(tmp_path), None) == {"examined": 0, "changed": 0}

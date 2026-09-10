@@ -100,3 +100,65 @@ def test_duplicate_species_in_candidates_keeps_first_occurrence():
     ]
     lookup = _lookup({"Turdus merula": 2})
     assert pick_headline_species(candidates, lookup) == "Amsel"
+
+
+# ── Evidence gates the rarity promotion ─────────────────────────────────
+# Rarity alone was defensible when this saw ONE frame's detections. Fed a
+# whole clip's tally it stopped being so, and a real archive clip
+# (20260907-103617) proved it: filed under a bird that has never been in
+# this garden, on one 29 % frame, against 110 frames of Elster at 70 %.
+# „wie ist der da überhaupt draufgekommen?"
+
+
+def test_a_single_stray_frame_never_takes_the_headline():
+    """THE ARCHIVE CASE, with its real numbers."""
+    candidates = [
+        ("Elster", "Pica pica", 110 * 0.6992),
+        ("Graureiher", "Ardea cinerea", 1 * 0.2891),  # never recorded — used to win
+    ]
+    assert pick_headline_species(candidates, _lookup({"Pica pica": 19})) == "Elster"
+
+
+def test_a_rare_bird_that_really_shared_the_clip_still_wins():
+    """The rule this protects must survive: a genuine second visitor,
+    present in comparable measure, still takes the headline."""
+    candidates = [
+        ("Elster", "Pica pica", 100 * 0.70),
+        ("Graureiher", "Ardea cinerea", 80 * 0.68),  # never recorded, well supported
+    ]
+    assert pick_headline_species(candidates, _lookup({"Pica pica": 19})) == "Graureiher"
+
+
+def test_the_promotion_line_is_half_the_leader():
+    from app.bird_species_rank import RARITY_PROMOTION_SHARE
+
+    lead = 100.0
+    lookup = _lookup({"Pica pica": 19})
+    just_over = [("Elster", "Pica pica", lead), ("Graureiher", "Ardea cinerea", lead * 0.51)]
+    just_under = [("Elster", "Pica pica", lead), ("Graureiher", "Ardea cinerea", lead * 0.49)]
+    assert RARITY_PROMOTION_SHARE == 0.5
+    assert pick_headline_species(just_over, lookup) == "Graureiher"
+    assert pick_headline_species(just_under, lookup) == "Elster"
+
+
+def test_without_evidence_the_historic_rarity_rule_is_untouched():
+    """Plain (display, latin) pairs carry no evidence — every candidate
+    scores 0, no promotion line exists, and rarity decides as it always
+    did. That is what keeps every caller that has not been taught to
+    measure working exactly as before."""
+    candidates = [("Amsel", "Turdus merula"), ("Graureiher", "Ardea cinerea")]
+    assert pick_headline_species(candidates, _lookup({"Turdus merula": 40})) == "Graureiher"
+
+
+def test_with_no_dossier_service_the_best_supported_candidate_wins():
+    """No history to be rare against, so the only defensible answer is
+    what the clip actually saw most of — not whichever fired first."""
+    candidates = [("Graureiher", "Ardea cinerea", 0.3), ("Elster", "Pica pica", 77.0)]
+    assert pick_headline_species(candidates, None) == "Elster"
+
+
+def test_two_thin_candidates_still_rank_by_rarity_between_themselves():
+    """The line is relative to the leader, so a clip that saw little of
+    anything has no leader to sink below — rarity decides as usual."""
+    candidates = [("Amsel", "Turdus merula", 0.4), ("Graureiher", "Ardea cinerea", 0.38)]
+    assert pick_headline_species(candidates, _lookup({"Turdus merula": 40})) == "Graureiher"

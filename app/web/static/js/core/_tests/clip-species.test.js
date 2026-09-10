@@ -146,3 +146,37 @@ test('a truncated clip with nothing left to add still stays silent', () => {
   // is nothing here to correct.
   assert.equal(speciesChipText(clip(['Grünfink'], true), 'Grünfink'), '');
 });
+
+// ── A guess is not an observation ───────────────────────────────────────
+// „nach dem Feintuning musst Du dich auf eins festlegen und kannst nicht
+// mehr mehrere Dinge raten." A real archive clip (20260907-103617) held
+// 110 frames of Elster at 0.70 and ONE frame of Graureiher at 0.29 — and
+// named both, the second as if it had been seen.
+
+const _row = (species, frames, best_score) => ({ species, frames, best_score });
+
+test('a one-frame straggler is not named beside a hundred-frame subject', () => {
+  const item = {
+    whole_clip: { species: [_row('Elster', 110, 0.6992), _row('Graureiher', 1, 0.2891)] },
+  };
+  assert.deepEqual(clipSpeciesNames(item), ['Elster']);
+});
+
+test('a bird that really shared the clip is still named', () => {
+  const item = {
+    whole_clip: { species: [_row('Elster', 100, 0.7), _row('Buntspecht', 80, 0.68)] },
+  };
+  assert.deepEqual(clipSpeciesNames(item), ['Elster', 'Buntspecht']);
+});
+
+test('rows written before the evidence fields existed are all kept', () => {
+  const item = { whole_clip: { species: [{ species: 'Elster' }, { species: 'Amsel' }] } };
+  assert.deepEqual(clipSpeciesNames(item), ['Elster', 'Amsel']);
+});
+
+test('the secondary line drops the straggler with the name', () => {
+  const item = {
+    whole_clip: { species: [_row('Elster', 110, 0.7), _row('Graureiher', 1, 0.29)] },
+  };
+  assert.equal(speciesChipText(item, 'Elster'), '');
+});

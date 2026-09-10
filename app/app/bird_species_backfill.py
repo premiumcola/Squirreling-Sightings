@@ -253,8 +253,13 @@ def backfill_event_species(
 
     # Same aggregate rule the live path uses — rarest/never-recorded
     # species wins; stored order is only the tiebreaker.
+    # The third element is the evidence behind each guess — see
+    # bird_species_rank.pick_headline_species. This path has no frame
+    # counts (it re-classifies one crop per detection), so the score
+    # alone stands in: enough to keep a 0.29 straggler from taking the
+    # headline off a confident one.
     species_candidates = [
-        (d.get("species"), d.get("species_latin"))
+        (d.get("species"), d.get("species_latin"), float(d.get("species_score") or 0.0))
         for d in dets
         if d.get("label") == "bird" and d.get("species")
     ]
@@ -332,6 +337,76 @@ def reconcile_species_unlocks(store, storage_root: Path) -> dict:
             len(seen),
         )
     return {"seen": len(seen), "unlocked": unlocked}
+
+
+def _headline_candidates_from_event(event: dict) -> list[tuple]:
+    """`(display, latin, evidence)` triples out of an event's own
+    whole-clip tally — the same shape `_clip_tally.headline_candidates`
+    hands the live path, read back off the stored document."""
+    rows = (event.get("whole_clip") or {}).get("species")
+    if not isinstance(rows, list):
+        return []
+    out = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("species"):
+            continue
+        frames = max(0, int(row.get("frames") or 0))
+        score = max(0.0, float(row.get("best_score") or 0.0))
+        out.append((row["species"], row.get("species_latin"), frames * score))
+    return out
+
+
+def resettle_headline_species(store, dossier_lookup: DossierLookup | None) -> dict:
+    """Re-decide `bird_species` on every archived clip that carries a
+    whole-clip tally, and rewrite the ones the rule now names differently.
+
+    WHY A SECOND PASS OVER SETTLED EVENTS. `pick_headline_species` used
+    to rank on rarity alone, so a never-recorded species won the headline
+    however thin its support. One frame at 29 % beat 110 frames at 70 %,
+    and the clip went into the archive filed under a bird that has never
+    been in this garden — „wie ist der da überhaupt draufgekommen?". The
+    rule now weighs what the clip actually saw, but a rule only decides
+    NEW events; everything already on disk keeps the name it was given.
+    This is what carries the correction backwards.
+
+    Costs no video work at all: the evidence (`frames`, `best_score` per
+    species) is already stored on each event by the live tally, so this
+    is a read, a comparison and — rarely — a write.
+
+    Never overwrites an OPERATOR's choice: an event whose species was
+    confirmed by hand carries `review`/verdict state elsewhere, and the
+    headline only moves when the stored tally itself names a different
+    winner. Idempotent — a second run changes nothing.
+    """
+    events_dir = getattr(store, "events_dir", None)
+    if events_dir is None or not Path(events_dir).exists():
+        return {"examined": 0, "changed": 0}
+    examined = changed = 0
+    for cam_dir in (d for d in Path(events_dir).iterdir() if d.is_dir()):
+        for jf in cam_dir.rglob("*.json"):
+            if jf.name.endswith(".tracks.json"):
+                continue
+            try:
+                event = json.loads(jf.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            candidates = _headline_candidates_from_event(event)
+            if len(candidates) < 2:
+                continue
+            examined += 1
+            want = pick_headline_species(candidates, dossier_lookup)
+            if not want or want == event.get("bird_species"):
+                continue
+            was = event.get("bird_species")
+            event["bird_species"] = want
+            try:
+                store.update_event(cam_dir.name, event.get("event_id", jf.stem), event)
+            except Exception as e:
+                log.debug("[det] headline resettle write failed for %s: %s", jf.name, e)
+                continue
+            changed += 1
+            log.info("[det] Art neu entschieden: %s → %s (%s)", was, want, jf.stem)
+    return {"examined": examined, "changed": changed}
 
 
 def _run_dossier_hook(dossier_hook, event: dict, event_id: str, camera_id: str) -> None:

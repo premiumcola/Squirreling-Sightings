@@ -287,16 +287,28 @@ class ClipTally:
         """Distinct species anywhere in the clip, best-scoring first."""
         return self._tally.result()
 
-    def headline_candidates(self) -> list[tuple[str, str | None]]:
-        """`(display, latin)` pairs for `bird_species_rank`.
+    def headline_candidates(self) -> list[tuple[str, str | None, float]]:
+        """`(display, latin, evidence)` triples for `bird_species_rank`.
 
         Order is the tally's — best-classified first — which is what
         `pick_headline_species` falls back on when two candidates rank
-        equally, and when no dossier service is wired up at all. The
-        rarest-first rule itself is unchanged; it just gets the whole
-        clip's candidates instead of one frame's.
+        equally, and when no dossier service is wired up at all.
+
+        THE THIRD ELEMENT IS WHAT THE CLIP ACTUALLY SAW: frames × best
+        score. Without it the rarest species won outright however thin
+        its support, and a real clip with 110 Elster frames at 0.70 and
+        ONE Graureiher frame at 0.29 was filed under Graureiher. See
+        `pick_headline_species` for the rule that number feeds.
         """
-        return [(r["species"], r["species_latin"]) for r in self.species() if r["species"]]
+        return [
+            (
+                r["species"],
+                r["species_latin"],
+                max(0, int(r.get("frames") or 0)) * max(0.0, float(r.get("best_score") or 0.0)),
+            )
+            for r in self.species()
+            if r["species"]
+        ]
 
     def is_truncated(self) -> bool:
         return bool(self.truncated or self._tally.truncated)

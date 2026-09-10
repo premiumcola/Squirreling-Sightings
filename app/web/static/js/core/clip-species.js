@@ -43,9 +43,36 @@ export function subjectLabel(label, species) {
   return OBJ_LABEL[label] || label || '';
 }
 
+/** Evidence behind one `whole_clip.species` row: how many frames the
+ *  clip held it, weighted by how sure the classifier was. The same
+ *  measure `bird_species_rank.pick_headline_species` ranks by. */
+function _rowEvidence(row) {
+  const frames = Math.max(0, Number(row?.frames) || 0);
+  const score = Math.max(0, Number(row?.best_score) || 0);
+  return frames * score;
+}
+
+/** A co-species must carry at least this share of the best-supported
+ *  one's evidence to be named at all. Mirrors
+ *  bird_species_rank.RARITY_PROMOTION_SHARE — one clip, one bar. */
+const SECONDARY_MIN_SHARE = 0.5;
+
 /**
  * PURE: every species identified anywhere in the clip, best-scoring
- * first, de-duplicated by display name.
+ * first, de-duplicated by display name — and only the ones the clip
+ * actually supports.
+ *
+ * THE FLOOR IS THE POINT. A real archive clip held 110 frames of Elster
+ * at 0.70 and ONE frame of Graureiher at 0.29, and named both. Naming
+ * the second is not extra information, it is a guess presented as an
+ * observation: „nach dem Feintuning musst Du dich auf eins festlegen und
+ * kannst nicht mehr mehrere Dinge raten". A bird that genuinely shared
+ * the clip clears half the leader's evidence easily; a stray frame
+ * never does.
+ *
+ * Rows written before `frames`/`best_score` existed carry no evidence at
+ * all — then no row does, there is no leader to measure against, and
+ * every name is kept exactly as it always was.
  *
  * @param {object} item  the event
  * @returns {string[]}  empty for an event with no `whole_clip`
@@ -53,11 +80,14 @@ export function subjectLabel(label, species) {
 export function clipSpeciesNames(item) {
   const rows = item?.whole_clip?.species;
   if (!Array.isArray(rows)) return [];
+  const best = rows.reduce((m, r) => Math.max(m, _rowEvidence(r)), 0);
+  const floor = best * SECONDARY_MIN_SHARE;
   const seen = new Set();
   const out = [];
   for (const row of rows) {
     const name = row && typeof row.species === 'string' ? row.species.trim() : '';
     if (!name || seen.has(name)) continue;
+    if (best > 0 && _rowEvidence(row) < floor) continue;
     seen.add(name);
     out.push(name);
   }

@@ -15,7 +15,14 @@ import { refreshTimelineAndStats } from '../chrome/storage-stats.js';
 export function _updateMediaSelectToggle() {
   const btn = byId('mediaSelectToggleBtn');
   if (!btn) return;
-  btn.style.display = state.mediaCamera ? 'inline-flex' : 'none';
+  // ANY drilldown, not just a single camera's. The control used to
+  // require `state.mediaCamera`, because the delete endpoint is
+  // per-camera and a cross-camera selection had nowhere to go — so in
+  // „Alle Medien" there was simply no way to select anything: „wo ist
+  // der Auswahlbutton? um mehrere dinge auszuwählen?!". The selection
+  // is grouped by camera at delete time now (`groupIdsByCamera`), so
+  // the endpoint's shape is no longer a reason to hide the button.
+  btn.style.display = state.mediaDrillOpen ? 'inline-flex' : 'none';
   btn.classList.toggle('btn-action', state.mediaSelectMode);
   btn.classList.toggle('action-green', state.mediaSelectMode);
   btn.classList.toggle('btn-neutral', !state.mediaSelectMode);
@@ -117,6 +124,56 @@ window.toggleSelectAllOnPage = function () {
   _repaintSelectAll();
 };
 
+/** How many clips a day keeps when the operator prunes by length. */
+export const KEEP_LONGEST_PER_DAY = 3;
+
+/** PURE: the ids worth pruning — everything EXCEPT the `keep` longest
+ *  clips of each calendar day.
+ *
+ * „gebe auch sowas wie nur die 3 längsten videos pro tag nicht
+ * markieren! als option an" — the archive fills with short clips of the
+ * same magpie on the same branch, and the ones worth keeping are the
+ * long ones. Per DAY, not overall: a quiet day's best clip is still that
+ * day's record, and a global top-3 would erase whole weeks.
+ *
+ * Ties and missing durations sort last, so a clip whose length is
+ * unknown is offered for deletion rather than silently protected — the
+ * operator still has to confirm, and an unknown length is usually a
+ * failed encode.
+ */
+export function idsExceptLongestPerDay(items, keep = KEEP_LONGEST_PER_DAY) {
+  const n = Math.max(0, Number(keep) || 0);
+  const byDay = new Map();
+  for (const it of items || []) {
+    if (!it?.event_id) continue;
+    const day = String(it.time || '').slice(0, 10) || '?';
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(it);
+  }
+  const out = [];
+  for (const list of byDay.values()) {
+    list.sort((a, b) => (Number(b.duration_s) || 0) - (Number(a.duration_s) || 0));
+    for (const it of list.slice(n)) out.push(it.event_id);
+  }
+  return out;
+}
+
+/** Select everything except each day's longest clips. Operates on the
+ *  whole loaded, filtered set — „pro Tag" is not a statement a single
+ *  page of eight cards can make. */
+window.selectAllButLongestPerDay = function () {
+  if (!state.mediaSelectMode) return;
+  const pool = state._allMedia || state.media || [];
+  const ids = idsExceptLongestPerDay(pool);
+  state.mediaSelected = new Set(ids);
+  document.querySelectorAll('.media-card').forEach((card) => {
+    const id = card.dataset?.eventId;
+    if (id) card.classList.toggle('media-card--selected', state.mediaSelected.has(id));
+  });
+  _refreshMediaSelectBar();
+  _repaintSelectAll();
+};
+
 window.toggleMediaSelectMode = function () {
   if (state.mediaSelectMode) _exitMediaSelectMode();
   else _enterMediaSelectMode();
@@ -164,14 +221,54 @@ async function _postBulkDelete(camId, ids) {
   }
 }
 
+/** PURE: `{cam_id: [event_id, …]}` for the selected ids.
+ *
+ * The delete endpoint is addressed per camera, but a selection made in
+ * „Alle Medien" spans several. Each item knows which camera it came
+ * from, so the grouping is a lookup, not a guess — and an id whose item
+ * is not in `items` is left out rather than posted to the wrong camera.
+ */
+export function groupIdsByCamera(ids, items) {
+  const camOf = new Map();
+  for (const it of items || []) {
+    if (it?.event_id && it.camera_id) camOf.set(it.event_id, it.camera_id);
+  }
+  const out = {};
+  for (const id of ids || []) {
+    const cam = camOf.get(id);
+    if (!cam) continue;
+    (out[cam] ||= []).push(id);
+  }
+  return out;
+}
+
 window.bulkDeleteSelectedMedia = async function () {
   const ids = Array.from(state.mediaSelected);
-  const camId = state.mediaCamera;
-  if (!camId || !ids.length) return;
+  if (!ids.length) return;
+  // In a single-camera drilldown every item is that camera's; in „Alle
+  // Medien" the selection spans cameras and the grouping decides.
+  const byCam = groupIdsByCamera(ids, state._allMedia || state.media || []);
+  const cams = Object.keys(byCam);
+  if (!cams.length) return;
   if (!(await showConfirm(`${ids.length} ausgewählte Einträge wirklich löschen?`))) return;
   try {
-    const r = await _postBulkDelete(camId, ids);
-    if (!r) return;
+    let deleted = 0;
+    const failedIds = [];
+    for (const cam of cams) {
+      // The endpoint refuses more than 500 ids per call, and a prune over
+      // a whole filtered archive can exceed that for one camera.
+      const chunks = [];
+      for (let k = 0; k < byCam[cam].length; k += 500) chunks.push(byCam[cam].slice(k, k + 500));
+      for (const chunk of chunks) {
+        const rc = await _postBulkDelete(cam, chunk);
+        // The operator said no to one camera's species question — that is
+        // an answer about THOSE clips, so the rest still go.
+        if (!rc) continue;
+        deleted += rc.deleted || 0;
+        failedIds.push(...(rc.failed || []));
+      }
+    }
+    const r = { deleted, failed: failedIds };
     const okSet = new Set(ids.filter((id) => !(r.failed || []).includes(id)));
     state._allMedia = (state._allMedia || []).filter((x) => !okSet.has(x.event_id));
     // calcItemsPerPage + renderMediaGrid + renderMediaPagination still

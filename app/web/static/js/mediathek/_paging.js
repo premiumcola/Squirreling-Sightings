@@ -23,7 +23,7 @@ import { registerMediaItems, getRegisteredMediaItem } from './_item-registry.js'
 // The two pure predicates behind the select-all control below. Only
 // those two — bulk-delete.js reaches back here through `window`, so an
 // import of anything stateful would close a cycle.
-import { pageEventIds, pageFullySelected } from './bulk-delete.js';
+import { KEEP_LONGEST_PER_DAY, pageEventIds, pageFullySelected } from './bulk-delete.js';
 import { setMediaNavList } from './_nav-list.js';
 
 // ── Page-size sizer ─────────────────────────────────────────────────────────
@@ -96,6 +96,13 @@ export function _goToPage(n) {
   renderMediaPagination();
 }
 
+// A stack of clips with the tallest kept — the shape of „alle außer den
+// längsten je Tag". Bars, because the criterion is length.
+const _PRUNE_SVG =
+  `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" ` +
+  `stroke-width="1.8" stroke-linecap="round" aria-hidden="true">` +
+  `<path d="M3 13V6M8 13V2.5M13 13V8.5"/><path d="M1.5 15h13" stroke-opacity=".45"/></svg>`;
+
 const _SELECT_ALL_SVG =
   `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" ` +
   `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
@@ -118,11 +125,19 @@ function _selectAllPillHTML() {
   if (!state.mediaSelectMode) return '';
   const all = pageFullySelected(pageEventIds(state.media), state.mediaSelected);
   const name = all ? 'Auswahl dieser Seite aufheben' : 'Alle auf dieser Seite markieren';
+  // The second one is a PRUNE preset, not a toggle: it marks everything
+  // in the filtered set except each day's three longest clips, which is
+  // the selection an operator actually wants before clearing space
+  // („nur die 3 längsten videos pro tag nicht markieren! als option").
+  const prune = `Alle außer den ${KEEP_LONGEST_PER_DAY} längsten je Tag markieren`;
   return (
     `<button type="button" id="mediaSelectAllBtn" ` +
     `class="page-pill page-pill--all${all ? ' is-on' : ''}" ` +
     `data-action="toggleSelectAllOnPage" title="${name}" aria-label="${name}">` +
-    `<span class="page-pill-chip">${_SELECT_ALL_SVG}</span></button>`
+    `<span class="page-pill-chip">${_SELECT_ALL_SVG}</span></button>` +
+    `<button type="button" class="page-pill page-pill--prune" ` +
+    `data-action="selectAllButLongestPerDay" title="${prune}" aria-label="${prune}">` +
+    `<span class="page-pill-chip">${_PRUNE_SVG}</span></button>`
   );
 }
 

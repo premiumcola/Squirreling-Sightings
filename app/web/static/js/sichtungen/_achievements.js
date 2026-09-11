@@ -18,8 +18,53 @@ import { BIRD_SVGS, MAMMAL_SVGS } from '../core/animal-icons.js';
 import { ACH_DEFS, _achTier, _rarityText, sightingStatsLine } from './_ach-defs.js';
 import { _currentAchOpenId, _reflowAchDrilldownIfOpen } from './_drilldown.js';
 import { isSpeciesDossierActive } from './_dossier-panel.js';
+import { measuredColumns } from '../core/grid-page-size.js';
 
 let _achData = {};
+
+/** Where `#speciesDossierPanel` lives when no species is open, captured
+ *  the first time it is moved so it can always go back. */
+let _dossierHome = null;
+
+/**
+ * Slide the dossier in under the ROW of the tile that was tapped.
+ *
+ * „kannst du das dosier bitte direkt unter dem angeklicktem element
+ * einsliden?" — it used to render far below the whole grid, so a tap on
+ * a bird in the second row answered somewhere off the bottom of the
+ * screen and the connection between question and answer was a scroll.
+ *
+ * After the ROW, not after the tile: the panel spans every column, so
+ * dropping it straight after the tile would push that row's remaining
+ * birds onto the next line and the grid would visibly rearrange itself
+ * around the thing being opened. The column count is read from the grid
+ * the browser actually laid out (core/grid-page-size.js::measuredColumns)
+ * rather than derived from a breakpoint — the same lesson the Mediathek's
+ * page size learned.
+ */
+function _placeDossierUnderRow() {
+  const panel = byId('speciesDossierPanel');
+  const grid = byId('achievementsGrid')?.querySelector('.ach-cards-grid');
+  if (!panel) return;
+  if (_dossierHome === null) {
+    _dossierHome = { parent: panel.parentElement, next: panel.nextElementSibling };
+  }
+  const active = grid?.querySelector('.ach-card--active');
+  if (!grid || !active || panel.hidden) {
+    panel.classList.remove('sd-panel--inrow');
+    if (_dossierHome.parent && panel.parentElement !== _dossierHome.parent) {
+      _dossierHome.parent.insertBefore(panel, _dossierHome.next);
+    }
+    return;
+  }
+  const cards = [...grid.children].filter((el) => el.classList.contains('ach-card'));
+  const i = cards.indexOf(active);
+  if (i < 0) return;
+  const cols = Math.max(1, measuredColumns(grid));
+  const at = Math.ceil((i + 1) / cols) * cols;
+  grid.insertBefore(panel, cards[at] || null);
+  panel.classList.add('sd-panel--inrow');
+}
 
 export function setAchievementsData(achData) {
   _achData = achData || {};
@@ -214,4 +259,7 @@ export function renderAchievements() {
   // If we re-rendered while a mammal drilldown was open, re-populate it
   // from the in-memory cache instead of showing "Lade…" again.
   _reflowAchDrilldownIfOpen();
+  // After the cards exist, not before: the placement measures the grid
+  // the browser has just laid out.
+  _placeDossierUnderRow();
 }

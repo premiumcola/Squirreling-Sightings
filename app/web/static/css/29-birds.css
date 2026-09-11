@@ -565,6 +565,14 @@
 .sd-gal-stage .mmc-actions {
   display: none;
 }
+/* And the green „bestätigt"-Scheibe with them, for the same reason plus
+   one: it sits at the card's top-right, exactly where the „1 / 150"
+   counter does, and the two overlapped into an unreadable clump. It is a
+   Mediathek affordance — whether a clip has been confirmed is not the
+   question this gallery asks. */
+.sd-gal-stage .media-confirmed-badge {
+  display: none;
+}
 
 .sd-gal-count {
   position: absolute;
@@ -809,4 +817,30 @@
   font-size: 14px;
   line-height: 1.5;
   text-align: center;
+}
+
+/* ── Der Steckbrief schiebt sich unter die angeklickte Zeile ─────────────
+   „kannst du das dosier bitte direkt unter dem angeklicktem element
+   einsliden?" — er stand vorher unter dem ganzen Raster, also antwortete
+   ein Tipp auf einen Vogel in der zweiten Reihe irgendwo unterhalb des
+   Bildschirms.
+   Als Rasterzelle über alle Spalten, eingefügt hinter dem ZEILENENDE
+   (sichtungen/_achievements.js::_placeDossierUnderRow) — hinter der
+   Kachel selbst würde er die restlichen Vögel dieser Zeile nach unten
+   schieben, und das Raster ordnete sich sichtbar um das um, was man
+   gerade öffnet. */
+.sd-panel--inrow {
+  grid-column: 1 / -1;
+  animation: sd-slide-in 220ms ease-out;
+}
+@keyframes sd-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sd-panel--inrow {
+    animation: none;
+  }
 }

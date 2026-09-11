@@ -212,13 +212,31 @@
   margin-bottom: var(--media-stack-gap);
 }
 
-/* THE ONE WAY BACK, beside the title.
+/* THE FILTER ZONE — the way back, then the chips it belongs to.
+   `flex-start`, so the arrow lines up with the FIRST chip row rather
+   than floating in the middle of a three-row stack. The bar beside it
+   takes the rest and keeps its own wrapping; `min-width: 0` is what lets
+   it, since a flex item's default minimum is its content. */
+.media-filter-zone {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.media-filter-zone > #libraryFilterBar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* THE ONE WAY BACK, at the head of the filters.
    Each of the three states used to open with its own full-width bar
    reading „← Alle Kameras" or „← Übersicht" — a whole row of a phone
    screen spent restating what the arrow already says, pushed the grid
    further down, and on top of that three separate controls for one idea.
-   Now: an arrow in the section head, whose action mediathek/
-   _view-toggle.js points at whatever state is showing.
+   It sat beside the section title next, which was already better — but
+   in front of the title it still split the one line the section has for
+   its name: „Nehm den zurück button vll runter weg vor dem titel!". Now
+   it heads the filter row, level with the left edge of the chips.
+   Which of the three exits it performs is decided by whatever state is
+   showing — mediathek/_view-toggle.js writes the action and unhides it.
    36 px of paint with CLAUDE.md's 44 px of target around it — the same
    transparent-::after trick the tile badge and the stale-build close
    use, so a small glyph stays hittable without making the head taller. */

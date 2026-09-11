@@ -1,33 +1,5 @@
 <section id="media" class="panel section">
   <div class="section-head">
-    {# THE ONE WAY BACK, an arrow and nothing else, riding beside the title instead of eating a row
-    of its own below the filters („'n Zurückpfeil ist ohne Übersicht […] nicht als einzelne Zeile,
-    sondern oben neben dem Mediathek-Titel"). Which of the three exits it performs is decided by
-    whatever state is showing — mediathek/_view-toggle.js writes data-action and unhides it; the
-    global click delegator (core/action-registry.js) dispatches whatever it finds there. #}
-    <button
-      type="button"
-      id="mediaBackBtn"
-      class="media-back-btn"
-      hidden
-      data-action="closeMediaDrilldown"
-      title="Zurück"
-      aria-label="Zurück"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        width="20"
-        height="20"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M15 5l-7 7 7 7" />
-      </svg>
-    </button>
     <h3 id="mediaSectionTitle" class="media-section-title">
       <svg
         viewBox="0 0 24 24"
@@ -93,7 +65,41 @@
   summary. Now: filters → the short camera overview (unchanged) → the full merged feed. Nothing
   about either piece's own behaviour changed, only their order — see library/page.js and
   mediathek/_overview.js, neither of which assumes a DOM position. #}
-  <div id="libraryFilterBar"></div>
+  {# THE WAY BACK, at the head of the filters rather than in front of the title.
+  It rode beside „Mediathek" first, which was already better than the three full-width bars it
+  replaced — but in front of the title it still splits the one line the section has for its name:
+  „Nehm den zurück button vll runter weg vor dem titel!". Down here it lines up with the left edge
+  of the chips, where the eye is already looking for where this view begins, and the title gets its
+  row back.
+  Which of the three exits it performs is decided by whatever state is showing —
+  mediathek/_view-toggle.js writes data-action and unhides it; the global click delegator
+  (core/action-registry.js) dispatches whatever it finds there. #}
+  <div class="media-filter-zone">
+  <button
+    type="button"
+    id="mediaBackBtn"
+    class="media-back-btn"
+    hidden
+    data-action="closeMediaDrilldown"
+    title="Zurück"
+    aria-label="Zurück"
+  >
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 5l-7 7 7 7" />
+    </svg>
+  </button>
+    <div id="libraryFilterBar"></div>
+  </div>
 
   {# A „Kamera-Ansicht & Auswahl"-Zwischentitel stand hier, mit demselben Kamera-Glyph wie die
   Überschrift 100 Zeilen weiter oben — und direkt darunter. Zwei Titel übereinander, von denen der

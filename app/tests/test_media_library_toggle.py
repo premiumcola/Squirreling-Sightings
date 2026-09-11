@@ -94,11 +94,16 @@ def _rule(css: str, selector: str) -> str:
 
 
 def _section_head(markup: str) -> str:
-    """The title row alone — title, back arrow, and whatever else has
-    talked its way in there. Ends at the merged feed's filter bar, the
-    first thing after the head."""
+    """The title row alone — the title and whatever else has talked its
+    way in there.
+
+    Ends at the filter zone, the first thing after the head. It used to
+    end at `id="libraryFilterBar"`, and that stopped being the same place
+    the moment the back arrow moved down and took the bar into a wrapper
+    with it: the slice then swallowed the very element it is used to
+    prove has LEFT the head."""
     return markup[
-        markup.index('<div class="section-head">') : markup.index('id="libraryFilterBar"')
+        markup.index('<div class="section-head">') : markup.index('class="media-filter-zone"')
     ]
 
 
@@ -182,16 +187,26 @@ def test_one_back_control_serves_all_three_states():
     """Each state used to open with its own full-width bar — „← Alle
     Kameras", „← Übersicht", „← Übersicht" — three controls for one idea,
     each eating a row of a phone screen to restate what the arrow already
-    says. There is one arrow now, in the section head, and the toggle
-    points it at whichever exit belongs to the state on screen."""
+    says. There is one arrow now, and the toggle points it at whichever
+    exit belongs to the state on screen."""
     mediathek = _code(_MEDIATHEK)
     assert mediathek.count("media-drill-back") == 0
     assert mediathek.count('id="mediaBackBtn"') == 1
     assert "← Alle Kameras" not in mediathek
     assert "← Übersicht" not in mediathek
-    # It lives in the section head, beside the title — not inside any of
-    # the four state containers.
-    assert 'id="mediaBackBtn"' in _section_head(mediathek)
+    # NOT in the title row — „Nehm den zurück button vll runter weg vor
+    # dem titel!". It heads the filter zone instead, level with the left
+    # edge of the chips, and the title keeps its own line.
+    assert 'id="mediaBackBtn"' not in _section_head(mediathek)
+    zone = mediathek[mediathek.index('class="media-filter-zone"') :]
+    zone = zone[: zone.index('id="mediaStorageBar"')]
+    assert 'id="mediaBackBtn"' in zone
+    assert zone.index('id="mediaBackBtn"') < zone.index(
+        'id="libraryFilterBar"'
+    ), "the arrow comes first — it is where the eye looks for where this view begins"
+    # And still outside every one of the four state containers, so one
+    # button serves all of them.
+    assert mediathek.index('id="mediaBackBtn"') < mediathek.index('id="mediaOverview"')
 
     toggle = _read(_JS / "mediathek" / "_view-toggle.js")
     for action in ("closeMediaDrilldown", "closeMediaSpeciesGrid", "resetLibraryView"):

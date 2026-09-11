@@ -101,6 +101,24 @@ def api_person_flags(name):
     return jsonify({"ok": ok, "profiles": app_state.person_registry.list_profiles()})
 
 
+@bp.post('/api/persons/<name>/rename')
+def api_person_rename(name):
+    """Umbenennen — und, wenn der neue Name schon vergeben ist,
+    ZUSAMMENFÜHREN. Zwei Profile für eine Person ist das normale Ergebnis
+    davon, Gesichter einzeln zu benennen; das hier ist der Weg zurück."""
+    payload = request.get_json(force=True, silent=True) or {}
+    ok = app_state.person_registry.rename_profile(name, (payload.get("to") or "").strip())
+    return jsonify({"ok": ok, "profiles": app_state.person_registry.list_profiles()})
+
+
+@bp.delete('/api/persons/<name>')
+def api_person_delete(name):
+    """Ein Profil vergessen. Die Ausschnitte bleiben auf der Platte und
+    fallen zurück in den unbenannten Haufen."""
+    ok = app_state.person_registry.delete_profile(name)
+    return jsonify({"ok": ok, "profiles": app_state.person_registry.list_profiles()})
+
+
 # ── Achievements ────────────────────────────────────────────────────────────
 
 # EIN Schloss über EINER Datei. `species_unlock` schreibt dieselbe

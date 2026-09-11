@@ -15,7 +15,11 @@
 // Public surface bridged on window for inline onclicks + loadAll() in
 // live-update.js: editCamera, toggleArm, toggleCameraEnabled,
 // _reconnectCam, _quickDeleteCamera, _flashDetection,
-// renderCameraSettings, renderProfiles, renderAudit, hydrateSettings.
+// renderCameraSettings, hydrateSettings.
+//
+// Die Identitäten-Karte gehörte einmal hierher (renderProfiles,
+// renderAudit). Sie ist eine eigene Ansicht geworden und wohnt jetzt in
+// identities/ — sie lädt beim Aufklappen, nicht bei jedem loadAll().
 import { state } from '../core/state.js';
 import { byId, esc } from '../core/dom.js';
 import { j, apiPost } from '../core/api.js';
@@ -212,36 +216,6 @@ byId('deleteCameraBtn')?.addEventListener('click', () => {
     (state.config?.cameras || []).find((c) => c.id === camId);
   _deleteCameraWithConfirm(camId, cam?.name || camId);
 });
-
-export async function renderProfiles() {
-  const cats = await j('/api/cats');
-  const persons = await j('/api/persons');
-  const catEl = byId('catList');
-  const perEl = byId('personList');
-  if (catEl)
-    catEl.innerHTML =
-      cats.profiles
-        .map((p) => `<div style="padding:3px 0;font-size:13px">${esc(p.name)}</div>`)
-        .join('') || '<span class="muted small">—</span>';
-  if (perEl)
-    perEl.innerHTML =
-      persons.profiles
-        .map(
-          (p) =>
-            `<div style="padding:3px 0;font-size:13px">${esc(p.name)}${p.whitelisted ? ' <span class="muted small">(Whitelist)</span>' : ''}</div>`,
-        )
-        .join('') || '<span class="muted small">—</span>';
-}
-export async function renderAudit() {
-  const actions = await j('/api/telegram/actions');
-  byId('auditPanel').innerHTML =
-    actions.items
-      .map(
-        (a) =>
-          `<div class="audit-item"><strong>${esc(a.action)}</strong><div class="small">${esc(a.time)}${a.camera_id ? ` · ${esc(a.camera_id)}` : ''}</div></div>`,
-      )
-      .join('') || '<div class="audit-item">Noch keine Telegram-Aktionen.</div>';
-}
 
 async function toggleArm(camId, armed) {
   await apiPost(`/api/camera/${camId}/arm`, { armed });

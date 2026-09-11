@@ -16,7 +16,6 @@ def status_payload() -> dict:
     state the dashboard polls, rather than growing a second, drifting
     idea of what "status" means.
     """
-    settings = app_state.settings
     runtimes = app_state.runtimes
     return {
         "cameras": [
@@ -27,7 +26,6 @@ def status_payload() -> dict:
         ],
         "cat_profiles": app_state.cat_registry.list_profiles(),
         "person_profiles": app_state.person_registry.list_profiles(),
-        "telegram_actions": settings.data.get("telegram_actions", [])[:12],
         "tpu": fleet_tpu_utilisation(runtimes),
     }
 

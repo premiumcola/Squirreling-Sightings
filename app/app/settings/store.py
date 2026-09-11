@@ -27,6 +27,7 @@ from .defaults import build_defaults, default_camera
 from .migrations import (
     migrate_alerting_schedules,
     migrate_camera_defaults,
+    migrate_drop_telegram_action_log,
     migrate_class_severity,
     migrate_label_thresholds,
     migrate_rtsp_password_encoding,
@@ -139,6 +140,9 @@ class SettingsStore:
         migrate_runtime_defaults(self.data)
         migrate_rtsp_password_encoding(self.data)
         migrate_zone_source_space(self.data)
+        dropped_action_log = migrate_drop_telegram_action_log(self.data)
+        if dropped_action_log:
+            log.info("[migration] removed the obsolete telegram_actions log from settings.json")
         self._repair_snapshot_urls()
         # One-shot cleanup of any pre-existing duplicate camera rows.
         # Historically, a stale state.cameras array round-tripping through
@@ -426,12 +430,6 @@ class SettingsStore:
             else:
                 target[key] = val
 
-    def log_action(self, action: dict):
-        actions = self.data.setdefault("telegram_actions", [])
-        actions.insert(0, action)
-        del actions[80:]
-        self.save()
-
     def set_review(self, event_key: str, review: dict):
         self.data.setdefault("review", {})[event_key] = review
         self.save()
@@ -496,7 +494,6 @@ class SettingsStore:
             "cameras",
             "ui",
             "review",
-            "telegram_actions",
             "weather",
             # export_text ships `storage`; without it here a settings
             # backup restored the retention window and the media page

@@ -18,12 +18,7 @@ import {
 } from './dashboard.js';
 import { renderTimeline } from './timeline.js';
 import { _renderGlobalStatusRows } from './camedit/detection.js';
-import {
-  renderCameraSettings,
-  renderProfiles,
-  renderAudit,
-  hydrateSettings,
-} from './camedit/index.js';
+import { renderCameraSettings, hydrateSettings } from './camedit/index.js';
 import { loadMediaStorageStats } from './chrome/storage-stats.js';
 import { hydrateTelegram, initTelegramTabs } from './telegram.js';
 import { hydratePushUI } from './push.js';
@@ -163,8 +158,6 @@ export async function loadAll() {
   renderDashboard();
   renderTimeline();
   renderCameraSettings();
-  await renderProfiles();
-  await renderAudit();
   hydrateSettings();
   hydrateTelegram();
   initTelegramTabs();

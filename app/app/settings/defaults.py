@@ -252,7 +252,6 @@ def build_defaults(base_config: dict) -> dict:
         # value as "use the config.yaml one", and seeding them would
         # freeze the base-config value into settings.json.
         "storage": deepcopy(STORAGE_DEFAULTS),
-        "telegram_actions": [],
         "review": {},
         "ui": {"wizard_completed": bool(cams)},
         # No `timelapse_settings` block. It only ever held

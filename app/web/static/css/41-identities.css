@@ -1,0 +1,344 @@
+/* ── Identitäten ─────────────────────────────────────────────────────────
+   „Die Zuordnung der Identitäten … sollte in dem Einstellungsmenü
+   Identitäten stattfinden. … Ich muss da bisschen an Google Fotos denken."
+
+   Zwei Zonen, klar getrennt: oben die benannten Personen als Karten mit
+   Gesicht, unten die unsortierten Gesichter als Raster. Dazwischen keine
+   Trennlinie, sondern ein Sprung in der Flächenhelligkeit — Tiefe über
+   Kontrast, nicht über Striche.
+
+   Der Akzent ist der der Sektion (--sa, Bernstein). Er markiert genau
+   zwei Dinge: eine ausgewählte Kachel und den Vorschlag, dem die Auswahl
+   zustimmt. Alles andere bleibt grau, sonst markiert er nichts mehr. */
+
+.idy {
+  display: grid;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+/* ── Kopf: Bilanz links, die zwei Läufe rechts ───────────────────────── */
+.idy-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.idy-stat {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.idy-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.idy-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Der einzige helle Knopf der Karte — er macht etwas an vielen Bildern
+   auf einmal, und das darf man sehen. */
+.idy-btn-go {
+  background: rgba(var(--sa), 0.92);
+  color: #1a1205;
+}
+.idy-btn[disabled] {
+  background: var(--surface);
+  color: var(--muted);
+  cursor: default;
+}
+@media (hover: hover) {
+  .idy-btn:not([disabled]):hover {
+    filter: brightness(1.12);
+  }
+}
+
+/* ── Die benannten Personen ──────────────────────────────────────────── */
+.idy-cards {
+  display: grid;
+  gap: 8px;
+}
+.idy-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: var(--surface);
+}
+.idy-card.is-wl {
+  background: rgba(var(--sa), 0.1);
+}
+.idy-av {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.idy-av-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.idy-av-txt {
+  color: rgba(var(--sa), 0.9);
+  font-size: 17px;
+  font-weight: 700;
+}
+.idy-id {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.idy-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.idy-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.idy-acts {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+}
+.idy-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.idy-card.is-wl .idy-act[data-idy='wl'] {
+  color: rgba(var(--sa), 0.95);
+}
+@media (hover: hover) {
+  .idy-act:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+  }
+}
+
+/* ── Katzen: dieselbe Registry, aber ohne Ausschnitte ────────────────── */
+.idy-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.idy-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.idy-tag {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* ── Das Raster der unsortierten Gesichter ───────────────────────────── */
+.idy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+.idy-face {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  cursor: pointer;
+}
+.idy-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Die Auswahl schrumpft das Bild in seinem Rahmen, statt es zu vergrößern
+   — vergrößern verdeckt die Nachbarn, und genau die vergleicht man ja
+   gerade. */
+.idy-face[aria-pressed='true'] {
+  background: rgba(var(--sa), 0.95);
+}
+.idy-face[aria-pressed='true'] img {
+  padding: 4px;
+  border-radius: 12px;
+  opacity: 0.85;
+}
+.idy-check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+}
+.idy-face[aria-pressed='true'] .idy-check {
+  background: #1a1205;
+}
+.idy-face[aria-pressed='true'] .idy-check::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 4px;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid rgba(var(--sa), 1);
+  border-bottom: 2px solid rgba(var(--sa), 1);
+  transform: rotate(-45deg);
+}
+.idy-hint {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.62);
+  color: rgba(var(--sa), 0.95);
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Die Zuordnungs-Leiste ───────────────────────────────────────────── */
+/* Sie wohnt in einem eigenen Fach, damit ein Tipp auf eine Kachel nur
+   dieses Fach neu schreibt und nicht das ganze Raster. Leer nimmt das
+   Fach keinen Platz — sonst stünde im Rasterabstand der Karte eine
+   sichtbare Lücke, solange nichts ausgewählt ist. */
+.idy-bar-slot:empty {
+  display: none;
+}
+.idy-bar {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(var(--sa), 0.12);
+}
+.idy-bar-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.idy-bar-n {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.idy-bar-clear {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.idy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.idy-chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* Der Name, auf den sich die Vorschläge der Auswahl einig sind, steht
+   vorn und ist der einzige helle — ein Tipp, kein Automatismus. */
+.idy-chip.is-hint {
+  background: rgba(var(--sa), 0.92);
+  color: #1a1205;
+}
+@media (hover: hover) {
+  .idy-chip:hover {
+    filter: brightness(1.14);
+  }
+}
+.idy-new,
+.idy-ren {
+  display: flex;
+  gap: 8px;
+}
+/* 16 px, sonst zoomt iOS beim Fokus in das Feld hinein. */
+.idy-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 16px;
+}
+.idy-add {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(var(--sa), 0.92);
+  color: #1a1205;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.idy-empty {
+  padding: 18px 10px;
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}

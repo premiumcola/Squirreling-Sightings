@@ -297,6 +297,25 @@ def migrate_timelapse_profiles(data: dict) -> None:
             profiles["daily"]["enabled"] = True
 
 
+def migrate_drop_telegram_action_log(data: dict) -> bool:
+    """Den alten Telegram-Menü-Mitschnitt aus der settings.json nehmen.
+
+    `telegram_actions` hielt bis zu achtzig Einträge der Form
+    „menu_root" / „menu_wetter" — jeder Tastendruck im Bot-Menü, sonst
+    nichts. Gelesen hat sie genau eine Kachel in den Einstellungen, die es
+    nicht mehr gibt („aktuell liegt da irgendwas ab … das brauchen wir
+    nicht"), geschrieben wurde dafür bei JEDEM Tippen die settings.json
+    komplett neu — ausgerechnet die Datei mit Token, Chat-IDs und
+    RTSP-Kennwörtern.
+
+    Ein gezieltes `pop` eines einzelnen, nirgends mehr gelesenen
+    Schlüssels, kein Überschreiben: jeder andere Schlüssel bleibt
+    unangetastet, und geschrieben wird nur, wenn es wirklich etwas zu
+    entfernen gab.
+    """
+    return data.pop("telegram_actions", None) is not None
+
+
 def migrate_telegram_push_defaults(data: dict) -> None:
     """Additively backfill telegram.push so every key the UI expects exists."""
     tg = data.setdefault("telegram", {})

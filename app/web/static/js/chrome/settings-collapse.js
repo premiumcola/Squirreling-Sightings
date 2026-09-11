@@ -12,6 +12,10 @@ window.toggleSetSection = function (id) {
   if (el.dataset.accent) el.style.setProperty('--sa', el.dataset.accent);
   const opening = !el.classList.contains('open');
   el.classList.toggle('open', opening);
+  // Damit eine Sektion ihre Daten erst holen kann, wenn sie jemand
+  // aufklappt. Die Identitäten gehen dafür das Ereignisarchiv durch —
+  // das gehört nicht in den loadAll(), der bei jedem Kamerawechsel läuft.
+  if (opening) el.dispatchEvent(new CustomEvent('set-section-open', { bubbles: true }));
 };
 
 // Seed --sa / --acc on first load so even closed sections render with

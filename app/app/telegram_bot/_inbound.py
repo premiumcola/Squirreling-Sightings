@@ -76,7 +76,6 @@ class InboundMixin:
         '🏠 Menü' reply-keyboard text all flow through here. No textual
         follow-up — the persistent keyboard sticks server-side once the
         first anchor has been sent with it attached."""
-        self.log_action("menu_open")
         chat_id = update.effective_chat.id if update.effective_chat else self.chat_id
         try:
             await self._anchor_send_or_edit(context.bot, chat_id, self._root_view())
@@ -299,7 +298,6 @@ class InboundMixin:
     async def _handle_menu_cb(self, q, data: str):
         """Routes every menu:* callback. View functions return (text, markup);
         we render in the same bubble via edit_message_text."""
-        self.log_action("menu_" + data.split(":", 1)[1])
         if data == "menu:root":
             await self._render_view(q, self._root_view())
             await q.answer()

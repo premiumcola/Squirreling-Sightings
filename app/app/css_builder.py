@@ -156,6 +156,10 @@ LOAD_ORDER = [
     # after 25-mobile.css like every other late partial to keep its own
     # 480px override authoritative.
     "40-species-grid.css",
+    # Die Identitäten-Karte (identities/) in den Einstellungen. Sitzt in
+    # einer .set-section, deren Abstände 08-settings.css setzt — also nach
+    # 25-mobile.css, damit die eigenen Rasterregeln stehenbleiben.
+    "41-identities.css",
 ]
 
 

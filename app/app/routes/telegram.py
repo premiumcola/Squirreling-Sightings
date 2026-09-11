@@ -22,11 +22,6 @@ from ..thresholds import recommend_push
 bp = Blueprint("telegram_bp", __name__)
 
 
-@bp.get('/api/telegram/actions')
-def api_telegram_actions():
-    return jsonify({"items": app_state.settings.data.get("telegram_actions", [])[:40]})
-
-
 @bp.get('/api/telegram/status')
 def api_telegram_status():
     """Read-only polling status for the connection-panel badge."""

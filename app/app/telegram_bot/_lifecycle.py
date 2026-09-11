@@ -474,16 +474,4 @@ class LifecycleMixin:
         except Exception:
             pass
 
-    # ── Action log helper ─────────────────────────────────────────────────
-    def log_action(self, action: str, camera_id: str | None = None, extra: dict | None = None):
-        if self.settings_store:
-            self.settings_store.log_action(
-                {
-                    "time": datetime.now().isoformat(timespec="seconds"),
-                    "action": action,
-                    "camera_id": camera_id,
-                    "extra": extra or {},
-                }
-            )
-
     # ── Send API ──────────────────────────────────────────────────────────

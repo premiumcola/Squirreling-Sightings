@@ -26,6 +26,13 @@ def hamming_hex(a: str, b: str) -> int:
     return bin(int(a, 16) ^ int(b, 16)).count("1")
 
 
+#: Wie viele Ausschnitt-Verweise ein Profil mitführt. Sie sind das
+#: Gesicht des Profils in der Oberfläche — der erste ist das Avatar, der
+#: Rest der kleine Stapel dahinter. Mehr als eine Handvoll bringt nichts
+#: und bläht die Registry auf, die sonst nur Hashes enthält.
+MAX_PROFILE_CROPS = 8
+
+
 class IdentityRegistry:
     def __init__(self, path: str | Path, threshold: int = 10):
         self.path = Path(path)
@@ -92,8 +99,21 @@ class IdentityRegistry:
         return m.get("name") if m else None
 
     def register_crop(
-        self, name: str, crop: np.ndarray, *, whitelisted: bool = False, notes: str = ""
+        self,
+        name: str,
+        crop: np.ndarray,
+        *,
+        whitelisted: bool = False,
+        notes: str = "",
+        relpath: str = "",
     ):
+        """Filed under `name`, creating the profile on the first crop.
+
+        `relpath` is the picture the hash was taken from. It is kept so
+        the identity panel has a face to show — without it a profile is
+        a name and sixteen hex digits, which is nothing to recognise a
+        person by.
+        """
         h = dhash_bgr(crop)
         if not h:
             return False
@@ -108,6 +128,52 @@ class IdentityRegistry:
             profile["notes"] = notes
         if h not in profile["hashes"]:
             profile["hashes"].append(h)
+        if relpath:
+            crops = profile.setdefault("crops", [])
+            if relpath in crops:
+                crops.remove(relpath)
+            crops.insert(0, relpath)
+            del crops[MAX_PROFILE_CROPS:]
+        self._save()
+        return True
+
+    def rename_profile(self, old: str, new: str) -> bool:
+        """Rename — or MERGE, when `new` is already a profile.
+
+        The merge is not a side effect, it is the point: two profiles for
+        one person is the normal outcome of naming faces one at a time,
+        and renaming one onto the other is how they are put back together.
+        """
+        new = (new or "").strip()
+        source = self.get_profile(old)
+        if not source or not new or new == old:
+            return False
+        target = self.get_profile(new)
+        if target is None:
+            source["name"] = new
+        else:
+            for h in source.get("hashes", []):
+                if h not in target.setdefault("hashes", []):
+                    target["hashes"].append(h)
+            crops = target.setdefault("crops", [])
+            for relpath in source.get("crops", []):
+                if relpath not in crops:
+                    crops.append(relpath)
+            del crops[MAX_PROFILE_CROPS:]
+            target["whitelisted"] = bool(target.get("whitelisted")) or bool(
+                source.get("whitelisted")
+            )
+            self.data["profiles"] = [p for p in self.list_profiles() if p is not source]
+        self._save()
+        return True
+
+    def delete_profile(self, name: str) -> bool:
+        """Forget a profile. The crops themselves stay on disk — they go
+        back into the unnamed pile and can be filed again."""
+        remaining = [p for p in self.list_profiles() if p.get("name") != name]
+        if len(remaining) == len(self.list_profiles()):
+            return False
+        self.data["profiles"] = remaining
         self._save()
         return True
 

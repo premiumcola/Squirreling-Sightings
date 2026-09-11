@@ -75,8 +75,6 @@ const _shim =
     return fn();
   };
 registerAction('closeLiveView', _shim('closeLiveView'));
-registerAction('openPersonNaming', _shim('openPersonNaming'));
-registerAction('startPersonCropSweep', _shim('startPersonCropSweep'));
 registerAction('toggleLiveViewHd', () => {
   if (typeof window._setLiveViewStream === 'function')
     window._setLiveViewStream(!window._liveViewHd);

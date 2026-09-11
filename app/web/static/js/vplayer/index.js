@@ -41,6 +41,7 @@ import { wireRecorded } from './_wire-recorded.js';
 import { mountOverlayPainter } from './_overlay-paint.js';
 import { subscribeLive } from './_data/live.js';
 import { liveStatus, resetLiveStatus } from './_data/status.js';
+import { installBackGesture } from './_back-gesture.js';
 
 /** The single open player, or null. One at a time, by construction. */
 let _open = null;
@@ -418,6 +419,9 @@ export function openVideoPlayer(config) {
   const cfg = buildPlayerConfig(config);
   closeVideoPlayer();
   _open = _mountAll(cfg);
+  // The open player is a history entry, so the phone's own back gesture
+  // closes it instead of leaving the app — see _back-gesture.js.
+  _open.backGesture = installBackGesture(_open.shell?.root, () => closeVideoPlayer());
   return _open;
 }
 
@@ -453,6 +457,9 @@ export function closeVideoPlayer() {
   p.stageChrome?.teardown();
   p.topbar?.teardown();
   p.stage?.teardown();
+  // Before the shell goes: the gesture is bound to its root, and the
+  // teardown also pops the history entry this open pushed.
+  p.backGesture?.();
   p.shell?.teardown();
   p.cfg.actions.onClose?.();
 }

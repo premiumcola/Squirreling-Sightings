@@ -125,7 +125,7 @@ def test_the_home_indicator_band_is_inside_the_plate_not_under_it():
     side gap."""
     body = _rule(_read(_DOCK), ".m-dock", occurrence=2)
     assert "padding-bottom" in body
-    assert "var(--m-dock-safe-b)" in body, "the buttons must still clear the home indicator"
+    assert "var(--m-dock-safe-pad)" in body, "the buttons must still clear the home indicator"
     safe = _tokens()["--m-dock-safe-b"]
     assert "env(safe-area-inset-bottom" in safe
     assert "0px" in safe, "env() needs a fallback for devices without an inset"
@@ -150,13 +150,29 @@ def test_the_gap_is_the_same_on_every_side():
 
 def test_the_plate_height_grows_with_the_band_it_now_carries():
     """Three consumers position themselves above the dock by reading
-    `--m-dock-bottom-gap + --m-dock-h`. The plate got taller by the
-    safe-area band, so the token has to say so — otherwise the stale-build
-    bar, the sticky select bar and the page's bottom padding all slide
-    under it on exactly the devices that have an inset."""
+    `--m-dock-bottom-gap + --m-dock-h`. The plate got taller by the band
+    it carries inside itself, so the token has to say so — otherwise the
+    stale-build bar, the sticky select bar and the page's bottom padding
+    all slide under it on exactly the devices that have an inset."""
     h = _tokens()["--m-dock-h"]
-    assert "var(--m-dock-safe-b)" in h
+    assert "var(--m-dock-safe-pad)" in h
     assert "var(--m-dock-btn-h)" in h and "var(--m-dock-inner-pad)" in h
+
+
+def test_the_plate_owes_the_indicator_less_than_the_reported_inset():
+    """„Menüleiste ist zu hoch."
+
+    The device's inset is measured from the SCREEN edge and is generous
+    by design. The plate already floats `--m-dock-bottom-gap` above that
+    edge, so adding the whole inset on top charged the same clearance
+    twice and grew the bar to ~104 px — taller than a native tab bar.
+    The padding is the inset MINUS the gap already spent, and capped so
+    a device reporting a large inset cannot inflate the bar either."""
+    pad = _tokens()["--m-dock-safe-pad"]
+    assert "var(--m-dock-safe-b)" in pad, "it still starts from what the device reports"
+    assert "var(--m-dock-bottom-gap)" in pad, "the gap already paid must be subtracted"
+    assert pad.startswith("min("), "and it must be capped"
+    assert "max(0px" in pad, "a device without an indicator owes nothing, never a negative"
 
 
 def test_the_dock_is_anchored_to_bottom_and_never_sized_in_vh():

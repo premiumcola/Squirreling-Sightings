@@ -95,8 +95,9 @@
      --m-dock-btn-h         button min-height. 54 px, comfortably over
                             the 44 px iOS touch-target floor.
      --m-dock-h             plate height, DERIVED — 2 · inner-pad +
-                            button height + the safe-area band the plate
-                            now carries inside itself. Previously
+                            button height + `--m-dock-safe-pad`, the
+                            share of the home-indicator band the plate
+                            carries inside itself. Previously
                             restated as the literal 70 px in three
                             places; three consumers still read it to
                             clear the dock, so it has to grow with the
@@ -106,6 +107,11 @@
                             viewport-fit=cover, so the inset is real).
                             0 on Android, older iPads and a narrow
                             desktop window.
+     --m-dock-safe-pad      what the plate actually owes that band —
+                            the reported inset minus the gap the plate
+                            already floats above the edge, capped. The
+                            full inset on top of the gap made the bar
+                            taller than a native tab bar; see `.m-dock`.
      --m-dock-bottom-gap    distance from the plate's bottom edge to the
                             bottom of the layout viewport — the SAME
                             number as the side margin: „schiebt die
@@ -134,8 +140,23 @@
     --m-dock-margin: 8px;
     --m-dock-inner-pad: 8px;
     --m-dock-btn-h: 54px;
-    --m-dock-h: calc(2 * var(--m-dock-inner-pad) + var(--m-dock-btn-h) + var(--m-dock-safe-b));
+    --m-dock-h: calc(2 * var(--m-dock-inner-pad) + var(--m-dock-btn-h) + var(--m-dock-safe-pad));
     --m-dock-safe-b: env(safe-area-inset-bottom, 0px);
+    /* WHAT THE PLATE ACTUALLY OWES THE HOME INDICATOR, which is less
+       than the inset the device reports.
+       That inset is measured from the SCREEN edge and is deliberately
+       generous — it is meant for content that must not come near the
+       indicator at all. This plate already floats `--m-dock-bottom-gap`
+       above that edge, so the gap is clearance it has paid once; adding
+       the full inset on top of it puts the buttons further from the
+       bottom than a native tab bar puts its own, and the plate grew to
+       ~104 px: „Menüleiste ist zu hoch."
+       So: subtract the gap already spent, then cap it. The indicator is
+       a ~5 px bar sitting ~8 px up, so ~14 px inside a plate that starts
+       8 px above the edge clears it with room to spare — and the cap is
+       what keeps a device reporting a large inset from inflating the
+       bar. 0 where there is no indicator at all. */
+    --m-dock-safe-pad: min(max(0px, calc(var(--m-dock-safe-b) - var(--m-dock-bottom-gap))), 14px);
     --m-dock-bottom-gap: var(--m-dock-margin);
     --m-dock-screen-radius: 55px;
     --m-dock-radius: calc(var(--m-dock-screen-radius) - var(--m-dock-margin));
@@ -151,13 +172,15 @@
     right: var(--m-dock-margin);
     bottom: var(--m-dock-bottom-gap);
     padding: var(--m-dock-inner-pad);
-    /* THE PLATE GOES TO THE EDGE, THE BUTTONS DO NOT. The extra bottom
-       padding is the home-indicator band, kept INSIDE the plate instead
-       of under it — exactly how a native iOS tab bar is built: the
-       background reaches the screen edge, the content is inset by the
-       safe area. Without it the buttons would sit in the system's own
-       swipe zone, where a tap near the bottom belongs to iOS. */
-    padding-bottom: calc(var(--m-dock-inner-pad) + var(--m-dock-safe-b));
+    /* THE PLATE COMES DOWN TO THE EDGE, THE BUTTONS STOP SHORT OF IT.
+       The extra bottom padding is the home-indicator band, kept INSIDE
+       the plate instead of under it — the way a native iOS tab bar is
+       built: the background reaches the edge, the content is inset.
+       Without it the buttons would sit in the system's own swipe zone,
+       where a tap near the bottom belongs to iOS and not to this app.
+       How much is `--m-dock-safe-pad`, and it is deliberately less than
+       the reported inset — see there. */
+    padding-bottom: calc(var(--m-dock-inner-pad) + var(--m-dock-safe-pad));
     border-radius: var(--m-dock-radius);
     /* Translucent neutral fill + heavy backdrop blur. The blur is
        what fogs page content scrolling underneath the plate the way

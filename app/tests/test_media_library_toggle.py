@@ -28,7 +28,13 @@ template/wiring side only.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
+
+from ._node_js import NODE_AVAILABLE, NODE_MISSING_REASON
+from ._node_js import run_js as _js
 
 _REPO = Path(__file__).resolve().parents[2]
 _TPL = _REPO / "app" / "web" / "templates"
@@ -72,6 +78,28 @@ def _code(path: Path) -> str:
 
 
 _MEDIATHEK = _TPL / "partials" / "mediathek.html"
+
+
+def _rule(css: str, selector: str) -> str:
+    """The declarations of `selector`'s FIRST rule block.
+
+    `selector + " {"` rather than a bare `index`, so `#mediaFilterBar`
+    does not match `#mediaFilterBar .media-nest` — every selector this
+    file pins is a prefix of a longer one somewhere below it.
+    """
+    head = f"{selector} {{"
+    assert head in css, f"missing rule: {selector}"
+    body = css[css.index(head) + len(head) :]
+    return body[: body.index("}")]
+
+
+def _section_head(markup: str) -> str:
+    """The title row alone — title, back arrow, and whatever else has
+    talked its way in there. Ends at the merged feed's filter bar, the
+    first thing after the head."""
+    return markup[
+        markup.index('<div class="section-head">') : markup.index('id="libraryFilterBar"')
+    ]
 
 
 # ── "Alle Ereignisse" is gone, completely ────────────────────────────────
@@ -163,9 +191,7 @@ def test_one_back_control_serves_all_three_states():
     assert "← Übersicht" not in mediathek
     # It lives in the section head, beside the title — not inside any of
     # the four state containers.
-    head = mediathek[mediathek.index('<div class="section-head">') :]
-    head = head[: head.index("</div>", head.index('id="mediathekTrashBtn"'))]
-    assert 'id="mediaBackBtn"' in head
+    assert 'id="mediaBackBtn"' in _section_head(mediathek)
 
     toggle = _read(_JS / "mediathek" / "_view-toggle.js")
     for action in ("closeMediaDrilldown", "closeMediaSpeciesGrid", "resetLibraryView"):
@@ -328,16 +354,21 @@ def test_the_back_arrow_meets_the_44px_touch_target_floor():
 
 
 def test_every_junction_in_the_mediathek_stack_uses_the_one_gap():
-    """Title → class pills → species pills → grid. Four things, three
-    junctions, ONE number — a stack where each seam carries its own
-    hand-tuned margin is exactly what reads as uneven on a phone."""
+    """Title → class pills → grid. Three things, two junctions, ONE
+    number — a stack where each seam carries its own hand-tuned margin is
+    exactly what reads as uneven on a phone.
+
+    It was four things: the species pills were a row of their own between
+    the class pills and the grid, and `.media-species-bar` carried the
+    same variable for that seam. They are inside the „Vogel" pill now
+    (mediathek/_species-filter.js::speciesNestHtml), so the seam is gone
+    and with it the entry in this list."""
     coral = _code(_CSS / "04-coral-1.css")
     settings = _code(_CSS / "08-settings.css")
     assert "--media-stack-gap: 10px;" in coral
     for block, css in (
         ("#media > .section-head {", coral),
         (".media-drill-head {", coral),
-        (".media-species-bar {", coral),
         (".media-storage-bar {", settings),
     ):
         rule = css[css.index(block) :]
@@ -347,3 +378,219 @@ def test_every_junction_in_the_mediathek_stack_uses_the_one_gap():
     # is now a plain wrapper around the filter bar alone — no column
     # stack, no gap of its own to disagree with the one above.
     assert ".media-drill-head {" not in _code(_CSS / "25-mobile.css")
+
+
+# ── „sortiere die elemente ein wenig - papierkorb oben kann weg" ─────────
+
+
+def test_the_papierkorb_left_the_title_row():
+    """The head was a title, a back arrow, an „Auswahl" button and a
+    trash can — four controls in the row that names the section."""
+    assert 'id="mediathekTrashBtn"' not in _section_head(_code(_MEDIATHEK))
+
+
+def test_the_papierkorb_moved_rather_than_went():
+    """It is the ONLY way into the bin — mediathek/trash-modal.js binds
+    one delegated `[data-action="open-trash"]` and nothing else opens the
+    modal — so „kann weg" can only mean „not here", never „nowhere". It
+    sits in Mediathek-Verwaltung now, the panel that already owns the
+    Papierkorb-Aufbewahrungsfrist, as the first of that panel's
+    buttons."""
+    mediathek = _code(_MEDIATHEK).replace('"', "'")
+    assert "id='mediathekTrashBtn'" in mediathek
+    assert "data-action='open-trash'" in mediathek
+    assert (
+        mediathek.index("panel_id='set-media-maint'")
+        < mediathek.index("id='mediathekTrashBtn'")
+        < mediathek.index("id='fixThumbsBtn'")
+    )
+    # The delegator keys on the attribute, not on where the button sits.
+    assert "[data-action=\"open-trash\"]" in _read(_JS / "mediathek" / "trash-modal.js")
+
+
+def test_the_header_only_rule_for_that_button_went_with_it():
+    """It is an ordinary `.btn-action` in a row of them now, so the
+    bespoke `.mediathek-trash-btn` (transparent 44 px glyph, tuned to sit
+    beside a title) has nothing left to style."""
+    assert "mediathek-trash-btn" not in _code(_CSS / "14-mediathek-1.css")
+    assert "mediathek-trash-btn" not in _code(_MEDIATHEK)
+
+
+# ── „die spezies … als unterelemente zu Vogel" ──────────────────────────
+
+
+def test_the_species_row_is_gone_as_a_row():
+    """Not gone as a filter — gone as a ROW. A second bar under the class
+    bar gave a narrowing of ONE pill the same rank as the whole
+    taxonomy."""
+    mediathek = _code(_MEDIATHEK)
+    assert 'id="mediaSpeciesFilterBar"' not in mediathek
+    assert "media-species-bar" not in mediathek
+    # …and nothing in the JS still paints a bar that isn't there.
+    assert "mediaSpeciesFilterBar" not in _code(_JS / "mediathek" / "filters.js")
+
+
+def test_the_species_chips_are_children_of_the_vogel_pill():
+    src = _read(_JS / "mediathek" / "_species-filter.js")
+    fn = src[src.index("export function speciesNestHtml") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert "media-nest" in fn
+    assert "speciesPillsHtml()" in fn
+    # The head is passed IN, not rebuilt here: one pill, one builder, so
+    # „Vogel" is the same button whether it stands alone or heads a
+    # bubble (filters.js::_pillAttrs).
+    assert "headHtml" in fn
+
+
+def test_open_is_the_active_bird_filter_not_a_second_state():
+    """Two states on one pill would mean two meanings for one tap. The
+    bubble stands open exactly while „Vogel" is the active class filter —
+    which is the same condition that used to decide whether the separate
+    species row was painted at all."""
+    src = _read(_JS / "mediathek" / "_species-filter.js")
+    fn = src[src.index("export function speciesNestOpen") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert "state.mediaLabels.has('bird')" in fn
+    assert "hasSpeciesToNest()" in fn
+
+
+def test_the_open_head_is_the_icon_alone():
+    """„Vogel wird beim aufklappen nur noch das icon und hat die spezies
+    drin!" — no word, no count chip; both stay in title/aria-label the way
+    the camera chips keep their name on a phone."""
+    src = _read(_JS / "mediathek" / "filters.js")
+    fn = src[src.index("function _nestHeadHtml") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert "mp-count" not in fn
+    assert "aria-label=" in fn and "title=" in fn
+    assert "aria-expanded=" in fn
+
+
+def test_the_class_pill_wiring_cannot_grab_the_species_chips():
+    """The chips wear `.media-pill` too, and carry no `data-val` — a
+    selector that took every pill in the bar would toggle `undefined`
+    into state.mediaLabels on every species tap (and on the read-only
+    „alle Filter aus" hint, which is how the bug got in)."""
+    src = _read(_JS / "mediathek" / "filters.js")
+    fn = src[src.index("function _wireClassPillClicks") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert ".media-pill[data-val]" in fn
+    fn = src[src.index("function _wireSpeciesPillClicks") :]
+    fn = fn[: fn.index("\n}") + 2]
+    assert ".media-pill[data-species]" in fn
+
+
+def test_the_bubble_and_its_children_meet_the_44px_touch_floor():
+    css = _read(_CSS / "14-mediathek-1.css")
+    head = _rule(css, "#mediaFilterBar .media-pill--nest-head")
+    assert "width: 44px" in head and "min-height: 44px" in head
+    assert "content: none" in _rule(css, "#mediaFilterBar .media-pill--nest-head.active::before")
+    assert "min-height: 44px" in _rule(css, "#mediaFilterBar .media-nest .media-pill")
+
+
+# ── „schiebe die elemente nicht so unschön zusammen!" ────────────────────
+
+
+def test_the_filter_row_wraps_instead_of_hiding_chips_in_a_side_scroller():
+    """`.media-filter-bar` is a swipe strip on touch (25-mobile.css), and
+    three of its parts have to be undone together or the row breaks:
+    `overflow-x`, the `touch-action: pan-x` that would otherwise swallow
+    the page's own vertical scroll under a wrapped row, and the
+    right-edge mask that fades a row with no end to reach."""
+    rule = _rule(_read(_CSS / "14-mediathek-1.css"), "#mediaFilterBar")
+    assert "flex-wrap: wrap" in rule
+    assert "overflow: visible" in rule
+    assert "touch-action: manipulation" in rule
+    assert "mask-image: none" in rule
+
+
+def test_the_row_spends_the_space_it_has_on_a_desktop():
+    """„schiebe die elemente nicht so unschön zusammen!" — wider gaps and
+    one minimum width for every chip, so a 1600 px row reads as a band
+    rather than a huddle at the left edge."""
+    css = _read(_CSS / "14-mediathek-1.css")
+    block = css[css.index("@media (min-width: 900px)") :]
+    block = block[: block.index("\n}\n")]
+    assert "#mediaFilterBar > .media-pill" in block
+    assert "min-width: 132px" in block
+    assert "gap: 14px" in block
+    # …but NOT the „alle Filter aus" hint. It borrows .media-pill for the
+    # shape and 18-telegram-2.css sizes it down on purpose („read-only,
+    # never tappable"); an ID selector outranks that, so the one thing in
+    # the row that must not invite a tap would end up sized most like a
+    # button.
+    assert "#mediaFilterBar > .media-pill:not(.media-pill--status)" in block
+
+
+# ── the painted bar, rendered by the real module under node ─────────────
+#
+# Everything above reads source text. These three run
+# mediathek/filters.js::renderMediaFilterPills for real (tests/_node_js.py)
+# and look at what it puts into #mediaFilterBar, because „Vogel is a
+# bubble now" is a claim about the painted row, not about a string in a
+# file: a bird pill drawn twice, or drawn beside its own bubble, greps
+# exactly the same as a correct one.
+
+_STATS = [
+    {
+        "camera_id": "c1",
+        "label_counts": {"bird": 330, "cat": 41, "motion": 12},
+        "species_counts": {"Elster": 150, "Kohlmeise": 64},
+    }
+]
+
+
+def _paint(labels, species=None):
+    """#mediaFilterBar's innerHTML after one real render."""
+    body = """
+        const { renderMediaFilterPills } = await import(JS + '/mediathek/filters.js');
+        const { state } = await import(JS + '/core/state.js');
+        // The bar is the only DOM this render touches; querySelectorAll
+        // answers [] because the click wiring is not what is under test.
+        const bar = { innerHTML: '', querySelectorAll: () => [] };
+        globalThis.document.getElementById = (id) => (id === 'mediaFilterBar' ? bar : null);
+        state.mediaCamera = null;
+        state.mediaPage = 0;
+        state.mediaLabels = new Set(%s);
+        state.mediaSpecies = %s;
+        state.mediaStats = %s;
+        renderMediaFilterPills();
+        console.log(JSON.stringify({ html: bar.innerHTML }));
+    """ % (json.dumps(labels), json.dumps(species), json.dumps(_STATS))
+    return _js(body)["html"]
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_an_active_vogel_paints_a_bubble_instead_of_a_pill():
+    html = _paint(["bird", "cat", "motion"])
+    assert 'class="media-nest media-nest--species"' in html
+    # ONCE. The bubble's head IS the Vogel pill — a second one beside it
+    # would be the same filter offered twice.
+    assert html.count('data-val="bird"') == 1
+    head = html[html.index('data-val="bird"') :]
+    head = head[: head.index("</button>")]
+    assert "mp-count" not in head, "the open head is the icon alone"
+    assert ">Vogel<" not in head
+    assert 'title="Vogel (330)"' in head, "the word and the tally move into the title"
+    # …and the species are inside the bubble, after that head.
+    assert html.index('data-species="Elster"') > html.index("media-nest--species")
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_collapsed_it_is_the_ordinary_vogel_pill_again():
+    html = _paint(["cat", "motion"])
+    assert "media-nest" not in html
+    assert 'data-val="bird"' in html
+    assert ">Vogel<" in html
+    assert ">330<" in html
+    assert "data-species=" not in html, "no species chips without an open bubble"
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason=NODE_MISSING_REASON)
+def test_the_bubble_is_painted_last_whatever_the_count_sort_says():
+    """„Vogel" is the busiest class on a bird feeder, so the count sort
+    puts it first — and it takes a line of its own, which would cut the
+    class row in two and strand the pills after it on a third line."""
+    html = _paint(["bird", "cat", "motion"])
+    assert html.index("media-nest--species") > html.index('data-val="cat"')
+    assert html.index("media-nest--species") > html.index('data-val="motion"')

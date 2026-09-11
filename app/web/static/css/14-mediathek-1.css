@@ -1,34 +1,128 @@
-/* ── Mediathek header trash button (Papierkorb opener) ──────────────────── */
-.mediathek-trash-btn {
-  /* iOS-safe: 44 px hit area, 32 px visual via padding. Visually
-       calm gray, no background, so it doesn't compete with the
-       primary "Auswahl" button next to it. */
-  appearance: none;
-  background: transparent;
-  border: none;
-  padding: 6px;
+/* ── The drilldown's filter row: #mediaFilterBar ─────────────────────────
+   A .mediathek-trash-btn rule opened this file — a transparent 44 px
+   glyph tuned to sit beside the section title. The Papierkorb is an
+   ordinary .btn-action in the Mediathek-Verwaltung panel now („papierkorb
+   oben kann weg", see partials/mediathek.html), so it styles itself.
+
+   „schiebe die elemente nicht so unschön zusammen!" — on a wide desktop
+   the chips huddled at the left edge of an otherwise empty row with 8 px
+   between them, which reads as something left over rather than a
+   control. Everything here is addressed BY ID, so the merged feed's own
+   rows — library/_filter-chips.js renders the very same
+   `.media-filter-bar` class — keep the behaviour they were tuned for.
+
+   It wraps at every width instead of becoming a swipe strip. The shared
+   rule in 25-mobile.css turns every .media-filter-bar into a horizontal
+   scroller on touch; this one carries at most eight short chips, and
+   once a species is picked usually one, so scrolling only hides them.
+   With the scroller go two of its parts: `touch-action: pan-x`, which on
+   a row that no longer scrolls sideways would swallow the vertical swipe
+   that scrolls the page, and the right-edge mask, which fades the end of
+   a row that has no end to reach. Both must be undone explicitly — a
+   wrapped row with pan-x is the iPhone bug where the page will not
+   scroll while the finger starts on a filter. */
+#mediaFilterBar {
+  flex-wrap: wrap;
+  align-items: center;
+  overflow: visible;
+  touch-action: manipulation;
+  -webkit-mask-image: none;
+  mask-image: none;
+  gap: 10px;
+}
+/* From tablet width up the row has space to spare, so it spends some:
+   wider gaps, and one minimum width for every chip, so the row reads as
+   a band of equal pieces instead of each pill ending wherever its own
+   word happens to run out.
+
+   :not(.media-pill--status) because „alle Filter aus" is not a chip. It
+   wears .media-pill for the shape alone and 18-telegram-2.css sizes it
+   down on purpose — 11 px italic, 4/10 padding, „read-only, never
+   tappable". An ID selector beats that class rule, so without the
+   exclusion the one thing in the row that must NOT invite a tap would be
+   the piece sized most like a button. */
+@media (min-width: 900px) {
+  #mediaFilterBar {
+    gap: 14px;
+  }
+  #mediaFilterBar > .media-pill:not(.media-pill--status) {
+    min-width: 132px;
+    padding: 8px 18px;
+  }
+}
+
+/* ── „Vogel" opens into a bubble that holds the species ──────────────────
+   „stelle die spezies als unterfilter zu vogel der indem die alle in eine
+   art aufgeklappte bubble rein kommen als unterelemente zu Vogel! …
+   Vogel wird beim aufklappen nur noch das icon und hat die spezies
+   drin!" — they were a second row under the class row, which gave a
+   narrowing of ONE pill the same rank as the whole taxonomy.
+
+   Open, the bubble is the bird colour at low opacity: it belongs to the
+   pill that heads it, and the tint is what says so without a border. */
+#mediaFilterBar .media-nest {
+  --cb: var(--class-bird);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A line of its own, sized to its chips. flex-basis 100 % breaks the
+     row before the bubble; max-content then pulls it back onto its own
+     content, so a 1600 px desktop does not get a bubble stretched across
+     a metre of nothing. On a phone max-content is wider than the line,
+     the bubble stays at 100 %, and the strip inside it scrolls sideways
+     rather than pushing the section wider. */
+  flex: 1 1 100%;
+  max-width: max-content;
+  min-width: 0;
+  padding: 5px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--class-bird) 12%, rgba(15, 23, 42, 0.72));
+}
+/* The head. Square and wordless — the name and the tally are in
+   title/aria-label (filters.js::_nestHeadHtml), and both would otherwise
+   be said twice inside a bubble whose chips carry their own. */
+#mediaFilterBar .media-pill--nest-head {
+  flex: 0 0 auto;
+  width: 44px;
   min-width: 44px;
   min-height: 44px;
-  display: inline-flex;
-  align-items: center;
+  padding: 0;
   justify-content: center;
-  color: var(--muted, #94a3b8);
-  cursor: pointer;
-  border-radius: 10px;
-  transition:
-    transform 0.15s,
-    opacity 0.15s,
-    color 0.15s;
-  opacity: 0.7;
-  -webkit-tap-highlight-color: transparent;
+  border-radius: 12px;
 }
-.mediathek-trash-btn:hover {
-  transform: scale(1.08);
-  opacity: 1;
-  color: #e2e8f0;
+/* No ✓ on the head: a bubble standing open IS „dieser Filter ist an",
+   and the glyph would shove the icon off the centre of a square button. */
+#mediaFilterBar .media-pill--nest-head.active::before {
+  content: none;
 }
-.mediathek-trash-btn:active {
-  transform: scale(0.96);
+/* 44 px for every child, the full iOS touch target — these are the most
+   tapped controls in the section and they no longer have a row of their
+   own to be generous in. */
+#mediaFilterBar .media-nest .media-pill {
+  min-height: 44px;
+}
+/* The chip strip. Desktop wraps (and keeps `overflow: visible`, so a
+   keyboard focus ring is not clipped by the scroll container); a phone
+   gets the sideways scroll-snap strip the shared .media-filter-bar rule
+   provides, because the species list is open-ended where the class
+   taxonomy is eight words long. */
+#mediaFilterBar .media-nest-kids {
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  touch-action: manipulation;
+}
+@media (max-width: 768px) {
+  #mediaFilterBar .media-nest-kids {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    touch-action: pan-x;
+    padding: 2px 0;
+  }
 }
 
 /* ── Papierkorb modal ───────────────────────────────────────────────────── */

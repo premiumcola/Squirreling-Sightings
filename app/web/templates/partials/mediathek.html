@@ -46,14 +46,12 @@
       ><span class="mst-text">Mediathek</span>
     </h3>
     {# The three „Sonderaktionen" (Thumbnails / Neu scannen / Tracking neu generieren) live in the
-    Mediathek-Einstellungen accordion. What stays up here is the bulk-delete entry point, shown
-    only inside a per-camera drilldown.
-
-    .btn-glyph: on a phone these two carry their icon alone. „Auswahl" beside a ticked checkbox and
-    „Seite" beside a select-all glyph are the picture said twice — „Wiederhole dich nicht, keine
-    sinnlosen texte die nicht auch per symbol gehen" — and the words were what squeezed the camera
-    name into a four-line column. The label stays in the markup for the desktop head and for screen
-    readers; only its pixels go. #}
+    Mediathek-Einstellungen accordion. What stays up here is the bulk-delete entry point, shown only
+    inside a per-camera drilldown. .btn-glyph: on a phone these two carry their icon alone.
+    „Auswahl" beside a ticked checkbox and „Seite" beside a select-all glyph are the picture said
+    twice — „Wiederhole dich nicht, keine sinnlosen texte die nicht auch per symbol gehen" — and the
+    words were what squeezed the camera name into a four-line column. The label stays in the markup
+    for the desktop head and for screen readers; only its pixels go. #}
     <button
       type="button"
       id="mediaSelectToggleBtn"
@@ -82,32 +80,11 @@
     {# „Ganze Seite markieren" used to sit here, a third button crowding the title row. It lives in
     the pagination row now (mediathek/_paging.js), beside the ‹ › that move between pages — which is
     where the operator's thumb already is when they want it: „Seitenauswahl am besten direkt beim
-    zur nächsten seite springen und noch einer für alle angezeigten elemente markieren". #}
-    <button
-      type="button"
-      id="mediathekTrashBtn"
-      class="mediathek-trash-btn"
-      data-action="open-trash"
-      title="Papierkorb"
-      aria-label="Papierkorb öffnen"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        width="20"
-        height="20"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <polyline points="3,6 5,6 21,6" />
-        <path d="M19 6l-1 14H6L5 6" />
-        <path d="M10 11v6M14 11v6" />
-        <path d="M9 6V4h6v2" />
-      </svg>
-    </button>
+    zur nächsten seite springen und noch einer für alle angezeigten elemente markieren". And so did
+    the Papierkorb, a fourth: „sortiere die elemente ein wenig - papierkorb oben kann weg." It is
+    the only way into the bin, so it moved rather than went — down into Mediathek-Verwaltung, the
+    panel that already owns the Papierkorb-Aufbewahrungsfrist. Same id, same data-action:
+    mediathek/trash-modal.js delegates on the attribute, never on the position. #}
   </div>
 
   {# Reordered per operator feedback: the merged "Alles gemischt" feed (originally right under the
@@ -130,10 +107,10 @@
   ever visible. #}
   <!-- State 1: camera-tile overview (default) -->
   <div id="mediaOverview"></div>
-  {# State 2: the "Vogelarten" species grid (mediathek/_species-grid.js) — one tile per bird
-  species this installation has actually sighted (icon + German name + sighting count), reached
-  from the "Vogelarten" card in the overview above. Tapping a tile opens state 3 below, already
-  filtered to that species (openMediaSpeciesDrilldown). #}
+  {# State 2: the "Vogelarten" species grid (mediathek/_species-grid.js) — one tile per bird species
+  this installation has actually sighted (icon + German name + sighting count), reached from the
+  "Vogelarten" card in the overview above. Tapping a tile opens state 3 below, already filtered to
+  that species (openMediaSpeciesDrilldown). #}
   <div id="mediaSpeciesGrid" style="display: none">
     <div id="mediaSpeciesGridBody" class="species-grid"></div>
   </div>
@@ -145,10 +122,12 @@
     <div class="media-drill-head">
       <div class="media-filter-bar" id="mediaFilterBar"></div>
     </div>
-    {# Species sub-row (filters.js::renderSpeciesFilterPills) — only unhidden
-    while "Vogel" is the active class pill above, populated from species this
-    installation has actually had on camera (mediathek/_species-filter.js). #}
-    <div class="media-filter-bar media-species-bar" id="mediaSpeciesFilterBar" hidden></div>
+    {# A second bar (#mediaSpeciesFilterBar) stood here and held the species pills. It is gone as a
+    ROW: the species are children of the „Vogel" pill in the bar above now — tapping Vogel opens it
+    into a bubble that contains them, and the pill itself shrinks to its icon while it is open
+    („stelle die spezies als unterfilter zu vogel … Vogel wird beim aufklappen nur noch das icon und
+    hat die spezies drin!"). Markup: mediathek/_species-filter.js::speciesNestHtml, wired in
+    mediathek/filters.js::renderMediaFilterPills. #}
     <div id="mediaGrid" class="media-grid"></div>
     <div id="mediaPagination" class="media-pagination"></div>
     {# ONE ROW, three things, no word said twice. It was „0 ausgewählt" + „Auswahl löschen" +
@@ -222,13 +201,12 @@
   client-held cursor-stack mechanics behind it. #}
   <div id="libraryBlock" style="display: none">
     {# A #libraryResultsHead with its own „← Übersicht" button used to open this block. Gone with
-    the other two: one arrow beside the section title is the way back out of all three states —
-    see mediathek/_view-toggle.js. #}
-    {# A #libraryZoomNote banner used to sit here, announcing that the grid was scoped to the span
-    dragged in the Wetterdaten-chart. It is gone with the coupling it described: the chart's time
-    chooser lives at the FOOT of this section and no longer reaches the grid at all (see
-    library/_filter-state.js, and weather/_time-binding.js for the release rule). A banner explaining
-    a filter the operator cannot see from here was the confusion, not the cure. #}
+    the other two: one arrow beside the section title is the way back out of all three states — see
+    mediathek/_view-toggle.js. #} {# A #libraryZoomNote banner used to sit here, announcing that the
+    grid was scoped to the span dragged in the Wetterdaten-chart. It is gone with the coupling it
+    described: the chart's time chooser lives at the FOOT of this section and no longer reaches the
+    grid at all (see library/_filter-state.js, and weather/_time-binding.js for the release rule). A
+    banner explaining a filter the operator cannot see from here was the confusion, not the cure. #}
     <div class="media-grid" id="libraryGrid"></div>
     <div id="libraryPagination" class="media-pagination"></div>
   </div>
@@ -248,32 +226,28 @@
         </svg>
         Wetterdaten &amp; Prognose
       </span>
-      {# A CONTINUOUS time zoom drawn as a slide-to-unlock bar. EVERY VISIBLE PART IS A DIV:
-      the pill, the filled part, the readout and the handle are ordinary elements positioned
-      off one custom property, and the <input type="range"> lies over them at opacity 0 purely
-      to keep the native drag, the keyboard arrows and the accessibility tree.
-
-      That is the third rewrite of this control, and the reason is CLAUDE.md's own rule — a
-      component patched twice for the same iOS symptom gets rebuilt rather than patched again.
-      Styling a range input means ::-webkit-slider-runnable-track and ::-moz-range-track and
-      hoping every engine honours the same heights; where one does not, the whole bar collapses
-      back to a hairline with the browser's default handle on it, which is exactly what the
-      operator kept being shown („Slider immernoch sehr hässlich"). Divs cannot fall back to
-      anything.
-
-      Hours are derived in weather/_range-slider.js; the markup only carries the ends of the
-      range. #}
+      {# A CONTINUOUS time zoom drawn as a slide-to-unlock bar. EVERY VISIBLE PART IS A DIV: the
+      pill, the filled part, the readout and the handle are ordinary elements positioned off one
+      custom property, and the <input type="range" /> lies over them at opacity 0 purely to keep the
+      native drag, the keyboard arrows and the accessibility tree. That is the third rewrite of this
+      control, and the reason is CLAUDE.md's own rule — a component patched twice for the same iOS
+      symptom gets rebuilt rather than patched again. Styling a range input means
+      ::-webkit-slider-runnable-track and ::-moz-range-track and hoping every engine honours the
+      same heights; where one does not, the whole bar collapses back to a hairline with the
+      browser's default handle on it, which is exactly what the operator kept being shown („Slider
+      immernoch sehr hässlich"). Divs cannot fall back to anything. Hours are derived in
+      weather/_range-slider.js; the markup only carries the ends of the range. #}
       <div class="ws-range" id="weatherStatsRange">
         <span class="ws-range-track">
           {# Fill and handle both ride on --ws-range-pos (0…1), written per drag by
-          _range-slider.js::_paintRange. The fill ends exactly at the handle's trailing edge,
-          so the two read as one object being pushed along the track. #}
+          _range-slider.js::_paintRange. The fill ends exactly at the handle's trailing edge, so the
+          two read as one object being pushed along the track. #}
           <span class="ws-range-fill" aria-hidden="true"></span>
-          {# The readout, twice — one copy at each end. Each fades as the handle comes toward
-          it (weather/_range-slider.js::zoneOpacity), so the span is always legible in the part
-          of the track the handle has just vacated and never sits under the disc. The dots that
-          used to flank the two are gone: stacked on a narrow screen they read as a riddle
-          („Was sollen die symbole zeichen beide links???"). #}
+          {# The readout, twice — one copy at each end. Each fades as the handle comes toward it
+          (weather/_range-slider.js::zoneOpacity), so the span is always legible in the part of the
+          track the handle has just vacated and never sits under the disc. The dots that used to
+          flank the two are gone: stacked on a narrow screen they read as a riddle („Was sollen die
+          symbole zeichen beide links???"). #}
           <span class="ws-range-zone ws-range-zone--far" id="weatherRangeFar" aria-hidden="true">
             <span class="ws-range-zone-text">24 h</span>
           </span>
@@ -352,9 +326,36 @@
   buttons (purgeOrphansBtn, cleanupNowBtn) stay dropped per docs/maintenance-panels.md; Auto-Cleanup
   + retention cover the same intent and the backend endpoints stay alive. #} {% from
   'partials/_maintenance_panel.html' import maintenance_panel %} {% call maintenance_panel(
-  panel_id='set-media-maint', accent='143,158,181', title='Mediathek-Verwaltung', hint='Nur bei
-  Indexproblemen — normalerweise nicht nötig.', retention={ 'form_id': 'retentionForm', 'groups':
-  retention_groups } ) %}
+  panel_id='set-media-maint', accent='143,158,181', title='Mediathek-Verwaltung', hint='Papierkorb —
+  der Rest nur bei Indexproblemen.', retention={ 'form_id': 'retentionForm', 'groups':
+  retention_groups } ) %} {# First in the row, because it is the only one here that is not a repair:
+  gelöschte Clips liegen bis zum Ablauf der Papierkorb-Frist weiter unten in diesem Panel. Dasselbe
+  Icon wie vorher oben in der Kopfzeile, damit der Griff wiedererkannt wird. #}
+  <button
+    type="button"
+    id="mediathekTrashBtn"
+    class="btn btn-action action-green"
+    data-action="open-trash"
+    title="Papierkorb öffnen"
+  >
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="3,6 5,6 21,6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4h6v2" />
+    </svg>
+    Papierkorb
+  </button>
   <button type="button" id="fixThumbsBtn" class="btn btn-action action-green">
     <svg
       viewBox="0 0 16 16"

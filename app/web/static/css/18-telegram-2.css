@@ -29,7 +29,12 @@
                At-a-glance distinction from inactive even on a glare-lit
                iPhone screen.
    empty     = not drawn at all — a filter that can only return nothing
-               costs a row of the grid it is filtering. */
+               costs a row of the grid it is filtering.
+   nested    = same chip, inside the „Vogel" bubble. It inherits the
+               bubble's --cb (the bird tone) instead of carrying its own,
+               and the bubble's head drops both its word and its ✓ — the
+               two departures from this contract, and they live with the
+               bubble in 14-mediathek-1.css rather than here. */
 .media-pill.cat-filter-btn {
   border: none;
   padding: 6px 14px;

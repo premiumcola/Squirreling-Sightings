@@ -17,6 +17,9 @@ import {
   effectiveMediaLabels,
   speciesClipCount,
   speciesPillsHtml,
+  hasSpeciesToNest,
+  speciesNestOpen,
+  speciesNestHtml,
 } from '../_species-filter.js';
 
 function resetState() {
@@ -233,4 +236,74 @@ test('speciesClipCount respects the camera scope the pills use', () => {
   assert.equal(speciesClipCount('Elster'), 157, 'all cameras when none is selected');
   state.mediaCamera = 'cam2';
   assert.equal(speciesClipCount('Elster'), 7);
+});
+
+// ── the bubble: „die spezies … als unterelemente zu Vogel" ──────────────
+//
+// The species were a SECOND ROW under the class row, which gave a
+// narrowing of one pill the same rank as the whole taxonomy. They are the
+// „Vogel" pill's children now. Open is not a state of its own: the bubble
+// stands open exactly while „Vogel" is the active class filter, so one
+// tap keeps one meaning.
+
+const HEAD = '<button data-val="bird">ICON</button>';
+
+test('the bubble is open while "bird" is active and something was sighted', () => {
+  resetState();
+  state.mediaLabels = new Set(['bird']);
+  state.mediaStats = [cam('cam1', { Elster: 5 })];
+  assert.equal(speciesNestOpen(), true);
+});
+
+test('deselecting "bird" collapses it back to an ordinary pill', () => {
+  resetState();
+  state.mediaLabels = new Set(['bird']);
+  state.mediaStats = [cam('cam1', { Elster: 5 })];
+  state.mediaLabels.delete('bird');
+  assert.equal(speciesNestOpen(), false);
+  assert.equal(speciesNestHtml(HEAD), '');
+});
+
+test('an installation with no sighted species never opens an empty bubble', () => {
+  // A control that promises children it does not have. „Vogel" stays a
+  // plain pill until the first species is actually on camera.
+  resetState();
+  state.mediaLabels = new Set(['bird']);
+  state.mediaStats = [{ camera_id: 'cam1', label_counts: { bird: 12 } }];
+  assert.equal(hasSpeciesToNest(), false);
+  assert.equal(speciesNestOpen(), false);
+  assert.equal(speciesNestHtml(HEAD), '');
+});
+
+test('the camera scope decides it too — a cam with no species gets no bubble', () => {
+  resetState();
+  state.mediaLabels = new Set(['bird']);
+  state.mediaStats = [cam('cam1', { Elster: 5 }), { camera_id: 'cam2', label_counts: {} }];
+  assert.equal(speciesNestOpen(), true);
+  state.mediaCamera = 'cam2';
+  assert.equal(speciesNestOpen(), false);
+});
+
+test('the open bubble carries the caller’s own head button, then the chips', () => {
+  // The head is passed IN rather than rebuilt here: filters.js owns the
+  // class-pill vocabulary, so „Vogel" is the same button whether it
+  // stands in the row or heads the bubble.
+  resetState();
+  state.mediaLabels = new Set(['bird']);
+  state.mediaStats = [cam('cam1', { Elster: 5, Amsel: 2 })];
+  const html = speciesNestHtml(HEAD);
+  assert.match(html, /class="media-nest media-nest--species"/);
+  assert.ok(html.includes(HEAD), 'the head goes in untouched');
+  assert.ok(html.indexOf(HEAD) < html.indexOf('data-species="Elster"'), 'head first, chips after');
+  assert.match(html, /data-species="Amsel"/);
+});
+
+test('the chips sit in their own strip inside the bubble, not loose in it', () => {
+  // .media-filter-bar is what gives them the sideways scroll-snap strip
+  // on a phone (25-mobile.css); a species list is open-ended where the
+  // class taxonomy is eight words long.
+  resetState();
+  state.mediaLabels = new Set(['bird']);
+  state.mediaStats = [cam('cam1', { Elster: 5 })];
+  assert.match(speciesNestHtml(HEAD), /<div class="media-filter-bar media-nest-kids">/);
 });

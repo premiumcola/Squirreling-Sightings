@@ -12,8 +12,10 @@ import { loadMedia } from './media-loader.js';
 import { renderMediaGrid, renderMediaPagination } from './_paging.js';
 import {
   selectSpecies,
-  speciesPillsHtml,
   speciesClipCount,
+  speciesNestHtml,
+  speciesNestOpen,
+  hasSpeciesToNest,
   clearSpeciesIfBirdInactive,
 } from './_species-filter.js';
 // ONE rule for "is this chip worth a row of screen", shared with the
@@ -116,17 +118,49 @@ export function _pruneEmptyMediaFilters() {
 function _classPillHtml(l, cnt) {
   const active = state.mediaLabels.has(l);
   if (!chipVisible(cnt, active)) return '';
-  const cls = `media-pill cat-filter-btn${active ? ' active' : ''}`;
-  const cb = CAT_COLORS[l] || '#94a3b8';
   const cntChip = cnt > 0 ? `<span class="mp-count" style="pointer-events:none">${cnt}</span>` : '';
-  return `<button type="button" class="${cls}" data-type="label" data-val="${l}" style="--cb:${cb}"><span class="cfb-icon" style="pointer-events:none">${objIconSvg(l, 18)}</span><span style="pointer-events:none">${OBJ_LABEL[l] || l}</span>${cntChip}</button>`;
+  // Only "Vogel" has children to open, and only once a species has
+  // actually been sighted — so only then does it announce itself as a
+  // closed disclosure rather than a plain toggle.
+  const exp = l === 'bird' && hasSpeciesToNest() ? ' aria-expanded="false"' : '';
+  return `<button type="button" ${_pillAttrs(l, active)}${exp}><span class="cfb-icon" style="pointer-events:none">${objIconSvg(l, 18)}</span><span style="pointer-events:none">${OBJ_LABEL[l] || l}</span>${cntChip}</button>`;
+}
+
+// The attributes every class-level pill carries, whether it stands in the
+// row or heads the species bubble — one pill, one builder.
+function _pillAttrs(l, active, extraCls) {
+  const cls = `media-pill cat-filter-btn${active ? ' active' : ''}${extraCls ? ' ' + extraCls : ''}`;
+  return `class="${cls}" data-type="label" data-val="${l}" style="--cb:${CAT_COLORS[l] || '#94a3b8'}"`;
+}
+
+// The open bubble's head: „Vogel wird beim aufklappen nur noch das icon
+// und hat die spezies drin!". The word says what the bubble's own
+// contents already say, and once a species is picked the count beside
+// the icon IS that chip's own number — _aggregateMediaCounts sets
+// counts.bird to speciesClipCount — so it would be the same figure
+// printed twice, 20 px apart. Nothing is deleted: name and count stay in
+// title/aria-label, the trade the camera chips make on a phone
+// (library/_filter-chips.js), so a pointer and a screen reader keep
+// both, and closing the bubble brings the labelled pill straight back.
+function _nestHeadHtml(cnt) {
+  const name = OBJ_LABEL.bird || 'bird';
+  const lbl = cnt > 0 ? `${name} (${cnt})` : name;
+  return (
+    `<button type="button" ${_pillAttrs('bird', true, 'media-pill--nest-head')} ` +
+    `aria-expanded="true" title="${lbl}" aria-label="${lbl}">` +
+    `<span class="cfb-icon" style="pointer-events:none">${objIconSvg('bird', 18)}</span></button>`
+  );
 }
 
 // Click wiring for the class-level pills, split out of
 // renderMediaFilterPills to keep that one under the file's own 60-line
 // function ceiling.
 function _wireClassPillClicks(bar) {
-  bar.querySelectorAll('.media-pill').forEach((p) => {
+  // `[data-val]`, not every `.media-pill` in the bar: the species chips
+  // inside the Vogel bubble wear the same class and carry no data-val, and
+  // so does the read-only „alle Filter aus" hint — wiring those as class
+  // pills toggled `undefined` into state.mediaLabels on every tap.
+  bar.querySelectorAll('.media-pill[data-val]').forEach((p) => {
     const val = p.dataset.val;
     // Belt-and-braces: re-set --cb via setProperty in addition to the
     // inline style attribute. The tinted-pill CSS reads var(--cb) for
@@ -176,43 +210,48 @@ export function renderMediaFilterPills() {
     if (d) return d;
     return MEDIA_FILTER_LABELS.indexOf(a) - MEDIA_FILTER_LABELS.indexOf(b);
   });
-  let html = labels.map((l) => _classPillHtml(l, counts[l] || 0)).join('');
+  // THE OPEN BUBBLE GOES LAST, whatever the count sort says. It takes a
+  // line of its own (`.media-nest`, 14-mediathek-1.css), so left in the
+  // middle of the sort — which is where "Vogel" usually lands, it being
+  // the busiest class on a bird feeder — it would cut the class row in
+  // two and strand the pills after it on a third line.
+  const nested = speciesNestOpen();
+  let html = labels
+    .filter((l) => !(nested && l === 'bird'))
+    .map((l) => _classPillHtml(l, counts[l] || 0))
+    .join('');
   // Status hint when the user has deselected every filter — the grid then
   // falls back to "show everything", and this pill keeps the state
   // visible so the user knows nothing is being hidden.
   if (state.mediaLabels.size === 0 && labels.length > 0) {
     html += `<span class="media-pill media-pill--status" aria-disabled="true">alle Filter aus</span>`;
   }
+  // The species chips are never painted from their own source: they read
+  // the same `state.mediaStats` this file's `_aggregateMediaCounts` does,
+  // so pill and chip are one number from one source — see
+  // _species-filter.js's header.
+  if (nested) html += speciesNestHtml(_nestHeadHtml(counts.bird || 0));
   bar.innerHTML = html;
   _wireClassPillClicks(bar);
-  // The species sub-row lives in its own bar just below this one (see
-  // partials/mediathek.html#mediaSpeciesFilterBar) but is never painted
-  // on its own from here: it reads the same `state.mediaStats` this
-  // file's `_aggregateMediaCounts` does, so the two rows are one number
-  // from one source — see _species-filter.js's header.
-  renderSpeciesFilterPills();
+  _wireSpeciesPillClicks(bar);
 }
 
-// Species pill row — separate render entry point from
-// renderMediaFilterPills so a species click only repaints this one bar,
-// not the whole class-level row above it.
-export function renderSpeciesFilterPills() {
-  const bar = byId('mediaSpeciesFilterBar');
-  if (!bar) return;
-  const html = speciesPillsHtml();
-  bar.innerHTML = html;
-  bar.hidden = !html;
-  bar.querySelectorAll('.media-pill').forEach((p) => {
+// The species chips inside the bubble. A tap TOGGLES the species (a
+// second tap on the picked one clears it), unlike a tile in the
+// Vogelarten grid, which is a fresh navigation target — see
+// _species-grid.js::selectSpeciesFromGrid.
+function _wireSpeciesPillClicks(bar) {
+  bar.querySelectorAll('.media-pill[data-species]').forEach((p) => {
     const name = p.dataset.species;
     p.addEventListener('click', () => {
       noteFilterUse('species');
       selectSpecies(name);
       state.mediaPage = 0;
-      // REPAINT THE ROW ABOVE TOO, not just this one. Picking a species
+      // REPAINT THE WHOLE BAR, not just the bubble. Picking a species
       // rewrites every class count (_aggregateMediaCounts) and, with the
-      // zero ones now dropped rather than greyed, empties most of that
-      // row — the point of „nehme wenn ein sub element gewählt alle
-      // anderen filter raus". Pruning first is what makes the drop
+      // zero ones now dropped rather than greyed, empties the row around
+      // the bubble — the point of „nehme wenn ein sub element gewählt
+      // alle anderen filter raus". Pruning first is what makes the drop
       // actually happen: a class still sitting in state.mediaLabels
       // counts as the operator's own active selection and would stay on
       // screen at zero until the next load pruned it.
@@ -228,7 +267,10 @@ export function renderSpeciesFilterPills() {
   });
 }
 
-// Legacy alias — pills are now rendered dynamically via renderMediaFilterPills.
+// Legacy alias — pills are now rendered dynamically via
+// renderMediaFilterPills. (It used to hand down a 'drilldown' mode; the
+// second, overview-only copy of this row that the mode existed for is
+// gone, and so is the parameter.)
 export function syncMediaPills() {
-  renderMediaFilterPills('drilldown');
+  renderMediaFilterPills();
 }

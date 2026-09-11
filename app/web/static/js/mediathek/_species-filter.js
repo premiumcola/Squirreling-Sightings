@@ -1,7 +1,15 @@
 // ─── mediathek/_species-filter.js ──────────────────────────────────────────
-// The Mediathek's species sub-filter — a second row of pills, under the
-// "Vogel" class pill, that narrows the grid to one bird species (e.g.
-// "Elster") without leaving Mediathek for the separate Sichtungen tab.
+// The Mediathek's species sub-filter — the chips INSIDE the "Vogel" class
+// pill that narrow the grid to one bird species (e.g. "Elster") without
+// leaving Mediathek for the separate Sichtungen tab.
+//
+// They used to be a second row of pills under the class row, which read
+// as a second taxonomy of equal rank next to Katze/Person/Hund rather
+// than as what they are — a narrowing of ONE of those pills: „stelle die
+// spezies als unterfilter zu vogel der indem die alle in eine art
+// aufgeklappte bubble rein kommen als unterelemente zu Vogel!". So the
+// pill opens into a bubble and holds them; see speciesNestHtml at the
+// foot of this file.
 //
 // Kept as a leaf module deliberately: filters.js itself pulls in
 // _paging.js and _drilldown.js, which reach lightbox.js — a module with
@@ -106,14 +114,12 @@ export function effectiveMediaLabels() {
   return [...state.mediaLabels];
 }
 
-// Pure HTML-string builder for the species pill row — empty string
-// (never rendered / hidden) unless "bird" is the active class filter
-// AND at least one species has actually been sighted. Mirrors
-// renderMediaFilterPills' pill markup (same `media-pill cat-filter-btn`
-// classes) so the two rows read as one family; `media-pill--species`
-// is an extra hook with no CSS behaviour of its own today, for a
-// callsite that wants to style the row without also matching the
-// class-level pills.
+// Pure HTML-string builder for the species chips — empty string unless
+// "bird" is the active class filter AND at least one species has
+// actually been sighted. Mirrors renderMediaFilterPills' pill markup
+// (same `media-pill cat-filter-btn` classes) so pill and chip read as
+// one family; `media-pill--species` is the hook that styles them as the
+// bubble's children without also matching the class-level pills.
 export function speciesPillsHtml() {
   if (!state.mediaLabels.has('bird')) return '';
   const options = birdSpeciesOptions();
@@ -137,4 +143,47 @@ export function speciesPillsHtml() {
       );
     })
     .join('');
+}
+
+// ── The bubble ──────────────────────────────────────────────────────────
+
+/** Is there anything to nest under "Vogel" at all? False on an
+ * installation that has never had a determined species on camera — the
+ * pill then stays an ordinary pill, because an empty bubble is a control
+ * that promises children it does not have. */
+export function hasSpeciesToNest() {
+  return birdSpeciesOptions().length > 0;
+}
+
+// OPEN IS NOT A STATE OF ITS OWN. The bubble stands open exactly while
+// "bird" is the active class filter — the same condition that used to
+// decide whether the separate species row was painted at all. So the tap
+// the operator described („Vogel … beim aufklappen") is the tap that was
+// always there, and no pill carries two meanings: activating Vogel opens
+// it, deactivating Vogel closes it and drops the species narrowing with
+// it (clearSpeciesIfBirdInactive, called from the same click handler).
+export function speciesNestOpen() {
+  return state.mediaLabels.has('bird') && hasSpeciesToNest();
+}
+
+/** The open bubble: the caller's own "Vogel" button as its head, the
+ * species chips as its children — „Vogel wird beim aufklappen nur noch
+ * das icon und hat die spezies drin!".
+ *
+ * `headHtml` is passed IN rather than built here: filters.js owns the
+ * class-pill vocabulary (OBJ_LABEL, CAT_COLORS, objIconSvg) and there is
+ * exactly one pill builder, so the head is the same button in the same
+ * markup whether it stands alone or heads a bubble. The kids sit in a
+ * plain `.media-filter-bar`, which is what gives them the sideways
+ * scroll-snap strip on a phone (25-mobile.css) — a species list is
+ * open-ended where the class taxonomy is eight words long.
+ *
+ * '' when the bubble is not open, so a caller can concatenate it
+ * unconditionally. */
+export function speciesNestHtml(headHtml) {
+  if (!speciesNestOpen()) return '';
+  return (
+    `<div class="media-nest media-nest--species">${headHtml}` +
+    `<div class="media-filter-bar media-nest-kids">${speciesPillsHtml()}</div></div>`
+  );
 }

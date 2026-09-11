@@ -644,14 +644,169 @@
   }
 }
 
-/* Shrink-wraps the clip card so the „1 / 64" counter can be inset from
-   the PICTURE's corner. As a child of the gallery block it anchored to
-   whatever positioned ancestor it found and ended up over the heading:
-   „anzahl hängt immernoch über". */
-.sd-gal-frame {
+/* THE GALLERY BLOCK IS THE COUNTER'S ANCHOR. „1 / 64" is absolutely
+   positioned and used to find no positioned ancestor here, so it climbed
+   to one far above and landed on the heading — „anzahl hängt immernoch
+   über". One line fixes it where the problem is.
+
+   A wrapper around the card was tried first and was worse: the card is
+   sized by `aspect-ratio` plus maxima, with no intrinsic width of its
+   own, so an extra shrink-to-fit box between it and the flex stage
+   resolved to zero and the gallery rendered blank — visible on a species
+   with a single clip, where there was nothing else to see. */
+.sd-clips-grid {
+  position: relative;
+}
+
+/* ── Personen benennen ───────────────────────────────────────────────────
+   Ein Portrait, eine Reihe Namen, weiter. Die Ausschnitte kommen aus den
+   Clips (app/app/person_crops.py); hier werden sie nur noch zugeordnet.
+   Dieselbe Form, die sich für die Steckbrief-Galerie schon bewährt hat:
+   eins groß ansehen und handeln schlägt ein Raster kleiner Kacheln, wenn
+   zu jedem Element eine Entscheidung gehört. */
+.pn-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+.pn-card {
+  position: relative;
+  width: min(460px, 100%);
+  max-height: min(88dvh, 860px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+.pn-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  cursor: pointer;
+}
+/* 36 px gezeichnet, 44 px getroffen — dieselbe durchsichtige ::after wie
+   beim Zurück-Pfeil und beim Kachel-Abzeichen. */
+.pn-close::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+.pn-stage {
   position: relative;
   display: flex;
-  flex: 0 1 auto;
+  justify-content: center;
+  margin-top: 6px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+/* Die Ausschnitte sind hochkant und unterschiedlich groß — `contain`
+   statt `cover`, weil ein beschnittenes Gesicht den Zweck verfehlt. */
+.pn-shot {
+  display: block;
+  width: 100%;
+  max-height: 46dvh;
+  object-fit: contain;
+}
+.pn-count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.pn-meta {
+  margin: 8px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.pn-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pn-name {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .pn-name:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+.pn-new {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+/* 16 px, sonst zoomt iOS beim Fokus in das Feld hinein. */
+.pn-input {
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 16px;
+}
+.pn-add {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 12px;
+  background: #5fc98a;
+  color: #06210f;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pn-nav {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+.pn-skip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pn-empty {
+  padding: 32px 8px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
 }

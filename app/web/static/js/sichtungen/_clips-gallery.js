@@ -64,15 +64,17 @@ export function renderClipsGallery(host, items, idx = 0) {
   }
   const at = clampIndex(idx, total);
   host.dataset.galIdx = String(at);
-  // THE COUNTER RIDES ON THE CARD. It used to be a child of the gallery
-  // block and anchored to whatever positioned ancestor it found, which
-  // put it over the heading above the picture („anzahl hängt immernoch
-  // über"). `.sd-gal-frame` shrink-wraps the card, so „1 / 64" is inset
-  // from the picture's own corner at every column width.
-  host.innerHTML = `<div class="sd-gal-stage"><div class="sd-gal-frame">${mediaCardHTML(
-    adaptMotionItem(items[at]),
-  )}${_counterHtml(at, total, total >= CLIPS_CAP)}</div></div>
-    ${_navHtml(at, total)}`;
+  // THE COUNTER IS ANCHORED TO THE GALLERY BLOCK, which `.sd-clips-grid`
+  // makes a positioning context for (29-birds.css). It used to find no
+  // positioned ancestor at all and climbed to one far above, which is
+  // how „1 / 64" ended up sitting on the heading: „anzahl hängt immernoch
+  // über". A wrapper around the card was the first attempt and was
+  // worse: the card is sized by `aspect-ratio` plus maxima, so an extra
+  // shrink-to-fit box between it and the flex stage collapsed it to
+  // nothing — the gallery went blank for a species with one clip.
+  host.innerHTML = `<div class="sd-gal-stage">${mediaCardHTML(adaptMotionItem(items[at]))}</div>
+    ${_navHtml(at, total)}
+    ${_counterHtml(at, total, total >= CLIPS_CAP)}`;
   // The species pencil on the card resolves its clip through the shared
   // registry (mediathek/_item-registry.js) — these clips come from
   // /api/library and are in none of the Mediathek's own caches, so

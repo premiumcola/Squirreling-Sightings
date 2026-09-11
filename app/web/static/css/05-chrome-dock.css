@@ -112,17 +112,19 @@
                             already floats above the edge, capped. The
                             full inset on top of the gap made the bar
                             taller than a native tab bar; see `.m-dock`.
+     --m-dock-indicator-reach
+                            how far the home indicator reaches up from
+                            the screen edge (~13 px), as opposed to the
+                            ~34 px safe-area inset the device reports.
      --m-dock-bottom-gap    distance from the plate's bottom edge to the
-                            bottom of the layout viewport — the SAME
-                            number as the side margin: „schiebt die
-                            Leiste 'n bisschen runter, dass links und
-                            unten der gleiche Abstand ist."
-                            It used to be the safe-area inset plus a
-                            couple of pixels, which on an iPhone is
-                            ~36 px against 8 px at the sides, and that
-                            asymmetry is what the operator kept seeing.
-                            The band is not ignored, it moved INSIDE the
-                            plate as bottom padding — see `.m-dock`.
+                            bottom of the layout viewport: the side
+                            margin plus ten. It was the safe-area inset
+                            plus a couple of pixels once (~36 px against
+                            8 px at the sides — the asymmetry the
+                            operator kept seeing), then exactly the side
+                            margin, and now a deliberate ten more:
+                            „wenn von unten der Abstand bisschen mehr ist
+                            als von der Seite wär auch in Ordnung."
      --m-dock-screen-radius the device's own display corner radius.
                             iPhone 15 Pro / Pro Max ≈ 55 px. The plate
                             radius is DERIVED from it minus the margin,
@@ -142,22 +144,30 @@
     --m-dock-btn-h: 54px;
     --m-dock-h: calc(2 * var(--m-dock-inner-pad) + var(--m-dock-btn-h) + var(--m-dock-safe-pad));
     --m-dock-safe-b: env(safe-area-inset-bottom, 0px);
-    /* WHAT THE PLATE ACTUALLY OWES THE HOME INDICATOR, which is less
-       than the inset the device reports.
-       That inset is measured from the SCREEN edge and is deliberately
-       generous — it is meant for content that must not come near the
-       indicator at all. This plate already floats `--m-dock-bottom-gap`
-       above that edge, so the gap is clearance it has paid once; adding
-       the full inset on top of it puts the buttons further from the
-       bottom than a native tab bar puts its own, and the plate grew to
-       ~104 px: „Menüleiste ist zu hoch."
-       So: subtract the gap already spent, then cap it. The indicator is
-       a ~5 px bar sitting ~8 px up, so ~14 px inside a plate that starts
-       8 px above the edge clears it with room to spare — and the cap is
-       what keeps a device reporting a large inset from inflating the
-       bar. 0 where there is no indicator at all. */
-    --m-dock-safe-pad: min(max(0px, calc(var(--m-dock-safe-b) - var(--m-dock-bottom-gap))), 14px);
-    --m-dock-bottom-gap: var(--m-dock-margin);
+    /* HOW FAR THE HOME INDICATOR ACTUALLY REACHES UP from the screen
+       edge — a ~5 px bar sitting ~8 px above it, so ~13 px all told.
+       NOT the same as the inset the device reports: that one is ~34 px
+       and is deliberately generous, meant for content that must not come
+       NEAR the indicator. A tab bar is not that kind of content; it is
+       chrome, and on iOS chrome lives down there. */
+    --m-dock-indicator-reach: 13px;
+    --m-dock-bottom-gap: calc(var(--m-dock-margin) + 10px);
+    /* WHAT THE PLATE STILL OWES, after the gap it already floats above
+       the edge. Twice this was got wrong in the same direction: first the
+       whole reported inset was added to the gap (plate 104 px, buttons
+       further from the edge than a native tab bar's), then a capped share
+       of it (84 px, still a visible empty band under the labels — „die
+       Menüleiste ist immer noch zu hoch").
+       With the gap below at 18 px the indicator is cleared by the gap
+       ALONE, so this resolves to 0 and the plate is its own height again.
+       It is kept as a formula rather than deleted because the gap is a
+       knob: shrink it and the padding comes back exactly as far as it is
+       needed. `min(safe-b, reach)` keeps a device that reports no inset
+       at all from being charged for an indicator it does not have. */
+    --m-dock-safe-pad: max(
+      0px,
+      calc(min(var(--m-dock-safe-b), var(--m-dock-indicator-reach)) - var(--m-dock-bottom-gap))
+    );
     --m-dock-screen-radius: 55px;
     --m-dock-radius: calc(var(--m-dock-screen-radius) - var(--m-dock-margin));
     --m-dock-pill-radius: calc(var(--m-dock-radius) - var(--m-dock-inner-pad));

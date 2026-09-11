@@ -82,11 +82,22 @@ def _rule(css: str, selector: str, occurrence: int = 1) -> str:
     raise AssertionError(f"{selector} (occurrence {occurrence}) is missing")
 
 
+def _flat(value: str) -> str:
+    """A declaration's value with prettier's line-wrapping undone.
+
+    A `max(calc(…))` past the 100-column budget comes back broken over
+    three lines; it is the same declaration as the one-liner, and no
+    assertion here is about where the line happens to break.
+    """
+    flat = re.sub(r"\s+", " ", value).strip()
+    return re.sub(r"\(\s", "(", re.sub(r"\s\)", ")", flat))
+
+
 def _tokens() -> dict[str, str]:
     """The dock's :root custom properties, from inside the phone query."""
     css = _read(_DOCK)
     root = _rule(css[css.index(_PHONE, css.index(".m-dock")) :], ":root")
-    found = {name: value.strip() for name, value in re.findall(r"(--m-dock-[\w-]+):([^;]+);", root)}
+    found = {name: _flat(value) for name, value in re.findall(r"(--m-dock-[\w-]+):([^;]+);", root)}
     missing = {
         "--m-dock-margin",
         "--m-dock-inner-pad",
@@ -112,6 +123,27 @@ def _px(value: str) -> int:
     return int(match.group(1))
 
 
+def _resolved_px(name: str, tokens: dict[str, str]) -> int:
+    """A token in pixels, with its `var()` references expanded first.
+
+    `_px` reads the first literal it sees, which is right for `13px` and
+    quietly wrong for `calc(var(--m-dock-margin) + 10px)` — it would
+    report the ten and miss the eight the token is anchored to. Only the
+    two shapes the geometry actually uses are resolved: a px literal and
+    a `calc()` of px terms added up. The safe-area formula is deliberately
+    NOT resolvable — it depends on the device, not on arithmetic.
+    """
+    value = tokens[name]
+    for _ in range(8):
+        if "var(" not in value:
+            break
+        value = re.sub(r"var\((--m-dock-[\w-]+)\)", lambda m: tokens[m.group(1)], value)
+    assert "env(" not in value, f"{name} resolves against the device, not here"
+    terms = re.findall(r"([+-]?)\s*(\d+)px", value)
+    assert terms, f"no px value in {value!r}"
+    return sum(-int(n) if sign == "-" else int(n) for sign, n in terms)
+
+
 # ── complaint 1 · "die ist wieder hochgerutscht" ──────────────────────
 
 
@@ -134,18 +166,24 @@ def test_the_home_indicator_band_is_inside_the_plate_not_under_it():
     ), "without viewport-fit=cover every safe-area inset resolves to 0"
 
 
-def test_the_gap_is_the_same_on_every_side():
-    """„schiebt die Leiste 'n bisschen runter, dass links und unten der
-    gleiche Abstand ist."
+def test_the_bottom_gap_is_the_side_margin_plus_a_deliberate_ten():
+    """„bitte schieb sie von unten vielleicht auch noch mal zehn Pixel
+    höher. Und wenn von unten der Abstand bisschen mehr ist als von der
+    Seite wär auch in Ordnung."
 
-    The bottom gap used to be the safe-area inset plus a couple of pixels
-    — roughly 36 px on a notched iPhone against 8 px at the sides. Two
-    earlier calibrations argued over that additive (+8 px read as
-    floating, 0 px as glued to the edge), but both kept the inset in the
-    gap, so the asymmetry survived every round. One number for all three
-    sides settles it."""
+    Three rounds got here. The gap was the safe-area inset plus a couple
+    of pixels (~36 px against 8 px at the sides — the asymmetry the
+    operator kept seeing), then exactly the side margin, and now the side
+    margin plus ten. The ten are not cosmetic: they are also what lifts
+    the plate clear of the home indicator, which is why the inner padding
+    below resolves to nothing."""
     tokens = _tokens()
-    assert tokens["--m-dock-bottom-gap"] == "var(--m-dock-margin)"
+    gap = tokens["--m-dock-bottom-gap"]
+    assert "var(--m-dock-margin)" in gap, "it is still anchored to the side margin"
+    assert "10px" in gap
+    assert (
+        _resolved_px("--m-dock-bottom-gap", tokens) == _resolved_px("--m-dock-margin", tokens) + 10
+    ), "a little more than the sides, by design"
 
 
 def test_the_plate_height_grows_with_the_band_it_now_carries():
@@ -159,20 +197,29 @@ def test_the_plate_height_grows_with_the_band_it_now_carries():
     assert "var(--m-dock-btn-h)" in h and "var(--m-dock-inner-pad)" in h
 
 
-def test_the_plate_owes_the_indicator_less_than_the_reported_inset():
-    """„Menüleiste ist zu hoch."
+def test_the_plate_owes_the_indicator_only_what_the_gap_has_not_paid():
+    """„die Menüleiste ist immer noch zu hoch."
 
-    The device's inset is measured from the SCREEN edge and is generous
-    by design. The plate already floats `--m-dock-bottom-gap` above that
-    edge, so adding the whole inset on top charged the same clearance
-    twice and grew the bar to ~104 px — taller than a native tab bar.
-    The padding is the inset MINUS the gap already spent, and capped so
-    a device reporting a large inset cannot inflate the bar either."""
-    pad = _tokens()["--m-dock-safe-pad"]
-    assert "var(--m-dock-safe-b)" in pad, "it still starts from what the device reports"
+    Twice wrong in the same direction: first the whole reported inset was
+    added on top of the gap (plate 104 px, buttons further from the edge
+    than a native tab bar's), then a capped share of it (84 px, with a
+    visible empty band under the labels).
+
+    The reported inset (~34 px) is not the indicator — it is the generous
+    safe area meant for content that must not come NEAR it. What the
+    plate has to clear is the indicator's own reach (~13 px), and only the
+    part of that the bottom gap has not already paid for."""
+    tokens = _tokens()
+    pad = tokens["--m-dock-safe-pad"]
+    assert "var(--m-dock-indicator-reach)" in pad, "the indicator, not the generous inset"
+    assert "var(--m-dock-safe-b)" in pad, "a device without an indicator owes nothing"
     assert "var(--m-dock-bottom-gap)" in pad, "the gap already paid must be subtracted"
-    assert pad.startswith("min("), "and it must be capped"
-    assert "max(0px" in pad, "a device without an indicator owes nothing, never a negative"
+    assert pad.startswith("max(0px"), "never a negative padding"
+    # And with today's numbers the gap pays for all of it, so the plate is
+    # its own height again: 2 x inner-pad + button.
+    assert _resolved_px("--m-dock-bottom-gap", tokens) >= _resolved_px(
+        "--m-dock-indicator-reach", tokens
+    ), "the plate should float clear of the indicator on its own"
 
 
 def test_the_dock_is_anchored_to_bottom_and_never_sized_in_vh():

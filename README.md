@@ -1,345 +1,318 @@
 <p align="center">
-  <img src="docs/img/banner.svg" alt="Squirreling · Sightings" width="100%" />
-</p>
-
-<p align="center"><strong>Self-hosted, weather-aware IP-camera + AI manager
-that turns motion noise into actual stories.</strong></p>
-
-<p align="center">
-  <em>Coral TPU · weather-aware · quest-driven</em>
+  <img src="docs/assets/hero.svg" alt="Squirreling · Sightings — selbst gehosteter Gartenwächter mit Tiererkennung" width="100%" />
 </p>
 
 <p align="center">
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776ab?logo=python&logoColor=white" />
-  <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ed?logo=docker&logoColor=white" />
-  <img alt="Coral TPU" src="https://img.shields.io/badge/Coral%20TPU-supported-ec4899" />
-  <img alt="Self-hosted" src="https://img.shields.io/badge/Self--hosted-LAN%20only-22c55e" />
-  <img alt="License" src="https://img.shields.io/badge/license-TBD-94a3b8" />
+  <img alt="Läuft in Docker" src="https://img.shields.io/badge/Docker-fertig%20zum%20Start-2496ed?logo=docker&logoColor=white" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.9%20%2F%203.11-3776ab?logo=python&logoColor=white" />
+  <img alt="Coral TPU" src="https://img.shields.io/badge/Coral%20TPU-optional-ec4899" />
+  <img alt="Bleibt im eigenen Netz" src="https://img.shields.io/badge/Daten-bleiben%20zu%20Hause-22c55e" />
+  <img alt="Lizenz" src="https://img.shields.io/badge/Lizenz-noch%20offen-94a3b8" />
 </p>
 
 <p align="center">
-  <a href="#-was-squirreling-macht">Was es macht</a> ·
-  <a href="#-show-dont-tell">Show, don't tell</a> ·
-  <a href="#-frame-validation-pipeline">Pipeline</a> ·
-  <a href="#-test-suite">Tests</a> ·
-  <a href="#-loslegen">Loslegen</a> ·
-  <a href="#-tieferer-blick">Tieferer Blick</a>
+  <a href="#was-ist-das">Was ist das</a> ·
+  <a href="#was-die-kameras-erkennen">Was erkannt wird</a> ·
+  <a href="#so-sieht-das-aus">So sieht das aus</a> ·
+  <a href="#so-funktioniert-es">So funktioniert es</a> ·
+  <a href="#loslegen">Loslegen</a> ·
+  <a href="#für-technisch-interessierte">Technik</a>
 </p>
+
+<p align="center"><sub><em>English: this page is in German. A machine translation covers it well —
+the project itself is a self-hosted garden-camera watcher that names the animal it sees.</em></sub></p>
 
 ---
 
-## ✨ Was Squirreling macht
+## Was ist das?
 
-Eine Reolink-Kamera produziert pro Tag tausende Sekunden Bewegung. Davon ist
-fast alles Müll: Wind im Baum, Schatten, Insekten an der Linse. **Squirreling
-· Sightings** filtert das raus und macht aus den verbleibenden Augenblicken
-kleine Geschichten — mit Wetter-Kontext, Tier-Erkennung, automatisch
-entstehenden Vogel-Dossiers und saisonalen Quests, die du ohne extra Aufwand
-abschließt (oder verfehlst).
+Eine Kamera im Garten filmt jeden Tag tausende Sekunden Bewegung. Fast
+alles davon ist nichts: Wind im Baum, ein Schatten, eine Fliege auf der
+Linse. Man schaut zweimal rein und danach nie wieder.
 
+**Squirreling · Sightings** sortiert das aus und behält die Augenblicke,
+die eine Geschichte sind. Es sagt dir nicht „Bewegung erkannt“ — es sagt
+dir, dass um 13:51 an der Werkbank das erste Eichhörnchen seit 36 Stunden
+saß, und legt den Clip dazu.
 
-### <img src="docs/img/icon-live.svg" width="24" height="24" align="absmiddle"/>  Live & Bewegung
+Alles läuft auf deinem eigenen Rechner, in deinem eigenen Netz. Keine
+Wolke, kein Abo, kein Konto. Nach außen geht nur, was du selbst
+einschaltest — die Meldung in den Chat. Wetterdaten und
+Artbeschreibungen werden **geholt**, nicht gesendet; deine Aufnahmen
+bleiben, wo sie entstanden sind.
 
-**Live-Mosaic** — eine Kachel pro Kamera, FPS-Pille, HD-Toggle pro Cam.
-Native Fullscreen + Swipe-Gesten auf iOS, Safe-Area-Insets respektiert.
-Kameras starten automatisch — nichts zu klicken, kein "Verbinden"-Button.
-
-**Coral-TPU-Pipeline** — drei Tiers in Reihe: EdgeTPU (~30 ms) → tflite
-CPU (~300 ms) → motion-only. Status-Pill zeigt jederzeit, welcher Tier
-gerade läuft. Coral-Stick optional, kein Zwang.
-
-**First-Since-Detektor** — wenn dein erstes Eichhörnchen seit 36 h
-auftaucht, weißt du das. Pro Klasse eigene Schwelle (Vögel 4 h, Personen
-6 h, Füchse 24 h). Telegram bekommt eine eigene Caption: *"Erstes
-Eichhörnchen seit 36 h ✨ (neuer Rekord)"*.
-
-### <img src="docs/img/icon-weather.svg" width="24" height="24" align="absmiddle"/>  Wetter-Wachen
-
-**Wetter-Trigger** — Open-Meteo poll-driven. Gewitter, Starkregen,
-Schnee und Nebel produzieren kurze Clips am Score-Maximum.
-
-**Sun-Timelapses** — Sonnenauf- und -untergänge als 75-min-Zeitraffer
-(deckt Civil Twilight + Goldene Stunde ab, Fenster fest verdrahtet).
-Day/Night-Mode wird symmetrisch *vor* und *nach* dem Fenster geschaltet,
-nie währenddessen.
-
-**Event-Timelapses** — heranziehende Gewitter, Frontdurchgänge und
-Sturmfronten lösen 60-min-Zeitraffer aus, ein Cooldown verhindert
-Doppelauslösung am selben Tag.
-
-**DWD-Bands** — Niederschlag wird nicht über pauschale "Starkregen"-
-Labels eingeordnet, sondern in DWD-Klassen: Trocken / Niesel / Leichter /
-Mäßiger / Starker / Starkregen — dieselbe Logik in UI, Telegram und MQTT.
-
-### <img src="docs/img/icon-identity.svg" width="24" height="24" align="absmiddle"/>  Identität & Dossiers
-
-**Vogel-Dossiers** — wenn der iNat-Klassifizierer eine neue Art
-findet, baut Squirreling automatisch ein persönliches Dossier auf:
-Wikipedia-Auszug, Foto, plus bis zu drei Xeno-Canto-Aufnahmen mit
-deutschem Caption (Gesang / Ruf / Warnruf) und sichtbarer
-Recordist-Attribution + CC-Lizenz.
-
-**Wildtier-Cascade** — Coral findet das Tier, der Wildlife-
-Klassifizierer benennt es: Eichhörnchen (rot/schwarz/hell), Igel, Fuchs,
-Reh, Feldhase. Ohne Coral läuft das Ganze als CPU-Fallback weiter.
-
-**Cat / Person Identity** — Histogramm-Re-ID auf Crop-Ebene. Whitelist
-für Personen unterdrückt Push-Alerts schedule-aware.
-
-### <img src="docs/img/icon-quests.svg" width="24" height="24" align="absmiddle"/>  Quests & Meilensteine
-
-**Saisonale Quests** — z. B. *"Wintervorrat"*: 50 Eichhörnchen-
-Sichtungen im Dezember. Oder *"Mondtiere"*: 5 Wildtiere zwischen
-2 und 4 Uhr morgens. Fortschritts-Pinboard auf der Sichtungen-Seite,
-Telegram-Glückwunsch beim Abschluss.
-
-**Achievement-Medaillen** — Bronze (1–4 Sichtungen) → Silber (5–19) →
-Gold (20+). Top-20 bayerische Gartenvögel + die wichtigsten Säugetiere.
-
-### <img src="docs/img/icon-ops.svg" width="24" height="24" align="absmiddle"/>  Operations
-
-**Self-mutating Telegram-Anchor** — eine Bubble pro Kamera, Drilldowns
-ändern dieselbe Nachricht via Edit-in-Place. Kein Chat-Spam, ein
-ständiger Steuerstand.
-
-**Strukturiertes Logging** — Tag-Schema (`[boot]`, `[cam:<id>]`,
-`[det]`, `[tg]`, `[weather]`, `[quests]`, `[dossiers]` …),
-Boot-Inventory, periodischer Heartbeat, 24-h-Reconnect-Counter pro Cam.
-
-**Deterministische Cam-IDs** — `manufacturer_model_name_iplastoctet`.
-Storage-Migration bindet Legacy-Folder bei jedem Boot idempotent um.
-
-**Frame-Validity-Filter** — verworfene Frames werden bei jedem
-Timelapse-Build separat gezählt; das Modul fängt sowohl flat-magenta
-als auch *gemusterte* H.265-Korruption ab.
+|  | |
+|---|---|
+| **Für dich, wenn** | du eine IP-Kamera im Garten hast, ein NAS oder einen kleinen Server, und wissen willst, welche Tiere vorbeikommen — ohne dafür Videomaterial durchzuscrollen. |
+| **Eher nicht, wenn** | du eine fertige Alarmanlage suchst. Das hier ist ein Beobachtungstagebuch mit Meldefunktion, kein Wachdienst mit Zertifikat. |
 
 ---
 
-## 📸 Show, don't tell
-
-> Die drei Views unten sind handgezeichnete SVG-Mockups, keine echten
-> Captures — sie zeigen die UI-Struktur ohne User-Daten zu leaken.
-> Das Refresh-Recipe steht in
-> [docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md).
+## Was die Kameras erkennen
 
 <p align="center">
-  <img src="docs/screenshots/01-mediathek.svg" alt="Mediathek mit gefilterten Sichtungen" width="100%" />
+  <img src="docs/assets/legende-klassen.svg" alt="Die erkannten Klassen: Vogel, Eichhörnchen, Katze, Hund, Fuchs, Igel, Reh, Marder, Person, Auto, Bewegung" width="100%" />
 </p>
 
-<p align="center"><em>Mediathek — Filter-Pills nach Objekttyp, Lightbox mit Prev/Next über Tagesgrenzen</em></p>
+Jede Klasse hat ihre eigene Farbe, und die bleibt überall dieselbe: im
+Rahmen über dem Video, in der Filterpille der Mediathek, in der Spur der
+Zeitleiste, auf der Medaille. Man muss die Zuordnung einmal sehen und nie
+wieder nachschlagen.
 
-<p align="center">
-  <img src="docs/screenshots/02-cam-edit.svg" alt="Kamera-Detailansicht mit Live-View und Verbindungsfeldern" width="100%" />
-</p>
+Zwei Klassen können noch genauer werden:
 
-<p align="center"><em>Kamera-Detail — Live-View, Erkennungs-Profile, Zonen-Editor</em></p>
-
-<p align="center">
-  <img src="docs/screenshots/03-telegram.svg" alt="Telegram-Push mit Bestätigungs-Buttons" width="55%" />
-</p>
-
-<p align="center"><em>Telegram — Inline-Buttons, Anchor-Bubble (Edit-in-Place statt Chat-Spam)</em></p>
+- **Vögel** bekommen eine Art. Aus „Vogel“ wird „Blaumeise“, und beim
+  ersten Mal legt das Programm von selbst ein kleines Dossier an —
+  Bild, Kurztext, dazu bis zu drei Tonaufnahmen mit Beschriftung
+  (Gesang / Ruf / Warnruf) und sichtbarer Nennung von Aufnehmendem und
+  Lizenz.
+- **Katzen und Personen** werden wiedererkannt. Wer auf der Whitelist
+  steht, löst keine Meldung aus — der Postbote schon.
 
 ---
 
-## 🛡 Frame Validation Pipeline
+## So sieht das aus
 
-Jeder einzelne Timelapse-Frame durchläuft denselben adaptiven
-Validator. Der Profil-Picker wird vor jedem Capture frisch
-gewählt und alle 2 min mit-laufend nachjustiert — so läuft auch
-ein 75-min Sun-Timelapse, der durch zivile Dämmerung bricht,
-nie mit den falschen Schwellen. Korrupte Decoder-Frames werden
-durch ein Sanity-Gate aus dem Picker-Sample gefiltert, bevor sie
-das Profil "vergiften" können.
+> Die Bilder unten sind gezeichnete Ansichten, keine echten Aufnahmen.
+> Sie zeigen Aufbau, Farben und Symbole der laufenden App, ohne den
+> Garten und die Kameranamen des Betreibers zu veröffentlichen. Jedes
+> Symbol darin stammt unverändert aus dem Quelltext der Oberfläche.
+
+### Der Player — eine Aufnahme ansehen
 
 <p align="center">
-  <img src="docs/img/validator-pipeline.svg" alt="Frame validation pipeline" width="100%" />
+  <img src="docs/assets/ansicht-player.svg" alt="Clip-Player mit Rahmen um zwei erkannte Tiere, Zeitleiste mit je einer Spur pro Tier, Ebenen-Schaltern und Objektliste" width="100%" />
 </p>
 
-**Drei Profile**, jeweils mit eigenen Schwellen für `tile_dead_fraction`,
-`flat_gray_std_floor` und `grey_midband_total_std`:
+Die Zeitleiste liegt **im** Bild, nicht darunter, und hat pro erkanntem
+Tier eine eigene Zeile: ein dicker Punkt beim ersten Auftauchen, ein
+Balken so lange, wie es verfolgt wurde. Man sieht auf einen Blick, ob
+zwei Tiere nacheinander oder gleichzeitig da waren — und springt mit
+einem Tipp genau dorthin.
 
-- **DAY** — `median brightness ≥ 110` · strikt (35 % dead-tile threshold)
-- **TWILIGHT** — `50 ≤ median < 110` · ausgewogen (55 % threshold)
-- **NIGHT** — `median brightness < 50` · locker (85 % threshold) —
-  echte IR-Nachtszenen haben legitim flache dunkle Bereiche
+Rahmen und Spuren lassen sich einzeln abschalten. Erkennungs-Zonen und
+Ausschluss-Masken sind beim Öffnen bewusst **aus**: das ist
+Referenzgeometrie, die man ab und zu braucht und nicht jedes Mal.
 
-**Validator-Stack** (in dieser Reihenfolge — der erste Reject gewinnt):
-brightness gates → `horizontal_anomaly_band` (H.265-Bandkorruption)
-→ `flat_gray_full_frame` (Vollbild-Decoder-Grau) → `grey_uniform`
-→ `no_detail` → `dead_area` (8×5-Tile-Grid) → `split_left/right_dead`
-(halb-korrupt) → `grey_midband` (Macroblock-Smear). Pro Slot wird
-bis zu 6× retried mit 0,4 s Abstand.
+### Die Mediathek — der Tag auf einer Seite
 
-Reject-Reasons sind parametrisiert (`horizontal_anomaly_band(y=50%,h=6%,score=2.6)`)
-und landen in `_rejected/<reason_head>/` — so siehst du beim
-Audit auf einen Blick, an welcher y-Position das Problem saß
-und welcher Sub-Detektor angeschlagen hat.
+<p align="center">
+  <img src="docs/assets/ansicht-mediathek.svg" alt="Mediathek mit Filterzeile nach Tierart und einem Raster aus Ereigniskacheln" width="100%" />
+</p>
+
+Eine Kachel je Ereignis, mit Art, Sicherheit, Uhrzeit und Kamera. Oben
+filtert eine Zeile nach Tierart — dieselben Symbole und Farben wie
+überall sonst. Zeitraffer liegen im selben Raster wie die Sichtungen, es
+gibt keine zweite Mediathek nebenan.
+
+### Sichtungen — das Tagebuch, das sich selbst schreibt
+
+<p align="center">
+  <img src="docs/assets/ansicht-sichtungen.svg" alt="Sichtungen-Seite mit laufenden Quests und dem Medaillenbrett der erkannten Arten" width="100%" />
+</p>
+
+Jede Art, die schon einmal vor einer Kamera stand, bekommt eine
+Medaille: Bronze ab der ersten Sichtung, Silber ab fünf, Gold ab zwanzig.
+Was noch fehlt, steht grau daneben — man sieht, was im Garten noch
+aussteht.
+
+Darüber laufen **Quests**: „50 Eichhörnchen-Sichtungen im Dezember“, „5
+Wildtiere zwischen 2 und 4 Uhr nachts“. Nichts davon muss man anstoßen;
+sie laufen mit und melden sich, wenn sie voll sind.
+
+### Gewitter-Archiv — Unwetter zum Nachschlagen
+
+<p align="center">
+  <img src="docs/assets/ansicht-gewitter.svg" alt="Gewitter-Archiv mit nach Stärke sortierten Episoden, Stärkebalken und Anzahl der Clips" width="100%" />
+</p>
+
+Überschreiten Blitzpotential, Niederschlag oder Böen die Schwelle, legt
+das Programm eine Episode an und schneidet mit. Später steht das Jahr als
+Liste da, nach Stärke sortierbar, zwei Gewitter lassen sich
+nebeneinanderlegen und vergleichen.
+
+### Wetter — warum die Kamera gerade aufnimmt
+
+<p align="center">
+  <img src="docs/assets/ansicht-wetter.svg" alt="Wetterseite mit Kennzahlen, Tagesverlauf und den beiden Sonnen-Zeitraffern" width="100%" />
+</p>
+
+Das Wetter ist hier kein Beiwerk, sondern ein Auslöser. Sonnenauf- und
+-untergang werden jeden Tag als 75-Minuten-Zeitraffer mitgeschnitten,
+aufziehende Gewitter und durchziehende Fronten als 60-Minuten-Zeitraffer.
+
+Regen wird nicht als „stark, ja oder nein“ gezeigt, sondern in den
+Klassen des Deutschen Wetterdienstes — Trocken, Niesel, Leicht, Mäßig,
+Stark, Starkregen. Dieselbe Einteilung in der Oberfläche, im Chat und
+auf MQTT, damit nirgends zwei verschiedene Wahrheiten stehen.
+
+### Die Meldung im Chat
+
+<p align="center">
+  <img src="docs/assets/ansicht-telegram.svg" alt="Telegram-Meldung mit Vorschaubild, Art und Uhrzeit sowie Knöpfen für Clip ansehen, stumm schalten und Falschmeldung" width="62%" />
+</p>
+
+Pro Kamera gibt es **eine** Nachricht, und jeder Knopfdruck schreibt
+genau die um. Kein Chat, der nach zwei Wochen aus tausend fast gleichen
+Meldungen besteht — sondern eine Steuertafel, die immer an derselben
+Stelle steht.
 
 ---
 
-## 🏗 Wie es funktioniert
+## So funktioniert es
 
-```mermaid
-flowchart LR
-    subgraph CAMS[Kameras]
-        C1[Reolink RTSP]
-    end
-    subgraph PIPE[Frame-Pipeline]
-        M[Motion Gate] --> D[Coral COCO Detector]
-        D -->|Vogel| BIRD[iNat Bird Classifier]
-        D -->|Säuger| WILD[Wildlife Classifier]
-        BIRD --> CONFIRM[N-of-M Confirmer]
-        WILD --> CONFIRM
-        D --> CONFIRM
-    end
-    subgraph TL[Timelapse-Pipelines]
-        SUN[Sun-TL · 75 min] -->|astral + APScheduler| ENC[ffmpeg encode]
-        EVT[Event-TL · 60 min] -->|Open-Meteo trigger| ENC
-        DAILY[Daily TL] --> ENC
-    end
-    subgraph SIDE[Side-Effects]
-        QUESTS[Quest-Evaluator]
-        DOSS[Bird-Dossier auto-fetch]
-        FS[First-Since-Detector]
-    end
-    subgraph OUT[Outputs]
-        UI[Web-UI · Flask + ESM]
-        TG[Telegram Anchor-Bubble]
-        MQ[MQTT / Home Assistant]
-        ST[(storage/)]
-    end
-    C1 --> PIPE
-    CONFIRM -->|Event JSON + clip| ST
-    CONFIRM --> FS
-    CONFIRM --> DOSS
-    CONFIRM --> QUESTS
-    TL --> ST
-    ST --> UI
-    FS --> TG
-    QUESTS --> TG
-    CONFIRM --> TG
-    CONFIRM --> MQ
-```
+<p align="center">
+  <img src="docs/assets/ablauf.svg" alt="Der Weg einer Sichtung in fünf Schritten: Kamera, Bewegung, Chip, Artbestimmung, Meldung" width="100%" />
+</p>
 
-Jede Kamera läuft auf einem eigenen Daemon-Thread im selben Flask-Prozess.
-Substream-Decoder → Motion-Gate → Coral-Detector → Klassifizierer-Cascade
-→ N-of-M-Confirmer → Event-JSON + MP4 → MQTT-Publish → Telegram-Push.
-Alles persistiert unter `storage/`. Das Frontend ist eine SPA, die
-ausschließlich gegen die Flask-API spricht — kein SSR, keine externen
-Runtime-Dependencies außer Open-Meteo für Wetter-Trigger.
+Einen Schritt zeigt das Bild nicht, weil er unsichtbar bleibt: bevor
+aus einer Erkennung eine Sichtung wird, muss das Tier auf **mehr als
+einem** Bild zu sehen sein. Das ist der Unterschied zwischen „ein Blatt
+sah für ein Einzelbild aus wie eine Katze“ und einer Meldung, die
+stimmt.
 
 ---
 
-## 🧪 Test Suite
+## Loslegen
 
-83 pytest-Funktionen in 8 Modulen, alle grün auf jedem Commit.
-Schwerpunkt liegt auf den drei Stellen, wo Bugs am teuersten
-sind: Frame-Validatoren (silent-corrupt-frames in MP4s),
-Storage-Migration (verlorene Sichtungen bei Cam-Rename) und
-Camera-ID-Resolution (Doppel-Folder bei IP-Wechsel).
-
-<p align="center">
-  <img src="docs/img/test-suite.svg" alt="Test Suite — 83 tests across 8 modules" width="100%" />
-</p>
+**Du brauchst:** einen Linux-Rechner, ein NAS oder Unraid mit Docker ·
+mindestens eine IP-Kamera mit RTSP im selben Netz · optional einen
+Coral-USB-Stick für schnellere Erkennung · optional einen Telegram-Bot
+für die Meldungen.
 
 ```bash
-# Alle Tests
-pytest -q
-
-# Nur die Frame-Validator-Suite (häufig touchierte Datei)
-pytest -q app/tests/test_frame_helpers.py
-
-# Mit Fixtures aus dem Squirrel-Town-Capture
-pytest -q app/tests/test_frame_validation_fixtures.py
-```
-
-Synthetische Fixtures werden in-test generiert (kein on-disk
-Asset-Berg). Echte Korruptions-Frames aus Produktion liegen
-unter `app/tests/fixtures/frame_validation/` und dienen als
-Regression-Bar für jede Validator-Änderung.
-
----
-
-## 🚀 Loslegen
-
-**Voraussetzungen:** Linux- oder Windows/Docker-Host · mindestens eine
-Reolink-Kamera im LAN · optional Coral USB Accelerator · optional
-Telegram-Bot.
-
-```bash
-git clone https://github.com/premiumcola/cam-manager.git
-cd cam-manager
+git clone https://github.com/premiumcola/Squirreling-Sightings.git
+cd Squirreling-Sightings
 docker compose up -d
 ```
 
-Web-UI öffnen: `http://<host-ip>:8099`. Setup-Wizard fragt nach Standort
-(für Sonnen- + Wetter-Trigger), erster Kamera (Auto-Discovery oder
-manuell), und optional Telegram-Bot-Token.
+Dann im Browser `http://<adresse-des-servers>:8099` öffnen. Beim ersten
+Start führt ein Einrichtungs-Assistent durch die drei Dinge, die das
+Programm von dir wissen muss:
 
-Volume-mounts für `app/`, `web/`, `storage/`, `models/` plus
-`--device /dev/bus/usb` für den Coral-Stick sind in `docker-compose.yml`
-voreingestellt. Volume-mounted Code reloadt sich nach
-`docker restart squirreling-sightings` — ein full rebuild ist nur bei Änderungen
-an `Dockerfile` oder `requirements.txt` nötig.
+1. **Wo du wohnst** — nur für Sonnenstand und Wetter, grob genügt.
+2. **Deine erste Kamera** — das Netz wird durchsucht, meist steht sie
+   schon in der Liste; sonst reichen Adresse, Benutzer und Passwort.
+3. **Telegram** — optional. Ohne Token läuft alles weiter, nur eben ohne
+   Meldungen aufs Handy.
 
----
+Danach läuft es. Kameras verbinden sich von selbst, es gibt keinen
+„Verbinden“-Knopf. Alle weiteren Einstellungen macht man in der
+Oberfläche; die Dateien unter `storage/` muss niemand von Hand anfassen.
 
-## 📚 Tieferer Blick
+> **Mit Coral-Stick:** in `docker-compose.yml` steht der fertige
+> Coral-Dienst auskommentiert bereit — er zieht ein vorgebautes Image
+> statt selbst zu bauen. Nur einer der beiden Dienste darf gleichzeitig
+> laufen. Einzelheiten:
+> [`app/docs/INSTALL_CORAL.md`](app/docs/INSTALL_CORAL.md).
+>
+> **Auf Unraid:** [`app/INSTALL_UNRAID.md`](app/INSTALL_UNRAID.md).
 
-- [`app/README.md`](app/README.md) — Backend-Architektur,
-  Package-Layout, alle 77 Python-Module
-- [`app/INSTALL_UNRAID.md`](app/INSTALL_UNRAID.md) — Unraid-spezifischer
-  Deployment-Pfad inkl. Bind-Mounts
-- [`app/docs/INSTALL_CORAL.md`](app/docs/INSTALL_CORAL.md) —
-  Coral USB einrichten + EdgeTPU-Modelle laden
-- [`app/docs/camera_notes.md`](app/docs/camera_notes.md) —
-  Vendor-spezifische RTSP-Pfade, ID-Schema, Discovery-Quirks
-- [`CLAUDE.md`](CLAUDE.md) — Operating Manual des Repos
-  (Hard Rules, Lint-Stack, Design-Prinzipien)
+### Wo die Daten liegen
 
-Alle Settings werden über die Web-UI verwaltet. Power-User können
-direkt in die JSON-Files unter `storage/` schauen — `settings.json` ist
-die Source of Truth, mit zwei rotierenden `.bak`-Snapshots und
-zeitgestempelten Migrations-Backups.
-
----
-
-## 🛠 Stack
-
-Python 3.11 · Flask · APScheduler · python-telegram-bot · paho-mqtt ·
-OpenCV · numpy · Pillow · PyCoral / TensorFlow Lite · iNaturalist Bird
-Model · astral · Open-Meteo · Reolink RTSP + ONVIF Discovery.
+Alles Persistente liegt in einem einzigen Ordner: `storage/`. Dort
+stehen die Einstellungen, die Ereignisse, die Clips, die Zeitraffer und
+der Wetterverlauf. Wer ein Backup einrichtet, richtet es auf diesen
+Ordner ein — mehr ist es nicht.
 
 ---
 
-## 🤝 Mitwirken
+## Was sonst noch drinsteckt
 
-Pull Requests willkommen. Issues bitte mit Logs (`docker logs squirreling-sightings
---tail 200` oder Logs-Tab), exaktem Reolink-Modell + Firmware, und
-Reproschritten.
+<table>
+<tr>
+<td width="56"><img src="docs/img/icon-live.svg" width="44" height="44" alt=""/></td>
+<td><strong>Live zuschauen</strong><br/>
+Eine Kachel je Kamera, HD einzeln zuschaltbar, Vollbild mit
+Wischgesten auf dem iPhone. Nichts anzuklicken, keinen
+„Verbinden“-Knopf.</td>
+</tr>
+<tr>
+<td><img src="docs/img/icon-identity.svg" width="44" height="44" alt=""/></td>
+<td><strong>Dossiers mit Tonaufnahmen</strong><br/>
+Zu jeder neu entdeckten Vogelart legt das Programm ein Blatt an: Bild,
+Kurztext, bis zu drei Aufnahmen mit Beschriftung. Für die Töne braucht
+es einen kostenlosen Xeno-canto-Schlüssel in <code>XENO_CANTO_API_KEY</code>;
+ohne ihn bleibt das Blatt stumm, alles andere läuft weiter.</td>
+</tr>
+<tr>
+<td><img src="docs/img/icon-quests.svg" width="44" height="44" alt=""/></td>
+<td><strong>„Erstes seit …“</strong><br/>
+Taucht eine Art nach langer Pause wieder auf, sagt die Meldung genau
+das — <em>Erstes Eichhörnchen seit 36 h, neuer Rekord.</em> Jede Klasse
+hat ihre eigene Pause, ab der es sich lohnt: Vögel 4 h, Personen 6 h,
+Füchse 24 h, Rehe 48 h.</td>
+</tr>
+<tr>
+<td><img src="docs/img/icon-weather.svg" width="44" height="44" alt=""/></td>
+<td><strong>Zeitraffer, die sich selbst starten</strong><br/>
+Einmal täglich der ganze Tag, dazu Sonnenauf- und -untergang und jedes
+aufziehende Unwetter. Kaputte Einzelbilder — Decoder-Grau,
+H.265-Bänder — werden vorher aussortiert, damit kein Zeitraffer
+flackert.</td>
+</tr>
+<tr>
+<td><img src="docs/img/icon-ops.svg" width="44" height="44" alt=""/></td>
+<td><strong>Betrieb ohne Rätselraten</strong><br/>
+Jede Sichtung geht zusätzlich per MQTT an Home Assistant. Jede Logzeile
+beginnt mit ihrem Bereich (<code>[cam:…]</code>, <code>[det]</code>,
+<code>[tg]</code>, <code>[weather]</code>). Und wechselt eine Kamera die
+IP, werden die alten Sichtungen beim nächsten Start umgehängt statt in
+einem zweiten Ordner zu versanden.</td>
+</tr>
+</table>
 
-## 📜 Lizenz
+---
 
-Eine Lizenz ist noch nicht hinterlegt. Default-Annahme bis dahin: alle
-Rechte vorbehalten. MIT ist geplant — sobald `LICENSE` im Repo-Root
-liegt, hat das Vorrang vor dieser Notiz.
+## Für technisch Interessierte
 
-## 💚 Credits
+Die ausführliche Fassung — Aufbau, Bildprüfung, Erkennungsstufen,
+Ablage, Tests — steht in **[docs/technik.md](docs/technik.md)**.
 
-**Coral USB Accelerator** (Google) für EdgeTPU-Inferenz ·
-**python-telegram-bot** maintainers für das Bot-Framework ·
-**Open-Meteo** für die kostenlose, key-freie Wetter-API ·
-**iNaturalist** für das Bird-Species-Modell ·
-**Xeno-canto** für die Vogelaufnahmen (Recordist-Credits sichtbar im
-Dossier) ·
-**MediaWiki / Wikipedia** für die Artbeschreibungen ·
-**DWD** für die Niederschlags-Klassengrenzen ·
-**astral** für die Sonnenstandsberechnung ·
-**Reolink** für die RTSP-Schnittstelle.
+In Kurzform: ein Flask-Prozess, ein Daemon-Thread je Kamera, eine SPA
+aus ES-Modulen ohne Build-Schritt, alles Persistente als JSON und MP4
+unter `storage/`. Erkennung in drei Stufen — Coral EdgeTPU (4–40 ms),
+sonst tflite auf dem Prozessor (~300 ms), sonst nur Bewegung. Welche
+Stufe läuft, steht in der Oberfläche und im Log; ein stiller Rückfall
+auf den Prozessor ist ausgeschlossen.
 
-Screenshot-Mockups + Stock-Bilder: siehe
-[docs/screenshots/CREDITS.md](docs/screenshots/CREDITS.md).
+| Wohin | Was steht dort |
+|---|---|
+| [`docs/technik.md`](docs/technik.md) | Architektur, Bildprüfung, Erkennung, Tests |
+| [`app/README.md`](app/README.md) | Modulkarte des Backends |
+| [`app/INSTALL_UNRAID.md`](app/INSTALL_UNRAID.md) | Unraid-Installation |
+| [`app/docs/INSTALL_CORAL.md`](app/docs/INSTALL_CORAL.md) | Coral-Stick einrichten |
+| [`app/docs/camera_notes.md`](app/docs/camera_notes.md) | RTSP-Pfade je Hersteller, ID-Schema |
+| [`CLAUDE.md`](CLAUDE.md) | Arbeitsregeln des Repos |
 
-Brand assets: in-house SVGs, dark-mode-only palette
-(forest green / acorn brown / lens cyan) — see `docs/img/`.
+---
+
+## Mitmachen
+
+Pull Requests sind willkommen. Fehlermeldungen bitte mit Log
+(`docker logs squirreling-sightings --tail 200` oder der Logs-Reiter in
+der Oberfläche), dem genauen Kameramodell samt Firmware und den
+Schritten zum Nachstellen.
+
+Bitte niemals echte Adressen, Zugangsdaten oder Chat-IDs in Issues oder
+Screenshots — in diesem Repo gelten überall Platzhalter (`192.0.2.x`,
+`cam.lan`, `<BOT_TOKEN>`).
+
+## Lizenz
+
+Noch keine hinterlegt. Bis dahin gilt: alle Rechte vorbehalten. MIT ist
+geplant — sobald eine `LICENSE` im Wurzelverzeichnis liegt, gilt die und
+nicht dieser Absatz.
+
+## Dank
+
+**Coral / Google** für den EdgeTPU-Stick · **python-telegram-bot** ·
+**Open-Meteo** für eine Wetter-Schnittstelle ohne Schlüssel und ohne
+Rechnung · **iNaturalist** für das Vogelmodell · **Xeno-canto** für die
+Tonaufnahmen (Aufnehmende werden im Dossier genannt) ·
+**Wikipedia** für die Artbeschreibungen · **DWD** für die
+Niederschlagsklassen · **astral** für den Sonnenstand.
+
+Die Zeichnungen in dieser README sind hauseigen. Woher jeder Glyph
+stammt und was beim Ändern zu beachten ist, steht in
+[docs/assets/CREDITS.md](docs/assets/CREDITS.md).

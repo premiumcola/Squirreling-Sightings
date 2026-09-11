@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Das Gewitter-Archiv: eine nach Stärke sortierte Liste vergangener Unwetter mit Rang, Dauer, Stärkebalken, Spitzenwert und der Zahl der aufgezeichneten Clips.">
+  <!-- Die Symbole und Farben der Filterzeile kommen aus
+       core/weather-types.js (WEATHER_TYPES) — dieselbe Tabelle, aus der
+       auch Telegram und MQTT ihre Labels ziehen. Das Archiv füllt sich
+       von allein: überschreiten Blitzpotential, Niederschlag oder Böen
+       die Schwelle, legt der Wetterdienst eine Episode an und schneidet
+       mit. -->
+  <rect width="1200" height="620" rx="18" fill="#141414"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif">
+    <!-- Kopf -->
+    <g transform="translate(28,22)" fill="none" stroke="#7faec9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2L3 14h7l-1 8 11-14h-7l0-6z"/>
+    </g>
+    <text x="60" y="42" fill="#edf4fb" font-size="22" font-weight="800">Gewitter-Archiv</text>
+    <text x="60" y="66" fill="#9ba3ad" font-size="13">2026 · 14 Gewitter · 3 h 52 min Aufzeichnung · stärkstes am 11. Juli</text>
+
+    <!-- Jahres- und Sortierpillen + Vergleichsknopf -->
+    <g font-size="12.5" font-weight="700">
+      <g transform="translate(742,26)">
+        <rect width="62" height="32" rx="12" fill="#3b82f6" fill-opacity="0.22"/><text x="31" y="21" fill="#bfdbfe" text-anchor="middle">2026</text>
+        <rect x="70" y="0" width="62" height="32" rx="12" fill="#222222"/><text x="101" y="21" fill="#9ba3ad" text-anchor="middle">2025</text>
+      </g>
+      <g transform="translate(890,26)">
+        <rect width="80" height="32" rx="12" fill="#222222"/><text x="40" y="21" fill="#9ba3ad" text-anchor="middle">Neueste</text>
+        <rect x="88" y="0" width="80" height="32" rx="12" fill="#3b82f6" fill-opacity="0.22"/><text x="128" y="21" fill="#bfdbfe" text-anchor="middle">Stärkste</text>
+      </g>
+      <g transform="translate(1068,26)">
+        <rect width="104" height="32" rx="12" fill="#2a3b46"/><text x="52" y="21" fill="#cfe3ee" text-anchor="middle">Vergleichen</text>
+      </g>
+    </g>
+
+    <!-- Filterzeile nach Wetterart -->
+    <g font-size="12.5" font-weight="700">
+      <g transform="translate(28,86)">
+        <rect width="124" height="34" rx="12" fill="#7faec9" fill-opacity="0.18"/>
+        <g transform="translate(12,8) scale(0.78)" fill="none" stroke="#7faec9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 11-14h-7l0-6z"/></g>
+        <text x="40" y="22" fill="#bcd8e8">Gewitter 14</text>
+      </g>
+      <g transform="translate(160,86)">
+        <rect width="134" height="34" rx="12" fill="#5a8aa8" fill-opacity="0.18"/>
+        <g transform="translate(12,8) scale(0.78)" fill="none" stroke="#5a8aa8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2.5"/><path d="M7 17l-2 4"/><path d="M11 19l-1 2"/><path d="M14 17l-2 4"/></g>
+        <text x="40" y="22" fill="#a8c4d6">Starkregen 9</text>
+      </g>
+      <g transform="translate(302,86)">
+        <rect width="132" height="34" rx="12" fill="#b08070" fill-opacity="0.18"/>
+        <g transform="translate(12,8) scale(0.78)" fill="none" stroke="#b08070" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2.5"/><line x1="2" y1="16" x2="20" y2="16"/><line x1="5" y1="20" x2="22" y2="20"/></g>
+        <text x="40" y="22" fill="#d3b1a5">Sturmfront 3</text>
+      </g>
+      <g transform="translate(442,86)">
+        <rect width="106" height="34" rx="12" fill="#6d7787" fill-opacity="0.18"/>
+        <g transform="translate(12,8) scale(0.78)" fill="none" stroke="#6d7787" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h16M3 12h18M5 16h14M7 20h10"/></g>
+        <text x="40" y="22" fill="#a8b0bd">Nebel 6</text>
+      </g>
+      <g transform="translate(556,86)">
+        <rect width="110" height="34" rx="12" fill="#a8c0d4" fill-opacity="0.16"/>
+        <g transform="translate(12,8) scale(0.78)" fill="none" stroke="#a8c0d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 7l14 10M5 17l14-10"/></g>
+        <text x="40" y="22" fill="#c3d3e0">Schnee 2</text>
+      </g>
+    </g>
+
+    <!-- ══ Liste ══ -->
+    <!-- Zeile 1 · Rang 1 -->
+    <g transform="translate(28,144)">
+      <rect width="1144" height="84" rx="14" fill="#1a1a1a"/>
+      <circle cx="42" cy="42" r="18" fill="#e0c050" fill-opacity="0.2"/>
+      <text x="42" y="48" fill="#e0c050" font-size="16" font-weight="800" text-anchor="middle">1</text>
+      <g transform="translate(78,30) scale(0.92)" fill="none" stroke="#7faec9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 11-14h-7l0-6z"/></g>
+      <text x="114" y="36" fill="#edf4fb" font-size="15" font-weight="700">Hitzegewitter über dem Tal</text>
+      <text x="114" y="58" fill="#9ba3ad" font-size="12">11. Juli · 17:24 · 2 h 06 min</text>
+      <rect x="520" y="38" width="300" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="520" y="38" width="300" height="7" rx="3.5" fill="#7faec9"/>
+      <text x="848" y="46" fill="#cfe3ee" font-size="13" font-weight="700">96 % Blitzpotential</text>
+      <g transform="translate(1032,31)">
+        <rect width="88" height="24" rx="9" fill="#222222"/>
+        <g transform="translate(10,5)" fill="none" stroke="#9ba3ad" stroke-width="1.6" stroke-linejoin="round"><rect x="0" y="1" width="15" height="12" rx="2"/><path d="M0 5h15M4 1v12M11 1v12"/></g>
+        <text x="34" y="17" fill="#9ba3ad" font-size="12" font-weight="700">6 Clips</text>
+      </g>
+    </g>
+
+    <!-- Zeile 2 -->
+    <g transform="translate(28,238)">
+      <rect width="1144" height="84" rx="14" fill="#1a1a1a"/>
+      <circle cx="42" cy="42" r="18" fill="#a0b4c4" fill-opacity="0.18"/>
+      <text x="42" y="48" fill="#a0b4c4" font-size="16" font-weight="800" text-anchor="middle">2</text>
+      <g transform="translate(78,30) scale(0.92)" fill="none" stroke="#b08070" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2.5"/><line x1="2" y1="16" x2="20" y2="16"/><line x1="5" y1="20" x2="22" y2="20"/></g>
+      <text x="114" y="36" fill="#edf4fb" font-size="15" font-weight="700">Sturmfront von Westen</text>
+      <text x="114" y="58" fill="#9ba3ad" font-size="12">3. August · 04:11 · 1 h 18 min</text>
+      <rect x="520" y="38" width="300" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="520" y="38" width="241" height="7" rx="3.5" fill="#b08070"/>
+      <text x="848" y="46" fill="#d3b1a5" font-size="13" font-weight="700">104 km/h Böen</text>
+      <g transform="translate(1032,31)">
+        <rect width="88" height="24" rx="9" fill="#222222"/>
+        <g transform="translate(10,5)" fill="none" stroke="#9ba3ad" stroke-width="1.6" stroke-linejoin="round"><rect x="0" y="1" width="15" height="12" rx="2"/><path d="M0 5h15M4 1v12M11 1v12"/></g>
+        <text x="34" y="17" fill="#9ba3ad" font-size="12" font-weight="700">4 Clips</text>
+      </g>
+    </g>
+
+    <!-- Zeile 3 -->
+    <g transform="translate(28,332)">
+      <rect width="1144" height="84" rx="14" fill="#1a1a1a"/>
+      <circle cx="42" cy="42" r="18" fill="#c87840" fill-opacity="0.18"/>
+      <text x="42" y="48" fill="#c87840" font-size="16" font-weight="800" text-anchor="middle">3</text>
+      <g transform="translate(78,30) scale(0.92)" fill="none" stroke="#5a8aa8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2.5"/><path d="M7 17l-2 4"/><path d="M11 19l-1 2"/><path d="M14 17l-2 4"/></g>
+      <text x="114" y="36" fill="#edf4fb" font-size="15" font-weight="700">Starkregen am Abend</text>
+      <text x="114" y="58" fill="#9ba3ad" font-size="12">26. Juni · 20:47 · 54 min</text>
+      <rect x="520" y="38" width="300" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="520" y="38" width="186" height="7" rx="3.5" fill="#5a8aa8"/>
+      <text x="848" y="46" fill="#a8c4d6" font-size="13" font-weight="700">31 mm/h · Starkregen</text>
+      <g transform="translate(1032,31)">
+        <rect width="88" height="24" rx="9" fill="#222222"/>
+        <g transform="translate(10,5)" fill="none" stroke="#9ba3ad" stroke-width="1.6" stroke-linejoin="round"><rect x="0" y="1" width="15" height="12" rx="2"/><path d="M0 5h15M4 1v12M11 1v12"/></g>
+        <text x="34" y="17" fill="#9ba3ad" font-size="12" font-weight="700">3 Clips</text>
+      </g>
+    </g>
+
+    <!-- Zeile 4 -->
+    <g transform="translate(28,426)">
+      <rect width="1144" height="84" rx="14" fill="#1a1a1a"/>
+      <circle cx="42" cy="42" r="18" fill="#ffffff" fill-opacity="0.06"/>
+      <text x="42" y="48" fill="#7b848e" font-size="16" font-weight="800" text-anchor="middle">4</text>
+      <g transform="translate(78,30) scale(0.92)" fill="none" stroke="#7a8eb5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 16a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2.5A4 4 0 0 0 5 16h12z"/><polyline points="11,11 9,15 12,15 10,19"/></g>
+      <text x="114" y="36" fill="#edf4fb" font-size="15" font-weight="700">Gewitter zieht auf</text>
+      <text x="114" y="58" fill="#9ba3ad" font-size="12">14. Mai · 15:02 · 41 min · Zeitraffer</text>
+      <rect x="520" y="38" width="300" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="520" y="38" width="132" height="7" rx="3.5" fill="#7a8eb5"/>
+      <text x="848" y="46" fill="#b4bed4" font-size="13" font-weight="700">60 min gerafft</text>
+      <g transform="translate(1032,31)">
+        <rect width="88" height="24" rx="9" fill="#222222"/>
+        <g transform="translate(10,5)" fill="none" stroke="#9ba3ad" stroke-width="1.6" stroke-linejoin="round"><rect x="0" y="1" width="15" height="12" rx="2"/><path d="M0 5h15M4 1v12M11 1v12"/></g>
+        <text x="34" y="17" fill="#9ba3ad" font-size="12" font-weight="700">1 Clip</text>
+      </g>
+    </g>
+
+    <!-- Zeile 5 -->
+    <g transform="translate(28,520)">
+      <rect width="1144" height="84" rx="14" fill="#1a1a1a"/>
+      <circle cx="42" cy="42" r="18" fill="#ffffff" fill-opacity="0.06"/>
+      <text x="42" y="48" fill="#7b848e" font-size="16" font-weight="800" text-anchor="middle">5</text>
+      <g transform="translate(78,30) scale(0.92)" fill="none" stroke="#6d7787" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h16M3 12h18M5 16h14M7 20h10"/></g>
+      <text x="114" y="36" fill="#edf4fb" font-size="15" font-weight="700">Bodennebel bis in den Vormittag</text>
+      <text x="114" y="58" fill="#9ba3ad" font-size="12">29. Oktober · 05:38 · 3 h 12 min</text>
+      <rect x="520" y="38" width="300" height="7" rx="3.5" fill="#ffffff" fill-opacity="0.08"/>
+      <rect x="520" y="38" width="96" height="7" rx="3.5" fill="#6d7787"/>
+      <text x="848" y="46" fill="#a8b0bd" font-size="13" font-weight="700">Sicht unter 200 m</text>
+      <g transform="translate(1032,31)">
+        <rect width="88" height="24" rx="9" fill="#222222"/>
+        <g transform="translate(10,5)" fill="none" stroke="#9ba3ad" stroke-width="1.6" stroke-linejoin="round"><rect x="0" y="1" width="15" height="12" rx="2"/><path d="M0 5h15M4 1v12M11 1v12"/></g>
+        <text x="34" y="17" fill="#9ba3ad" font-size="12" font-weight="700">2 Clips</text>
+      </g>
+    </g>
+  </g>
+</svg>

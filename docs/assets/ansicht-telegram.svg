@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 640" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Die Chat-Meldung: eine Nachricht je Kamera mit Vorschaubild, Art und Uhrzeit, darunter Knöpfe für Clip ansehen, eine Stunde stumm und Falschmeldung.">
+  <!-- Eine Blase je Kamera, die sich SELBST umschreibt: jeder Knopfdruck
+       ändert dieselbe Nachricht, statt eine neue zu schicken. Deshalb
+       bleibt der Chat auch nach Wochen kurz. Die Tier-Silhouette im
+       Vorschaubild ist wieder MAMMAL_SVGS aus core/animal-icons.js. -->
+  <defs>
+    <linearGradient id="t-thumb" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3a2d22"/><stop offset="100%" stop-color="#1a1410"/></linearGradient>
+    <linearGradient id="t-thumb2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2b3a4a"/><stop offset="100%" stop-color="#161f28"/></linearGradient>
+  </defs>
+
+  <rect width="700" height="640" rx="18" fill="#0e1621"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif">
+    <!-- Chat-Kopf -->
+    <rect x="0" y="0" width="700" height="56" rx="18" fill="#17212b"/>
+    <rect x="0" y="38" width="700" height="18" fill="#17212b"/>
+    <circle cx="34" cy="28" r="16" fill="#2d6a4f"/>
+    <g transform="translate(24,18) scale(0.85)">
+      <ellipse cx="12" cy="14" rx="9" ry="5" fill="#74c69d"/><rect x="10" y="14" width="4" height="9" fill="#6b4423"/><circle cx="12" cy="12" r="2.6" fill="#0a0a0a"/><circle cx="11.3" cy="11.3" r="0.9" fill="#4cc9f0"/>
+    </g>
+    <text x="62" y="26" fill="#ffffff" font-size="14.5" font-weight="700">Squirreling · Sightings</text>
+    <text x="62" y="44" fill="#6d7f8f" font-size="12">Bot · antwortet sofort</text>
+
+    <!-- ══ Blase 1 · Sichtung ══ -->
+    <g transform="translate(20,76)">
+      <rect width="470" height="296" rx="16" fill="#182533"/>
+      <rect x="12" y="12" width="446" height="150" rx="10" fill="url(#t-thumb)"/>
+      <path d="M12 128 Q235 116 458 130 V152 a10 10 0 0 1 -10 10 H22 a10 10 0 0 1 -10 -10 Z" fill="#241c12"/>
+      <g transform="translate(180,44) scale(1.15)">
+        <path d="M 50 72 Q 74 60 72 32 Q 70 14 54 16 Q 38 18 42 38 Q 46 58 50 72Z" fill="#a8350c"/><path d="M 51 70 Q 68 58 66 34 Q 64 22 54 24 Q 44 26 46 40 Q 48 56 51 70Z" fill="#c64a18"/><path d="M 53 66 Q 62 56 61 38 Q 60 30 55 32 Q 50 34 51 42 Q 52 54 53 66Z" fill="#e06228"/><ellipse cx="34" cy="62" rx="17" ry="12" fill="#a8350c"/><ellipse cx="34" cy="63" rx="13" ry="9" fill="#c64a18"/><ellipse cx="36" cy="68" rx="9" ry="5" fill="#f0c89a"/><circle cx="38" cy="42" r="15" fill="#a8350c"/><circle cx="38" cy="44" r="13" fill="#c64a18"/><path d="M 28 39 Q 38 50 50 41 Q 48 50 38 53 Q 30 50 28 39Z" fill="#f0c89a"/><path d="M 22 26 Q 26 16 32 22 Q 32 28 28 31Z" fill="#a8350c"/><path d="M 50 24 Q 46 16 42 22 Q 42 28 46 31Z" fill="#a8350c"/><circle cx="44" cy="38" r="3.6" fill="#1a0a05"/><circle cx="42.7" cy="36.7" r="1.3" fill="#fff"/><ellipse cx="49" cy="46" rx="5.5" ry="4" fill="#9a3008"/><circle cx="51" cy="44.5" r="1.6" fill="#1a0a05"/>
+      </g>
+      <rect x="168" y="34" width="128" height="110" rx="7" fill="none" stroke="#c8651a" stroke-width="2.4"/>
+      <rect x="20" y="20" width="152" height="22" rx="8" fill="#160d06" fill-opacity="0.9"/>
+      <!-- Prozent, kein 0,88: die Bildunterschrift baut sich als
+           „<b>{Art}</b> · {score_pct}% · {Kamera}" zusammen
+           (telegram_bot/_outbound/_event_alert.py::_event_caption), und die
+           Mediathek daneben schreibt „Sicherheit 91 %" — ein zweites
+           Zahlenformat für dieselbe Größe wäre genau die Doppelung, die
+           die README sonst vermeidet. -->
+      <text x="32" y="36" fill="#f7dfc9" font-size="12" font-weight="700">Eichhörnchen · 88 %</text>
+
+      <text x="18" y="192" fill="#ffffff" font-size="15" font-weight="700">Werkbank</text>
+      <text x="18" y="216" fill="#c9d6e0" font-size="13.5">Erstes Eichhörnchen seit 36 h — neuer Rekord.</text>
+      <text x="18" y="238" fill="#6d7f8f" font-size="12.5">Rot, allein, 9 Sekunden im Bild. Bewölkt, 14 °C.</text>
+
+      <!-- Knöpfe -->
+      <g font-size="12.5" font-weight="700" text-anchor="middle">
+        <rect x="12" y="250" width="146" height="34" rx="10" fill="#1e2c3a"/><text x="85" y="272" fill="#62bcf9">Clip ansehen</text>
+        <rect x="164" y="250" width="146" height="34" rx="10" fill="#1e2c3a"/><text x="237" y="272" fill="#62bcf9">1 h stumm</text>
+        <rect x="316" y="250" width="142" height="34" rx="10" fill="#1e2c3a"/><text x="387" y="272" fill="#62bcf9">War nichts</text>
+      </g>
+      <text x="452" y="238" fill="#6d7f8f" font-size="11" text-anchor="end">13:51</text>
+    </g>
+
+    <!-- ══ Blase 2 · Quest ══ -->
+    <g transform="translate(20,388)">
+      <rect width="470" height="82" rx="16" fill="#182533"/>
+      <circle cx="42" cy="41" r="20" fill="#fbbf24" fill-opacity="0.18"/>
+      <g transform="translate(42,41)"><path d="M0 -9 L2.4 -2.4 L9 0 L2.4 2.4 L0 9 L-2.4 2.4 L-9 0 L-2.4 -2.4 Z" fill="#fbbf24"/></g>
+      <text x="76" y="34" fill="#ffffff" font-size="14.5" font-weight="700">Quest geschafft: Mondtiere</text>
+      <text x="76" y="56" fill="#c9d6e0" font-size="13">5 Wildtiere zwischen 2 und 4 Uhr — in 11 Nächten.</text>
+      <text x="452" y="70" fill="#6d7f8f" font-size="11" text-anchor="end">03:12</text>
+    </g>
+
+    <!-- ══ Blase 3 · Wetter ══ -->
+    <g transform="translate(20,486)">
+      <rect width="470" height="132" rx="16" fill="#182533"/>
+      <rect x="12" y="12" width="128" height="80" rx="10" fill="url(#t-thumb2)"/>
+      <g transform="translate(58,36) scale(1.4)" fill="none" stroke="#7faec9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 11-14h-7l0-6z"/></g>
+      <text x="154" y="38" fill="#ffffff" font-size="14.5" font-weight="700">Gewitter zieht auf</text>
+      <text x="154" y="60" fill="#c9d6e0" font-size="13">Zeitraffer läuft an der Gartenkamera.</text>
+      <text x="154" y="82" fill="#6d7f8f" font-size="12.5">Blitzpotential 78 % · Böen 54 km/h</text>
+      <g font-size="12.5" font-weight="700" text-anchor="middle">
+        <rect x="12" y="102" width="180" height="30" rx="10" fill="#1e2c3a"/><text x="102" y="122" fill="#62bcf9">Live ansehen</text>
+      </g>
+      <text x="452" y="122" fill="#6d7f8f" font-size="11" text-anchor="end">15:02</text>
+    </g>
+
+    <!-- Randnotiz -->
+    <g transform="translate(510,76)">
+      <rect width="170" height="182" rx="14" fill="#121b26"/>
+      <text x="16" y="30" fill="#74c69d" font-size="12" font-weight="800">EINE BLASE, IMMER</text>
+      <text x="16" y="46" fill="#74c69d" font-size="12" font-weight="800">DIESELBE</text>
+      <text x="16" y="76" fill="#9fb0be" font-size="12">Jeder Knopfdruck</text>
+      <text x="16" y="94" fill="#9fb0be" font-size="12">schreibt diese</text>
+      <text x="16" y="112" fill="#9fb0be" font-size="12">Nachricht um, statt</text>
+      <text x="16" y="130" fill="#9fb0be" font-size="12">eine neue zu schicken.</text>
+      <text x="16" y="158" fill="#6d7f8f" font-size="12">Kein Chat voller</text>
+      <text x="16" y="174" fill="#6d7f8f" font-size="12">Wiederholungen.</text>
+    </g>
+  </g>
+</svg>

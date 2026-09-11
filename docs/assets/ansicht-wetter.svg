@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Die Wetter-Seite: vier Kennzahlen, ein Tagesverlauf mit Regenbalken und Gewittermarke, dazu die beiden Sonnen-Zeitraffer des Tages.">
+  <!-- Niederschlag wird nicht als „Starkregen, ja/nein" gezeigt, sondern
+       in den DWD-Klassen Trocken / Niesel / Leicht / Mäßig / Stark /
+       Starkregen — dieselbe Einteilung in Oberfläche, Chat und MQTT.
+       Die Wetterikonen sind die aus core/weather-types.js. -->
+  <defs>
+    <linearGradient id="w-temp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f6b73c" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#f6b73c" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="w-night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b2740" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#1b2740" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="w-rise" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e89540"/><stop offset="60%" stop-color="#8a5a3a"/><stop offset="100%" stop-color="#1e1a20"/>
+    </linearGradient>
+    <linearGradient id="w-set" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d4823a"/><stop offset="60%" stop-color="#6a3f46"/><stop offset="100%" stop-color="#1a1620"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="600" rx="18" fill="#141414"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif">
+    <!-- Kopf -->
+    <g transform="translate(28,22)" fill="none" stroke="#5a8aa8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 13a5 5 0 0 0 0-10 7 7 0 0 0-13.5 2.5"/><path d="M7 17l-2 4"/><path d="M11 19l-1 2"/><path d="M14 17l-2 4"/>
+    </g>
+    <text x="60" y="42" fill="#edf4fb" font-size="22" font-weight="800">Wetter</text>
+    <!-- 5 Minuten, nicht 10: poll_interval steht in settings/_consts.py
+         und in weather_service/_lifecycle.py übereinstimmend auf 300 s. -->
+    <text x="60" y="66" fill="#9ba3ad" font-size="13">Dein Standort · alle 5 Minuten frisch · kein Konto, kein Schlüssel nötig</text>
+
+    <!-- Kennzahlen -->
+    <g transform="translate(28,88)">
+      <rect width="278" height="86" rx="14" fill="#1a1a1a"/>
+      <text x="20" y="30" fill="#9ba3ad" font-size="12" font-weight="700">TEMPERATUR</text>
+      <text x="20" y="66" fill="#edf4fb" font-size="27" font-weight="800">18,4 °C</text>
+      <text x="258" y="66" fill="#f6b73c" font-size="13" font-weight="700" text-anchor="end">↑ 2,1 in 3 h</text>
+    </g>
+    <g transform="translate(316,88)">
+      <rect width="278" height="86" rx="14" fill="#1a1a1a"/>
+      <text x="20" y="30" fill="#9ba3ad" font-size="12" font-weight="700">NIEDERSCHLAG</text>
+      <text x="20" y="66" fill="#edf4fb" font-size="27" font-weight="800">6,2 mm/h</text>
+      <rect x="176" y="46" width="82" height="24" rx="9" fill="#5a8aa8" fill-opacity="0.24"/>
+      <text x="217" y="63" fill="#a8c4d6" font-size="12.5" font-weight="700" text-anchor="middle">Mäßig</text>
+    </g>
+    <g transform="translate(604,88)">
+      <rect width="278" height="86" rx="14" fill="#1a1a1a"/>
+      <text x="20" y="30" fill="#9ba3ad" font-size="12" font-weight="700">BÖEN</text>
+      <text x="20" y="66" fill="#edf4fb" font-size="27" font-weight="800">54 km/h</text>
+      <text x="258" y="66" fill="#b08070" font-size="13" font-weight="700" text-anchor="end">aus West</text>
+    </g>
+    <g transform="translate(892,88)">
+      <rect width="280" height="86" rx="14" fill="#1a1a1a"/>
+      <text x="20" y="30" fill="#9ba3ad" font-size="12" font-weight="700">BLITZPOTENTIAL</text>
+      <text x="20" y="66" fill="#edf4fb" font-size="27" font-weight="800">78 %</text>
+      <rect x="150" y="46" width="110" height="24" rx="9" fill="#7faec9" fill-opacity="0.24"/>
+      <text x="205" y="63" fill="#bcd8e8" font-size="12.5" font-weight="700" text-anchor="middle">Aufziehend</text>
+    </g>
+
+    <!-- ══ Tagesverlauf ══ -->
+    <g transform="translate(28,192)">
+      <rect width="1144" height="250" rx="14" fill="#1a1a1a"/>
+      <text x="22" y="30" fill="#edf4fb" font-size="14" font-weight="700">Heute</text>
+      <g font-size="12" font-weight="600">
+        <circle cx="960" cy="25" r="5" fill="#f6b73c"/><text x="972" y="30" fill="#9ba3ad">Temperatur</text>
+        <rect x="1060" y="20" width="10" height="10" rx="2" fill="#5a8aa8"/><text x="1076" y="30" fill="#9ba3ad">Regen</text>
+      </g>
+
+      <!-- Nachtbänder -->
+      <rect x="44" y="52" width="106" height="150" fill="url(#w-night)"/>
+      <rect x="1010" y="52" width="112" height="150" fill="url(#w-night)"/>
+
+      <!-- Gitter -->
+      <g stroke="#262626" stroke-width="1">
+        <line x1="44" y1="202" x2="1122" y2="202"/>
+        <line x1="44" y1="152" x2="1122" y2="152"/>
+        <line x1="44" y1="102" x2="1122" y2="102"/>
+      </g>
+
+      <!-- Temperaturfläche + Linie -->
+      <path d="M44 178 C160 172 220 160 300 140 C400 116 470 92 560 84 C650 78 700 96 760 122 C830 152 900 160 1000 168 C1060 174 1100 178 1122 180 L1122 202 L44 202 Z" fill="url(#w-temp)"/>
+      <path d="M44 178 C160 172 220 160 300 140 C400 116 470 92 560 84 C650 78 700 96 760 122 C830 152 900 160 1000 168 C1060 174 1100 178 1122 180"
+            fill="none" stroke="#f6b73c" stroke-width="2.6" stroke-linecap="round"/>
+
+      <!-- Regenbalken -->
+      <g fill="#5a8aa8">
+        <rect x="556" y="186" width="16" height="16" rx="3"/>
+        <rect x="600" y="172" width="16" height="30" rx="3"/>
+        <rect x="644" y="146" width="16" height="56" rx="3"/>
+        <rect x="688" y="122" width="16" height="80" rx="3" fill="#7faec9"/>
+        <rect x="732" y="158" width="16" height="44" rx="3"/>
+        <rect x="776" y="182" width="16" height="20" rx="3"/>
+        <rect x="820" y="194" width="16" height="8" rx="3" fill="#3f6580"/>
+      </g>
+
+      <!-- Gewitter-Marke am Maximum -->
+      <line x1="696" y1="58" x2="696" y2="202" stroke="#7faec9" stroke-width="1.5" stroke-dasharray="3 5"/>
+      <g transform="translate(660,44)">
+        <rect width="146" height="26" rx="10" fill="#17242c"/>
+        <g transform="translate(9,4) scale(0.78)" fill="none" stroke="#7faec9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 11-14h-7l0-6z"/></g>
+        <text x="34" y="18" fill="#bcd8e8" font-size="12" font-weight="700">Gewitter · Clip läuft</text>
+      </g>
+
+      <!-- Sonnenauf- und -untergang -->
+      <g transform="translate(128,44)">
+        <circle cx="8" cy="13" r="6" fill="#e89540"/>
+        <text x="22" y="18" fill="#e0a468" font-size="11.5" font-weight="700">6:42 Aufgang</text>
+      </g>
+      <g transform="translate(936,44)">
+        <circle cx="8" cy="13" r="6" fill="#d4823a"/>
+        <text x="22" y="18" fill="#cf9560" font-size="11.5" font-weight="700">19:58 Untergang</text>
+      </g>
+
+      <!-- Stundenachse -->
+      <g fill="#7b848e" font-size="11" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+        <text x="44" y="224">00</text><text x="224" y="224">04</text><text x="404" y="224">08</text>
+        <text x="584" y="224">12</text><text x="764" y="224">16</text><text x="944" y="224">20</text>
+        <text x="1110" y="224">24</text>
+      </g>
+    </g>
+
+    <!-- ══ Sonnen-Zeitraffer ══ -->
+    <g transform="translate(28,458)">
+      <rect width="562" height="118" rx="14" fill="#1a1a1a"/>
+      <rect x="14" y="14" width="150" height="90" rx="10" fill="url(#w-rise)"/>
+      <circle cx="89" cy="74" r="17" fill="#ffd9a0" fill-opacity="0.9"/>
+      <path d="M14 86 h150 v8 a10 10 0 0 1 -10 10 h-130 a10 10 0 0 1 -10 -10 z" fill="#171216" fill-opacity="0.7"/>
+      <text x="182" y="44" fill="#edf4fb" font-size="15" font-weight="700">Sonnenaufgang</text>
+      <!-- 05:50–07:05 um den Aufgang 06:42, nicht bis dahin: das Fenster
+           ist auf 70/30 vorgespannt (_sun_tl/__init__.py, _SUN_PRE_BIAS),
+           also 52 min davor und 23 min danach — „startet in der Dämmerung
+           und schaut der Sonne beim Aufgehen zu". -->
+      <text x="182" y="68" fill="#9ba3ad" font-size="12.5">05:50 – 07:05 · 75 Minuten gerafft auf 41 Sekunden</text>
+      <text x="182" y="92" fill="#e0a468" font-size="12.5" font-weight="700">Läuft jeden Morgen von allein</text>
+    </g>
+    <g transform="translate(610,458)">
+      <rect width="562" height="118" rx="14" fill="#1a1a1a"/>
+      <rect x="14" y="14" width="150" height="90" rx="10" fill="url(#w-set)"/>
+      <circle cx="89" cy="76" r="17" fill="#ffc48a" fill-opacity="0.85"/>
+      <path d="M14 86 h150 v8 a10 10 0 0 1 -10 10 h-130 a10 10 0 0 1 -10 -10 z" fill="#161219" fill-opacity="0.7"/>
+      <text x="182" y="44" fill="#edf4fb" font-size="15" font-weight="700">Sonnenuntergang</text>
+      <text x="182" y="68" fill="#9ba3ad" font-size="12.5">19:06 – 20:21 · 75 Minuten gerafft auf 38 Sekunden</text>
+      <text x="182" y="92" fill="#cf9560" font-size="12.5" font-weight="700">Tag-/Nachtumschaltung liegt davor und danach</text>
+    </g>
+  </g>
+</svg>

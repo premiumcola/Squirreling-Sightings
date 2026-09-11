@@ -1,0 +1,260 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 820" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Der Clip-Player: Videobild mit zwei erkannten Tieren in farbigen Rahmen, darunter eine Zeitleiste mit einer Spur je Tier, Ebenen-Schalter, Transportknöpfe und die Objektliste.">
+  <!-- Aufbau 1:1 wie vplayer/_shell-html.js: topbar · stage (Bild +
+       Rahmen + Zeitleiste IM Bild) · toggles · controls · panel.
+       Farben: CLASS_COLORS — Vogel #62d26f, Eichhörnchen #c8651a; bei
+       einer Aufnahme färbt die Klasse die Spur, nicht die Track-Nummer
+       (vplayer/timeline/_basis.js). Die Tiere sind die echten
+       Silhouetten aus core/animal-icons.js. Kein echter Kamera-Frame:
+       ein Mockup zeigt den Aufbau, ohne den Garten des Betreibers
+       öffentlich zu machen. -->
+  <defs>
+    <linearGradient id="p-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a3f4e"/>
+      <stop offset="42%" stop-color="#1d3a34"/>
+      <stop offset="100%" stop-color="#12241c"/>
+    </linearGradient>
+    <radialGradient id="p-sun" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffd9a0" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#ffd9a0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="p-scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="26%" stop-color="#05080a" stop-opacity="0.72"/>
+      <stop offset="100%" stop-color="#05080a" stop-opacity="0.9"/>
+    </linearGradient>
+    <clipPath id="p-stage-clip"><rect x="20" y="64" width="1160" height="440" rx="14"/></clipPath>
+  </defs>
+
+  <rect width="1200" height="820" rx="18" fill="#141414"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif">
+
+    <!-- ══ topbar ══ Kamerasymbol statt Kameraname; der Titel sagt WANN. -->
+    <g transform="translate(0,0)">
+      <g transform="translate(28,18)" stroke="#7faec9" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 6c-3.5-1-7 1-8 5l-2 7l5-3c3 2 7 0 8-4"/>
+        <circle cx="15.5" cy="6" r="0.9" fill="#7faec9" stroke="none"/>
+      </g>
+      <text x="64" y="35" fill="#edf4fb" font-size="16" font-weight="700">11.09.2026 · 14:23 · 0:12</text>
+      <g fill="#9ba3ad">
+        <circle cx="1116" cy="28" r="2.4"/><circle cx="1125" cy="28" r="2.4"/><circle cx="1134" cy="28" r="2.4"/>
+      </g>
+      <path d="M1160 20l14 16M1174 20l-14 16" stroke="#9ba3ad" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+    </g>
+
+    <!-- ══ stage ══ -->
+    <g clip-path="url(#p-stage-clip)">
+      <rect x="20" y="64" width="1160" height="440" fill="url(#p-sky)"/>
+      <circle cx="1010" cy="120" r="180" fill="url(#p-sun)"/>
+
+      <!-- Hintergrund: Büsche, Unschärfekreise -->
+      <g opacity="0.5">
+        <circle cx="120" cy="170" r="14" fill="#3f6b52"/><circle cx="185" cy="130" r="9" fill="#4d7d60"/>
+        <circle cx="960" cy="215" r="11" fill="#3f6b52"/><circle cx="1080" cy="170" r="16" fill="#35604a"/>
+        <circle cx="520" cy="110" r="8" fill="#4d7d60"/><circle cx="860" cy="105" r="12" fill="#3f6b52"/>
+      </g>
+      <g opacity="0.75">
+        <ellipse cx="90" cy="300" rx="130" ry="86" fill="#1c3b2d"/>
+        <ellipse cx="1130" cy="285" rx="120" ry="96" fill="#1a3729"/>
+        <ellipse cx="560" cy="130" rx="210" ry="52" fill="#193425"/>
+      </g>
+
+      <!-- Boden -->
+      <path d="M20 372 Q600 348 1180 376 V504 H20 Z" fill="#182a1d"/>
+      <path d="M20 372 Q600 348 1180 376 V400 Q600 376 20 398 Z" fill="#22402c" opacity="0.8"/>
+
+      <!-- Baumstamm + Ast mit hängendem Futterhaus -->
+      <path d="M770 64 h44 v210 h-44 z" fill="#5a3a1c"/>
+      <path d="M800 64 h14 v210 h-14 z" fill="#472d15"/>
+      <path d="M770 130 Q690 140 632 158" stroke="#5a3a1c" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <line x1="620" y1="156" x2="620" y2="186" stroke="#3c2a16" stroke-width="3"/>
+      <!-- Futterhaus · die Sitzstange reicht bis unter die Meise -->
+      <path d="M580 186 h80 l-10 -22 h-60 z" fill="#6b4423"/>
+      <rect x="588" y="186" width="64" height="46" rx="5" fill="#8a5a2e"/>
+      <rect x="596" y="196" width="48" height="26" rx="3" fill="#3a2712"/>
+      <rect x="584" y="232" width="176" height="7" rx="3.5" fill="#6b4423"/>
+
+      <!-- Grashalme -->
+      <g stroke="#2f5a3c" stroke-width="3" stroke-linecap="round" opacity="0.85">
+        <path d="M160 392 q6 -20 2 -34"/><path d="M176 394 q-4 -18 4 -30"/>
+        <path d="M930 392 q7 -22 1 -36"/><path d="M948 394 q-5 -16 5 -28"/>
+        <path d="M520 386 q5 -16 1 -28"/>
+      </g>
+
+      <!-- ── Spur 1 · Blaumeise · #62d26f ─────────────────────── -->
+      <path d="M1044 120 Q900 130 820 158 Q760 176 706 196" fill="none" stroke="#62d26f" stroke-width="2.6"
+            stroke-linecap="round" stroke-dasharray="2 9" opacity="0.85"/>
+      <g>
+        <rect x="638" y="150" width="140" height="120" rx="9" fill="none" stroke="#62d26f" stroke-width="2.6"/>
+        <rect x="638" y="150" width="140" height="120" rx="9" fill="#62d26f" fill-opacity="0.07"/>
+        <rect x="636" y="122" width="164" height="24" rx="8" fill="#0d1a11" fill-opacity="0.88"/>
+        <rect x="636" y="122" width="4" height="24" rx="2" fill="#62d26f"/>
+        <text x="650" y="139" fill="#dff6e4" font-size="13" font-weight="700">#1 Blaumeise · 0,91</text>
+        <!-- Silhouette 1:1 aus core/animal-icons.js · BIRD_SVGS.blaumeise -->
+        <g transform="translate(664,166) scale(1.12)">
+          <path d="M18 56 L10 58 L12 64 L20 61Z" fill="#4a90d9"/><ellipse cx="36" cy="50" rx="18" ry="12" fill="#f0d060"/><ellipse cx="30" cy="44" rx="17" ry="9" fill="#5a9a40"/><ellipse cx="28" cy="42" rx="15" ry="7" fill="#4a90d9"/><circle cx="52" cy="36" r="11" fill="#f0f0f0"/><ellipse cx="52" cy="27" rx="11" ry="7" fill="#4a90d9"/><rect x="42" y="34" width="18" height="2.5" rx="1.2" fill="#111"/><circle cx="57" cy="32" r="1.8" fill="#111"/><path d="M63 35 L72 34 L63 38Z" fill="#666"/>
+        </g>
+      </g>
+
+      <!-- ── Spur 2 · Eichhörnchen · #c8651a ───────────────────── -->
+      <path d="M60 400 Q150 384 230 366 Q290 352 332 330" fill="none" stroke="#c8651a" stroke-width="2.6"
+            stroke-linecap="round" stroke-dasharray="2 9" opacity="0.85"/>
+      <g>
+        <rect x="250" y="228" width="176" height="146" rx="9" fill="none" stroke="#c8651a" stroke-width="2.6"/>
+        <rect x="250" y="228" width="176" height="146" rx="9" fill="#c8651a" fill-opacity="0.07"/>
+        <rect x="248" y="200" width="200" height="24" rx="8" fill="#1c1008" fill-opacity="0.9"/>
+        <rect x="248" y="200" width="4" height="24" rx="2" fill="#c8651a"/>
+        <text x="262" y="217" fill="#f7dfc9" font-size="13" font-weight="700">#2 Eichhörnchen · 0,88</text>
+        <!-- Silhouette 1:1 aus core/animal-icons.js · MAMMAL_SVGS.eichhoernchen_orange -->
+        <g transform="translate(268,238) scale(1.66)">
+          <path d="M 50 72 Q 74 60 72 32 Q 70 14 54 16 Q 38 18 42 38 Q 46 58 50 72Z" fill="#a8350c"/><path d="M 51 70 Q 68 58 66 34 Q 64 22 54 24 Q 44 26 46 40 Q 48 56 51 70Z" fill="#c64a18"/><path d="M 53 66 Q 62 56 61 38 Q 60 30 55 32 Q 50 34 51 42 Q 52 54 53 66Z" fill="#e06228"/><ellipse cx="34" cy="62" rx="17" ry="12" fill="#a8350c"/><ellipse cx="34" cy="63" rx="13" ry="9" fill="#c64a18"/><ellipse cx="36" cy="68" rx="9" ry="5" fill="#f0c89a"/><circle cx="38" cy="42" r="15" fill="#a8350c"/><circle cx="38" cy="44" r="13" fill="#c64a18"/><path d="M 28 39 Q 38 50 50 41 Q 48 50 38 53 Q 30 50 28 39Z" fill="#f0c89a"/><path d="M 22 26 Q 26 16 32 22 Q 32 28 28 31Z" fill="#a8350c"/><path d="M 24 25 Q 27 19 30 24 Q 30 27 28 29Z" fill="#e0805a"/><path d="M 50 24 Q 46 16 42 22 Q 42 28 46 31Z" fill="#a8350c"/><path d="M 48 24 Q 45 19 43 24 Q 43 27 45 29Z" fill="#e0805a"/><circle cx="44" cy="38" r="3.6" fill="#1a0a05"/><circle cx="42.7" cy="36.7" r="1.3" fill="#fff"/><ellipse cx="49" cy="46" rx="5.5" ry="4" fill="#9a3008"/><ellipse cx="50.5" cy="45" rx="3" ry="2.2" fill="#c64a18"/><circle cx="51" cy="44.5" r="1.6" fill="#1a0a05"/><ellipse cx="26" cy="68" rx="4.5" ry="6" fill="#5a1804"/><ellipse cx="36" cy="69" rx="4" ry="5" fill="#5a1804"/>
+        </g>
+      </g>
+
+      <!-- Blättern durch die Nachbarclips — am Bildrand, nicht in der Titelzeile -->
+      <g>
+        <circle cx="66" cy="284" r="21" fill="#05080a" fill-opacity="0.55"/>
+        <path d="M71 275l-9 9 9 9" stroke="#e2e8f0" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="1134" cy="284" r="21" fill="#05080a" fill-opacity="0.55"/>
+        <path d="M1129 275l9 9-9 9" stroke="#e2e8f0" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- ══ Zeitleiste — IM Bild, nicht darunter ══ -->
+      <rect x="20" y="378" width="1160" height="126" fill="url(#p-scrim)"/>
+
+      <!-- Spur 1 -->
+      <text x="44" y="416" fill="#cfe8d5" font-size="12" font-weight="700">#1 Blaumeise</text>
+      <rect x="176" y="406" width="964" height="10" rx="5" fill="#ffffff" fill-opacity="0.07"/>
+      <rect x="404" y="406" width="512" height="10" rx="5" fill="#62d26f"/>
+      <rect x="612" y="406" width="74" height="10" rx="5" fill="#0d1a11" fill-opacity="0.55"/>
+      <circle cx="404" cy="411" r="8" fill="#62d26f"/>
+      <circle cx="404" cy="411" r="3" fill="#0d1a11"/>
+
+      <!-- Spur 2 -->
+      <text x="44" y="446" fill="#f0d6bd" font-size="12" font-weight="700">#2 Eichhörnchen</text>
+      <rect x="176" y="436" width="964" height="10" rx="5" fill="#ffffff" fill-opacity="0.07"/>
+      <rect x="212" y="436" width="330" height="10" rx="5" fill="#c8651a"/>
+      <rect x="470" y="436" width="46" height="10" rx="5" fill="#1c1008" fill-opacity="0.55"/>
+      <circle cx="212" cy="441" r="8" fill="#c8651a"/>
+      <circle cx="212" cy="441" r="3" fill="#1c1008"/>
+
+      <!-- Schiene + Abspielkopf -->
+      <rect x="44" y="466" width="1112" height="8" rx="4" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="44" y="466" width="640" height="8" rx="4" fill="#e2e8f0"/>
+      <g fill="#f6b73c">
+        <rect x="206" y="462" width="3" height="16" rx="1.5"/>
+        <rect x="400" y="462" width="3" height="16" rx="1.5"/>
+        <rect x="612" y="462" width="3" height="16" rx="1.5"/>
+        <rect x="908" y="462" width="3" height="16" rx="1.5"/>
+      </g>
+      <circle cx="684" cy="470" r="9" fill="#ffffff"/>
+      <text x="44" y="494" fill="#9ba3ad" font-size="11" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0:00</text>
+      <text x="1156" y="494" fill="#9ba3ad" font-size="11" font-weight="600" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0:12</text>
+    </g>
+
+    <!-- ══ toggles ══ vier Ebenen mit den echten 16er-Glyphen aus
+         mediaview/overlay-toggles.js (_TOGGLE_ICONS). Rahmen + Spuren
+         stehen an, Zonen + Masken sind beim Öffnen aus. Eine ROI-Pille
+         gibt es hier bewusst nicht mehr — sie las ein Feld, das nie
+         jemand geschrieben hat, und war nie auf dem Schirm. -->
+    <g transform="translate(20,522)" font-size="13" font-weight="600">
+      <rect width="468" height="38" rx="12" fill="#1e1e1e"/>
+
+      <rect x="4" y="4" width="112" height="30" rx="9" fill="#62d26f" fill-opacity="0.2"/>
+      <g transform="translate(16,12) scale(0.875)" fill="none" stroke="#9ae6a8" stroke-width="1.6">
+        <rect x="2.5" y="2.5" width="11" height="11" rx="2"/>
+      </g>
+      <text x="38" y="24" fill="#9ae6a8">Rahmen</text>
+
+      <rect x="120" y="4" width="112" height="30" rx="9" fill="#62d26f" fill-opacity="0.2"/>
+      <g transform="translate(132,12) scale(0.875)" fill="none" stroke="#9ae6a8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 13 6 9 9 11 14 4"/><circle cx="14" cy="4" r="1.4" fill="#9ae6a8" stroke="none"/>
+      </g>
+      <text x="154" y="24" fill="#9ae6a8">Spuren</text>
+
+      <g transform="translate(248,12) scale(0.875)" fill="none" stroke="#7b848e" stroke-width="1.6" stroke-linejoin="round">
+        <path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/>
+      </g>
+      <text x="270" y="24" fill="#7b848e">Zonen</text>
+
+      <g transform="translate(364,12) scale(0.875)" fill="none" stroke="#7b848e" stroke-width="1.6" stroke-linejoin="round" stroke-dasharray="3 2">
+        <path d="M3 5 8 2.5 13 5v6L8 13.5 3 11Z"/>
+      </g>
+      <text x="386" y="24" fill="#7b848e">Masken</text>
+    </g>
+
+    <!-- ══ controls ══ die echte Transportleiste (mediaview/player/_transport-controls.js) -->
+    <g transform="translate(0,578)">
+      <g fill="#1e1e1e">
+        <rect x="374" y="0" width="44" height="44" rx="13"/>
+        <rect x="426" y="0" width="44" height="44" rx="13"/>
+        <rect x="478" y="0" width="70" height="44" rx="13"/>
+        <rect x="556" y="0" width="44" height="44" rx="13"/>
+        <rect x="608" y="0" width="44" height="44" rx="13"/>
+        <rect x="660" y="0" width="44" height="44" rx="13"/>
+        <rect x="712" y="0" width="44" height="44" rx="13"/>
+      </g>
+      <g stroke="#d5dde5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Einzelbild zurück / vor · bewusst OHNE Balken: der nackte
+             Winkel ist _frameStepSvg (ein Stups um ein Bild), der Winkel
+             MIT Balken weiter unten ist _detNavSvg (Sprung auf eine
+             markierte Erkennung). Die Quelle hält die beiden ausdrücklich
+             auseinander — „kept visually distinct from the plain chevron
+             of _frameStepSvg" (mediaview/player/_transport-controls.js);
+             mit Balken an beiden Paaren zeigt das Bild vier Knöpfe, die
+             wie zweimal dasselbe aussehen. -->
+        <g transform="translate(388,14)"><polyline points="11 2 5 8 11 14"/></g>
+        <g transform="translate(440,14)"><polyline points="5 2 11 8 5 14"/></g>
+        <!-- Tempo · Tacho, kein Dreieck: ein Dreieck läse sich als Abspielen -->
+        <g transform="translate(488,14) scale(0.7)"><path d="M4 15a8 8 0 0 1 16 0"/><line x1="12" y1="15" x2="16" y2="10"/><circle cx="12" cy="15" r="1.2" fill="#d5dde5" stroke="none"/></g>
+        <!-- Wiederholen -->
+        <g transform="translate(566,14)"><path d="M2 3h11a3 3 0 0 1 3 3v2"/><polyline points="11 0 14 3 11 6"/><path d="M16 13H5a3 3 0 0 1-3-3V8"/><polyline points="7 16 4 13 7 10"/></g>
+        <!-- vorherige / nächste Erkennung -->
+        <g transform="translate(622,14)"><polyline points="11 2 5 8 11 14"/><line x1="3" y1="1" x2="3" y2="15"/></g>
+        <g transform="translate(674,14)"><polyline points="5 2 11 8 5 14"/><line x1="13" y1="1" x2="13" y2="15"/></g>
+      </g>
+      <text x="516" y="27" fill="#d5dde5" font-size="12" font-weight="700">1×</text>
+      <!-- Standbild -->
+      <g transform="translate(726,14)" stroke="#d5dde5" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M0 4h3l2-2h6l2 2h3v11H0z"/><circle cx="8" cy="9.5" r="3.5"/>
+      </g>
+    </g>
+
+    <!-- ══ panel ══ Objekte im Clip -->
+    <g transform="translate(20,646)">
+      <rect width="1160" height="152" rx="14" fill="#1a1a1a"/>
+      <text x="22" y="30" fill="#edf4fb" font-size="14" font-weight="700">Objekte in dieser Aufnahme</text>
+      <text x="1138" y="30" fill="#9ba3ad" font-size="12" text-anchor="end">2 Spuren · 41 Einzelbilder</text>
+
+      <g transform="translate(16,46)">
+        <rect width="1128" height="44" rx="11" fill="#222222"/>
+        <rect x="0" y="0" width="4" height="44" rx="2" fill="#62d26f"/>
+        <circle cx="34" cy="22" r="13" fill="#62d26f" fill-opacity="0.22"/>
+        <g transform="translate(23,11) scale(0.275)">
+          <ellipse cx="36" cy="50" rx="18" ry="12" fill="#f0d060"/><ellipse cx="30" cy="44" rx="17" ry="9" fill="#5a9a40"/><ellipse cx="28" cy="42" rx="15" ry="7" fill="#4a90d9"/><circle cx="52" cy="36" r="11" fill="#f0f0f0"/><ellipse cx="52" cy="27" rx="11" ry="7" fill="#4a90d9"/><rect x="42" y="34" width="18" height="2.5" rx="1.2" fill="#111"/><circle cx="57" cy="32" r="1.8" fill="#111"/>
+        </g>
+        <text x="58" y="27" fill="#edf4fb" font-size="13.5" font-weight="700">Blaumeise</text>
+        <text x="164" y="27" fill="#9ba3ad" font-size="12.5">Vogel · Sicherheit 91 %</text>
+        <text x="360" y="27" fill="#9ba3ad" font-size="12.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">2,4 s – 8,7 s</text>
+        <rect x="520" y="15" width="180" height="14" rx="7" fill="#ffffff" fill-opacity="0.08"/>
+        <rect x="520" y="15" width="164" height="14" rx="7" fill="#62d26f"/>
+        <text x="1112" y="27" fill="#7b848e" font-size="12" text-anchor="end">Art ändern</text>
+      </g>
+
+      <g transform="translate(16,98)">
+        <rect width="1128" height="44" rx="11" fill="#222222"/>
+        <rect x="0" y="0" width="4" height="44" rx="2" fill="#c8651a"/>
+        <circle cx="34" cy="22" r="13" fill="#c8651a" fill-opacity="0.22"/>
+        <g transform="translate(24,12) scale(0.26)">
+          <path d="M 50 72 Q 74 60 72 32 Q 70 14 54 16 Q 38 18 42 38 Q 46 58 50 72Z" fill="#a8350c"/><path d="M 51 70 Q 68 58 66 34 Q 64 22 54 24 Q 44 26 46 40 Q 48 56 51 70Z" fill="#c64a18"/><ellipse cx="34" cy="62" rx="17" ry="12" fill="#a8350c"/><ellipse cx="34" cy="63" rx="13" ry="9" fill="#c64a18"/><circle cx="38" cy="42" r="15" fill="#a8350c"/><circle cx="38" cy="44" r="13" fill="#c64a18"/><path d="M 28 39 Q 38 50 50 41 Q 48 50 38 53 Q 30 50 28 39Z" fill="#f0c89a"/><circle cx="44" cy="38" r="3.6" fill="#1a0a05"/><ellipse cx="49" cy="46" rx="5.5" ry="4" fill="#9a3008"/>
+        </g>
+        <text x="58" y="27" fill="#edf4fb" font-size="13.5" font-weight="700">Eichhörnchen</text>
+        <text x="180" y="27" fill="#9ba3ad" font-size="12.5">rot · Sicherheit 88 %</text>
+        <text x="360" y="27" fill="#9ba3ad" font-size="12.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">0,4 s – 6,1 s</text>
+        <rect x="520" y="15" width="180" height="14" rx="7" fill="#ffffff" fill-opacity="0.08"/>
+        <rect x="520" y="15" width="158" height="14" rx="7" fill="#c8651a"/>
+        <text x="1112" y="27" fill="#7b848e" font-size="12" text-anchor="end">Art ändern</text>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Squirreling · Sightings — selbst gehosteter Kamera-Wächter für den Garten">
+  <!-- Hero der README. Der Markenglyph unten trägt Form für Form dieselben
+       Pfade wie app/web/static/img/logos/logo-tree-lens-dark.svg — also
+       derselbe Glyph, den die App im Kopf trägt: „schöne Vektorgrafiken,
+       die wir auch auf der Seite verwenden." Byte-gleich ist er nicht: der
+       Bodenstreifen des Originals fällt weg (hier trägt die Karte den
+       Boden), dafür kommen Schlagschatten und Linsen-Schein dazu, damit
+       der Glyph auf dem Hero nicht flach aufliegt. Der eigene undurchsichtige
+       Hintergrund ist Absicht — GitHub zeigt Bilder in hellem UND
+       dunklem Theme, und eine Karte mit eigenem Grund liest sich in
+       beiden wie ein Screenshot statt wie ein Loch. -->
+  <defs>
+    <linearGradient id="h-sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c1118"/>
+      <stop offset="55%" stop-color="#0f1b24"/>
+      <stop offset="100%" stop-color="#12242c"/>
+    </linearGradient>
+    <linearGradient id="h-ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17402f"/>
+      <stop offset="100%" stop-color="#0b2118"/>
+    </linearGradient>
+    <radialGradient id="h-moon" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffeec2" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#ffeec2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="h-lens" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#4cc9f0" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#4cc9f0" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="h-shadow" x="-30%" y="-30%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="h-card"><rect width="1280" height="360" rx="18"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#h-card)">
+  <rect width="1280" height="360" fill="url(#h-sky)"/>
+
+  <!-- Sternfeld, sehr zurückhaltend -->
+  <g fill="#33506a" opacity="0.5">
+    <circle cx="120" cy="44" r="1.3"/><circle cx="248" cy="30" r="1"/><circle cx="360" cy="58" r="1.1"/>
+    <circle cx="470" cy="34" r="1"/><circle cx="606" cy="52" r="1.2"/><circle cx="712" cy="28" r="1"/>
+    <circle cx="1156" cy="46" r="1.1"/><circle cx="1232" cy="72" r="1"/><circle cx="1074" cy="26" r="1"/>
+  </g>
+
+  <circle cx="1075" cy="70" r="72" fill="url(#h-moon)"/>
+  <circle cx="1075" cy="70" r="21" fill="#2c3f52" opacity="0.55"/>
+  <circle cx="1069" cy="65" r="17" fill="#1b2a38" opacity="0.75"/>
+
+  <!-- Waldsilhouette + Boden -->
+  <path d="M0 302 Q640 282 1280 302 V360 H0 Z" fill="url(#h-ground)"/>
+  <g opacity="0.45">
+    <ellipse cx="150" cy="250" rx="52" ry="74" fill="#1b4332"/>
+    <rect x="146" y="270" width="8" height="48" fill="#0d2a1f"/>
+    <ellipse cx="232" cy="266" rx="38" ry="56" fill="#17392b"/>
+    <rect x="229" y="288" width="6" height="32" fill="#0d2a1f"/>
+    <ellipse cx="1230" cy="262" rx="44" ry="62" fill="#1b4332"/>
+  </g>
+
+  <!-- ── Marke ────────────────────────────────────────────────────── -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif">
+    <text x="88" y="128" fill="#ffffff" font-size="62" font-weight="800" letter-spacing="-1.2">Squirreling</text>
+    <text x="88" y="192" fill="#74c69d" font-size="62" font-weight="800" letter-spacing="-1.2">· Sightings</text>
+    <text x="90" y="234" fill="#b8c4d0" font-size="19" font-weight="500">Der Gartenwächter, der aus Bewegung Geschichten macht.</text>
+
+    <!-- Chips: die vier Dinge, die jemand in drei Sekunden wissen will -->
+    <g font-size="13.5" font-weight="600">
+      <g transform="translate(90,258)">
+        <rect width="150" height="32" rx="16" fill="#16291f"/>
+        <circle cx="19" cy="16" r="5" fill="#52b788"/>
+        <text x="34" y="21" fill="#dbe7ef">Läuft bei dir</text>
+      </g>
+      <g transform="translate(252,258)">
+        <rect width="176" height="32" rx="16" fill="#2a1a26"/>
+        <circle cx="19" cy="16" r="5" fill="#f472b6"/>
+        <text x="34" y="21" fill="#dbe7ef">Erkennt die Tierart</text>
+      </g>
+      <g transform="translate(440,258)">
+        <rect width="168" height="32" rx="16" fill="#152531"/>
+        <circle cx="19" cy="16" r="5" fill="#7faec9"/>
+        <text x="34" y="21" fill="#dbe7ef">Kennt das Wetter</text>
+      </g>
+      <g transform="translate(620,258)">
+        <rect width="156" height="32" rx="16" fill="#2b2414"/>
+        <circle cx="19" cy="16" r="5" fill="#fbbf24"/>
+        <text x="34" y="21" fill="#dbe7ef">Meldet per Chat</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ── Markenglyph · 1:1 aus app/web/static/img/logos/logo-tree-lens-dark.svg ── -->
+  <g transform="translate(872,104) scale(3.08)" filter="url(#h-shadow)">
+    <ellipse cx="55" cy="61" rx="52" ry="3.5" fill="#1b4332" opacity="0.55"/>
+    <rect x="30" y="22" width="10" height="36" fill="#6b4423"/>
+    <rect x="36" y="22" width="4" height="36" fill="#5a3a1c"/>
+    <ellipse cx="35" cy="14" rx="22" ry="12" fill="#2d6a4f"/>
+    <ellipse cx="20" cy="18" rx="10" ry="8" fill="#40916c"/>
+    <ellipse cx="50" cy="16" rx="11" ry="9" fill="#52b788"/>
+    <ellipse cx="35" cy="8" rx="12" ry="6" fill="#74c69d"/>
+    <ellipse cx="28" cy="12" rx="8" ry="6" fill="#52b788"/>
+    <ellipse cx="42" cy="11" rx="9" ry="6" fill="#40916c"/>
+    <ellipse cx="35" cy="22" rx="18" ry="5" fill="#1b4332"/>
+    <circle cx="35" cy="14" r="13" fill="url(#h-lens)"/>
+    <circle cx="35" cy="14" r="6" fill="#0a0a0a"/>
+    <circle cx="35" cy="14" r="3.5" fill="#1f1f1f"/>
+    <circle cx="33.5" cy="12.5" r="1.6" fill="#4cc9f0"/>
+    <circle cx="33" cy="12" r="0.5" fill="#fff"/>
+    <g transform="translate(48, 44)">
+      <path d="M 7 6 Q 18 0 18 -8 Q 16 -18 6 -18 Q -2 -14 2 -6 Z" fill="#c89464" stroke="#a06c2c" stroke-width="0.4"/>
+      <ellipse cx="16" cy="-12" rx="3.5" ry="2.5" fill="#d4a574" transform="rotate(-20 16 -12)"/>
+      <ellipse cx="0" cy="0" rx="8" ry="11" fill="#b87333"/>
+      <ellipse cx="0" cy="3" rx="5" ry="7" fill="#d4a574"/>
+      <circle cx="0" cy="-11" r="7" fill="#b87333"/>
+      <ellipse cx="-4" cy="-8" rx="2.2" ry="1.8" fill="#a06c2c" opacity="0.5"/>
+      <path d="M -6 -16 L -3 -21 L -1 -17 Z" fill="#b87333"/>
+      <path d="M 1 -17 L 3 -21 L 6 -16 Z" fill="#b87333"/>
+      <path d="M -4 -17 L -3 -19 L -2 -17 Z" fill="#7a4a26"/>
+      <path d="M 2 -17 L 3 -19 L 4 -17 Z" fill="#7a4a26"/>
+      <circle cx="-3" cy="-12" r="1.7" fill="#0a0a0a"/>
+      <circle cx="3" cy="-12" r="1.7" fill="#0a0a0a"/>
+      <circle cx="-2.5" cy="-12.5" r="0.6" fill="#fff"/>
+      <circle cx="3.5" cy="-12.5" r="0.6" fill="#fff"/>
+      <ellipse cx="0" cy="-7" rx="1.2" ry="0.9" fill="#0a0a0a"/>
+      <path d="M -2 -5 Q 0 -3.5 2 -5" stroke="#0a0a0a" stroke-width="0.7" fill="none" stroke-linecap="round"/>
+      <ellipse cx="-5" cy="-2" rx="2" ry="2.5" fill="#a06c2c"/>
+      <ellipse cx="5" cy="-2" rx="2" ry="2.5" fill="#a06c2c"/>
+      <ellipse cx="0" cy="-2" rx="2.5" ry="3" fill="#8b5a3c"/>
+      <path d="M -3 -4 Q 0 -7 3 -4 L 2.5 -3 L -2.5 -3 Z" fill="#5a3a1c"/>
+      <line x1="0" y1="-6" x2="0" y2="-7.5" stroke="#5a3a1c" stroke-width="0.7" stroke-linecap="round"/>
+      <ellipse cx="-5" cy="13" rx="3.5" ry="2" fill="#a06c2c"/>
+      <ellipse cx="5" cy="13" rx="3.5" ry="2" fill="#a06c2c"/>
+    </g>
+  </g>
+
+  <!-- fliegende Blätter -->
+  <g opacity="0.8">
+    <ellipse cx="806" cy="168" rx="6" ry="3" fill="#52b788" transform="rotate(25 806 168)"/>
+    <ellipse cx="846" cy="232" rx="5" ry="2.5" fill="#74c69d" transform="rotate(-18 846 232)"/>
+    <ellipse cx="872" cy="110" rx="4" ry="2" fill="#40916c" transform="rotate(42 872 110)"/>
+  </g>
+  </g>
+</svg>

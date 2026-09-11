@@ -29,6 +29,7 @@ from pathlib import Path
 
 from ..library._motion_reader import motion_candidates as _lib_motion_candidates
 from ..weather_service._consts import _safe_dt
+from ..weather_service._consts import SUN_SKIP_EVENT_TYPE
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +98,11 @@ def weather_candidates(weather_service, since=None, until=None) -> list:
     )
     out: list = []
     for m in result.get("items") or []:
+        # A failed sun run is a record, not footage — it has an id and a
+        # timestamp now (so it can be reported) but no clip behind it, and
+        # a card pointing at a missing file is worse than no card.
+        if m.get("event_type") == SUN_SKIP_EVENT_TYPE:
+            continue
         start, end = _manifest_span(m)
         if start is None:
             continue

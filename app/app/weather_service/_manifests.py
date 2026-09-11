@@ -18,6 +18,7 @@ from pathlib import Path
 import requests
 
 from ._consts import (
+    SUN_SKIP_EVENT_TYPE,
     EVENT_ICON_HEX,
     EVENT_LABEL_DE,
     HISTORY_FIELD_TO_EVENT,
@@ -91,6 +92,9 @@ class ManifestsMixin:
                     "sun_timelapse_rise",
                     "sun_timelapse_set",
                     "sun_timelapse",
+                    # The failed runs live in the same two directories as
+                    # the successful ones — they ARE those runs.
+                    SUN_SKIP_EVENT_TYPE,
                 )
                 _is_evt_tl_request = event_type in (
                     "thunder_rising",
@@ -116,6 +120,21 @@ class ManifestsMixin:
                     if until_dt and started > until_dt:
                         continue
                     et = m.get("event_type") or evt_dir.name
+                    # AUSGEFALLEN. A sun run that never produced a video
+                    # leaves a `<stem>_skip.json` saying why (see
+                    # `_sun_tl._write_sun_skip_json`). It is a real record
+                    # of a real night, so it belongs in this list — but it
+                    # is NOT footage, and it used to be bucketed under the
+                    # directory name („sunrise_timelapse"), a key no
+                    # label map knows. Named here, counted here, and
+                    # filtered out of the media feed by
+                    # `weather_episodes._footage_sources`.
+                    if et == SUN_SKIP_EVENT_TYPE:
+                        if event_type and event_type != et:
+                            continue
+                        counts[et] = counts.get(et, 0) + 1
+                        items.append(m)
+                        continue
                     # Sun-Timelapse: collapse the generic "sun_timelapse"
                     # event_type onto the phase-specific display type so the
                     # frontend's WEATHER_TYPES map (sun_timelapse_rise /
@@ -319,7 +338,45 @@ class ManifestsMixin:
 
     def status(self) -> dict:
         with self._lock:
-            return dict(self._status)
+            out = dict(self._status)
+        # WHY THERE IS NO VIDEO. A sun run that fails leaves a skip record
+        # naming the reason (`_sun_tl._write_sun_skip_json`), and until now
+        # nothing read it — so a missing sunrise looked exactly like a
+        # sunrise that was never scheduled: „Es sind keine sunrise sunset
+        # timelapses da." The last handful ride along with the status the
+        # weather panel already polls, so the answer is one request away
+        # instead of buried in a log ring buffer that rolls over in half
+        # an hour.
+        out["sun_skips"] = self.recent_sun_skips()
+        return out
+
+    def recent_sun_skips(self, limit: int = 10) -> list[dict]:
+        """The most recent sun-timelapse runs that produced no video.
+
+        Newest first, trimmed to the fields that answer the question:
+        which camera, which phase, when, why, and how close it got.
+        Best-effort — a diagnostic must never be the reason a status call
+        fails.
+        """
+        try:
+            res = self.list_sightings(event_type=SUN_SKIP_EVENT_TYPE, page=0, page_size=limit)
+        except Exception:
+            log.debug("[weather] Ausfallliste nicht lesbar", exc_info=True)
+            return []
+        out = []
+        for m in res.get("items") or []:
+            out.append(
+                {
+                    "id": m.get("id"),
+                    "cam_id": m.get("cam_id") or m.get("camera_id"),
+                    "phase": m.get("sun_phase") or m.get("phase"),
+                    "at": m.get("started_at") or m.get("captured_at"),
+                    "reason": m.get("skip_reason"),
+                    "frames": m.get("n_written"),
+                    "frames_required": m.get("min_required"),
+                }
+            )
+        return out
 
     # ── History (Wetterstatistik) ──────────────────────────────────────────
     def list_recaps(self) -> list[dict]:

@@ -17,6 +17,16 @@ from pathlib import Path
 
 # Pinned logger name so log filters and grep keep matching the legacy module
 # path after the package split.
+#: Event type of a sun-timelapse run that produced no video.
+#:
+#: Its own type rather than a flag on the real one: a night that failed is
+#: a different KIND of thing from a night that was recorded, and every
+#: consumer has to be able to tell them apart without reading a second
+#: field. `_sun_tl` writes it, `_manifests` lists it, the media feed in
+#: `weather_episodes._footage_sources` drops it — it is a record, not
+#: footage.
+SUN_SKIP_EVENT_TYPE = "sun_timelapse_skip"
+
 log = logging.getLogger("app.weather_service")
 
 

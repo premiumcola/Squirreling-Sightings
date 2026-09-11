@@ -30,6 +30,7 @@ from .._consts import (
     HISTORY_LABELS_DE,
     HISTORY_MAXLEN,
     HISTORY_UNITS,
+    SUN_SKIP_EVENT_TYPE,
     _atomic_write_json,
     _is_quiet_now,
     _safe_dt,
@@ -241,13 +242,27 @@ def _write_sun_skip_json(
     any extras the caller wants to surface (e.g. exception type +
     message for loop crashes). All writes are best-effort — a failure
     here only emits a warning, never raises."""
+    now_iso = datetime.now().isoformat(timespec="seconds")
     payload = {
+        # IDENTITY, so the record can be FOUND. Without these three keys
+        # the file was written by six failure paths and read by nobody:
+        # `list_sightings` globbed it, computed `started_at` as
+        # `datetime.min`, bucketed it under the directory name and handed
+        # it on to a consumer that dropped anything without an `id`. The
+        # docstring above promised a trail „the mediathek can surface";
+        # this is what that promise was missing. See
+        # `_manifests.SUN_SKIP_EVENT_TYPE`.
+        "id": f"{camera_id}__sun_timelapse_skip__{stem}",
+        "event_type": SUN_SKIP_EVENT_TYPE,
+        "started_at": now_iso,
+        "sun_phase": phase,
         "phase": phase,
         "camera_id": camera_id,
+        "cam_id": camera_id,
         "skip_reason": skip_reason,
         "n_written": int(n_written),
         "min_required": int(min_required),
-        "captured_at": datetime.now().isoformat(timespec="seconds"),
+        "captured_at": now_iso,
         "log_tail": list(log_tail or [])[-30:],
     }
     if extra:

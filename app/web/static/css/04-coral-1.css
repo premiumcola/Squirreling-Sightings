@@ -253,11 +253,10 @@
     background: var(--panel);
   }
 }
-/* Arrow and title stay together on the left; the head's own
-   space-between then pushes the select/trash controls to the right. */
-.media-section-title {
-  margin-right: auto;
-}
+/* The rule that keeps the title left lives in 18-telegram-2.css, beside
+   the `.media-section-title { margin: 0 }` it has to beat — same
+   specificity, later file. Putting it here looked right and did nothing:
+   „bitte titel oben links nicht mittig!". */
 /* The vertical rhythm of the drilldown stack. See .media-drill-head. */
 :root {
   --media-stack-gap: 10px;
@@ -670,6 +669,11 @@
    two halves of one gesture speak the same colour. */
 .page-pill--all {
   margin-left: 10px;
+}
+/* The prune preset sits right beside the select-all toggle and shares
+   its family, but it is an ACTION, not a state — so it never lights up. */
+.page-pill--prune {
+  margin-left: 2px;
 }
 .page-pill--all.is-on .page-pill-chip {
   background: color-mix(in srgb, #5fc98a 26%, transparent);

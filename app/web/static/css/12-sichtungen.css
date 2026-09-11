@@ -141,10 +141,17 @@
 .medal-emoji-locked {
   filter: grayscale(1) brightness(0.4);
 }
+/* The count rides on the medal's shoulder. It used to hang OUT of the
+   card: at `right: -4px` a two-digit count („65×") was wider than the
+   4 px of slack the tile had, so the pill crossed the card's edge. The
+   medal is a circle inside an 88 px square, so its top-right corner has
+   ~13 px of empty square to sit in — pull the badge back into that
+   instead of pushing it out of the card. */
 .medal-count-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: 0;
+  right: 0;
+  max-width: 100%;
   padding: 1px 7px;
   border-radius: 999px;
   font-size: 10px;

@@ -101,7 +101,15 @@
   gap: 8px;
   min-width: 0;
   max-width: 100%;
-  margin: 0;
+  /* LEFT, not centred. The head is a `space-between` row, so with only a
+     back arrow on one side and a trash can on the other the title drifted
+     into the middle of a very wide desktop row — „verteilung der elemente
+     an PC dämlich - bitte titel oben links nicht mittig!". `auto` on the
+     right edge collapses that gap onto one side and the title sits where
+     a title belongs. The declaration has to be HERE: 04-coral-1.css tried
+     it first and lost to the `margin: 0` on this very rule, same
+     specificity, later file. */
+  margin: 0 auto 0 0;
 }
 .media-section-title svg {
   flex-shrink: 0;

@@ -60,6 +60,7 @@ def test_storms_package_exists_with_the_expected_modules():
         "_detail.js",
         "_detail_edit.js",
         "_compare.js",
+        "_compare_metrics.js",
         "_compare_table.js",
         "_footage.js",
         "_helpers.js",
@@ -239,15 +240,162 @@ def test_metric_direction_is_asked_never_re_declared():
             assert smell not in src, f"{name} re-declares the metric direction ({smell})"
 
 
-def test_compare_shares_one_absolute_y_scale():
-    """Per-line normalisation would draw a 12 mm/h cloudburst and a
-    3 mm/h shower as identical curves — the opposite of comparing."""
+def test_compare_shares_one_absolute_scale_per_metric():
+    """Per-SERIES normalisation would draw a 12 mm/h cloudburst and a
+    3 mm/h shower as identical curves — the opposite of comparing.
+
+    Since the compare view can carry several metrics at once, the shared
+    scale is per METRIC rather than one for the whole plot: every episode
+    drawn on `precipitation` shares one band, and the gust curve next to
+    it gets its own. What may never come back is a band computed from the
+    single series being drawn. The numbers are asserted behaviourally in
+    test_storms_frontend_logic.py::test_two_episodes_of_one_metric_share_one_band.
+    """
+    src = _read(_CHART / "_multi.js")
+    seg = src[src.index("function _seriesPaths") :]
+    seg = seg[: seg.index("\n}")]
+    assert "dom.bands[s.metric]" in seg, "_seriesPaths must look the band up by metric"
+    assert (
+        "lo: band.lo" in seg and "hi: band.hi" in seg
+    ), "_seriesPaths must force the metric's shared {lo, hi} onto every line"
+
+
+def test_the_per_metric_scale_decision_is_recorded_where_it_is_made():
+    """Two dishonest alternatives were available — one absolute axis for
+    every unit (everything but lightning collapses onto the floor) and
+    per-series normalisation (the comparison stops comparing). Both are
+    the kind of thing a later refactor "helpfully" restores, so the
+    reasoning stays in the module that implements the rule."""
+    src = _read(_CHART / "_multi_scale.js")
+    assert "export function valueBands" in src
+    for term in ("Per-SERIES normalisation", "One absolute axis", "12 mm/h"):
+        assert term in src, f"the {term!r} rationale was dropped from _multi_scale.js"
+
+
+def test_the_metric_identity_channel_is_not_colour_and_not_dashes():
+    """Colour means "which episode" in this view and one colour must mean
+    one thing per view, so the metric needs a second channel. Dash
+    patterns were rejected before this feature existed — they wreck a
+    noisy storm curve — and the rejection must not be quietly undone by
+    the module that now needs a channel."""
+    scale = _read(_CHART / "_multi_scale.js")
+    assert "export function metricEndLabels" in scale
+    assert "stroke-dasharray" not in scale, "the metric channel must not be a dash pattern"
+    assert "dash patterns: they wreck" in _read(_CHART / "_multi.js")
+    # The label has to carry the slot too, or it identifies the metric
+    # and leaves "which episode" to colour alone.
+    assert "${s.slot} ${shortOf(s.metric)}" in scale
+
+
+def test_the_y_axis_drops_its_labels_once_two_units_share_the_plot():
+    """A labelled shared axis across mm/h and J/kg is a number nobody is
+    asking about — the same finding buildYAxis' all-lines branch already
+    recorded. The compare chart must reuse that branch, not relabel."""
+    src = _read(_CHART / "_multi.js")
+    seg = src[src.index("function _axisSvg") :]
+    seg = seg[: seg.index("\n}\n")]
+    assert "buildValueAxis({" in seg, "a single metric must keep its real-value axis"
+    assert "buildYAxis({" in seg, "several metrics must fall back to the shared gridline branch"
+
+
+def test_compare_never_stretches_one_episode_to_fill_the_plot():
+    """„bitte achte beim vergleich auch auf die zeitliche ausdehnung die
+    muss vergleichbar bleiben also kein verzug des zeitrahmens!" — every
+    series is mapped through the ONE union minute domain, so a 40-minute
+    squall stays a third as wide as a two-hour front."""
     src = _read(_CHART / "_multi.js")
     seg = src[src.index("function _seriesPaths") :]
     seg = seg[: seg.index("\n}")]
     assert (
-        "lo: dom.lo" in seg and "hi: dom.hi" in seg
-    ), "_seriesPaths must force the shared {lo, hi} onto every line"
+        "xLo: dom.minMin" in seg and "xHi: dom.maxMin" in seg
+    ), "a per-series x domain would rescale each episode to the full width"
+
+
+# ── several curves at once, and hiding the ones that say nothing ─────
+
+
+def test_compare_metric_pills_are_independent_toggles():
+    """„gebe im gewitterarchiv auch die möglichkeit beliebige kurven
+    parallel anzuwählen" — the pills stopped being one-of-five.
+
+    role=tablist promises a screen reader exactly one selected item, so
+    it cannot stay on a bar where every pill toggles on its own; each
+    button carries its own aria-pressed instead. The DETAIL view's pill
+    bar is untouched, because there it really is one choice.
+    """
+    src = _read(_STORMS / "_compare_metrics.js")
+    assert 'role="group"' in src
+    assert "aria-pressed=" in src
+    assert 'role="tablist"' not in src, "a multi-select bar must not claim to be a tablist"
+    assert 'role="tablist"' in _read(_STORMS / "_detail.js"), "detail is still single-choice"
+
+
+def test_turning_off_the_last_curve_is_a_no_op():
+    """Hiding every curve leaves a blank plot the operator then has to
+    guess their way out of. Same guard the Wetterstatistik legend chips
+    carry."""
+    src = _read(_STORMS / "_compare_metrics.js")
+    body = src[src.index("export function toggleCompareMetric") :]
+    body = body[: body.index("\n}")]
+    assert "last one standing" in body
+
+
+def test_a_metric_that_never_moved_is_dimmed_not_removed():
+    """„ich möchte bestimmte kurven als nicht relevant ausblenden können
+    wie z.B schnee im sommer" — but a flat metric must stay one tap
+    away: "show me that it really is flat" is a fair thing to ask, and it
+    is the same treatment the Wetterstatistik legend gives an auto-hidden
+    field. Only a metric with NO data anywhere is disabled outright."""
+    src = _read(_STORMS / "_compare_metrics.js")
+    pill = src[src.index("function _pillHtml") :]
+    pill = pill[: pill.index("\n}")]
+    assert "is-flat" in pill
+    assert "disabled" in pill and "metricHasData" in pill
+    # …and the flat branch must not also disable the button.
+    assert "flat ? ' disabled'" not in pill
+    css = _read(_CSS / "24b-storms.css")
+    rule = re.search(
+        r"^\.st-mpill\.is-flat:not\(\.is-on\) \{(.*?)\}", css, re.DOTALL | re.MULTILINE
+    )
+    assert rule, "the flat pill has no dimmed state"
+    assert "opacity" in rule.group(1)
+
+
+def test_flatness_is_measured_on_the_raw_extent_not_on_the_peak():
+    """Two wrong primitives were available. `metricHasData` only asks
+    whether a PEAK was stamped, which says nothing about whether the
+    curve moved. `fieldValueRange` pins a flat line to a ±0.5 band so it
+    can be drawn mid-chart, and that band reads back as a 1.0 swing that
+    never happened — a dead-flat Schneefall curve looked like real
+    snowfall to exactly that mistake once already."""
+    src = _read(_STORMS / "_compare_metrics.js")
+    body = src[src.index("export function metricMoves") :]
+    body = body[: body.index("\n}")]
+    assert "fieldDataExtent" in body
+    # Named in the docstring as the rejected option; calling it is the
+    # regression.
+    assert "fieldValueRange(" not in src, "the ±0.5 flat-line band is not a movement measurement"
+
+
+def test_the_multi_select_pill_bar_drops_the_segment_well_without_going_dark_on_dark():
+    """A shared dark well is the affordance of a one-of-N control, and it
+    is exactly what would stop the operator ever trying a second pill —
+    so it goes, and each button gets a surface of its own.
+
+    The obvious move, rgba(0,0,0,.18) from the container onto the
+    buttons, is the one thing that rule may NOT be: the well's own
+    comment says a dark fill on a button renders darker than the panel
+    under it, which the design rules forbid outright. The per-button
+    surface has to be a lifted one.
+    """
+    css = _read(_CSS / "24b-storms.css")
+    bar = re.search(r"^\.st-mpills\.is-multi \{(.*?)\}", css, re.DOTALL | re.MULTILINE)
+    assert bar, "the multi-select pill bar has no rule"
+    assert "background: transparent" in bar.group(1)
+    pill = re.search(r"^\.st-mpills\.is-multi \.st-mpill \{(.*?)\}", css, re.DOTALL | re.MULTILINE)
+    assert pill, "the individual pills got no surface of their own"
+    assert "rgba(255, 255, 255" in pill.group(1), "a dark-on-dark button fill"
+    assert "rgba(0, 0, 0" not in pill.group(1), "a dark-on-dark button fill"
 
 
 # ── compare cap ──────────────────────────────────────────────────────

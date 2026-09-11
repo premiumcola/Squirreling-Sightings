@@ -125,7 +125,13 @@ export const stormsState = {
   slots: [null, null, null, null],
   detail: null, // full episode record (with samples) for the detail view
   detailId: null,
-  metric: null, // compare metric key, null = auto-pick
+  metric: null, // single metric key (detail view + compare's seed), null = auto-pick
+  // Compare draws SEVERAL metrics at once — „beliebige kurven parallel
+  // anzuwählen". `null` means untouched, which is what makes the view
+  // still open on the one auto-picked metric it always opened on; an
+  // array means the operator has taken over the selection. No separate
+  // "userAdjusted" flag: `null` vs. array already says it.
+  metrics: null,
   samples: {}, // id → full record cache, so compare fetches each id once
   footage: {}, // id → footage payload
 };

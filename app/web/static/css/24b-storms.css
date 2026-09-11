@@ -317,7 +317,17 @@
 .st-axis-hint {
   margin-top: 6px;
   font-size: 11px;
+  line-height: 1.4;
   color: var(--muted);
+}
+
+/* Once several metrics share the compare plot the Y axis drops its
+   labels (see stats-chart/_multi_scale.js), so this tooltip is not a
+   convenience any more — it is where the numbers live. Each row also
+   carries the metric name now ("Hagelfront · Böen"), and the shared
+   240 px cap ellipsised half of that away. */
+.st-chart-wrap .ws-chart-tooltip {
+  max-width: 280px;
 }
 
 /* Metrik-Pills — one row of five, never a scroll strip: at 375 px five
@@ -359,6 +369,42 @@
 .st-mpill[disabled] {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Multi-select variant — the Vergleich, where „beliebige kurven parallel
+   anzuwählen" means every pill is its own independent toggle.
+
+   The shared dark WELL above is what makes .st-mpills read as
+   one-of-five, and that affordance is exactly what would stop the
+   operator ever trying a second pill. So the well goes, and each button
+   gets a surface of its own: five discrete chips, each visibly on or off
+   on its own.
+
+   That surface is LIFTED (white at 5 %), not sunken. The well's own
+   comment above says why: a dark fill on the button renders darker than
+   the panel it sits on, which is the dark-on-dark the design rules
+   forbid outright — so simply moving rgba(0,0,0,.18) from the container
+   onto the buttons would have reintroduced it. White at 5 % is the
+   surface .st-lchip already uses for a chip on this panel; no new
+   colour, and the accent fill of .is-on still reads clearly against it. */
+.st-mpills.is-multi {
+  padding: 0;
+  gap: 6px;
+  background: transparent;
+}
+.st-mpills.is-multi .st-mpill {
+  background: rgba(255, 255, 255, 0.05);
+}
+.st-mpills.is-multi .st-mpill.is-on {
+  background: rgba(127, 174, 201, 0.22);
+}
+/* „schnee im sommer" — has data, never moved in this selection. Dimmed
+   rather than disabled: still one tap away, because "show me that it
+   really is flat" is a fair thing to ask. Mirrors the Wetterstatistik
+   legend's own auto-hidden chip. Never dims an active pill: an ON curve
+   must look ON even when it turns out to be a straight line. */
+.st-mpill.is-flat:not(.is-on) {
+  opacity: 0.55;
 }
 
 /* ── Detail ────────────────────────────────────────────────────────── */
@@ -717,4 +763,15 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+/* Die Restzeile des Tooltips. Vier Gewitter mal fünf Messgrößen sind
+   zwanzig Zeilen, und der Rahmen darüber ist 220 px hoch und schneidet
+   ab — siehe _multi_hover.js::HOVER_MAX_ROWS. Was nicht passt, wird
+   gezählt statt weggeschnitten. */
+.ws-tt-more {
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }

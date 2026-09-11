@@ -1,9 +1,16 @@
 // ─── weather/stats-chart/_multi.js ─────────────────────────────────────────
-// Multi-EPISODE overlay chart for the Gewitter-Browser's compare view.
-// Lives inside stats-chart/ deliberately: there is one chart package in
-// this app, not two. It composes the same primitives the Wetterstatistik
-// chart uses — buildLinePath for the geometry, buildValueAxis for the Y
-// ticks, buildRelTicks for the X ticks, bindChartHover for the tooltip.
+// Multi-EPISODE, multi-METRIC overlay chart for the Gewitter-Browser's
+// compare view. Lives inside stats-chart/ deliberately: there is one
+// chart package in this app, not two. It composes the same primitives
+// the Wetterstatistik chart uses — buildLinePath for the geometry,
+// buildValueAxis / buildYAxis for the Y ticks, buildRelTicks for the X
+// ticks, bindChartHover for the tooltip.
+//
+// Two siblings carry the parts that outgrew this file:
+//   _multi_scale.js — the per-metric value bands + the direct end
+//                     labels, and the record of why the Y axis goes
+//                     unlabelled once two units share the plot.
+//   _multi_hover.js — the relative-minute hover math and tooltip rows.
 //
 // ── Why the X axis is PEAK-aligned, and why that is not configurable ──
 //
@@ -30,24 +37,26 @@
 //   part. The records' pre_min / post_min margins guarantee data on
 //   both flanks, so it can never produce a one-sided curve.
 //
-// Sampling is the weather poll, whose interval is user-configurable.
-// Nothing in here assumes a value for it: the hover tolerance is
-// MEASURED off the samples that actually arrived (see hoverTolerance),
-// so a 600 s poll, a coalesced job or a restart-shaped hole changes the
-// number instead of quietly breaking the tooltip.
+// The X SPAN is not normalised either. Every series is mapped through
+// the one union domain minMin…maxMin, so a 40-minute squall occupies a
+// third of the width next to a two-hour front: „bitte achte beim
+// vergleich auch auf die zeitliche ausdehnung die muss vergleichbar
+// bleiben also kein verzug des zeitrahmens!"
 
 import { buildLinePath } from './_paths.js';
-import { buildValueAxis } from './_axes.js';
+import { buildValueAxis, buildYAxis } from './_axes.js';
 import { statsChartPad, axisTickLabels } from './_pad.js';
 import { buildRelTicks, fmtRelMinute } from './_ticks.js';
 import { bindChartHover } from './_hover.js';
 import { isWorse } from '../metric-direction.js';
+import { valueBands, bandY, domainX, metricEndLabels } from './_multi_scale.js';
+import { episodeHoverGrid, episodeHoverRows } from './_multi_hover.js';
 
-// Synthetic timestamps let bindChartHover's wall-clock lookup serve the
-// relative-minute axis unchanged — the mapping minMin…maxMin →
-// tFirst…tLast is linear and identical to the one buildLinePath uses.
-const _REL_EPOCH = Date.UTC(2000, 0, 1);
-const _relToTs = (m) => new Date(_REL_EPOCH + m * 60_000).toISOString();
+// The four pure hover helpers moved to _multi_hover.js; re-exported here
+// so their import path never changed for anyone. (This file's own uses
+// go through the explicit imports above — a re-export does NOT put a
+// symbol into local scope.)
+export { nearestPoint, medianStep, hoverTolerance, seriesReading } from './_multi_hover.js';
 
 function _sizeOf(wrap) {
   const w = Math.round(wrap.clientWidth);
@@ -55,45 +64,25 @@ function _sizeOf(wrap) {
   return w > 0 && h > 0 ? { w, h } : null;
 }
 
-// Shared absolute value domain across every series, plus the relative-
-// minute domain. The value floor is pinned to 0 for the non-negative
-// storm metrics so two curves' heights are directly comparable rather
-// than each being stretched to its own extent. Every threshold line is
-// folded in so none of them is ever drawn off-plot.
-function _domain(series, thresholds) {
-  let minMin = Infinity,
-    maxMin = -Infinity,
-    lo = Infinity,
-    hi = -Infinity;
-  for (const s of series) {
-    for (const [m, v] of s.points) {
-      if (Number.isFinite(m)) {
-        if (m < minMin) minMin = m;
-        if (m > maxMin) maxMin = m;
-      }
-      if (Number.isFinite(v)) {
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-      }
-    }
-  }
-  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
-  for (const t of thresholds) hi = Math.max(hi, t.value);
-  lo = Math.min(0, lo);
-  if (hi - lo < 1e-9) hi = lo + 1;
-  return { minMin, maxMin, lo, hi };
-}
-
-// One path per episode, in the episode's slot colour. Colour means
-// "which episode" in this view and nothing else — the class is carried
-// by the legend glyph, the metric by the pills above the chart.
-function _seriesPaths(series, dom, pad, cw, ch) {
+// One path per series, drawn against ITS METRIC's band — shared by every
+// episode on that metric, so two rain curves stay directly comparable
+// while a gust curve next to them gets its own scale (_multi_scale.js
+// carries the full reasoning).
+//
+// Colour means "which episode" in this view and nothing else. The class
+// is carried by the legend glyph, the metric by the pills above the
+// chart and by the direct end label on the curve itself. Explicitly NOT
+// dash patterns: they wreck the readability of a noisy storm curve.
+function _seriesPaths(series, dom, geo) {
+  const { pad, cw, ch } = geo;
   let svg = '';
   for (const s of series) {
+    const band = dom.bands[s.metric];
+    if (!band) continue;
     const samples = s.points.map(([, v]) => ({ values: { v } }));
     const meta = buildLinePath(samples, 'v', pad.l, pad.t, cw, ch, {
-      lo: dom.lo,
-      hi: dom.hi,
+      lo: band.lo,
+      hi: band.hi,
       xValues: s.points.map(([m]) => m),
       xLo: dom.minMin,
       xHi: dom.maxMin,
@@ -131,16 +120,16 @@ export function seriesPeak(points, metric) {
 
 // Redundant, non-colour identity channel: a filled dot carrying the slot
 // number at each series' own worst reading. Survives colour-blindness
-// and a greyscale screenshot. No dash patterns: they wreck the
-// readability of a noisy storm curve.
-function _peakDots(series, metric, dom, pad, cw, ch) {
-  const span = dom.maxMin - dom.minMin || 1;
+// and a greyscale screenshot.
+function _peakDots(series, dom, geo) {
+  const { pad, cw, ch } = geo;
   let svg = '';
   for (const s of series) {
-    const top = seriesPeak(s.points, metric);
+    const band = dom.bands[s.metric];
+    const top = band ? seriesPeak(s.points, s.metric) : null;
     if (!top) continue;
-    const x = pad.l + ((top.m - dom.minMin) / span) * cw;
-    const y = pad.t + ch - ((top.v - dom.lo) / (dom.hi - dom.lo)) * ch;
+    const x = domainX(dom, top.m, pad, cw);
+    const y = bandY(band, top.v, pad, ch);
     svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="${s.colour}"/>`;
     svg += `<text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#0a0e14">${s.slot}</text>`;
   }
@@ -149,154 +138,113 @@ function _peakDots(series, metric, dom, pad, cw, ch) {
 
 // The t=0 anchor: dashed vertical in the shared guide style plus a
 // "Höhepunkt" caption above it, and ONE threshold line per distinct
-// trigger level in the selection.
+// trigger level in the selection, normalised on its OWN metric's band.
 //
 // Not one line for the whole chart: every record stamps the thresholds
 // it was measured against, and the archive outlives the settings that
 // produced it — so four curves can legitimately carry four different
 // trigger levels. Drawing the first episode's line across all of them
 // labels three curves with a threshold that was never theirs. When the
-// levels differ, each line names the slots it belongs to.
+// levels differ, each line names the slots it belongs to; when several
+// metrics share the plot, it names the metric too (storms/_compare.js
+// builds those labels).
 //
 // The lines are white at 45 %, NOT the metric colour — colour means
 // "which episode" here, and one colour must mean one thing per view.
-function _anchors(dom, thresholds, pad, cw, ch) {
-  const span = dom.maxMin - dom.minMin || 1;
-  const x = pad.l + ((0 - dom.minMin) / span) * cw;
+function _anchors(dom, thresholds, geo) {
+  const { pad, cw, ch } = geo;
+  const x = domainX(dom, 0, pad, cw);
   let svg =
     `<line x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${pad.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3"/>` +
     `<text x="${x.toFixed(1)}" y="${pad.t - 2}" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.55)">Höhepunkt</text>`;
   for (const t of thresholds) {
-    const y = pad.t + ch - ((t.value - dom.lo) / (dom.hi - dom.lo)) * ch;
+    const band = dom.bands[t.metric];
+    if (!band) continue;
+    const y = bandY(band, t.value, pad, ch);
     svg += `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${(pad.l + cw).toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.45)" stroke-width="1" stroke-dasharray="5 4"/>`;
     svg += `<text x="${(pad.l + cw + 4).toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="10" fill="rgba(255,255,255,.45)">${t.label}</text>`;
   }
   return svg;
 }
 
-// Union of every series' relative minutes — the hover grid. One tooltip
-// column per distinct sampled minute across the selection.
-function _hoverGrid(series) {
-  const set = new Set();
-  for (const s of series) for (const [m] of s.points) if (Number.isFinite(m)) set.add(m);
-  return [...set].sort((a, b) => a - b).map((m) => ({ ts: _relToTs(m), rel: m }));
+// Rails are measured against the labels this render will actually draw
+// (stats-chart/_pad.js). Labelled value ticks exist only while ONE
+// metric is on the plot; with several, buildYAxis' unlabelled-gridline
+// branch draws nothing in the left rail, so nothing is reserved for it.
+function _geometry(size, dom, metrics, thresholds, opts) {
+  const band = metrics.length === 1 ? dom.bands[metrics[0]] : null;
+  const unit = band ? opts.unitOf(metrics[0]) : '';
+  const pad = statsChartPad({
+    width: size.w,
+    yLabels: band ? axisTickLabels(band.lo, band.hi, unit) : [],
+    edgeLabels: thresholds.map((t) => t.label),
+  });
+  const cw = size.w - pad.l - pad.r;
+  const ch = size.h - pad.t - pad.b;
+  if (cw <= 0 || ch <= 0) return null;
+  return { pad, cw, ch, band, unit };
 }
 
-/**
- * The sample of `points` closest to relative minute `rel`, within
- * `tol` minutes. `null` when the series has nothing that near.
- *
- * Exact matching is wrong here: the episodes are weeks apart and their
- * 5-minute polls are not phase-locked, so two series' relative-minute
- * sets almost never intersect and an `===` lookup shows one episode per
- * tooltip — the one thing a compare view must not do.
- */
-export function nearestPoint(points, rel, tol) {
-  let best = null,
-    bestD = Infinity;
-  for (const [m, v] of points || []) {
-    if (!Number.isFinite(m) || !Number.isFinite(v)) continue;
-    const d = Math.abs(m - rel);
-    if (d <= tol && d < bestD) {
-      bestD = d;
-      best = [m, v];
-    }
+// One labelled value axis while a single metric owns the plot; four
+// plain gridlines as soon as two units share it. Same two modes, and the
+// same reasoning, as buildYAxis' own isolated / all-lines split — which
+// is why the second branch calls it rather than re-drawing gridlines.
+function _axisSvg(geo) {
+  const { band, unit, pad, cw, ch } = geo;
+  if (band) {
+    return buildValueAxis({
+      lo: band.lo,
+      hi: band.hi,
+      unit,
+      colour: 'rgba(255,255,255,.55)',
+      pad,
+      cw,
+      ch,
+    });
   }
-  return best;
+  return buildYAxis({ isolated: null, lineMetas: {}, data: null, pad, cw, ch });
 }
+
+function _chartSvg(list, dom, geo, metrics, thresholds, opts, size) {
+  const { pad, cw, ch } = geo;
+  return `
+    <svg viewBox="0 0 ${size.w} ${size.h}" preserveAspectRatio="none" role="img" aria-label="${opts.aria || 'Gewitter-Vergleich'}">
+      ${_axisSvg(geo)}
+      ${buildRelTicks({ minMin: dom.minMin, maxMin: dom.maxMin, pad, cw, ch, vbH: size.h })}
+      ${_anchors(dom, thresholds, geo)}
+      ${_seriesPaths(list, dom, geo)}
+      ${_peakDots(list, dom, geo)}
+      ${metrics.length > 1 ? metricEndLabels(list, dom, geo, opts.shortOf) : ''}
+      <line class="ws-chart-guide" x1="0" y1="${pad.t}" x2="0" y2="${pad.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
+      <rect class="ws-chart-hover-area" x="${pad.l}" y="${pad.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
+    </svg>
+    <div class="ws-chart-tooltip" hidden></div>
+  `;
+}
+
+// Tooltip rows grouped by metric: with several on the plot the reader is
+// comparing episodes WITHIN a metric, so those rows have to sit
+// together rather than interleave by episode.
+function _byMetric(list, metrics) {
+  return [...list].sort(
+    (a, b) => metrics.indexOf(a.metric) - metrics.indexOf(b.metric) || a.slot - b.slot,
+  );
+}
+
+const _IDENTITY = (v) => String(v);
 
 /**
- * Median gap between consecutive samples of one series, in minutes.
- * NaN for a series with fewer than two finite minutes.
- *
- * Median, not mean: a poll outage or a restart leaves a hole an order
- * of magnitude wider than the cadence, and a mean would let one such
- * hole inflate the tolerance until unrelated samples matched.
- */
-export function medianStep(points) {
-  const mins = (points || []).map(([m]) => m).filter((m) => Number.isFinite(m));
-  mins.sort((a, b) => a - b);
-  const gaps = [];
-  for (let i = 1; i < mins.length; i++) if (mins[i] > mins[i - 1]) gaps.push(mins[i] - mins[i - 1]);
-  if (!gaps.length) return NaN;
-  gaps.sort((a, b) => a - b);
-  const mid = gaps.length >> 1;
-  return gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
-}
-
-// Floor for the derived tolerance, and the fallback when nothing can be
-// measured (one sample per series). Half of the shipped default poll
-// interval — used ONLY when measurement is impossible.
-const HOVER_TOLERANCE_FLOOR_MIN = 0.5;
-const HOVER_TOLERANCE_FALLBACK_MIN = 2.5;
-
-/**
- * Half of the widest per-series cadence in the selection.
- *
- * MEASURED, not assumed. The old constant 2.5 was "half a poll" against
- * a 300 s poll_interval that the operator can change: at 600 s every
- * tooltip regressed to one episode. Reading the cadence off the samples
- * that actually arrived also survives an episode recorded under a
- * different setting than the one next to it.
- *
- * Widest, not narrowest: a 10-min episode compared against a 5-min one
- * still has to resolve, and over-reaching by half a step never crosses
- * into another sample's territory.
- */
-export function hoverTolerance(series) {
-  let widest = 0;
-  for (const s of series || []) {
-    const step = medianStep(s.points);
-    if (Number.isFinite(step) && step > widest) widest = step;
-  }
-  if (!widest) return HOVER_TOLERANCE_FALLBACK_MIN;
-  return Math.max(HOVER_TOLERANCE_FLOOR_MIN, widest / 2);
-}
-
-/**
- * What one series has to say about relative minute `rel`:
- *
- *   {v}      — a reading within `tol`
- *   null     — inside the episode's own span, but no sample near: a
- *              GAP (failed poll, coalesced job, restart). The row is
- *              still drawn, with a dash, because silently dropping the
- *              episode is what made the tooltip look like the storm
- *              wasn't in the comparison at all.
- *   undefined — outside the episode's span entirely. No row: the
- *              episode genuinely does not reach this far from its peak.
- */
-export function seriesReading(points, rel, tol) {
-  const mins = (points || []).map(([m]) => m).filter((m) => Number.isFinite(m));
-  if (!mins.length) return undefined;
-  if (rel < Math.min(...mins) - tol || rel > Math.max(...mins) + tol) return undefined;
-  const hit = nearestPoint(points, rel, tol);
-  return hit ? hit[1] : null;
-}
-
-// Tooltip rows: "[1] ⚡ Hagelfront · 2400 J/kg", one per episode that
-// spans the hovered minute. `fmtValue` is injected so this module stays
-// free of German-formatting imports from the storms package (which
-// imports this one — the dependency must not become a cycle).
-function _hoverRows(series, fmtValue) {
-  const tol = hoverTolerance(series);
-  return (sample) =>
-    series
-      .map((s) => {
-        const v = seriesReading(s.points, sample.rel, tol);
-        if (v === undefined) return '';
-        const txt = v === null ? '—' : fmtValue(v);
-        return `<div class="ws-tt-row"><span class="ws-tt-dot" style="background:${s.colour}"></span><span class="ws-tt-lbl">${s.label}</span><span class="ws-tt-val">${txt}</span></div>`;
-      })
-      .filter(Boolean)
-      .join('');
-}
-
-/**
- * Draw up to four peak-aligned episode curves for ONE metric.
+ * Draw peak-aligned episode curves — up to four episodes × any number of
+ * metrics, each metric on its own shared band.
  *
  * @param wrap   laid-out container element (its CSS pixel size is the viewBox)
- * @param series [{ slot:1-4, colour, label, points: [[relMinutes, value], …] }]
- * @param opts   { metric, unit, thresholds:[{value,label}], fmtValue, aria }
+ * @param series [{ slot:1-4, colour, label, metric, points: [[relMinutes, value], …] }]
+ *               `label` must arrive pre-escaped; it can be an
+ *               operator-typed episode name.
+ * @param opts   { metrics, unitOf, shortOf, fmtValue, thresholds, aria }
+ *               `metrics` fixes the draw / legend order and defaults to
+ *               the distinct metrics present in `series`; `thresholds`
+ *               entries are [{ value, label, metric }].
  */
 export function renderEpisodeChart(wrap, series, opts = {}) {
   if (!wrap) return;
@@ -314,36 +262,20 @@ export function renderEpisodeChart(wrap, series, opts = {}) {
   const thresholds = (opts.thresholds || []).filter(
     (t) => Number.isFinite(t?.value) && t.value > 0,
   );
-  const dom = _domain(list, thresholds);
+  const dom = valueBands(list, thresholds);
   if (!dom) return;
-  // Same measured-rail rule as the Wetterstatistik chart, from the same
-  // helper — this used to carry its own {l:42,r:72} / {l:40,r:44} pair
-  // keyed on a 600 px breakpoint, which was a second copy of a geometry
-  // that had already drifted once.
-  const pad = statsChartPad({
-    width: size.w,
-    yLabels: axisTickLabels(dom.lo, dom.hi, opts.unit || ''),
-    edgeLabels: thresholds.map((t) => t.label),
-  });
-  const cw = size.w - pad.l - pad.r;
-  const ch = size.h - pad.t - pad.b;
-  if (cw <= 0 || ch <= 0) return;
-  const fmtValue = opts.fmtValue || ((v) => String(v));
-  wrap.innerHTML = `
-    <svg viewBox="0 0 ${size.w} ${size.h}" preserveAspectRatio="none" role="img" aria-label="${opts.aria || 'Gewitter-Vergleich'}">
-      ${buildValueAxis({ lo: dom.lo, hi: dom.hi, unit: opts.unit || '', colour: 'rgba(255,255,255,.55)', pad, cw, ch })}
-      ${buildRelTicks({ minMin: dom.minMin, maxMin: dom.maxMin, pad, cw, ch, vbH: size.h })}
-      ${_anchors(dom, thresholds, pad, cw, ch)}
-      ${_seriesPaths(list, dom, pad, cw, ch)}
-      ${_peakDots(list, opts.metric, dom, pad, cw, ch)}
-      <line class="ws-chart-guide" x1="0" y1="${pad.t}" x2="0" y2="${pad.t + ch}" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-dasharray="3 3" style="display:none;pointer-events:none"/>
-      <rect class="ws-chart-hover-area" x="${pad.l}" y="${pad.t}" width="${cw}" height="${ch}" fill="transparent" style="pointer-events:all;cursor:crosshair"/>
-    </svg>
-    <div class="ws-chart-tooltip" hidden></div>
-  `;
-  const grid = _hoverGrid(list);
-  bindChartHover(wrap, grid, [], pad, cw, size.w, null, {
+  const metrics = opts.metrics?.length ? opts.metrics : [...new Set(list.map((s) => s.metric))];
+  const o = {
+    aria: opts.aria,
+    unitOf: opts.unitOf || (() => ''),
+    shortOf: opts.shortOf || ((m) => m),
+    fmtValue: opts.fmtValue || _IDENTITY,
+  };
+  const geo = _geometry(size, dom, metrics, thresholds, o);
+  if (!geo) return;
+  wrap.innerHTML = _chartSvg(list, dom, geo, metrics, thresholds, o, size);
+  bindChartHover(wrap, episodeHoverGrid(list), [], geo.pad, geo.cw, size.w, null, {
     head: (s) => fmtRelMinute(s.rel),
-    rows: _hoverRows(list, fmtValue),
+    rows: episodeHoverRows(_byMetric(list, metrics), { ...o, showMetric: metrics.length > 1 }),
   });
 }

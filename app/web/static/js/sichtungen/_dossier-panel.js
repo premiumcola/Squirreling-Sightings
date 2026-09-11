@@ -34,11 +34,11 @@
 import { byId, esc } from '../core/dom.js';
 import { apiGet, j } from '../core/api.js';
 import { renderClipsGallery } from './_clips-gallery.js';
+import { CLIPS_CAP } from './_clips-helpers.js';
 import { clipsMessageHtml } from './_clips-helpers.js';
 import { _achTier } from './_ach-defs.js';
 import { heroHtml, audioListHtml, wireHeroAudio } from './_hero-overlay.js';
 
-const _CLIPS_LIMIT = 8;
 const _TIER_LABEL = { bronze: 'Bronze', silver: 'Silber', gold: 'Gold' };
 
 let _dossiers = [];
@@ -218,7 +218,7 @@ async function _loadClips(d) {
   let items = [];
   try {
     const r = await apiGet(
-      `/api/library?labels=${encodeURIComponent(name)}&kinds=motion&limit=${_CLIPS_LIMIT}`,
+      `/api/library?labels=${encodeURIComponent(name)}&kinds=motion&limit=${CLIPS_CAP}`,
     );
     items = (r && r.items) || [];
   } catch {

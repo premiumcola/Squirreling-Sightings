@@ -14,6 +14,17 @@ import { esc } from '../core/dom.js';
 
 /** Clamp `idx` into `[0, len)`. Returns 0 for an empty list so callers
  *  never have to special-case it before indexing. */
+/** How many of a species' clips the gallery loads.
+ *
+ * A cap, not a page size. The counter under the gallery reads „1 / N"
+ * and N used to be whatever had been fetched — eight — beside a medal
+ * saying „64×": „wieso zahlenunterschied?". Loading them all makes the
+ * counter the real number; a set that actually reaches this cap is
+ * marked with a „+" so the display never quietly means something else
+ * again.
+ */
+export const CLIPS_CAP = 200;
+
 export function clampIndex(idx, len) {
   if (!Number.isFinite(idx) || len <= 0) return 0;
   return Math.min(Math.max(Math.trunc(idx), 0), len - 1);

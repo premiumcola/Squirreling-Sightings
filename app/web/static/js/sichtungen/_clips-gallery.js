@@ -25,16 +25,16 @@
 import { isIOS } from '../core/ios-video.js';
 import { mediaCardHTML } from '../mediathek/_cards.js';
 import { adaptMotionItem } from '../library/_motion-adapter.js';
-import { clampIndex, clipVideoUrl, clipsMessageHtml } from './_clips-helpers.js';
+import { CLIPS_CAP, clampIndex, clipVideoUrl, clipsMessageHtml } from './_clips-helpers.js';
 
 const _ARROW = (dir) =>
   `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${
     dir === 'prev' ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'
   }"/></svg>`;
 
-function _counterHtml(idx, total) {
+function _counterHtml(idx, total, capped) {
   if (total < 2) return '';
-  return `<span class="sd-gal-count">${idx + 1} / ${total}</span>`;
+  return `<span class="sd-gal-count">${idx + 1} / ${total}${capped ? '+' : ''}</span>`;
 }
 
 function _navHtml(idx, total) {
@@ -65,7 +65,7 @@ export function renderClipsGallery(host, items, idx = 0) {
   host.dataset.galIdx = String(at);
   host.innerHTML = `<div class="sd-gal-stage">${mediaCardHTML(adaptMotionItem(items[at]))}</div>
     ${_navHtml(at, total)}
-    ${_counterHtml(at, total)}`;
+    ${_counterHtml(at, total, total >= CLIPS_CAP)}`;
   _wireStage(host, items, at);
 }
 

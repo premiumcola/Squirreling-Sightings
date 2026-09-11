@@ -1088,23 +1088,31 @@ body.sidebar-locked {
    vertically — title in full, buttons row below — and relax the
    ellipsis since wrapping is fine here. */
 @media (max-width: 768px) {
-  /* Long drilldown titles ("Mediathek · cam_xyz") need to wrap on
-     iPhone — the .mst-text rule in 18-telegram-2.css keeps the
-     title on a single line with text-overflow:ellipsis (so the
-     whole title doesn't squeeze the right-side button when one
-     is shown), so we relax that here only for the title text. */
-  #media .media-section-title .mst-text {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    word-break: normal;
-    overflow-wrap: break-word;
-  }
-  /* Auswahl button is the only contextual right-side button; bump
-     touch target to ≥44 px when it's actually visible. */
-  #media #mediaSelectToggleBtn {
+  /* THE TITLE STAYS ON ONE LINE. It was allowed to wrap here, on the
+     premise that the head would stack vertically on a phone — it never
+     did. So in select mode, with a back arrow and three buttons sharing
+     the row, „Mediathek · Garten 'Dach Terrasse'" broke mid-word into a
+     four-line column beside them. One line that ends in an ellipsis says
+     the same thing and costs one row instead of four; the buttons beside
+     it are glyphs now (.btn-glyph below), so there is room for most of
+     the name.
+     Nothing is declared here: removing the override is the fix, and
+     18-telegram-2.css's own .mst-text rule is what applies. */
+
+  /* GLYPH ONLY. „Auswahl" beside a ticked checkbox and „Seite" beside a
+     select-all glyph are the picture said twice — „keine sinnlosen texte
+     die nicht auch per symbol gehen". The label stays in the DOM for the
+     accessible name; only its pixels go. Square, so the two read as a
+     pair with the trash can beside them. */
+  #media .btn.btn-glyph {
+    width: 44px;
     min-height: 44px;
-    padding: 10px 14px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+  #media .btn.btn-glyph .btn-label {
+    display: none;
   }
 }
 

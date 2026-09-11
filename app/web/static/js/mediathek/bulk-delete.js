@@ -39,13 +39,22 @@ function _updateSelectAllButton() {
   const btn = byId('mediaSelectAllBtn');
   if (!btn) return;
   btn.style.display = state.mediaSelectMode ? 'inline-flex' : 'none';
-  const label = byId('mediaSelectAllLabel');
-  if (!label) return;
   // One button, both directions: once the page is fully selected the
-  // only thing left to want is to let it go again.
-  label.textContent = pageFullySelected(pageEventIds(state.media), state.mediaSelected)
-    ? 'Keine'
-    : 'Seite';
+  // only thing left to want is to let it go again. On a phone the label
+  // is not painted (.btn-glyph), so the state has to reach the operator
+  // through the button's own tint and its accessible name instead.
+  const all = pageFullySelected(pageEventIds(state.media), state.mediaSelected);
+  // The same green the select-mode toggle beside it already uses for
+  // „this is on" — one visual language for both, rather than a second
+  // one invented for this button.
+  btn.classList.toggle('btn-action', all);
+  btn.classList.toggle('action-green', all);
+  btn.classList.toggle('btn-neutral', !all);
+  const name = all ? 'Auswahl der Seite aufheben' : 'Ganze Seite auswählen';
+  btn.title = name;
+  btn.setAttribute('aria-label', name);
+  const label = byId('mediaSelectAllLabel');
+  if (label) label.textContent = all ? 'Keine' : 'Seite';
 }
 
 export function _exitMediaSelectMode() {
@@ -76,8 +85,14 @@ function _refreshMediaSelectBar() {
     return;
   }
   bar.style.display = '';
+  const n = state.mediaSelected.size;
   const c = byId('msbCount');
-  if (c) c.textContent = String(state.mediaSelected.size);
+  if (c) c.textContent = String(n);
+  // A live-looking red „Löschen" beside a count of zero is a button that
+  // promises an action it cannot perform. It greys out until there is
+  // something to delete.
+  const del = byId('msbDeleteBtn');
+  if (del) del.disabled = n === 0;
 }
 
 // Inline onclick callsites in the grid card render rely on this — used

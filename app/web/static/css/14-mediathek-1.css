@@ -273,6 +273,12 @@ body.media-select-mode .media-grid .mmc-img-wrap {
   z-index: 5;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
+/* ONE ROW. It used to wrap: „0 ausgewählt" and a wide red „Auswahl
+   löschen" on the first line, „Abbrechen" alone on the second, which on
+   a phone is two rows of chrome for three controls and reads as thrown
+   together („ungekonnt unschöne anordnung […] nutze den platz am ios
+   sinnvoll und elegant aus"). `nowrap` and one flexible middle button
+   keep it to a single 56 px band at every width. */
 .media-select-bar {
   position: sticky;
   bottom: 8px;
@@ -280,19 +286,71 @@ body.media-select-mode .media-grid .mmc-img-wrap {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   margin-top: 14px;
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-radius: 14px;
   background: #1f1f24;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   min-height: 56px;
 }
+/* The count as a badge, not a sentence. „N ausgewählt" said in words what
+   the bar's own presence already says; the number is the only part that
+   changes. Tabular figures so the badge does not twitch between 9 and 10. */
 .media-select-bar .msb-count {
-  font-size: 13px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
   color: #e2e8f0;
-  margin-right: auto;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+/* The destructive one takes the middle and grows into whatever is left —
+   it is the reason the bar exists, and the one control here that keeps a
+   word: a trash can on its own is not enough warning before a bulk
+   delete. */
+.media-select-bar .msb-delete {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-height: 44px;
+}
+.media-select-bar .msb-delete:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Leaving select mode is a ✕ and nothing else. 36 px of paint with
+   CLAUDE.md's 44 px of target around it, the same transparent-::after the
+   back arrow and the tile badge use. */
+.media-select-bar .msb-cancel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+.media-select-bar .msb-cancel::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+@media (hover: hover) {
+  .media-select-bar .msb-cancel:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
 }
 @media (max-width: 768px) {
   .media-select-bar {

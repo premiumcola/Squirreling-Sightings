@@ -76,8 +76,15 @@ def precision_for(cam_cfg_getter, camera_id: str) -> str:
     return "standard"
 
 
-def _read_at(cap, frame_idx: int):
+def read_frame_at(cap, frame_idx: int):
     """Seek to ``frame_idx`` and read that frame. ``(ok, frame)``.
+
+    Public since ``person_crops`` needs it too: it is the only helper in
+    this project that seeks by FRAME INDEX, which is the unit a
+    tracks.json sample records its position in. Every other decode site
+    seeks by fraction or by time, and time-seeking snaps to a keyframe —
+    fine for a poster, useless for a crop, because the subject has moved
+    out of the rectangle by then.
 
     Also the only place in the sampling loop that needs cv2, which is
     why the import sits here rather than at the top of the walk.
@@ -157,7 +164,7 @@ def sample_clip(
         if max_samples is not None and attempts >= max_samples:
             break
         attempts += 1
-        ok, frame = _read_at(cap, frame_idx)
+        ok, frame = read_frame_at(cap, frame_idx)
         if not ok or frame is None:
             frame_idx += sample_interval
             continue

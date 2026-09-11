@@ -11,9 +11,9 @@ The rules it encodes are unchanged:
 * An mp4 below :data:`~.media_index.MIN_VIDEO_BYTES` is a crashed
   encode, not a clip. It is skipped, not registered as a tile that
   plays nothing.
-* Everything under ``<day>/scrub/`` is a filmstrip belonging to a clip,
-  not a clip — see :func:`is_derived_media` for the ghost cards that
-  cost.
+* Everything under ``<day>/scrub/`` (filmstrips) and ``<day>/crops/``
+  (person portraits) belongs to a clip rather than being one — see
+  :func:`is_derived_media` for the ghost cards that cost.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from .person_crops import CROP_DIR
 from .scrub_sprite import SPRITE_DIR
 
 log = logging.getLogger(__name__)
@@ -32,6 +33,13 @@ _MEDIA_SUFFIXES = (".jpg", ".jpeg", ".mp4")
 #: ``<id>.best``) never match an event id, so without this guard the
 #: scan invents a second event for every clip it already knows.
 _COMPANION_SUFFIXES = (".raw.mp4", ".best.jpg")
+
+#: Directories holding files DERIVED from a clip rather than clips of
+#: their own: the scrub filmstrip and the person crops. Both are named
+#: after the event they belong to, so only the directory tells them apart
+#: from a real snapshot — and a scan that walks into one invents a ghost
+#: event per file. That has happened once already, with the filmstrip.
+_DERIVED_DIRS = {SPRITE_DIR, CROP_DIR}
 
 
 def media_url(base: str, relpath: str) -> str:
@@ -111,9 +119,10 @@ def is_derived_media(media_file: Path) -> bool:
 
     Two shapes, one rule. The suffix companions (``<id>.raw.mp4`` /
     ``<id>.best.jpg``) sit beside the clip and are caught by name. The
-    scrub filmstrip sits one directory down, in ``<day>/scrub/``, and is
-    caught by that directory — because its FILE NAME is indistinguishable
-    from a real snapshot: same event id, same ``.jpg``.
+    derived IMAGES sit one directory down — the scrub filmstrip in
+    ``<day>/scrub/``, the person portraits in ``<day>/crops/`` — and are
+    caught by that directory, because their FILE NAMES are
+    indistinguishable from a real snapshot: same event id, same ``.jpg``.
 
     That indistinguishability is the whole bug. The scan walks the tree
     with ``rglob``, so it descended into ``scrub/`` and found a ``.jpg``
@@ -132,7 +141,7 @@ def is_derived_media(media_file: Path) -> bool:
     """
     if media_file.name.endswith(_COMPANION_SUFFIXES):
         return True
-    return SPRITE_DIR in Path(media_file).parts
+    return bool(_DERIVED_DIRS & set(Path(media_file).parts))
 
 
 def _candidates(cam_dir: Path, existing_ids: set) -> list:

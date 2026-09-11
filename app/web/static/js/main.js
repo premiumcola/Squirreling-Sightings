@@ -85,6 +85,7 @@ import './router.js'; // stage 18
 // Bird species dossier panel — same boot-pattern as loadAchievements;
 // sits underneath the species grid in the Sichtungen panel.
 import { loadAchievements, loadBirdDossiers } from './sichtungen/index.js';
+import './sichtungen/person-naming.js'; // Personen-Ausschnitte benennen (window-Bridge)
 // Telegram + push hydration is wired by their own modules at import
 // time; bringing the side-effect imports in keeps the load order
 // predictable.

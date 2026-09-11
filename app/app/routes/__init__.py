@@ -76,6 +76,7 @@ def register_blueprints(app) -> None:
         library,
         media,
         netz,
+        person_crops,
         retention_panel,
         replay,
         replay_batch,
@@ -100,6 +101,7 @@ def register_blueprints(app) -> None:
     app.register_blueprint(replay.bp)
     app.register_blueprint(replay_batch.bp)
     app.register_blueprint(sichtungen.bp)
+    app.register_blueprint(person_crops.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(bootstrap.bp)
     app.register_blueprint(cameras.bp)

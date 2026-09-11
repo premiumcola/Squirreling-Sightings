@@ -38,6 +38,48 @@
              backdrop — picking a species (via a Tiere tile above or this
              panel's own switcher) just re-points what's already inline. -->
   <div id="speciesDossierPanel" class="sd-panel" hidden></div>
+
+  {# PERSONEN BENENNEN. Die Ausschnitte schneidet app/app/person_crops.py aus den Clips — nicht aus
+  dem Schnappschuss, weil dessen Pixelraum ein anderer ist als der der gespeicherten Rechtecke
+  („Crop leer" war die Antwort des alten Weges auf fast jeden Clip). Zwei Knöpfe, weil es zwei
+  verschiedene Dinge sind: einmal das Archiv durchsuchen (dauert, läuft im Hintergrund), und dann
+  die Funde benennen. #}
+  <div class="pn-entry">
+    <button type="button" class="btn btn-action action-green" data-action="openPersonNaming">
+      <svg
+        viewBox="0 0 24 24"
+        width="15"
+        height="15"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.9"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="8" r="3.4" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </svg>
+      Personen benennen
+    </button>
+    <button type="button" class="btn btn-neutral" data-action="startPersonCropSweep">
+      <svg
+        viewBox="0 0 24 24"
+        width="15"
+        height="15"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.9"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="6.4" />
+        <path d="M15.8 15.8 21 21" />
+      </svg>
+      Ausschnitte suchen
+    </button>
+  </div>
 </section>
 
 <!-- Wetter — eigene Top-Level-Sektion (war bis Phase Sun-TL ein Sub-Block

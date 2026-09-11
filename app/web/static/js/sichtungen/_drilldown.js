@@ -13,6 +13,7 @@ import { byId } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { j } from '../core/api.js';
 import { mediaCardHTML } from '../mediathek/orchestration.js';
+import { setMediaNavList } from '../mediathek/_nav-list.js';
 
 // State is module-level so the renderer can reflect the open card with
 // an outline+highlight and the wrap stays consistent across re-renders.
@@ -72,8 +73,13 @@ function _achDrillRenderItems() {
     const shown = _achDrillItems.length;
     countEl.textContent = _achDrillTotal <= shown ? `${shown}` : `${shown} von ${_achDrillTotal}`;
   }
-  // Cards click → openLightbox with our item list in scope.
+  // Cards click → openLightbox with our item list in scope. And the
+  // player pages through THESE clips while this accordion is the grid on
+  // screen — it used to walk the Mediathek's pool instead, because only
+  // `state.media` was stashed and the player never read that one. See
+  // mediathek/_nav-list.js.
   _achDrillStashMedia();
+  setMediaNavList(_achDrillItems);
   grid.querySelectorAll('.media-card').forEach((card) => {
     const eid = card.dataset.eventId;
     card.style.cursor = 'pointer';

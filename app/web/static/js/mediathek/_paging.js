@@ -24,6 +24,7 @@ import { registerMediaItems, getRegisteredMediaItem } from './_item-registry.js'
 // those two — bulk-delete.js reaches back here through `window`, so an
 // import of anything stateful would close a cycle.
 import { pageEventIds, pageFullySelected } from './bulk-delete.js';
+import { setMediaNavList } from './_nav-list.js';
 
 // ── Page-size sizer ─────────────────────────────────────────────────────────
 // _lastKnownCols + window._cachedPageSize are bridged on window so the
@@ -147,6 +148,38 @@ export function renderMediaPagination() {
     selectAll;
 }
 
+/**
+ * Repaint ONE card in place, from whatever the caches now hold.
+ *
+ * A clip that has just been corrected in the player keeps its place in
+ * the grid — the filter behind it is deliberately not re-run, so a card
+ * whose „Hund" was taken off does not vanish from under the operator
+ * („lass sie bitte so lange ich keinen filter ändere stehen"). But it
+ * was also not repainted, so it went on wearing the badge of the class
+ * that had just been disproved. One card, rebuilt from the patched item:
+ * the badge, the identity chip and the „bearbeitet"-Marke all land at
+ * once, and nothing around it moves.
+ *
+ * Reached through `window` by mediaview/panels/labels.js — importing
+ * this module from there would close a cycle through lightbox.js.
+ */
+export function repaintMediaCard(eventId) {
+  if (!eventId) return;
+  const grid = byId('mediaGrid');
+  const card = grid?.querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`);
+  if (!card) return;
+  const item =
+    (state.media || []).find((x) => x?.event_id === eventId) || getRegisteredMediaItem(eventId);
+  if (!item) return;
+  const wasSelected = card.classList.contains('media-card--selected');
+  card.outerHTML = mediaCardHTML(item);
+  if (!wasSelected) return;
+  grid
+    .querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`)
+    ?.classList.add('media-card--selected');
+}
+window.repaintMediaCard = repaintMediaCard;
+
 // ── In-flight poll ──────────────────────────────────────────────────────────
 let _processingPoll = null;
 export function _ensureProcessingPoll() {
@@ -217,6 +250,10 @@ export function renderMediaGrid() {
   // `items.find(...)` closure stopped being enough once a second grid
   // could be on screen at once.
   registerMediaItems(items);
+  // And the list the player pages through while THIS grid is on screen:
+  // the whole filtered pool, not the page slice — paging is a render
+  // optimisation, never a navigation boundary. See _nav-list.js.
+  setMediaNavList(state._allMedia || items);
   window._openMediaItem = (id) => {
     if (state.mediaSelectMode) {
       window._toggleMediaSelected(id);

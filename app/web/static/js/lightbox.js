@@ -23,6 +23,7 @@
 // + still-resident callers keep resolving until those domains migrate.
 import { byId, esc } from './core/dom.js';
 import { state } from './core/state.js';
+import { mediaNavList } from './mediathek/_nav-list.js';
 import { j } from './core/api.js';
 import { showToast } from './core/toast.js';
 import { lbState } from './mediathek/state.js';
@@ -354,7 +355,11 @@ export function closeLightbox() {
 // item type. _tlNavItems() returns the same list (kept as an alias for
 // historical reasons + the timelapse-only callers).
 function _lbNavList() {
-  return state._allMedia || [];
+  // The list the visible grid declared when it painted — see
+  // mediathek/_nav-list.js. `state._allMedia` is only ONE grid's pool
+  // (the per-camera drilldown's), and reading it here is what made the
+  // player page through a different set than the one behind it.
+  return mediaNavList();
 }
 
 let _lbSeekOverlayTimer = null;

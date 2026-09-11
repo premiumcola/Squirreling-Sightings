@@ -27,6 +27,7 @@ import { byId, esc } from '../core/dom.js';
 import { state } from '../core/state.js';
 import { showToast } from '../core/toast.js';
 import { lbState } from '../mediathek/state.js';
+import { mediaNavList, navIndexOf } from '../mediathek/_nav-list.js';
 import { lbLoadTracksForItem, setLbTimelineHost } from '../mediathek/bbox-overlay/index.js';
 import {
   calcItemsPerPage,
@@ -115,20 +116,21 @@ export function openRecorded(item) {
   }
   byId('lightboxModal')?.classList.remove('lb-weather', 'lb-live-detect', 'lb-fs-video');
 
-  // Index into the GLOBAL list (state._allMedia) so prev/next can cross
-  // pagination boundaries — the page-slice (state.media) is a render
-  // optimisation, not a navigation boundary.
-  const globalList = state._allMedia || [];
-  lbState.index = globalList.findIndex((x) => x.event_id === item.event_id);
-  if (lbState.index === -1) {
-    lbState.index = 0;
-    lbState.item = item;
-  } else {
-    lbState.item = globalList[lbState.index];
-  }
+  // THE LIST THE GRID BEHIND THIS PLAYER IS SHOWING — declared by that
+  // grid when it painted (mediathek/_nav-list.js), not guessed from a
+  // global. The page slice (state.media) is a render optimisation and
+  // never a navigation boundary, so this is the full filtered set.
+  const globalList = mediaNavList();
+  lbState.index = navIndexOf(globalList, item.event_id);
+  // NOT FOUND MEANS NO NEIGHBOURS. It used to mean index 0, and that is
+  // how a clip opened from one grid began paging through another one.
+  lbState.item = lbState.index === -1 ? item : globalList[lbState.index];
   // Jump the grid's page so the thumbnails behind the lightbox match.
+  // Only for the per-camera drilldown: it is the one grid whose paging
+  // is a slice of this very list. The merged feed pages by cursor over
+  // its own query and cannot be addressed by an index into anything.
   const ps = window._cachedPageSize || calcItemsPerPage();
-  if (window._cachedPageSize && globalList.length > 0) {
+  if (window._cachedPageSize && lbState.index >= 0 && globalList === (state._allMedia || [])) {
     const targetPage = Math.floor(lbState.index / ps);
     if (targetPage !== state.mediaPage) {
       state.mediaPage = targetPage;
@@ -202,14 +204,15 @@ function _openRecordedPhoto(item) {
 
 // ── Video / timelapse branch — the unified player, behind the flag ───────
 //
-// Navigation deliberately walks state._allMedia, the GLOBAL list, not
-// the page slice: the pagination is a render optimisation, never a
-// navigation boundary, and prev/next have always crossed it. Both
-// handlers route back through window.openLightbox so the next item
-// re-enters this same function and re-seeds lbState — including the
-// grid page-jump — exactly as a click on a thumbnail would.
+// Navigation walks the list the visible grid declared (mediathek/
+// _nav-list.js), not the page slice: the pagination is a render
+// optimisation, never a navigation boundary, and prev/next have always
+// crossed it. Both handlers route back through window.openLightbox so
+// the next item re-enters this same function and re-seeds lbState —
+// including the grid page-jump — exactly as a click on a thumbnail
+// would.
 function _openRecordedInVPlayer(item) {
-  const list = state._allMedia || [];
+  const list = mediaNavList();
   const hasPrev = lbState.index > 0;
   const hasNext = lbState.index >= 0 && lbState.index < list.length - 1;
   openVideoPlayer({
@@ -253,7 +256,7 @@ function _openRecordedVideoShell(item) {
   const isTL = item.type === 'timelapse';
   const mode = isTL ? 'timelapse' : 'recorded';
   const cam = (state.cameras || []).find((c) => c.id === item.camera_id) || {};
-  const list = state._allMedia || [];
+  const list = mediaNavList();
   const hasPrev = lbState.index > 0;
   const hasNext = lbState.index >= 0 && lbState.index < list.length - 1;
   const modal = byId('lightboxModal');

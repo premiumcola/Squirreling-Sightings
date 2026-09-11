@@ -41,10 +41,16 @@ import { openManualEventView } from '../weather/_manual-events.js';
 import { getRegisteredMediaItem, registerMediaItems } from '../mediathek/_item-registry.js';
 import { adaptMotionItem } from './_motion-adapter.js';
 import { resolveMotionItem } from './_motion-open.js';
+import { setMediaNavList } from '../mediathek/_nav-list.js';
 
 function _registerMotionItems(page) {
   const items = page.filter((it) => it.kind === 'motion').map(adaptMotionItem);
   registerMediaItems(items);
+  // THIS grid's list is what the player must page through while THIS
+  // grid is the one on screen. Without it the player looked the item up
+  // in the per-camera drilldown's pool, did not find it, and paged
+  // through whatever that pool happened to hold — see _nav-list.js.
+  setMediaNavList(items);
   window._openMediaItem = (id) => {
     const item = resolveMotionItem(items, id, getRegisteredMediaItem);
     if (item) openLightbox(item);

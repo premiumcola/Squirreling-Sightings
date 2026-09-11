@@ -326,6 +326,17 @@ def _run_daily_cleanup(first_run: bool = False):
     that clears backlogs over the whole archive; the timer below re-arms
     without it, so every later pass is the short nightly shape."""
     log = logging.getLogger(__name__)
+    # ZUERST, VOR JEDEM SWEEP, DER LÖSCHT. Die Aufbewahrung direkt
+    # darunter räumt abgelaufene Clips weg, und mit der Ereignis-Datei
+    # ginge die Art mit — das Sichtungsbuch trägt aus dem Archiv nach,
+    # also muss es lesen, solange das Archiv noch vollständig ist.
+    # Umgekehrt wäre es jede Nacht ein Stück Chronik weniger.
+    try:
+        from .sightings_ledger import backfill_from_archive
+
+        backfill_from_archive(app_state.store, app_state.storage_root)
+    except Exception as e:
+        log.warning("[sichtungen] Sichtungsbuch-Nachtrag fehlgeschlagen: %s", e)
     if not auto_cleanup_enabled():
         log.info("[storage] autoclean deaktiviert (storage.auto_cleanup_enabled) — übersprungen")
     else:

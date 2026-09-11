@@ -26,6 +26,7 @@ from flask import Blueprint, jsonify, request
 from .. import app_state, trash as _trash
 from ..detection_feedback import record_verdict
 from ..event_relabel import apply_label_change, neutralize_sidecar_file
+from ..sightings_ledger import record_sighting
 from ..species_video_count import record_confirmed_video
 
 bp = Blueprint("events", __name__)
@@ -56,6 +57,25 @@ def _ledger_verdict(cam_id, event_id, *, correct, source, corrected_label=None, 
             cam_id=cam_id,
             species=species,
         )
+
+
+def _ledger_sighting(cam_id, event, source: str) -> None:
+    """Den Artstand des Ereignisses ins Sichtungsbuch nachziehen.
+
+    Zwingend nach JEDER Korrektur, die `bird_species` anfassen kann:
+    das Buch überlebt den Clip, also überlebt eine falsche Zeile darin
+    auch die Löschung, die sie sonst stillschweigend berichtigt hätte.
+    Eine leergewordene Art hängt eine Rücknahme an — siehe
+    `sightings_ledger.record_sighting`; sie unterscheidet „war doch kein
+    Vogel" von „Video gelöscht", und nur das erste zählt gegen die
+    Statistik.
+
+    Best-effort wie `_ledger_verdict` daneben und aus demselben Grund:
+    ein Buchungsfehler darf aus einer geglückten Korrektur keine 500
+    machen.
+    """
+    with contextlib.suppress(Exception):
+        record_sighting(app_state.storage_root, event, cam_id=cam_id, source=source)
 
 
 def _resync_species_board() -> None:
@@ -89,7 +109,12 @@ def api_event_delete(cam_id, event_id):
     """Soft-delete: move the event into ``storage/.trash/`` instead
     of hard-deleting. The trash entry sits for ``trash.grace_days``
     days before the daily sweep removes it. /api/trash/<id>/restore
-    moves it back; /api/trash/empty hard-deletes everything now."""
+    moves it back; /api/trash/empty hard-deletes everything now.
+
+    Die ERKENNUNG überlebt das Video: `trash.move_to_trash` verbucht die
+    Art vorher im Sichtungsbuch, und kein Löschweg nimmt eine Zeile
+    daraus je zurück — „Beim löschen der elemente bitte nicht die
+    statistik leeren also die events bleiben drin"."""
     storage_root = app_state.storage_root
     result = _trash.move_to_trash(cam_id, event_id)
     # Timelapse fallback: tl_<stem> events live in storage/timelapse/<cam>/
@@ -267,7 +292,10 @@ def api_event_labels(cam_id, event_id):
     _relabel_sidecar(event, removed)
     # „bird" aus den Labels zu nehmen löscht `bird_species` mit (siehe
     # event_relabel.IDENTITY_FIELDS) — die Art verliert damit einen Beleg
-    # und womöglich ihren letzten.
+    # und womöglich ihren letzten. Das ist ein WIDERRUF und keine
+    # Löschung: er gehört auch ins Sichtungsbuch, das eine Löschung
+    # bewusst ignoriert.
+    _ledger_sighting(cam_id, event, "web_labels")
     _resync_species_board()
     # Only a changed top_label is a correction. Adding a secondary label
     # leaves the detector's verdict standing — recording that as "wrong"
@@ -359,6 +387,10 @@ def api_event_species(cam_id, event_id):
         with contextlib.suppress(Exception):
             record_confirmed_video(app_state.storage_root, species)
     store.update_event(cam_id, event_id, event)
+    # Die von Hand bestimmte Art ist die belastbarste, die dieses
+    # Ereignis je tragen wird — sie muss im Sichtungsbuch die Schätzung
+    # des Modells ablösen, sonst zählt die Statistik weiter die alte.
+    _ledger_sighting(cam_id, event, "web_species")
     _ledger_verdict(cam_id, event_id, correct=True, source="web", species=species)
     # Die Korrektur gibt einer Art einen Beleg und nimmt der vorher
     # eingetragenen genau diesen einen weg. Beides gehört ins Raster —

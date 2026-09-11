@@ -138,6 +138,31 @@ class PublishMixin:
         with contextlib.suppress(Exception):
             self.mqtt.publish(f"events/{self.camera_id}", event)
 
+    def _record_sighting(self, event: dict) -> None:
+        """Die Art ins Sichtungsbuch, bevor sonst irgendetwas passiert.
+
+        Gelesen wird das EREIGNIS, nicht `meta`: das ist die Form, die
+        auch auf der Platte landet (`meta["time"]` ist noch ein
+        `datetime`, `event["time"]` schon der ISO-Zeitstempel), und das
+        Buch soll genau das führen, was das Archiv sagt — sonst
+        widersprechen sich der Nachlauf über die Dateien und die
+        Live-Schreibung.
+
+        Als ERSTE Folge des Ereignisses, vor Abzeichen, Quests und
+        Alarm: alles danach ist Benachrichtigung und darf ausfallen, der
+        Eintrag ist der Teil, der bleiben muss — „auch wenn ich die video
+        lösche […] separat zum video […] gespeichert".
+        """
+        try:
+            from ...sightings_ledger import record_sighting
+
+            root = (self.global_cfg.get("storage") or {}).get("root") if self.global_cfg else None
+            if not root:
+                return
+            record_sighting(root, event, cam_id=self.camera_id, source="live")
+        except Exception as e:
+            log.debug("[%s] Sichtungs-Eintrag übersprungen: %s", self.camera_id, e)
+
     def _publish_achievement(self, meta: dict) -> None:
         species = meta.get("bird_species")
         if not species:
@@ -293,6 +318,7 @@ class PublishMixin:
             self._apply_first_since(event, meta)
             with contextlib.suppress(Exception):
                 self.store.update_event(self.camera_id, event.get("event_id"), event)
+        self._record_sighting(event)
         self._publish_mqtt(event)
         self._publish_achievement(meta)
         self._publish_quests()

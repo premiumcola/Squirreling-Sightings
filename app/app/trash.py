@@ -39,6 +39,7 @@ from pathlib import Path
 from . import app_state
 from .scrub_sprite import SPRITE_DIR
 from .settings._consts import TRASH_DEFAULTS
+from .sightings_ledger import preserve_before_delete
 
 log = logging.getLogger("trash")
 
@@ -98,6 +99,8 @@ def move_to_trash(cam_id: str, event_id: str) -> dict:
         event = json.loads(json_path.read_text(encoding="utf-8"))
     except Exception:
         event = {}
+    # Verbuchen, solange die Art noch im Archiv steht — gleich tut sie es nicht mehr.
+    preserve_before_delete(store.root, cam_id, event)
     trash_dir = _trash_root() / cam_id / event_id
     trash_dir.mkdir(parents=True, exist_ok=True)
     store_root = Path(store.root)

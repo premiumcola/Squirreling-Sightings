@@ -123,6 +123,11 @@ def test_the_alert_has_exactly_one_call_site():
     "consequence",
     [
         "_apply_first_since",
+        # Das Sichtungsbuch. Es steht bewusst VOR Abzeichen, Quests und
+        # Meldung: es ist die einzige Folge, die das Löschen des Clips
+        # überlebt, und eine Chronik, die eine Zeile verliert, weil ein
+        # Telegram-Versand danach hängt, wäre keine.
+        "_record_sighting",
         "_publish_mqtt",
         "_publish_achievement",
         "_publish_quests",

@@ -414,6 +414,22 @@ class EventCallbackMixin:
                 return
             event["bird_species"] = species
             self.store.update_event(cam_id, eid, event)
+            # UND INS BUCH. Das Sichtungsbuch ist die einzige Chronik, die
+            # das Löschen des Clips überlebt, und `routes/events.py` hält
+            # dafür fest: nach JEDER Korrektur, die `bird_species` anfassen
+            # kann. Dieser Weg hier — die Artkorrektur aus Telegram — war
+            # der einzige, der sie nicht mitgeschrieben hat; das Buch hing
+            # dann bis zum nächtlichen Nachtrag eine Nacht hinterher.
+            self._record_sighting(eid, cam_id, event)
+
+    def _record_sighting(self, eid: str, cam_id: str, event: dict) -> None:
+        """Best-effort — eine Korrektur darf nicht daran scheitern, dass
+        das Buch gerade nicht schreibbar ist. Der nächtliche Nachtrag holt
+        sie dann nach."""
+        with contextlib.suppress(Exception):
+            from ..sightings_ledger import record_sighting
+
+            record_sighting(self._storage_root(), event, cam_id=cam_id, source="telegram")
 
     async def _cb_mute(self, q, eid: str):
         ss = self.settings_store

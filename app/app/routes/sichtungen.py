@@ -218,6 +218,49 @@ def api_bird_species_backfill():
     return jsonify({"ok": True, **result})
 
 
+# ── Sichtungsbuch (append-only) ────────────────────────────────────────────
+
+
+@bp.get('/api/sightings/ledger')
+def api_sightings_ledger():
+    """Die Erkennungen, unabhängig davon, ob ihr Video noch da ist.
+
+    Jede andere Art-Statistik dieser Anwendung zählt Dateien: das
+    Sichtungs-Raster (`species_board.tally_species`), die Artfilter der
+    Mediathek (`media_index/_visible.py::camera_stats`), die Zeitleiste.
+    Das ist dort richtig — wer zählt, was er anzeigt, kann nicht
+    auseinanderlaufen. Aber es heißt eben auch: einen Clip löschen heißt,
+    die Sichtung löschen, und danach war der Vogel nie da.
+
+    Diese Antwort kommt stattdessen aus `sightings_ledger` und ist damit
+    die einzige, die eine Aufräumaktion überlebt — „auch wenn ich die
+    video lösche […] auch für die statistik gespeichert". Nur-lesend;
+    geschrieben wird das Buch beim Erkennen, beim Korrigieren und ein
+    letztes Mal unmittelbar vor dem Löschen.
+
+    ``since`` / ``until`` sind Kalendertage (``YYYY-MM-DD``, beide
+    einschließlich), ``species`` grenzt auf eine Art ein.
+    """
+    from ..sightings_ledger import daily_counts, species_totals
+
+    since = request.args.get("since") or None
+    until = request.args.get("until") or None
+    species = request.args.get("species") or None
+    root = app_state.storage_root
+    totals = species_totals(root, since=since, until=until, species=species)
+    return jsonify(
+        {
+            "ok": True,
+            "since": since,
+            "until": until,
+            "species": species,
+            "species_totals": totals,
+            "per_day": daily_counts(root, since=since, until=until, species=species),
+            "total": sum(row["count"] for row in totals.values()),
+        }
+    )
+
+
 # ── Bird dossiers (F08) ────────────────────────────────────────────────────
 
 

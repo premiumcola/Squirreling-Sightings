@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from .io_utils import atomic_write_json
@@ -153,6 +153,33 @@ def unlock_species(
     return True
 
 
+def _day(iso: str) -> str:
+    """Der Kalendertag eines ISO-Zeitstempels, oder „"."""
+    return (iso or "")[:10]
+
+
+def sightings_per_day(count: int, first_iso: str, last_iso: str) -> float:
+    """Wie oft die Art an einem Tag zu sehen ist, ungefähr.
+
+    Gezählt wird über die Spanne vom ersten bis zum letzten Beleg,
+    einschließlich beider Tage — eine Art mit drei Aufnahmen an EINEM Tag
+    hat drei je Tag, nicht drei je vier Monate. Beide Enden ohne
+    lesbares Datum heißt: keine Aussage, also 0.
+
+    Auf eine Nachkommastelle, weil dies eine Größenordnung ist und keine
+    Messung: „wie oft je tag ca?!"
+    """
+    n = max(0, int(count or 0))
+    a, b = _day(first_iso), _day(last_iso)
+    if not n or not a or not b:
+        return 0.0
+    try:
+        span = (date.fromisoformat(b) - date.fromisoformat(a)).days
+    except ValueError:
+        return 0.0
+    return round(n / max(1, span + 1), 1)
+
+
 def apply_species_tally(storage_root, tally: dict[str, dict]) -> dict:
     """Das Sichtungs-Raster auf den Stand des Archivs bringen.
 
@@ -258,10 +285,25 @@ def _entries_from_tally(tally: dict[str, dict]) -> dict[str, dict]:
                 "camera_id": row.get("camera_id") or "",
                 "species": species,
                 "count": count,
+                # Die drei Steckbrief-Kennzahlen, aus demselben Lauf:
+                # „wie oft gesehen, wann das erste Mal, wie oft je Tag ca?!"
+                # `date` beantwortet das „wann das erste Mal" schon.
+                "last": row.get("last") or "",
+                "days": int(row.get("days") or 0),
+                "per_day": float(row.get("per_day") or 0.0),
             }
             continue
         prev["count"] += count
+        prev["days"] += int(row.get("days") or 0)
+        last = row.get("last") or ""
+        if last > (prev.get("last") or ""):
+            prev["last"] = last
         if date and (not prev["date"] or date < prev["date"]):
             prev["date"] = date
             prev["camera_id"] = row.get("camera_id") or prev["camera_id"]
+    # Zwei Schreibweisen derselben Art sind EINE Art, also wird ihre Rate
+    # auch über die vereinte Spanne gerechnet — nicht addiert, was zwei
+    # halb so häufige Arten ergäbe statt einer ganzen.
+    for entry in out.values():
+        entry["per_day"] = sightings_per_day(entry["count"], entry["date"], entry["last"])
     return out

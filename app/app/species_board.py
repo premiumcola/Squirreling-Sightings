@@ -36,7 +36,7 @@ import json
 import logging
 from pathlib import Path
 
-from .species_unlock import apply_species_tally
+from .species_unlock import _day, apply_species_tally, sightings_per_day
 
 log = logging.getLogger("app.sichtungen")
 
@@ -98,21 +98,35 @@ def species_rows(events_dir) -> dict[str, list[dict]]:
 
 
 def tally_species(events_dir) -> dict[str, dict]:
-    """Jede Art im Archiv mit Anzahl Clips, Erstsichtung und Kamera.
+    """Jede Art im Archiv mit ihren Kennzahlen.
 
-    ``{Artname: {"count": n, "date": iso, "camera_id": cam}}`` — die
-    Sicht, die das Sichtungs-Raster braucht, abgeleitet aus
-    :func:`species_rows`.
+    ``{Artname: {"count", "date", "camera_id", "last", "days", "per_day"}}``
+    — abgeleitet aus :func:`species_rows`.
+
+    `count` / `date` sind, was das Abzeichen selbst braucht. Die drei
+    daneben sind, was der Steckbrief beantworten soll: „wie oft gesehen,
+    wann das erste Mal und wie oft je Tag ca?!" Sie werden hier
+    berechnet, weil der Lauf über das Archiv ohnehin stattfindet und die
+    Alternative — sie beim Anzeigen auszurechnen — hieße, dieselbe Frage
+    zweimal zu beantworten und ab dem ersten Rundungsfehler verschieden.
     """
     tally: dict[str, dict] = {}
     for species, lst in species_rows(events_dir).items():
         # Das Abzeichen sagt „seit wann" — also zählt der ÄLTESTE Beleg,
         # und der steht bei absteigender Sortierung am Ende.
-        first = lst[-1]
+        first, last = lst[-1], lst[0]
+        days = {_day(r["time"]) for r in lst}
+        days.discard("")
         tally[species] = {
             "count": len(lst),
             "date": first["time"],
             "camera_id": first["camera_id"],
+            "last": last["time"],
+            # An wie vielen VERSCHIEDENEN Tagen sie da war — die ehrlichere
+            # Antwort auf „wie oft", wenn zwölf Aufnahmen aus einem einzigen
+            # Vormittag stammen.
+            "days": len(days),
+            "per_day": sightings_per_day(len(lst), first["time"], last["time"]),
         }
     return tally
 

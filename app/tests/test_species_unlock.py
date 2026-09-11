@@ -24,7 +24,12 @@ from app.species_board import (
     species_losing_last_proof,
     tally_species,
 )
-from app.species_unlock import achievement_id_for, apply_species_tally, unlock_species
+from app.species_unlock import (
+    achievement_id_for,
+    apply_species_tally,
+    sightings_per_day,
+    unlock_species,
+)
 
 
 class _Store:
@@ -306,3 +311,46 @@ def test_ohne_treffer_wird_nicht_gefragt(tmp_path):
     assert species_losing_last_proof(events_dir, ["elster_0", "elster_1"]) == {}
     # Eine ID, die es gar nicht gibt, betrifft niemanden.
     assert species_losing_last_proof(events_dir, ["gibtsnicht"]) == {}
+
+
+# ── Steckbrief-Kennzahlen ───────────────────────────────────────────────
+#
+# „trage je Dossier: wie oft gesehen, wann das erste Mal und wie oft je
+# Tag ca?!" — aus demselben Lauf über das Archiv, der das Abzeichen
+# entscheidet, damit Kachel und Kennzahl nicht auseinanderlaufen können.
+
+
+def test_die_rate_zaehlt_ueber_die_spanne_einschliesslich_beider_tage():
+    # Drei Aufnahmen an EINEM Tag sind drei je Tag, nicht drei je Jahr.
+    assert sightings_per_day(3, "2026-09-11T08:00:00", "2026-09-11T18:00:00") == 3.0
+    # Zehn über zehn Tage: eine je Tag.
+    assert sightings_per_day(10, "2026-09-01T08:00:00", "2026-09-10T08:00:00") == 1.0
+    assert sightings_per_day(3, "2026-09-01T08:00:00", "2026-09-10T08:00:00") == 0.3
+
+
+def test_ohne_lesbares_datum_gibt_es_keine_rate():
+    assert sightings_per_day(5, "", "2026-09-10T08:00:00") == 0.0
+    assert sightings_per_day(5, "irgendwann", "auch irgendwann") == 0.0
+    assert sightings_per_day(0, "2026-09-01T08:00:00", "2026-09-10T08:00:00") == 0.0
+
+
+def test_die_kennzahlen_stehen_am_abzeichen(tmp_path):
+    for day in ("06", "06", "07", "09"):
+        _event(
+            tmp_path,
+            "cam_a",
+            f"e_{day}_{len(day)}_{day}",
+            bird_species="Elster",
+            time=f"2026-09-{day}T08:00:00",
+        )
+    # Vier Ereignisse, aber zwei am selben Tag → drei verschiedene Tage.
+    _event(tmp_path, "cam_a", "e_extra", bird_species="Elster", time="2026-09-06T09:00:00")
+
+    resync_species_board(_store(tmp_path), tmp_path)
+
+    entry = _unlocked(tmp_path)["elster"]
+    assert entry["date"].startswith("2026-09-06")
+    assert entry["last"].startswith("2026-09-09")
+    assert entry["days"] == 3, "drei Kalendertage, nicht vier Aufnahmen"
+    # 4 Aufnahmen über den 06.–09. = vier Tage → 1,0 je Tag.
+    assert entry["per_day"] == 1.0

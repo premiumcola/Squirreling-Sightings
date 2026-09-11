@@ -138,3 +138,30 @@ export function _rarityText(freq, isUnlocked) {
   const color = isUnlocked ? m.color : 'rgba(255,255,255,0.25)';
   return `<span class="medal-rarity" style="color:${color}">${m.label}</span>`;
 }
+
+/** PURE: „seit 09.09. · ⌀ 1,5/Tag" from one achievement entry.
+ *
+ * Both halves are optional: an entry from before this shipped carries
+ * neither, and a species seen once today has a first-seen but no
+ * meaningful rate. Whatever is missing is left out rather than printed
+ * as a zero — „⌀ 0/Tag" beside an unlocked medal is a lie.
+ */
+export function sightingStatsLine(info) {
+  const parts = [];
+  const since = _shortDay(info?.date);
+  if (since) parts.push(`seit ${since}`);
+  const rate = Number(info?.per_day) || 0;
+  if (rate > 0) parts.push(`⌀ ${_de(rate)}/Tag`);
+  return parts.join(' · ');
+}
+
+/** ISO timestamp → „09.09.", or '' when there is no readable date. */
+function _shortDay(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${m[3]}.${m[2]}.` : '';
+}
+
+/** 1.5 → „1,5"; 3 → „3". German decimal comma, no trailing „,0". */
+function _de(n) {
+  return (Number.isInteger(n) ? String(n) : n.toFixed(1)).replace('.', ',');
+}

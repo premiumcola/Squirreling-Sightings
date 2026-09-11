@@ -15,7 +15,7 @@
 //   * locked mammal tile              → not clickable, unchanged.
 import { byId, esc } from '../core/dom.js';
 import { BIRD_SVGS, MAMMAL_SVGS } from '../core/animal-icons.js';
-import { ACH_DEFS, _achTier, _rarityText } from './_ach-defs.js';
+import { ACH_DEFS, _achTier, _rarityText, sightingStatsLine } from './_ach-defs.js';
 import { _currentAchOpenId, _reflowAchDrilldownIfOpen } from './_drilldown.js';
 import { isSpeciesDossierActive } from './_dossier-panel.js';
 
@@ -138,10 +138,18 @@ function _renderCard(a) {
     ? `<span class="medal-count-badge ${tier}">${count}×</span>`
     : `<div class="medal-lock-overlay"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="3"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>`;
   const countColors = { bronze: '#d4894a', silver: '#90a8be', gold: '#d4a820' };
-  const countSpan = isUnlocked
-    ? `<span class="medal-count" style="color:${countColors[tier] || '#d4a820'}">${count}× gesehen</span>`
+  // „N× gesehen" used to stand here — beside a medal badge already
+  // reading „N×". One of the two was the other one said again, so the
+  // line carries what the tile could NOT say instead: since when, and
+  // roughly how often a day („wie oft gesehen, wann das erste Mal und
+  // wie oft je tag ca?!"). Both come from the archive walk that decides
+  // the badge itself, so they can never disagree with it.
+  const statsSpan = isUnlocked
+    ? `<span class="medal-count" style="color:${countColors[tier] || '#d4a820'}">${esc(
+        sightingStatsLine(info),
+      )}</span>`
     : '';
-  const footline = `<div class="medal-footline">${countSpan}${_rarityText(a.freq, isUnlocked)}</div>`;
+  const footline = `<div class="medal-footline">${statsSpan}${_rarityText(a.freq, isUnlocked)}</div>`;
   const nameParts = a.name.match(/^(.+?)\s*(\(.+\))?$/);
   const baseName = nameParts?.[1] || a.name;
   const variantSuffix = nameParts?.[2] || '';

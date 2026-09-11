@@ -30,6 +30,15 @@ const _SPECIES_EDIT_SVG =
   'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
+// „Von Hand korrigiert" — the same pencil, on its own small disc, above
+// the class badge. It answers the question a corrected grid raises: the
+// card stays put after an edit (the filter is not re-run until the
+// operator touches one), so without a mark the only difference between
+// „the detector said cat" and „I said cat" is a memory.
+const _EDITED_MARK_HTML =
+  `<span class="mmc-edited" title="Von Hand bearbeitet" aria-label="Von Hand bearbeitet">` +
+  `${_SPECIES_EDIT_SVG}</span>`;
+
 // ── Per-camera tints + helpers ──────────────────────────────────────────────
 export const CAM_COLORS = [
   '#3b82f6',
@@ -234,6 +243,14 @@ function _motionCtx(item) {
     // reported „Grafik kollision", on every long species name.
     motionBadge:
       `<div class="mmc-badges">` +
+      // „BEARBEITET". A corrected clip keeps its place in the grid — the
+      // filter behind it is not re-run until the operator touches one,
+      // so a clip whose „Hund" was just taken off stays where it was and
+      // would otherwise still wear the old badge. The badge below now
+      // paints the CORRECTED class; this mark is what says the class
+      // came from a person rather than the detector: „passe die badge an
+      // dass ich auch schön sehe was bearbeitet wurde".
+      (item.labels_edited_at ? _EDITED_MARK_HTML : '') +
       (editable
         ? `<button type="button" class="mmc-tl-badge mmc-tl-badge--edit" ` +
           `title="Art korrigieren" aria-label="Art korrigieren" ` +

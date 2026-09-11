@@ -279,3 +279,30 @@ def test_an_unreadable_sidecar_never_breaks_the_correction(tmp_path):
     path = tmp_path / "clip.tracks.json"
     path.write_text("{not json", encoding="utf-8")
     assert neutralize_sidecar_file(path, {"bird"}) is False
+
+
+# ── „bearbeitet" ────────────────────────────────────────────────────────
+#
+# Ein korrigierter Clip bleibt nach dem Schließen des Players an seinem
+# Platz — der Filter wird erst wieder ausgeführt, wenn der Betreiber
+# einen anfasst. Ohne Marke ist der einzige Unterschied zwischen „der
+# Detektor sagte Hund" und „ich sagte kein Hund" eine Erinnerung:
+# „passe die badge an dass ich auch schön sehe was bearbeitet wurde".
+
+
+def test_eine_korrektur_hinterlaesst_einen_zeitstempel():
+    from datetime import datetime
+
+    event = {"labels": ["dog", "motion"], "top_label": "dog"}
+    apply_label_change(event, ["motion"], now=datetime(2026, 9, 11, 7, 44, 0))
+
+    assert event["labels_edited_at"] == "2026-09-11T07:44:00"
+
+
+def test_der_zeitstempel_kommt_auch_ohne_entfernte_labels():
+    """Auch das HINZUFÜGEN einer Klasse ist eine Bearbeitung — die Marke
+    sagt „ein Mensch war hier", nicht „etwas wurde weggenommen"."""
+    event = {"labels": ["motion"], "top_label": "motion"}
+    apply_label_change(event, ["motion", "cat"])
+
+    assert event["labels_edited_at"]

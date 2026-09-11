@@ -58,5 +58,10 @@ export function applyLabelPatch(target, res) {
   // object-list heading never catches up until a full reload.
   if ('whole_clip' in res) target.whole_clip = res.whole_clip;
   if ('detections' in res) target.detections = res.detections;
+  // The „bearbeitet" stamp (event_relabel.apply_label_change). The grid
+  // card wears it so a corrected clip is recognisable as corrected —
+  // without it, the only difference between a class the detector chose
+  // and one the operator chose is a memory.
+  if ('labels_edited_at' in res) target.labels_edited_at = res.labels_edited_at;
   return target;
 }

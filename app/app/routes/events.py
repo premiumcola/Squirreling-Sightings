@@ -301,6 +301,10 @@ def api_event_labels(cam_id, event_id):
             # stale identity chip without a full reload.
             "cat_name": event.get("cat_name"),
             "bird_species": event.get("bird_species"),
+            # Stamped by apply_label_change. The Mediathek card wears it
+            # as a „bearbeitet"-Marke so the operator can see, from the
+            # grid, which clips they have already been through.
+            "labels_edited_at": event.get("labels_edited_at"),
             # apply_label_change() also neutralized any per-detection row
             # that carried a disproven label — without handing the result
             # back, the player's object-list panel keeps reading its OWN

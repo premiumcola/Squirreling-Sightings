@@ -93,6 +93,13 @@ export function applyLabelSaveResult(res, item = lbState.item) {
   const aIdx = (state._allMedia || []).findIndex((x) => x.event_id === item.event_id);
   if (aIdx >= 0) applyLabelPatch(state._allMedia[aIdx], res);
   _syncGridBubbles(item.event_id, res.labels);
+  // THE CARD'S OWN BADGE. The bubble row above is the small strip of
+  // object glyphs; the badge that says „Hund" is a different element,
+  // and nothing repainted it — so a clip whose dog had just been edited
+  // out came back to a grid still calling it a dog. Repainting the whole
+  // card from the patched item fixes badge, identity chip and the
+  // „bearbeitet"-Marke together, and leaves the card exactly where it is.
+  window.repaintMediaCard?.(item.event_id);
   // Re-pull timeline + storage stats so badges and dots reflect the retag.
   refreshTimelineAndStats();
 }

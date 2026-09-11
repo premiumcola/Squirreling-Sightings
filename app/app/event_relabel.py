@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ def _neutralize_disproven_detections(event: dict, removed: set) -> None:
                 d["identity"] = None
 
 
-def apply_label_change(event: dict, labels: list) -> dict:
+def apply_label_change(event: dict, labels: list, *, now: datetime | None = None) -> dict:
     """Mutate `event` in place for a new `labels` list. Returns `event`.
 
     Keeps `top_label` in sync, clears any identity field (`cat_name`,
@@ -105,6 +106,12 @@ def apply_label_change(event: dict, labels: list) -> dict:
     leave a cat identity name standing (the badge/filters would still
     match it through `extras`), and a disproven "person" detection must
     not keep telling the object-list panel it is still a person.
+
+    It also stamps ``labels_edited_at``. A corrected clip is no longer
+    what the detector said it was, and the operator has to be able to
+    SEE which ones they have been through — „passe die badge an dass ich
+    auch schön sehe was bearbeitet wurde". A timestamp rather than a
+    flag: it survives a reload, it says when, and it costs one key.
     """
     removed = set(event.get("labels") or []) - set(labels)
     event["top_label"] = sync_top_label(event, labels)
@@ -113,6 +120,7 @@ def apply_label_change(event: dict, labels: list) -> dict:
         if label in removed and event.get(field):
             event[field] = None
     _neutralize_disproven_detections(event, removed)
+    event["labels_edited_at"] = (now or datetime.now()).isoformat(timespec="seconds")
     return event
 
 

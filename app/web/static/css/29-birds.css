@@ -643,3 +643,15 @@
     font-size: 15px;
   }
 }
+
+/* Shrink-wraps the clip card so the „1 / 64" counter can be inset from
+   the PICTURE's corner. As a child of the gallery block it anchored to
+   whatever positioned ancestor it found and ended up over the heading:
+   „anzahl hängt immernoch über". */
+.sd-gal-frame {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}

@@ -109,8 +109,11 @@
 .ach-card:not(.locked):hover {
   background: rgba(255, 255, 255, 0.04);
 }
+/* NO ZOOM. The medal used to grow 4 % under the cursor, which on the
+   tile you have just picked reads as the grid twitching rather than as a
+   response: „nehme den zoom effekt raus bei anwahl!". The shadow alone
+   is enough of a hover cue, and it moves nothing. */
 .ach-card:not(.locked):hover .medal-wrap svg {
-  transform: scale(1.04);
   filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.5));
 }
 .medal-wrap {

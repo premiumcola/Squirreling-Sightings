@@ -30,6 +30,14 @@ export const netzState = {
   // ── per-panel Netz / Verlauf toggle ──
   viewByCam: {}, // camId -> 'netz' | 'verlauf'
   archiveByCam: {}, // camId -> last /api/netz/archive response for this cam
+  // camId -> the same response from a run with NO filter set. The class
+  // chips and the „Nur offen" toggle are built from THIS, never from the
+  // filtered response: a filter that matches nothing returns total 0 and
+  // an empty label list, which used to take the chips off screen along
+  // with the results — leaving no way back out of the filter („wenn ich
+  // hier bin komm ich nicht zurück"). It is also what lets the row offer
+  // only classes that actually exist.
+  archiveFacetsByCam: {},
   archiveFilterByCam: {}, // camId -> {label, open}
   archiveViewByCam: {}, // camId -> 'list' | 'detail'
   detailIdByCam: {},

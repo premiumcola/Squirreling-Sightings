@@ -34,7 +34,20 @@ function _headHtml(data) {
   return `<div class="netz-arc-head"><span class="netz-arc-stat">${esc(stat)}</span></div>`;
 }
 
-function _classChips(data, camId) {
+/** The class row, built from the archive's OWN facts — not from the
+ *  current selection's.
+ *
+ * Two bugs lived in reading the filtered response here. A filter that
+ * matched nothing came back with `total: 0` and no labels, so the row
+ * disappeared together with the results and the filter could not be
+ * undone: „wenn ich hier bin komm ich nicht zurück". And the row could
+ * offer a class the selection no longer contained — a chip that can only
+ * answer „keine Einträge" („wenn ich einen filter wähle der keine
+ * inhalte hat, am besten zeigst du so einen filter gar nicht erst an").
+ * `facets` is the unfiltered answer, cached per camera; every class in it
+ * has at least one record behind it, by construction. */
+function _classChips(facets, camId) {
+  const data = facets || {};
   if ((data.total || 0) < MIN_RECORDS_FOR_CLASS_CHIPS) return '';
   const labels = data.labels || [];
   if (labels.length < 2) return '';
@@ -54,7 +67,10 @@ function _classChips(data, camId) {
   );
 }
 
-function _openToggle(data, camId) {
+function _openToggle(facets, camId) {
+  const data = facets || {};
+  // Same rule as the chips above: a toggle that is ON and has taken every
+  // row off the screen must still be on the screen to be turned off.
   if (!data.unjudged) return '';
   const on = archiveFilterFor(camId).open;
   return (
@@ -103,13 +119,17 @@ function _emptyHtml() {
   );
 }
 
-export function renderArchiveList(host, data, camId, handlers) {
+export function renderArchiveList(host, data, camId, handlers, facets = null) {
+  // `facets` describes the whole archive; `data` describes the current
+  // selection. Everything the operator STEERS with is drawn from the
+  // former, everything they are LOOKING AT from the latter.
+  const chrome = facets || data;
   if (!data || !data.items?.length) {
     const filter = archiveFilterFor(camId);
     const noFilter = !filter.label && !filter.open;
     host.innerHTML = noFilter
       ? _emptyHtml()
-      : `${_classChips(data || {}, camId)}` +
+      : `${_classChips(chrome, camId)}${_openToggle(chrome, camId)}` +
         `<div class="netz-empty"><div class="netz-empty-sub">Keine Einträge in dieser ` +
         `Auswahl.</div></div>`;
     _bind(host, camId, handlers);
@@ -117,8 +137,8 @@ export function renderArchiveList(host, data, camId, handlers) {
   }
   host.innerHTML =
     _headHtml(data) +
-    _classChips(data, camId) +
-    _openToggle(data, camId) +
+    _classChips(chrome, camId) +
+    _openToggle(chrome, camId) +
     `<div class="netz-arc-rows">${data.items.map(_rowHtml).join('')}</div>`;
   _bind(host, camId, handlers);
 }

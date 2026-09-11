@@ -278,3 +278,56 @@
     background: rgba(255, 255, 255, 0.09);
   }
 }
+
+/* ── Der Verlaufseintrag als eigenes Fenster ──────────────────────────────
+   A record is a frame, a verdict, a reason, the whole class ladder as a
+   table and a restore button. The Erkennungsnetz card is as tall as its
+   net diagram needs to be, so a record painted inside it was cut off at
+   the bottom — and the bottom is where the verdict controls are: „die
+   anzeige ist halb verdeckt! … ich kann hier die noch nicht bewerteten
+   dinge nicht nachbewerten da ichs nicht komplett sehe!".
+   Growing the card was the other option and it was ruled out for the
+   right reason — every section below it would move down the page. A
+   dialog costs the column nothing. See netz/_detail_modal.js. */
+.netz-detail-card {
+  position: relative;
+  width: min(720px, 100%);
+  /* dvh, not vh — CLAUDE.md's iOS rule: the address bar collapses and a
+     vh-sized dialog then reaches past the bottom of the screen. */
+  max-height: min(86dvh, 900px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+}
+.netz-detail-body {
+  /* Room for the close button to sit over, without the heading running
+     under it. */
+  padding-top: 4px;
+}
+.netz-detail-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  cursor: pointer;
+}
+/* 36 px of paint, CLAUDE.md's 44 px of target. */
+.netz-detail-close::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+@media (hover: hover) {
+  .netz-detail-close:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}

@@ -31,7 +31,7 @@ import {
 } from './_cards.js';
 import { svgGeometry } from './_tune_radar.js';
 import { bindTuneDrag, isTuneDragging } from './_tune_drag.js';
-import { renderArchiveDetail } from './_archive_detail.js';
+import { openNetzDetail } from './_detail_modal.js';
 import { renderArchiveList } from './_archive_list.js';
 import {
   archiveFilterFor,
@@ -43,9 +43,7 @@ import {
 } from './_state.js';
 
 function _slotFor(camId) {
-  return byId('cameraCards')?.querySelector(
-    `.cam-net-slot[data-camid="${CSS.escape(camId)}"]`,
-  );
+  return byId('cameraCards')?.querySelector(`.cam-net-slot[data-camid="${CSS.escape(camId)}"]`);
 }
 
 // ── panel shell ─────────────────────────────────────────────────────────
@@ -168,8 +166,13 @@ function _bindHeader(article, camId) {
 // ── Verlauf sub-view ─────────────────────────────────────────────────────
 
 async function _renderArchiveInto(body, camId) {
+  // A DETAIL RECORD OPENS IN ITS OWN WINDOW, and the panel keeps showing
+  // the list behind it. It used to replace the list inside this card,
+  // whose height belongs to the net diagram — so the verdict controls at
+  // the bottom of a record were cut off and could not be reached. See
+  // netz/_detail_modal.js.
   if (archiveViewFor(camId) === 'detail' && netzState.detailByCam[camId]) {
-    renderArchiveDetail(body, netzState.detailByCam[camId], {
+    openNetzDetail(netzState.detailByCam[camId], {
       back: () => {
         setArchiveView(camId, 'list');
         renderPanel(camId);
@@ -180,17 +183,30 @@ async function _renderArchiveInto(body, camId) {
         renderPanel(camId);
       },
     });
-    return;
+    // Fall through: the list stays painted underneath, so closing the
+    // dialog reveals exactly what the operator left.
+    setArchiveView(camId, 'list');
   }
-  const res = await fetchArchive({ cam: camId, ...archiveFilterFor(camId) });
+  const filter = archiveFilterFor(camId);
+  const res = await fetchArchive({ cam: camId, ...filter });
   netzState.archiveByCam[camId] = res.ok ? res : { items: [] };
+  // The chips describe the whole archive, not the current selection —
+  // see netzState.archiveFacetsByCam. Only an unfiltered answer may
+  // define them, and the first visit to Verlauf is always unfiltered.
+  if (res.ok && !filter.label && !filter.open) netzState.archiveFacetsByCam[camId] = res;
   // The panel may have re-rendered (or the operator may have switched back
   // to the net) while this fetch was in flight.
   if (viewFor(camId) !== 'verlauf' || !_slotFor(camId)?.contains(body)) return;
-  renderArchiveList(body, netzState.archiveByCam[camId], camId, {
-    reload: () => _renderArchiveInto(body, camId),
-    openDetail: (eid) => _openArchiveDetail(camId, eid),
-  });
+  renderArchiveList(
+    body,
+    netzState.archiveByCam[camId],
+    camId,
+    {
+      reload: () => _renderArchiveInto(body, camId),
+      openDetail: (eid) => _openArchiveDetail(camId, eid),
+    },
+    netzState.archiveFacetsByCam[camId] || null,
+  );
 }
 
 async function _openArchiveDetail(camId, eid) {

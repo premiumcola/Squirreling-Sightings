@@ -25,6 +25,7 @@
 import { isIOS } from '../core/ios-video.js';
 import { mediaCardHTML } from '../mediathek/_cards.js';
 import { adaptMotionItem } from '../library/_motion-adapter.js';
+import { registerMediaItems } from '../mediathek/_item-registry.js';
 import { CLIPS_CAP, clampIndex, clipVideoUrl, clipsMessageHtml } from './_clips-helpers.js';
 
 const _ARROW = (dir) =>
@@ -63,9 +64,21 @@ export function renderClipsGallery(host, items, idx = 0) {
   }
   const at = clampIndex(idx, total);
   host.dataset.galIdx = String(at);
-  host.innerHTML = `<div class="sd-gal-stage">${mediaCardHTML(adaptMotionItem(items[at]))}</div>
-    ${_navHtml(at, total)}
-    ${_counterHtml(at, total, total >= CLIPS_CAP)}`;
+  // THE COUNTER RIDES ON THE CARD. It used to be a child of the gallery
+  // block and anchored to whatever positioned ancestor it found, which
+  // put it over the heading above the picture („anzahl hängt immernoch
+  // über"). `.sd-gal-frame` shrink-wraps the card, so „1 / 64" is inset
+  // from the picture's own corner at every column width.
+  host.innerHTML = `<div class="sd-gal-stage"><div class="sd-gal-frame">${mediaCardHTML(
+    adaptMotionItem(items[at]),
+  )}${_counterHtml(at, total, total >= CLIPS_CAP)}</div></div>
+    ${_navHtml(at, total)}`;
+  // The species pencil on the card resolves its clip through the shared
+  // registry (mediathek/_item-registry.js) — these clips come from
+  // /api/library and are in none of the Mediathek's own caches, so
+  // without this the correction sheet opened on nothing at all and the
+  // tap did nothing: „edit geht nicht".
+  registerMediaItems(items.map(adaptMotionItem));
   _wireStage(host, items, at);
 }
 

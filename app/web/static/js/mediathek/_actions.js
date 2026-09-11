@@ -16,6 +16,7 @@ import { refreshTimelineAndStats } from '../chrome/storage-stats.js';
 import { renderMediaGrid, renderMediaPagination, _dropEventAndReslice } from './_paging.js';
 import { openSpeciesPicker } from '../mediaview/panels/species-picker.js';
 import { applyLabelSaveResult } from '../mediaview/panels/labels.js';
+import { getRegisteredMediaItem } from './_item-registry.js';
 
 export async function deleteMediaCard(btn) {
   const card = btn.closest('.media-card');
@@ -89,9 +90,14 @@ export function openSpeciesPickerForCard(btn) {
   const eventId = card?.dataset.eventId;
   const camId = card?.dataset.cameraId;
   if (!eventId || !camId) return;
+  // The Mediathek's own caches first, then the shared registry — the
+  // dossier's „Eigene Aufnahmen" gallery paints the same cards from
+  // /api/library items that are in neither cache, and the pencil there
+  // silently did nothing because this lookup came back empty.
   const item =
     (state.media || []).find((x) => x.event_id === eventId) ||
-    (state._allMedia || []).find((x) => x.event_id === eventId);
+    (state._allMedia || []).find((x) => x.event_id === eventId) ||
+    getRegisteredMediaItem(eventId);
   if (!item) return;
   openSpeciesPicker(item, {
     onSaved: (res) => {

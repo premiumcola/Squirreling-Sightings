@@ -79,35 +79,10 @@
       </svg>
       <span class="btn-label">Auswahl</span>
     </button>
-    {# Only visible while selecting — „vielleicht irgendwie rechts oben mit irgend 'nem Button,
-    der vielleicht erst angezeigt wird, wenn ich eben im Auswahlmodus bin". Takes the whole
-    current PAGE, not the whole library: the page is what the operator can see and check. #}
-    <button
-      type="button"
-      id="mediaSelectAllBtn"
-      class="btn btn-neutral btn-glyph"
-      style="display: none"
-      title="Ganze Seite auswählen"
-      aria-label="Ganze Seite auswählen"
-      data-action="toggleSelectAllOnPage"
-    >
-      <svg
-        viewBox="0 0 16 16"
-        width="15"
-        height="15"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="1.5" y="1.5" width="9" height="9" rx="2" />
-        <path d="M5.5 13.2h6a1.7 1.7 0 0 0 1.7-1.7v-6" />
-        <polyline points="3.6,6 5.2,7.6 8.4,4.4" />
-      </svg>
-      <span class="btn-label" id="mediaSelectAllLabel">Seite</span>
-    </button>
+    {# „Ganze Seite markieren" used to sit here, a third button crowding the title row. It lives in
+    the pagination row now (mediathek/_paging.js), beside the ‹ › that move between pages — which is
+    where the operator's thumb already is when they want it: „Seitenauswahl am besten direkt beim
+    zur nächsten seite springen und noch einer für alle angezeigten elemente markieren". #}
     <button
       type="button"
       id="mediathekTrashBtn"

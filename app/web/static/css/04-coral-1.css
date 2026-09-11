@@ -661,6 +661,20 @@
   opacity: 0.35;
   cursor: default;
 }
+/* „Alle auf dieser Seite markieren" — only present while selecting, and
+   sitting immediately after the „nächste Seite" arrow, which is where the
+   thumb already is when the operator is working through pages. The extra
+   left margin keeps the centred ‹ N von M › group readable as its own
+   unit instead of turning the row into four evenly spaced buttons. Its ON
+   state is the same green the select-mode toggle in the head uses, so the
+   two halves of one gesture speak the same colour. */
+.page-pill--all {
+  margin-left: 10px;
+}
+.page-pill--all.is-on .page-pill-chip {
+  background: color-mix(in srgb, #5fc98a 26%, transparent);
+  color: #9ff0bd;
+}
 .page-label {
   font-size: 13px;
   font-weight: 600;

@@ -20,6 +20,10 @@ import { openLightbox } from '../lightbox.js';
 import { mediaCardHTML } from './_cards.js';
 import { isActivelyPending, renderProcessingQueue } from './_processing.js';
 import { registerMediaItems, getRegisteredMediaItem } from './_item-registry.js';
+// The two pure predicates behind the select-all control below. Only
+// those two — bulk-delete.js reaches back here through `window`, so an
+// import of anything stateful would close a cycle.
+import { pageEventIds, pageFullySelected } from './bulk-delete.js';
 
 // ── Page-size sizer ─────────────────────────────────────────────────────────
 // _lastKnownCols + window._cachedPageSize are bridged on window so the
@@ -91,13 +95,47 @@ export function _goToPage(n) {
   renderMediaPagination();
 }
 
+const _SELECT_ALL_SVG =
+  `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" ` +
+  `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+  `<rect x="1.5" y="1.5" width="9" height="9" rx="2"/>` +
+  `<path d="M5.5 13.2h6a1.7 1.7 0 0 0 1.7-1.7v-6"/>` +
+  `<polyline points="3.6,6 5.2,7.6 8.4,4.4"/></svg>`;
+
+/** „Alle auf dieser Seite markieren", rendered INTO the pagination row.
+ *
+ * It used to be a third button in the section head, crowding the camera
+ * name. Here it sits where the thumb already is when the operator is
+ * working through pages — „Seitenauswahl am besten direkt beim zur
+ * nächsten Seite springen und noch einer für alle angezeigten Elemente
+ * markieren". One control, both directions: once the page is fully
+ * selected the only thing left to want is to let it go again.
+ *
+ * Glyph only. The state is the button's own tint, not a word beside it.
+ */
+function _selectAllPillHTML() {
+  if (!state.mediaSelectMode) return '';
+  const all = pageFullySelected(pageEventIds(state.media), state.mediaSelected);
+  const name = all ? 'Auswahl dieser Seite aufheben' : 'Alle auf dieser Seite markieren';
+  return (
+    `<button type="button" id="mediaSelectAllBtn" ` +
+    `class="page-pill page-pill--all${all ? ' is-on' : ''}" ` +
+    `data-action="toggleSelectAllOnPage" title="${name}" aria-label="${name}">` +
+    `<span class="page-pill-chip">${_SELECT_ALL_SVG}</span></button>`
+  );
+}
+
 export function renderMediaPagination() {
   const pg = byId('mediaPagination');
   if (!pg) return;
   const total = state.mediaTotalPages || 1;
   const cur = state.mediaPage || 0;
+  const selectAll = _selectAllPillHTML();
+  // A single page still needs the select-all control while selecting —
+  // it is not a paging widget then, it is the only place that control
+  // lives.
   if (total <= 1) {
-    pg.innerHTML = '';
+    pg.innerHTML = selectAll;
     return;
   }
   // POLISH-01a · the ‹ / › buttons carry a 44 px touch target but a
@@ -105,7 +143,8 @@ export function renderMediaPagination() {
   pg.innerHTML =
     `<button class="page-pill" ${cur === 0 ? 'disabled' : ''} onclick="_goToPage(${cur - 1})" aria-label="Vorherige Seite"><span class="page-pill-chip">‹</span></button>` +
     `<span class="page-label">Seite ${cur + 1} von ${total}</span>` +
-    `<button class="page-pill" ${cur >= total - 1 ? 'disabled' : ''} onclick="_goToPage(${cur + 1})" aria-label="Nächste Seite"><span class="page-pill-chip">›</span></button>`;
+    `<button class="page-pill" ${cur >= total - 1 ? 'disabled' : ''} onclick="_goToPage(${cur + 1})" aria-label="Nächste Seite"><span class="page-pill-chip">›</span></button>` +
+    selectAll;
 }
 
 // ── In-flight poll ──────────────────────────────────────────────────────────

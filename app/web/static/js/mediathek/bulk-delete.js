@@ -19,7 +19,20 @@ export function _updateMediaSelectToggle() {
   btn.classList.toggle('btn-action', state.mediaSelectMode);
   btn.classList.toggle('action-green', state.mediaSelectMode);
   btn.classList.toggle('btn-neutral', !state.mediaSelectMode);
-  _updateSelectAllButton();
+  _repaintSelectAll();
+}
+
+/** „Ganze Seite markieren" lives in the pagination row now, beside the
+ *  ‹ › that move between pages — „Seitenauswahl am besten direkt beim
+ *  zur nächsten Seite springen". mediathek/_paging.js paints it from
+ *  `state`, so every place that changes the selection just asks for a
+ *  repaint instead of reaching into the button.
+ *
+ *  Through `window` rather than an import: _paging.js pulls in
+ *  lightbox.js, which has top-level DOM side effects, and this module is
+ *  loaded by the drilldown openers long before any grid exists. */
+function _repaintSelectAll() {
+  window.renderMediaPagination?.();
 }
 
 /** PURE: the event ids on the page currently rendered. `state.media` is
@@ -33,28 +46,6 @@ export function pageEventIds(media) {
 /** PURE: does the page's selection already cover every id on it? */
 export function pageFullySelected(ids, selected) {
   return ids.length > 0 && ids.every((id) => selected.has(id));
-}
-
-function _updateSelectAllButton() {
-  const btn = byId('mediaSelectAllBtn');
-  if (!btn) return;
-  btn.style.display = state.mediaSelectMode ? 'inline-flex' : 'none';
-  // One button, both directions: once the page is fully selected the
-  // only thing left to want is to let it go again. On a phone the label
-  // is not painted (.btn-glyph), so the state has to reach the operator
-  // through the button's own tint and its accessible name instead.
-  const all = pageFullySelected(pageEventIds(state.media), state.mediaSelected);
-  // The same green the select-mode toggle beside it already uses for
-  // „this is on" — one visual language for both, rather than a second
-  // one invented for this button.
-  btn.classList.toggle('btn-action', all);
-  btn.classList.toggle('action-green', all);
-  btn.classList.toggle('btn-neutral', !all);
-  const name = all ? 'Auswahl der Seite aufheben' : 'Ganze Seite auswählen';
-  btn.title = name;
-  btn.setAttribute('aria-label', name);
-  const label = byId('mediaSelectAllLabel');
-  if (label) label.textContent = all ? 'Keine' : 'Seite';
 }
 
 export function _exitMediaSelectMode() {
@@ -104,7 +95,7 @@ export function _toggleMediaSelected(eventId) {
   const card = document.querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`);
   if (card) card.classList.toggle('media-card--selected', state.mediaSelected.has(eventId));
   _refreshMediaSelectBar();
-  _updateSelectAllButton();
+  _repaintSelectAll();
 }
 window._toggleMediaSelected = _toggleMediaSelected;
 
@@ -123,7 +114,7 @@ window.toggleSelectAllOnPage = function () {
     if (id) card.classList.toggle('media-card--selected', state.mediaSelected.has(id));
   });
   _refreshMediaSelectBar();
-  _updateSelectAllButton();
+  _repaintSelectAll();
 };
 
 window.toggleMediaSelectMode = function () {
@@ -131,17 +122,56 @@ window.toggleMediaSelectMode = function () {
   else _enterMediaSelectMode();
 };
 
+/** PURE: the second question, in the operator's own words.
+ *  `{Elster: 3, Amsel: 1}` → „Elster (3), Amsel (1)". */
+export function speciesProofWarning(species) {
+  const names = Object.entries(species || {}).map(([name, n]) => `${name} (${n})`);
+  if (!names.length) return '';
+  return (
+    `Das sind die letzten Aufnahmen von ${names.join(', ')}. ` +
+    `Ohne Beweisvideo verliert ${names.length > 1 ? 'diese Arten' : 'diese Art'} ` +
+    `die Freischaltung im Sichtungs-Raster. Trotzdem löschen?`
+  );
+}
+
+/** One bulk-delete POST. Returns the parsed result, or `null` when the
+ *  server asked a question the operator answered with "no".
+ *
+ *  The server refuses with 409 + the affected species when a selection
+ *  would take the LAST clip of one — see routes/events.py. That is not
+ *  an error to surface as one; it is a second question, and answering it
+ *  yes simply repeats the call with `force`. */
+async function _postBulkDelete(camId, ids) {
+  const url = `/api/camera/${encodeURIComponent(camId)}/events/delete-bulk`;
+  const send = (force) =>
+    j(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(force ? { event_ids: ids, force: true } : { event_ids: ids }),
+    });
+  try {
+    return await send(false);
+  } catch (e) {
+    if (e?.status !== 409) throw e;
+    let species = {};
+    try {
+      species = JSON.parse(e.message)?.species || {};
+    } catch {
+      species = {};
+    }
+    if (!(await showConfirm(speciesProofWarning(species)))) return null;
+    return send(true);
+  }
+}
+
 window.bulkDeleteSelectedMedia = async function () {
   const ids = Array.from(state.mediaSelected);
   const camId = state.mediaCamera;
   if (!camId || !ids.length) return;
   if (!(await showConfirm(`${ids.length} ausgewählte Einträge wirklich löschen?`))) return;
   try {
-    const r = await j(`/api/camera/${encodeURIComponent(camId)}/events/delete-bulk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_ids: ids }),
-    });
+    const r = await _postBulkDelete(camId, ids);
+    if (!r) return;
     const okSet = new Set(ids.filter((id) => !(r.failed || []).includes(id)));
     state._allMedia = (state._allMedia || []).filter((x) => !okSet.has(x.event_id));
     // calcItemsPerPage + renderMediaGrid + renderMediaPagination still

@@ -233,12 +233,16 @@ def _camera_of(events_dir: Path, path: Path) -> str:
     return parts[0] if len(parts) > 1 else "_lose"
 
 
-def _collect_expired(events_dir: Path, cutoff: datetime, judged: set) -> tuple:
+def _collect_expired(events_dir: Path, cutoff: datetime, protected: set) -> tuple:
     """Group expired files by ``(camera, event_id)``.
 
     Returns ``(buckets, preserved_ids, preserved_files, timelapse_records)``.
     Grouping matters because the trash is organised per event, so one
     ``meta.json`` describes the whole set a restore has to put back.
+
+    ``protected`` holds every event id that outlives the window: the ones
+    a human has judged, plus each species' newest clips, which are the
+    only evidence its badge rests on (see ``species_board``).
     """
     buckets: dict = {}
     preserved_ids: set = set()
@@ -258,7 +262,7 @@ def _collect_expired(events_dir: Path, cutoff: datetime, judged: set) -> tuple:
         if event_id.startswith(TIMELAPSE_ID_PREFIX):
             timelapse_records += 1
             continue
-        if event_id in judged:
+        if event_id in protected:
             preserved_files += 1
             preserved_ids.add(event_id)
             continue
@@ -331,17 +335,32 @@ def cleanup_old(store, retention_days: int, keep_judged: bool | None = None) -> 
     if keep_judged is None:
         keep_judged = keep_judged_events_enabled()
     judged = judged_event_ids(store.events_dir) if keep_judged else set()
+    # KEIN ABZEICHEN OHNE BELEG. Seit das Sichtungs-Raster aus dem Archiv
+    # abgeleitet wird (species_board.py), nimmt eine Frist einer Art ihr
+    # Abzeichen, sobald deren letzte Aufnahme abläuft — die Erkennung
+    # verschwindet dann, ohne dass jemand etwas falsch gemacht hätte.
+    # Also sind die je Art zehn neuesten Clips unantastbar, genau wie die
+    # von Hand beurteilten: „mindestens die letzten 10 erkennungen der
+    # spezies als video erhalten".
+    # Lokaler Import aus demselben Grund wie bei `trash` in `_retire`:
+    # dieses Modul wird aus `storage` heraus geladen, und eine Kante nach
+    # oben zur Boot-Zeit ist genau die Sorte Kreis, die dieses Projekt
+    # schon zweimal gekostet hat.
+    from .species_board import proof_event_ids
+
+    proof = proof_event_ids(store.events_dir)
     cutoff = datetime.now() - timedelta(days=retention_days)
     log.info(
         "[storage] autoclean: retention=%dd cutoff=%s | eligible: motion snapshots + "
         "event JSON (motion_detection/) | protected: timelapse videos AND their "
-        "tl_*.json records, judged events | expired files go to storage/.trash "
-        "(restorable), they are not unlinked",
+        "tl_*.json records, judged events, %d Art-Belege | expired files go to "
+        "storage/.trash (restorable), they are not unlinked",
         retention_days,
         cutoff.strftime("%Y-%m-%d"),
+        len(proof),
     )
     buckets, preserved_ids, preserved_files, tl_records = _collect_expired(
-        store.events_dir, cutoff, judged
+        store.events_dir, cutoff, judged | proof
     )
     retired = _retire(store.root, buckets)
     _log_outcome(retention_days, retired, (preserved_files, len(preserved_ids)), tl_records)

@@ -18,7 +18,12 @@ from __future__ import annotations
 
 import json
 
-from app.species_board import resync_species_board, tally_species
+from app.species_board import (
+    proof_event_ids,
+    resync_species_board,
+    species_losing_last_proof,
+    tally_species,
+)
 from app.species_unlock import achievement_id_for, apply_species_tally, unlock_species
 
 
@@ -243,3 +248,61 @@ def test_ein_leergeraeumtes_archiv_nimmt_sehr_wohl_zurueck(tmp_path):
 
     assert resync_species_board(_store(tmp_path), tmp_path)["revoked"] == 1
     assert _unlocked(tmp_path) == {}
+
+
+# ── Kein Abzeichen ohne Beleg ───────────────────────────────────────────
+#
+# Seit das Raster Abzeichen ZURÜCKNIMMT, hat jede Löschung eine
+# Nebenwirkung, die sie vorher nicht hatte: mit der letzten Aufnahme
+# einer Art geht auch ihre Erkennung. „kein spezies unlock ohne
+# beweisvideo!"
+
+
+def _clips(root, species, n, cam="cam_a", day="2026-09-06", first=0):
+    for i in range(n):
+        _event(
+            root,
+            cam,
+            f"{species.lower()}_{first + i}",
+            bird_species=species,
+            time=f"2026-09-{6 + (first + i) % 20:02d}T08:00:00",
+        )
+
+
+def test_die_zehn_neuesten_aufnahmen_je_art_sind_unantastbar(tmp_path):
+    _clips(tmp_path, "Elster", 25)
+    _clips(tmp_path, "Amsel", 3)
+
+    proof = proof_event_ids(tmp_path / "motion_detection")
+
+    # 10 von 25 Elstern, und alle drei Amseln — eine Art mit weniger als
+    # zehn Aufnahmen behält schlicht alle.
+    assert sum(1 for i in proof if i.startswith("elster_")) == 10
+    assert sum(1 for i in proof if i.startswith("amsel_")) == 3
+
+
+def test_die_neuesten_bleiben_nicht_die_aeltesten(tmp_path):
+    for i, day in enumerate(("06", "07", "08")):
+        _event(tmp_path, "cam_a", f"e{i}", bird_species="Elster", time=f"2026-09-{day}T08:00:00")
+
+    assert proof_event_ids(tmp_path / "motion_detection", keep=1) == {"e2"}
+
+
+def test_eine_loeschung_die_eine_art_restlos_traefe_wird_gemeldet(tmp_path):
+    _clips(tmp_path, "Elster", 12)
+    _clips(tmp_path, "Amsel", 2)
+    events_dir = tmp_path / "motion_detection"
+
+    # Beide Amseln weg, eine einzelne Elster weg.
+    losing = species_losing_last_proof(events_dir, ["amsel_0", "amsel_1", "elster_0"])
+
+    assert losing == {"Amsel": 2}, "nur die Art, die JEDEN Beleg verliert"
+
+
+def test_ohne_treffer_wird_nicht_gefragt(tmp_path):
+    _clips(tmp_path, "Elster", 12)
+    events_dir = tmp_path / "motion_detection"
+    assert species_losing_last_proof(events_dir, []) == {}
+    assert species_losing_last_proof(events_dir, ["elster_0", "elster_1"]) == {}
+    # Eine ID, die es gar nicht gibt, betrifft niemanden.
+    assert species_losing_last_proof(events_dir, ["gibtsnicht"]) == {}

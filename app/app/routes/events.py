@@ -131,6 +131,26 @@ def api_event_delete(cam_id, event_id):
     return jsonify({"ok": True, "tl_cleaned": tl_cleaned, **result})
 
 
+def _species_losing_proof(cam_id: str, event_ids: list) -> dict:
+    """``{Art: Anzahl}`` für jede Art, die diese Löschung restlos träfe.
+
+    Best-effort: kann das Archiv nicht gelesen werden, wird nicht
+    gefragt — eine Rückfrage, die aus einem Lesefehler entsteht, ist
+    schlechter als keine, weil sie den Betreiber darauf trainiert, sie
+    wegzuklicken.
+    """
+    try:
+        from ..species_board import species_losing_last_proof
+
+        events_dir = getattr(app_state.store, "events_dir", None)
+        return species_losing_last_proof(events_dir, event_ids)
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "[storage] Art-Beleg-Prüfung für %s übersprungen", cam_id, exc_info=True
+        )
+        return {}
+
+
 @bp.post('/api/camera/<cam_id>/events/delete-bulk')
 def api_event_delete_bulk(cam_id):
     """Bulk soft-delete — every successfully-moved event lands in
@@ -145,6 +165,23 @@ def api_event_delete_bulk(cam_id):
         return jsonify({"ok": False, "error": "Keine event_ids angegeben"}), 400
     if len(event_ids) > 500:
         return jsonify({"ok": False, "error": "Maximal 500 Events pro Aufruf"}), 400
+    # KEIN ABZEICHEN OHNE BELEG. Seit das Sichtungs-Raster aus dem Archiv
+    # abgeleitet wird, nimmt eine Löschung, die die LETZTE Aufnahme einer
+    # Art erwischt, auch deren Erkennung mit — und eine Sammelauswahl
+    # über eine gefilterte Seite trifft genau diesen Fall leicht.
+    # Nicht verbieten: der Betreiber darf eine Fehlerkennung samt
+    # Abzeichen loswerden wollen. Aber nicht, ohne es zu wissen.
+    if not payload.get("force"):
+        losing = _species_losing_proof(cam_id, event_ids)
+        if losing:
+            return jsonify(
+                {
+                    "ok": False,
+                    "needs_confirm": "species_proof",
+                    "species": losing,
+                    "error": "Letzte Aufnahmen dieser Arten",
+                }
+            ), 409
     deleted = 0
     failed = []
     for eid in event_ids:

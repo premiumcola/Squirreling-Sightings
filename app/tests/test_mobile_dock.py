@@ -115,46 +115,48 @@ def _px(value: str) -> int:
 # ── complaint 1 · "die ist wieder hochgerutscht" ──────────────────────
 
 
-def test_the_bottom_gap_clears_the_home_indicator_via_safe_area():
+def test_the_home_indicator_band_is_inside_the_plate_not_under_it():
     """`safe-area-inset-*` is on CLAUDE.md's every-UI-change checklist and
-    it is where this component regresses. The page ships
-    viewport-fit=cover, so the inset is a real number on a notched
-    iPhone; without it the plate would sit on the home indicator."""
-    gap = _tokens()["--m-dock-bottom-gap"]
-    assert "env(safe-area-inset-bottom" in gap
-    assert "0px" in gap, "env() needs a fallback for devices without an inset"
+    it is where this component regresses. It is still honoured — it just
+    moved: the plate's background now reaches the screen edge and carries
+    the band as its own bottom padding, which is how a native iOS tab bar
+    is built. Under the old layout the whole plate was pushed up by the
+    band instead, and that is what made the bottom gap four times the
+    side gap."""
+    body = _rule(_read(_DOCK), ".m-dock", occurrence=2)
+    assert "padding-bottom" in body
+    assert "var(--m-dock-safe-b)" in body, "the buttons must still clear the home indicator"
+    safe = _tokens()["--m-dock-safe-b"]
+    assert "env(safe-area-inset-bottom" in safe
+    assert "0px" in safe, "env() needs a fallback for devices without an inset"
     assert 'content="width=device-width,initial-scale=1,viewport-fit=cover"' in _read(
         _TPL / "index.html"
     ), "without viewport-fit=cover every safe-area inset resolves to 0"
 
 
-def test_the_dock_sits_low_without_going_flush_against_the_indicator():
-    """The operator's calibration, twice over: +8 px felt like the bar was
-    floating mid-screen (a5f7fc8), 0 px read as a chrome partition glued
-    to the screen edge (296f2b6, reverted). The additive over the inset
-    is what crept back to +6 px and drew the "wieder hochgerutscht"
-    report — pin it at or below the side margin."""
+def test_the_gap_is_the_same_on_every_side():
+    """„schiebt die Leiste 'n bisschen runter, dass links und unten der
+    gleiche Abstand ist."
+
+    The bottom gap used to be the safe-area inset plus a couple of pixels
+    — roughly 36 px on a notched iPhone against 8 px at the sides. Two
+    earlier calibrations argued over that additive (+8 px read as
+    floating, 0 px as glued to the edge), but both kept the inset in the
+    gap, so the asymmetry survived every round. One number for all three
+    sides settles it."""
     tokens = _tokens()
-    margin = _px(tokens["--m-dock-margin"])
-    additive = re.search(
-        r"env\(safe-area-inset-bottom[^)]*\)\s*\+\s*(\d+)px",
-        tokens["--m-dock-bottom-gap"],
-    )
-    assert additive, "the bottom gap no longer adds a design margin to the inset"
-    assert 0 < int(additive.group(1)) <= margin, (
-        "0 px is the rejected flush-bottom layout; anything above the side "
-        "margin lifts the bar off the bottom edge again"
-    )
+    assert tokens["--m-dock-bottom-gap"] == "var(--m-dock-margin)"
 
 
-def test_the_bottom_gap_keeps_a_floor_for_devices_without_an_inset():
-    """Android, older iPads and narrow desktop report no inset at all. The
-    floor keeps the bottom gap from collapsing below the side margin,
-    which would break the concentric geometry below."""
-    tokens = _tokens()
-    gap = tokens["--m-dock-bottom-gap"]
-    assert gap.startswith("max("), "no floor — inset-less devices lose the gap"
-    assert _px(gap) == _px(tokens["--m-dock-margin"])
+def test_the_plate_height_grows_with_the_band_it_now_carries():
+    """Three consumers position themselves above the dock by reading
+    `--m-dock-bottom-gap + --m-dock-h`. The plate got taller by the
+    safe-area band, so the token has to say so — otherwise the stale-build
+    bar, the sticky select bar and the page's bottom padding all slide
+    under it on exactly the devices that have an inset."""
+    h = _tokens()["--m-dock-h"]
+    assert "var(--m-dock-safe-b)" in h
+    assert "var(--m-dock-btn-h)" in h and "var(--m-dock-inner-pad)" in h
 
 
 def test_the_dock_is_anchored_to_bottom_and_never_sized_in_vh():

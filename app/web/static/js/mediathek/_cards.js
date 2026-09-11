@@ -133,6 +133,32 @@ function _dateTimeBadges(date, time, subBadge) {
       </div>`;
 }
 
+/** A stored media URL, re-pointed at the host the page is served from.
+ *
+ * A timelapse event freezes its poster as an ABSOLUTE url at registration
+ * time, built from `server.public_base_url` — on the live box that is
+ * `http://<LAN-IP>:8099/media/...`. Reached over any other address — a
+ * hostname, a reverse proxy, a tunnel — that image simply never loads and
+ * the card falls back to its dark plate: „in den timelapses fehlen die
+ * thumbs". Motion cards never had the problem because they carry a
+ * RELATIVE `snapshot_relpath` instead.
+ *
+ * Keeping only the path is safe for exactly the `/media/...` files this
+ * app serves itself, and it is also the shape the rest of the Mediathek
+ * already uses. Anything that is not a parseable absolute URL is handed
+ * back untouched — a relative value is already right.
+ */
+export function sameOriginMedia(url) {
+  const raw = String(url || '');
+  if (!raw || !/^https?:\/\//i.test(raw)) return raw;
+  try {
+    const u = new URL(raw);
+    return `${u.pathname}${u.search}`;
+  } catch {
+    return raw;
+  }
+}
+
 // ── Timelapse branch ────────────────────────────────────────────────────────
 //
 // THE GLYPH IS THE WORD. The badge read „⧗ Timelapse", which is the
@@ -157,7 +183,7 @@ function _tlCardHTML(item) {
         : Math.floor(item.target_s / 60) + 'min'
       : '';
   const sizeText = item.size_mb != null ? item.size_mb + ' MB' : '';
-  const thumbSrc = item.thumb_url || '';
+  const thumbSrc = sameOriginMedia(item.thumb_url);
   const thumbEl = thumbSrc
     ? `<img src="${esc(thumbSrc)}" alt="preview" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;opacity:.7" loading="lazy" onerror="this.remove()">`
     : '';

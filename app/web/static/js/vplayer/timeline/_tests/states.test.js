@@ -1,12 +1,17 @@
 // ─── vplayer/timeline/_tests/states.test.js ────────────────────────────────
-// The three behaviours a timeline rewrite drops silently, because
-// nothing else in the code references them: the lost-track ×, the three
-// empty states, and the live filtered fold.
+// The behaviours a timeline rewrite drops silently, because nothing else
+// in the code references them: the lost-track × and the live filtered
+// fold.
+//
+// THE THREE EMPTY STATES USED TO BE PINNED HERE TOO. They are gone with
+// _empty-states.js — „Das wiederhol icon raus!". Two of the three
+// rendered nothing at all by the end, and the third's green round-arrow
+// button was wired through a `deps.post` mountTimeline is never passed,
+// so it had no handler on any mount. Nothing is left to assert.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { emptyStateFor } from '../_empty-states.js';
 import { buildLossReport, shouldShowLostMarker } from '../_loss-tip.js';
 import { laneFingerprint, splitFiltered } from '../_rolling.js';
 
@@ -114,24 +119,6 @@ test('the class row ticks against the object filter', () => {
   // No filter configured is not a failure — it is no opinion.
   assert.equal(buildLossReport(track, {}).rows[2].value, 'Person');
   assert.equal(buildLossReport(track, {}).rows[2].tone, null);
-});
-
-// ── the three empty states ─────────────────────────────────────────────
-
-test('a timelapse gets the action, not an explanation', () => {
-  assert.equal(emptyStateFor({ type: 'timelapse' }, null), 'timelapse');
-  assert.equal(emptyStateFor({ type: 'timelapse' }, { built_at: 1 }), 'timelapse');
-});
-
-test('a sidecar that ran and found nothing says so', () => {
-  assert.equal(emptyStateFor({ type: 'motion' }, { built_at: 123, tracks: [] }), 'done');
-  assert.equal(emptyStateFor({ type: 'motion' }, { schema: 2, tracks: [] }), 'done');
-});
-
-test('no sidecar at all means nothing has ever looked', () => {
-  assert.equal(emptyStateFor({ type: 'motion' }, null), 'unindexed');
-  assert.equal(emptyStateFor({ type: 'motion' }, {}), 'unindexed');
-  assert.equal(emptyStateFor(null, null), 'unindexed');
 });
 
 // ── the live filtered fold ─────────────────────────────────────────────

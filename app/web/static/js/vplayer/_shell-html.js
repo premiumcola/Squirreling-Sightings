@@ -12,16 +12,26 @@
 //
 // LAYOUT, top → bottom:
 //
-//   topbar    prev / title / next, the overflow trigger and close.
 //   stage     the picture. Owns the media element and the overlay
-//             layers (frame), AND the timeline — mounting the timeline
-//             INSIDE the stage instead of in a strip below it is the
-//             central structural change of this player.
+//             layers (frame), the TOPBAR, AND the timeline — mounting
+//             the timeline INSIDE the stage instead of in a strip below
+//             it is the central structural change of this player.
 //   toggles   the overlay segmented control + the ROI chip.
 //   controls  the transport's below-stage row (speed, frame-step, loop,
 //             detection-nav, snapshot), owned by mediaview/player/*.
 //   panel     the context panel: objects + details for a recorded clip,
 //             tracks + raw detections for live and simulation.
+//
+// THE TOP BAR IS INSIDE THE STAGE, and that is the whole of „systemplayer
+// oben weg … achte auf keinen sinnfreien platz fresserei!". It used to be
+// the first child of the root, a full-width band of --vp-chrome carrying
+// a camera glyph, one line of title and two buttons — roughly 48 px of
+// the screen spent on five things, above a picture that is only 211 px
+// tall at 375 px. As a child of the stage it is absolutely positioned
+// over the TOP EDGE of the picture (36a), so it costs zero rows and the
+// ✕ has not moved a pixel on screen. It is still its own slot: the
+// picture, the chrome and the timeline are three different owners and
+// this is the one nothing paints into.
 //
 // Empty slots collapse via :empty rather than being conditionally
 // rendered, so every mode composes from one skeleton and teardown has
@@ -29,9 +39,9 @@
 
 /** Every slot name in the skeleton, in mount order. */
 export const VP_SHELL_SLOTS = [
-  'topbar',
   'stage',
   'frame',
+  'topbar',
   'timeline',
   'toggles',
   'controls',
@@ -42,9 +52,9 @@ export const VP_SHELL_SLOTS = [
 export const VP_ROOT_CLASS = 'vp-root';
 
 export const VP_SHELL_HTML =
-  `<div class="vp-topbar" data-slot="topbar"></div>` +
   `<div class="vp-stage" data-slot="stage">` +
   `<div class="vp-frame" data-slot="frame"></div>` +
+  `<div class="vp-topbar" data-slot="topbar"></div>` +
   `<div class="vp-timeline" data-slot="timeline"></div>` +
   `</div>` +
   `<div class="vp-toggles" data-slot="toggles"></div>` +

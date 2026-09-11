@@ -23,7 +23,7 @@ import { containRect } from '../core/video-fit.js';
 import { placeOverlay } from '../core/box-model.js';
 // The refit is also the moment the crowding verdict can change, so the
 // density rule rides the same trigger rather than growing a third one.
-import { chromeRects, mountStripHeight } from './_density.js';
+import { chromeRects, mountStripHeight, forgetChromeRects } from './_density.js';
 
 /** The layers, in paint order. Zones sit under the boxes drawn on them. */
 export const VP_LAYERS = ['zones', 'trails', 'boxes'];
@@ -174,6 +174,9 @@ export function mountStage(frame, cfg) {
     },
     teardown: () => {
       detach();
+      // The memo outlives the stage otherwise, and the next player would
+      // start against the geometry of the last one.
+      forgetChromeRects();
       density.teardown();
       listeners.clear();
       _releaseMedia(video, img);

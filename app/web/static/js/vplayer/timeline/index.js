@@ -10,7 +10,6 @@
 // `timeline` flag from _config.js — never by sniffing the data.
 
 import { TL_BASIS_LIVE, TL_BASIS_NONE } from './_basis.js';
-import { emptyStateFor, emptyStateHtml, wireRescan } from './_empty-states.js';
 import { lanesHtml } from './_lanes.js';
 import { wireBeads } from './_markers.js';
 import { railHtml, setPlayhead } from './_rail.js';
@@ -45,7 +44,6 @@ export function mountTimeline(host, cfg, deps = {}) {
   const rolling = cfg.flags.timeline === 'rolling';
   let model = buildTimelineModel([], rolling ? { windowMs: cfg.windowMs, now: 0 } : {});
   let scrub = null;
-  let rescan = null;
   let preview = null;
   let beads = null;
   // Coarse pointers get the bubble lifted clear of the finger. Read once
@@ -99,15 +97,23 @@ export function mountTimeline(host, cfg, deps = {}) {
       return model;
     }
     scrub?.teardown();
-    rescan?.teardown();
     beads?.teardown();
     // `data-many` decides whether the block may scroll at all. Below the
     // threshold it must not: a reserved scrollbar gutter beside two rows
     // is a control for a list that fits. See 36b.
+    //
+    // NO LANES MEANS NO BLOCK — just the rail. There used to be an
+    // "empty state" here, and by the end all that survived of it was one
+    // green round-arrow button on a timelapse clip: „Das wiederhol icon
+    // raus!". It was worse than decorative. It was wired through
+    // `deps.post`, a dependency mountTimeline has never been passed by
+    // its only caller, so wireRescan returned null on every single mount
+    // and the button had no handler at all — a green control that looked
+    // like the re-run it was named after and did nothing when pressed.
     const body = model.lanes.length
       ? `<div class="vp-tl-lanes" data-many="${model.lanes.length > LANES_BEFORE_SCROLL ? '1' : '0'}">` +
         `${lanesHtml(model)}</div>`
-      : emptyStateHtml(emptyStateFor(opts.item, opts.tracks), opts);
+      : '';
     host.innerHTML = body + railHtml(model);
     watchLanes();
     preview?.teardown();
@@ -157,7 +163,6 @@ export function mountTimeline(host, cfg, deps = {}) {
         for (const s of this.parts) s?.teardown();
       },
     };
-    rescan = wireRescan(host, deps);
     beads = wireBeads(host, { onSeek: deps.onSeek, onPause: deps.onPause });
     return model;
   };
@@ -177,7 +182,6 @@ export function mountTimeline(host, cfg, deps = {}) {
       scrub?.teardown();
       preview?.teardown();
       laneRo?.disconnect();
-      rescan?.teardown();
       beads?.teardown();
       host.innerHTML = '';
       delete host.dataset.vpFp;

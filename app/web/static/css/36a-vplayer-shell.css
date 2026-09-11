@@ -28,10 +28,6 @@
      --bg so the video's own edge is the only edge the eye finds. */
   --vp-ground: #000000;
 
-  /* Chrome that floats ON the picture: translucent so the frame stays
-     readable underneath, opaque enough for white text at a glance. */
-  --vp-chrome: rgba(17, 17, 17, 0.92);
-
   /* Corner radii. CLAUDE.md's floor is 8px; the shell itself carries
      the larger one and controls inside it the smaller. */
   --vp-radius: 14px;
@@ -110,9 +106,36 @@
   display: none !important;
 }
 
-/* ── Top bar ───────────────────────────────────────────────────────────── */
+/* ── Top strip · ON the picture, not above it ──────────────────────────────
+   „systemplayer oben weg … achte auf keinen sinnfreien platz fresserei!"
+
+   This was a row: the shell's first child, a full-width band of near-
+   opaque dark, ~48 px of a 375 px screen spent on a camera glyph, one
+   line of title and two buttons — above a picture that is only 211 px
+   tall at that width. Nothing on it was wrong; the ROW was.
+
+   So it is now absolutely positioned over the top edge of the picture
+   (the skeleton moved it inside `.vp-stage`, see _shell-html.js). It
+   costs zero layout, the ✕ has not moved a pixel on screen, and the
+   title and camera glyph are still there. Instead of a slab it carries a
+   top-down scrim, so white text stays readable over bright footage
+   without painting a bar across it.
+
+   The strip takes no pointer events; only its BUTTONS take them back.
+   Same idiom, and the same reason, as `.mv-player` in 30h: the stage
+   underneath owns the tap-to-toggle for the chrome, and a transparent
+   scrim spanning the top of the picture would otherwise swallow every
+   tap aimed at the frame behind it. `pointer-events` inherits, so the
+   one declaration on the strip covers the title, the glyph and the
+   spacer without naming any of them. */
 .vp-topbar {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Above `.vp-glass` (18), so the ⋮ and ✕ are never shadowed by the
+     navigation layer that spans the whole picture. */
+  z-index: 19;
   display: flex;
   align-items: center;
   /* 8 px, not 4. The buttons here paint at 36 px and claim their 44 px
@@ -123,14 +146,20 @@
      mis-tap costs the most. At 8 px the two targets meet and stop. */
   gap: 8px;
   padding: 6px 8px;
-  background: var(--vp-chrome);
+  background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+.vp-topbar button {
+  pointer-events: auto;
 }
 
 /* The camera, as a glyph. It replaced the camera NAME, which the bar
    used to spend its whole width on — „reicht das logo der kamera als
    kamera-hinweis! Der name muss nicht drüber". Decorative in the layout
-   sense only: it carries the name as its aria-label, so the bar still
-   announces which camera this is. */
+   sense only: it carries the name as its aria-label, so the strip still
+   announces which camera this is. Light, not --muted: it sits on footage
+   now, not on a panel. */
 .vp-top-cam {
   flex: 0 0 auto;
   display: inline-flex;
@@ -138,7 +167,7 @@
   justify-content: center;
   width: 26px;
   height: 26px;
-  color: var(--muted);
+  color: rgba(234, 242, 234, 0.85);
 }
 .vp-top-cam svg {
   width: 100%;
@@ -147,10 +176,17 @@
 
 /* WHEN, not where: date · time · duration. Left-aligned beside the
    camera glyph rather than centred — centred, a growing string drifts
-   under the two buttons on the right at 375 px. */
+   under the buttons on the right at 375 px.
+
+   `flex: 0 1 auto`, NOT `1 1 auto`: the box has to hug its own text now
+   that _density.js measures it to keep detection plates out from under
+   it (see its _CHROME_SEL note). A title that claimed the whole free
+   width would forbid a plate across the entire top of the picture. The
+   slack is taken by .vp-top-gap instead, which prints nothing. */
 .vp-top-title {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -158,11 +194,42 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Over footage, not over a panel. These cameras shoot snow, gravel and
+     white sky; a shadow is what keeps the line legible on all three. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+/* The spacer that pushes the actions to the right edge.
+
+   THIS IS NOT `margin-left: auto` ON THE ACTION GROUP, deliberately.
+   That pairing — an auto margin against an inline-flex box — is the one
+   CLAUDE.md names as the recurring root cause of this project's
+   Live-Pill / Live-Chrome layout bugs on iOS. An empty flex child that
+   eats the slack cannot misbehave. */
+.vp-top-gap {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+.vp-top-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The speed button's host. Empty on a live surface, where there is no
+   playback rate to change — an empty flex box with no padding takes no
+   width, so nothing has to be conditionally rendered around it. */
+.vp-top-speed {
+  display: flex;
+  align-items: center;
 }
 
 /* 36 px of paint, 44 px of target. The ::before is the touch area and
-   is deliberately larger than the button box — painting four 44 px
-   discs across a 375 px bar is what the smaller visual avoids. */
+   is deliberately larger than the button box — painting 44 px discs
+   across the top of a 375 px picture is what the smaller visual
+   avoids. */
 .vp-top-btn {
   position: relative;
   flex: 0 0 auto;
@@ -175,13 +242,15 @@
   border: 0;
   /* Discs, and the same glass as the chevrons on the picture — one
      language for every round control in this player. They used to be
-     --surface squares on the --vp-chrome bar, which is two dark greys
-     on top of each other: the dark-on-dark button CLAUDE.md forbids,
-     and it read as two grey boxes bolted to the corner. */
+     translucent white on the dark bar; that bar is gone, and over
+     footage a light fill disappears against a bright frame. Dark glass
+     with a blur reads on anything. */
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
+  background: rgba(10, 14, 20, 0.5);
+  backdrop-filter: blur(6px);
+  color: #eaf2ea;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .vp-top-btn::before {
@@ -194,20 +263,89 @@
   transform: translate(-50%, -50%);
 }
 
+/* ── Playback speed ────────────────────────────────────────────────────────
+   „bitte integriere ein 1,5 2x 3x geschwindikgiet button! den will ich
+   auch während dem videolauf anpassen können!"
+
+   A pill rather than a disc, because its content is two or four
+   characters („1×" … „1,5×") and a circle sized for the longest of them
+   would be a heavy blob beside two 36 px discs. Same glass, same height,
+   same family — only wider. The 44 px touch minimum is met on both axes:
+   min-width carries it horizontally and the ::before band carries it
+   vertically, exactly as the discs do. */
+.vp-top-rate {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--vp-tap);
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(10, 14, 20, 0.5);
+  backdrop-filter: blur(6px);
+  color: #eaf2ea;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vp-top-rate::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--vp-tap);
+  transform: translateY(-50%);
+}
+
+/* Anything but 1× is a state the PICTURE cannot show — a clip at 3× just
+   looks like a fast animal. The accent fill is the only thing that says
+   why, so it is not decoration and it is not optional. */
+.vp-top-rate[data-on='1'] {
+  background: var(--vp-accent);
+  color: var(--vp-on-accent);
+}
+
 /* Hover states only where a pointer can actually hover. On a touch
    device an unguarded :hover sticks after the tap and the control
    reads as permanently active. */
 @media (hover: hover) {
-  .vp-top-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
+  .vp-top-btn:hover,
+  .vp-top-rate:hover {
+    background: rgba(20, 28, 36, 0.72);
+  }
+  .vp-top-rate[data-on='1']:hover {
+    background: color-mix(in srgb, var(--vp-accent) 82%, #ffffff);
   }
 }
 
-/* ── Overflow menu ─────────────────────────────────────────────────────── */
+/* ── Overflow menu ─────────────────────────────────────────────────────────
+   Anchored to the SHELL ROOT, not to the strip the ⋮ sits in. The strip
+   is inside `.vp-stage` now, and that element is `overflow: hidden` —
+   it has to be, the letterboxed picture and its layers depend on it — so
+   a dropdown anchored in there would be sheared off at the bottom of the
+   picture on exactly the short screens where it matters. The root is
+   `position: fixed`, so it is the containing block.
+
+   THE INSET HAS TO BE ADDED BACK BY HAND. An absolutely positioned child
+   resolves against its ancestor's PADDING BOX, whose top edge is the
+   border edge — the root's `padding-top: var(--vp-safe-top)` lies INSIDE
+   that box, not above it. A bare `top: 52px` is therefore 52 px from the
+   top of the screen, while the ⋮ it hangs from starts at safe-top + 6 px:
+   on a notched iPhone (inset ~47–59 px) the menu would open above the
+   button that opened it and cover the whole strip. 52 px is what clears
+   the 6 px padding plus the 36 px button; the inset is what puts that
+   measurement where the strip actually is. */
 .vp-menu {
   position: absolute;
-  top: calc(100% + 4px);
-  right: 8px;
+  top: calc(var(--vp-safe-top) + 52px);
+  right: 10px;
   z-index: var(--z-dropdown);
   min-width: 208px;
   padding: 6px;
@@ -216,8 +354,14 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
 }
 
+/* A glyph column, then the words — „less text, more flat-design icons".
+   The delete in particular had nothing but prose to warn with; it now
+   carries the universal trash can (see _overflow-menu.js for why the
+   MENU, and not the picture, is where a delete may live at all). */
 .vp-menu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   min-height: var(--vp-tap);
   padding: 0 12px;
@@ -228,6 +372,20 @@
   font-size: 15px;
   text-align: left;
   cursor: pointer;
+}
+
+.vp-menu-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.vp-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .vp-menu-item--danger {
@@ -572,8 +730,8 @@ body.vp-is-scrubbing .vp-stage .vp-layer {
 /* Fade with the rest of the chrome. Same attribute, same timing as
    30h-mediaview-player.css uses for the transport, so the group leaves
    and returns together instead of in two waves. */
-/* Only the glass layer left to fade: the layer switches moved out of the
-   stage into their own row, so they neither float over the footage nor
+/* The glass layer goes whole: the layer switches moved out of the stage
+   into their own row, so they neither float over the footage nor
    disappear with the chrome. A control that vanishes when the chrome
    times out is a control the operator has to summon before using. */
 .vp-stage[data-chrome] > .vp-glass {
@@ -583,8 +741,46 @@ body.vp-is-scrubbing .vp-stage .vp-layer {
   opacity: 0;
   pointer-events: none;
 }
+
+/* THE TOP STRIP FADES IN HALVES, and the split is the point.
+
+   What it SAYS — the scrim, the camera glyph, the title — is chrome over
+   footage and leaves with everything else: „wenn ich drüber hover
+   einblenden, wenn ich weghover schnell wieder ausblenden, damit ich das
+   Video ordentlich sehen kann".
+
+   What it DOES stays. A ✕ you have to summon before you can press it is
+   a close button the operator has to go looking for, and the speed pill
+   exists precisely to be pressed while the clip is running („den will
+   ich auch während dem videolauf anpassen können") — which is the one
+   moment the chrome is faded out. Three small glass controls in a corner
+   are not what „die Buttons liegen dauerhaft über dem Video" was about;
+   that was four labelled pills across the middle of the frame. */
+.vp-stage[data-chrome] > .vp-topbar,
+.vp-stage[data-chrome] > .vp-topbar > .vp-top-cam,
+.vp-stage[data-chrome] > .vp-topbar > .vp-top-title {
+  transition:
+    opacity 0.24s ease,
+    background 0.24s ease;
+}
+/* A TRANSPARENT GRADIENT, not `none`. The transition above names
+   `background`, and background-image interpolates only between two
+   gradients of the same shape — gradient → `none` is a discrete swap,
+   so the scrim would pop off halfway through the 0.24 s while the title
+   beside it faded properly. Same two stops, both at zero alpha. */
+.vp-stage[data-chrome='0'] > .vp-topbar {
+  background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0));
+}
+.vp-stage[data-chrome='0'] > .vp-topbar > .vp-top-cam,
+.vp-stage[data-chrome='0'] > .vp-topbar > .vp-top-title {
+  opacity: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .vp-stage[data-chrome] > .vp-glass {
+  .vp-stage[data-chrome] > .vp-glass,
+  .vp-stage[data-chrome] > .vp-topbar,
+  .vp-stage[data-chrome] > .vp-topbar > .vp-top-cam,
+  .vp-stage[data-chrome] > .vp-topbar > .vp-top-title {
     transition: none;
   }
 }

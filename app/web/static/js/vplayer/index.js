@@ -23,17 +23,9 @@ import { buildPlayerConfig } from './_config.js';
 import { keyAction, seekTarget } from './_keys.js';
 import { mountShell } from './_shell.js';
 import { mountStage } from './_stage.js';
-import { mountTopbar } from './_topbar.js';
+import { mountChrome, teardownChrome } from './_chrome.js';
 import { mountTransport } from './_transport.js';
 import { mountOverlayRow } from './_overlay-row.js';
-import { mountStageChrome } from './_stage-chrome.js';
-import {
-  buildOverflowItems,
-  mountOverflowMenu,
-  VP_MENU_DELETE,
-  VP_MENU_NATIVE,
-} from './_overflow-menu.js';
-import { canNativeFullscreen, handoffToNativePlayer } from '../mediaview/player/_native.js';
 import { makeLiveTrackBuffer } from './timeline/_live-buffer.js';
 import { mountTimeline } from './timeline/index.js';
 import { renderContextPanel } from './panels/index.js';
@@ -45,15 +37,6 @@ import { installBackGesture } from './_back-gesture.js';
 
 /** The single open player, or null. One at a time, by construction. */
 let _open = null;
-
-/** Route an overflow-menu pick to the action it names. */
-function _onMenuPick(id, cfg, stage) {
-  if (id === VP_MENU_DELETE) {
-    cfg.actions.onDelete?.(cfg.item);
-    return;
-  }
-  if (id === VP_MENU_NATIVE) handoffToNativePlayer(stage.video);
-}
 
 /**
  * Feed a live surface. The frames come from the EXISTING poll loop —
@@ -229,29 +212,6 @@ function _autoplay(video) {
 }
 
 /**
- * The top bar and the overflow menu it triggers. One helper because they
- * share a slot and a trigger element, and because splitting them off is
- * what keeps _mountAll under the 60-line ceiling.
- */
-function _mountChrome(shell, cfg, stage) {
-  const topbar = mountTopbar(shell.slot('topbar'), cfg, {
-    onClose: () => closeVideoPlayer(),
-  });
-  // prev/next live on the picture now, not in the title row.
-  const stageChrome = mountStageChrome(shell.slot('stage'), cfg, {
-    onPrev: cfg.actions.onPrev,
-    onNext: cfg.actions.onNext,
-  });
-  const items = buildOverflowItems(cfg, {
-    nativeAvailable: !cfg.flags.live && canNativeFullscreen(stage.video),
-  });
-  const menu = mountOverflowMenu(shell.slot('topbar'), topbar?.trigger, items, (id) =>
-    _onMenuPick(id, cfg, stage),
-  );
-  return { topbar, menu, stageChrome };
-}
-
-/**
  * Turn a swallowed key into something happening to the video.
  *
  * The mapping itself is in _keys.js and is pure; this is the half that
@@ -288,7 +248,7 @@ function _mountAll(cfg) {
   let onKey = (key) => key === 'Escape' && closeVideoPlayer();
   const shell = mountShell(cfg, { onKey: (key, ev) => onKey(key, ev) });
   const stage = mountStage(shell.slot('frame'), cfg);
-  const { topbar, menu, stageChrome } = _mountChrome(shell, cfg, stage);
+  const chrome = mountChrome(shell, cfg, stage, { onClose: () => closeVideoPlayer() });
   // The painter first, so the row can push the operator's choice into
   // it; then the row's own resolved state back into the painter, because
   // a persisted "trails off" wins over the mode's default and the
@@ -390,9 +350,7 @@ function _mountAll(cfg) {
     cfg,
     shell,
     stage,
-    topbar,
-    menu,
-    stageChrome,
+    chrome,
     overlays,
     overlayRow,
     playhead,
@@ -453,9 +411,7 @@ export function closeVideoPlayer() {
   // is discarded whole a few lines below.
   p.playhead?.teardown();
   p.overlays?.teardown();
-  p.menu?.teardown();
-  p.stageChrome?.teardown();
-  p.topbar?.teardown();
+  teardownChrome(p.chrome);
   p.stage?.teardown();
   // Before the shell goes: the gesture is bound to its root, and the
   // teardown also pops the history entry this open pushed.

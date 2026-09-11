@@ -650,55 +650,13 @@
   }
 }
 
-/* ── Empty states ──────────────────────────────────────────────────────────
-   Three different answers to "no tracks", because they need opposite
-   reactions: run the detection, accept that nothing was found, or
-   index the clip for the first time. */
-.vp-tl-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 8px 0 10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.vp-tl-empty-sub {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-.vp-tl-empty[data-state='err'] .vp-tl-empty-text {
-  color: var(--danger);
-}
-
-.vp-tl-rescan {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: var(--vp-tap);
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--vp-radius-sm);
-  /* Never dark-on-dark — this is the one action on an otherwise empty
-     strip and it has to read as pressable. */
-  background: var(--vp-accent);
-  color: #ffffff;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.vp-tl-rescan[disabled] {
-  opacity: 0.6;
-  cursor: default;
-}
-
-@media (hover: hover) {
-  .vp-tl-rescan:not([disabled]):hover {
-    background: #2f6fd0;
-  }
-}
+/* NO EMPTY STATE. A clip with no lanes now shows the rail and nothing
+   else — „Das wiederhol icon raus!". The block that used to sit here
+   had shrunk to a single green round-arrow button on timelapse clips,
+   and that button was never wired: timeline/index.js passed it a
+   `deps.post` its own caller has never supplied, so it rendered, looked
+   like a re-run control and answered no press. The rules went with it
+   (see timeline/_empty-states.js in the history). */
 
 /* ── The lost-track popover ────────────────────────────────────────────────
    The only place in the app that answers "why did the box stop

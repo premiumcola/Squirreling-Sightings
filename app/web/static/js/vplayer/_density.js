@@ -153,9 +153,22 @@ export function fitPlateText(det, cat, geom = {}) {
 }
 
 /**
- * Everything this player still paints ON the picture and expects a
- * finger on: the two navigation chevrons at the sides, and mediaview's
- * transport disc in the middle.
+ * Everything this player paints ON the picture: the two navigation
+ * chevrons at the sides, mediaview's transport disc in the middle, and
+ * the top strip's title and buttons along the top edge.
+ *
+ * THE TOP STRIP JOINED THIS LIST when it stopped being a row above the
+ * picture and became chrome over it (_shell-html.js). A plate landing
+ * under „07.09.2026 · 10:36 · 0:27" or under the ✕ is two pieces of
+ * white text printed through each other, which is the exact failure this
+ * measurement exists to prevent — it is just that until now nothing was
+ * up there to collide with.
+ *
+ * The TITLE, not the strip. The strip spans the full width of the
+ * picture and is mostly empty; feeding its box in would forbid a plate
+ * anywhere in the top 44 px. The title element hugs its own text
+ * (`flex: 0 1 auto` in 36a), so it forbids only the pixels it actually
+ * prints on.
  *
  * The layer switches and the ROI caption used to be in here too. They
  * have left the stage for the shell's own row below the picture, so they
@@ -163,7 +176,16 @@ export function fitPlateText(det, cat, geom = {}) {
  * suppressing labels near the top of the frame for buttons that are no
  * longer there.
  */
-const _CHROME_SEL = '.vp-glass-nav, .mv-player-btn';
+const _CHROME_SEL = '.vp-glass-nav, .mv-player-btn, .vp-top-btn, .vp-top-rate, .vp-top-title';
+
+/**
+ * The subset that stays on screen when the idle auto-hide has faded the
+ * rest: the strip's action buttons (36a fades the scrim, the camera
+ * glyph and the title, never these). They are the reason this file can
+ * no longer answer "faded" with "nothing to avoid" — a ✕ that is still
+ * there is still something a plate must not print through.
+ */
+const _CHROME_PERSISTENT_SEL = '.vp-top-btn, .vp-top-rate';
 
 /**
  * The on-picture chrome, as rects in the PICTURE's own CSS-px space.
@@ -174,26 +196,57 @@ const _CHROME_SEL = '.vp-glass-nav, .mv-player-btn';
  * exactly the widths that need it, and stale the first time any of the
  * three changes.
  *
- * Empty while the chrome is faded out: the stage carries
- * `data-chrome="0"` during playback, and a label suppressed for a button
- * nobody can see is information thrown away for nothing.
+ * While the chrome is faded out — the stage carries `data-chrome="0"`
+ * during playback — only the controls that DO NOT fade are measured. A
+ * label suppressed for a button nobody can see is information thrown
+ * away for nothing; a label printed through a ✕ that is still on the
+ * picture is the opposite mistake.
  *
  * @param {HTMLElement} stageEl
  * @param {{x:number,y:number}} rect  the letterboxed picture rect
  * @returns {Array<{x,y,w,h}>}
  */
+/** The last answer, and what it was an answer to.
+ *
+ * MEASURED ONCE PER STATE, NOT ONCE PER FRAME. The painter asks for the
+ * chrome on every repaint, and a repaint happens per animation frame
+ * while a clip runs. This used to cost nothing during playback — the
+ * faded state returned `[]` before touching the DOM — but it now measures
+ * the controls that stay visible, and `getBoundingClientRect` forces the
+ * browser to flush layout. Doing that 60 times a second for boxes that
+ * cannot move between frames is the kind of cost that shows up as a
+ * stutter on a phone and nowhere in a profile of "our" code.
+ *
+ * The key is everything the answer depends on: which selector (the chrome
+ * is faded or it is not), the stage's own box, and where the letterboxed
+ * picture sits inside it. Nothing else moves those controls. */
+let _rectsKey = '';
+let _rectsValue = [];
+
 export function chromeRects(stageEl, rect) {
-  if (!stageEl || stageEl.dataset.chrome === '0') return [];
+  if (!stageEl) return [];
+  const sel = stageEl.dataset.chrome === '0' ? _CHROME_PERSISTENT_SEL : _CHROME_SEL;
   const stage = stageEl.getBoundingClientRect();
+  const key = `${sel}|${stage.width}x${stage.height}|${rect?.x || 0},${rect?.y || 0}`;
+  if (key === _rectsKey) return _rectsValue;
   const ox = stage.left + (rect?.x || 0);
   const oy = stage.top + (rect?.y || 0);
   const out = [];
-  for (const el of stageEl.querySelectorAll(_CHROME_SEL)) {
+  for (const el of stageEl.querySelectorAll(sel)) {
     const r = el.getBoundingClientRect();
     if (!(r.width > 0) || !(r.height > 0)) continue;
     out.push({ x: r.left - ox, y: r.top - oy, w: r.width, h: r.height });
   }
+  _rectsKey = key;
+  _rectsValue = out;
   return out;
+}
+
+/** Drop the memo — for a teardown, and for any caller that knows the
+ *  chrome moved without the stage resizing. */
+export function forgetChromeRects() {
+  _rectsKey = '';
+  _rectsValue = [];
 }
 
 /**

@@ -31,6 +31,28 @@ test('the delete is marked as the destructive item', () => {
   assert.equal(del.label, 'Aufnahme löschen');
 });
 
+test('the delete carries a trash glyph, not just words', () => {
+  // „papierkorb mit gängigem logo" — and the conventional one: a lid
+  // line, a tapered body and the two slots. Pinned because a delete is
+  // the one row where the glyph is a warning, not decoration, and a
+  // silent drop would leave three identical lines of German prose.
+  const cfg = buildPlayerConfig({ mode: 'recorded', actions: { onDelete: () => {} } });
+  const del = buildOverflowItems(cfg, {}).find((i) => i.id === VP_MENU_DELETE);
+  assert.match(del.icon, /^<svg/);
+  assert.match(del.icon, /M4 7h16/, 'the lid line of the trash can');
+});
+
+test('every offered item carries a glyph', () => {
+  const cfg = buildPlayerConfig({ mode: 'recorded', actions: { onDelete: () => {} } });
+  for (const item of buildOverflowItems(cfg, { nativeAvailable: true })) {
+    assert.match(item.icon, /^<svg/, item.id);
+  }
+  const live = buildPlayerConfig({ mode: 'live' });
+  for (const item of buildOverflowItems(live, {})) {
+    assert.match(item.icon, /^<svg/, item.id);
+  }
+});
+
 test('a mode that permits deleting still offers nothing without a handler', () => {
   // The permission and the handler are different facts. A menu row that
   // calls nothing is worse than an absent one.

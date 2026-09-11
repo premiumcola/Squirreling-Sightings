@@ -255,3 +255,77 @@ test('der Abbau raeumt die Eigenschaft wieder ab', () => {
   h.teardown();
   assert.equal(stage.style.props['--vp-strip-h'], undefined);
 });
+
+// ── the chrome memo ──────────────────────────────────────────────────────
+//
+// The painter asks for the chrome on every repaint, and a repaint happens
+// per animation frame while a clip runs. `getBoundingClientRect` forces a
+// layout flush, so measuring boxes that cannot move between frames is a
+// stutter on a phone and invisible in a profile. The answer is cached
+// against everything it depends on.
+
+const { chromeRects, forgetChromeRects } = await import('../_density.js');
+
+function _stage({ chrome = '1', w = 640, h = 360, calls } = {}) {
+  const el = {
+    dataset: { chrome },
+    getBoundingClientRect() {
+      calls.stage += 1;
+      return { left: 0, top: 0, width: w, height: h };
+    },
+    querySelectorAll() {
+      calls.query += 1;
+      return [
+        {
+          getBoundingClientRect() {
+            calls.child += 1;
+            return { left: 10, top: 10, width: 30, height: 20 };
+          },
+        },
+      ];
+    },
+  };
+  return el;
+}
+
+test('the same state is measured once, not once per frame', () => {
+  forgetChromeRects();
+  const calls = { stage: 0, query: 0, child: 0 };
+  const el = _stage({ calls });
+  const first = chromeRects(el, { x: 0, y: 0 });
+  for (let i = 0; i < 60; i++) chromeRects(el, { x: 0, y: 0 });
+  assert.deepEqual(first, [{ x: 10, y: 10, w: 30, h: 20 }]);
+  assert.equal(calls.child, 1, 'one measurement for sixty frames');
+  // The stage box is the cheap read that decides whether anything moved.
+  assert.equal(calls.query, 1);
+});
+
+test('a resize is a different state and is measured again', () => {
+  forgetChromeRects();
+  const calls = { stage: 0, query: 0, child: 0 };
+  chromeRects(_stage({ calls }), { x: 0, y: 0 });
+  chromeRects(_stage({ calls, w: 800 }), { x: 0, y: 0 });
+  assert.equal(calls.child, 2);
+});
+
+test('fading the chrome in or out is a different state too', () => {
+  forgetChromeRects();
+  const calls = { stage: 0, query: 0, child: 0 };
+  chromeRects(_stage({ calls, chrome: '1' }), { x: 0, y: 0 });
+  chromeRects(_stage({ calls, chrome: '0' }), { x: 0, y: 0 });
+  assert.equal(calls.child, 2, 'the faded state measures a different subset');
+});
+
+test('a letterbox shift is a different state', () => {
+  forgetChromeRects();
+  const calls = { stage: 0, query: 0, child: 0 };
+  const el = _stage({ calls });
+  chromeRects(el, { x: 0, y: 0 });
+  chromeRects(el, { x: 0, y: 40 });
+  assert.equal(calls.child, 2);
+});
+
+test('no stage is no measurement and no crash', () => {
+  forgetChromeRects();
+  assert.deepEqual(chromeRects(null, { x: 0, y: 0 }), []);
+});

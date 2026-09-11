@@ -63,9 +63,15 @@
     <div class="shell">
       {% include 'partials/sidenav.html' %}
       <main class="main">
+        {# Gewitter-Archiv sits directly under the Mediathek, above Sichtungen: it is a short
+        section — a list of episodes and one chart — and it was stranded below two long ones for
+        no reason but the order it happened to be added in („hol das gewitter archiv hoch vor die
+        Sichtungen weil das braucht ja gar nicht so viel platz!"). chrome/sidebar.js's scrollspy
+        list carries the same order; the two must not disagree or the nav highlights the wrong
+        entry on the way past. #}
         {% include 'partials/hero.html' %} {% include 'partials/dashboard.html' %} {% include
-        'partials/mediathek.html' %} {% include 'partials/sichtungen.html' %} {% include
-        'partials/statistik.html' %} {% include 'partials/storms.html' %} {% include
+        'partials/mediathek.html' %} {% include 'partials/storms.html' %} {% include
+        'partials/sichtungen.html' %} {% include 'partials/statistik.html' %} {% include
         'partials/cam_edit.html' %} {% include 'partials/settings.html' %} {% include
         'partials/logs.html' %}
       </main>

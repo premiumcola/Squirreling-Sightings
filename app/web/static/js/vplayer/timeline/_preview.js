@@ -178,6 +178,27 @@ export function mountScrubPreview(rail, opts = {}) {
   el.appendChild(cap);
   rail.appendChild(el);
 
+  /** Lift the bubble clear of everything between the rail and the
+   *  picture.
+   *
+   * It was anchored 12 px above the rail, which on a desktop layout put
+   * it on top of the lane strip and, with the play button reaching up
+   * from the transport row, straight over the play button as well:
+   * „thumb am pc höher […] grad hängt es sogar über dem play button!".
+   *
+   * Measured, not a constant: the lane strip is as tall as the clip has
+   * tracks, so any fixed number is right for exactly one clip. This asks
+   * how far the rail sits below the top of the timeline block and lifts
+   * by that much, which lands the bubble inside the picture with the
+   * whole strip below it — no matter how many lanes there are. */
+  const liftClearOfTimeline = () => {
+    const host = rail.closest('.vp-timeline') || rail.parentElement;
+    if (!host?.getBoundingClientRect) return;
+    const gap = rail.getBoundingClientRect().top - host.getBoundingClientRect().top;
+    if (!Number.isFinite(gap)) return;
+    el.style.setProperty('--vp-scrub-lift', `${Math.max(12, Math.round(gap) + 16)}px`);
+  };
+
   // One pending position, applied on the next frame. See the header:
   // writing style per pointermove is what makes a drag feel heavy.
   let pending = null;
@@ -222,6 +243,9 @@ export function mountScrubPreview(rail, opts = {}) {
     if (!armed || shown) return;
     shown = true;
     el.hidden = false;
+    // Measured on every reveal rather than at mount: the lane strip's
+    // height depends on the clip, and the player is reused across clips.
+    liftClearOfTimeline();
     // Next frame, so the browser has the element laid out at opacity 0
     // before the class flips it — otherwise the transition is skipped
     // and it snaps in, which is the flicker by another route.

@@ -126,12 +126,17 @@ function _initSidebarNav() {
   // 'netz' dropped — Erkennungsprofil no longer has a section of its
   // own; its content lives inline per camera inside #dashboard now. In
   // DOM/scroll order to match the page flow after the reorg.
+  // SAME ORDER AS THE PAGE. The scrollspy walks this list top-down to
+  // decide which nav entry is current, so it has to match the include
+  // order in templates/index.html — Gewitter-Archiv moved up under the
+  // Mediathek, and a list still claiming it sits below Statistik would
+  // light the wrong entry on the way past.
   const sectionIds = [
     'dashboard',
     'media',
+    'storms',
     'achievements',
     'statistik',
-    'storms',
     'cameras',
     'settings',
     'logs',

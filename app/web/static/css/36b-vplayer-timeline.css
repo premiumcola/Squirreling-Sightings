@@ -757,7 +757,11 @@
    clamped inside the rail's own width rather than escaping the player. */
 .vp-scrub-preview {
   position: absolute;
-  bottom: calc(100% + 12px);
+  /* The lift is measured — timeline/_preview.js::liftClearOfTimeline
+     writes it so the bubble clears the lane strip and the transport row
+     and lands inside the picture. 12 px is the fallback for the frame
+     before the first measurement, never a layout anyone sees. */
+  bottom: calc(100% + var(--vp-scrub-lift, 12px));
   /* Above the playhead (3) and the beads (2): it is the thing being
      looked at while it is up, and it is pointer-transparent anyway. */
   z-index: 6;
@@ -800,9 +804,10 @@
 }
 
 /* A finger covers the rail and everything just above it, so on a touch
-   screen the bubble rides clear of the hand instead of under it. */
+   screen the bubble rides clear of the hand — on top of the measured
+   lift, not instead of it. */
 .vp-scrub-preview--touch {
-  bottom: calc(100% + 56px);
+  bottom: calc(100% + var(--vp-scrub-lift, 12px) + 44px);
 }
 
 .vp-scrub-preview-img {

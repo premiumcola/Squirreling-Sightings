@@ -451,27 +451,33 @@ def test_no_thin_borders_in_the_storms_stylesheet():
 # ── wiring ───────────────────────────────────────────────────────────
 
 
-def test_section_is_included_after_weather():
-    # partials/weather.html merged into partials/mediathek.html (Stage 6,
-    # the Mediathek + Wetter-Ereignisse section merge) — the ordering
-    # check now compares against mediathek.html, storms' old neighbour.
+def test_section_sits_directly_under_the_mediathek():
+    """Between Mediathek and Sichtungen, not below Statistik.
+
+    It is a short section — an episode list and one chart — and it was
+    stranded under two long ones by nothing but the order it was added
+    in: „hol das gewitter archiv hoch vor die Sichtungen weil das
+    braucht ja gar nicht so viel platz!"
+    """
     index = _read(_TPL / "index.html")
     assert "partials/storms.html" in index
     assert index.index("partials/storms.html") > index.index("partials/mediathek.html")
+    assert index.index("partials/storms.html") < index.index("partials/sichtungen.html")
     section = _read(_TPL / "partials" / "storms.html")
     assert 'id="storms"' in section and 'id="stormsBody"' in section
     assert 'data-accent="127,174,201"' in section
 
 
-def test_scrollspy_knows_the_new_section():
-    # 'weather' dropped from sectionIds in Stage 6 (merged into 'media') —
-    # storms' relative position is now checked against 'media' instead,
-    # its new neighbour in the list.
+def test_scrollspy_walks_the_sections_in_page_order():
+    """The scrollspy decides the current nav entry by walking this list
+    top-down, so it has to agree with the include order in index.html —
+    a list that still put storms below Statistik would light the wrong
+    entry on the way past."""
     src = _read(_JS / "chrome" / "sidebar.js")
     ids = src[src.index("const sectionIds") :]
     ids = ids[: ids.index("]")]
     assert "'storms'" in ids
-    assert ids.index("'storms'") > ids.index("'media'")
+    assert ids.index("'media'") < ids.index("'storms'") < ids.index("'achievements'")
 
 
 def test_sidenav_entry_uses_the_new_sprite_glyph():

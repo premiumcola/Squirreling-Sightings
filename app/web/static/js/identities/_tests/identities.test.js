@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 globalThis.window = globalThis.window || {};
 globalThis.document = globalThis.document || { getElementById: () => null };
 
-const { personMeta, personAvatar, personsHtml, catsHtml } = await import('../_persons.js');
+const { personMeta, personAvatar, personsHtml, catsHtml, qualityLine } =
+  await import('../_persons.js');
 const { suggestLabel, selectionItems, agreedSuggestion, confidentCount, facesHtml, assignBarHtml } =
   await import('../_faces.js');
 
@@ -115,4 +116,41 @@ test('the assign bar stays away until there is something to assign', () => {
 test('without an agreed name no chip is highlighted', () => {
   const html = assignBarHtml(2, ['Anna', 'Bo'], '');
   assert.ok(!html.includes('is-hint'));
+});
+
+// ── bekannt, ohne Namen ────────────────────────────────────────────────
+
+test('a profile without a name says so in its own line', () => {
+  assert.equal(personMeta({ samples: 4, anonymous: true }), '4 Proben · ohne Namen');
+});
+
+test('the bar always offers the nameless option', () => {
+  assert.match(assignBarHtml(1, [], ''), /data-idy="assign-anon"/);
+});
+
+// ── wie gut das Profil schon ist ───────────────────────────────────────
+
+test('no measurement at all shows nothing rather than a zero', () => {
+  assert.equal(qualityLine(undefined), null);
+  assert.equal(qualityLine(null), null);
+});
+
+test('a profile that could not be measured says what to do about it', () => {
+  // Eine erfundene 0 % sähe aus wie ein schlechtes Profil statt wie ein
+  // ungeprüftes — das ist der Unterschied, den diese Zeile trägt.
+  const q = qualityLine({ state: 'zu-wenig', events: 1 });
+  assert.equal(q.pct, null);
+  assert.match(q.text, /noch nicht messbar/);
+  assert.match(q.hint, /zweiten Auftritt/);
+});
+
+test('a measured profile reports the count, not only the percentage', () => {
+  const q = qualityLine({ state: 'gemessen', rate: 0.778, hits: 7, checked: 9, confused: 0 });
+  assert.equal(q.pct, 78);
+  assert.equal(q.text, '7 von 9 wiedererkannt');
+});
+
+test('confusions are named, because they are the other half of the question', () => {
+  const q = qualityLine({ state: 'gemessen', rate: 0.5, hits: 2, checked: 4, confused: 1 });
+  assert.match(q.text, /1× verwechselt/);
 });

@@ -15,9 +15,49 @@ import { esc } from '../core/dom.js';
 export function personMeta(profile) {
   const n = Number(profile?.samples || 0);
   const parts = [`${n} ${n === 1 ? 'Probe' : 'Proben'}`];
+  if (profile?.anonymous) parts.push('ohne Namen');
   if (profile?.whitelisted) parts.push('Whitelist');
   if (profile?.notes) parts.push(String(profile.notes));
   return parts.join(' · ');
+}
+
+/** PURE: was der Güte-Balken sagt.
+ *
+ *  „Vielleicht das Halbieren, die Menge, und die eine Menge mit der
+ *  anderen erkennen und sagen, wie gut Du's schon erkennst." Genau das
+ *  rechnet der Server (identity_quality.py); hier steht nur, wie man es
+ *  liest — und was man tun kann, wenn es noch nichts zu lesen gibt.
+ *
+ *  Eine 0 % zu zeigen, wo nichts gemessen werden KONNTE, wäre die
+ *  unehrlichste Variante: sie sähe aus wie ein schlechtes Profil statt
+ *  wie ein ungeprüftes. */
+export function qualityLine(quality) {
+  if (!quality) return null;
+  if (quality.state !== 'gemessen') {
+    return {
+      pct: null,
+      text: 'noch nicht messbar',
+      hint: 'Ordne Ausschnitte aus einem zweiten Auftritt zu — aus einem einzigen Clip lässt sich nichts prüfen.',
+    };
+  }
+  const pct = Math.round((Number(quality.rate) || 0) * 100);
+  const parts = [`${quality.hits} von ${quality.checked} wiedererkannt`];
+  if (quality.confused) parts.push(`${quality.confused}× verwechselt`);
+  return { pct, text: parts.join(' · '), hint: '' };
+}
+
+function _qualityHtml(profile) {
+  const q = qualityLine(profile?.quality);
+  if (!q) return '';
+  if (q.pct === null) {
+    return `<span class="idy-q idy-q--none" title="${esc(q.hint)}">${esc(q.text)}</span>`;
+  }
+  const tone = q.pct >= 80 ? 'good' : q.pct >= 50 ? 'mid' : 'weak';
+  return (
+    `<span class="idy-q idy-q--${tone}" title="${esc(q.text)}">` +
+    `<span class="idy-q-track"><span class="idy-q-fill" style="width:${q.pct}%"></span></span>` +
+    `<span class="idy-q-num">${q.pct}\u00a0%</span></span>`
+  );
 }
 
 /** PURE: das Avatar einer Person — ihr erster Ausschnitt, sonst Initiale. */
@@ -48,10 +88,13 @@ const _SHIELD = '<path d="M12 3l7 3v6c0 4-3 6.5-7 9-4-2.5-7-5-7-9V6z"/>';
 function _personCard(profile) {
   const name = profile?.name || '';
   return (
-    `<div class="idy-card${profile?.whitelisted ? ' is-wl' : ''}">` +
+    `<div class="idy-card${profile?.whitelisted ? ' is-wl' : ''}` +
+    `${profile?.anonymous ? ' is-anon' : ''}">` +
     `<span class="idy-av">${personAvatar(profile)}</span>` +
     `<span class="idy-id"><span class="idy-name">${esc(name)}</span>` +
-    `<span class="idy-meta">${esc(personMeta(profile))}</span></span>` +
+    `<span class="idy-meta">${esc(personMeta(profile))}</span>` +
+    _qualityHtml(profile) +
+    `</span>` +
     `<span class="idy-acts">` +
     _iconBtn('wl', name, profile?.whitelisted ? 'Whitelist aus' : 'Whitelist an', _SHIELD) +
     _iconBtn('rename', name, 'Umbenennen oder zusammenführen', _PENCIL) +

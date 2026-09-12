@@ -11,8 +11,11 @@ export const loadIdentities = () => j('/api/identities');
 export const loadUnnamedFaces = (limit = 60) =>
   j(`/api/person-crops?only_unnamed=1&suggest=1&limit=${limit}`);
 
-/** Einen Schwung Ausschnitte unter einem Namen ablegen. */
-export const assignFaces = (name, items) => apiPost('/api/person-crops/assign', { name, items });
+/** Einen Schwung Ausschnitte unter einem Namen ablegen.
+ *  `anonymous` ohne Namen heißt „bekannt, aber ohne Namensnennung" — den
+ *  neutralen Schlüssel vergibt der Server. */
+export const assignFaces = (name, items, { anonymous = false } = {}) =>
+  apiPost('/api/person-crops/assign', { name, items, anonymous });
 
 /** Die sicheren Vorschläge in einem Zug übernehmen. */
 export const autoAssignFaces = () => apiPost('/api/person-crops/auto-assign', {});

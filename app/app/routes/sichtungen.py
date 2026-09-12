@@ -97,6 +97,7 @@ def api_person_flags(name):
         name,
         whitelisted=payload.get("whitelisted"),
         notes=payload.get("notes"),
+        anonymous=payload.get("anonymous"),
     )
     return jsonify({"ok": ok, "profiles": app_state.person_registry.list_profiles()})
 

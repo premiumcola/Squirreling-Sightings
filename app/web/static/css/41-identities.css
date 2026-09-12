@@ -90,10 +90,14 @@
   background: rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
+/* 44 px sind ein Daumennagel — hier ist `cover` richtig. Der Ausschnitt
+   sitzt bewusst oben: ein Personen-Ausschnitt ist hochkant, und die
+   Mitte davon ist der Bauch. */
 .idy-av-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 50% 22%;
 }
 .idy-av-txt {
   color: rgba(var(--sa), 0.9);
@@ -169,31 +173,52 @@
 }
 
 /* ── Das Raster der unsortierten Gesichter ───────────────────────────── */
+/* GANZE BILDER, UNGLEICHE HÖHEN. Vorher steckte jede Kachel in einem
+   festen 3:4-Rahmen mit `object-fit: cover` — und weil ein Personen-
+   Ausschnitt mal schmal und hoch und mal breit und flach ist, hat dieser
+   Rahmen genau das weggeschnitten, worauf man schaut: „ganz oft die Köpfe
+   abgeschnitten oder ich seh nur den Bauch".
+   Also Spaltensatz statt Raster: die Bilder behalten ihr eigenes
+   Seitenverhältnis, fließen untereinander und packen sich dicht — „wenn
+   das Format unterschiedlich ist von den Bildern, das finde ich jetzt
+   nicht so schlimm". `columns` bekommt eine BREITE, keine Anzahl: der
+   Browser entscheidet, wie viele hineinpassen, und am PC werden sie damit
+   von selbst größer statt zahlreicher. */
 .idy-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 8px;
+  columns: 104px;
+  column-gap: 8px;
+}
+@media (min-width: 768px) {
+  .idy-grid {
+    columns: 168px;
+  }
+}
+@media (min-width: 1200px) {
+  .idy-grid {
+    columns: 208px;
+  }
 }
 .idy-face {
   position: relative;
   display: block;
-  aspect-ratio: 3 / 4;
+  width: 100%;
+  margin: 0 0 8px;
   padding: 0;
   border: 0;
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.35);
   overflow: hidden;
   cursor: pointer;
+  break-inside: avoid;
 }
 .idy-face img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
+  width: 100%;
+  height: auto;
 }
-/* Die Auswahl schrumpft das Bild in seinem Rahmen, statt es zu vergrößern
-   — vergrößern verdeckt die Nachbarn, und genau die vergleicht man ja
-   gerade. */
+/* Die Auswahl legt einen Rahmen in der Akzentfarbe um das Bild, statt es
+   zu vergrößern — vergrößern verdeckt die Nachbarn, und genau die
+   vergleicht man ja gerade. */
 .idy-face[aria-pressed='true'] {
   background: rgba(var(--sa), 0.95);
 }
@@ -341,4 +366,86 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* ── Güte eines Profils ──────────────────────────────────────────────────
+   „Wie gut das Profil schon ist" — die Hälfte der Proben erkennt die
+   andere wieder, gerechnet in identity_quality.py. Ein schmaler Balken
+   plus Zahl; die Erklärung steht im `title`, nicht als dritte Textzeile
+   auf einer Karte, die schon zwei hat. */
+.idy-q {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.idy-q-track {
+  width: 52px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.idy-q-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: currentColor;
+}
+.idy-q--good {
+  color: #5fc98a;
+}
+.idy-q--mid {
+  color: rgba(var(--sa), 0.95);
+}
+.idy-q--weak {
+  color: #e07a5f;
+}
+.idy-q--none {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ── Bekannt, ohne Namen ─────────────────────────────────────────────────
+   Kein weiterer Namensvorschlag, sondern die Entscheidung, KEINEN Namen
+   zu vergeben — deshalb eine eigene Zeile unter dem Eingabefeld und
+   bewusst unauffälliger als die Chips darüber. */
+.idy-anon {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .idy-anon:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+/* Ein namenloses Profil bekommt einen ruhigeren Grundton als ein
+   benanntes — man soll auf einen Blick sehen, dass hier bewusst kein
+   Name steht. */
+.idy-card.is-anon .idy-name {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Die eine Zeile, die sagt, was hier eigentlich verglichen wird. */
+.idy-note {
+  margin-top: -2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.idy-note b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }

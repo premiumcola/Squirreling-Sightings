@@ -87,6 +87,12 @@ export function assignBarHtml(count, names, agreed) {
     `<form class="idy-new"><input type="text" class="idy-input" placeholder="Neue Person…" ` +
     `aria-label="Neue Person" autocomplete="off">` +
     `<button type="submit" class="idy-add">Zuordnen</button></form>` +
+    // „Bekannt, aber ohne Namensnennung." Eine eigene Zeile, weil es
+    // kein weiterer Namensvorschlag ist, sondern die Entscheidung, KEINEN
+    // Namen zu vergeben. Der Schlüssel („Bekannt 3") kommt vom Server;
+    // er dient nur dazu, zwei unbenannte Personen auseinanderzuhalten.
+    `<button type="button" class="idy-anon" data-idy="assign-anon">` +
+    `+ Bekannt, ohne Namen</button>` +
     `</div>`
   );
 }

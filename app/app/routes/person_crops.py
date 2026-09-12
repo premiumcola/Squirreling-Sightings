@@ -31,6 +31,8 @@ import threading
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
+from ..cat_identity import profile_crops, profile_samples
+from ..identity_quality import evaluate
 from ..person_crops import sweep_person_crops
 from ._identity_helpers import (
     SUGGEST_BUDGET,
@@ -54,34 +56,40 @@ def _events_dir():
     return getattr(app_state.store, "events_dir", None)
 
 
-def _profile_card(profile: dict) -> dict:
+def _profile_card(profile: dict, quality: dict) -> dict:
     """Ein Profil so, wie die Karte es braucht.
 
-    Ohne die Hashes: das sind je Probe sechzehn Hexziffern, die niemand
-    ansieht, und sie machen die Antwort um ein Vielfaches größer als den
-    Teil, der tatsächlich angezeigt wird. Die Ausschnitte kommen als
-    fertige URLs zurück, damit die Oberfläche den Speicheraufbau nicht
-    kennen muss.
+    Ohne die Proben selbst: das sind je Stück sechzehn Hexziffern, die
+    niemand ansieht, und sie machen die Antwort um ein Vielfaches größer
+    als den Teil, der tatsächlich angezeigt wird. Die Ausschnitte kommen
+    als fertige URLs zurück, damit die Oberfläche den Speicheraufbau
+    nicht kennen muss.
     """
+    name = profile.get("name")
     return {
-        "name": profile.get("name"),
+        "name": name,
         "whitelisted": bool(profile.get("whitelisted")),
+        "anonymous": bool(profile.get("anonymous")),
         "notes": profile.get("notes", ""),
-        "samples": len(profile.get("hashes") or []),
-        "crops": [f"/media/{c}" for c in (profile.get("crops") or [])],
+        "samples": len(profile_samples(profile)),
+        "crops": [f"/media/{c}" for c in profile_crops(profile)],
+        "quality": (quality.get("profiles") or {}).get(name),
     }
 
 
 @bp.get('/api/identities')
 def api_identities():
     """Alles, was die Identitäten-Karte in einem Rutsch braucht: die
-    benannten Personen, die Katzen und wie viele Gesichter noch
-    unsortiert herumliegen."""
+    benannten Personen, die Katzen, wie viele Gesichter noch unsortiert
+    herumliegen — und wie gut die Profile tatsächlich schon erkennen."""
     rows = walk_person_crops(_events_dir(), only_unnamed=False)
+    persons = app_state.person_registry
+    quality = evaluate(persons.list_profiles(), persons.threshold)
     return jsonify(
         {
-            "persons": [_profile_card(p) for p in app_state.person_registry.list_profiles()],
-            "cats": [_profile_card(p) for p in app_state.cat_registry.list_profiles()],
+            "persons": [_profile_card(p, quality) for p in persons.list_profiles()],
+            "cats": [_profile_card(p, {}) for p in app_state.cat_registry.list_profiles()],
+            "quality": quality.get("total") or {},
             "crops": {
                 "total": len(rows),
                 "unnamed": sum(1 for r in rows if not r.get("person_name")),
@@ -151,14 +159,23 @@ def api_person_crops_assign():
     """
     payload = request.get_json(force=True, silent=True) or {}
     name = (payload.get("name") or "").strip()
+    anonymous = bool(payload.get("anonymous"))
     items = payload.get("items")
     if not isinstance(items, list) or not items:
         items = [payload]
     items = [i for i in items if isinstance(i, dict) and (i.get("relpath") or "").strip()]
+    registry = app_state.person_registry
+    # „Bekannt, aber ohne Namensnennung": ohne Namen, aber mit gesetztem
+    # Merker legt der Server das nächste neutrale Profil an. Ein
+    # Schlüssel muss es trotzdem geben, sonst ließen sich zwei unbenannte
+    # Personen nicht auseinanderhalten — also eine Nummer statt eines
+    # Namens, und die vergibt der Server, damit zwei Geräte nicht
+    # gleichzeitig dieselbe erfinden.
+    if anonymous and not name:
+        name = registry.next_anonymous_name()
     if not items or not name:
         return jsonify({"ok": False, "error": "relpath und name erforderlich"}), 400
     whitelisted = payload.get("whitelisted")
-    registry = app_state.person_registry
     filed = 0
     for item in items:
         if file_crop(
@@ -169,11 +186,12 @@ def api_person_crops_assign():
             name,
             whitelisted=None if whitelisted is None else bool(whitelisted),
             notes=payload.get("notes", ""),
+            anonymous=True if anonymous else None,
         ):
             filed += 1
     if not filed:
         return jsonify({"ok": False, "error": "Ausschnitt nicht lesbar"}), 400
-    return jsonify({"ok": True, "filed": filed, "profiles": registry.list_profiles()})
+    return jsonify({"ok": True, "filed": filed, "name": name})
 
 
 @bp.post('/api/person-crops/auto-assign')

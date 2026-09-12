@@ -30,7 +30,7 @@ import {
 const MOUNT = 'identityPanel';
 const SECTION = 'set-profiles';
 
-let _data = { persons: [], cats: [], crops: {} };
+let _data = { persons: [], cats: [], crops: {}, quality: {} };
 let _faces = [];
 let _loaded = false;
 let _busy = false;
@@ -45,6 +45,7 @@ function _names() {
 }
 
 function _topHtml() {
+  const total = _data.quality?.checked ? _data.quality : null;
   const open = _data.crops?.unnamed || 0;
   const auto = _data.crops?.auto || 0;
   const ready = confidentCount(_faces);
@@ -60,7 +61,17 @@ function _topHtml() {
     `<button type="button" class="idy-btn" data-idy="sweep">Gesichter suchen</button>` +
     `<button type="button" class="idy-btn idy-btn-go" data-idy="auto"${ready ? '' : ' disabled'}>` +
     `Vorschläge übernehmen${ready ? ` (${ready})` : ''}</button>` +
-    `</div></div>`
+    `</div></div>` +
+    // EINE Zeile, einmal, und dann nie wieder erklärt: was hier
+    // verglichen wird, ist der ganze Personen-Ausschnitt — Silhouette,
+    // Kleidung, Ort, Licht — und nicht das Gesicht. Wer das nicht weiß,
+    // hält eine schwache Quote für einen Fehler statt für die Physik des
+    // Verfahrens.
+    `<div class="idy-note">Verglichen wird der ganze Personen-Ausschnitt ` +
+    `(Silhouette, Kleidung, Ort), nicht das Gesicht. Zuordnungen von ` +
+    `verschiedenen Tagen bringen deshalb am meisten.` +
+    (total ? ` <b>${total.hits}/${total.checked}</b> wiedererkannt.` : '') +
+    `</div>`
   );
 }
 
@@ -107,11 +118,12 @@ export async function loadIdentities({ keepSelection = false } = {}) {
       persons: summary.persons || [],
       cats: summary.cats || [],
       crops: summary.crops || {},
+      quality: summary.quality || {},
     };
     _faces = crops.items || [];
     _loaded = true;
   } catch {
-    _data = { persons: [], cats: [], crops: {} };
+    _data = { persons: [], cats: [], crops: {}, quality: {} };
     _faces = [];
   }
   _paint();
@@ -129,13 +141,13 @@ async function _guard(label, fn) {
   }
 }
 
-async function _assign(name) {
+async function _assign(name, { anonymous = false } = {}) {
   const items = selectionItems(_faces, _selected);
-  if (!items.length || !name) return;
+  if (!items.length || (!name && !anonymous)) return;
   await _guard('Zuordnen', async () => {
-    const res = await api.assignFaces(name, items);
+    const res = await api.assignFaces(name, items, { anonymous });
     if (!res?.ok) throw new Error(res?.error || 'abgelehnt');
-    showToast(`${res.filed} × „${name}" gemerkt`, 'success');
+    showToast(`${res.filed} × „${res.name || name}" gemerkt`, 'success');
     await loadIdentities();
   });
 }
@@ -240,6 +252,7 @@ function _onClick(e) {
   const { idy, name } = btn.dataset;
   if (_ACTIONS[idy]) return _ACTIONS[idy]();
   if (idy === 'assign') return _assign(name);
+  if (idy === 'assign-anon') return _assign('', { anonymous: true });
   if (idy === 'wl') return _toggleWhitelist(name);
   if (idy === 'forget') return _forget(name);
   if (idy === 'rename') return _startRename(btn.closest('.idy-card'), name);

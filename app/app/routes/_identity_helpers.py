@@ -136,10 +136,15 @@ def file_crop(
     whitelisted: bool | None = None,
     notes: str = "",
     auto: bool = False,
+    anonymous: bool | None = None,
 ) -> bool:
     """Einen Ausschnitt einer Person zuordnen: Probe in die Registry, Name
     auf das Ereignis. Beides oder nichts — ein Profil ohne das Ereignis
-    dahinter fällt beim nächsten Lauf wieder in den unbenannten Haufen."""
+    dahinter fällt beim nächsten Lauf wieder in den unbenannten Haufen.
+
+    Die Clip-Kennung wandert mit in die Registry: ohne sie lässt sich
+    später nicht mehr trennen, was aus demselben Auftritt stammt, und die
+    Güteprüfung (`identity_quality.py`) misst dann sich selbst."""
     img = read_crop(storage_root, (item or {}).get("relpath") or "")
     if img is None or not name:
         return False
@@ -149,6 +154,8 @@ def file_crop(
         whitelisted=bool(whitelisted),
         notes=notes,
         relpath=item.get("relpath") or "",
+        event_id=(item.get("event_id") or "").strip(),
+        anonymous=anonymous,
     )
     if not ok:
         return False

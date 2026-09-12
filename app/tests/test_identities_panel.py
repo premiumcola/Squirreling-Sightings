@@ -22,7 +22,7 @@ import cv2
 import numpy as np
 import pytest
 
-from app.cat_identity import IdentityRegistry
+from app.cat_identity import IdentityRegistry, profile_crops, profile_samples
 from app.routes._identity_helpers import (
     AUTO_MAX_DISTANCE,
     clear_person,
@@ -74,7 +74,11 @@ def test_filing_a_crop_writes_BOTH_halves(bench):
     registry, store, root = bench
     item = {"relpath": _write_crop(root, "crops/a.jpg", 1), "cam_id": "cam_a", "event_id": "e1"}
     assert file_crop(registry, store, root, item, "Anna")
-    assert registry.get_profile("Anna")["crops"] == ["crops/a.jpg"]
+    profile = registry.get_profile("Anna")
+    assert profile_crops(profile) == ["crops/a.jpg"]
+    # Die Clip-Kennung wandert mit — ohne sie misst die Güteprüfung
+    # später zwei Ausschnitte derselben Sekunde gegeneinander.
+    assert profile_samples(profile)[0]["event_id"] == "e1"
     assert store.events[("cam_a", "e1")]["person_name"] == "Anna"
 
 

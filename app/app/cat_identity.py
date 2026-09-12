@@ -26,11 +26,45 @@ def hamming_hex(a: str, b: str) -> int:
     return bin(int(a, 16) ^ int(b, 16)).count("1")
 
 
-#: Wie viele Ausschnitt-Verweise ein Profil mitführt. Sie sind das
-#: Gesicht des Profils in der Oberfläche — der erste ist das Avatar, der
-#: Rest der kleine Stapel dahinter. Mehr als eine Handvoll bringt nichts
-#: und bläht die Registry auf, die sonst nur Hashes enthält.
+#: Wie viele Ausschnitt-Verweise die Oberfläche je Profil bekommt — der
+#: erste ist das Avatar, der Rest der kleine Stapel dahinter. Abgeleitet
+#: aus den Proben, nicht getrennt geführt.
 MAX_PROFILE_CROPS = 8
+
+#: Obergrenze der Proben je Profil. Jede kostet rund 150 Byte; fünfhundert
+#: sind also 75 KB und mehr Material, als die Güteprüfung braucht. Die
+#: ältesten fallen hinten heraus.
+MAX_PROFILE_SAMPLES = 500
+
+
+def profile_samples(profile: dict) -> list[dict]:
+    """Die Proben eines Profils, neueste zuerst.
+
+    EIN Ort für die Wahrheit, mit einer Rückfallschiene: Profile, die vor
+    dem 2026-09-13 geschrieben wurden, haben nur eine flache
+    ``hashes``-Liste ohne Herkunft. Die werden hier als Proben ohne
+    Ereignis nachgereicht, damit der Abgleich sie weiter findet — für die
+    Güteprüfung taugen sie nicht, weil man ohne Ereignis nicht trennen
+    kann, was aus demselben Moment stammt.
+    """
+    out = [s for s in (profile.get("samples") or []) if isinstance(s, dict) and s.get("h")]
+    known = {s["h"] for s in out}
+    for h in profile.get("hashes") or []:
+        if h not in known:
+            out.append({"h": h, "relpath": "", "event_id": ""})
+    return out
+
+
+def profile_crops(profile: dict) -> list[str]:
+    """Die Bilder, die die Oberfläche als Gesicht des Profils zeigt."""
+    seen = []
+    for s in profile_samples(profile):
+        rel = s.get("relpath")
+        if rel and rel not in seen:
+            seen.append(rel)
+        if len(seen) >= MAX_PROFILE_CROPS:
+            break
+    return seen
 
 
 class IdentityRegistry:
@@ -58,7 +92,12 @@ class IdentityRegistry:
         return next((p for p in self.data.get("profiles", []) if p.get("name") == name), None)
 
     def set_profile_flags(
-        self, name: str, *, whitelisted: bool | None = None, notes: str | None = None
+        self,
+        name: str,
+        *,
+        whitelisted: bool | None = None,
+        notes: str | None = None,
+        anonymous: bool | None = None,
     ):
         p = self.get_profile(name)
         if not p:
@@ -67,8 +106,27 @@ class IdentityRegistry:
             p["whitelisted"] = bool(whitelisted)
         if notes is not None:
             p["notes"] = notes
+        if anonymous is not None:
+            p["anonymous"] = bool(anonymous)
         self._save()
         return True
+
+    def next_anonymous_name(self, prefix: str = "Bekannt") -> str:
+        """Der nächste freie neutrale Name.
+
+        „Ich würde gerne bestimmte Personen … auf neutral oder bekannt,
+        aber ohne Namensnennung aufnehmen." Ein Profil braucht trotzdem
+        einen Schlüssel, sonst lassen sich zwei unbenannte Personen nicht
+        auseinanderhalten — also eine Nummer statt eines Namens. Gezählt
+        wird über ALLE Profile, nicht nur die neutralen: sonst käme nach
+        einer Umbenennung von „Bekannt 2" zu „Anna" ein zweites
+        „Bekannt 2" heraus.
+        """
+        used = {(p.get("name") or "").strip() for p in self.list_profiles()}
+        n = 1
+        while f"{prefix} {n}" in used:
+            n += 1
+        return f"{prefix} {n}"
 
     def match_details(self, crop: np.ndarray) -> dict | None:
         h = dhash_bgr(crop)
@@ -77,9 +135,9 @@ class IdentityRegistry:
         best = None
         best_dist = 999
         for p in self.data.get("profiles", []):
-            for sample in p.get("hashes", []):
+            for sample in profile_samples(p):
                 try:
-                    d = hamming_hex(h, sample)
+                    d = hamming_hex(h, sample["h"])
                 except Exception:
                     continue
                 if d < best_dist:
@@ -90,6 +148,7 @@ class IdentityRegistry:
                 "name": best.get("name"),
                 "distance": best_dist,
                 "whitelisted": bool(best.get("whitelisted", False)),
+                "anonymous": bool(best.get("anonymous", False)),
                 "notes": best.get("notes", ""),
             }
         return None
@@ -106,13 +165,22 @@ class IdentityRegistry:
         whitelisted: bool = False,
         notes: str = "",
         relpath: str = "",
+        event_id: str = "",
+        anonymous: bool | None = None,
     ):
         """Filed under `name`, creating the profile on the first crop.
 
-        `relpath` is the picture the hash was taken from. It is kept so
-        the identity panel has a face to show — without it a profile is
-        a name and sixteen hex digits, which is nothing to recognise a
-        person by.
+        `relpath` is the picture the hash was taken from and `event_id`
+        the clip it came from. Both are kept for a reason beyond showing
+        a thumbnail: WITHOUT THE CLIP, THE PROFILE CANNOT BE MEASURED.
+        Two crops out of the same clip are the same instant from two
+        angles of the same second — testing one against the other would
+        report a recognition rate that says nothing. The quality check in
+        `identity_quality.py` therefore splits by clip, which it can only
+        do if the clip is written down here.
+
+        `anonymous` marks the profile as known-but-unnamed („bekannt,
+        aber ohne Namensnennung"). None leaves an existing flag alone.
         """
         h = dhash_bgr(crop)
         if not h:
@@ -120,20 +188,25 @@ class IdentityRegistry:
         profiles = self.data.setdefault("profiles", [])
         profile = next((p for p in profiles if p.get("name") == name), None)
         if profile is None:
-            profile = {"name": name, "hashes": [], "whitelisted": bool(whitelisted), "notes": notes}
+            profile = {
+                "name": name,
+                "samples": [],
+                "whitelisted": bool(whitelisted),
+                "anonymous": bool(anonymous),
+                "notes": notes,
+            }
             profiles.append(profile)
-        profile.setdefault("hashes", [])
+        profile.setdefault("samples", [])
         profile.setdefault("whitelisted", bool(whitelisted))
         if notes:
             profile["notes"] = notes
-        if h not in profile["hashes"]:
-            profile["hashes"].append(h)
-        if relpath:
-            crops = profile.setdefault("crops", [])
-            if relpath in crops:
-                crops.remove(relpath)
-            crops.insert(0, relpath)
-            del crops[MAX_PROFILE_CROPS:]
+        if anonymous is not None:
+            profile["anonymous"] = bool(anonymous)
+        if not any(s.get("h") == h for s in profile_samples(profile)):
+            profile["samples"].insert(
+                0, {"h": h, "relpath": relpath or "", "event_id": event_id or ""}
+            )
+            del profile["samples"][MAX_PROFILE_SAMPLES:]
         self._save()
         return True
 
@@ -151,15 +224,18 @@ class IdentityRegistry:
         target = self.get_profile(new)
         if target is None:
             source["name"] = new
+            # Ein Profil, dem man einen echten Namen gibt, ist nicht mehr
+            # das namenlose „bekannt" — das ist der natürliche Weg nach
+            # oben und braucht keinen zweiten Schalter.
+            source["anonymous"] = False
         else:
-            for h in source.get("hashes", []):
-                if h not in target.setdefault("hashes", []):
-                    target["hashes"].append(h)
-            crops = target.setdefault("crops", [])
-            for relpath in source.get("crops", []):
-                if relpath not in crops:
-                    crops.append(relpath)
-            del crops[MAX_PROFILE_CROPS:]
+            known = {s["h"] for s in profile_samples(target)}
+            merged = target.setdefault("samples", [])
+            for s in profile_samples(source):
+                if s["h"] not in known:
+                    merged.append(s)
+                    known.add(s["h"])
+            del merged[MAX_PROFILE_SAMPLES:]
             target["whitelisted"] = bool(target.get("whitelisted")) or bool(
                 source.get("whitelisted")
             )

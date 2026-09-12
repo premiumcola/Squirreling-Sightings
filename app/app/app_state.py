@@ -52,6 +52,12 @@ store: EventStore | None = None
 settings: SettingsStore | None = None
 cat_registry: IdentityRegistry | None = None
 person_registry: IdentityRegistry | None = None
+#: Die GEGENPROBE zum Personenregister: was ausdrücklich KEINE Person ist.
+#: „es ist 2 mal ein baumstamm drauf als person" — derselbe Baumstamm wird
+#: jeden Tag wieder gefunden, also wird er einmal getaggt und ab dann
+#: automatisch erkannt und aussortiert. Dieselbe Klasse, eigene Datei; die
+#: Einträge dürfen nie in der Personenliste auftauchen.
+reject_registry: IdentityRegistry | None = None
 timelapse_builder: TimelapseBuilder | None = None
 bird_dossiers: BirdDossierService | None = None
 first_since_detector: FirstSinceDetector | None = None

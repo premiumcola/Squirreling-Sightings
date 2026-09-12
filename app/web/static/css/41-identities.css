@@ -250,6 +250,12 @@
   border-bottom: 2px solid rgba(var(--sa), 1);
   transform: rotate(-45deg);
 }
+/* Eine Kachel, die das Ablehnungsregister schon kennt, wird gedämpft
+   statt versteckt: verschwinden zu lassen, was man gerade getaggt hat,
+   sieht aus wie ein verlorener Tipp. Beim nächsten Laden ist sie weg. */
+.idy-face.is-reject {
+  opacity: 0.45;
+}
 .idy-hint {
   position: absolute;
   right: 0;
@@ -413,6 +419,33 @@
    Kein weiterer Namensvorschlag, sondern die Entscheidung, KEINEN Namen
    zu vergeben — deshalb eine eigene Zeile unter dem Eingabefeld und
    bewusst unauffälliger als die Chips darüber. */
+/* Die zwei Wege, die KEINEN Namen vergeben, stehen nebeneinander unter
+   dem Eingabefeld — der eine sagt „jemand, nur ohne Namen", der andere
+   „gar kein Jemand". Beide bewusst ruhiger als die Namens-Chips darüber. */
+.idy-bar-alt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.idy-hint.is-reject {
+  color: var(--muted);
+}
+.idy-reject {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e07a5f;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .idy-reject:hover {
+    background: rgba(224, 122, 95, 0.18);
+  }
+}
 .idy-anon {
   justify-self: start;
   min-height: 44px;

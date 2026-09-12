@@ -25,6 +25,7 @@ import {
   selectionItems,
   agreedSuggestion,
   confidentCount,
+  knownRejectCount,
 } from './_faces.js';
 
 const MOUNT = 'identityPanel';
@@ -49,10 +50,18 @@ function _topHtml() {
   const open = _data.crops?.unnamed || 0;
   const auto = _data.crops?.auto || 0;
   const ready = confidentCount(_faces);
+  const rejected = _data.crops?.rejected || 0;
+  const known = knownRejectCount(_faces);
   const stat = [`${_data.persons.length} benannt`, `${open} offen`];
   // Was die Maschine selbst zugeordnet hat, gehört sichtbar dazu — das
   // ist die Zahl, die man gelegentlich nachprüfen will.
   if (auto) stat.push(`${auto} automatisch`);
+  // Und was ausdrücklich keine Person ist. Die zweite Zahl ist die
+  // interessantere: so oft hat das Taggen von neulich gerade Arbeit
+  // gespart.
+  if (rejected) {
+    stat.push(`${rejected} × keine Person${known ? ` (${known} hier erkannt)` : ''}`);
+  }
   return (
     `<div class="idy-top">` +
     `<div class="idy-stat">${stat.join(' · ')}</div>` +
@@ -148,6 +157,17 @@ async function _assign(name, { anonymous = false } = {}) {
     const res = await api.assignFaces(name, items, { anonymous });
     if (!res?.ok) throw new Error(res?.error || 'abgelehnt');
     showToast(`${res.filed} × „${res.name || name}" gemerkt`, 'success');
+    await loadIdentities();
+  });
+}
+
+async function _reject() {
+  const items = selectionItems(_faces, _selected);
+  if (!items.length) return;
+  await _guard('Ablehnen', async () => {
+    const res = await api.rejectFaces(items);
+    if (!res?.ok) throw new Error(res?.error || 'abgelehnt');
+    showToast(`${res.rejected} × „${res.bucket}" gemerkt`, 'success');
     await loadIdentities();
   });
 }
@@ -253,6 +273,7 @@ function _onClick(e) {
   if (_ACTIONS[idy]) return _ACTIONS[idy]();
   if (idy === 'assign') return _assign(name);
   if (idy === 'assign-anon') return _assign('', { anonymous: true });
+  if (idy === 'reject') return _reject();
   if (idy === 'wl') return _toggleWhitelist(name);
   if (idy === 'forget') return _forget(name);
   if (idy === 'rename') return _startRename(btn.closest('.idy-card'), name);

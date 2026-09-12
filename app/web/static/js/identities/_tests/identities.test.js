@@ -15,8 +15,16 @@ globalThis.document = globalThis.document || { getElementById: () => null };
 
 const { personMeta, personAvatar, personsHtml, catsHtml, qualityLine } =
   await import('../_persons.js');
-const { suggestLabel, selectionItems, agreedSuggestion, confidentCount, facesHtml, assignBarHtml } =
-  await import('../_faces.js');
+const {
+  suggestLabel,
+  selectionItems,
+  agreedSuggestion,
+  confidentCount,
+  facesHtml,
+  assignBarHtml,
+  isKnownReject,
+  knownRejectCount,
+} = await import('../_faces.js');
 
 test('the line under a name counts samples and says Probe in the singular', () => {
   assert.equal(personMeta({ samples: 1 }), '1 Probe');
@@ -153,4 +161,39 @@ test('a measured profile reports the count, not only the percentage', () => {
 test('confusions are named, because they are the other half of the question', () => {
   const q = qualityLine({ state: 'gemessen', rate: 0.5, hits: 2, checked: 4, confused: 1 });
   assert.match(q.text, /1× verwechselt/);
+});
+
+// ── „das ist gar keine Person" ─────────────────────────────────────────
+
+test('a known reject wins over a name suggestion on the tile', () => {
+  // Für etwas, von dem der Betreiber gesagt hat, es sei kein Mensch,
+  // einen Namen vorzuschlagen wäre die falsche Frage — und er hat sie
+  // schon beantwortet.
+  const row = { reject: { name: 'Keine Person' }, suggest: { name: 'Anna', confident: true } };
+  assert.equal(suggestLabel(row), '∅ Keine Person');
+  assert.ok(isKnownReject(row));
+});
+
+test('without a reject the tile still suggests a name', () => {
+  assert.equal(suggestLabel({ suggest: { name: 'Anna', confident: true } }), 'Anna?');
+  assert.ok(!isKnownReject({ suggest: { name: 'Anna' } }));
+});
+
+test('the header can say how much yesterday’s tagging saved today', () => {
+  assert.equal(
+    knownRejectCount([{ reject: { name: 'Keine Person' } }, { suggest: { name: 'Anna' } }, {}]),
+    1,
+  );
+  assert.equal(knownRejectCount([]), 0);
+});
+
+test('a tile the register already knows is dimmed, not hidden', () => {
+  // Verschwinden zu lassen, was man gerade getaggt hat, sieht aus wie
+  // ein verlorener Tipp.
+  const html = facesHtml([{ relpath: 'a', url: '/m/a.jpg', reject: { name: 'X' } }], new Set());
+  assert.match(html, /class="idy-face is-reject"/);
+});
+
+test('the bar always offers the not-a-person way out', () => {
+  assert.match(assignBarHtml(2, ['Anna'], ''), /data-idy="reject"/);
 });

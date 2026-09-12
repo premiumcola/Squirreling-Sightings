@@ -25,19 +25,24 @@ darüber.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
+import time
 
 from flask import Blueprint, jsonify, request
 
 from .. import app_state
-from ..cat_identity import profile_crops, profile_samples
+from ..cat_identity import IdentityRegistry, profile_crops, profile_samples
+from ..detection_feedback import record_verdict
 from ..identity_quality import evaluate
 from ..person_crops import sweep_person_crops
 from ._identity_helpers import (
+    REJECT_BUCKET,
     SUGGEST_BUDGET,
     clear_person,
     file_crop,
+    reject_crop,
     suggest_for,
     walk_person_crops,
 )
@@ -54,6 +59,15 @@ _sweep_lock = threading.Lock()
 
 def _events_dir():
     return getattr(app_state.store, "events_dir", None)
+
+
+def _rejects():
+    """Das Ablehnungsregister — oder ein leeres, wenn der Boot es nie
+    gebaut hat (alte Instanz, Testaufbau). Ein fehlendes Gegenregister
+    darf die Karte nicht umbringen."""
+    return app_state.reject_registry or IdentityRegistry(
+        app_state.storage_root / "reject_registry.json"
+    )
 
 
 def _profile_card(profile: dict, quality: dict) -> dict:
@@ -94,6 +108,7 @@ def api_identities():
                 "total": len(rows),
                 "unnamed": sum(1 for r in rows if not r.get("person_name")),
                 "auto": sum(1 for r in rows if r.get("person_source") == "auto"),
+                "rejected": sum(len(profile_samples(p)) for p in _rejects().list_profiles()),
             },
         }
     )
@@ -114,7 +129,13 @@ def api_person_crops():
     rows = walk_person_crops(_events_dir(), only_unnamed=only_unnamed)
     page = rows[offset : offset + limit]
     if request.args.get('suggest') in ('1', 'true', 'yes'):
-        suggest_for(app_state.person_registry, app_state.storage_root, page, SUGGEST_BUDGET)
+        suggest_for(
+            app_state.person_registry,
+            app_state.storage_root,
+            page,
+            SUGGEST_BUDGET,
+            app_state.reject_registry,
+        )
     return jsonify({"items": page, "total": len(rows)})
 
 
@@ -208,9 +229,13 @@ def api_person_crops_auto_assign():
     if not registry.list_profiles():
         return jsonify({"ok": False, "error": "Noch keine benannte Person"}), 400
     rows = walk_person_crops(_events_dir(), only_unnamed=True)
-    suggest_for(registry, app_state.storage_root, rows, SUGGEST_BUDGET)
+    suggest_for(registry, app_state.storage_root, rows, SUGGEST_BUDGET, app_state.reject_registry)
     filed = 0
     for row in rows:
+        # Was als „keine Person" abgelehnt wurde, bekommt vom
+        # automatischen Lauf erst recht keinen Namen.
+        if row.get("reject"):
+            continue
         hint = row.get("suggest") or {}
         if not hint.get("confident"):
             continue
@@ -232,3 +257,52 @@ def api_person_crops_clear():
         (payload.get("event_id") or "").strip(),
     )
     return jsonify({"ok": ok}), (200 if ok else 404)
+
+
+@bp.post('/api/person-crops/reject')
+def api_person_crops_reject():
+    """„Das ist gar keine Person."
+
+    „es ist 2 mal ein baumstamm drauf als person" — der Detektor legt ein
+    Personen-Rechteck um einen Baumstamm, und weil der Baumstamm morgen
+    noch da steht, kommt er jeden Tag wieder. Einmal taggen muss also
+    zweierlei bewirken: er verschwindet aus dem Stapel, UND er wird beim
+    nächsten Mal von allein erkannt.
+
+    Der Widerspruch gegen den Detektor wird zusätzlich im
+    Erkennungs-Korpus gebucht (`detection_feedback.record_verdict`) —
+    derselbe Weg, den die Label-Korrektur in der Mediathek nimmt. Ein
+    zweiter eigener wäre eine zweite Wahrheit über dieselbe Aussage.
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    bucket = (payload.get("bucket") or "").strip() or REJECT_BUCKET
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        items = [payload]
+    items = [i for i in items if isinstance(i, dict) and (i.get("relpath") or "").strip()]
+    if not items:
+        return jsonify({"ok": False, "error": "relpath erforderlich"}), 400
+    rejects = _rejects()
+    done = 0
+    booked = set()
+    for item in items:
+        if not reject_crop(rejects, app_state.store, app_state.storage_root, item, bucket):
+            continue
+        done += 1
+        event_id = (item.get("event_id") or "").strip()
+        # Je Ereignis EIN Verdikt, auch wenn drei seiner Ausschnitte
+        # abgelehnt werden — sonst zählt der Korpus eine Aussage dreifach.
+        if event_id and event_id not in booked:
+            booked.add(event_id)
+            with contextlib.suppress(Exception):
+                record_verdict(
+                    app_state.storage_root,
+                    event_id=event_id,
+                    correct=False,
+                    ts=time.time(),
+                    source="identities",
+                    cam_id=(item.get("cam_id") or "").strip() or None,
+                )
+    if not done:
+        return jsonify({"ok": False, "error": "Ausschnitt nicht lesbar"}), 400
+    return jsonify({"ok": True, "rejected": done, "bucket": bucket})

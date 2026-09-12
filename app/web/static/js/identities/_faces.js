@@ -15,11 +15,27 @@
 // Deshalb steht er als Frage auf der Kachel und nicht als Tatsache.
 import { esc } from '../core/dom.js';
 
-/** PURE: die Beschriftung des Vorschlags-Abzeichens, oder ''. */
+/** PURE: die Beschriftung des Abzeichens auf der Kachel, oder ''.
+ *
+ *  Die ABLEHNUNG steht vor dem Vorschlag. Für etwas, von dem der
+ *  Betreiber gesagt hat, es sei kein Mensch, einen Namen vorzuschlagen
+ *  wäre die falsche Frage — und er hat sie schon beantwortet. */
 export function suggestLabel(row) {
+  const no = row && row.reject;
+  if (no && no.name) return `∅ ${no.name}`;
   const hint = row && row.suggest;
   if (!hint || !hint.name) return '';
   return hint.confident ? `${hint.name}?` : `${hint.name} ?`;
+}
+
+/** PURE: ob diese Kachel schon als „keine Person" bekannt ist. */
+export function isKnownReject(row) {
+  return Boolean(row && row.reject);
+}
+
+/** PURE: wie viele Kacheln der Seite das Ablehnungsregister schon kennt. */
+export function knownRejectCount(items) {
+  return (items || []).filter(isKnownReject).length;
 }
 
 /** PURE: die ausgewählten Zeilen, in der Reihenfolge des Rasters. */
@@ -41,14 +57,15 @@ export function confidentCount(items) {
 
 function _tile(row, selected) {
   const hint = suggestLabel(row);
+  const reject = isKnownReject(row) ? ' is-reject' : '';
   const when = String(row.time || '')
     .replace('T', ' ')
     .slice(0, 16);
   return (
-    `<button type="button" class="idy-face" data-relpath="${esc(row.relpath || '')}" ` +
+    `<button type="button" class="idy-face${reject}" data-relpath="${esc(row.relpath || '')}" ` +
     `aria-pressed="${selected.has(row.relpath) ? 'true' : 'false'}" title="${esc(when)}">` +
     `<img src="${esc(row.url || '')}" alt="Personen-Ausschnitt" loading="lazy">` +
-    (hint ? `<span class="idy-hint">${esc(hint)}</span>` : '') +
+    (hint ? `<span class="idy-hint${reject}">${esc(hint)}</span>` : '') +
     `<span class="idy-check" aria-hidden="true"></span>` +
     `</button>`
   );
@@ -91,8 +108,14 @@ export function assignBarHtml(count, names, agreed) {
     // kein weiterer Namensvorschlag ist, sondern die Entscheidung, KEINEN
     // Namen zu vergeben. Der Schlüssel („Bekannt 3") kommt vom Server;
     // er dient nur dazu, zwei unbenannte Personen auseinanderzuhalten.
+    `<div class="idy-bar-alt">` +
     `<button type="button" class="idy-anon" data-idy="assign-anon">` +
     `+ Bekannt, ohne Namen</button>` +
-    `</div>`
+    // Die Gegenprobe. „es ist 2 mal ein baumstamm drauf als person" —
+    // einmal getaggt, und derselbe Baumstamm wird beim nächsten Lauf von
+    // allein erkannt und aus dem Stapel gehalten.
+    `<button type="button" class="idy-reject" data-idy="reject">` +
+    `∅ Keine Person</button>` +
+    `</div></div>`
   );
 }

@@ -17,6 +17,10 @@ export const loadUnnamedFaces = (limit = 60) =>
 export const assignFaces = (name, items, { anonymous = false } = {}) =>
   apiPost('/api/person-crops/assign', { name, items, anonymous });
 
+/** Einen Schwung Ausschnitte als „keine Person" ablegen. */
+export const rejectFaces = (items, bucket) =>
+  apiPost('/api/person-crops/reject', { items, bucket });
+
 /** Die sicheren Vorschläge in einem Zug übernehmen. */
 export const autoAssignFaces = () => apiPost('/api/person-crops/auto-assign', {});
 

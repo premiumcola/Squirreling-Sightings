@@ -43,6 +43,12 @@ AUTO_MAX_DISTANCE = 6
 #: ohnehin nur eine Seite.
 SUGGEST_BUDGET = 120
 
+#: Der Eimer, in dem alles landet, was ausdrücklich KEINE Person ist.
+#: „es ist 2 mal ein baumstamm drauf als person" — ein Name ist er nicht,
+#: aber ein Schlüssel muss es sein; wer will, legt daneben eigene an
+#: („Mülltonne", „Zaunpfosten"), das Register kennt beliebig viele.
+REJECT_BUCKET = "Keine Person"
+
 
 def walk_person_crops(events_dir, *, only_unnamed: bool) -> list[dict]:
     """Alle notierten Ausschnitte, neueste zuerst.
@@ -69,6 +75,13 @@ def walk_person_crops(events_dir, *, only_unnamed: bool) -> list[dict]:
             if only_unnamed and named:
                 continue
             for c in crops:
+                # Einmal als „keine Person" getaggt heißt für immer aus
+                # dem Stapel. Der Vermerk sitzt am Ausschnitt und nicht am
+                # Ereignis: in einem Clip können eine echte Person UND ein
+                # Baumstamm stehen, und das Ereignis umzuetikettieren
+                # nähme der Person ihre Spur.
+                if c.get("rejected"):
+                    continue
                 rows.append(
                     {
                         "event_id": event.get("event_id") or jf.stem,
@@ -101,13 +114,28 @@ def read_crop(storage_root, relpath: str):
     return cv2.imread(str(path))
 
 
-def suggest_for(registry: IdentityRegistry, storage_root, rows: list[dict], budget: int) -> None:
-    """Hängt jeder Zeile — soweit das Budget reicht — einen `suggest` an.
+def suggest_for(
+    registry: IdentityRegistry,
+    storage_root,
+    rows: list[dict],
+    budget: int,
+    rejects: IdentityRegistry | None = None,
+) -> None:
+    """Hängt jeder Zeile — soweit das Budget reicht — einen `suggest` an,
+    und markiert, was schon einmal als „keine Person" abgelehnt wurde.
 
-    Ohne Profile gibt es nichts zu vergleichen; dann bleibt der Lauf aus,
-    statt jedes Bild umsonst von der Platte zu holen.
+    DIE ABLEHNUNG WIRD ZUERST GEFRAGT. Derselbe Baumstamm steht morgen
+    wieder da und wird wieder gefunden; wer ihn einmal getaggt hat, will
+    ihn nicht jeden Tag wieder wegtippen. Ein Treffer im Ablehnungs-
+    register beendet die Zeile — einen Namen für etwas vorzuschlagen, von
+    dem der Betreiber gesagt hat, es sei kein Mensch, wäre die falsche
+    Frage.
+
+    Ohne Profile UND ohne Ablehnungen gibt es nichts zu vergleichen; dann
+    bleibt der Lauf aus, statt jedes Bild umsonst von der Platte zu holen.
     """
-    if not registry.list_profiles():
+    has_rejects = bool(rejects and rejects.list_profiles())
+    if not registry.list_profiles() and not has_rejects:
         return
     opened = 0
     for row in rows:
@@ -117,6 +145,15 @@ def suggest_for(registry: IdentityRegistry, storage_root, rows: list[dict], budg
         if img is None:
             continue
         opened += 1
+        if has_rejects:
+            no = rejects.match_details(img)
+            if no:
+                row["reject"] = {
+                    "name": no.get("name"),
+                    "distance": no.get("distance"),
+                    "confident": int(no.get("distance", 99)) <= AUTO_MAX_DISTANCE,
+                }
+                continue
         match = registry.match_details(img)
         if match:
             row["suggest"] = {
@@ -184,4 +221,47 @@ def clear_person(store, cam_id: str, event_id: str) -> bool:
     event.pop("person_name", None)
     event.pop("person_source", None)
     store.update_event(cam_id, event_id, event)
+    return True
+
+
+def reject_crop(rejects: IdentityRegistry, store, storage_root, item: dict, bucket: str) -> bool:
+    """Einen Ausschnitt als „keine Person" ablegen.
+
+    Zwei Schreibvorgänge, beide nötig und beide klein:
+
+      * die Probe in das ABLEHNUNGS-Register, damit derselbe Baumstamm
+        beim nächsten Mal von allein erkannt und übersprungen wird;
+      * ein `rejected: true` am Ausschnitt IM EREIGNIS, damit er aus dem
+        Stapel verschwindet, ohne dass das Ereignis umetikettiert wird.
+
+    Warum nicht das Ereignis umetikettieren: in einem Clip können eine
+    echte Person und ein Baumstamm nebeneinander stehen. „Person" vom
+    Ereignis zu nehmen nähme der echten Person ihre Sichtung. Die
+    Korrektur gehört an den Ausschnitt, nicht an den Clip — und der
+    Widerspruch gegen den Detektor wird getrennt gebucht (siehe den
+    Aufrufer).
+    """
+    relpath = (item or {}).get("relpath") or ""
+    img = read_crop(storage_root, relpath)
+    if img is None:
+        return False
+    if not rejects.register_crop(
+        bucket, img, relpath=relpath, event_id=(item.get("event_id") or "").strip()
+    ):
+        return False
+    cam_id = (item.get("cam_id") or "").strip()
+    event_id = (item.get("event_id") or "").strip()
+    if not cam_id or not event_id:
+        return True
+    event = store.get_event(cam_id, event_id)
+    if not event:
+        return True
+    touched = False
+    for c in crops_of(event):
+        if c.get("relpath") == relpath:
+            c["rejected"] = True
+            c["rejected_as"] = bucket
+            touched = True
+    if touched:
+        store.update_event(cam_id, event_id, event)
     return True

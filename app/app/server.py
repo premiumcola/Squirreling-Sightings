@@ -149,6 +149,14 @@ person_registry = IdentityRegistry(
     threshold=int(cfg.get("processing", {}).get("person_identity", {}).get("match_threshold", 10)),
 )
 app_state.person_registry = person_registry
+# Die Gegenprobe. Sie teilt sich die Schwelle mit dem Personenregister:
+# „das ist derselbe Baumstamm wie neulich" ist dieselbe Frage wie „das
+# ist dieselbe Person wie neulich", nur mit anderem Vorzeichen.
+reject_registry = IdentityRegistry(
+    storage_root / "reject_registry.json",
+    threshold=person_registry.threshold,
+)
+app_state.reject_registry = reject_registry
 timelapse_builder = TimelapseBuilder(storage_root)
 app_state.timelapse_builder = timelapse_builder
 # F08 dossier service — owns storage/bird_dossiers.json. Camera runtimes

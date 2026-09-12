@@ -311,6 +311,20 @@ CAMERA_SCHEMA: dict = {
     #                                Set to False to keep ghosts for
     #                                debugging.
     "track_filter_ghosts": (bool, True),
+    #   track_filter_splinters     — K5. When True (default) the
+    #                                post-clip worker drops any track of
+    #                                at most two observations whose box
+    #                                is at least 2.5x shorter than an
+    #                                established track of the SAME label
+    #                                in the same clip. That is the
+    #                                one-person-becomes-three case; the
+    #                                ghost filter cannot see it because
+    #                                these blips score ABOVE the spawn
+    #                                threshold. Set to False on a camera
+    #                                with real depth of field, where one
+    #                                subject may legitimately be a
+    #                                quarter the height of another.
+    "track_filter_splinters": (bool, True),
     # ── Reolink-only · HTTP CGI port for image-mode override ─────────────
     # Most Reolink cams listen on plain HTTP/80, but the user may have
     # remapped that to e.g. 8000 when port-forwarding. Treated as 80 if

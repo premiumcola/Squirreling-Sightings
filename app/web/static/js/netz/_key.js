@@ -55,6 +55,19 @@ export function ghostIconSvg(px) {
   );
 }
 
+/** Das Splitter-Glyph: eine Gestalt, von der ein Stück abspringt — genau
+ *  das, was das Sieb wegwirft. Bewusst anders als das Ghost-Glyph, die
+ *  beiden Knöpfe stehen nebeneinander. */
+export function splinterIconSvg(px) {
+  return (
+    `<svg viewBox="0 0 24 24" width="${px}" height="${px}" aria-hidden="true" fill="none" ` +
+    `stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+    `<circle cx="9" cy="6" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>` +
+    `<path d="M18 7.5v.01M20.5 12v.01M18.5 16.5v.01" stroke-dasharray="0.1 3"/>` +
+    `<rect x="17" y="6" width="5" height="6" rx="1.4" opacity=".55"/></svg>`
+  );
+}
+
 /** What the ghost switch is currently doing — the STATE, not the lesson.
  *
  *  It used to carry the full definition ("Spur ohne Objekt — läuft nur

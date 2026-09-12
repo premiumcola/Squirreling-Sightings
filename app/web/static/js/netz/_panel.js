@@ -26,6 +26,7 @@ import {
   combosHtml,
   frozenSectionHtml,
   ghostToggleHtml,
+  splinterToggleHtml,
   netBodyHtml,
   netProbeHtml,
 } from './_cards.js';
@@ -93,6 +94,7 @@ function _headerHtml(cam, camId) {
     `aria-pressed="${inVerlauf ? 'true' : 'false'}" aria-label="${title}" title="${title}">` +
     `${_HISTORY_ICON}</button>` +
     ghostToggleHtml(camId) +
+    splinterToggleHtml(camId) +
     `</header>`
   );
 }

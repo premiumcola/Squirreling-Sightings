@@ -52,6 +52,11 @@ def test_a_never_touched_camera_reports_the_schema_defaults(tmp_path, monkeypatc
         "track_spawn_min_score": 0,
         "track_block_contain": 0,
         "track_filter_ghosts": True,
+        # K5 · beide an bzw. auf dem Vorgabewert, ohne dass die Kamera je
+        # gespeichert wurde — der Splitter-Filter greift auf jeder
+        # bestehenden Kamera sofort, so wie der Geister-Filter es tat.
+        "track_filter_splinters": True,
+        "track_postclip_precision": "standard",
         "roi_mode": "off",
         "wildlife_motion_sensitivity": 0,
         "roi_min_net_disp_frac": 0,

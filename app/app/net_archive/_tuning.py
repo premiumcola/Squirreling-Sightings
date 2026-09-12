@@ -54,6 +54,8 @@ TUNING_LABELS_DE = {
     "track_block_contain": "Doppel-Sperre",
     "track_continue_min_score": "Spur-Fortsetzung",
     "track_filter_ghosts": "Ghost-Spuren ausblenden",
+    "track_filter_splinters": "Splitter-Spuren ausblenden",
+    "track_postclip_precision": "Nachlauf-Abtastung",
 }
 
 #: What an ABSENT key means. 0.0 is the "use the system default" sentinel
@@ -63,8 +65,11 @@ TUNING_LABELS_DE = {
 #: Same numbers as ``routes/_netz_helpers.net_state``'s tuning dict.
 _UNSET = {"frame_interval_ms": 350, "motion_sensitivity": 0.5}
 
-_BOOL_FIELDS = ("track_filter_ghosts",)
-_ENUM_DE = {"roi_mode": {"off": "Aus", "roi": "Motion-ROI", "2x2": "2×2", "3x3": "3×3"}}
+_BOOL_FIELDS = ("track_filter_ghosts", "track_filter_splinters")
+_ENUM_DE = {
+    "roi_mode": {"off": "Aus", "roi": "Motion-ROI", "2x2": "2×2", "3x3": "3×3"},
+    "track_postclip_precision": {"standard": "1 Hz (Standard)", "precise": "2 Hz (genau)"},
+}
 
 
 def _norm(field: str, raw):

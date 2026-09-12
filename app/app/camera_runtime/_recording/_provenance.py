@@ -126,6 +126,7 @@ def _effective(setup, roi_mode: str, cam_cfg: dict) -> dict:
     out["excluded_classes"] = sorted(setup.excluded_classes)
     out["roi_mode"] = roi_mode
     out["track_filter_ghosts"] = cam_cfg.get("track_filter_ghosts") is not False
+    out["track_filter_splinters"] = cam_cfg.get("track_filter_splinters") is not False
     return out
 
 

@@ -19,7 +19,7 @@
 import { esc, qsa } from '../core/dom.js';
 import { showToast } from '../core/toast.js';
 import { patchTuning } from './_api.js';
-import { ghostIconSvg, ghostKeyText, netKeyHtml } from './_key.js';
+import { ghostIconSvg, ghostKeyText, netKeyHtml, splinterIconSvg } from './_key.js';
 import { TUNE_COMBOS, TUNE_GROUPS, TUNE_SPECS, buildTuneAxes } from './_settings_axes.js';
 import { renderTuneRadar } from './_tune_radar.js';
 import { buildClassAxes, classAxisHint, classAxisSpec } from './_class_rows.js';
@@ -92,6 +92,26 @@ export function ghostToggleHtml(camId) {
     `<button type="button" class="netz-view-btn" data-tune-ghost ` +
     `aria-pressed="${on ? 'true' : 'false'}" aria-label="${title}" title="${title}">` +
     `${ghostIconSvg(18)}</button>`
+  );
+}
+
+// K5 · derselbe Knopf-Typ daneben für das Splitter-Sieb. „Wieso splittet
+// die eine Person immer wieder auf drei Personen" — das Sieb wirft die
+// Ein-Bild-Fehlfunde weg, die im selben Clip neben einer viel größeren
+// Spur derselben Klasse stehen. Es ist an, und an gehört es auch; der
+// Schalter existiert für die Kamera mit echter Tiefenstaffelung, bei der
+// ein Subjekt zu Recht ein Viertel so hoch sein darf wie ein anderes.
+const _SPLINTER_TITLE =
+  'Splitter-Spuren ausblenden – einzelner Fehlfund neben einer viel größeren ' +
+  'Spur derselben Klasse im selben Clip. ';
+
+export function splinterToggleHtml(camId) {
+  const on = effectiveTuning(camId).track_filter_splinters !== false;
+  const title = esc(_SPLINTER_TITLE + (on ? 'Splitter aus' : 'Splitter an'));
+  return (
+    `<button type="button" class="netz-view-btn" data-tune-splinter ` +
+    `aria-pressed="${on ? 'true' : 'false'}" aria-label="${title}" title="${title}">` +
+    `${splinterIconSvg(18)}</button>`
   );
 }
 
@@ -252,5 +272,14 @@ export function bindGhostToggle(card, onRepaint) {
   card.querySelector('[data-tune-ghost]')?.addEventListener('click', async (ev) => {
     const wasOn = ev.currentTarget.getAttribute('aria-pressed') === 'true';
     await _save(camId, { track_filter_ghosts: !wasOn }, 'Erkennungsprofil übernommen.', onRepaint);
+  });
+  card.querySelector('[data-tune-splinter]')?.addEventListener('click', async (ev) => {
+    const wasOn = ev.currentTarget.getAttribute('aria-pressed') === 'true';
+    await _save(
+      camId,
+      { track_filter_splinters: !wasOn },
+      'Erkennungsprofil übernommen.',
+      onRepaint,
+    );
   });
 }

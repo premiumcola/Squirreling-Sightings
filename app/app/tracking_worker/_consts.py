@@ -93,3 +93,50 @@ STITCH_MAX_GAP_S = 6.0
 STITCH_DIST_FACTOR = 1.6
 STITCH_SIZE_RATIO = 1.8
 STITCH_OVERLAP_IOU = 0.55
+
+# K5 · the splinter sweep. „Bitte schau dir an, wieso die eine Person
+# immer wieder splittet auf jetzt in dem Fall eben drei Personen. Wenn
+# ich einfach nur ganz ruhig hin- und herlaufe."
+#
+# WAS DAS DEBUG-BUNDLE VOM 2026-09-12 ZEIGTE. Acht Werkstatt-Clips,
+# eine Person, 17 Personen-Spuren. Zehn davon hatten EINE oder ZWEI
+# Beobachtungen und eine Boxhöhe von 8–18 % der Bildhöhe, während jede
+# echte Spur desselben Clips 43–67 % hoch war und 9–98 Beobachtungen
+# hatte. Zwei saubere Haufen, keine Überschneidung.
+#
+# WARUM KEINE DER BESTEHENDEN SIEBE SIE ERWISCHT:
+#   * Der Geister-Filter fragt nach der KONFIDENZ — diese Splitter
+#     lagen bei 0,52–0,80, also über der Spawn-Schwelle 0,50.
+#   * Der Statik-Filter braucht ≥ 3 Beobachtungen; ein Zwei-Bild-
+#     Aufblitzen lässt er bewusst in Ruhe.
+#   * Der Zusammennäher lehnt sie zu Recht ab: bei einem Größen-
+#     verhältnis von 4,8 wäre die verschmolzene Spur Unsinn. Nur hieß
+#     „zu verschieden, um dieselbe zu sein" bisher automatisch „also
+#     eine zweite" — und genau das ist der Fehlschluss.
+#
+# Die Regel: existiert im selben Clip eine ETABLIERTE Spur derselben
+# Klasse, die mindestens SPLINTER_SIZE_RATIO mal so hoch ist, dann ist
+# ein Aufblitzen von höchstens SPLINTER_MAX_DETECTS Beobachtungen keine
+# zweite Person, sondern ein Fehlfund. Ohne Zeitbedingung: die drei
+# Spuren im Clip 093143 lagen HINTEREINANDER, nicht nebeneinander.
+#
+# Gegengeprüft an allen 67 Spuren des Bundles: getroffen wurden exakt
+# die acht Werkstatt-Splitter, kein Vogel, keine Katze, keine Person
+# der beiden Außenkameras (die Garten-Kamera blickt weit, ihre echten
+# Personen sind 7,7–33 % hoch — die Regel misst relativ zum größten
+# Fund DESSELBEN Clips, nicht absolut, und rührt sie darum nicht an).
+#
+# WO DIE 2,5 HERKOMMT — gemessen, nicht geschätzt. Über dieselben 67
+# Spuren, je Clip und Klasse das Verhältnis Anker zu kurzer Spur:
+#   * größtes UNSCHULDIGES Verhältnis: ×1,72 (Garten, eine Person mit
+#     270 px neben einer mit 464 px),
+#   * kleinstes echtes Splitter-Verhältnis: ×2,73 (Werkstatt 093143,
+#     227 px neben 619 px).
+# Zwischen 1,72 und 2,73 liegt die Lücke; 2,5 liegt darin und mit
+# Absicht näher am Splitter-Ende — ein übersehener Splitter ist eine
+# Kachel zu viel, eine verworfene echte Spur ist eine Sichtung zu wenig.
+SPLINTER_MAX_DETECTS = 2
+SPLINTER_SIZE_RATIO = 2.5
+# Die Bezugsspur muss selbst mehr als ein Aufblitzen sein — sonst
+# könnten sich zwei Splitter gegenseitig als Maßstab dienen.
+SPLINTER_MIN_ANCHOR_DETECTS = 3

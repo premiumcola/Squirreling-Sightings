@@ -123,6 +123,8 @@ def api_cameras():
         # L07 · expose to the cam-edit form. Default True so legacy
         # cameras without the field read as enabled on first hydrate.
         s["track_filter_ghosts"] = cam.get("track_filter_ghosts") is not False
+        s["track_filter_splinters"] = cam.get("track_filter_splinters") is not False
+        s["track_postclip_precision"] = cam.get("track_postclip_precision") or "standard"
         # The Simulieren panel's MODUS control seeds itself from this. It
         # used to hardcode "off", so opening the simulator on a camera that
         # actually runs 2x2 showed — and then ran — a DIFFERENT pipeline
@@ -332,8 +334,16 @@ _TUNING_FLOAT_FIELDS = {
 }
 _TUNING_ENUM_FIELDS = {
     "roi_mode": ("off", "roi", "2x2", "3x3"),
+    # Bis 2026-09-12 nur von Hand in der settings.json erreichbar
+    # („no UI, power-user tuning"). Es ist aber der wirksamste Hebel
+    # gegen zerfallende Spuren: bei „standard" tastet der Nachlauf den
+    # Clip mit 1 Hz ab, und eine gehende Person verlässt zwischen zwei
+    # Abtastungen ihre eigene Box — die IoU ist dann auf JEDEM Bild 0
+    # und nur noch die Geschwindigkeitsvorhersage hält die Spur
+    # zusammen. „precise" halbiert diesen Abstand.
+    "track_postclip_precision": ("standard", "precise"),
 }
-_TUNING_BOOL_FIELDS = ("track_filter_ghosts",)
+_TUNING_BOOL_FIELDS = ("track_filter_ghosts", "track_filter_splinters")
 #: Everything this route can move. The Verlauf snapshot is taken over
 #: exactly these keys, and only for the ones the request actually carries.
 _ARCHIVED_TUNING_FIELDS = (
@@ -494,6 +504,8 @@ def api_camera_detection_tuning(cam_id):
                 "motion_sensitivity": cam.get("motion_sensitivity"),
                 "post_motion_tail_s": cam.get("post_motion_tail_s"),
                 "track_filter_ghosts": cam.get("track_filter_ghosts") is not False,
+                "track_filter_splinters": cam.get("track_filter_splinters") is not False,
+                "track_postclip_precision": cam.get("track_postclip_precision") or "standard",
                 "roi_mode": cam.get("roi_mode") or "off",
                 "wildlife_motion_sensitivity": cam.get("wildlife_motion_sensitivity"),
                 "roi_min_net_disp_frac": cam.get("roi_min_net_disp_frac"),

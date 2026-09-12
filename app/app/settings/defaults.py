@@ -200,6 +200,9 @@ def default_camera(cam: dict | None = None) -> dict:
         # explicitly stored False (the explicit-False case the user
         # wants for debugging).
         "track_filter_ghosts": (False if cam.get("track_filter_ghosts") is False else True),
+        # K5 — Splitter-Sieb, gleiche Voreinstellung und gleiche
+        # Lesart wie der Geister-Filter darüber.
+        "track_filter_splinters": (False if cam.get("track_filter_splinters") is False else True),
         # Reolink HTTP-CGI port override — same persistence hole as the
         # tracker fields above, surfaced by task vk257 when the image-
         # mode panel's port number was getting dropped on save.

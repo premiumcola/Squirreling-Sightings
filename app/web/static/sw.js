@@ -4,19 +4,39 @@
 // /media, or MJPEG streams — those are live data and a stale response
 // would be worse than no response.
 //
-// NETWORK-FIRST FOR CODE. This file used to be stale-while-revalidate
-// for everything, and `return cached || fetchPromise` means the browser
-// gets the OLD file and only writes the new one for NEXT time — so an
-// online user with a working connection was permanently one deploy
-// behind. For a dashboard that ships several times a day that is not a
-// caching strategy, it is a bug with a comment: „wieso kommt der neue
-// player nicht bei mir an??" Code now goes to the network first and
-// falls back to the cache only when the network actually fails, which
-// is the offline case the cache exists for in the first place.
+// ── VERSIONS-GETAKTET, NICHT PRO DATEI ────────────────────────────────
 //
-// Cache versioning: the cache name carries the shell hash from
-// /version.json — which since this commit hashes the JS tree as well as
-// app.css, so a JavaScript-only deploy also flips it.
+// Diese Datei hatte zwei Fassungen, und beide waren an derselben Frage
+// falsch: „woher weiß der Browser, dass sein Vorrat noch stimmt?"
+//
+//   1. stale-while-revalidate für alles. `cached || fetchPromise` gibt
+//      die ALTE Datei heraus und schreibt die neue für das nächste Mal —
+//      ein Nutzer online, mit funktionierender Verbindung, hing dauerhaft
+//      einen Deploy hinterher: „wieso kommt der neue player nicht bei
+//      mir an??"
+//   2. network-first mit `cache: 'no-cache'` für JEDE Code-Datei. Damit
+//      war die Frische zurück, aber der Preis stand in dieser Datei als
+//      Nebensatz: „one conditional request per file". Gemessen am
+//      2026-09-12 sind das **365 bedingte Anfragen bei jedem
+//      Seitenaufruf**, jede mit ihrer eigenen Wartezeit, und es werden
+//      mit jedem neuen Modul mehr. Genau das ist der Eindruck „die Seite
+//      wird mobil immer langsamer".
+//
+// Die Frage muss nicht 365-mal gestellt werden, sondern EINMAL. Der
+// Cache-Name trägt den Shell-Hash aus /version.json, und der deckt seit
+// jeher CSS **und** den JS-Baum ab. Also:
+//
+//   * bei jedem Seitenaufruf (navigate) genau eine Abfrage von
+//     /version.json → der gültige Cache-Name;
+//   * gleicher Hash  → alles aus dem Cache, NULL Netzanfragen für Code;
+//   * anderer Hash   → anderer Cache-Name, der ist leer, alles wird
+//     einmal frisch geholt. Ein altes Bündel kann gar nicht ausgeliefert
+//     werden, weil es unter einem Namen liegt, den niemand mehr fragt.
+//
+// Das ist dieselbe Zusage wie bei network-first, für einen Rundlauf
+// statt für 365. Als zweites Netz prüft core/version-guard.js im Tab den
+// im Dokument eingestempelten Hash gegen den Server und bietet einen
+// Knopf an, der Cache und Worker vollständig wegwirft.
 
 const CACHE_PREFIX = 'squirreling-shell-';
 const SHELL_ASSETS = [
@@ -27,39 +47,61 @@ const SHELL_ASSETS = [
   '/static/manifest.json',
 ];
 
-// The browser kills and restarts a service worker constantly, and
-// `install`/`activate` do NOT re-run on a restart — they only fire when
-// the SW file itself changes. So a plain `let _activeCache = ...` is
-// reset to its initial value several times an hour, and the old code
-// then wrote fresh responses into a cache named `…-init` while
-// `caches.match(req)` — unscoped, therefore searching EVERY cache —
-// kept answering from the real one. New files were downloaded, stored,
-// and never served. Re-deriving the name per request fixes that; the
-// promise is memoised so it costs one fetch per SW lifetime, not one
-// per request.
-let _cacheNamePromise = null;
+// Der Browser beendet und startet einen Service Worker ständig neu, und
+// `install`/`activate` laufen dabei NICHT erneut — nur wenn sich die
+// SW-Datei selbst ändert. Ein schlichtes `let _name = …` wäre also
+// mehrmals pro Stunde wieder auf seinem Anfangswert. Deshalb wird der
+// Name aus /version.json abgeleitet, gemerkt, und bei jedem
+// Seitenaufruf einmal nachgezogen.
+let _cacheName = null;
+let _namePromise = null;
+
+async function _purgeOthers(keep) {
+  const keys = await caches.keys();
+  await Promise.all(
+    keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== keep).map((k) => caches.delete(k)),
+  );
+}
+
+async function _resolveName() {
+  try {
+    const r = await fetch('/version.json', { cache: 'no-store' });
+    if (r.ok) {
+      const data = await r.json();
+      if (data && data.shell_hash) {
+        const name = CACHE_PREFIX + data.shell_hash;
+        if (name !== _cacheName) {
+          _cacheName = name;
+          // Ein neuer Deploy: die alten Vorräte sind ab jetzt
+          // unerreichbar, also weg damit, bevor sie Platz kosten.
+          await _purgeOthers(name);
+        }
+        return _cacheName;
+      }
+    }
+  } catch {
+    /* offline → unten weiter */
+  }
+  if (_cacheName) return _cacheName;
+  // Offline und noch kein Name: den vorhandenen versionierten Cache
+  // weiterbenutzen statt einen frischen leeren zu erfinden — sonst hat
+  // der Notnagel nichts, worauf er zurückfallen könnte.
+  const keys = await caches.keys();
+  _cacheName = keys.filter((k) => k.startsWith(CACHE_PREFIX))[0] || CACHE_PREFIX + 'init';
+  return _cacheName;
+}
 
 function activeCacheName() {
-  if (!_cacheNamePromise) {
-    _cacheNamePromise = (async () => {
-      try {
-        const r = await fetch('/version.json', { cache: 'no-store' });
-        if (r.ok) {
-          const data = await r.json();
-          if (data && data.shell_hash) return CACHE_PREFIX + data.shell_hash;
-        }
-      } catch {
-        /* offline → fall through */
-      }
-      // Offline and no name yet: reuse whatever versioned cache exists
-      // rather than inventing a fresh empty one, or the fallback has
-      // nothing to fall back to.
-      const keys = await caches.keys();
-      const known = keys.filter((k) => k.startsWith(CACHE_PREFIX));
-      return known[0] || CACHE_PREFIX + 'init';
-    })();
-  }
-  return _cacheNamePromise;
+  if (!_namePromise) _namePromise = _resolveName();
+  return _namePromise;
+}
+
+/** Einmal pro Seitenaufruf: den Cache-Namen neu bestimmen. Alle
+ *  Asset-Anfragen dieses Aufrufs warten auf dieselbe Zusage, bekommen
+ *  also garantiert den Vorrat des Bündels, das gerade geladen wird. */
+function refreshCacheName() {
+  _namePromise = _resolveName();
+  return _namePromise;
 }
 
 self.addEventListener('install', (evt) => {
@@ -75,11 +117,7 @@ self.addEventListener('install', (evt) => {
 self.addEventListener('activate', (evt) => {
   evt.waitUntil(
     (async () => {
-      const name = await activeCacheName();
-      const keys = await caches.keys();
-      await Promise.all(
-        keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== name).map((k) => caches.delete(k)),
-      );
+      await _purgeOthers(await activeCacheName());
       await self.clients.claim();
     })(),
   );
@@ -97,53 +135,32 @@ async function _put(request, response) {
 }
 
 /** Read from the active cache, then from any older one as a last
- *  resort. Offline is the only path that gets here. */
+ *  resort. Only the offline path gets to the second half. */
 async function _fallback(request) {
   const c = await caches.open(await activeCacheName());
   return (await c.match(request)) || (await caches.match(request));
 }
 
-/** Network-first: the answer is whatever the server says, and the cache
- *  is only consulted when the network fails.
+/** Cache-first gegen den VERSIONIERTEN Cache.
  *
- *  `cache: 'no-cache'` is load-bearing, not decoration. A plain
- *  `fetch(request)` is served by the BROWSER's HTTP cache, so this
- *  function could hand back a stale file while believing it had gone to
- *  the network — the same bug one layer down, and it would have made
- *  this whole rewrite look like it did nothing.
- *
- *  Note it is 'no-cache', not 'no-store': the request still carries its
- *  validators, so an unchanged file comes back as a 304 with no body.
- *  Correctness on every load, at the cost of one conditional request per
- *  file — and, critically, this no longer depends on the server sending
- *  the right Cache-Control. index.html stamps ?v= on exactly two URLs;
- *  the several hundred ES modules behind them are fetched at addresses
- *  that never change, so their freshness rests entirely here.
- */
-async function _networkFirst(request) {
+ *  Dass das nichts Altes ausliefern kann, hängt an einer einzigen
+ *  Eigenschaft: der Cache-Name trägt den Shell-Hash. Ein anderer Build
+ *  ist ein anderer Name ist ein leerer Vorrat. Deshalb steht diese
+ *  Funktion und nicht mehr `_networkFirst` in der Auslieferung. */
+async function _cacheFirst(request) {
+  const c = await caches.open(await activeCacheName());
+  const cached = await c.match(request);
+  if (cached) return cached;
   try {
-    const net = await fetch(request, { cache: 'no-cache' });
+    const net = await fetch(request);
     if (net && net.ok) _put(request, net.clone());
     return net;
   } catch (err) {
-    const cached = await _fallback(request);
-    if (cached) return cached;
+    const old = await caches.match(request);
+    if (old) return old;
     throw err;
   }
 }
-
-/** Cache-first for things that do not change between deploys — icons,
- *  the manifest, fonts. Saves a round trip where staleness costs
- *  nothing, because the cache name itself flips on every deploy. */
-async function _cacheFirst(request) {
-  const cached = await _fallback(request);
-  if (cached) return cached;
-  const net = await fetch(request);
-  if (net && net.ok) _put(request, net.clone());
-  return net;
-}
-
-const _IMMUTABLE = /\.(png|jpg|jpeg|svg|ico|webp|woff2?|ttf)$|\/manifest\.json$/i;
 
 self.addEventListener('fetch', (evt) => {
   const url = new URL(evt.request.url);
@@ -162,7 +179,24 @@ self.addEventListener('fetch', (evt) => {
   // Cross-origin (CDN, tiles) — leave to the browser's own cache.
   if (url.origin !== self.location.origin) return;
 
-  evt.respondWith(
-    _IMMUTABLE.test(url.pathname) ? _cacheFirst(evt.request) : _networkFirst(evt.request),
-  );
+  // Das Dokument selbst geht immer ans Netz (es ist ohnehin `no-store`)
+  // und ist zugleich der Auslöser für die EINE Versionsabfrage, von der
+  // alle Code-Anfragen dieses Aufrufs abhängen.
+  if (evt.request.mode === 'navigate') {
+    refreshCacheName();
+    evt.respondWith(
+      (async () => {
+        try {
+          return await fetch(evt.request);
+        } catch (err) {
+          const cached = await _fallback(evt.request);
+          if (cached) return cached;
+          throw err;
+        }
+      })(),
+    );
+    return;
+  }
+
+  evt.respondWith(_cacheFirst(evt.request));
 });

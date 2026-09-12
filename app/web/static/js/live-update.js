@@ -146,15 +146,27 @@ export function startLiveUpdate() {
 // the same sequence.
 export async function loadAll() {
   if (typeof window._restoreEditWrapper === 'function') window._restoreEditWrapper();
-  state.bootstrap = await j('/api/bootstrap');
-  state.config = await j('/api/config');
-  state.cameras = (await j('/api/cameras')).cameras || [];
+  // FÜNF ANFRAGEN, EIN RUNDLAUF. Sie hingen bis 2026-09-12 in einer
+  // Kette aus `await`s hintereinander, obwohl keine von ihnen ein
+  // Ergebnis der vorherigen braucht — am Handy also fünf volle
+  // Laufzeiten, bevor überhaupt etwas gezeichnet wurde. Die Reihenfolge,
+  // in der GEZEICHNET wird, bleibt unverändert; nur das Holen läuft
+  // jetzt nebeneinander.
+  const [bootstrap, config, cameras, timeline] = await Promise.all([
+    j('/api/bootstrap'),
+    j('/api/config'),
+    j('/api/cameras'),
+    j(
+      `/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`,
+    ),
+    loadMediaStorageStats(),
+  ]);
+  state.bootstrap = bootstrap;
+  state.config = config;
+  state.cameras = cameras.cameras || [];
+  state.timeline = timeline;
   _resetFailedSnapshotIds();
   if (typeof window._updateMobileDockLiveDot === 'function') window._updateMobileDockLiveDot();
-  state.timeline = await j(
-    `/api/timeline?hours=${state.tlHours || 168}${state.label ? `&label=${encodeURIComponent(state.label)}` : ''}`,
-  );
-  await loadMediaStorageStats();
   renderDashboard();
   renderTimeline();
   renderCameraSettings();

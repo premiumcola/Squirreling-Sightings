@@ -193,6 +193,14 @@ from .routes import register_blueprints as _register_blueprints
 
 _register_blueprints(app)
 
+# gzip für Text-Antworten. Vorher kam jede einzelne Antwort dieser App
+# ungepackt heraus — gemessen 4,2 MB für ein kaltes Laden auf dem Handy.
+# Siehe `http_compression.py` für die Messung und für die eine Antwort,
+# die dabei niemals angefasst werden darf (den MJPEG-Strom).
+from .http_compression import install as _install_compression
+
+_install_compression(app)
+
 
 def _log_route_inventory(_app):
     """P26 · one INFO line summarising registered routes at boot.

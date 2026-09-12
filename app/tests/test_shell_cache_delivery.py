@@ -167,35 +167,59 @@ def test_sw_resolves_cache_name_per_request():
 
 
 def test_sw_never_matches_across_all_caches_first():
-    """`caches.match(req)` searches EVERY cache, including ones the
-    activate handler is about to delete. It is allowed only as the last
-    resort inside the offline fallback, never as the primary read."""
+    """`caches.match(req)` searches EVERY cache, including ones the purge
+    is about to delete. The primary read must go through the RESOLVED
+    cache; the unscoped search is the offline last resort only."""
     src = _code()
-    fallback = src[
-        src.index("async function _fallback") : src.index("async function _networkFirst")
-    ]
-    assert "caches.match(request)" in fallback
-    outside = src.replace(fallback, "")
-    assert "caches.match(" not in outside, "unscoped caches.match outside the offline fallback"
+    assert (
+        "const cached = await c.match(request)" in src
+    ), "the cache-first read no longer goes through the resolved cache"
+    allowed = {"_fallback", "_cacheFirst"}
+    for m in re.finditer(r"caches\.match\(", src):
+        fn = max(
+            (f for f in re.finditer(r"(?:async )?function (\w+)", src[: m.start()])),
+            key=lambda f: f.start(),
+        ).group(1)
+        assert fn in allowed, f"unscoped caches.match in {fn}() — that is not a fallback"
 
 
 # ── 3. online users get the new code, not the previous one ───────────
 
 
-def test_sw_is_network_first_for_code():
+def test_sw_gates_the_cache_on_the_shell_hash():
+    """DIE Zusage, die den Strategiewechsel vom 2026-09-12 trägt.
+
+    Bis dahin war der Worker network-first mit `cache: 'no-cache'` für
+    jede Code-Datei. Das war frisch, aber der Preis stand als Nebensatz
+    in der Datei: „one conditional request per file" — gemessen **365
+    bedingte Anfragen bei jedem Seitenaufruf**, und mit jedem neuen
+    Modul mehr. Genau das ist „die Seite wird mobil immer langsamer".
+
+    Jetzt wird EINMAL pro Seitenaufruf gefragt und der Cache-Name aus
+    der Antwort gebildet. Ein anderes Bündel ist ein anderer Name ist
+    ein leerer Vorrat — ein altes Bündel kann gar nicht ausgeliefert
+    werden, weil niemand mehr nach seinem Namen fragt. Diese Kette ist
+    das, was hier festgenagelt wird; bricht ein Glied, ist der Worker
+    wieder das, was er 2026-08 schon einmal war: ein Nutzer, der
+    dauerhaft einen Deploy hinterherhängt.
+    """
     src = _code()
-    assert "async function _networkFirst" in src
-    net = src[src.index("async function _networkFirst") : src.index("async function _cacheFirst")]
-    # The network response is what gets returned; the cache is only
-    # touched in the catch.
-    assert "const net = await fetch(request" in net
-    assert "return net" in net
-    # And it must actually GO to the network. A plain fetch() inside a
-    # service worker is answered by the browser's own HTTP cache, so
-    # "network-first" without this reads stale and reports success.
-    assert "cache: 'no-cache'" in net, "the network-first path can be served from the HTTP cache"
-    cached_return = net.index("if (cached) return cached")
-    assert net.index("catch") < cached_return, "cache is consulted before the network fails"
+    resolver = src[src.index("async function _resolveName") : src.index("function activeCacheName")]
+    assert "fetch('/version.json'" in resolver, "the name is not derived from the server"
+    assert "cache: 'no-store'" in resolver, "the version probe may be answered from the HTTP cache"
+    assert "CACHE_PREFIX + data.shell_hash" in resolver, "the name does not carry the shell hash"
+    assert "_purgeOthers(name)" in resolver, "a new build leaves the old cache lying around"
+
+
+def test_sw_re_resolves_the_name_on_every_page_load():
+    """Ein Service Worker lebt Minuten bis Stunden; `activate` läuft beim
+    Neustart NICHT. Ohne eine Neubestimmung je Seitenaufruf würde ein
+    Deploy erst beim nächsten Worker-Neustart ankommen."""
+    src = _code()
+    assert "function refreshCacheName" in src
+    nav = src[src.index("evt.request.mode === 'navigate'") :]
+    assert "refreshCacheName()" in nav[:400], "a navigation does not re-check the version"
+    assert "await fetch(evt.request)" in nav[:900], "the document itself must come from the network"
 
 
 def test_sw_does_not_stale_while_revalidate_code():
@@ -204,19 +228,16 @@ def test_sw_does_not_stale_while_revalidate_code():
     assert "return cached || fetchPromise" not in src
 
 
-def test_code_paths_route_through_network_first():
-    """JS/CSS/HTML use network-first; only genuinely immutable assets
-    may be served cache-first."""
+def test_code_paths_are_served_from_the_versioned_cache():
+    """Nach der Versionsabfrage kommt Code aus dem Cache — das ist der
+    ganze Gewinn. Was NICHT aus dem Cache kommen darf, steht als Liste
+    von Pfad-Ausnahmen darüber und wird hier mitgeprüft."""
     src = _code()
-    dispatch = src[src.index("evt.respondWith") :]
-    assert "_networkFirst(evt.request)" in dispatch
-    immutable = re.search(r"const _IMMUTABLE = /(.+)/[a-z]*;", src)
-    assert immutable, "no immutable-asset pattern found"
-    pattern = re.compile(immutable.group(1), re.I)
-    for code_path in ("/static/js/main.js", "/static/js/vplayer/index.js", "/static/app.css", "/"):
-        assert not pattern.search(code_path), f"{code_path} would be served cache-first"
-    for asset in ("/static/icons/icon-192.png", "/static/manifest.json"):
-        assert pattern.search(asset), f"{asset} should be cache-first"
+    dispatch = src[src.index("self.addEventListener('fetch'") :]
+    assert "_cacheFirst(evt.request)" in dispatch
+    assert "_networkFirst" not in src, "the per-file conditional request is back"
+    for live in ("/api/", "/media/", ".mjpg", "snapshot.jpg", "/sw.js", "/version.json"):
+        assert live in dispatch, f"{live} is no longer excluded from the cache"
 
 
 def test_sw_does_not_cache_its_own_version_probe():

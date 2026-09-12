@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 globalThis.window = globalThis.window || {};
 globalThis.document = globalThis.document || { getElementById: () => null };
 
-const { personMeta, personAvatar, personsHtml, catsHtml, qualityLine } =
+const { personMeta, personAvatar, personsHtml, catsHtml, qualityLine, regionRows, regionsHtml } =
   await import('../_persons.js');
 const {
   suggestLabel,
@@ -196,4 +196,51 @@ test('a tile the register already knows is dimmed, not hidden', () => {
 
 test('the bar always offers the not-a-person way out', () => {
   assert.match(assignBarHtml(2, ['Anna'], ''), /data-idy="reject"/);
+});
+
+// ── ganze Person / Oberkörper / Kopf ───────────────────────────────────
+
+test('the regions are listed best first, so the answer is the top row', () => {
+  const rows = regionRows(
+    {
+      full: { checked: 10, hits: 7, rate: 0.7 },
+      head: { checked: 10, hits: 9, rate: 0.9 },
+      upper: { checked: 10, hits: 8, rate: 0.8 },
+    },
+    'full',
+  );
+  assert.deepEqual(
+    rows.map((r) => r.key),
+    ['head', 'upper', 'full'],
+  );
+  assert.equal(rows[0].pct, 90);
+});
+
+test('an unmeasured region is left out rather than shown as zero', () => {
+  const rows = regionRows(
+    { full: { checked: 4, hits: 2, rate: 0.5 }, head: { checked: 0 } },
+    'full',
+  );
+  assert.deepEqual(
+    rows.map((r) => r.key),
+    ['full'],
+  );
+});
+
+test('the region actually in use is marked', () => {
+  const rows = regionRows({ full: { checked: 4, hits: 2, rate: 0.5 } }, 'full');
+  assert.equal(rows[0].active, true);
+  assert.match(regionsHtml({ full: { checked: 4, hits: 2, rate: 0.5 } }, 'full'), /is-active/);
+});
+
+test('nothing measured means no table at all', () => {
+  assert.equal(regionsHtml({}, 'full'), '');
+  assert.equal(regionsHtml({ head: { checked: 0 } }, 'full'), '');
+});
+
+test('the rows carry the count, not only the percentage', () => {
+  const html = regionsHtml({ upper: { checked: 9, hits: 7, rate: 0.778 } }, 'full');
+  assert.match(html, /Oberkörper/);
+  assert.match(html, /78/);
+  assert.match(html, /7\/9/);
 });

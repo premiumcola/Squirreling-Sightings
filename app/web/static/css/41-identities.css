@@ -482,3 +482,47 @@
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Ganze Person / Oberkörper / Kopf ────────────────────────────────────
+   „ich würde sagen du solltest eher auf die köpfe gehen die müssen ja
+   wiedererkannt werden! - komplett weis ich nicht ob das sinn macht!"
+   Drei Zeilen, beste Quote oben, die gerade benutzte markiert. Eine
+   Tabelle ohne Kopfzeile: drei Zahlen brauchen keine Überschrift, die
+   sagt, dass es Zahlen sind. */
+.idy-regions {
+  display: grid;
+  gap: 6px;
+}
+.idy-reg {
+  display: grid;
+  grid-template-columns: 1fr 56px auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.idy-reg.is-active {
+  background: rgba(var(--sa), 0.12);
+  color: var(--text);
+}
+.idy-reg-name {
+  font-weight: 600;
+}
+.idy-reg .idy-q-track {
+  width: 100%;
+}
+.idy-reg .idy-q-fill {
+  background: currentColor;
+}
+.idy-reg-num {
+  font-weight: 700;
+  color: var(--text);
+}
+.idy-reg-of {
+  color: var(--muted);
+  font-size: 11px;
+}

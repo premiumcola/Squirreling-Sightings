@@ -35,7 +35,7 @@ from flask import Blueprint, jsonify, request
 from .. import app_state
 from ..cat_identity import IdentityRegistry, profile_crops, profile_samples
 from ..detection_feedback import record_verdict
-from ..identity_quality import evaluate
+from ..identity_quality import compare_regions, evaluate
 from ..person_crops import sweep_person_crops
 from ._identity_helpers import (
     REJECT_BUCKET,
@@ -98,12 +98,16 @@ def api_identities():
     herumliegen — und wie gut die Profile tatsächlich schon erkennen."""
     rows = walk_person_crops(_events_dir(), only_unnamed=False)
     persons = app_state.person_registry
-    quality = evaluate(persons.list_profiles(), persons.threshold)
+    quality = evaluate(persons.list_profiles(), persons.threshold, persons.region)
     return jsonify(
         {
             "persons": [_profile_card(p, quality) for p in persons.list_profiles()],
             "cats": [_profile_card(p, {}) for p in app_state.cat_registry.list_profiles()],
             "quality": quality.get("total") or {},
+            # Ganze Person / Oberkörper / Kopf, dieselbe Prüfung dreimal.
+            # Solange hier niemand gewinnt, bleibt der Abgleich auf dem
+            # ganzen Ausschnitt — siehe cat_identity.DEFAULT_REGION.
+            "regions": compare_regions(persons.list_profiles(), persons.threshold),
             "crops": {
                 "total": len(rows),
                 "unnamed": sum(1 for r in rows if not r.get("person_name")),

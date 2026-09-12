@@ -18,7 +18,7 @@
 import { byId } from '../core/dom.js';
 import { showToast, showConfirm } from '../core/toast.js';
 import * as api from './_api.js';
-import { personsHtml, catsHtml } from './_persons.js';
+import { personsHtml, catsHtml, regionsHtml } from './_persons.js';
 import {
   facesHtml,
   assignBarHtml,
@@ -31,7 +31,7 @@ import {
 const MOUNT = 'identityPanel';
 const SECTION = 'set-profiles';
 
-let _data = { persons: [], cats: [], crops: {}, quality: {} };
+let _data = { persons: [], cats: [], crops: {}, quality: {}, regions: {} };
 let _faces = [];
 let _loaded = false;
 let _busy = false;
@@ -76,9 +76,10 @@ function _topHtml() {
     // Kleidung, Ort, Licht — und nicht das Gesicht. Wer das nicht weiß,
     // hält eine schwache Quote für einen Fehler statt für die Physik des
     // Verfahrens.
-    `<div class="idy-note">Verglichen wird der ganze Personen-Ausschnitt ` +
-    `(Silhouette, Kleidung, Ort), nicht das Gesicht. Zuordnungen von ` +
-    `verschiedenen Tagen bringen deshalb am meisten.` +
+    `<div class="idy-note">Verglichen wird ein Bild-Ausschnitt, nicht ein ` +
+    `Gesicht — ein Gesichtsmodell gibt es hier nicht. Welcher Ausschnitt ` +
+    `am besten trägt, steht unten als Messung. Zuordnungen von ` +
+    `verschiedenen Tagen bringen am meisten.` +
     (total ? ` <b>${total.hits}/${total.checked}</b> wiedererkannt.` : '') +
     `</div>`
   );
@@ -109,6 +110,7 @@ function _paint() {
   el.innerHTML =
     _topHtml() +
     personsHtml(_data.persons) +
+    regionsHtml(_data.regions, _data.quality?.region) +
     catsHtml(_data.cats) +
     `<div class="idy-sub">Neue Gesichter</div>` +
     facesHtml(_faces, _selected) +
@@ -128,11 +130,12 @@ export async function loadIdentities({ keepSelection = false } = {}) {
       cats: summary.cats || [],
       crops: summary.crops || {},
       quality: summary.quality || {},
+      regions: summary.regions || {},
     };
     _faces = crops.items || [];
     _loaded = true;
   } catch {
-    _data = { persons: [], cats: [], crops: {}, quality: {} };
+    _data = { persons: [], cats: [], crops: {}, quality: {}, regions: {} };
     _faces = [];
   }
   _paint();

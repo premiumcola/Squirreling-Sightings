@@ -19,6 +19,84 @@ def dhash_bgr(img: np.ndarray) -> str | None:
     return f"{int(bits, 2):016x}"
 
 
+#: Welcher Teil des Personen-Ausschnitts verglichen wird, als Anteil
+#: (oben, unten, links, rechts) des Rechtecks.
+#:
+#: „ich würde sagen du solltest eher auf die köpfe gehen die müssen ja
+#: wiedererkannt werden! - komplett weis ich nicht ob das sinn macht!"
+#:
+#: Der Gedanke stimmt: Kleidung wechselt täglich, ein Kopf nicht. Nur
+#: lässt er sich nicht einfach behaupten — es gibt in diesem Projekt KEIN
+#: Gesichtsmodell (der Detektor kennt COCO-Klassen, „face" ist keine
+#: davon), also ist „Kopf" hier ein geometrischer Ausschnitt und keine
+#: Erkennung: das obere Viertel des Personen-Rechtecks, horizontal
+#: eingezogen. Bei einer stehenden Person trifft das Kopf und Schultern.
+#:
+#: Und es gibt ein Gegenargument, das man kennen muss, bevor man
+#: umstellt: der dHash ist ein 8×8-Gradient. Ein Kopf, der im Bild 90 px
+#: hoch ist, wird dafür auf acht Zeilen heruntergerechnet — vom Gesicht
+#: bleiben vier Pixel. Weniger Fläche heißt hier nicht schärfer, sondern
+#: gröber. Deshalb wird nicht umgestellt, sondern GEMESSEN: jede Probe
+#: bekommt alle drei Hashes, `identity_quality` rechnet die Trefferquote
+#: für jeden Bereich getrennt aus, und die Zahl entscheidet.
+REGIONS = {
+    "full": (0.0, 1.0, 0.0, 1.0),
+    "upper": (0.0, 0.45, 0.0, 1.0),
+    "head": (0.0, 0.26, 0.20, 0.80),
+}
+
+#: Der Bereich, auf dem der Abgleich tatsächlich läuft. Bleibt „full",
+#: bis die Messung etwas anderes sagt — eine unbelegte Umstellung wäre
+#: genau der Griff, den die Messung überflüssig machen soll.
+DEFAULT_REGION = "full"
+
+#: Unter dieser Kantenlänge ist ein Ausschnitt für einen 9×8-Gradienten
+#: zu klein; der Hash daraus ist Rauschen.
+MIN_REGION_PX = 12
+
+
+def crop_region(img, region: str):
+    """Den benannten Teil eines Ausschnitts, oder None, wenn er zu klein
+    wird. Der volle Bereich gibt das Bild unverändert zurück."""
+    box = REGIONS.get(region)
+    if img is None or box is None:
+        return None
+    if region == "full":
+        return img
+    top, bottom, left, right = box
+    h, w = img.shape[:2]
+    y1, y2 = int(h * top), int(h * bottom)
+    x1, x2 = int(w * left), int(w * right)
+    if (y2 - y1) < MIN_REGION_PX or (x2 - x1) < MIN_REGION_PX:
+        return None
+    return img[y1:y2, x1:x2]
+
+
+def region_hashes(img) -> dict:
+    """Alle Bereiche eines Ausschnitts auf einmal, leere ausgelassen."""
+    out = {}
+    for region in REGIONS:
+        part = crop_region(img, region)
+        if part is None:
+            continue
+        h = dhash_bgr(part)
+        if h:
+            out[region] = h
+    return out
+
+
+def sample_hash(sample: dict, region: str) -> str | None:
+    """Der Hash einer Probe für einen Bereich.
+
+    ``full`` liegt weiterhin unter ``h`` — das ist der Schlüssel, auf dem
+    der Abgleich seit jeher läuft, und ihn umzubenennen hätte jede
+    bestehende Registry entwertet, ohne irgendetwas zu verbessern.
+    """
+    if region == "full":
+        return sample.get("h")
+    return (sample.get("hr") or {}).get(region)
+
+
 def hamming_hex(a: str, b: str) -> int:
     # bin().count("1") rather than int.bit_count() — the latter is 3.10+
     # and the Coral image runs Python 3.9. Both operands are non-negative,
@@ -68,10 +146,11 @@ def profile_crops(profile: dict) -> list[str]:
 
 
 class IdentityRegistry:
-    def __init__(self, path: str | Path, threshold: int = 10):
+    def __init__(self, path: str | Path, threshold: int = 10, region: str = DEFAULT_REGION):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.threshold = threshold
+        self.region = region if region in REGIONS else DEFAULT_REGION
         self.data = {"profiles": []}
         self._load()
 
@@ -129,15 +208,19 @@ class IdentityRegistry:
         return f"{prefix} {n}"
 
     def match_details(self, crop: np.ndarray) -> dict | None:
-        h = dhash_bgr(crop)
+        part = crop_region(crop, self.region)
+        h = dhash_bgr(part) if part is not None else None
         if not h:
             return None
         best = None
         best_dist = 999
         for p in self.data.get("profiles", []):
             for sample in profile_samples(p):
+                other = sample_hash(sample, self.region)
+                if not other:
+                    continue
                 try:
-                    d = hamming_hex(h, sample["h"])
+                    d = hamming_hex(h, other)
                 except Exception:
                     continue
                 if d < best_dist:
@@ -182,7 +265,8 @@ class IdentityRegistry:
         `anonymous` marks the profile as known-but-unnamed („bekannt,
         aber ohne Namensnennung"). None leaves an existing flag alone.
         """
-        h = dhash_bgr(crop)
+        hashes = region_hashes(crop)
+        h = hashes.get("full")
         if not h:
             return False
         profiles = self.data.setdefault("profiles", [])
@@ -204,7 +288,15 @@ class IdentityRegistry:
             profile["anonymous"] = bool(anonymous)
         if not any(s.get("h") == h for s in profile_samples(profile)):
             profile["samples"].insert(
-                0, {"h": h, "relpath": relpath or "", "event_id": event_id or ""}
+                0,
+                {
+                    "h": h,
+                    # Die übrigen Bereiche daneben, damit die Messung sie
+                    # vergleichen kann, ohne jedes JPEG erneut zu öffnen.
+                    "hr": {k: v for k, v in hashes.items() if k != "full"},
+                    "relpath": relpath or "",
+                    "event_id": event_id or "",
+                },
             )
             del profile["samples"][MAX_PROFILE_SAMPLES:]
         self._save()

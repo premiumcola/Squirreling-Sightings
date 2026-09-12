@@ -42,7 +42,7 @@ Ausschnitte von VERSCHIEDENEN Tagen zuordnet.
 
 from __future__ import annotations
 
-from .cat_identity import hamming_hex, profile_samples
+from .cat_identity import DEFAULT_REGION, REGIONS, hamming_hex, profile_samples, sample_hash
 
 #: Wie viele Proben je Profil höchstens ins Gedächtnis bzw. in die
 #: Prüfung gehen. Die Auswertung ist ein Alle-gegen-alle-Vergleich; ohne
@@ -105,20 +105,29 @@ def _nearest(h: str, memories: dict) -> tuple[str | None, int]:
     return best_name, best
 
 
-def evaluate(profiles: list[dict], threshold: int) -> dict:
+def evaluate(profiles: list[dict], threshold: int, region: str = DEFAULT_REGION) -> dict:
     """Je Profil eine Trefferquote, plus eine Gesamtbilanz.
 
     ``{"profiles": {name: {...}}, "total": {...}}``. Ein Profil, das noch
     nicht geprüft werden kann, bekommt ``state: "zu-wenig"`` und keine
     Quote — eine erfundene 0 % wäre schlimmer als keine Zahl.
+
+    ``region`` wählt, WELCHER Teil des Ausschnitts verglichen wird —
+    ganze Person, Oberkörper oder Kopf. Proben, die für diesen Bereich
+    keinen Hash haben (zu kleiner Ausschnitt, oder vor der Umstellung
+    abgelegt), fallen für diese Rechnung weg statt sie zu verfälschen.
     """
     split = {}
     for p in profiles or []:
         name = p.get("name") or ""
         if not name:
             continue
-        split[name] = split_by_event(profile_samples(p))
-    memories = {name: [s["h"] for s in mem] for name, (mem, _) in split.items()}
+        mem, probe = split_by_event(profile_samples(p))
+        split[name] = (
+            [s for s in mem if sample_hash(s, region)],
+            [s for s in probe if sample_hash(s, region)],
+        )
+    memories = {name: [sample_hash(s, region) for s in mem] for name, (mem, _) in split.items()}
 
     per: dict = {}
     hits = checked = confused = 0
@@ -132,7 +141,7 @@ def evaluate(profiles: list[dict], threshold: int) -> dict:
             continue
         own = wrong = 0
         for s in probe:
-            who, dist = _nearest(s["h"], memories)
+            who, dist = _nearest(sample_hash(s, region), memories)
             if dist > threshold:
                 continue  # nicht wiedererkannt — weder Treffer noch Verwechslung
             if who == name:
@@ -157,5 +166,22 @@ def evaluate(profiles: list[dict], threshold: int) -> dict:
         "hits": hits,
         "confused": confused,
         "rate": round(hits / checked, 3) if checked else None,
+        "region": region,
     }
     return {"profiles": per, "total": total}
+
+
+def compare_regions(profiles: list[dict], threshold: int) -> dict:
+    """Dieselbe Prüfung für jeden Bereich — ganze Person, Oberkörper, Kopf.
+
+    „ich würde sagen du solltest eher auf die köpfe gehen die müssen ja
+    wiedererkannt werden! - komplett weis ich nicht ob das sinn macht!"
+
+    Der Gedanke ist richtig — Kleidung wechselt, ein Kopf nicht — und die
+    Umsetzung ist trotzdem nicht offensichtlich: der dHash ist ein
+    8×8-Gradient, und je kleiner der Ausschnitt, desto gröber wird er.
+    Was besser trägt, ist eine empirische Frage, und das hier ist die
+    Antwort darauf statt einer Meinung. Umgestellt wird `DEFAULT_REGION`
+    erst, wenn die Zahlen es sagen.
+    """
+    return {region: evaluate(profiles, threshold, region).get("total") or {} for region in REGIONS}

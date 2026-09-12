@@ -123,3 +123,49 @@ export function catsHtml(cats) {
     `</div>`
   );
 }
+
+//: Deutsche Namen der Vergleichsbereiche. Spiegel von
+//: cat_identity.REGIONS — steht hier, weil nur die Oberfläche sie
+//: ausspricht.
+const _REGION_DE = { full: 'Ganze Person', upper: 'Oberkörper', head: 'Kopf' };
+
+/** PURE: die Bereiche als Zeilen, beste Quote zuerst.
+ *
+ *  „ich würde sagen du solltest eher auf die köpfe gehen die müssen ja
+ *  wiedererkannt werden! - komplett weis ich nicht ob das sinn macht!"
+ *  — die Zeilen sind die Antwort darauf. Bereiche ohne geprüfte Probe
+ *  fallen raus statt mit 0 % dazustehen. */
+export function regionRows(regions, active) {
+  return Object.entries(regions || {})
+    .filter(([, r]) => r && r.checked)
+    .map(([key, r]) => ({
+      key,
+      label: _REGION_DE[key] || key,
+      pct: Math.round((Number(r.rate) || 0) * 100),
+      checked: r.checked,
+      hits: r.hits,
+      active: key === active,
+    }))
+    .sort((a, b) => b.pct - a.pct);
+}
+
+/** Der Vergleich als kleine Tabelle. Leer, solange nichts gemessen ist. */
+export function regionsHtml(regions, active) {
+  const rows = regionRows(regions, active);
+  if (!rows.length) return '';
+  return (
+    `<div class="idy-sub">Was besser wiedererkennt</div>` +
+    `<div class="idy-regions">` +
+    rows
+      .map(
+        (r) =>
+          `<div class="idy-reg${r.active ? ' is-active' : ''}">` +
+          `<span class="idy-reg-name">${esc(r.label)}${r.active ? ' ·&nbsp;aktiv' : ''}</span>` +
+          `<span class="idy-q-track"><span class="idy-q-fill" style="width:${r.pct}%"></span></span>` +
+          `<span class="idy-reg-num">${r.pct}\u00a0%</span>` +
+          `<span class="idy-reg-of">${r.hits}/${r.checked}</span></div>`,
+      )
+      .join('') +
+    `</div>`
+  );
+}

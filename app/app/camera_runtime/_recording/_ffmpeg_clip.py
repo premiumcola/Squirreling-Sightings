@@ -236,6 +236,10 @@ class FfmpegClipMixin(FinalizeClipMixin):
             if pre_s > 0 and hasattr(self, "_ring_segments_covering")
             else []
         )
+        # Bis zum Ankleben festhalten — sonst räumt der Ring sie weg, bevor
+        # die Nachbearbeitung sie braucht (siehe _ring_buffer.stale_segments).
+        if self._rec_ring_segments and hasattr(self, "_ring_claim"):
+            self._ring_claim(self._rec_ring_segments)
         # Persist a 'recording' stub so the dashboard can show the clip immediately
         try:
             self._write_recording_event_stub(event_id, meta, start_time, status="recording")

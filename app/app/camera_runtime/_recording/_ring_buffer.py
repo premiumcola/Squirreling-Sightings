@@ -85,6 +85,12 @@ def _ring_seconds() -> float:
 
 _CLEANUP_EVERY_S = 5.0
 
+#: Wie lange ein Anspruch auf Segmente höchstens gilt. Ein Clip, dessen
+#: Nachbearbeitung abstürzt, gibt seine Segmente nie frei — ohne Verfall
+#: wüchse der Ring dann unbegrenzt. 15 Minuten liegen weit über
+#: `clip_max_duration_s` (120 s) plus jeder gemessenen Kodier-Warteschlange.
+_CLAIM_TTL_S = 900.0
+
 
 # ── pure helpers — no filesystem, no subprocess, fully unit-testable ──────
 
@@ -121,10 +127,23 @@ def segments_covering(
     return out
 
 
-def stale_segments(stamped: list[tuple[float, Path]], cutoff_ts: float) -> list[Path]:
+def stale_segments(
+    stamped: list[tuple[float, Path]], cutoff_ts: float, claimed: frozenset = frozenset()
+) -> list[Path]:
     """Segments whose own start is older than `cutoff_ts` — what the
-    janitor should delete this sweep."""
-    return [path for ts, path in stamped if ts < cutoff_ts]
+    janitor should delete this sweep — MINUS every segment a clip still
+    in flight has claimed for its pre-roll.
+
+    „Es fängt sehr, sehr ruckelig an … und auch Vorlauf ist nicht da."
+    Die Segmente werden beim AUSLÖSEN ausgewählt, angeklebt werden sie
+    erst nach Aufnahme und Kodierung — gemessen am 2026-09-25 auf der
+    Nut Bar 49 s später (Auslösung 14:33:19, Aufnahme bis 14:33:49,
+    Kodierung fertig 14:34:08). Das Ringfenster ist 20 s. Der Aufräumer
+    hatte den echten Vorlauf also längst gelöscht, und jeder Clip über
+    ~15 s bekam stattdessen die ~3-fps-Standbilder vorne dran — genau
+    das Ruckeln am Anfang. Ein beanspruchtes Segment bleibt liegen, bis
+    der Clip es verbraucht hat."""
+    return [path for ts, path in stamped if ts < cutoff_ts and path not in claimed]
 
 
 # ── the stateful half — one continuous ffmpeg process per camera ──────────
@@ -257,6 +276,45 @@ class StreamRingBufferMixin:
                 proc.kill()
                 proc.wait(timeout=3)
 
+    def _ring_claims_state(self):
+        """`(lock, {path: claimed_at})`, created on first use — the mixin
+        has no __init__ of its own to put them in."""
+        if getattr(self, "_ring_claims_lock", None) is None:
+            self._ring_claims_lock = threading.Lock()
+            self._ring_claims = {}
+        return self._ring_claims_lock, self._ring_claims
+
+    def _ring_claim(self, paths) -> None:
+        """Schützt die Vorlauf-Segmente eines Clips vor dem Aufräumer, bis
+        `_ring_release` sie wieder freigibt (siehe `stale_segments`)."""
+        if not paths:
+            return
+        lock, claims = self._ring_claims_state()
+        now = time.time()
+        with lock:
+            for p in paths:
+                claims[Path(p)] = now
+
+    def _ring_release(self, paths) -> None:
+        """Gibt beanspruchte Segmente frei. Der nächste Kehrlauf löscht
+        sie, sobald sie außerhalb des Fensters liegen."""
+        if not paths:
+            return
+        lock, claims = self._ring_claims_state()
+        with lock:
+            for p in paths:
+                claims.pop(Path(p), None)
+
+    def _ring_claimed_now(self) -> frozenset:
+        """Die gültigen Ansprüche — verfallene fallen dabei heraus, damit
+        ein abgestürzter Clip den Ring nicht auf ewig festhält."""
+        lock, claims = self._ring_claims_state()
+        cutoff = time.time() - _CLAIM_TTL_S
+        with lock:
+            for p in [p for p, at in claims.items() if at < cutoff]:
+                claims.pop(p, None)
+            return frozenset(claims)
+
     def _ring_cleanup_loop(self, stop_evt: threading.Event) -> None:
         """Deletes segments older than the ring window. Runs until
         `stop_evt` is set — `Event.wait` doubles as the sleep, so stop is
@@ -264,7 +322,8 @@ class StreamRingBufferMixin:
         while not stop_evt.wait(_CLEANUP_EVERY_S):
             cutoff = time.time() - _ring_seconds()
             try:
-                for f in stale_segments(self._ring_stamped_segments(), cutoff):
+                stamped = self._ring_stamped_segments()
+                for f in stale_segments(stamped, cutoff, self._ring_claimed_now()):
                     with contextlib.suppress(OSError):
                         f.unlink(missing_ok=True)
             except Exception as e:

@@ -25,6 +25,16 @@ _PROFILES = TIMELAPSE_PROFILES
 # fast stream-copy path (direct RTSP → mp4, no CPU re-encode). Otherwise we
 # fall back to the OpenCV frame-buffer approach, which loses timestamps.
 _FFMPEG_AVAILABLE = _shutil.which('ffmpeg') is not None
+
+# Wie lange ein ffmpeg-Mitschnitt MINDESTENS läuft, bevor er gestoppt
+# werden darf. Der Stream-Copy fängt mitten in einer GOP an und braucht
+# rund eine Sekunde für den RTSP-Aufbau; lief die Aufnahme nur Bewegung
+# plus Nachlauf (gemessen: ~3 s), kam in den verbleibenden zwei Sekunden
+# oft kein Keyframe — die Datei hatte einen Kopf und kein einziges Bild,
+# und die Mediathek zeigte eine 1-KB-Kachel „Conversion failed" (32 Stück
+# am 2026-09-25, Garten und Nut Bar). Sechs Sekunden decken den Aufbau
+# plus zwei Keyframe-Abstände der Reolink-Voreinstellung.
+MIN_LIVE_SEGMENT_S = 6.0
 if not _FFMPEG_AVAILABLE:
     logging.getLogger(__name__).warning(
         "ffmpeg binary not found — motion recording falls back to OpenCV frame buffer "

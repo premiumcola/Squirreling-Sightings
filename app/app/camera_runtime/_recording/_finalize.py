@@ -34,6 +34,8 @@ from .._clip_tally import clip_aggregate_fields
 from .._consts import log
 from ...media_encode import build_reencode_cmd
 from ._encode_queue import encode_slot
+from ._thumbnail import extract_motion_thumbnail
+from ._unplayable import discard_unplayable, has_decodable_frame
 from ._stages import (
     STAGE_ENCODING,
     STAGE_FAILED,
@@ -91,9 +93,16 @@ class FinalizeClipMixin:
         # ehrlich beschreibt, was er tut: warten. Ohne diese Klammer
         # liefen acht 4K-Transkodierungen gleichzeitig und keine wurde
         # fertig; siehe _encode_queue.py für die Messung.
-        with encode_slot(self.camera_id, event_id):
-            video_url, video_relpath, duration_s, file_size_bytes, encode_error, achieved_pre_s = (
-                self._produce_playable_clip(
+        try:
+            with encode_slot(self.camera_id, event_id):
+                (
+                    video_url,
+                    video_relpath,
+                    duration_s,
+                    file_size_bytes,
+                    encode_error,
+                    achieved_pre_s,
+                ) = self._produce_playable_clip(
                     raw_path,
                     vid_path,
                     event_id,
@@ -103,7 +112,13 @@ class FinalizeClipMixin:
                     preroll_frames,
                     ring_segments,
                 )
-            )
+        finally:
+            # Die beim Auslösen beanspruchten Ring-Segmente sind verbraucht
+            # (oder werden es nie mehr) — siehe _ring_buffer.stale_segments.
+            if hasattr(self, "_ring_release"):
+                self._ring_release(ring_segments)
+        if not video_url and discard_unplayable(self.camera_id, event_id, encode_error):
+            return
 
         # AFTER the splice, not before. The thumbnail seeks to a third of
         # whatever file it is handed, and it used to be handed the
@@ -113,8 +128,8 @@ class FinalizeClipMixin:
         # final file; the preview picture has to come from the same one,
         # or the grid and the poster disagree about what this clip is.
         thumb_source = vid_path if vid_path.exists() else (raw_path if raw_path.exists() else None)
-        thumb_rel, thumb_url = self._extract_motion_thumbnail(
-            thumb_source, day_dir, event_id, storage_root, public_base
+        thumb_rel, thumb_url = extract_motion_thumbnail(
+            self.camera_id, thumb_source, day_dir, event_id, storage_root, public_base
         )
 
         # The scrub filmstrip, AFTER the splice — the sheet has to describe
@@ -325,7 +340,7 @@ class FinalizeClipMixin:
             log.error("[%s] Re-encode failed: %s", self.camera_id, e)
             encode_error = str(e)
             # Fallback: raw may still be playable — expose it if so
-            if raw_path.exists() and raw_path.stat().st_size > 1024:
+            if has_decodable_frame(raw_path):
                 rel = raw_path.relative_to(storage_root)
                 video_url = (
                     f"{public_base}/media/{rel.as_posix()}"
@@ -335,42 +350,6 @@ class FinalizeClipMixin:
                 video_relpath = rel.as_posix()
                 file_size_bytes = raw_path.stat().st_size
         return video_url, video_relpath, duration_s, file_size_bytes, encode_error
-
-    def _extract_motion_thumbnail(
-        self,
-        thumb_source: Path | None,
-        day_dir: Path,
-        event_id: str,
-        storage_root: Path,
-        public_base: str,
-    ) -> tuple[str | None, str | None]:
-        """Grab a representative frame (~1/3 into whichever file is
-        present) and downscale to max 640px wide. Returns
-        ``(thumb_relpath, thumb_url)``, both None on any failure."""
-        if thumb_source is None:
-            return None, None
-        thumb_path = day_dir / f"{event_id}.jpg"
-        try:
-            cap = cv2.VideoCapture(str(thumb_source))
-            total_f = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if total_f > 3:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, total_f // 3)
-            ok_th, frame_th = cap.read()
-            cap.release()
-            if ok_th and frame_th is not None:
-                tw = frame_th.shape[1]
-                if tw > 640:
-                    scale = 640 / tw
-                    frame_th = cv2.resize(frame_th, (640, int(frame_th.shape[0] * scale)))
-                if cv2.imwrite(str(thumb_path), frame_th, [int(cv2.IMWRITE_JPEG_QUALITY), 75]):
-                    thumb_rel = thumb_path.relative_to(storage_root).as_posix()
-                    thumb_url = (
-                        f"{public_base}/media/{thumb_rel}" if public_base else f"/media/{thumb_rel}"
-                    )
-                    return thumb_rel, thumb_url
-        except Exception as _te:
-            log.debug("[%s] motion thumb (post-encode) failed: %s", self.camera_id, _te)
-        return None, None
 
     def _build_scrub_sprite(self, vid_path: Path | None) -> dict | None:
         """The scrub filmstrip for a finished clip, or None.

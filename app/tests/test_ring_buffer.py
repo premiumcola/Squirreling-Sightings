@@ -230,3 +230,71 @@ def test_ring_cleanup_loop_deletes_only_segments_older_than_the_window(tmp_path,
 
     assert not old.exists()
     assert fresh.exists()
+
+
+# ── beanspruchte Segmente ──────────────────────────────────────────────────
+# „Es fängt sehr, sehr ruckelig an … und auch Vorlauf ist nicht da."
+# Gemessen am 2026-09-25 auf der Nut Bar: Auslösung 14:33:19, Kodierung
+# fertig 14:34:08 — 49 s, bei einem Ringfenster von 20 s. Der Aufräumer
+# hatte den echten Vorlauf gelöscht, bevor er angeklebt wurde, und der
+# Clip bekam die ~3-fps-Standbilder vorne dran.
+
+
+def test_stale_segments_spares_a_claimed_segment():
+    a, b = Path("100.mp4"), Path("101.mp4")
+    out = stale_segments([(100.0, a), (101.0, b)], 200.0, frozenset({a}))
+    assert out == [b]
+
+
+def test_the_janitor_leaves_a_claimed_pre_roll_alone(tmp_path, monkeypatch):
+    """DER Fehler: der Clip ist noch in Arbeit, sein Vorlauf liegt schon
+    außerhalb des Fensters — und darf trotzdem nicht weg."""
+    monkeypatch.setattr(ring_mod, "_ring_seconds", lambda: 10.0)
+    rt = _Ring("cam1", tmp_path)
+    ring_dir = rt._ring_buffer_dir()
+    ring_dir.mkdir(parents=True)
+    now = time.time()
+    claimed = ring_dir / f"{int(now - 40)}.mp4"
+    other = ring_dir / f"{int(now - 41)}.mp4"
+    claimed.write_bytes(b"x")
+    other.write_bytes(b"x")
+
+    rt._ring_claim([claimed])
+    rt._ring_cleanup_loop(_OneShotEvent())
+
+    assert claimed.exists(), "der Vorlauf eines laufenden Clips wurde gelöscht"
+    assert not other.exists()
+
+
+def test_a_released_segment_is_swept_on_the_next_pass(tmp_path, monkeypatch):
+    monkeypatch.setattr(ring_mod, "_ring_seconds", lambda: 10.0)
+    rt = _Ring("cam1", tmp_path)
+    ring_dir = rt._ring_buffer_dir()
+    ring_dir.mkdir(parents=True)
+    seg = ring_dir / f"{int(time.time() - 40)}.mp4"
+    seg.write_bytes(b"x")
+
+    rt._ring_claim([seg])
+    rt._ring_release([seg])
+    rt._ring_cleanup_loop(_OneShotEvent())
+
+    assert not seg.exists()
+
+
+def test_a_claim_expires_so_a_crashed_clip_cannot_pin_the_ring(tmp_path, monkeypatch):
+    """Ohne Verfall hielte eine abgestürzte Nachbearbeitung ihre Segmente
+    auf ewig fest, und der Ring wüchse unbegrenzt."""
+    rt = _Ring("cam1", tmp_path)
+    seg = Path("123.mp4")
+    rt._ring_claim([seg])
+    assert seg in rt._ring_claimed_now()
+    lock, claims = rt._ring_claims_state()
+    claims[seg] = time.time() - ring_mod._CLAIM_TTL_S - 1
+    assert seg not in rt._ring_claimed_now()
+
+
+def test_claiming_and_releasing_nothing_is_harmless(tmp_path):
+    rt = _Ring("cam1", tmp_path)
+    rt._ring_claim([])
+    rt._ring_release(None)
+    assert rt._ring_claimed_now() == frozenset()

@@ -8,7 +8,7 @@ from pathlib import Path
 from ..settings._consts import BIRD_SPECIES_VIDEO_CAP_DEFAULT
 from ..species_video_count import confirmed_video_count
 from ._clip_tally import ClipTally, rank_headline_species
-from ._consts import _FFMPEG_AVAILABLE, log
+from ._consts import _FFMPEG_AVAILABLE, MIN_LIVE_SEGMENT_S, log
 
 
 class RecordingStepMixin:
@@ -322,7 +322,10 @@ class RecordingStepMixin:
         # In OpenCV mode we keep accumulating tail frames
         if self._ffmpeg_proc is None:
             self._rec_frames.append(proc_frame.copy())
-        if since_last >= post_tail or since_start >= clip_max:
+        # Im ffmpeg-Modus nie vor MIN_LIVE_SEGMENT_S stoppen — sonst kann
+        # der Mitschnitt ohne einen einzigen Keyframe enden (siehe _consts).
+        min_live = MIN_LIVE_SEGMENT_S if self._ffmpeg_proc is not None else 0.0
+        if (since_last >= post_tail and since_start >= min_live) or since_start >= clip_max:
             if self._rec_corrupt_frames > 5:
                 log.warning(
                     "[%s] %d corrupt frames rejected in this clip",

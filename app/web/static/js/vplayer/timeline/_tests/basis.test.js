@@ -350,3 +350,22 @@ test('a track carrying no score at all is kept rather than guessed away', () => 
   const lanes = timelineBasis({}, _gated(0.5, [{ label: 'bird', samples: [{ t: 0 }] }])).tracks;
   assert.equal(lanes.length, 1);
 });
+
+// ── gepunktet oben, gepunktet unten ──────────────────────────────────────
+// „es ist gestrichelt oben, aber unten in der Timeline ist die Linie …
+// nicht gestrichelt." Ohne Bild-für-Bild-Spuren ist der Kasten im Video
+// der gepunktete „≈"-Kasten — die Zeile im Zeitstrahl muss dasselbe sagen.
+
+test('a lane without per-frame tracks is dotted, like its box', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const css = readFileSync(
+    fileURLToPath(new URL('../../../../css/36b-vplayer-timeline.css', import.meta.url)),
+    'utf8',
+  );
+  for (const basis of [TL_BASIS_CLIP, 'trigger']) {
+    assert.match(css, new RegExp(`\\[data-basis='${basis}'\\] \\.vp-tl-bar`));
+    assert.match(css, new RegExp(`\\[data-basis='${basis}'\\] \\.vp-tl-dot`));
+  }
+  assert.ok(!/\[data-basis='sidecar'\] \.vp-tl-bar/.test(css), 'echte Spuren bleiben durchgezogen');
+});

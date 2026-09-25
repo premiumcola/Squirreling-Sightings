@@ -203,9 +203,9 @@ function _triggerSamples(dets, src, masks) {
  *
  * TWO GEOMETRIES, never mixed. A sidecar gives per-frame boxes that
  * follow the subject; without one the trigger frame's boxes are all
- * there is, and those are a single instant — so they show while the clip
- * is parked and vanish the moment it runs, rather than trailing a stale
- * rectangle behind a subject that has walked out of it.
+ * there is — a single instant, drawn dotted with „≈" for exactly that
+ * reason, and shown through playback too (see readiness.js::
+ * triggerBoxVisible for why that changed on 2026-09-25).
  */
 function _paintRecorded(stage, st, t, playing) {
   const src = _sourceSize(stage);

@@ -241,7 +241,7 @@ test('nichts gefunden bietet keinen Nachbau an — solange nichts widerspricht',
 test('die grobe Spur beziffert, was an ihr grob ist', () => {
   const r = clipReadiness(TRIGGER_ITEM, null);
   assert.equal(factValue(r, 'Erkannt'), '2');
-  assert.equal(factValue(r, 'Rahmen'), 'nur im Standbild');
+  assert.equal(factValue(r, 'Rahmen'), 'aus dem Auslöse-Bild');
   assert.equal(factValue(r, 'Sicherheit'), '57 %');
   assert.equal(r.rebuildable, true);
 });
@@ -253,13 +253,15 @@ test('der laufende Abruf ist sichtbar, der fertige Clip stumm', () => {
   assert.ok(clipReadiness(TRIGGER_ITEM, undefined).note);
 });
 
-test('ein Auslöse-Kasten steht still — also nur bei Pause', () => {
-  // Er ist ein einziger Augenblick. Ihn während der Wiedergabe stehen zu
-  // lassen behauptet, das Subjekt sei dort, wo es längst weg ist. Das ist
-  // die Regel, die der alte Renderer erarbeitet hatte.
+test('ein Auslöse-Kasten bleibt sichtbar — auch während der Wiedergabe', () => {
+  // „Rahmen und Spur sind fest angewählt und sollten dauerhaft sichtbar
+  // sein." Bis 2026-09-25 verschwand er beim Abspielen; da der Clip von
+  // selbst anläuft, sah man ihn nur nach einem Druck auf Pause. Dass er
+  // ein einziger Augenblick ist, sagt jetzt sein Stil (gepunktet, „≈"),
+  // nicht sein Verschwinden.
   const coarse = clipReadiness(TRIGGER_ITEM, null);
   assert.equal(triggerBoxVisible(coarse, false), true, 'pausiert: sichtbar');
-  assert.equal(triggerBoxVisible(coarse, true), false, 'läuft: verschwindet');
+  assert.equal(triggerBoxVisible(coarse, true), true, 'läuft: bleibt');
 });
 
 test('mit Feinspur gilt die Pausenregel nicht', () => {

@@ -198,6 +198,32 @@
   background: var(--vp-tl-hatch);
 }
 
+/* ── Gepunktet oben, gepunktet unten ─────────────────────────────────────
+   „es ist gestrichelt oben, aber unten in der Timeline ist die Linie …
+   nicht gestrichelt. … Wenn es gestrichelt ist, dann ist in der Timeline
+   gestrichelt und auch dann im Video der Rahmen gestrichelt."
+
+   Ohne Bild-für-Bild-Spuren (Basis „clip" oder „trigger") ist der Kasten
+   im Video der gepunktete „≈"-Kasten aus dem Auslöse-Bild. Dieselbe
+   Aussage — keine Spur hat dieses Objekt über die Zeit bestätigt — trägt
+   jetzt auch die Zeile im Zeitstrahl: der Balken gepunktet, der
+   Startpunkt ein gepunkteter Ring statt einer vollen Scheibe. Die Farbe
+   bleibt die Klasse, wie oben: der Stil ist der Befund, nicht die Farbe. */
+[data-basis='clip'] .vp-tl-bar,
+[data-basis='trigger'] .vp-tl-bar {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--vp-lane-colour, var(--vp-accent)) 0 3px,
+    transparent 3px 7px
+  );
+}
+[data-basis='clip'] .vp-tl-dot,
+[data-basis='trigger'] .vp-tl-dot {
+  background: transparent;
+  border: 2px dotted var(--vp-lane-colour, var(--vp-accent));
+  box-sizing: border-box;
+}
+
 /* The first-detection dot. Painted after the bar so a single-sample
    track — whose bar has no width — still shows something. */
 .vp-tl-dot {

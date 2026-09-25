@@ -191,8 +191,7 @@ export function clipReadiness(item, tracks) {
     // contradiction: the trigger scored at or above the very threshold
     // the indexer says it applied. Something other than the picture
     // decided this, and the operator is the one who can chase it.
-    const contradicts =
-      gate.threshold != null && gate.best != null && gate.best >= gate.threshold;
+    const contradicts = gate.threshold != null && gate.best != null && gate.best >= gate.threshold;
     return {
       ...base,
       state: CLIP_EMPTY,
@@ -212,7 +211,7 @@ export function clipReadiness(item, tracks) {
       facts: [
         ..._emptyFacts(gate),
         _fact('Erkannt', String(trigger.length)),
-        _fact('Rahmen', 'nur im Standbild'),
+        _fact('Rahmen', 'aus dem Auslöse-Bild'),
       ].filter(Boolean),
       gate,
       // A walk that contradicts its own trigger frame is worth running
@@ -231,7 +230,7 @@ export function clipReadiness(item, tracks) {
       note: 'Bisher nur das Auslöse-Bild. Die genaue Auswertung Bild für Bild holt die App automatisch nach — dann bewegen sich die Rahmen mit.',
       facts: [
         _fact('Erkannt', String(trigger.length)),
-        _fact('Rahmen', 'nur im Standbild'),
+        _fact('Rahmen', 'aus dem Auslöse-Bild'),
         _fact('Sicherheit', best == null ? null : pctLabel(best)),
       ].filter(Boolean),
       rebuildable: hasVideo(item),
@@ -251,11 +250,23 @@ export function clipReadiness(item, tracks) {
 /**
  * May a trigger-frame box be on screen right now?
  *
- * Only while the clip is not running. A trigger detection is one instant;
- * leaving it painted through playback claims the subject is somewhere it
- * left seconds ago, which is worse than showing nothing. The legacy
- * renderer reached the same conclusion — this is that rule, stated once.
+ * Whenever the clip has nothing better — paused OR playing.
+ *
+ * Bis 2026-09-25 galt „nur im Standbild": ein Auslöse-Kasten ist ein
+ * einziger Augenblick, und ihn durch die Wiedergabe stehen zu lassen,
+ * behaupte einen Ort, den das Tier längst verlassen hat. Der Betreiber
+ * sah es anders und hat es ausdrücklich so gewollt: „Rahmen und Spur sind
+ * fest angewählt und sollten dauerhaft sichtbar sein." Da der Clip
+ * automatisch anläuft, war der Kasten praktisch nie zu sehen — nur nach
+ * einem Druck auf Pause, und beim Weiterspielen verschwand er wieder.
+ *
+ * Die Ehrlichkeit liegt jetzt im STIL statt im Verstecken: der Kasten ist
+ * gepunktet und trägt „≈" (siehe _overlay-paint.js::_triggerSamples), und
+ * die Spur im Zeitstrahl ist es ebenso (36b-vplayer-timeline.css). Der
+ * Schalter „Rahmen" bleibt das, womit man ihn ausblendet.
+ *
+ * `playing` bleibt Teil der Signatur, damit kein Aufrufer bricht.
  */
-export function triggerBoxVisible(readiness, playing) {
-  return readiness.geometry === GEOM_TRIGGER && !playing;
+export function triggerBoxVisible(readiness, _playing) {
+  return readiness.geometry === GEOM_TRIGGER;
 }

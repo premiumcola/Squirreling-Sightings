@@ -246,7 +246,12 @@ function _openRecordedInVPlayer(item) {
       // panels/labels.js owns that fan-out and the legacy bubble editor
       // calls the same function, so one save updates one set of caches
       // whichever editor made it.
-      onSaved: applyLabelSaveResult,
+      // Nur die Antwort weiterreichen. Die Korrektur-Leiste ruft
+      // onSaved(res, labels) — direkt übergeben landete das Label-Array
+      // im `item`-Parameter, der Standardwert lbState.item griff nie, und
+      // gepatcht wurde das Array statt der Kachel. Der Fehlalarm blieb so
+      // in der Mediathek als „Auto" stehen.
+      onSaved: (res) => applyLabelSaveResult(res),
       onError: (msg) => window.showToast?.(msg, 'error'),
     },
   });

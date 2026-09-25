@@ -30,14 +30,21 @@ const _SPECIES_EDIT_SVG =
   'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 
-// „Von Hand korrigiert" — the same pencil, on its own small disc, above
-// the class badge. It answers the question a corrected grid raises: the
-// card stays put after an edit (the filter is not re-run until the
+// „Von Hand korrigiert". It answers the question a corrected grid raises:
+// the card stays put after an edit (the filter is not re-run until the
 // operator touches one), so without a mark the only difference between
 // „the detector said cat" and „I said cat" is a memory.
+//
+// NICHT DER STIFT. Bis 2026-09-25 war das derselbe Stift wie im Art-Chip
+// daneben, auf einer eigenen Scheibe — zwei Stifte auf einer Kachel, und
+// nur einer davon tut etwas: „wieso 2 edit buttons?". Eine Markierung
+// ist kein Knopf, also bekommt sie ein Zeichen, das „geändert" sagt statt
+// „ändern": den Revisionspfeil, ohne Scheibe, ohne Ring.
 const _EDITED_MARK_HTML =
-  `<span class="mmc-edited" title="Von Hand bearbeitet" aria-label="Von Hand bearbeitet">` +
-  `${_SPECIES_EDIT_SVG}</span>`;
+  `<span class="mmc-edited" title="Von Hand korrigiert" aria-label="Von Hand korrigiert">` +
+  '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></span>';
 
 // ── Per-camera tints + helpers ──────────────────────────────────────────────
 export const CAM_COLORS = [

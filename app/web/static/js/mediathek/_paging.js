@@ -180,18 +180,27 @@ export function renderMediaPagination() {
  */
 export function repaintMediaCard(eventId) {
   if (!eventId) return;
-  const grid = byId('mediaGrid');
-  const card = grid?.querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`);
-  if (!card) return;
   const item =
     (state.media || []).find((x) => x?.event_id === eventId) || getRegisteredMediaItem(eventId);
   if (!item) return;
-  const wasSelected = card.classList.contains('media-card--selected');
-  card.outerHTML = mediaCardHTML(item);
-  if (!wasSelected) return;
-  grid
-    .querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`)
-    ?.classList.add('media-card--selected');
+  // BEIDE Raster. Die gefilterte Mediathek (Art-Chip, Label-Filter) ist
+  // #libraryGrid, nicht #mediaGrid — hier nur im zweiten zu suchen hieß,
+  // dass die Kachel im gefilterten Raster ihr altes Abzeichen behielt,
+  // bis ein Filterwechsel neu lud: „erst wenn ich umfiltere, wird die
+  // Batch aktualisiert". Die Motion-Kacheln beider Raster kommen aus
+  // demselben mediaCardHTML und öffnen per Inline-onclick, also darf die
+  // Kachel hier wie dort einfach ersetzt werden.
+  for (const gridId of ['mediaGrid', 'libraryGrid']) {
+    const grid = byId(gridId);
+    const card = grid?.querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`);
+    if (!card) continue;
+    const wasSelected = card.classList.contains('media-card--selected');
+    card.outerHTML = mediaCardHTML(item);
+    if (!wasSelected) continue;
+    grid
+      .querySelector(`.media-card[data-event-id="${CSS.escape(eventId)}"]`)
+      ?.classList.add('media-card--selected');
+  }
 }
 window.repaintMediaCard = repaintMediaCard;
 

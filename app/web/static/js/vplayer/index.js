@@ -375,11 +375,15 @@ function _mountAll(cfg) {
  */
 export function openVideoPlayer(config) {
   const cfg = buildPlayerConfig(config);
-  closeVideoPlayer();
+  // Ein offener Player wird ERSETZT, nicht geschlossen: sein Verlaufs-
+  // eintrag geht an den neuen über, und sein onClose läuft nicht — das
+  // Lightbox-Fenster schließt ja nicht, es zeigt den nächsten Clip. Beides
+  // zusammen war der Grund, warum „weiter" in der Übersicht landete.
+  const adopt = closeVideoPlayer({ replacing: true });
   _open = _mountAll(cfg);
   // The open player is a history entry, so the phone's own back gesture
   // closes it instead of leaving the app — see _back-gesture.js.
-  _open.backGesture = installBackGesture(_open.shell?.root, () => closeVideoPlayer());
+  _open.backGesture = installBackGesture(_open.shell?.root, () => closeVideoPlayer(), { adopt });
   return _open;
 }
 
@@ -388,9 +392,14 @@ export function isVideoPlayerOpen() {
   return _open !== null;
 }
 
-/** Close whatever the player currently has open. Safe to call twice. */
-export function closeVideoPlayer() {
-  if (!_open) return;
+/** Close whatever the player currently has open. Safe to call twice.
+ *
+ *  `replacing` — ein nachfolgender Player übernimmt: der Verlaufseintrag
+ *  bleibt stehen und `onClose` läuft nicht, weil aus Sicht der Seite
+ *  nichts geschlossen wird. Gibt dann zurück, ob es einen Eintrag zu
+ *  übernehmen gibt. */
+export function closeVideoPlayer({ replacing = false } = {}) {
+  if (!_open) return false;
   const p = _open;
   _open = null;
   // Reverse mount order — every listener released before the DOM it is
@@ -415,7 +424,8 @@ export function closeVideoPlayer() {
   p.stage?.teardown();
   // Before the shell goes: the gesture is bound to its root, and the
   // teardown also pops the history entry this open pushed.
-  p.backGesture?.();
+  const handover = p.backGesture?.({ keepEntry: replacing }) || false;
   p.shell?.teardown();
-  p.cfg.actions.onClose?.();
+  if (!replacing) p.cfg.actions.onClose?.();
+  return handover;
 }

@@ -213,15 +213,19 @@ function _openRecordedPhoto(item) {
 // would.
 function _openRecordedInVPlayer(item) {
   const list = mediaNavList();
-  const hasPrev = lbState.index > 0;
-  const hasNext = lbState.index >= 0 && lbState.index < list.length - 1;
+  // Der Index DIESES Clips, festgehalten beim Bau der Knöpfe — nicht erst
+  // beim Klick aus lbState gelesen. Was zwischen Öffnen und Klick sonst
+  // noch an lbState dreht, darf nicht bestimmen, wohin „weiter" führt.
+  const at = lbState.index;
+  const hasPrev = at > 0;
+  const hasNext = at >= 0 && at < list.length - 1;
   openVideoPlayer({
     mode: 'recorded',
     item,
     source: { type: 'mp4', url: _videoSrcOf(item) },
     actions: {
-      onPrev: hasPrev ? () => window.openLightbox?.(list[lbState.index - 1]) : null,
-      onNext: hasNext ? () => window.openLightbox?.(list[lbState.index + 1]) : null,
+      onPrev: hasPrev ? () => window.openLightbox?.(list[at - 1]) : null,
+      onNext: hasNext ? () => window.openLightbox?.(list[at + 1]) : null,
       onClose: () => window.closeLightbox?.(),
       // The delete keeps the legacy button's whole aftermath — the
       // three branches, the grid re-pagination, the neighbour to open

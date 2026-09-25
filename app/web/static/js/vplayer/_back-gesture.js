@@ -24,6 +24,16 @@
 //
 // The two cannot double-fire: the drag path closes through the same
 // history step, so whichever fires first consumes the entry.
+//
+// ONE ENTRY PER PLAYER ON SCREEN, NOT PER CLIP. Blättern (prev/next)
+// ersetzt den Player durch einen neuen. Bis 2026-09-25 räumte der alte
+// dabei seinen Verlaufseintrag mit `history.back()` ab, und der neue
+// legte sofort einen eigenen an. `history.back()` ist aber asynchron: das
+// `popstate` des alten Schritts kam erst an, als der NEUE Player schon
+// lauschte — und der verstand es als „zurück" und schloss sich. Jeder
+// Tipp auf den Weiter-Pfeil landete so wieder in der Übersicht. Beim
+// Ersetzen wird der Eintrag deshalb ÜBERGEBEN statt ab- und neu angelegt
+// (`keepEntry` beim Abbau, `adopt` beim Aufbau).
 
 const _EDGE_PX = 24;
 const _TRIGGER_PX = 64;
@@ -49,7 +59,7 @@ export function isBackSwipe(startX, dx, dy) {
  * which case it also pops the history entry so the stack does not grow
  * one step per clip the operator looks at.
  */
-export function installBackGesture(root, onBack) {
+export function installBackGesture(root, onBack, { adopt = false } = {}) {
   let done = false;
   let startX = 0;
   let startY = 0;
@@ -66,11 +76,16 @@ export function installBackGesture(root, onBack) {
   // switch sections behind the player.
   const marker = { sqPlayer: Date.now() };
   let pushed = false;
-  try {
-    globalThis.history?.pushState?.(marker, '', globalThis.location?.href);
+  if (adopt) {
+    // Der Vorgänger hat seinen Eintrag liegen lassen — er gehört jetzt uns.
     pushed = true;
-  } catch {
-    pushed = false;
+  } else {
+    try {
+      globalThis.history?.pushState?.(marker, '', globalThis.location?.href);
+      pushed = true;
+    } catch {
+      pushed = false;
+    }
   }
 
   const onPop = () => {
@@ -108,13 +123,21 @@ export function installBackGesture(root, onBack) {
     root?.addEventListener?.(ev, stop, { passive: true });
   }
 
-  return function teardownBackGesture() {
+  /** Abbau. `keepEntry` lässt den Verlaufseintrag stehen, damit der
+   *  nachfolgende Player ihn übernehmen kann; zurückgegeben wird, ob es
+   *  einen zu übernehmen gibt. */
+  return function teardownBackGesture({ keepEntry = false } = {}) {
     done = true;
     globalThis.removeEventListener?.('popstate', onPop);
     root?.removeEventListener?.('pointerdown', onDown);
     root?.removeEventListener?.('pointermove', onMove);
     for (const ev of ['pointerup', 'pointercancel']) {
       root?.removeEventListener?.(ev, stop);
+    }
+    if (keepEntry) {
+      const handover = pushed;
+      pushed = false;
+      return handover;
     }
     // Closed by the ✕ or Escape while our entry is still on the stack:
     // drop it, or every clip viewed would leave a step behind and the
@@ -127,5 +150,6 @@ export function installBackGesture(root, onBack) {
         /* a stack we may not touch is not worth an error */
       }
     }
+    return false;
   };
 }

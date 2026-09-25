@@ -36,7 +36,7 @@ from .. import app_state
 from ..cat_identity import IdentityRegistry, profile_crops, profile_samples
 from ..detection_feedback import record_verdict
 from ..identity_quality import compare_regions, evaluate
-from ..person_crops import sweep_person_crops
+from ..person_crops import crops_of, sweep_person_crops
 from ._identity_helpers import (
     REJECT_BUCKET,
     SUGGEST_BUDGET,
@@ -263,6 +263,15 @@ def api_person_crops_clear():
     return jsonify({"ok": ok}), (200 if ok else 404)
 
 
+def _no_person_left(cam_id: str, event_id: str) -> bool:
+    """Ob in diesem Ereignis nach der Ablehnung KEIN Personen-Ausschnitt
+    mehr steht. Nur dann hat der Betreiber dem Detektor widersprochen."""
+    if not cam_id:
+        return False
+    event = app_state.store.get_event(cam_id, event_id) or {}
+    return not [c for c in crops_of(event) if not c.get("rejected")]
+
+
 @bp.post('/api/person-crops/reject')
 def api_person_crops_reject():
     """„Das ist gar keine Person."
@@ -294,9 +303,19 @@ def api_person_crops_reject():
             continue
         done += 1
         event_id = (item.get("event_id") or "").strip()
+        cam_id = (item.get("cam_id") or "").strip()
         # Je Ereignis EIN Verdikt, auch wenn drei seiner Ausschnitte
         # abgelehnt werden — sonst zählt der Korpus eine Aussage dreifach.
-        if event_id and event_id not in booked:
+        #
+        # UND NUR, WENN KEINE PERSON MEHR ÜBRIG IST. Ein Clip mit einer
+        # echten Person UND einem Baumstamm hat den Detektor nicht
+        # widerlegt; den Baumstamm abzulehnen buchte aber „Erkennung
+        # falsch" auf das GANZE Ereignis. Das Verdikt ist je Ereignis
+        # zuletzt-gewinnt, überschrieb also ein ✅ aus Telegram, und der
+        # nächtliche Lerner zog daraus die Personen-Schwelle der Kamera
+        # hoch — ein Tipp auf einen Baumstamm machte echte Personenalarme
+        # seltener. Gefunden vom Review am 2026-09-12.
+        if event_id and event_id not in booked and _no_person_left(cam_id, event_id):
             booked.add(event_id)
             with contextlib.suppress(Exception):
                 record_verdict(
@@ -305,7 +324,7 @@ def api_person_crops_reject():
                     correct=False,
                     ts=time.time(),
                     source="identities",
-                    cam_id=(item.get("cam_id") or "").strip() or None,
+                    cam_id=cam_id or None,
                 )
     if not done:
         return jsonify({"ok": False, "error": "Ausschnitt nicht lesbar"}), 400

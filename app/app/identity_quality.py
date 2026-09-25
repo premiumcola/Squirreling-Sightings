@@ -183,5 +183,22 @@ def compare_regions(profiles: list[dict], threshold: int) -> dict:
     Was besser trägt, ist eine empirische Frage, und das hier ist die
     Antwort darauf statt einer Meinung. Umgestellt wird `DEFAULT_REGION`
     erst, wenn die Zahlen es sagen.
+
+    DIESELBEN PROBEN FÜR ALLE DREI. Jeder Bereich wurde zuerst auf seinen
+    eigenen Proben gerechnet — und ein zu kleiner Ausschnitt hat keinen
+    Kopf-Hash. Fehlten einer Person die Kopf-Hashes, fiel sie aus dem
+    Kopf-Vergleich heraus, die übrigen hatten weniger Konkurrenz und der
+    Kopf sah besser aus, als er ist; fehlten sie nur in der Gedächtnis-
+    hälfte, stand für den Kopf eine erfundene 0 %. Beides schiebt genau
+    die Zahl, nach der `DEFAULT_REGION` umgestellt werden soll (Review
+    vom 2026-09-12). Verglichen wird jetzt nur auf Proben, die ALLE drei
+    Hashes tragen — ein Vergleich auf derselben Grundlage.
     """
-    return {region: evaluate(profiles, threshold, region).get("total") or {} for region in REGIONS}
+    common = [_with_all_regions(p) for p in profiles or []]
+    return {region: evaluate(common, threshold, region).get("total") or {} for region in REGIONS}
+
+
+def _with_all_regions(profile: dict) -> dict:
+    """Das Profil mit nur den Proben, die für jeden Bereich einen Hash haben."""
+    keep = [s for s in profile_samples(profile) if all(sample_hash(s, r) for r in REGIONS)]
+    return {"name": profile.get("name"), "samples": keep}

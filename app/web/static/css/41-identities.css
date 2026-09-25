@@ -515,9 +515,6 @@
 .idy-reg .idy-q-track {
   width: 100%;
 }
-.idy-reg .idy-q-fill {
-  background: currentColor;
-}
 .idy-reg-num {
   font-weight: 700;
   color: var(--text);

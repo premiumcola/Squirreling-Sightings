@@ -205,28 +205,47 @@ def test_the_full_region_keeps_living_under_its_old_key():
     assert sample_hash(sample, "upper") is None
 
 
-def test_a_region_without_hashes_is_reported_as_unmeasured_not_as_zero():
-    """Proben von vor der Umstellung haben nur den vollen Hash. Für Kopf
-    und Oberkörper gibt es dann nichts zu rechnen — und eine 0 % wäre
-    eine Aussage über den Bereich, die niemand gemessen hat."""
+def test_samples_without_every_region_are_left_out_of_the_comparison():
+    """Proben von vor der Umstellung haben nur den vollen Hash. Für den
+    VERGLEICH der Bereiche taugen sie nicht — auf ihnen ließe sich nur
+    einer der drei rechnen, und der stünde dann auf anderen Proben als
+    die übrigen. Kein Bereich bekommt also eine Zahl, statt dass einer
+    eine erfundene 0 % trägt."""
     p = _profile("Anna", _A, ["e1", "e1", "e2", "e2"])
     out = compare_regions([p], threshold=10)
-    assert out["full"]["checked"] == 2
+    assert out["full"]["checked"] == 0
     assert out["head"]["checked"] == 0
     assert out["head"]["rate"] is None
+
+
+def _full(h, head, upper, event):
+    return {"h": h, "hr": {"head": head, "upper": upper}, "event_id": event}
 
 
 def test_each_region_is_measured_on_its_own_hashes():
     anna = {
         "name": "Anna",
-        "samples": [
-            {"h": _A[0], "hr": {"head": _B[0]}, "event_id": "e1"},
-            {"h": _A[1], "hr": {"head": _B[1]}, "event_id": "e2"},
-        ],
+        "samples": [_full(_A[0], _B[0], _A[2], "e1"), _full(_A[1], _B[1], _A[3], "e2")],
     }
     out = compare_regions([anna], threshold=10)
     assert out["full"]["checked"] == 1 and out["full"]["hits"] == 1
     assert out["head"]["checked"] == 1 and out["head"]["hits"] == 1
+
+
+def test_all_three_regions_are_measured_on_the_same_samples():
+    """Review 2026-09-12: fehlten einer Person die Kopf-Hashes, fiel sie
+    aus dem Kopf-Vergleich heraus, die anderen hatten weniger Konkurrenz,
+    und der Kopf sah besser aus, als er ist. Auf gemeinsamer Grundlage
+    prüft jeder Bereich dieselbe Zahl Proben."""
+    anna = {
+        "name": "Anna",
+        "samples": [_full(_A[0], _B[0], _A[2], "e1"), _full(_A[1], _B[1], _A[3], "e2")],
+    }
+    # Bo hat keine Kopf-Hashes — und fällt damit aus ALLEN Bereichen, nicht
+    # nur aus dem Kopf.
+    bo = {"name": "Bo", "samples": [{"h": _B[2], "event_id": "e3"}, {"h": _B[3], "event_id": "e4"}]}
+    out = compare_regions([anna, bo], threshold=10)
+    assert out["full"]["checked"] == out["head"]["checked"] == out["upper"]["checked"] == 1
 
 
 def test_every_region_is_named_in_the_comparison():

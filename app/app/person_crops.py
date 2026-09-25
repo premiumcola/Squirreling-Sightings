@@ -217,6 +217,30 @@ def crops_of(event: dict) -> list[dict]:
     return [c for c in val if isinstance(c, dict)] if isinstance(val, list) else []
 
 
+def keep_rejections(old: list[dict], found: list[dict]) -> list[dict]:
+    """Die frisch geschnittenen Ausschnitte, mit den Ablehnungen der alten.
+
+    „Einmal als keine Person getaggt heißt für immer aus dem Stapel" —
+    aber der Vermerk sitzt an genau der Liste, die dieser Nachlauf neu
+    schreibt. Fehlte auch nur eine Datei (etwa nach einer Kamera-
+    Zusammenführung, die die JPEGs verschiebt), schnitt er den Clip neu
+    und schrieb die Liste ohne `rejected` zurück: jeder getaggte
+    Baumstamm stand wieder im Stapel. Gefunden vom Review am 2026-09-12.
+    Zugeordnet wird über die Spur — der Dateiname hängt an ihr, und eine
+    neu geschnittene Datei desselben Tracks ist derselbe Fund.
+    """
+    marks = {
+        c.get("track_id"): {k: c[k] for k in ("rejected", "rejected_as") if k in c}
+        for c in (old or [])
+        if c.get("rejected")
+    }
+    out = []
+    for c in found:
+        mark = marks.get(c.get("track_id"))
+        out.append({**c, **mark} if mark else c)
+    return out
+
+
 def needs_crops(event: dict, storage_root) -> bool:
     """Ob dieser Clip noch bearbeitet werden muss.
 
@@ -292,7 +316,7 @@ def sweep_person_crops(store, storage_root, *, cam_filter=None, budget=SWEEP_BUD
             # Der Verweis gehört auf das Ereignis, sonst findet die
             # Galerie den Ausschnitt nie und der nächste Lauf hält den
             # Clip trotzdem für erledigt — siehe `needs_crops`.
-            event["person_crops"] = found
+            event["person_crops"] = keep_rejections(crops_of(event), found)
             store.update_event(cam_dir.name, event.get("event_id") or jf.stem, event)
             _time.sleep(SWEEP_PAUSE_S)
     if out["crops"]:

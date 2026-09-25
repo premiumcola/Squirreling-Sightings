@@ -327,3 +327,56 @@ def test_an_unreadable_crop_is_not_silently_recorded(bench):
     rejects = IdentityRegistry(root / "reject_registry.json")
     assert not reject_crop(rejects, store, root, {"relpath": "crops/nope.jpg"}, REJECT_BUCKET)
     assert rejects.list_profiles() == []
+
+
+# ── Review 2026-09-12 ──────────────────────────────────────────────────
+
+
+def test_a_rejected_crop_survives_a_new_sweep():
+    """Der Vermerk sitzt an der Liste, die der Nachlauf neu schreibt.
+    Fehlte eine Datei (etwa nach einer Kamera-Zusammenführung), schnitt
+    er neu und schrieb die Liste OHNE `rejected` zurück — jeder getaggte
+    Baumstamm stand wieder im Stapel."""
+    from app.person_crops import keep_rejections
+
+    old = [
+        {"track_id": "t1", "relpath": "a/t1.jpg", "rejected": True, "rejected_as": "Keine Person"},
+        {"track_id": "t2", "relpath": "a/t2.jpg"},
+    ]
+    found = [{"track_id": "t1", "relpath": "b/t1.jpg"}, {"track_id": "t2", "relpath": "b/t2.jpg"}]
+    out = keep_rejections(old, found)
+    assert out[0]["rejected"] is True
+    assert out[0]["rejected_as"] == "Keine Person"
+    assert out[0]["relpath"] == "b/t1.jpg", "der neue Pfad gilt, nur der Vermerk wandert mit"
+    assert "rejected" not in out[1]
+
+
+def test_nothing_to_carry_over_changes_nothing():
+    from app.person_crops import keep_rejections
+
+    found = [{"track_id": "t1", "relpath": "a.jpg"}]
+    assert keep_rejections([], found) == found
+    assert keep_rejections(None, found) == found
+
+
+def test_rejecting_a_trunk_beside_a_real_person_books_no_verdict(bench, monkeypatch):
+    """Review 2026-09-12, der schwerste Fund: den Baumstamm abzulehnen
+    buchte „Erkennung falsch" auf das GANZE Ereignis — obwohl eine echte
+    Person im Clip stand. Das überschrieb ein ✅ aus Telegram, und der
+    nächtliche Lerner zog die Personen-Schwelle der Kamera hoch."""
+    from app import app_state
+    import app.routes.person_crops as route
+
+    _registry, store, root = bench
+    trunk = _write_crop(root, "crops/trunk.jpg", 11)
+    human = _write_crop(root, "crops/human.jpg", 12)
+    store.events[("cam_a", "e1")]["person_crops"] = [
+        {"track_id": "t1", "relpath": trunk},
+        {"track_id": "t2", "relpath": human},
+    ]
+    monkeypatch.setattr(app_state, "store", store)
+    assert route._no_person_left("cam_a", "e1") is False
+    store.events[("cam_a", "e1")]["person_crops"][0]["rejected"] = True
+    assert route._no_person_left("cam_a", "e1") is False, "die echte Person steht noch"
+    store.events[("cam_a", "e1")]["person_crops"][1]["rejected"] = True
+    assert route._no_person_left("cam_a", "e1") is True, "erst jetzt ist der Detektor widerlegt"

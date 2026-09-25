@@ -9,6 +9,7 @@ from ._preroll import MotionPrerollMixin
 from ._provenance import ProvenanceMixin
 from ._publish import PublishMixin
 from ._ring_splice import RingPrerollSpliceMixin
+from ._rolls import resolve_post_motion_seconds
 from .._consts import _FFMPEG_AVAILABLE, log
 
 
@@ -113,7 +114,9 @@ class RecordingMixin(
             # at 0 — this snapshot's "3" never survives to a finished
             # ffmpeg-path clip.
             "pre_motion_seconds": 3,
-            "post_motion_seconds": int(self.cfg.get("post_motion_tail_s") or 0),
+            # Der WIRKSAME Wert, nicht der eigene der Kamera — siehe _rolls.py.
+            # Die Nachbearbeitung ersetzt ihn durch die Messung.
+            "post_motion_seconds": resolve_post_motion_seconds(self.cfg, self.global_cfg),
         }
 
     def _build_achievement_snapshot(self) -> dict:

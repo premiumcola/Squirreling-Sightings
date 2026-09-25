@@ -8,6 +8,7 @@ from pathlib import Path
 from ..settings._consts import BIRD_SPECIES_VIDEO_CAP_DEFAULT
 from ..species_video_count import confirmed_video_count
 from ._clip_tally import ClipTally, rank_headline_species
+from ._recording._rolls import record_post_roll, resolve_post_motion_seconds
 from ._consts import _FFMPEG_AVAILABLE, MIN_LIVE_SEGMENT_S, log
 
 
@@ -50,9 +51,7 @@ class RecordingStepMixin:
         # Clip boundary knobs (configurable).
         _proc = self.global_cfg.get("processing") or {}
         _clip_max = int(_proc.get("clip_max_duration_s", 120))
-        _post_tail = float(
-            self.cfg.get("post_motion_tail_s") or _proc.get("post_motion_tail_s", 3.0)
-        )
+        _post_tail = resolve_post_motion_seconds(self.cfg, self.global_cfg)
         # Feed whichever pre-roll buffer this recording backend actually
         # uses, every tick, motion or not — a trigger can fire on ANY
         # tick, so the buffer has to already be full by then. ffmpeg
@@ -332,6 +331,8 @@ class RecordingStepMixin:
                     self.camera_id,
                     self._rec_corrupt_frames,
                 )
+            # Gemessen, nicht eingestellt: so viel Nachlauf hat DIESER Clip.
+            record_post_roll(self._rec_event_meta, since_last)
             if self._ffmpeg_proc is not None:
                 # ffmpeg mode: stop subprocess + queue re-encode.
                 # _stop_ffmpeg_and_queue_reencode snapshots

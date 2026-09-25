@@ -151,10 +151,16 @@ export function railHtml(model) {
       ? `<div class="vp-tl-marker" style="left:${_pct(pctOf(model.firstEventT, d))}"` +
         ` title="Erste Erkennung"></div>`
       : '';
+  // DIE BÄNDER ÜBER DEM FORTSCHRITT, nicht darunter. Sie lagen vor der
+  // grünen Füllung im Markup, also unter ihr — sobald der Kopf über den
+  // Vorlauf hinaus war, war der Vorlauf nicht mehr zu sehen: „Vor- und
+  // Nachlauf ist auch nicht schön markiert in der Timeline". Darüber, mit
+  // dunklen Streifen, lesen sie sich auf dem grauen wie auf dem grünen
+  // Teil der Leiste.
   return (
     railCaptionsHtml(model) +
-    `<div class="vp-tl-track">${bands}${marker}` +
-    `<div class="vp-tl-fill"></div>${markersHtml(model)}${_headHtml()}` +
+    `<div class="vp-tl-track">` +
+    `<div class="vp-tl-fill"></div>${bands}${marker}${markersHtml(model)}${_headHtml()}` +
     // The drag surface. Transparent, the rail's full width, and tall
     // enough to meet the 44 px touch minimum around a 6 px rail.
     //

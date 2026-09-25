@@ -369,3 +369,15 @@ test('a lane without per-frame tracks is dotted, like its box', async () => {
   }
   assert.ok(!/\[data-basis='sidecar'\] \.vp-tl-bar/.test(css), 'echte Spuren bleiben durchgezogen');
 });
+
+test('the roll bands sit above the progress fill, not under it', async () => {
+  // Unter der grünen Füllung war der Vorlauf weg, sobald der Kopf über
+  // ihn hinaus war.
+  const { railHtml } = await import('../_rail.js');
+  const { buildTimelineModel } = await import('../_model.js');
+  const html = railHtml(buildTimelineModel([], { duration: 20, preRoll: 3, postRoll: 3 }));
+  const fill = html.indexOf('vp-tl-fill');
+  assert.ok(fill >= 0);
+  assert.ok(html.indexOf('vp-tl-band--pre') > fill, 'Vorlauf über der Füllung');
+  assert.ok(html.indexOf('vp-tl-band--post') > fill, 'Nachlauf über der Füllung');
+});

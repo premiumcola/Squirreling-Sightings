@@ -463,6 +463,8 @@ class FinalizeClipMixin:
                 ev["encode_error"] = encode_error
             rs = ev.get("recording_settings") or {}
             rs["pre_motion_seconds"] = round(achieved_pre_s, 2)
+            if (meta or {}).get("post_roll_s") is not None:
+                rs["post_motion_seconds"] = meta["post_roll_s"]
             ev["recording_settings"] = rs
             self.store.update_event(self.camera_id, event_id, ev)
         except Exception as e:

@@ -33,6 +33,7 @@ from ...net_archive._tuning import TUNING_LABELS_DE
 from ...thresholds._apply import camera_role
 from .._consts import log
 from ._preroll import resolve_pre_motion_seconds
+from ._rolls import resolve_post_motion_seconds
 
 PROVENANCE_SCHEMA = 1
 
@@ -182,9 +183,7 @@ def build_provenance(
         "models": describe_models(detector, bird, wildlife),
         "timing": {
             "pre_roll_s": resolve_pre_motion_seconds(cam_cfg, global_cfg),
-            "post_roll_s": float(
-                cam_cfg.get("post_motion_tail_s") or proc.get("post_motion_tail_s", 3.0)
-            ),
+            "post_roll_s": resolve_post_motion_seconds(cam_cfg, global_cfg),
             "analysis_interval_ms": interval_ms,
             "analysed_fps": round(float(analysed_fps or 0.0), 2),
             "source_fps": round(float(source_fps or 0.0), 2),

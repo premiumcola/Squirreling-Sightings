@@ -102,7 +102,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dev tooling
         run: npm install --no-audit --no-fund
@@ -131,6 +131,14 @@ jobs:
     # registry, and `npm ci` is not an option regardless: this repo
     # tracks no package-lock.json.
     #
+    # NODE 24, the version the devbox runs. This job sat on node 20 while
+    # every developer ran 24 — and node 20 has no global `navigator`, so a
+    # module-level `navigator.userAgent` in core/state.js made most test
+    # files fail here and pass everywhere else, red from 2026-08-31 on for
+    # over a hundred runs. CI must run what development runs, or it
+    # reports on a machine nobody uses. (Node 20 also left support in
+    # April 2026.) core/state.js no longer depends on it either way.
+    #
     # The file list comes from `find`, not from a glob passed to node.
     # `node --test <dir>` searches a directory on node 20 but treats it
     # as a module path on node 24, while glob expansion of the positional
@@ -145,7 +153,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: node --test
         run: npm test

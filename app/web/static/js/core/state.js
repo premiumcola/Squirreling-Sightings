@@ -56,9 +56,18 @@ export const shapeState = {
 // iPadOS 13+ reports "MacIntel" with maxTouchPoints > 1. The fallback
 // disambiguates a real Mac from an iPad pretending to be one. Cached
 // once at module load — no per-render UA sniffing.
+//
+// ÜBER globalThis, NICHT DIREKT. Dies ist eine der wenigen Zeilen, die
+// schon beim LADEN des Moduls laufen, und fast jedes Modul importiert
+// state.js. Node kennt `navigator` erst ab Version 21 — unter Node 20
+// warf der Import `ReferenceError: navigator is not defined`, und damit
+// fiel jede Testdatei, die irgendwo state.js nachzog. Auf der devbox
+// (Node 24) grün, im GitHub-Lint (Node 20) seit dem 2026-08-31 rot, weit
+// über hundert Läufe lang. Im Browser ist beides dasselbe Objekt.
+const _nav = globalThis.navigator || {};
 export const IS_IOS =
-  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  /iPad|iPhone|iPod/.test(_nav.userAgent || '') ||
+  (_nav.platform === 'MacIntel' && _nav.maxTouchPoints > 1);
 
 // Whether the Mediathek "drilldown by stat" links open the gallery
 // filtered to the picked label. Toggled here so a future A/B can flip

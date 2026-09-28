@@ -106,7 +106,10 @@ select.dark-select,
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   padding: 9px 32px 9px 12px;
-  font-size: 13px;
+  /* 16 px kills the iOS Safari focus-zoom that fires on any
+     <input>/<select> rendered <16 px (see .time-input in
+     06d-cam-edit-alerting.css for the same fix). */
+  font-size: 16px;
   appearance: none;
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b9ab5' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");

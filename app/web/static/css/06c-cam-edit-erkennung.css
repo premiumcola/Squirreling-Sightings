@@ -401,7 +401,10 @@
   border: 0;
   border-radius: 7px;
   padding: 7px 10px;
-  font-size: 11.5px;
+  /* 16 px kills the iOS Safari focus-zoom that fires on any
+     <input>/<select> rendered <16 px (see .time-input in
+     06d-cam-edit-alerting.css for the same fix). */
+  font-size: 16px;
   outline: none;
   -webkit-appearance: none;
   appearance: none;

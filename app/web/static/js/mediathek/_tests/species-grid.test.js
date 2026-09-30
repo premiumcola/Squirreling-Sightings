@@ -23,8 +23,6 @@ function resetState() {
   state.mediaStats = [];
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 10));
-
 // ── speciesGridTilesHTML — one tile per sighted species ──────────────────
 
 test('renders one tile per dossier entry with sighting_count > 0', () => {

@@ -123,7 +123,6 @@ export function _renderDiagStrip() {
 // (text-overflow: ellipsis).
 export function _buildDebugSummary() {
   const parts = [];
-  const tickFields = S.diagState.tick?.fields || {};
   const tickFlag = S.diagState.tick?.opts?.flag;
   const tickStatus = tickFlag === 'tick-stuck' ? 'STUCK' : tickFlag === 'tick-warn' ? 'WARN' : 'ok';
   parts.push(`TICK ${tickStatus}`);

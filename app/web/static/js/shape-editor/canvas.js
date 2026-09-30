@@ -5,7 +5,7 @@
 // dependency graph one-way).
 import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
-import { ZONE_STROKE, ZONE_FILL, MASK_STROKE, MASK_FILL } from '../core/zone-tokens.js';
+import { ZONE_STROKE, MASK_STROKE } from '../core/zone-tokens.js';
 import { _polyPoints, _polyLabels, _polyCurves } from './geometry.js';
 
 // Labels available for per-polygon scoping. Mirrors KNOWN_OBJECT_LABELS

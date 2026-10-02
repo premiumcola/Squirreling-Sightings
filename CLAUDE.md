@@ -594,6 +594,16 @@ Single file: `python -m pytest tests/test_camera_id.py -v`. Tests
 are stub-based — no real Coral hardware, no real APIs. Fixtures use
 RFC-5737 doc IPs (`192.0.2.x`).
 
+**No temp files without guaranteed cleanup; tests use `tmp_path`.**
+Tests take `tmp_path` / `tmp_path_factory` — never `tempfile.mkdtemp`,
+`mkstemp` or `NamedTemporaryFile(delete=False)`, and never at import
+time. App code creates temp files only inside `with` or `try/finally`
+that removes them. Safety net: `tests/conftest.py::_contain_tempfile`
+points `tempfile.tempdir` at pytest's basetemp (pytest keeps the last
+3 runs). Background: on 2026-10-02 the devbox's shared /tmp held
+346 507 never-removed `tmp*` entries (18 GB) and was filling the Unraid
+docker.img.
+
 ## Maintenance
 
 ```powershell

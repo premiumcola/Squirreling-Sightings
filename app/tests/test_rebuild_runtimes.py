@@ -15,17 +15,18 @@ leaked into every test_*.py loaded afterwards in the same session.
 
 import sys
 import copy
-import tempfile
 import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-_tmpdir = tempfile.mkdtemp(prefix="tam-test-")
-
+# The storage root is filled in by `_stub_sys_modules` below, from pytest's
+# own tmp_path_factory. It used to be `tempfile.mkdtemp(prefix="tam-test-")`
+# at IMPORT time — one directory under /tmp per test run, never removed
+# (eleven of them had piled up in the devbox's /tmp by 2026-10-02).
 _BASE_CFG = {
-    "storage": {"root": _tmpdir, "retention_days": 14},
+    "storage": {"root": "", "retention_days": 14},
     "server": {"host": "0.0.0.0", "port": 8099},
     "cameras": [],
     "processing": {
@@ -75,7 +76,9 @@ def _make_stub(name: str) -> MagicMock:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _stub_sys_modules():
+def _stub_sys_modules(tmp_path_factory):
+    storage_root = tmp_path_factory.mktemp("rebuild-runtimes")
+    _BASE_CFG["storage"]["root"] = str(storage_root)
     # Snapshot whatever was already in sys.modules under these names
     # — anything we displace must be put back so later test files
     # don't see the stubs.
@@ -107,7 +110,7 @@ def _stub_sys_modules():
     sys.modules["app.settings_store"] = _ss_mod
 
     _ev_store_inst = MagicMock()
-    _ev_store_inst.events_dir = Path(_tmpdir) / "events"
+    _ev_store_inst.events_dir = storage_root / "events"
     _st_mod = _make_stub("app.storage")
     _st_mod.EventStore.return_value = _ev_store_inst
     sys.modules["app.storage"] = _st_mod

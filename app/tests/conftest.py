@@ -13,9 +13,33 @@ boilerplate" not "leak shared state across tests".
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _contain_tempfile(tmp_path_factory):
+    """Every `tempfile` call during the tests lands under pytest's basetemp.
+
+    Tests use `tmp_path` / `tmp_path_factory`; this is the safety net for
+    whatever does not — a helper deep in the app that calls `mkstemp`, a
+    library that calls `gettempdir()`. Pointing `tempfile.tempdir` here
+    means such a file is created inside pytest's basetemp, of which pytest
+    keeps only the last three runs, instead of in the devbox's shared /tmp,
+    where 346 507 never-removed `tmp*` entries (18 GB, from several
+    projects) had piled up by 2026-10-02 and were filling the Unraid
+    docker.img.
+
+    Not covered: a `tempfile` call at IMPORT time, which runs during
+    collection, before any fixture. There is none left —
+    test_rebuild_runtimes.py was the one, see its header.
+    """
+    previous = tempfile.tempdir
+    tempfile.tempdir = str(tmp_path_factory.mktemp("tempfile"))
+    yield
+    tempfile.tempdir = previous
 
 
 @pytest.fixture

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -180,8 +181,13 @@ def test_the_count_cap_evicts_the_oldest_first(tmp_storage_root):
     directory = tmp_storage_root / "logs" / "simu" / CAM
     directory.mkdir(parents=True)
     made = []
+    # TODAY'S date, not a fixed one. The name IS the capture time, and
+    # the age quota evicts anything older than MAX_AGE_DAYS — a hard-coded
+    # 2026-08-30 turned this into a count test that the age quota answered
+    # instead, from 2026-09-30 on (25 evicted, not 5).
+    day = datetime.now().strftime("%Y%m%d")
     for i in range(simu_log.MAX_RUNS_PER_CAMERA + 5):
-        path = directory / f"20260830-1200{i // 60:02d}-{i % 60:06d}.json"
+        path = directory / f"{day}-1200{i // 60:02d}-{i % 60:06d}.json"
         path.write_text("{}", encoding="utf-8")
         made.append(path)
     assert simu_log.enforce(tmp_storage_root, CAM) == 5

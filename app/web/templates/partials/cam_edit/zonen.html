@@ -33,9 +33,14 @@
         Erkennungen werden nur innerhalb der GRÜNEN Polygone gezählt.
       </p>
     </div>
+    <!-- The canvas covers the stage AND the gutter around it, so a
+         vertex on the frame edge shows its whole handle and stays
+         grabbable; see shape-editor/view.js. -->
     <div class="canvas-wrap">
-      <img id="maskSnapshot" src="" alt="Snapshot" />
-      <canvas id="maskCanvas" width="1280" height="720"></canvas>
+      <div class="canvas-stage" id="maskStage">
+        <img id="maskSnapshot" src="" alt="Snapshot" />
+      </div>
+      <canvas id="maskCanvas"></canvas>
     </div>
 
     <!-- Live counter + drawing actions (only visible while drawing) -->

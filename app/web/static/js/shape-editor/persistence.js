@@ -1,28 +1,43 @@
 // ─── shape-editor/persistence.js ───────────────────────────────────────────
 // Snapshot loading + form-field serialisation + polygon-name generation.
-// loadMaskSnapshot reaches into canvas.js for the redraw + fallback
-// canvas — without that, a failed load would leave the user clicking
-// into a 0×0 surface that swallows clicks.
+// loadMaskSnapshot owns the frame: the snapshot's natural size is the
+// coordinate space every polygon is drawn and stamped in.
 import { byId } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
-import { drawShapes, _maskCanvasFallback } from './canvas.js';
+import { drawShapes } from './canvas.js';
+import { clampPolyToSource, fallbackFrame } from './view.js';
+
+function _fitStage(frame) {
+  const stage = byId('maskStage');
+  if (stage) stage.style.aspectRatio = `${frame.w} / ${frame.h}`;
+}
 
 export function loadMaskSnapshot(camId) {
   if (!camId) return;
   const img = byId('maskSnapshot');
   if (!img) return;
-  // Wire one-shot handlers so a failed load still leaves us with a
-  // usable canvas instead of a 0×0 surface that swallows clicks.
+  const polys = [...(shapeState.zones || []), ...(shapeState.masks || [])];
+  // Points dragged out of the frame before drags were clamped (x = 648,
+  // y = −19 in a 640 × 360 zone) sit outside the canvas, where nobody
+  // can grab them. Pull them onto the edge; this lands in settings.json
+  // only when the camera is saved.
+  if (polys.map(clampPolyToSource).some(Boolean)) saveShapesIntoForm();
+  shapeState.frame = null;
+  shapeState.frameState = 'loading';
+  img.hidden = false;
   img.onload = () => {
-    // A real snapshot is back — drop any aspect-ratio lock left
-    // behind by a previous fallback render so the wrap follows the
-    // image again.
-    const wrap = byId('maskCanvas')?.parentElement;
-    if (wrap) wrap.style.aspectRatio = '';
+    shapeState.frame = { w: img.naturalWidth, h: img.naturalHeight };
+    shapeState.frameState = 'ready';
+    _fitStage(shapeState.frame);
     drawShapes();
   };
+  // A failed load still leaves a usable surface: the stage keeps the
+  // polygons' own aspect and the user can draw blind.
   img.onerror = () => {
-    _maskCanvasFallback();
+    shapeState.frame = fallbackFrame(polys);
+    shapeState.frameState = 'missing';
+    img.hidden = true;
+    _fitStage(shapeState.frame);
     drawShapes();
   };
   img.src = `/api/camera/${camId}/snapshot.jpg?t=${Date.now()}`;

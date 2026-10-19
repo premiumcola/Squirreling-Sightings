@@ -51,6 +51,10 @@ export const shapeState = {
   camera: null,
   zones: [],
   masks: [],
+  // Frame = the snapshot's natural size, the coordinate space polygons
+  // are drawn in. Set by shape-editor/persistence.js on load.
+  frame: null,
+  frameState: 'loading',
 };
 
 // iPadOS 13+ reports "MacIntel" with maxTouchPoints > 1. The fallback

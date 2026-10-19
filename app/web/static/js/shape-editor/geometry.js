@@ -1,8 +1,6 @@
 // ─── shape-editor/geometry.js ──────────────────────────────────────────────
-// Pure-data accessors + polygon math + canvas-coordinate helpers. The
-// only DOM touch is canvasPoint() reading the canvas bounding rect to
-// translate pointer events; everything else is value-in / value-out.
-import { byId } from '../core/dom.js';
+// Pure-data accessors + polygon math, all in frame units. Mapping
+// between the screen and the frame lives in view.js.
 import { shapeState } from '../core/state.js';
 
 // Polygon shape: {points:[{x,y},...], label:"Zone 1"}. Raw arrays of
@@ -30,22 +28,28 @@ export function _polyCurves(p) {
   return Array.isArray(p.curves) ? p.curves : [];
 }
 
-// Hit-test radius for vertex-grab and close-polygon detection. Shrunk
-// from 12 to 9 after C1 — handles got smaller (radius 5 / 7), so the
-// hit-test no longer needs to eat clicks well past the visible disc.
-// Still touch-friendly: 9 source-resolution units typically resolve to
-// ~25 CSS pixels at the mobile display size.
-export const _SHAPE_HIT_PX = 9;
+// The visual middle of segment i: the chord midpoint for a straight
+// segment, the quadratic bezier at t = 0.5 for a curved one
+// (0.25·p0 + 0.5·cp + 0.25·p1). The bend handle is drawn and hit-tested
+// here, and view.controlForMidpoint inverts it while dragging.
+export function segmentMidpoint(p0, p1, cp) {
+  if (cp && Number.isFinite(cp.x) && Number.isFinite(cp.y)) {
+    return { x: 0.25 * p0.x + 0.5 * cp.x + 0.25 * p1.x, y: 0.25 * p0.y + 0.5 * cp.y + 0.25 * p1.y };
+  }
+  return { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+}
 
-export function _hitVertex(pt) {
+const _near = (a, b, r) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2 <= r * r;
+
+// Hit tests take the radius in FRAME units from the caller —
+// view.hitRadius() derives it from CSS px and the pointer type, so a
+// finger gets a fingertip and a mouse gets a cursor.
+export function _hitVertex(pt, r) {
   const test = (arr, kind) => {
     for (let i = arr.length - 1; i >= 0; i--) {
       const pts = _polyPoints(arr[i]);
       for (let j = 0; j < pts.length; j++) {
-        const dx = pts[j].x - pt.x,
-          dy = pts[j].y - pt.y;
-        if (dx * dx + dy * dy <= _SHAPE_HIT_PX * _SHAPE_HIT_PX)
-          return { kind, polyIdx: i, ptIdx: j };
+        if (_near(pts[j], pt, r)) return { kind, polyIdx: i, ptIdx: j };
       }
     }
     return null;
@@ -53,34 +57,17 @@ export function _hitVertex(pt) {
   return test(shapeState.zones || [], 'zone') || test(shapeState.masks || [], 'mask');
 }
 
-// C3 — hit-test against every segment's visual midpoint. Straight
-// segment midpoint = average of endpoints; curved segment midpoint =
-// quadratic-bezier at t=0.5 → 0.25*p0 + 0.5*cp + 0.25*p1. Vertex
-// hit-test takes priority over midpoint hit-test in pointer.js so
-// vertices "win" when handles overlap (vertex sits visually on top).
-export function _hitMidpoint(pt) {
+// Vertex hits take priority over midpoint hits in pointer.js, so a
+// vertex wins where handles overlap (it is drawn on top).
+export function _hitMidpoint(pt, r) {
   const test = (arr, kind) => {
     for (let i = arr.length - 1; i >= 0; i--) {
       const pts = _polyPoints(arr[i]);
       if (pts.length < 2) continue;
       const curves = _polyCurves(arr[i]);
       for (let s = 0; s < pts.length; s++) {
-        const p0 = pts[s];
-        const p1 = pts[(s + 1) % pts.length];
-        const cp = curves[s];
-        let mx, my;
-        if (cp && Number.isFinite(cp.x) && Number.isFinite(cp.y)) {
-          mx = 0.25 * p0.x + 0.5 * cp.x + 0.25 * p1.x;
-          my = 0.25 * p0.y + 0.5 * cp.y + 0.25 * p1.y;
-        } else {
-          mx = (p0.x + p1.x) / 2;
-          my = (p0.y + p1.y) / 2;
-        }
-        const dx = mx - pt.x,
-          dy = my - pt.y;
-        if (dx * dx + dy * dy <= _SHAPE_HIT_PX * _SHAPE_HIT_PX) {
-          return { kind, polyIdx: i, segIdx: s };
-        }
+        const m = segmentMidpoint(pts[s], pts[(s + 1) % pts.length], curves[s]);
+        if (_near(m, pt, r)) return { kind, polyIdx: i, segIdx: s };
       }
     }
     return null;
@@ -88,12 +75,9 @@ export function _hitMidpoint(pt) {
   return test(shapeState.zones || [], 'zone') || test(shapeState.masks || [], 'mask');
 }
 
-export function _isClosingPoint(pt) {
+export function _isClosingPoint(pt, r) {
   if (!shapeState.points || shapeState.points.length < 3) return false;
-  const first = shapeState.points[0];
-  const dx = first.x - pt.x,
-    dy = first.y - pt.y;
-  return dx * dx + dy * dy <= _SHAPE_HIT_PX * _SHAPE_HIT_PX;
+  return _near(shapeState.points[0], pt, r);
 }
 
 // Ray-casting point-in-polygon test against {x,y} polygon vertices.
@@ -121,16 +105,4 @@ export function _findPolygonAt(pt) {
     return null;
   };
   return test(shapeState.zones || [], 'zone') || test(shapeState.masks || [], 'mask');
-}
-
-export function canvasPoint(evt) {
-  const canvas = byId('maskCanvas');
-  const rect = canvas.getBoundingClientRect();
-  // Support both mouse and touch events. Touch coords live on .touches
-  // (move/start) or .changedTouches (end).
-  const src =
-    (evt.touches && evt.touches[0]) || (evt.changedTouches && evt.changedTouches[0]) || evt;
-  const x = (src.clientX - rect.left) * (canvas.width / rect.width);
-  const y = (src.clientY - rect.top) * (canvas.height / rect.height);
-  return { x: Math.round(x), y: Math.round(y) };
 }

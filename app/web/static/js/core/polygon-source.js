@@ -38,7 +38,7 @@ function _parseRes(str) {
  * Returns the substream dims when the camera has them, then any
  * configured detection_resolution, then a 1280×720 last-ditch
  * default (the shape-editor's hard-coded fallback when no snapshot
- * loads — same constant in `shape-editor/canvas.js#scaleForCanvas`).
+ * loads — same constant as `shape-editor/view.js#DEFAULT_FRAME`).
  */
 export function resolveCamSourceDims(cam) {
   const fromPreview = _parseRes(cam && cam.preview_resolution);

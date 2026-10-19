@@ -412,27 +412,44 @@ textarea:focus {
   padding: 14px;
   margin-top: 14px;
   border-radius: 18px;
-} /* Wrap height follows the snapshot's natural aspect ratio: image is in
-   normal flow with width:100% + height:auto, the wrap shrinks to fit.
-   The canvas overlay then inset:0 covers exactly the same area. Without
-   max-height/object-fit there is no letterbox; canvas and image bounds
-   stay 1:1 so clicks always land where they appear to land. */
-.canvas-wrap {
-  position: relative;
-  border-radius: 18px;
-  overflow: hidden;
-  background: #222222;
-  min-height: 240px;
 }
-.canvas-wrap img {
+/* Zone/mask editor frame. The stage holds the snapshot at the frame's
+   own aspect (persistence.js sets aspect-ratio once the snapshot has
+   loaded); the canvas covers stage AND gutter, so a vertex on the frame
+   edge or in a corner shows its whole handle and can be grabbed. The
+   old wrap ended at the frame edge, rounded and overflow-clipped, which
+   hid corner points under the rounding — and its min-height of 240 px
+   stretched the canvas past a 180-px-tall phone snapshot, so taps and
+   drawings landed below the picture. The gutter is darker than the
+   panel (depth by contrast, no border line); the snapshot keeps square
+   corners so a corner point sits exactly on the visible corner. */
+.canvas-wrap {
+  --shape-gutter: 12px;
+  position: relative;
+  padding: var(--shape-gutter);
+  border-radius: 16px;
+  background: var(--bg);
+}
+.canvas-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--surface);
+}
+.canvas-stage img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
 }
-/* Canvas sits ABOVE the snapshot image and any sibling overlays so clicks
-   reliably reach it. pointer-events:auto is the default for canvas, but
-   stating it explicitly guards against any inherited none from the
-   collapsing/animated parent panel. */
+/* `display` above would beat the UA `[hidden]` rule (author origin
+   wins); persistence.js hides the image when the snapshot fails. */
+.canvas-stage img[hidden] {
+  display: none;
+}
+/* Canvas sits ABOVE the snapshot so clicks reliably reach it.
+   pointer-events:auto is the default for canvas, but stating it
+   guards against an inherited none from the collapsing parent panel. */
 .canvas-wrap canvas {
   position: absolute;
   inset: 0;

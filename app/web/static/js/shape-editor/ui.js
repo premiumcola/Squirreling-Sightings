@@ -8,7 +8,8 @@
 import { byId, esc } from '../core/dom.js';
 import { shapeState } from '../core/state.js';
 import { _polyPoints, _polyLabel, _polyLabels } from './geometry.js';
-import { drawShapes, _SHAPE_LABEL_OPTS } from './canvas.js';
+import { drawShapes } from './canvas.js';
+import { _SHAPE_LABEL_OPTS } from './draw-poly.js';
 import { saveShapesIntoForm } from './persistence.js';
 
 export function _updateShapeDrawingBar() {
